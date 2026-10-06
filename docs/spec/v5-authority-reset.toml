@@ -7,6 +7,23 @@ reviewed_candidate_commit = "3b133ebfe3c870102931982d6c056595f9d44255"
 active_requirement_count = 65
 classified_requirement_count = 121
 
+# ADR-0019 fields above are the historical v5.1 activation record.
+# This operation refinement changes no classified requirement or admission status.
+[consumer_td_admission]
+decision = "docs/ADRs/0021-borrowed-consumer-td-admission.org"
+contract = "docs/work-packages/WP-100-consumer-validated-thing-admission.md"
+planning_contract = "docs/spec/planning.md"
+transaction_contract = "docs/work-packages/WP-400-servient.md"
+input = "caller-owned-immutable-typed-Thing"
+semantic_boundary = "TD-paid-lend-and-acknowledge"
+output = "source-independent-owned-Planning-draft"
+publication = "Servient-transaction-private-permit-atomic-install"
+supersedes = "mandatory-normalized-build-Snapshot"
+strict_ingestion_scope = "separate-future-capability"
+resource_interpretation_revision = 2
+typed_document_byte_oracle = "typed-content-v1"
+wire_document_byte_oracle = "consumed-UTF8-JSON-bytes"
+
 [classification.indispensable]
 authority_status = "active"
 expected_count = 41

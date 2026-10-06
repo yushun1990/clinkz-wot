@@ -1,6 +1,6 @@
 # Foundation Domain Specification
 
-Status: active v5.0 authority.
+Status: active v5.1 authority; Consumer admission refined by ADR-0021.
 
 This specification owns exactly eight active requirements:
 `API-RESOURCE-001`, `CONSTRAINED-STORAGE-001`,
@@ -111,47 +111,31 @@ declared scopes. `NA` means typed non-applicability. Omission, `inherit`, and
 `unbounded` are invalid. Zero disables a resource unless the schema explicitly
 declares rendezvous capacity; zero never means unbounded.
 
-For `WP-100-CONSUMER-VALIDATED-THING`, the append-only
-`number_lexeme_bytes_max` row is a per-Number Consumer `+validated-thing`
-admission resource, with named profile projection 256/NA/64 for
-gateway/directory-client/benchmark-static-reference. There is no Directory-client
-validation owner for this row. It is provisional until its Consumer owner is
-implemented; generated schema plumbing alone makes no runtime-enforcement claim.
-The 256 and 64 values are provisional named-profile capacities, not a
-project-wide maximum or target feasibility claim. The TD-owned
-`ValidatedThingAdmissionConfig::try_from_limits` projection MUST bind only the
-fields consumed by `ValidatedThing` admission. It is an operation-local checked
-view, not the complete Consumer role/profile/execution-cell builder described
-above. It MUST NOT reject `None` in unrelated Consumer fields such as
-`pending_client_calls_per_binding_max`; the resource-profile owner separately
-validates complete role and execution-cell applicability. Thus the benchmark
-static reference profile remains a valid input to this projection despite its
-unrelated Host Consumer fields being `NA`. Success of this TD projection does
-not certify the complete `ResourceLimits` profile.
+The Consumer typed admission projection is specified in
+[the TD admission contract](../work-packages/WP-100-consumer-validated-thing-admission.md#typed-content-and-resource-projection).
+It registers resource interpretation revision 2: `document_bytes_max` applies
+`typed-content-v1` to an already typed loan; future strict ingestion retains its
+consumed-wire-byte projection. This explicit operation-qualified refinement
+keeps byte units, stable numeric row ordering and all 196 named values. This is
+an explicit operation-schema migration: semantic identity includes the registered
+interpretation revision and operation, not only the ResourceKind discriminant.
+The former Snapshot interpretation is historical. Production checked handles,
+configuration/cache identity and evidence must distinguish revision 2 typed
+content from that interpretation and from wire ingestion. A shared numeric value
+does not make their oracles interchangeable. No generated ResourceKind/getter or
+low-level schema assembly behavior changes in this migration.
 
-Within the `ValidatedThing` admission-field catalog, the TD projection validates
-a finite configured `L` against the selected implementation's representable
-complete atomic work debit and bounded temporary resource envelope. It computes
-the prefix maximum `M` supported by the implementation and policy, for which
-every lexical length through `M` has that complete envelope; a missing required
-admission field or `L > M` returns a `ValidatedThingConfigError` before any
-parent/global allowance, child ledger, input inspection, or normalization
-state-machine entry. Both direct `ValidatedThing` admission constructors accept
-only the successful opaque projection, never raw `ResourceLimits`.
-Configuration rejection is therefore not a per-input
-`ValidatedThingProgress::Limit`.
-
-The row bounds one Number lexeme before bounded numeric projection or lossless
-retained copying. Zero disables Number admission within a selected Consumer
-role; it does not change role applicability or feature support. The row does
-not declare every JSON Number to be binary64 and does not replace aggregate
-document/source/work limits. For a validated configured `L`, strict admission
-rejects at the first excess Number byte (`L + 1`) without finishing the scan or
-copying the rejected byte; typed admission checks borrowed lexical length before
-projection/copy. Zero rejects the first Number byte, and 64 admits a 64-byte
-Number but rejects at byte 65. Raw `ResourceLimits` construction validates only
-schema-level invariants and deliberately cannot validate this role- and
-implementation-dependent atomic envelope.
+`number_lexeme_bytes_max` remains a provisional per-Number Consumer
+`+validated-thing` control (gateway 256, Directory NA, static benchmark 64).
+TD's opaque checked operation projection validates applicable fields and its
+supported Number/iterator/URI/workspace envelopes before allowance, ledger,
+input or progress ownership. It ignores unrelated Consumer NA cells and does
+not certify a complete role/profile. Missing/unsupported configuration is
+separate from per-input Limit; raw ResourceLimits cannot bypass the projection.
+Numbers are length-checked before projection; opaque within-limit `1e309`
+remains legal supplied content. Future strict ingestion checks raw and decoded
+Number length before excess copy/projection. Zero disables Number admission,
+not the role or feature. The numeric amendment owns exact projection semantics.
 
 `RES-LIMIT-002`: A resource-policy violation MUST stop before rejected work or
 externally reachable publication and return a structured limit category naming
@@ -185,90 +169,60 @@ Physically live engine-owned arena, pool, heap, or exclusively reserved
 caller-provided capacity is charged. Verification records which representation
 is measured. Rollback metadata MUST NOT duplicate the resources it protects.
 
-For the first v5.1 Consumer Property Read aggregate, TD constructs a normalized
-build Snapshot with three possible exact-length allocations: node, edge,
-and byte arenas. Its structured footprint keeps five values distinct:
+For the first Consumer Property Read transaction, source input is an immutable
+caller loan. Physical source and persistent-document accounts have zero **new**
+use for that loan. Caller allocation history is baseline; the typed-content
+oracle is not a capacity census. An upstream engine source keeps its existing
+source/global charge while lent, until physical release by that owner.
 
-- total requested bytes of the live sealed arenas;
-- count of their non-empty allocations;
-- largest actual single allocation request across build, grow, seal, and the
-  completed Snapshot;
-- peak simultaneously live temporary requested bytes; and
-- peak simultaneously live project-owned bytes added by conversion over the
-  selected entry baseline, including old/new grow or seal overlap.
+Controlled TD frames/current derived bytes are temporary. Planning output,
+artifacts, attributable registration/erasure, slots/records and cleanup/reclaim
+capacity have their actual owners/accounts. The exhaustive site/formula contract
+is in the TD admission record and Planning's PlanFootprint contract. Actual
+capacities, inline slot bytes, alignment, transfer/return overlap and any selected
+allocator surcharge are accounted. There is no mandatory complete TD Snapshot,
+exact-length TD seal, fixed arena-count prescription or copied-source footprint.
 
-An `AdmissionLedger::try_reserve_source` or `try_reserve_temporary` call for
-this path corresponds to one actual checked `Layout` request. Callers MUST NOT
-reserve an aggregate footprint through one such call and thereby report it as
-a physical contiguous allocation. Account usage and peak-live values sum the
-individually reserved requests; largest-contiguous observes their maximum.
-The existing `retained_source_bytes_*`, `admission_temporary_bytes_*`,
-`peak_live_bytes_per_admission_max`,
-`admission_peak_live_bytes_global_max`, and
-`largest_contiguous_allocation_bytes_max` rows therefore remain sufficient.
-Allocation count is bounded by the frozen arena catalog and needs no new global
-resource field.
+Each physical ledger reservation observes one actual checked Layout, including
+old/new overlap during growth. Aggregate preflight allowances use separate logical
+capacity reservations; feeding their sum into a largest-request primitive is
+invalid. Current live, peak simultaneous live, largest request, allocation count,
+temporary peak and additional controlled admission peak remain distinct. Released
+storage does not erase historical peak. Shared startup storage is not counted
+twice, and concurrent global peak sums actual simultaneous owners, not local
+maxima. Inline reserved capacity belongs to owner/slot accounting, not an
+invented physical allocation request.
 
-`AdmissionLedger` is the generation-bearing per-owner/per-admission physical
-account; it records local live, peak, and largest-request facts but is not by
-itself the concurrent global aggregator. The admission coordinator owns the
-corresponding parent/global allowances under existing `ResourceAccount` and
-Servient resource-account authority. It caps the child operation before TD
-entry, retains that outer reservation while the cursor and completed build
-Snapshot are live, reconciles it from the exact footprint on `Complete`, and
-releases it on every failure, cursor abandonment, or successful post-plan
-Snapshot destruction. No callback or allocation occurs between outer
-reservation and child-ledger ownership transfer. Implementing that coordinator
-belongs to the later Servient tranche; this migration changes its contract but
-does not advance it.
+The admission coordinator pairs local child capacity with parent/global
+allowances before work/allocation, retains parents while any protected child is
+live, reconciles actual owners and releases children before parents on every
+failure/abandonment/success path. AdmissionLedger alone is not the global
+aggregator. A rejected charge does no allocator work. Allocation ordering is:
+check structure/support and lifetime work; predebit accepted work and fixed
+release; check current/replacement capacity and actual Layout; obtain matching
+local/parent temporary/runtime/peak/contiguous authorization; allocate; transfer
+under paid progress; physically release old storage then its charge.
 
-The arbitrary-`Thing` compatibility entry borrows a pre-existing typed value.
-Foundation can guarantee only the additional project-owned conversion peak
-over that entry baseline; it cannot retroactively charge caller allocation
-history. The strict project-owned JSON builder/decoder begins accounting at its
-first controlled allocation and provides an absolute engine-owned input-
-processing-through-build-Snapshot bound. Its borrowed input buffer remains
-caller capacity but its length and processing work are bounded. The two entries
-use the same source/temporary accounts and snapshot representation; this
-guarantee difference is not hidden by one ambiguous peak scalar.
+Complete Planning output owns every runtime fact. All input/scratch/config/compiler
+loans end and bounded build cleanup finishes before final reconciliation/checks
+and publication permit. No still-live owner is discharged by ending a borrow.
+Published carries independently committed runtime/registration/lifecycle/cleanup
+charges only. Generic source, temporary, persistent-document and runtime accounts
+remain for their actual lifecycles. The already orphaned
+`AdmissionLedger::reclassify_source_to_persistent_document` remains a future
+source-removal obligation, not a typed publication step.
 
-Inline `ValidatedThing` and Servient record capacity is not an allocation
-request and remains in its owning slot/runtime capacity. It is not folded into
-largest-contiguous. Allocator-private headers, bins, and rounding require a
-separate allocator-specific surcharge if a profile chooses to govern them.
+Future strict ingestion accounts all controlled parse/source state from its first
+allocation, retains upstream charges while lending and proves bounded physical
+release before publication. Borrowed wire buffers remain caller capacity.
+This capability can supply an absolute engine-controlled input-through-build
+bound; ordinary typed provisioning plus borrowing supplies only the additional
+controlled-state bound. Neither is a whole-process/firmware RAM promise.
 
-After TD-owned Basic validation, normalization, semantic-equivalence checking,
-and exact-length seal, the completed build owner keeps one `AdmissionLedger`.
-The sealed arenas remain charged to source while Planning borrows the view and
-while the complete plan/artifact material is simultaneously live. That overlap
-contributes to the admission and global live peaks. After every fallible final
-check has succeeded and the private publication permit has closed cancellation,
-destroying the build owner deallocates each arena and releases each exact child
-source charge; only then does the coordinator release the reconciled parent/
-global source allowance. No byte is reclassified to persistent-document
-accounting for this Snapshot. The Published record carries only its
-independently reserved compiled-runtime, registration, lifecycle, diagnostic,
-and cleanup charges.
-
-`AdmissionLedger::reclassify_source_to_persistent_document` has no independent
-admitted caller after this correction and is a target old-API removal. Generic
-source, temporary, persistent-document, and persistent-runtime reserve/release
-accounts remain unchanged for other lifecycles.
-
-Normalization reserves in this order: check structural and lifetime-work
-bounds; charge each work/byte unit before processing; check final or current
-build capacity; check the source/temporary account, operation/global peak, and
-actual contiguous request; precharge one `CleanupItems` unit for the live
-allocation; reserve the exact checked `Layout`; then allocate. A grow or seal
-reserves the replacement while the old allocation remains live and releases
-the old charge only after successful transfer. Invalid input, Basic invalidity,
-limit, cancellation, allocation/arithmetic failure, or equivalence failure
-fixes the first cause and releases all partial account charges before exposing
-a terminal. This tranche retains only a fixed inline invalid/limit/conversion
-diagnostic (category, phase, and numeric coordinate), so its diagnostic account
-stays at zero and no diagnostic allocation or resource row is required. The
-existing allocation-owning public `ValidateError` adapter is not used as the
-normalization terminal.
+Fixed TD first-cause diagnostics allocate nothing. Variable output rollback or
+compiler destruction needs an admitted nonrecursive cleanup owner and pre-reserved
+capacity; it cannot be hidden in a terminal destructor. Cleanup never replaces
+first cause or makes a subset published.
 
 ## Constrained storage
 
@@ -310,15 +264,14 @@ discriminants after the existing ten entries: `DocumentNodes` and
 separately admitted `WP-100-CONSUMER-VALIDATED-THING` tranche; this authority
 does not itself admit that source change.
 
-`DocumentNodes` charges generic typed-document validation, normalization,
-semantic-equivalence, map-sort comparisons/moves, and structural visits not
-already owned by a more specific class. Typed schema-node visits remain
-`JsonSchemaNodes`; strict JSON bytes and typed source bytes read remain
-`CodecInputBytes`; normalized bytes emitted or copied remain
-`CodecOutputBytes`; URI bytes remain `UriBytes`; security branches remain
-`SecurityBranches`; and destruction of one live arena consumes a prepaid
-`CleanupItems` unit. Work is neither relabelled nor double charged merely
-because it occurs during normalization.
+`DocumentNodes` charges typed structural/Basic visits, frame transfer and
+operation/query discovery not owned by a more specific class. Typed string and
+Number reads/comparisons pay CodecInputBytes; owned copies pay CodecOutputBytes;
+URI semantics pay UriBytes; schema visits pay JsonSchemaNodes; security work pays
+SecurityBranches; each fixed block deallocation prepays CleanupItems. Iterator
+primitives use the admitted backend envelope, not one unbounded native lookup.
+No map canonical sort, normalization/seal or post-copy equivalence pass is required.
+The TD contract owns exact applicable work formulas and numeric/URI support.
 
 For bounded admission, JSON Number lexing, borrowed lexical inspection, and
 lossless copying remain byte-charged work. When one of the five TD Basic
@@ -332,23 +285,23 @@ and remains pending; if the lifetime remainder is insufficient, it terminates
 as the existing resource limit. A repeated projection incurs the same debit
 again. No new WorkClass is introduced for numeric projection.
 
-Every accepted class-specific unit also consumes one unit from a shared
+During TD inspect/Basic/semantic lending, every accepted class-specific unit
+also consumes one unit from a shared
 non-resettable lifetime remainder derived from the existing
 `document_validation_work_units_max`; byte classes consume one unit per byte.
 Prepaid cleanup consumes both units before its allocation becomes live. Host
 may drive the same pure cursor to completion synchronously, while application-
 static callers resume it; fresh per-step budgets do not replace that lifetime
-remainder. Exhausting it is a resource limit, not Basic invalidity.
+remainder. Exhausting it is a resource limit, not Basic invalidity. Planning
+output materialization and cleanup have their own non-resettable derived work
+envelopes; copying a lent fact does not debit the same TD semantic action again.
 
-The normalized node and edge elements own no nested allocation or recursive
-drop. The exhaustive three-retained/four-temporary allocation catalog makes
-terminal release fixed and bounded independently of document depth. Deep input
-rejection MUST NOT perform an uncharged recursive `Thing`, map, vector, JSON,
-or task-tree drop inside TD. Compatibility input destruction remains with its
-borrowed caller. Dropping an unpublished cursor may only consume its prepaid
-fixed-allocation cleanup and release its owned ledger; any future fallible or
-unbounded destruction requires an explicit cleanup owner and architecture
-review.
+TD frame and current-byte workspace has a fixed catalog of nonrecursive,
+trivially destructible blocks with prepaid release. Caller Thing destruction
+remains caller-owned. Planning variable output instead uses a monotonic bounded
+rollback/reclaim owner and supported bounded artifact/cursor cleanup. Abandonment
+performs only fixed prepaid release or transfers the complete object to reserved
+cleanup capacity; no record allocation or lost live owner is permitted on drop.
 
 `PlanningItems` charges aggregate enumeration, row construction, lookup
 sealing, reconciliation, and reclamation. A monotonic cursor visits each

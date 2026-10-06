@@ -94,7 +94,7 @@ The package consumes `PLAN-INDEX-001`, `PLAN-REQUEST-001`, `STATE-BIND-001`,
 
 | Cargo package | Feature cell | Required surface |
 | --- | --- | --- |
-| `clinkz-wot-planning` | `--no-default-features` | `CapabilityIndex`, `PlanCompiler`, form/security/target resolution, and URI-template compilation coordinated over the core compiler-extension SPI without execution-trait ownership |
+| `clinkz-wot-planning` | `--no-default-features` | `CapabilityIndex`, `PlanCompiler`, selection over TD-owned effective forms/security/targets, and URI-template compilation coordinated over the core compiler-extension SPI without execution-trait ownership |
 | `clinkz-wot-planning` | `async`, no `std` where provided | Async compiler adapters without an executor or concrete transport |
 | `clinkz-wot-planning` | `std` | Host planning conveniences only; no concrete zenoh dependency |
 | `clinkz-wot-protocol-bindings-zenoh` | `--no-default-features` | Zenoh form metadata, protocol-local compiler data, and constrained adapter types without a concrete runtime |

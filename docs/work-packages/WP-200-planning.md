@@ -260,24 +260,20 @@ does not own persistent-capacity reservation, publication, the retained
 registration owner, `ValidatedThing` lifetime after handoff, call execution, or
 plan-set lifecycle state.
 
-Workspace topic 0065 changes this future aggregate's input authority without
-advancing or admitting it. It must borrow TD's storage-independent
-`ValidatedThingView`, not `&Thing`. The view supplies deterministic Property
-ordinal/name iteration and lookup, original Form indices, raw/resolved URI,
-content metadata, effective operations/security, and security-definition
-scheme lookup. Planning must not reconstruct a `Thing`, parse normalized
-storage, or copy Basic/default/URI/security rules. The already completed exact-
-coordinate `PropertyReadPlanCompiler` behavior and evidence remain regression
-authority; adapting that leaf to the view belongs to this future aggregate
-tranche and changes no current WP-200 status.
+ADR-0021 changes this future aggregate's trusted input to the TD-owned paid
+semantic cursor over `ValidatedThing<'td>`. Its exact consumed build/progress and
+registration-adapter contracts belong to the [Planning specification](../spec/planning.md#first-consumer-property-read-aggregate).
+No raw Thing aggregate entry, synchronous source lookup, self-borrow into owned
+scratch, unpaid Ready sizing/URI replay or lifetime-refilling second pass is legal.
+The completed exact-coordinate leaf remains regression authority at its narrower
+boundary; adapting shared preparation belongs to this future tranche.
 
-Every `ValidatedThingView` and nested Property/Form/security view borrow ends
-after the complete draft is sealed. The draft's public type carries no TD-
-derived lifetime or raw arena range and must remain usable after
-`ValidatedThing` is dropped. The complete registration owner remains separate;
-the draft carries only checked registration identity/generation and owned
-artifacts. This strengthens the future aggregate boundary without changing the
-completed exact-coordinate tranche or its evidence.
+The draft owns all runtime facts and concrete artifacts independent of TD,
+compiler input and registration callbacks. Completion consumes input-bearing state
+before returning it. Preflight stays privately tied to its original transaction,
+policy/proof/registration identity. Planning owns variable bounded rollback/reclaim,
+exact PlanFootprint and supported callback/abort/destructor evidence. Servient
+retains the complete registration separately and owns capacity pairing/publication.
 
 Permitted production paths are exactly:
 
@@ -291,7 +287,7 @@ while allowing all bounds to be collected before any compiler starts. Public
 `PropertyReadPlanCompiler::consumer_call` semantics and the existing completion
 evidence remain regression requirements, not superseded authority.
 
-The first slice visits the view's property keys deterministically, retains each
+The first slice visits the semantic cursor's property keys deterministically, retains each
 Form's original source index, creates an empty range for a property without a
 readable Form, requires one TD-resolved NoSec result for every retained
 coordinate, and uses only registration ordinal/candidate order zero. A Basic-
@@ -315,8 +311,9 @@ cover deterministic multi-property/multi-Form ordering, empty-vs-missing
 lookup, all-coordinate NoSec admission, every materialization/bounds negative
 with zero compiler starts and complete rollback, non-resettable compiler and
 Planning work, exact-coordinate regression, draft independence from TD and
-compiler inputs, an external drop-order proof that ends every view borrow and
-uses the draft after `ValidatedThing` destruction, Host/static parity, and the
+compiler inputs, an external consuming-completion proof that ends all input/scratch loans and
+uses concrete output after Thing and compiler-registration destruction; supported
+compiler Pending/abort and variable output cleanup, Host/static parity, and the
 three Planning feature cells. It
 claims no WP-400 publication/execution or Consumer architecture gate.
 
@@ -449,10 +446,13 @@ capability indexes, collision tables, Servient lifecycle, production
 protocols, and aggregate architecture fixture roots remain outside this
 narrow scope.
 
-Resolve effective operation, root-versus-affordance form context, original form index, `base`
-plus relative `href`, media defaults, response metadata, URI variables, security inheritance,
-scope, extensions, and stable plan identity exactly once per logical form. Preserve TD order in
-candidate vectors and retain enough source identity for strict selection and diagnostics.
+Consume TD-owned effective operation, root-versus-affordance context, original
+Form index, `base`/relative-target resolution, media defaults, security inheritance
+and scope meaning. Materialize response metadata, URI variables, required
+extensions and stable plan identity once per logical form into owned output.
+Every required TD semantic pass pays its work; Planning cannot duplicate those
+rules. Preserve TD order in candidate vectors and retain enough owned identity
+for strict selection and diagnostics.
 
 ## State and Ownership Migration
 

@@ -64,6 +64,11 @@ The authoritative revision is v5.1 Consumer one-shot authority. Its active
 source map is `docs/spec/v5-authority-reset.toml`; accepted specifications,
 ADRs, work packages, code, and tests own the current contract.
 
+ADR-0021 refines the Consumer TD input/ownership boundary within that same
+requirement set. The registered TD, Planning and Servient owners project its
+borrowed-input/owned-output transaction and separate future ingestion scope.
+This migration grants no implementation admission or gate status.
+
 No individual v5.1 artifact grants implementation admission outside that
 active set. Git history retains the superseded activation and rollback record;
 current validation does not replay it.

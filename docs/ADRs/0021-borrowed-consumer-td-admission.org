@@ -1,0 +1,108 @@
+#+title: ADR-0021: Borrowed Consumer TD Admission
+#+date: 2026-10-06
+#+status: Accepted
+
+* Context
+
+The normalized Consumer owner selected after the opaque-container accounting
+counterexample required complete node/edge/byte copying, exact resealing and
+post-copy equivalence. The build-only lifetime correction had already removed
+TD retention from Published. Owning a second complete TD therefore adds
+construction and cleanup without supplying a runtime responsibility.
+
+Workspace 0074 challenged that choice. Workspace 0075 and the discriminator
+merged in PR #128 construct the replacement for an explicit input/compiler
+envelope. Independent review accepted exact head
+=4b2fd2f4a77d83ab78c360202f7cd000d8fd7e17= after fixing unpaid Ready URI
+validation and scope-size replay. That evidence does not establish production
+global accounting, variable output cleanup, generic compiler contracts, real
+publication races or bounded JSON ingestion.
+
+* Decision
+
+The first Consumer Property Read admission borrows a caller-owned immutable
+typed =Thing=. TD performs bounded inspection of the entire supplied value and
+complete shared Basic validation before minting an opaque lifetime-bearing
+proof. TD owns effective operations, security and URI meaning. Planning consumes
+only TD's paid semantic lending cursor: one coordinate remains Ready until
+acknowledged, and every poll obtains a fresh short loan. Suspended state owns
+scalars, external immutable references or owned storage, never references into
+its own scratch. No complete derived TD table is required.
+
+Planning owns complete preflight, required runtime facts, every property lookup
+row, all compiler bounds before any start, sequential eager compilation, exact
+output accounting and a source-independent Frozen draft. Concrete artifacts
+and suspended compiler state must satisfy the owned-input/cleanup contract;
+a lifetime-free wrapper alone is insufficient.
+
+Servient owns immutable policy and complete-registration capture, paired
+local/parent allowances, the admission transaction, runtime reservation,
+cleanup, identity/generation checks, private publication permit and atomic
+installation. All input/scratch loans end and build cleanup finishes before
+the final checks and permit. Permit issuance closes cancellation under exclusive
+installation authority; installation is preallocated, non-fallible,
+allocation-free, callback-free and non-yielding. Published owns plans, the
+separate complete registration and runtime lifecycle/resource records.
+
+Caller storage stays live until the consumed build owner returns a source-free
+result or terminal cleanup. It is a baseline, not an engine-owned allocation
+estimate. Engine-owned upstream sources retain their original global charges
+while lent. Controlled frame, current derived URI, output, compiler, erasure,
+slot, diagnostic and cleanup capacity is charged before work/allocation; peaks
+observe simultaneous owners and largest requests observe actual Layouts.
+
+The exact API/progress, typed-content byte oracle, operation-local resource
+projections, support algorithms, allocation formulas and readmission obligations
+are owned by
+[[file:../work-packages/WP-100-consumer-validated-thing-admission.md][the Consumer TD admission contract]],
+with Planning and Servient details in their registered specifications and work
+packages. This is a refinement within the existing 65-requirement v5.1 set.
+
+Strict bounded JSON ingestion is a separate future TD capability. ADR-0020's
+literal JSON algebra, shared field policies, duplicate/null/Number rules,
+ordinary-serde differences and shared resumable RFC3339 decoder remain its
+authority. Its complete construction, physical source accounting and terminal
+proof move with that capability; they are not typed Consumer prerequisites.
+Ordinary parse-and-borrow never establishes a bounded ingestion claim. Directory,
+Discovery or later release claims needing external ingestion require their own
+domain/capability admission and that evidence.
+
+* Supersession and preserved guarantees
+
+This decision supersedes the mandatory complete normalized Consumer Snapshot,
+three-retained/four-temporary site counts, exact-length TD seal, opaque-map
+canonical sorting, whole-TD post-copy equivalence, Snapshot footprint handoff,
+owning normalized-source continuations and post-permit source destruction.
+The old source-to-persistent-document reclassification removal remains required
+through its owning future source change. Actual source accounts remain valid
+for other owners. Legacy by-value =consume(Thing)= cannot be the bounded facade
+unless a separate owning adapter proves bounded source destruction.
+
+Complete Basic and structural rejection, the Number amendment and AP access,
+finite resource/work/lifetime bounds, first-cause diagnostics, bounded cleanup,
+complete Planning output, the all-bounds barrier, source/artifact independence,
+generation/registration integrity, atomic publication, leases/drain and bounded
+reclamation remain required. URI resolution is byte-resumable in production;
+the discriminator's conservative quadratic atomic envelope is historical local
+feasibility evidence, not authority to under-support a promised profile.
+
+ADR-0008's attribution of W3C defaults/security/target resolution to Planning
+is superseded by TD semantic ownership. ADR-0019's Consumer domain entry and
+ADR-0015's immutable profiles/linear budgets remain. ADR-0020's coupling to a
+mandatory first-Consumer Snapshot and decoder is superseded, its wire semantics
+remain. Existing workspace documents, fixtures and reviewed evidence retain
+their narrower historical claims; they are not rewritten as replacement proof.
+
+No tranche/admission/gate status, requirement activation, production completion
+or release claim changes. Replacement authority needs independent exact-head
+acceptance; readmission remains a separate reviewed transition after the
+replacement evidence obligations are discharged.
+
+* Alternatives
+
+Complete capacity-charged TD ownership remains appropriate for a demonstrated
+owned ingestion use, but is unnecessary for typed input. A full derived table
+adds another retained representation; one Ready coordinate is sufficient.
+Unrestricted synchronous queries, raw Thing Planning input, caller-minted proof,
+hidden source retention and an unbounded parse/drop convenience would each
+evade an active semantic, progress or ownership boundary and are rejected.

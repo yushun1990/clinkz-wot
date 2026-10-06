@@ -118,15 +118,17 @@ sequence = 170
 status = "planned"
 admission_status = "candidate"
 impact_status = "current"
-impact_review = "workspace/0073-shared-json-value-decode-boundary.md"
-impact_disposition = "literal-json-value-contract-migrated-without-readmission"
-decision_review = "github-pr:76"
-authority_migration_review = "github-pr:117"
+impact_review = "workspace/0075-consumer-borrowed-admission-construction.md"
+impact_disposition = "borrowed-typed-admission-authority-migrated-without-readmission"
+decision_review = "github-pr:128"
 depends_on = []
 depends_on_packages = ["WP-000"]
 requirements = [
     "DOC-RUNTIME-001",
     "RES-LIMIT-001",
+    "RES-LIMIT-002",
+    "RES-LIMIT-003",
+    "API-RESOURCE-001",
     "ADMIT-MEM-001",
     "ADMIT-TXN-001",
     "CONSTRAINED-WORK-001",
@@ -139,6 +141,7 @@ authoritative_artifacts = [
     "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
     "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
     "docs/ADRs/0020-strict-json-value-decoding.org",
+    "docs/ADRs/0021-borrowed-consumer-td-admission.org",
     "docs/amendments/WP-100-bounded-atomic-number-v1.md",
     "docs/api-ownership.csv",
     "docs/architecture/10-primary-data-flows.md",
@@ -161,16 +164,73 @@ api_items = [
     "WorkClass",
     "AdmissionLedger",
     "ValidatedThing",
-    "ValidatedThingCursor",
-    "ValidatedThingBuilder",
     "ValidatedThingAdmissionConfig",
-    "ValidatedThingConfigErrorKind",
     "ValidatedThingConfigError",
-    "ValidatedThingProgress",
-    "ValidatedThingPhase",
-    "ValidatedThingInvalidKind",
+    "ValidatedThingConfigErrorKind",
+    "ValidatedThingCursor",
     "ValidatedThingInvalid",
+    "ValidatedThingInvalidKind",
     "ValidatedThingLimit",
+    "ValidatedThingPhase",
+    "ValidatedThingProgress",
+    "validated_thing_admission_config_try_from_limits",
+    "validated_thing_config_error_configured",
+    "validated_thing_config_error_kind",
+    "validated_thing_config_error_resource_kind",
+    "validated_thing_config_error_supported_max",
+    "validated_thing_cursor_from_thing",
+    "validated_thing_cursor_step",
+    "validated_thing_invalid_kind",
+    "validated_thing_invalid_node_ordinal",
+    "validated_thing_invalid_phase",
+    "validated_thing_limit_configured",
+    "validated_thing_limit_kind",
+    "validated_thing_limit_observed",
+    "validated_thing_limit_phase",
+    "ValidatedThingFailureKind",
+    "ValidatedThingFailure",
+    "ValidatedThingCause",
+    "ValidatedPropertyReadCursor",
+    "ValidatedPropertyReadStep",
+    "ValidatedPropertyReadEvent",
+    "ValidatedPropertyReadForm",
+    "ValidatedTextSequence",
+    "validated_thing_into_property_read",
+    "validated_property_read_cursor_id",
+    "validated_property_read_cursor_step",
+    "validated_property_read_cursor_acknowledge",
+    "validated_property_read_cursor_rewind",
+    "validated_property_read_form_property_ordinal",
+    "validated_property_read_form_property_name",
+    "validated_property_read_form_original_index",
+    "validated_property_read_form_href",
+    "validated_property_read_form_resolved_href",
+    "validated_property_read_form_content_type",
+    "validated_property_read_form_content_coding",
+    "validated_property_read_form_subprotocol",
+    "validated_property_read_form_scopes",
+    "validated_property_read_form_readable",
+    "validated_property_read_form_security_count",
+    "validated_property_read_form_security_name",
+    "validated_property_read_form_security_scheme",
+    "validated_property_read_form_copy_bytes",
+    "validated_text_sequence_len",
+    "validated_text_sequence_byte_len",
+    "validated_text_sequence_iter",
+    "validated_thing_failure_kind",
+    "validated_thing_failure_phase",
+    "validated_thing_failure_requested_bytes",
+]
+state_machines = ["consumer-td-validation", "consumer-td-semantic-lending"]
+resource_changes = [
+    "Resource interpretation revision 2: typed-content-v1 document/string/extension oracle and typed structural applicability; existing 196 row identities/order/profile values and wire-ingestion projection retained",
+    "Finite checked TD operation projection validates Number, iterator, resumable URI and workspace support before allowance/ledger/input/progress, ignores unrelated NA; complete role/cell validation remains resource-profile ownership",
+    "No new WorkClass/account: every TD accepted class debit shares one non-resettable lifetime remainder through validation, semantic passes and moves; atomic steps require whole credit, no Ready source replay",
+    "Typed source remains caller baseline or separately charged upstream source; TD frames/current derived bytes are temporary; exact actual Layout/local-parent pairing, simultaneous peaks, inline/overlap and child-before-parent release replace Snapshot footprint handoff",
+]
+old_api_removals = [
+    "admission_ledger_reclassify_source_to_persistent_document",
+    "ValidatedThingBuilder",
     "ValidatedThingConversionErrorKind",
     "ValidatedThingConversionError",
     "ValidatedThingFootprint",
@@ -180,30 +240,18 @@ api_items = [
     "ValidatedSecuritySchemeView",
     "ValidatedFormHref",
     "ValidatedFormHrefError",
-    "validated_thing_cursor_from_thing",
     "validated_thing_builder_from_json",
-    "validated_thing_admission_config_try_from_limits",
-    "validated_thing_config_error_kind",
-    "validated_thing_config_error_resource_kind",
-    "validated_thing_config_error_configured",
-    "validated_thing_config_error_supported_max",
-    "validated_thing_cursor_step",
     "validated_thing_builder_step",
     "validated_thing_view",
     "validated_thing_footprint",
+    "validated_thing_reclassify_source_to_persistent_document",
+    "validated_thing_retained_source_bytes",
     "validated_thing_property_count",
     "validated_thing_readable_property_form_count",
-    "validated_thing_invalid_kind",
-    "validated_thing_invalid_phase",
     "validated_thing_invalid_input_offset",
-    "validated_thing_invalid_node_ordinal",
     "validated_thing_conversion_error_kind",
     "validated_thing_conversion_error_phase",
     "validated_thing_conversion_error_requested_bytes",
-    "validated_thing_limit_kind",
-    "validated_thing_limit_configured",
-    "validated_thing_limit_observed",
-    "validated_thing_limit_phase",
     "validated_thing_footprint_retained_requested_bytes",
     "validated_thing_footprint_retained_allocation_count",
     "validated_thing_footprint_largest_allocation_request_bytes",
@@ -228,21 +276,9 @@ api_items = [
     "validated_form_view_effective_security",
     "validated_security_scheme_view_name",
     "validated_security_scheme_view_scheme",
-]
-state_machines = ["validated-thing-normalization"]
-resource_changes = [
-    "Append number_lexeme_bytes_max as one Consumer +validated-thing per-Number document-byte ResourceKind at stable index 195; provisional named-profile values gateway 256, directory-client NA, benchmark-static-reference 64; require the sole opaque TD configuration projection over only the fields consumed by ValidatedThing admission before either direct entry, leave complete role/execution-cell applicability with the resource-profile owner, reject missing admission fields or implementation-unsupported limits as configuration errors outside progress, then reject valid configured_limit + 1 input including zero-disabled; target cycle/stack characterization is separate from generic readmission",
-    "No new WorkClass or ledger account: numeric projection precharges existing CodecInputBytes against the current step budget and the shared non-resettable lifetime remainder before one bounded atomic projection",
-    "Each Foundation ledger reservation still corresponds to one actual checked allocation Layout; aggregate retained or peak footprints are sums/observations and are never submitted as a physical contiguous allocation",
-    "The first Consumer path keeps the completed Snapshot in source accounting only through complete independent plan construction and every fallible final check, includes simultaneous Snapshot/runtime-plan residency in live peak, then deallocates the arenas and releases exact child source charges before releasing the matching parent/global allowance and atomically publishing; it performs no Snapshot source-to-persistent-document reclassification and Published retains only independently committed runtime accounts",
-]
-old_api_removals = [
-    "admission_ledger_reclassify_source_to_persistent_document",
     "validated_thing_cursor_new",
     "ValidatedThingStep",
     "validated_thing_thing",
-    "validated_thing_reclassify_source_to_persistent_document",
-    "validated_thing_retained_source_bytes",
 ]
 performance_workloads = []
 implementation_paths = [
@@ -253,8 +289,6 @@ implementation_paths = [
     "td/src/validate.rs",
     "td/src/td_defaults.rs",
     "td/src/thing.rs",
-    "td/src/flat.rs",
-    "td/src/rfc3339.rs",
     "td/src/lib.rs",
     "td/src/components/affordance.rs",
     "td/src/components/context.rs",
@@ -272,6 +306,7 @@ implementation_paths = [
 pre_implementation_checks = [
     "python3 tools/architecture-fixtures/validated-thing-feature-boundary/check.py",
     "tools/check-design-artifacts.sh",
+    "cargo test --locked --manifest-path tools/architecture-fixtures/consumer-borrowed-admission/Cargo.toml",
     "cargo test --workspace --locked",
     "cargo check --locked -p clinkz-wot-foundation --no-default-features",
     "cargo check --locked -p clinkz-wot-foundation --no-default-features --features async",
@@ -285,8 +320,8 @@ pre_implementation_checks = [
     "cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features serde_json/arbitrary_precision",
 ]
 admission_review = "required-after-authority-migration"
-completion_evidence_keys = ["consumer-normalized-validated-thing"]
-completion_evidence_path = "docs/evidence/WP-100-consumer-normalized-validated-thing.toml"
+completion_evidence_keys = ["consumer-borrowed-td-admission"]
+completion_evidence_path = "docs/evidence/WP-100-consumer-borrowed-td-admission.toml"
 
 [[tranche]]
 id = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"

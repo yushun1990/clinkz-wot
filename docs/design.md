@@ -170,3 +170,14 @@ checkpoint `6d483a598e654f5c7043efb887074aba3a605f7a` and invalidates any tranch
 admitted solely by v5.0. Reset basis
 `6c01e07a446f51d413618474554b5eedcf5de23e` remains the historical source for
 the 121 inherited identities.
+
+## Consumer TD admission refinement
+
+[ADR-0021](ADRs/0021-borrowed-consumer-td-admission.org) supersedes the mandatory normalized typed-TD Snapshot with
+caller-owned immutable input, complete bounded TD validation, paid semantic
+lending, owned Planning output and a Servient-owned transaction. The exact
+contracts and resource interpretation revision 2 are registered in
+`docs/spec/v5-authority-reset.toml`. Strict bounded ingestion is a separate
+future capability under ADR-0020. The 65/31/121 requirement dispositions,
+tranche/admission/gate statuses and prior production evidence are unchanged;
+independent authority acceptance and replacement readmission remain required.

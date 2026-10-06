@@ -26,6 +26,17 @@ AP Number token and a literal object can be identical, collisions reach known
 fields, null policy is field-specific, and AP decoded Number spelling can grow.
 None of these observations is a complete decoder or an impossibility proof.
 
+* Scope amendment (ADR-0021)
+
+The original two-entry/Snapshot context above is history. Strict bounded JSON is
+now a separate future ingestion capability, not a prerequisite of typed Consumer
+Property Read. Its literal algebra, shared field/Basic/default/security/URI rules,
+ordinary-serde differences, complete bounded construction/source accounting and
+shared resumable RFC3339 obligations remain. ADR-0021 supersedes the prescribed
+arena counts, exact TD reseal, public builder/Snapshot surface and coupling to
+first-Consumer readmission. The eventual controlled backend lends the same closed
+TD semantic program without constructing an ordinary Thing or a mandatory copy.
+
 * Decision
 
 Strict =from_json= uses project-owned literal JSON value kinds. An object is
@@ -36,8 +47,8 @@ construction contract has one owner:
 [[file:../work-packages/WP-100-consumer-validated-thing-admission.md][WP-100 Consumer Validated Thing Admission]],
 section "Strict JSON value-decoding contract".
 
-Ordinary serde deserialization remains unchanged. Compatibility normalization
-preserves its supplied typed Thing exactly and does not replay wire decoding.
+Ordinary serde deserialization remains unchanged. Typed admission
+inspects its supplied immutable Thing directly and does not replay wire decoding.
 The strict entry may therefore differ from ordinary serde where dependency
 representation-driven Value/RawValue interpretation supplies different logical
 values or rejects. This is an explicit wire contract, not a reserved-name
@@ -47,11 +58,11 @@ Unchanged logical values must retain field and semantic parity.
 This supersedes the prior unconditional strict/serde wire-equivalence
 interpretation and qualifies the raw extension-round-trip assumption for the
 same Value/RawValue cases; unaffected ordinary extension round trips remain
-required. The normalized owner, public signatures, AP capability, typed
-compatibility, allocation catalog, WorkClasses, configuration, lifetime work,
-rollback and build-scoped Planning handoff remain binding. The revision is a
-docs-only authority candidate requiring independent exact-head acceptance;
-WP-100 remains planned/candidate and no gate or source admission changes.
+required. The typed-loan/proof/lending/transaction boundary is owned by ADR-0021
+and the
+TD admission record. AP lexical access and numeric semantics remain unchanged;
+strict wire/date/field construction proof is required before ingestion admission,
+not before typed Consumer readmission. No tranche/gate status changes.
 
 * Alternatives
 
@@ -80,10 +91,12 @@ not silently counted as complete. Foundation/Context, resource rows, completed
 successor packages and the Producer gate require no reopening from this
 decision; future admitted implementation must still reaffirm them.
 
-Before readmission the complete field extraction and bounded construction must
+Before future ingestion admission the complete field extraction and bounded
+construction must
 classify the existing adversarial corpus, preserve every unaffected field
 policy and Number content, and demonstrate the full allocation/work/terminal
-contract in the supported cells. If that construction needs another owning
-category or diverges for equal logical field values, it falsifies this candidate
-and returns to impact review. Green local probes or authority checks supply
+contract in the supported cells. The ingestion backend must declare every owning
+category and cleanup formula;
+a divergence for equal logical field values returns to impact review. Green local
+probes or authority checks supply
 neither independent acceptance nor the separate admission-only transition.

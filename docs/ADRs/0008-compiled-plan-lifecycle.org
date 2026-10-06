@@ -18,6 +18,17 @@ first-use caches, generation rules, and reclamation.
 The existing package name =clinkz-wot-protocol-bindings= further obscures that
 its target responsibility is shared planning rather than protocol execution.
 
+* Current projection (ADR-0021)
+
+ADR-0021 supersedes the semantic attribution in the original layer list below:
+TD owns Basic/default/security/URI meaning; Planning owns selection, templates,
+logical materialization and compiler coordination. The first Consumer input is
+an immutable typed loan with paid semantic lending, and its output is entirely
+owned. Build cleanup precedes publication permit. The lifecycle, immutable plans,
+complete registrations, generation/lease/drain and bounded reclaim decision is
+unchanged. The original attribution is historical rationale, not competing
+Planning authority.
+
 * Decision
 
 The engine has an explicit Servient-owned compiled-plan-set lifecycle:
@@ -35,9 +46,9 @@ and reclamation cursors live in the owning produced/consumed Servient record.
 The plan model has four layers:
 
 - core owns protocol-neutral immutable logical-plan and plan-reference values;
-- the shared planning crate owns W3C defaulting, form/security/target
-  resolution, capability indexes, logical-plan construction, and coordination
-  of compiler extensions;
+- the original shared-planning semantic attribution (superseded by ADR-0021)
+  included W3C defaulting and form/security/target resolution; current Planning
+  owns capability/selection, logical-plan construction and compiler coordination;
 - a concrete binding compiler extension produces only its bounded
   protocol-specific artifact for an already selected candidate; and
 - Servient owns admission, publication, pinning, draining, and reclamation of

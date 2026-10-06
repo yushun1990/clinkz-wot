@@ -28,7 +28,7 @@ Building -> Frozen -> Published -> Draining -> Reclaimed
     +-> Failed +-> Failed
 ```
 
-- `Building` owns the document/policy/registration snapshot, admission
+- `Building` retains the external document/policy/registration loans and owns the admission
   transaction, compiler cursors, and provisional artifacts.
 - `Frozen` means every mandatory plan, identity, footprint, and route owner is
   immutable and all required capacity is reserved. No binding side effect has
@@ -135,35 +135,27 @@ under a live lease for that exact plan-set record. The lease, rather than
 numeric coincidence or global uniqueness, proves which record may resolve an
 artifact.
 
-For this aggregate, Planning borrows only `ValidatedThingView`, emits the sealed
-TD-free aggregate draft, and neither owns nor reconstructs the source. Every
-nested view borrow ends before Servient proves that the draft owns all runtime
-facts and remains usable after `ValidatedThing` destruction. Servient then
-performs every fallible identity, generation, footprint, publication-slot, and
-final cancellation check while the Snapshot is still live. Success yields a
-private single-use publication permit that closes cancellation for the
-non-yielding commit sequence.
+For this aggregate, [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org)
+requires paid TD semantic lending from an immutable typed loan. Planning owns a
+complete source-independent draft and consumes/destroys the terminal input-bearing
+build state before handoff. Concrete plans/artifacts remain usable after Thing and
+compiler-registration destruction; runtime retains its own complete registration.
 
-Servient next destroys `ValidatedThing`, deallocating its private exact-length
-node/edge/byte arenas and releasing child-ledger source charges. Only after
-those physical bytes are no longer live does it release the exact parent/global
-source allowance. It performs no source-to-persistent-document
-reclassification. The permit then atomically installs an already allocated
-record containing the sealed aggregate, one finalized complete Consumer
-registration, and runtime lifecycle/resource records only. No allocation,
-callback, semantic query, compiler work, or fallible operation occurs between
-Snapshot release and registry publication. Host records share ownership of the
-registration; application-static roots retain it directly. Neither
-representation creates a general registration snapshot, per-plan registration
-pin, or runtime binding scan for this slice.
+All input/derived/config/compiler loans end and bounded build cleanup finishes
+before final actual-account reconciliation and identity/generation/registration/
+cancellation/slot checks. Servient then issues a private single-use permit under
+exclusive registry installation authority; cancellation closes at the last check.
+The already allocated record is installed with no allocation, callback, yield,
+source query, new cancellation decision, fallible release or retry. Neither ending
+a loan nor publishing authorizes releasing a still-live upstream source charge.
 
-Starting close prevents new plan-set leases and binding calls. Existing calls,
-leases, and cleanup owners retain the record until terminal settlement.
-Reclamation begins only after all of them are terminal and advances
-monotonically under `WorkClass::PlanningItems` plus the existing
-`plan_reclaim_bytes_per_step_max`; only then may the plan set, registration
-owner, and runtime lifecycle/resource storage be released. No Snapshot or TD
-source charge survives to this phase.
+Host records share the complete registration; application-static roots retain it
+directly. Neither creates per-plan pins or a general registration scan. Close
+rejects new plan-set leases/calls. Existing calls, leases and cleanup retain output
+and registration until terminal settlement. Reclaim is monotonic and bounded by
+PlanningItems and `plan_reclaim_bytes_per_step_max`, releasing physical children
+before runtime parent allowances. No proof, source/view borrow or TD charge
+attributable to this build survives publication.
 
 ## Hot-path contract
 

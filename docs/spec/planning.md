@@ -4,7 +4,7 @@ Status: active v5.1 authority. Nine requirement definitions are registered.
 Retained deferred clauses remain entry-review input and carry no implementation
 authority unless explicitly registered by the v5.1 manifest.
 
-This specification is the single normative owner of effective-form planning,
+This specification is the single normative owner of effective-form selection,
 capability indexing, logical-plan construction, binding-compiler coordination,
 compiled-plan-set publication, and plan reclamation. It refines
 `docs/architecture/30-compiled-plan-lifecycle.md` and ADR-0008. The Protocol
@@ -107,19 +107,19 @@ policy MUST remain visible in immutable diagnostics.
 ## Scope and invariants
 
 Planning starts from a TD-owned validated semantic view or produced-Thing draft
-plus immutable policy and registration snapshots. For the normalized Consumer
-build-Snapshot path that view is `ValidatedThingView`; Planning never receives
-the private snapshot or a reconstructed `Thing`. It ends with an admitted
+plus immutable policy and registration snapshots. For the first Consumer
+aggregate, TD supplies paid short semantic loans from its opaque validated
+immutable Thing proof; Planning never receives raw input/storage access. It ends with an admitted
 immutable plan set.
 The following invariants apply to every profile:
 
 - Planning consumes TD-owned default/effective results. The completed direct-
   `Thing` leaf calls the pure `clinkz-wot-td::td_defaults` helpers; the future
-  normalized Consumer aggregate reads the same authority through
-  `ValidatedThingView`. Planning does not copy those rules into its own walker
+  borrowed Consumer aggregate reads the same authority through its paid
+  semantic lending cursor. Planning does not copy those rules into its own walker
   or a binding.
 - `base` resolution, operation defaulting, and effective-security inheritance
-  happen once in TD semantic authority for the normalized path. URI-template
+  belong solely to TD; each required pass pays its semantic work. URI-template
   compilation, form identity, and candidate ordering happen once in Planning.
 - A binding compiler receives one already resolved and already selected
   candidate. It cannot select another form, operation, security expression, or
@@ -151,7 +151,7 @@ The ownership split is exact:
 | --- | --- |
 | `clinkz-wot-td` | Lossless TD/TM data, validation, and pure W3C default rules |
 | `clinkz-wot-core` | Protocol-neutral immutable plan identities and values, binding capability and compiler-extension SPI values, and generation-bearing plan references |
-| `clinkz-wot-planning` | Effective-form resolution, capability indexes, logical-plan construction, URI-template compilation, compiler coordination, deterministic ordering, and admitted build output |
+| `clinkz-wot-planning` | Selection over TD-owned effective forms/targets/security, capability indexes, logical-plan construction, URI-template compilation, compiler coordination, deterministic ordering, and admitted build output |
 | Concrete binding crate | Its capability declaration, compiler-extension implementation, and opaque protocol-specific artifact payload |
 | `clinkz-wot-servient` | Build transaction, capacity reservation, plan-set record, publication, pins, lazy-slot state, draining, and reclamation |
 
@@ -950,9 +950,9 @@ pub trait PlanCompiler<R: ?Sized> {
 This frozen `PlanBuildInput<&Thing>` shape remains the completed exact-
 coordinate Producer/Consumer leaf contract and its existing evidence remains
 current. It is not the input contract for the later all-readable Consumer
-aggregate. That successor must adapt the same behavioral leaf to TD's
-`ValidatedThingView` before it enters source admission; it may not obtain
-`&Thing` by reconstructing one from the normalized owner. This authority
+aggregate. That successor must adapt the same behavioral leaf to TD's paid semantic
+lending cursor before source admission; it may not recover raw `&Thing` from
+the opaque proof. This authority
 migration changes no existing Planning source or completed tranche status.
 
 `PlanBuildOutput<A>` owns a bounded collection of
@@ -1179,46 +1179,163 @@ first Consumer gate MUST NOT depend on those deferred mechanisms.
 ### First Consumer Property Read aggregate
 
 The first aggregate contains every effective readable Property Read Form from
-one borrowed `ValidatedThingView` and exactly one finalized complete Consumer-
-capable Property Read registration. Properties are visited by the view's
-deterministic normalized key-order ordinal; each property's Forms retain their
-original array indices. TD-owned view queries supply raw and resolved Form URI,
-content type/coding, subprotocol/scopes, effective-operation defaulting, and
-effective-security inheritance plus security-definition scheme lookup.
-Planning neither parses snapshot storage nor copies those rules. Every declared
-property receives a lookup row, including an empty range when it has no readable
-Form. Every retained coordinate uses registration ordinal and candidate order
-zero, one eager `ConsumerCall` artifact, and no credential/provider or binding-
-carried security material; effective security must be exactly one TD-resolved
-NoSec definition.
+one TD-owned validated immutable Thing loan and exactly one finalized complete
+Consumer-capable Property Read registration. Properties use Thing's BTreeMap key
+order; Forms retain original array indices. TD's paid lending cursor supplies
+raw/resolved targets, content type/coding, subprotocol/scopes, effective operations
+and security-definition meaning. Planning receives no raw Thing/map/storage
+access and owns no Basic/default/security/URI rules. Each property gets a lookup
+row, including an empty readable range. Each retained coordinate has registration
+ordinal/candidate order zero, one eager ConsumerCall artifact, no credentials and
+exactly one TD-resolved NoSec definition. Explicit empty ops/security remain empty.
 
-Planning owns two opaque TD-lifetime-free aggregate values:
+Planning owns `ConsumerPropertyReadPreflight` and
+`ConsumerPropertyReadDraft<A: 'static>`, both without TD/environment lifetimes.
+Preflight has checked property/coordinate counts, captured registration identity,
+conservative output/cursor/temporary/cleanup capacities and a remaining Planning
+work envelope. It has no plan ID/artifact/lease or registration owner. It is associated with
+its originating proof/policy/registration/transaction nonce; its counts cannot
+authorize another build. Draft owns all logical plans/candidates, eager concrete
+artifacts/references, names/ranges/lookup, required execution programs and exact
+PlanFootprint. It has no source or registration callback/payload loan, publication
+state or mutable index-rebuild authority. Opaque unrelated metadata is inspected,
+not retained. The first slice preserves its existing narrow response-sealing rule;
+deferred operation-specific schema/template programs need owned-output evidence
+when their operation enters, never runtime schema loans.
 
-- `ConsumerPropertyReadPreflight` records checked property/coordinate counts,
-  the exact one-registration projection, conservative capacity requirements,
-  and the structurally derived remaining `PlanningItems` work. It contains no
-  TD borrow, registration owner, plan id, artifact, or runtime lease.
-- `ConsumerPropertyReadDraft<A>` seals logical plans, candidates, eager
-  artifact envelopes/references, target ranges, deterministic lookup, and the
-  exact `PlanFootprint`. It contains no TD borrow, binding execution object,
-  publication state, or authority to rebuild indexes after handoff.
+A Basic-valid missing ID fails preflight before persistent reservation,
+materialization, bounds or start. Preflight and materialization each enumerate
+through TD's monotonic semantic cursor and debit the same remaining TD lifetime;
+rewind at Done never refills it. One Property/Form event stays Ready until Planning
+has fully checked copy/item/cleanup credit. TD has already paid URI UTF-8 validity,
+security lookup and scope-count/byte-total facts. Planning retries read those
+scalars without source sizing/semantic replay, then charge each sequence advance
+and copy before actual materialization. Zero/short credit cannot accumulate across
+calls or acknowledge a partial event.
 
-Planning first preflights the validated view. A Basic-valid semantic value
-without an ID fails here, before capacity reservation, materialization,
-compiler bounds, or compiler start. Only after preflight succeeds does Servient
-reserve the conservative persistent-capacity envelope. Planning may then
-materialize one logical plan/candidate for every retained coordinate and
-evaluate each compiler's pure `bounds` operation exactly once. The preflight
-and draft borrow no raw `Thing`, snapshot arena, or storage offset; owned output
-remains usable after the validated owner and view are gone.
+After preflight, Servient reserves runtime/record/slot/rollback envelopes. Planning
+then materializes **every** coordinate and owned logical input before collecting
+all pure compiler bounds. No native source scan or synchronous public Thing helper
+is an aggregate entry. The existing exact-coordinate `PlanBuildInput<&Thing>` is
+narrow leaf regression authority and proves no validated trust boundary.
 
-After draft sealing, every `ValidatedThingView` and nested view borrow ends.
-The draft must then pass a source-independent use boundary: its lookup, plans,
-candidates, artifacts, identities, diagnostics, and `PlanFootprint` are usable
-after `ValidatedThing` is dropped. No final check or Published selection may
-recover a TD fact from an artifact, registration callback, raw range, or hidden
-lifetime. Servient retains the complete registration as a separate owner and
-joins it to the draft only by the checked registration identity and generation.
+The portable consumed build boundary is frozen as follows (private layouts and
+helper modules are implementation mechanics):
+
+```rust
+pub trait ConsumerPropertyReadRegistration: private::Sealed {
+    type Artifact: 'static;
+    // Implemented only for complete Core Host/static registrations; immutable
+    // identity/capability/compiler/declared memory-work-abort projections.
+}
+pub struct ConsumerPropertyReadBuildConfig { /* checked fixed Planning projection */ }
+pub struct ConsumerPropertyReadRollback<A: 'static> { /* owned output, accounts, fixed cause/positions */ }
+pub struct ConsumerPropertyReadCleanupSlot<A: 'static> { /* reserved complete-object destination */ }
+pub enum ConsumerPropertyReadRollbackStep<A: 'static> {
+    Pending(ConsumerPropertyReadRollback<A>), Complete(CoreError),
+}
+impl<A: 'static> ConsumerPropertyReadCleanupSlot<A> {
+    pub fn try_new(config: &ConsumerPropertyReadBuildConfig,
+                   capacity: ResourceReservation) -> Result<Self, CoreError>;
+    pub fn take(&mut self) -> Option<ConsumerPropertyReadRollback<A>>;
+}
+impl<A: 'static> ConsumerPropertyReadRollback<A> {
+    pub fn step(self, budget: &mut WorkBudget) -> ConsumerPropertyReadRollbackStep<A>;
+}
+pub struct ConsumerPropertyReadBuild<'td, 'environment, R: ConsumerPropertyReadRegistration> {
+    /* owns TD cursor, accounts, nonce, draft and scalar phase; borrows external R */
+}
+pub enum ConsumerPropertyReadBuildStep<'td, 'environment, R: ConsumerPropertyReadRegistration> {
+    Pending(ConsumerPropertyReadBuild<'td, 'environment, R>),
+    Preflight { build: ConsumerPropertyReadBuild<'td, 'environment, R>,
+                requirements: ConsumerPropertyReadPreflight },
+    Complete(ConsumerPropertyReadDraft<R::Artifact>),
+    Failed { cause: CoreError,
+             cleanup: Option<ConsumerPropertyReadRollback<R::Artifact>> },
+}
+impl ConsumerPropertyReadBuildConfig {
+    pub fn try_from_limits(limits: &ResourceLimits) -> Result<Self, CoreError>;
+}
+pub fn build_consumer_property_read_aggregate<'td, 'environment, R: ConsumerPropertyReadRegistration>(
+    td: ValidatedThing<'td>, registration: &'environment R,
+    config: &ConsumerPropertyReadBuildConfig, generation: PlanSetGeneration,
+    ledger: AdmissionLedger,
+    cleanup: &'environment mut ConsumerPropertyReadCleanupSlot<R::Artifact>,
+) -> Result<ConsumerPropertyReadBuild<'td, 'environment, R>, CoreError>;
+impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
+    ConsumerPropertyReadBuild<'td, 'environment, R>
+{
+    pub fn step(self, budget: &mut WorkBudget, cancel_requested: bool)
+        -> ConsumerPropertyReadBuildStep<'td, 'environment, R>;
+    pub fn admit_runtime(self, ledger: AdmissionLedger)
+        -> Result<Self, (Self, AdmissionLedger, CoreError)>;
+}
+```
+
+The checked Planning projection covers only existing structural/candidate/output,
+artifact/cursor/temporary, compile-step and reclaim fields consumed by this slice.
+It rejects missing values/arithmetic/support failure before progress; complete
+Consumer role/profile/registration eligibility is Servient's checked capture.
+Config constructors allocate/scan no external input. The build copies fixed config
+and captures complete registration identity; its entry does no variable work.
+The sealed registration adapter is implemented generically for complete Core
+Host/static registrations, with their actual artifact/cursor types; it confers no
+downstream trusted proof factory and cannot install a compiler-only component.
+The checked Consumer policy binds the selected closed compiler set to explicit
+bounds/start/step/abort primitive costs, cursor/temporary/allocator contracts and
+artifact destructor costs. A complete registration alone is not that support
+attestation; an extension lacking this reviewed bounded contract is ineligible.
+No concrete protocol dependency or unsafe type identification enters Planning.
+Binding authors still use the existing complete Core registration SPI.
+
+Preflight is emitted once, leaving the returned owner waiting for matching runtime
+capacity. `admit_runtime` moves the coordinator's capped output ledger into that
+owner only in this waiting phase after checking its transaction/account/capacity
+association. A wrong phase or mismatched ledger returns the unchanged build and
+ledger with a fixed error, without work or lost capacity. It never publishes or
+invents parent authority; the coordinator retains paired allowances/nonce and
+reconciliation. Waiting polls return Pending without source replay.
+Complete consumes/destroys all input/config/registration/compiler-bearing
+state before exposing the source-free draft payload; destructuring Complete leaves
+no generic terminal cursor keeping the TD loan alive. Failed first ends TD/external-input loans and performs the supported prepaid
+fixed exactly-once abort, then preserves cause and returns all remaining output/
+account objects in source-free Rollback. Its Pending/terminal cleanup shape is
+`ConsumerPropertyReadRollbackStep<A> { Pending(Rollback<A>), Complete(CoreError) }`;
+`Rollback::step(self, &mut WorkBudget)` uses monotonic item/byte positions.
+The fixed cause/diagnostic has admitted bounded storage; a compiler CoreError is
+reduced to that category without uncharged formatting or an unbounded destructor.
+Cleanup completion is not admission success.
+
+The checked cleanup-slot constructor moves an existing logical cleanup-capacity
+reservation of sufficient size/alignment for the fixed Rollback owner slot,
+validates its account/generation/policy association and allocates nothing. A slot
+is vacant on construction and reserves both the complete-object destination and
+its runtime retention. The coordinator pairs its parent allowance; no logical
+slot reservation is submitted as a contiguous allocation. It is reserved before
+entry/output construction, never allocated
+on drop. `CleanupSlot::take(&mut self) -> Option<Rollback<A>>` moves the complete
+cleanup object to its driver, and `Rollback::step` consumes/returns its owner.
+The slot owns complete pending output/accounts, not merely a cleanup record.
+The advanced build entry borrows the external slot; Host runtime and static root
+retain the actual reserved slot owner. Abandonment first ends all caller/config/
+registration/compiler loans and executes prepaid bounded abort/fixed TD release,
+then moves all source-free output/accounts into that destination with fixed work.
+The deposited Rollback contains no references to input, registration or the build.
+If another live owner occupies the destination the entry is rejected before work;
+no fallback allocation or lost owner is allowed. No detached cleanup retains a
+caller input loan, and no variable collection Drop is hidden in abandonment.
+
+Compiler bounds/start/step/abort callbacks are themselves supported bounded
+primitives. Predebit their admitted callback cost, including the cost to compute
+bounds, before calling them; returned bounds cannot retrospectively pay for the
+callback. Obtain conservative cursor/temporary storage before start and check
+actual requests before allocation, not after an infallible callback has exceeded
+capacity. The admitted binding set provides an allocation/cleanup adapter or
+source-level proof for every callback. A `'static` artifact bound is necessary;
+concrete no-source-pointer/callback, declaration honesty and post-destruction
+execution evidence are also required. Each callback receives a short owned-input
+loan; suspended compiler state owns data or checked positions, never a loan into
+movable transaction output.
 
 Every bound must declare only `WorkClass::BindingPolls`, with a nonzero total
 no greater than the existing `plan_compile_work_units_per_step_max`. All
@@ -1252,7 +1369,19 @@ plan-set lease.
 
 Aggregate enumeration, row construction, lookup sealing, reconciliation, and
 later reclamation consume `WorkClass::PlanningItems` through monotonic cursors.
-Existing structural maxima bound lifetime work, the existing step limits bound
+Owned byte copies pay CodecOutputBytes; sequence advances pay their declared
+bounded primitive/item cost; cleanup pays CleanupItems and its byte work.
+Before each phase, derive its checked non-resettable item/byte/cleanup envelope
+from the fixed pass count, admitted structural counts, preflight byte/program
+capacity and constructed output/artifact capacity. These are private projections
+of existing limits, not new ResourceKinds. Every accepted unit debits that
+phase's remainder before work; atomic multi-class debits cannot partially commit,
+and movement, fresh budgets or retries cannot refill it. Preflight source queries
+still debit the same TD lifetime. Compiler progress uses its separate declared
+coordinate remainder. Exhaustion fails the unpublished aggregate with a bounded
+limit cause; cleanup's reserved capacity and lifetime allowance remain available
+to terminal release under its explicit per-step budget.
+Existing structural/output maxima bound lifetime work, the existing step limits bound
 one call, and `plan_reclaim_bytes_per_step_max` bounds reclamation. The sealed
 draft is transferred once to Servient; Servient does not recount semantics,
 rewrite artifact slots, or construct a second lookup.
@@ -1360,14 +1489,14 @@ before that linearization remains valid until released.
 
 ### Consumer timing
 
-`consume` performs `Building -> Frozen -> Published` without transport side
-effects. For the first Consumer Property Read aggregate, Frozen planning output
-is complete and TD-lifetime-free before Servient's last fallible checks. A
-private permit then closes cancellation, the build Snapshot/source charge is
-released, and the already allocated record is atomically installed without an
-allocation, callback, yield, or further failure point. Returning a consumed
-handle proves that its plan set is Published. A failed consume publishes neither
-a handle nor a partial registry entry.
+The Consumer transaction performs `Building -> Frozen -> Published` without
+transport side effects. First-Consumer Frozen output is complete/source-independent;
+input-bearing build state is consumed and bounded scratch cleanup finishes before
+final actual-account/identity/generation/registration/cancellation/slot checks.
+A private permit closes cancellation under exclusive installation authority; the
+preallocated complete record is atomically installed without allocation, callback,
+yield, source query, fallible release or further cancellation decision. Returning
+a handle proves Published; failure publishes neither a handle nor a subset.
 
 ### Producer timing
 
@@ -1411,6 +1540,15 @@ compiler-cursor capacity, retained source/extension bytes, and reclamation
 metadata. The sum is checked against per-Thing and global reservations without
 double-counting shared immutable storage.
 
+For this first slice retained-source and lazy-slot fields are zero. Exact output
+accounting separates logical strings/programs, table capacity, candidates/lookup,
+artifacts, compiler/cursor/temporary overlap, registration/erasure/record deltas,
+inline capacity and rollback/reclaim metadata. Persistent output allowances are
+logical sums; largest-contiguous observes only individual actual checked Layouts.
+A variable output rollback/reclaimer retains monotonic item/byte positions, owns
+complete artifacts, admits bounded destructor primitives and releases children
+before parents. `Vec` nesting is not evidence of bounded Drop.
+
 Every compiler extension reports conservative final, cursor, temporary, and
 work bounds before compilation. Temporary memory is charged while live but is
 not misreported as lifetime storage. Actual final and cursor footprints are
@@ -1437,8 +1575,11 @@ candidate order, artifact, or error classification.
 
 For an admitted document:
 
-- source validation and logical compilation are linear in the visited bounded
-  document, schema, security, URI-template, and extension structures;
+- structural enumeration and logical materialization make a fixed number of
+  monotonic passes over supplied structures; every actual semantic lookup/byte
+  comparison and URI path action is bounded and charged through TD. The supported
+  iterator envelope and repeated security/URI work can exceed linear charged work
+  in unique input size; no free native lookup or Pending prefix replay is allowed;
 - capability lookup and candidate construction are O(`f + p + c`) outside the
   explicit wildcard worst case;
 - logical memory is O(`l`), not O(`l * c`), where `l` is shared logical-plan
@@ -1465,8 +1606,8 @@ new generation fields.
 
 For the first Consumer Property Read record, that immutable generation contains
 the execution plans and lookup, the complete binding registration owner, and
-runtime lifecycle/resource records. It contains no `ValidatedThing`, TD view,
-Snapshot arena, source charge, or Snapshot persistent-document charge.
+runtime lifecycle/resource records. It contains no TD proof, input/derived loan or TD source/document charge
+attributable to this borrowed build.
 
 Consumers of plan data are restricted as follows:
 
