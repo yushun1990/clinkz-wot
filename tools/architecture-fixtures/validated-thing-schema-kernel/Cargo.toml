@@ -18,6 +18,7 @@ serde = { version = "1.0", default-features = false, features = ["derive", "allo
 serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "raw_value"] }
 serde_with = { version = "3.18", default-features = false, features = ["macros", "alloc"] }
 validated-thing-value-construction-probe = { path = "../validated-thing-value-construction", default-features = false, optional = true }
+validated-thing-arena-layout-probe = { path = "../validated-thing-arena-layout", default-features = false, optional = true }
 
 [dev-dependencies]
 clinkz-wot-td = { path = "../../../td", default-features = false }
@@ -27,6 +28,7 @@ default = ["std"]
 std = ["clinkz-wot-foundation/std", "fluent-uri/std", "time/std", "serde/std", "serde_json/std", "serde_with/std", "clinkz-wot-td/std", "validated-thing-value-construction-probe?/std"]
 async = ["clinkz-wot-foundation/async", "validated-thing-value-construction-probe?/async"]
 validated-thing = ["serde_json/arbitrary_precision", "dep:validated-thing-value-construction-probe"]
+borrowed-admission = ["validated-thing", "dep:validated-thing-arena-layout-probe"]
 ap = ["serde_json/arbitrary_precision"]
 order = ["serde_json/preserve_order"]
 td2-preview = ["clinkz-wot-td/td2-preview"]

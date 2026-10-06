@@ -60,6 +60,26 @@ fn main() {
     lib = lib.replace("mod schema_kernel;", "pub mod schema_kernel;");
     lib = lib.replace("mod basic_kernel;", "pub mod basic_kernel;");
     lib = lib.replace("mod basic_typed;", "pub mod basic_typed;");
+    let borrowed = fixture
+        .join("../consumer-borrowed-admission/src/td.rs")
+        .canonicalize()
+        .unwrap();
+    println!("cargo:rerun-if-changed={}", borrowed.display());
+    lib.push_str(&format!("\n#[cfg(feature = \"borrowed-admission\")]\n#[path = {borrowed:?}]\npub mod borrowed_admission;\n"));
+    // Reuse the already differential-tested URI rule owner, without importing
+    // its Snapshot tests or creating another resolver.
+    let uri_source = source.join("../tests/support/uri_semantic_kernel_probe.rs");
+    println!("cargo:rerun-if-changed={}", uri_source.display());
+    let uri = fs::read_to_string(uri_source).unwrap();
+    let uri = uri
+        .split("#[cfg(test)]")
+        .next()
+        .unwrap()
+        .replace("//!", "//");
+    fs::write(candidate.join("borrowed_uri.rs"), uri).unwrap();
+    lib.push_str(
+        "\n#[cfg(feature = \"borrowed-admission\")]\n#[allow(dead_code)]\nmod borrowed_uri;\n",
+    );
     fs::write(candidate.join("lib.rs"), lib).unwrap();
 
     // Borrow the established private Context sequence; serialization is not an
