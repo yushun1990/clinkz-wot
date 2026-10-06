@@ -6,6 +6,7 @@
 //! adapter and the three-arena Snapshot adapter call this one implementation.
 
 use crate::data_type::{BaseUri, FormHref};
+use core::cell::Cell;
 use fluent_uri::{Uri, UriRef};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -236,6 +237,8 @@ fn classify_segment(mut segment: &str) -> SegmentKind {
 pub(super) struct FixedUriBuffer<const N: usize> {
     bytes: [u8; N],
     length: usize,
+    validated: Cell<bool>,
+    validation_bytes: Cell<u64>,
 }
 
 impl<const N: usize> FixedUriBuffer<N> {
@@ -243,11 +246,26 @@ impl<const N: usize> FixedUriBuffer<N> {
         Self {
             bytes: [0; N],
             length: 0,
+            validated: Cell::new(true),
+            validation_bytes: Cell::new(0),
         }
     }
 
     pub(super) fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.bytes[..self.length]).unwrap()
+        if !self.validated.get() {
+            self.validation_bytes
+                .set(self.validation_bytes.get() + self.length as u64);
+            core::str::from_utf8(&self.bytes[..self.length]).unwrap();
+            self.validated.set(true);
+        }
+        // SAFETY: the empty initial slice is valid, and every successful
+        // mutation invalidates the cache before changing bytes or length. Only
+        // a complete checked conversion restores it. A loan prevents mutation.
+        unsafe { core::str::from_utf8_unchecked(&self.bytes[..self.length]) }
+    }
+
+    pub(super) fn validation_bytes(&self) -> u64 {
+        self.validation_bytes.get()
     }
 }
 
@@ -268,6 +286,7 @@ impl<const N: usize> UriOutput for FixedUriBuffer<N> {
         if end > N {
             return Err(ResolveIntoError::Capacity);
         }
+        self.validated.set(false);
         self.bytes[self.length..end].copy_from_slice(value.as_bytes());
         self.length = end;
         Ok(())
@@ -277,6 +296,7 @@ impl<const N: usize> UriOutput for FixedUriBuffer<N> {
         if self.length == N {
             return Err(ResolveIntoError::Capacity);
         }
+        self.validated.set(false);
         self.bytes[self.length] = value;
         self.length += 1;
         Ok(())
@@ -284,6 +304,7 @@ impl<const N: usize> UriOutput for FixedUriBuffer<N> {
 
     fn truncate(&mut self, length: usize) {
         assert!(length <= self.length);
+        self.validated.set(false);
         self.length = length;
     }
 
@@ -296,6 +317,7 @@ impl<const N: usize> UriOutput for FixedUriBuffer<N> {
         if end > N {
             return Err(ResolveIntoError::Capacity);
         }
+        self.validated.set(false);
         self.bytes
             .copy_within(index..self.length, index + value.len());
         self.bytes[index..index + value.len()].copy_from_slice(value.as_bytes());
@@ -310,6 +332,60 @@ mod tests {
     use crate::data_type::{ResolveFormHrefError, resolve_form_href};
 
     use super::super::{PROPERTY_FORMS, ROOT_PROPERTIES, Snapshot};
+
+    #[test]
+    fn uri_buffer_revalidates_mutations_and_caches_unchanged_loans() {
+        let mut output = FixedUriBuffer::<8>::new();
+        assert_eq!(output.as_str(), "");
+        assert_eq!(output.validation_bytes(), 0);
+        output.push_str("é").unwrap();
+        assert_eq!(output.as_str(), "é");
+        assert_eq!(output.validation_bytes(), 2);
+        assert_eq!(output.as_str(), "é");
+        assert_eq!(output.validation_bytes(), 2);
+        output.push_byte(b'/').unwrap();
+        assert_eq!(output.as_str(), "é/");
+        assert_eq!(output.validation_bytes(), 5);
+        output.insert_str(2, "ß").unwrap();
+        assert_eq!(output.as_str(), "éß/");
+        assert_eq!(output.validation_bytes(), 10);
+        output.truncate(2);
+        assert_eq!(output.as_str(), "é");
+        assert_eq!(output.validation_bytes(), 12);
+        assert_eq!(output.push_str("overflow"), Err(ResolveIntoError::Capacity));
+        assert_eq!(output.as_str(), "é");
+        assert_eq!(output.validation_bytes(), 12);
+    }
+
+    #[test]
+    #[should_panic]
+    fn uri_buffer_rejects_invalid_byte_after_a_cached_loan() {
+        let mut output = FixedUriBuffer::<8>::new();
+        output.push_str("valid").unwrap();
+        assert_eq!(output.as_str(), "valid");
+        output.push_byte(0xff).unwrap();
+        let _ = output.as_str();
+    }
+
+    #[test]
+    #[should_panic]
+    fn uri_buffer_rejects_truncation_inside_a_cached_utf8_scalar() {
+        let mut output = FixedUriBuffer::<8>::new();
+        output.push_str("é").unwrap();
+        assert_eq!(output.as_str(), "é");
+        output.truncate(1);
+        let _ = output.as_str();
+    }
+
+    #[test]
+    #[should_panic]
+    fn uri_buffer_rejects_insertion_inside_a_cached_utf8_scalar() {
+        let mut output = FixedUriBuffer::<8>::new();
+        output.push_str("é").unwrap();
+        assert_eq!(output.as_str(), "é");
+        output.insert_str(1, "x").unwrap();
+        let _ = output.as_str();
+    }
 
     fn selected_form_mut(thing: &mut crate::thing::Thing) -> &mut crate::form::Form {
         &mut thing

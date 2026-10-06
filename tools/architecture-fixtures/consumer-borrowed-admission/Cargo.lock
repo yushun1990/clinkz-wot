@@ -64,8 +64,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-core"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-foundation",
+ "clinkz-wot-td",
+ "critical-section",
+]
+
+[[package]]
 name = "clinkz-wot-foundation"
 version = "0.1.0"
+
+[[package]]
+name = "clinkz-wot-property-read-binding-fixture"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+]
 
 [[package]]
 name = "clinkz-wot-td"
@@ -80,10 +97,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "consumer-borrowed-admission-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-property-read-binding-fixture",
+ "serde_json",
+ "validated-thing-arena-layout-probe",
+ "validated-thing-schema-kernel-probe",
+ "validated-thing-value-construction-probe",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
+
+[[package]]
+name = "critical-section"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "darling"
@@ -505,7 +541,6 @@ name = "validated-thing-schema-kernel-probe"
 version = "0.0.0"
 dependencies = [
  "clinkz-wot-foundation",
- "clinkz-wot-td",
  "fluent-uri",
  "serde",
  "serde_json",

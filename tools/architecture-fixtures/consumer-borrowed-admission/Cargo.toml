@@ -1,0 +1,21 @@
+[package]
+name = "consumer-borrowed-admission-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+td-candidate = { package = "validated-thing-schema-kernel-probe", path = "../validated-thing-schema-kernel", default-features = false, features = ["borrowed-admission"] }
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+clinkz-wot-core = { path = "../../../core", default-features = false }
+clinkz-wot-property-read-binding-fixture = { path = "../property-read-binding", default-features = false }
+validated-thing-value-construction-probe = { path = "../validated-thing-value-construction", default-features = false }
+validated-thing-arena-layout-probe = { path = "../validated-thing-arena-layout", default-features = false }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "arbitrary_precision"] }
+
+[features]
+default = ["std"]
+std = ["td-candidate/std", "clinkz-wot-foundation/std", "clinkz-wot-core/std", "clinkz-wot-property-read-binding-fixture/std", "validated-thing-value-construction-probe/std", "serde_json/std"]
+order = ["td-candidate/order", "serde_json/preserve_order"]

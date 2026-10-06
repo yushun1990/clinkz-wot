@@ -36,6 +36,7 @@ Topics are retained after migration as decision history.
 
 ** DECIDED
 
+- [[file:0075-consumer-borrowed-admission-construction.md][0075 Consumer Borrowed Admission Construction]]
 - [[file:0074-consumer-td-admission-architecture-proposal.md][0074 Consumer TD Admission Architecture Proposal and Impact Review]]
 
 ** MIGRATED
