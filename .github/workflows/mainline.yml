@@ -80,7 +80,7 @@ jobs:
                 cat "$td_negative_log"
                 exit 1
               fi
-              rg 'unresolved imports.*td::ValidatedThing' "$td_negative_log"
+              grep -E 'unresolved imports.*td::ValidatedThing' "$td_negative_log" || { cat "$td_negative_log"; exit 1; }
               rm "$td_negative_log"
             done
           done
