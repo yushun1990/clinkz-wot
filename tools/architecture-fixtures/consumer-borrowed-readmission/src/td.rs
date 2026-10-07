@@ -1307,9 +1307,15 @@ impl<'a> Read<'a> {
         self.proof.thing.id.as_ref().map(|v| v.as_str())
     }
     pub fn ready(&self) -> bool {
-        matches!(self.stage, 6 | 8)
+        self.failure.is_none() && matches!(self.stage, 6 | 8)
+    }
+    fn is_done(&self) -> bool {
+        self.failure.is_none() && self.stage == 7
     }
     pub fn acknowledge(&mut self) {
+        if !self.ready() {
+            return;
+        }
         match self.stage {
             8 => self.stage = 2,
             6 => {
@@ -1320,7 +1326,7 @@ impl<'a> Read<'a> {
         }
     }
     pub fn finish(self) -> Validated<'a> {
-        assert_eq!(self.stage, 7);
+        assert!(self.is_done());
         self.proof
     }
     fn debit(&mut self, budget: &mut WorkBudget, costs: &[(W, u64)]) -> Result<bool, Cause> {
@@ -1339,16 +1345,21 @@ impl<'a> Read<'a> {
         if let Some(first) = self.failure {
             return Err(first);
         }
+        // Completion is terminal until a successful rewind. A later cancel
+        // request cannot replace Done or create a failure that rewind erases.
+        if self.is_done() {
+            return Ok(Event::Done);
+        }
         if cancel {
             self.failure = Some(Cause::Cancelled);
             return Err(Cause::Cancelled);
         }
-        if budget.is_exhausted() && !matches!(self.stage, 6 | 7 | 8) {
+        if budget.is_exhausted() && !matches!(self.stage, 6 | 8) {
             return Ok(Event::Pending);
         }
         let mut actions = 0;
         loop {
-            if self.stage == 7 {
+            if self.is_done() {
                 return Ok(Event::Done);
             }
             if self.stage == 8 {

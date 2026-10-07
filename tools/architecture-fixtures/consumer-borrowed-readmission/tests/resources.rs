@@ -171,7 +171,7 @@ fn every_inspect_basic_and_semantic_suspension_can_cancel_or_drop() {
         }
     }
     drop(read);
-    for position in 0..terminal_read {
+    for position in 0..=terminal_read {
         for cancel in [false, true] {
             let g = support::start(None);
             let mut read = validate(&t, l, 4096).unwrap().into_property_read();
@@ -182,9 +182,33 @@ fn every_inspect_basic_and_semantic_suspension_can_cancel_or_drop() {
                 }
             }
             if cancel {
-                let first = read.step(&mut budget(0), true).err().unwrap();
-                assert!(matches!(first, ValidatedThingCause::Cancelled { .. }));
-                assert_eq!(read.step(&mut budget(4096), false).err(), Some(first));
+                if position == terminal_read {
+                    assert!(matches!(
+                        read.step(&mut budget(0), true),
+                        Ok(ValidatedPropertyReadStep::Done)
+                    ));
+                } else {
+                    let first = read.step(&mut budget(0), true).err().unwrap();
+                    assert!(matches!(first, ValidatedThingCause::Cancelled { .. }));
+                    let snapshot = (
+                        read.trace(),
+                        read.lifetime_remaining(),
+                        read.uri_observations(),
+                        read.scope_visits(),
+                    );
+                    read.acknowledge();
+                    read = read.rewind();
+                    assert_eq!(read.step(&mut budget(4096), false).err(), Some(first));
+                    assert_eq!(
+                        (
+                            read.trace(),
+                            read.lifetime_remaining(),
+                            read.uri_observations(),
+                            read.scope_visits()
+                        ),
+                        snapshot
+                    );
+                }
             }
             drop(read);
             let c = support::counts();
@@ -194,7 +218,7 @@ fn every_inspect_basic_and_semantic_suspension_can_cancel_or_drop() {
         }
     }
     println!(
-        "exhaustive cancellation/drop positions: inspect/Basic={} semantic={}",
+        "exhaustive cancellation/drop positions: inspect/Basic={} semantic={} plus post-Done",
         terminal, terminal_read
     );
 }
@@ -240,7 +264,7 @@ fn every_normalization_suspension_and_allocation_failure_preserves_terminal_owne
         assert_eq!(support::counts().allocations, support::counts().releases);
         drop(g);
     }
-    for position in 0..positions {
+    for position in 0..=positions {
         for cancel in [false, true] {
             let g = support::start(None);
             let mut read = validate(&t, &l, 4096).unwrap().into_property_read();
@@ -251,9 +275,33 @@ fn every_normalization_suspension_and_allocation_failure_preserves_terminal_owne
                 }
             }
             if cancel {
-                let e = read.step(&mut budget(0), true).err().unwrap();
-                assert!(matches!(e, ValidatedThingCause::Cancelled { .. }));
-                assert_eq!(read.step(&mut budget(4096), false).err(), Some(e));
+                if position == positions {
+                    assert!(matches!(
+                        read.step(&mut budget(0), true),
+                        Ok(ValidatedPropertyReadStep::Done)
+                    ));
+                } else {
+                    let e = read.step(&mut budget(0), true).err().unwrap();
+                    assert!(matches!(e, ValidatedThingCause::Cancelled { .. }));
+                    let snapshot = (
+                        read.trace(),
+                        read.lifetime_remaining(),
+                        read.uri_observations(),
+                        read.scope_visits(),
+                    );
+                    read.acknowledge();
+                    read = read.rewind();
+                    assert_eq!(read.step(&mut budget(4096), false).err(), Some(e));
+                    assert_eq!(
+                        (
+                            read.trace(),
+                            read.lifetime_remaining(),
+                            read.uri_observations(),
+                            read.scope_visits()
+                        ),
+                        snapshot
+                    );
+                }
             }
             drop(read);
             assert_eq!(support::counts().live, 0);
@@ -262,8 +310,138 @@ fn every_normalization_suspension_and_allocation_failure_preserves_terminal_owne
         }
     }
     println!(
-        "normalization cancellation/drop positions={positions}; allocation failures={attempts}"
+        "normalization cancellation/drop positions={positions} plus post-Done; allocation failures={attempts}"
     );
+}
+#[test]
+fn semantic_failures_preserve_first_cause_and_owned_blocks_through_acknowledge_and_rewind() {
+    use clinkz_wot_foundation::WorkClass as W;
+    for scenario in [
+        "pending cancel",
+        "property cancel",
+        "form cancel",
+        "invalid URI",
+        "URI limit",
+        "work limit",
+        "allocation failure",
+    ] {
+        let mut t = normalization_source(40);
+        let mut limits = GatewayDefaultV1::limits()
+            .clone()
+            .with_limit(R::UriTemplateSourceBytesMax, Some(64));
+        match scenario {
+            "form cancel" => {
+                t.properties
+                    .as_mut()
+                    .unwrap()
+                    .get_mut("p")
+                    .unwrap()
+                    ._interaction
+                    .forms[0]
+                    .scopes = Some(vec!["retained".into()]);
+            }
+            "invalid URI" => t.base = Some(BaseUri::parse("foo:").unwrap()),
+            "URI limit" => {
+                t = source();
+                t.base = Some(BaseUri::parse("https://h/").unwrap());
+                limits = limits.with_limit(R::UriTemplateSourceBytesMax, Some(6));
+            }
+            "work limit" => {
+                let validation_work = validate(&t, &limits, 4096)
+                    .unwrap()
+                    .trace()
+                    .work
+                    .iter()
+                    .sum();
+                limits = limits
+                    .with_limit(R::JsonMembersPerObjectMax, Some(64))
+                    .with_limit(R::JsonArrayItemsMax, Some(64))
+                    .with_limit(R::AffordancesPerThingMax, Some(16))
+                    .with_limit(R::DocumentValidationWorkUnitsMax, Some(validation_work));
+            }
+            _ => {}
+        }
+        let proof = validate(&t, &limits, 4096).unwrap();
+        let g = support::start((scenario == "allocation failure").then_some(1));
+        let mut read = proof.into_property_read();
+        let first = match scenario {
+            "pending cancel" => read.step(&mut budget(0), true).err().unwrap(),
+            "property cancel" | "form cancel" => {
+                loop {
+                    match read.step(&mut budget(4), false).unwrap() {
+                        ValidatedPropertyReadStep::Ready(
+                            ValidatedPropertyReadEvent::Property { .. },
+                        ) if scenario == "property cancel" => break,
+                        ValidatedPropertyReadStep::Ready(ValidatedPropertyReadEvent::Form(_)) => {
+                            break;
+                        }
+                        ValidatedPropertyReadStep::Ready(_) => read.acknowledge(),
+                        _ => {}
+                    }
+                }
+                read.step(&mut budget(0), true).err().unwrap()
+            }
+            _ => drive(&mut read, 4).unwrap_err(),
+        };
+        match scenario {
+            "pending cancel" | "property cancel" | "form cancel" => assert!(matches!(
+                first,
+                ValidatedThingCause::Cancelled {
+                    phase: ValidatedThingPhase::Semantics
+                }
+            )),
+            "invalid URI" => assert!(
+                matches!(first, ValidatedThingCause::Invalid(x) if x.kind() == ValidatedThingInvalidKind::InvalidUri)
+            ),
+            "URI limit" => assert!(
+                matches!(first, ValidatedThingCause::Limit(x) if x.kind() == R::UriTemplateSourceBytesMax)
+            ),
+            "work limit" => assert!(
+                matches!(first, ValidatedThingCause::Limit(x) if x.kind() == R::DocumentValidationWorkUnitsMax)
+            ),
+            "allocation failure" => assert!(
+                matches!(first, ValidatedThingCause::Failed(x) if x.kind() == ValidatedThingFailureKind::AllocationFailed)
+            ),
+            _ => unreachable!(),
+        }
+        let snapshot = (
+            read.trace(),
+            read.lifetime_remaining(),
+            read.uri_observations(),
+            read.scope_visits(),
+        );
+        let allocations = support::counts();
+        if scenario == "form cancel" {
+            assert_eq!(read.scope_visits(), 1);
+            assert_eq!(read.uri_validation_bytes(), 11);
+            assert_eq!(allocations.live, 64);
+        }
+        assert!(!read.ready(), "{scenario}: a failed cursor cannot be Ready");
+        for credit in [0, 1, 4096] {
+            read.acknowledge();
+            read = read.rewind();
+            for cancel in [false, true] {
+                let mut b = budget(credit);
+                let before = W::ALL.map(|c| b.remaining(c));
+                assert_eq!(read.step(&mut b, cancel).err(), Some(first), "{scenario}");
+                assert_eq!(W::ALL.map(|c| b.remaining(c)), before);
+                assert_eq!(
+                    (
+                        read.trace(),
+                        read.lifetime_remaining(),
+                        read.uri_observations(),
+                        read.scope_visits()
+                    ),
+                    snapshot
+                );
+                assert_eq!(support::counts(), allocations);
+            }
+        }
+        drop(read);
+        assert_eq!(support::counts().live, 0);
+        assert_eq!(support::counts().allocations, support::counts().releases);
+        drop(g);
+    }
 }
 #[test]
 fn allocation_limits_reject_before_allocator_entry() {
@@ -513,6 +691,56 @@ fn fixed_pool_runtime_prepays_alignment_metadata_and_unused_allocator_capacity()
         let trace = read.trace();
         let actual = support::counts();
         let pool = support::pool_observations();
+        let life = read.lifetime_remaining();
+        let observed = (read.uri_observations(), read.scope_visits());
+        // The fixed allocator also executes the terminal public sequences.
+        // Done ignores later cancellation; successful rewind owns the same
+        // block and lifetime, then cancellation of that new pass stays failed.
+        assert!(matches!(
+            read.step(&mut budget(0), true),
+            Ok(ValidatedPropertyReadStep::Done)
+        ));
+        read.acknowledge();
+        assert_eq!((read.trace(), read.lifetime_remaining()), (trace, life));
+        assert_eq!((read.uri_observations(), read.scope_visits()), observed);
+        read = read.rewind();
+        assert_eq!((read.trace(), read.lifetime_remaining()), (trace, life));
+        let first = read.step(&mut budget(0), true).err().unwrap();
+        assert!(matches!(
+            first,
+            ValidatedThingCause::Cancelled {
+                phase: ValidatedThingPhase::Semantics
+            }
+        ));
+        let failed_observed = (read.uri_observations(), read.scope_visits());
+        read.acknowledge();
+        read = read.rewind();
+        assert_eq!(read.step(&mut budget(4), false).err(), Some(first));
+        assert_eq!((read.trace(), read.lifetime_remaining()), (trace, life));
+        assert_eq!(
+            (read.uri_observations(), read.scope_visits()),
+            failed_observed
+        );
+        assert_eq!(support::counts(), actual);
+        let after = support::pool_observations();
+        assert_eq!(
+            (
+                after.allocations,
+                after.releases,
+                after.live,
+                after.peak,
+                after.occupied_span,
+                after.alignment_padding
+            ),
+            (
+                pool.allocations,
+                pool.releases,
+                pool.live,
+                pool.peak,
+                pool.occupied_span,
+                pool.alignment_padding
+            )
+        );
         assert_eq!(pool.live, actual.live);
         assert_eq!(pool.peak, actual.peak);
         assert_eq!(pool.allocations, actual.allocations);

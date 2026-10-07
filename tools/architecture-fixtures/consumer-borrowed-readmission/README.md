@@ -19,6 +19,10 @@ The [independent review of `c4d0824`](https://github.com/yushun1990/clinkz-wot/p
 required changes for two URI counterexamples; that head was not accepted.
 The current candidate corrects both with executable regressions below. Its new
 exact head still needs independent acceptance; the earlier review is preserved.
+The [re-review of `bb18276`](https://github.com/yushun1990/clinkz-wot/pull/130#issuecomment-6032912445)
+closed the URI findings but required a semantic terminal-state correction.
+The terminal regressions below address that counterexample; this candidate
+still requires independent review at its new exact head.
 
 ## Construction and review map
 
@@ -101,6 +105,19 @@ observations. One monotonic `DocumentValidationWorkUnitsMax` remainder survives
 validation, proof movement, semantic queries and rewinds. Allocation acquires
 prepaid fixed-block CleanupItems; cancellation/drop can release those blocks at
 zero new credit. Semantic failures retain their original cause on later polls.
+
+Done is recognized before a later cancellation request and remains Done at
+zero, short or ample credit, without changing budgets, lifetime, URI/scope
+visits or allocator observations. One shared predicate permits rewind/finish
+only at successful Done. A failed cursor cannot become Ready, acknowledge a
+coordinate or rewind into a new pass; it retains its first cause and fixed
+blocks until owner release. Successful rewind starts a paid pass using the
+same proof, lifetime and reusable allocation. The terminal regressions cover
+the review's one-property input and a derived URI with scopes, plus seven
+failure origins: pending/Property-Ready/Form-Ready cancellation, invalid URI,
+URI limit, lifetime limit and fallible URI allocation. Repeated cancel,
+acknowledge, rewind and polls cannot re-emit events or spend further work after
+failure. The fully prepaid fixed allocator executes both terminal sequences.
 
 URI component discovery, authority scan, reverse merge search, prefix emission,
 segment classification, path pop, in-place reversal, query/fragment emission,
@@ -228,7 +245,8 @@ The cancellation/drop corpus exhausts 499 inspection/Basic positions, 167
 semantic positions and 744 external-build positions. The small normalization
 counterexample additionally exhausts all 221 semantic positions and its four
 fallible allocation requests, covering source-pop and in-place-swap phases.
-Both explicit cancellation
+Both semantic sweeps also include the state after the poll returning Done and
+acknowledge/rewind after each pre-Done cancellation. Both explicit cancellation
 and abandonment are checked, including transfer and a started owned compiler.
 The closed MockCompilerCursor's abort is a scalar primitive and is observed
 exactly once whenever owned. Fixed Draft destruction visits at most 16 rows and
@@ -295,7 +313,7 @@ cargo rustc --locked --manifest-path tools/architecture-fixtures/consumer-borrow
 tools/check-design-artifacts.sh
 ```
 
-The 35 runtime tests execute under default BTree, preserve_order and native
+The 37 runtime tests execute under default BTree, preserve_order and native
 no_std + alloc/async graphs. The matrix separately checks eight Host default,
 four native no-default, eight thumb and twelve import/unification cells; the
 serde-only capability negatives cannot pass because another cell enabled it.

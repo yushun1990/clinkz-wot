@@ -359,7 +359,7 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
         self.0.acknowledge();
     }
     pub fn rewind(self) -> Self {
-        if self.0.stage == 7 {
+        if self.0.is_done() {
             Self(Read::new(self.0.finish()))
         } else {
             self

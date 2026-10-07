@@ -318,6 +318,87 @@ fn exact_lifetime_work_is_monotonic_through_moves_and_rewind() {
     }
 }
 #[test]
+fn semantic_done_is_stable_under_cancel_acknowledge_and_zero_credit_until_rewind() {
+    let mut derived = normalization_source(40);
+    derived
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .scopes = Some(vec!["scope".into()]);
+    for t in [source(), derived] {
+        let proof = validate(&t, GatewayDefaultV1::limits(), 4096).unwrap();
+        let g = support::start(None);
+        let mut read = proof.into_property_read();
+        drive(&mut read, 4).unwrap();
+        let snapshot = (
+            read.trace(),
+            read.lifetime_remaining(),
+            read.uri_observations(),
+            read.scope_visits(),
+        );
+        let allocations = support::counts();
+        for cancel in [true, false, true] {
+            for credit in [0, 1, 4096] {
+                let mut b = budget(credit);
+                let before = W::ALL.map(|c| b.remaining(c));
+                assert!(matches!(
+                    read.step(&mut b, cancel),
+                    Ok(ValidatedPropertyReadStep::Done)
+                ));
+                read.acknowledge();
+                assert!(!read.ready());
+                assert_eq!(W::ALL.map(|c| b.remaining(c)), before);
+                assert_eq!(
+                    (
+                        read.trace(),
+                        read.lifetime_remaining(),
+                        read.uri_observations(),
+                        read.scope_visits()
+                    ),
+                    snapshot
+                );
+                assert_eq!(support::counts(), allocations);
+            }
+        }
+        let mut read = read.rewind();
+        assert_eq!(
+            (read.trace(), read.lifetime_remaining()),
+            (snapshot.0, snapshot.1)
+        );
+        assert_eq!(support::counts(), allocations);
+        assert!(matches!(
+            read.step(&mut budget(0), false),
+            Ok(ValidatedPropertyReadStep::Pending)
+        ));
+        let mut events = 0;
+        loop {
+            match read.step(&mut budget(4), false).unwrap() {
+                ValidatedPropertyReadStep::Ready(_) => {
+                    events += 1;
+                    read.acknowledge();
+                }
+                ValidatedPropertyReadStep::Pending => {}
+                ValidatedPropertyReadStep::Done => break,
+            }
+        }
+        assert_eq!(events, 2);
+        assert!(read.lifetime_remaining() < snapshot.1);
+        assert_eq!(support::counts(), allocations); // reusable derived block
+        assert!(matches!(
+            read.step(&mut budget(0), true),
+            Ok(ValidatedPropertyReadStep::Done)
+        ));
+        drop(read);
+        assert_eq!(support::counts().live, 0);
+        assert_eq!(support::counts().allocations, support::counts().releases);
+        drop(g);
+    }
+}
+#[test]
 fn named_uri_targets_advance_with_small_credit_and_ready_retries_do_no_work() {
     for (original, n) in [
         (GatewayDefaultV1::limits(), 16384usize),

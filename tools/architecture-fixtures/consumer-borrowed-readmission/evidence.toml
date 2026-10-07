@@ -48,6 +48,8 @@ inspection_basic_suspension_positions = 499
 semantic_suspension_positions = 167
 normalization_suspension_positions = 221
 normalization_allocation_failures = 4
+semantic_sweeps_include_post_done = true
+semantic_cancel_sweeps_preserve_failure_through_acknowledge_rewind = true
 source_charge = "Caller source is external baseline; real engine-owned upstream Layouts keep original source/global charges through TD lending until actual Thing destruction. No reclassification or field-length allocation estimate."
 system_observer_scope = "requested Layout bytes/alignment; not malloc usable size or OS RAM"
 fixed_allocator_scope = "native execution of the no_std + alloc candidate using a caller-reserved fixed arena; full startup and unused capacity retained, zero additional child bytes at terminal"
@@ -103,6 +105,16 @@ empty_rootless_base = "Include empty paths in the shared TD rootless-base restri
 transient_uri_projection = "Backward source-segment cancellation emits only final surviving bytes; paid in-place reversal uses the existing single URI-ceiling allocation, no intermediate/base limit or reduced profile support."
 witnesses = ["tests/boundary.rs", "tests/progress.rs", "tests/resources.rs", "tests/join.rs"]
 
+[terminal_review_correction]
+reviewed_ref = "bb18276b41937689700c54b4250dd10bcd4bfadd"
+review_url = "https://github.com/yushun1990/clinkz-wot/pull/130#issuecomment-6032912445"
+review_disposition = "changes required for terminal state; prior URI findings closed; current candidate still needs independent exact-head acceptance"
+claim = "Done precedes later cancellation; only successful Done can rewind/finish. Failure excludes Ready/acknowledgement and preserves first cause, lifetime, budgets, URI/scope observations and allocator requests/live blocks through repeated acknowledge/rewind/polls. Valid rewind opens a paid pass without allowance refill or allocation."
+witnesses = ["src/td.rs", "src/api.rs", "tests/progress.rs", "tests/resources.rs"]
+done_input_shapes = ["the review's one-NoSec-property/href-target input", "derived URI with scope"]
+failed_cursor_origins = ["Pending cancellation", "Property Ready cancellation", "Form Ready cancellation", "invalid URI", "URI resource limit", "lifetime work limit", "fallible URI allocation"]
+runtime_backends = ["System allocator observations", "fully prepaid fixed pool"]
+
 [deferred]
 claims = [
     "separate independent exact-head acceptance and admission-only transition",
@@ -118,7 +130,7 @@ claims = [
 toolchain = "rustc 1.99.0 b940084d7eb6a299eb4bfeb8e34901bc051e7ac4; LLVM 23.1.1"
 native_target = "x86_64-unknown-linux-gnu"
 compile_target = "thumbv7em-none-eabihf"
-runtime_tests_per_graph = 35
+runtime_tests_per_graph = 37
 runtime_graphs = ["default BTree", "std preserve_order", "native no-default validated-thing,async"]
 uri_component_cases = 209
 uri_segment_cross_product_cases = 6000
@@ -151,7 +163,7 @@ observation_status = "measured fixture/compiler values; not fixed profile consta
 
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml"
-scope = "35 candidate runtime tests, including both independent-review URI counterexamples"
+scope = "37 candidate runtime tests, including URI counterexamples and re-review terminal sequences"
 status = "passed-locally"
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml --features order"
