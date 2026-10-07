@@ -285,8 +285,9 @@ capability with ADR-0020 semantics, first-allocation source accounting and its o
 admission/evidence. Existing arena/strict/date/semantic/handoff fixtures remain at
 their narrower boundaries. Foundation/Context and completed WP-100 response,
 WP-200 leaf, WP-300 execution and Producer evidence remain disjoint regression
-requirements. The orphaned source reclassification removal stays a future admitted
-source duty. Status remains `planned` / `candidate` / `current` and no gate changes.
+requirements. The orphaned source reclassification removal belongs to the admitted
+TD tranche's subsequent Foundation source change. Admission state and production
+completion obligations are owned by the linked TD admission record.
 
 ## Requirements
 

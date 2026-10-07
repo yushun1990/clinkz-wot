@@ -1,11 +1,15 @@
 # WP-100 Consumer TD Admission
 
-Status: AUTHORITY MIGRATED; NOT ADMITTED. `WP-100-CONSUMER-VALIDATED-THING`
-remains `planned` / `candidate` / `current`. [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org)
-migrates the independently reviewed design and discriminator from
-[workspace 0075](../../workspace/0075-consumer-borrowed-admission-construction.md)
-/ github-pr:128. This record supplies no production implementation, readmission,
-completion, successor admission or gate transition.
+Status: ADMITTED FOR IMPLEMENTATION. `WP-100-CONSUMER-VALIDATED-THING`
+is `planned` / `admitted` / `current` in [the work-package index](index.toml).
+The separate admission-only transition uses the
+[independent complete six-obligation acceptance on PR #130](https://github.com/yushun1990/clinkz-wot/pull/130#issuecomment-6034368557)
+of exact evidence head `81738ca24a5919314267c0ccaaa6638fb184a8b3`.
+That review accepts the entire borrowed-TD pre-readmission boundary for this
+transition, including the [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org)
+authority migrated by github-pr:129. The admitted technical contract and
+accepted executable witnesses are preserved. Production implementation and
+completion, successor admission and Consumer gate registration remain separate.
 
 The normalized-owner authority from github-pr:78 and its later refinements is
 superseded for typed Consumer admission. The github-pr:75 withdrawal after the
@@ -14,8 +18,8 @@ opaque-allocation counterexample remains history. Foundation/Context work from
 fixtures remain evidence at their original boundaries. Git preserves prior
 contracts; this record does not rewrite those observations as borrowed production
 proof. The numeric amendment remains active; the literal strict contract below
-moves with future ingestion. Independent acceptance of this exact authority
-revision and a separate evidence-backed admission transition remain required.
+moves with future ingestion. Implementation is confined to the registered paths
+below and must produce the separate production completion evidence.
 
 ## Tranche and authority
 
@@ -24,7 +28,7 @@ revision and a separate evidence-backed admission transition remain required.
 - owner packages: `clinkz-wot-foundation`, `clinkz-wot-td`
 - profile cells: `no-default`, `async-no-std`, `std`; the TD surface explicitly
   requires `validated-thing` in each
-- future evidence: `consumer-borrowed-td-admission` at
+- production completion evidence (not produced by admission): `consumer-borrowed-td-admission` at
   `docs/evidence/WP-100-consumer-borrowed-td-admission.toml`
 
 The active requirements are `DOC-RUNTIME-001`, `RES-LIMIT-001..003`,
@@ -842,9 +846,9 @@ different typed Numbers; parity compares the resolved typed value, not an
 invented graph-invariant parsing result. Object storage order and caller
 capacity remain non-semantic; borrowed Number content remains lossless.
 
-## Permitted future implementation paths
+## Permitted implementation paths
 
-After separate readmission, the TD tranche may change the paths registered in
+The admitted TD tranche may change the paths registered in
 `index.toml`: Foundation generated Number-row plumbing and the already orphaned
 source-to-persistent-document method removal; TD's explicit feature/API floor,
 new validation/proof/lending module, shared Basic/default/URI kernels, private
@@ -859,10 +863,11 @@ review. No new Foundation account, WorkClass or resource row is authorized.
 ## Evidence required before separate readmission
 
 These replacement obligations supersede the eight Snapshot-specific items.
-Independent exact-head acceptance must establish the **complete TD tranche**
-proof before a separate docs-only candidate-to-admitted transition. Reusable
+The independent acceptance linked above establishes the **complete six-obligation
+pre-readmission boundary** at the accepted evidence head. The following obligations
+remain the boundary to repeat through production for completion. Reusable
 historical witnesses count only where their actual claim matches the obligation;
-passing this migration's authority checks discharges none of the production joins.
+neither admission nor the non-production witnesses establish production completion.
 
 1. **Capability and lifetimes.** Compile the exact proof/progress/lending boundary
    and full capability off/on matrix; negative fixtures prohibit raw Thing

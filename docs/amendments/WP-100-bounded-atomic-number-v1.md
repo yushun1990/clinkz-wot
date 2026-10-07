@@ -1,6 +1,7 @@
 # WP-100 Bounded Atomic Number v1
 
-Status: authority candidate for `WP-100-CONSUMER-VALIDATED-THING`; not admitted.
+Status: active numeric authority for `WP-100-CONSUMER-VALIDATED-THING`;
+implementation admission is owned by [the TD admission record](../work-packages/WP-100-consumer-validated-thing-admission.md).
 
 Decision source: workspace topic 0069 / github-pr:86.
 Migration records: workspace topic 0070 (historical, github-pr:87); workspace
@@ -8,8 +9,8 @@ topic 0071 (current resource-authority migration, github-pr:92).
 
 This amendment owns the WP-100 numeric boundary that supersedes the affected
 exact-decimal / byte-resumable clauses previously projected from workspace
-0067 and 0068. It does not authorize production Rust, readmit the tranche, or
-change existing Consumer gates.
+0067 and 0068. Production implementation follows the TD tranche's indexed
+admission scope; this amendment grants no separate admission or gate authority.
 
 ## Scope
 
@@ -178,10 +179,10 @@ without borrowed lexical access because it is not the bounded admission path.
 The previously accepted Host/thumb/downstream feature matrix and semver floor
 remain unchanged.
 
-## Evidence required before readmission
+## Pre-implementation and completion evidence
 
-The replacement TD readmission set in the admission record remains required. Numeric evidence must now
-include:
+The admission record owns acceptance of the replacement TD pre-readmission set
+and its repetition through production for completion. Numeric evidence includes:
 
 - successful configuration projection of the gateway and benchmark static
   reference values, including benchmark success while unrelated Host Consumer
@@ -234,7 +235,6 @@ It preserves all unrelated Basic rules, fixed first-cause/cleanup and actual
 accounting, the explicit AP boundary and existing feature/target matrices.
 ADR-0021 supersedes the Snapshot-specific preservation clauses of prior versions.
 
-The tranche remains `planned` / `candidate` / `current`. Independent exact-head
-authority review, completion and independent acceptance of the replacement TD
-readmission obligations, and only then a separate docs-only
-`candidate -> admitted` transition are required before production implementation.
+The TD admission record and work-package index own admission state, accepted
+review authority and permitted implementation paths. Production completion must
+repeat the applicable numeric claims through the admitted public boundary.

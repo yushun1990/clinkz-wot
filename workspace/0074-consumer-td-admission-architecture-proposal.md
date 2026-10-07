@@ -1,6 +1,10 @@
 # 0074 Consumer TD Admission Architecture Proposal and Impact Review
 
-Status: DECIDED — recommended direction; independent architecture review pending
+Status: MIGRATED — the selected conclusion is projected by
+[ADR-0021](../docs/ADRs/0021-borrowed-consumer-td-admission.org) and its registered
+contracts. [The TD admission record](../docs/work-packages/WP-100-consumer-validated-thing-admission.md)
+owns implementation admission. The original proposal below is retained as
+decision history at its review baseline.
 
 Kind: independent architecture decision proposal and pre-migration impact review
 
