@@ -110,6 +110,15 @@ jobs:
           cargo test --locked --manifest-path "$borrowed_fixture_manifest" --no-default-features
           cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$borrowed_fixture_manifest" --no-default-features
 
+      - name: Check borrowed Consumer readmission evidence candidate
+        run: |
+          readmission_fixture_manifest=tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml
+          cargo test --locked --manifest-path "$readmission_fixture_manifest"
+          cargo test --locked --manifest-path "$readmission_fixture_manifest" --features order
+          cargo test --locked --manifest-path "$readmission_fixture_manifest" --no-default-features --features validated-thing,async
+          python3 tools/architecture-fixtures/consumer-borrowed-readmission/check_boundary.py
+          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$readmission_fixture_manifest" --no-default-features --features validated-thing
+
       - name: Run no-default Property Read integration tests
         run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read
 

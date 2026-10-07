@@ -1,0 +1,205 @@
+# Non-production review candidate, not the registered production completion record.
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-100"
+tranche = "WP-100-CONSUMER-VALIDATED-THING"
+status = "candidate-for-independent-review"
+base_ref = "a7ed82b1d87843a6c71f549f023138a35793e422"
+review_subject = "the exact Git/PR head containing this record, its complete diff and executable witnesses"
+contract = "docs/work-packages/WP-100-consumer-validated-thing-admission.md"
+authority = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0021-borrowed-consumer-td-admission.org",
+]
+claim_detail = "tools/architecture-fixtures/consumer-borrowed-readmission/README.md"
+production_paths_changed = []
+admission_transition = false
+consumer_gate_registration = false
+
+[[obligation]]
+id = 1
+claim = "Exact opaque proof/config, consuming progress and short semantic loans; separately resolved off/on/unification graphs; source-free consumed concrete draft."
+witnesses = ["matrix/downstream/src/lib.rs", "matrix/surface", "check_boundary.py", "tests/join.rs"]
+feature_cells = 32
+expected_diagnostic_negatives = 14
+
+[[obligation]]
+id = 2
+claim = "Entire supplied typed-content and resources, including private Context and every unrelated schema/security/opaque path; shared whole Basic and first rule; explicit-empty/default, serializer-failing, absent-ID and Number parity."
+witnesses = ["src/typed.rs", "src/inspect.rs", "tests/support/oracle.rs", "tests/boundary.rs", "tests/progress.rs"]
+reused_rule_owner = "validated-thing-schema-kernel source-projected shared Basic/schema kernels"
+
+[[obligation]]
+id = 3
+claim = "Complete operation projection and target support checks, conservative native iterator primitives, byte-resumable URI, bounded public AP projection, atomic whole-debit Pending, monotonic lifetime, moves/growth/cleanup and actual Ready UTF-8/scope access observations."
+witnesses = ["src/policy.rs", "src/td.rs", "src/uri.rs", "tests/progress.rs", "tests/resources.rs", "tests/join.rs"]
+applicable_resource_kinds = 27
+resource_interpretation_revision = 2
+operation = "typed-content-v1"
+named_number_limits = [256, 64]
+named_uri_capacities = [16384, 4096]
+profile_intersection = "Unchanged static lifetime 16384 rejects the tested 4096-byte relative derived target at observed work 16385. Full derived-capacity algorithm proof explicitly uses finite work 1048576; unchanged static succeeds with a 4096-byte absolute target and a 1025-byte derived target. No changed policy row, smaller URI cap or input-time support fallback."
+
+[[obligation]]
+id = 4
+claim = "Checked actual frame/URI Layouts and inline owners, old/new overlap, observed peak/largest/count, all TD allocator failures and pre-allocation limits, exhaustive fixed release/cancellation/drop, paired child capacity and retained actual upstream source. Explicit fixed allocator startup metadata/backing/alignment is included."
+witnesses = ["src/storage.rs", "src/api.rs", "src/lib.rs", "tests/resources.rs", "tests/support/mod.rs", "tests/support/pool.rs"]
+inspection_basic_suspension_positions = 499
+semantic_suspension_positions = 159
+source_charge = "Caller source is external baseline; real engine-owned upstream Layouts keep original source/global charges through TD lending until actual Thing destruction. No reclassification or field-length allocation estimate."
+system_observer_scope = "requested Layout bytes/alignment; not malloc usable size or OS RAM"
+fixed_allocator_scope = "native execution of the no_std + alloc candidate using a caller-reserved fixed arena; full startup and unused capacity retained, zero additional child bytes at terminal"
+arm_scope = "compile and actual target Layout instantiation; not ARM runtime"
+
+[[obligation]]
+id = 5
+claim = "External consumer accepts only trusted TD proof/cursor, joins a complete registration to actual Core plans and concrete owned MockArtifacts, preserves all original/empty coordinates, rejects later materialization/bounds failures with zero starts, survives actual Thing/registration destruction and bounded fixed rollback."
+witnesses = ["src/planning.rs", "tests/join.rs"]
+reused_registration = "tools/architecture-fixtures/validated-thing-planning-handoff/src/registration.rs"
+concrete_compiler = "clinkz-wot-property-read-binding-fixture::MockCompiler"
+fixed_output_slots = 16
+fixed_scopes_per_row = 16
+fixed_release_block_maximum = 401
+build_suspension_positions = 718
+allocation_failure_scope = "all fallible TD and materialization requests before bounds; the existing MockCompiler's infallible Box OOM is not injected or claimed"
+
+[[obligation]]
+id = 6
+claim = "Disjoint Foundation #69, Context #70, general ledger/work/196-row schema and completed Consumer leaves reaffirmed by unchanged-source regressions; every passed Producer gate command rerun. Historical evidence retains only its original claims."
+witnesses = [
+    "foundation/src/resource.rs", "foundation/src/budget.rs", "td/src/components/context.rs",
+    "docs/resource-limits.csv", "tools/check-design-artifacts.sh",
+    "docs/evidence/WP-100-consumer-call-values-response-validation.toml",
+    "docs/evidence/WP-200-consumer-property-read-planning-selection.toml",
+    "docs/evidence/WP-300-consumer-property-read-binding-execution.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+]
+impact_disposition = "reaffirmation candidate; no disjoint falsification observed and no existing record/status rewritten"
+orphan_reclassification = "preserved until its future admitted Foundation source change"
+
+[reuse]
+discriminator_ref = "4b2fd2f4a77d83ab78c360202f7cd000d8fd7e17"
+discriminator_claim = "lending/external-iterator construction, shared-rule/corpus groundwork, concrete owned join and actual Ready scan instrumentation"
+discriminator_exclusions = ["complete policy projection", "named byte-resumable URI", "complete parent/global pairing", "production variable-output cleanup", "Servient publication races"]
+other_reused_owners = [
+    "td/tests/support/basic_corpus_shared.rs",
+    "td/tests/support/typed_corpus_shared.rs",
+    "shared Basic/schema discovery and amended public predicates",
+    "existing private Context field access seam",
+    "public TD resolve_form_href as a differential oracle only",
+    "existing complete handoff registration and concrete Core mock compiler",
+]
+historical_scope = "strict/field/date/arena/semantic/Snapshot handoff and discriminator suites retain narrower constructive claims; none becomes production constructibility by reinterpretation"
+
+[deferred]
+claims = [
+    "separate independent exact-head acceptance and admission-only transition",
+    "production TD public implementation/completion, actual production Host/no_std runtime traces",
+    "WP-200 complete variable-output aggregate, generic fallible artifact/compiler-Pending contracts, variable rollback/reclaim and exact production PlanFootprint",
+    "WP-400 captured policy/registration, full simultaneous source/runtime/global race and slot/generation ownership, Host erasure, permit/install, leases/drain and runtime reclamation",
+    "Consumer gate registration/acceptance",
+    "real constrained target/product cycle, stack and RAM promises",
+    "strict bounded JSON ingestion, decoded AP spelling growth and shared resumable RFC3339 construction",
+]
+
+[observations]
+toolchain = "rustc 1.99.0 b940084d7eb6a299eb4bfeb8e34901bc051e7ac4; LLVM 23.1.1"
+native_target = "x86_64-unknown-linux-gnu"
+compile_target = "thumbv7em-none-eabihf"
+runtime_tests_per_graph = 29
+runtime_graphs = ["default BTree", "std preserve_order", "native no-default validated-thing,async"]
+uri_component_cases = 152
+uri_segment_cross_product_cases = 1500
+native_td_sizes = [10584, 10216, 11448, 10584]
+thumb_td_sizes = [8296, 8112, 8816, 8296]
+native_frame_size = 424
+thumb_frame_size = 296
+native_build_step_draft_sizes = [24096, 24096, 10216]
+thumb_build_step_draft_sizes = [17800, 17800, 6616]
+native_nested_peak = 20352
+native_nested_largest_request = 16384
+native_nested_allocations = 5
+native_nested_frame_moves = 29
+actual_upstream_requested_bytes = 14752
+native_owned_join_requested_bytes = 240
+native_owned_join_allocations = 18
+native_owned_join_largest_request = 36
+native_uri_join_overlap_peak = 16624
+fixed_allocator_startup_bytes = 176832
+fixed_allocator_startup_alignment = 64
+fixed_allocator_nested_occupied_span = 25440
+fixed_allocator_nested_alignment_padding = 0
+observation_status = "measured fixture/compiler values; not fixed profile constants or production footprint"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml"
+scope = "29 candidate runtime tests"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml --features order"
+scope = "alternate dense serde backend"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml --no-default-features --features validated-thing,async"
+scope = "same no_std + alloc candidate at native runtime"
+status = "passed-locally"
+[[verification]]
+command = "python3 tools/architecture-fixtures/consumer-borrowed-readmission/check_boundary.py --offline"
+scope = "32 separately resolved feature cells and 14 expected compile diagnostics"
+status = "passed-locally"
+[[verification]]
+command = "cargo rustc --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml --lib --no-default-features --features validated-thing --target thumbv7em-none-eabihf -- --emit=llvm-ir"
+scope = "actual compiled 32-bit ABI Layouts"
+status = "passed-locally"
+[[verification]]
+command = "cargo rustc --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml --lib --no-default-features --features validated-thing -- --emit=llvm-ir"
+scope = "native ABI Layouts"
+status = "passed-locally"
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+scope = "accepted authority, DAG, API ownership, resource/value rows, unchanged admission and gate frontier"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-foundation -p clinkz-wot-td -p clinkz-wot-core -p clinkz-wot-planning"
+scope = "Foundation/Context/Basic and completed exact Consumer leaves"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-foundation --no-default-features"
+scope = "portable Foundation borrowing, ledgers and linear work"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --test consumer_property_read_binding --test consumer_property_read_request --test property_read_response_sealing --test interaction_options --test interaction_output_test"
+scope = "portable completed exact WP-100/WP-300 leaves; also rerun with --features async"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --lib"
+scope = "portable completed WP-200 leaf; also rerun with --features async"
+status = "passed-locally"
+[[verification]]
+command = "every test_commands entry in docs/work-packages/property-read-architecture-gate.toml"
+scope = "existing passed Producer gate only, including seven real Host Zenoh loopback feedback tests"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-admission/Cargo.toml"
+scope = "unchanged #128 discriminator"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing,order"
+scope = "shared public Basic, strict/field/Number construction historical boundaries"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-strict-number-lexeme/Cargo.toml"
+scope = "historical strict Number spelling"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-rfc3339-resumable/Cargo.toml"
+scope = "historical date construction only"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml"
+scope = "historical real arena requests/growth/transfer/release"
+status = "passed-locally"
+[[verification]]
+command = "cargo test --locked --offline -p validated-thing-planning-handoff-probe"
+scope = "historical Snapshot/source-free concrete handoff only"
+status = "passed-locally"

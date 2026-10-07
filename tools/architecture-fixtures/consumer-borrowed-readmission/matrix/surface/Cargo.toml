@@ -1,0 +1,13 @@
+[package]
+name="readmission-surface"
+version="0.0.0"
+edition="2024"
+publish=false
+[dependencies]
+candidate={package="consumer-borrowed-readmission-probe",path="../..",default-features=false}
+readmission-downstream={path="../downstream",default-features=false}
+[features]
+default=[]
+capability=["readmission-downstream/validated-thing"]
+ap=["readmission-downstream/ap"]
+order=["readmission-downstream/order"]
