@@ -1,0 +1,8 @@
+[package]
+name="readmission-negative"
+version="0.0.0"
+edition="2024"
+publish=false
+[dependencies]
+candidate={package="consumer-borrowed-readmission-probe",path="../..",default-features=false,features=["validated-thing"]}
+clinkz-wot-foundation={path="../../../../../foundation",default-features=false}

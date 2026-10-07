@@ -32,3 +32,6 @@ borrowed-admission = ["validated-thing", "dep:validated-thing-arena-layout-probe
 ap = ["serde_json/arbitrary_precision"]
 order = ["serde_json/preserve_order"]
 td2-preview = ["clinkz-wot-td/td2-preview"]
+
+# Separate replacement evidence; does not widen the historical discriminator.
+readmission = ["borrowed-admission"]

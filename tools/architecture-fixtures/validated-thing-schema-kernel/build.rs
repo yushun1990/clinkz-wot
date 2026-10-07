@@ -66,6 +66,14 @@ fn main() {
         .unwrap();
     println!("cargo:rerun-if-changed={}", borrowed.display());
     lib.push_str(&format!("\n#[cfg(feature = \"borrowed-admission\")]\n#[path = {borrowed:?}]\npub mod borrowed_admission;\n"));
+    let readmission = fixture
+        .join("../consumer-borrowed-readmission/src/td.rs")
+        .canonicalize()
+        .unwrap();
+    println!("cargo:rerun-if-changed={}", readmission.display());
+    lib.push_str(&format!(
+        "\n#[cfg(feature = \"readmission\")]\n#[path = {readmission:?}]\npub mod readmission;\n"
+    ));
     // Reuse the already differential-tested URI rule owner, without importing
     // its Snapshot tests or creating another resolver.
     let uri_source = source.join("../tests/support/uri_semantic_kernel_probe.rs");

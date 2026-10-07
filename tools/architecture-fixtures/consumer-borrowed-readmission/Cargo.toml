@@ -1,0 +1,22 @@
+[package]
+name = "consumer-borrowed-readmission-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+td-candidate = { package = "validated-thing-schema-kernel-probe", path = "../validated-thing-schema-kernel", default-features = false }
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+clinkz-wot-core = { path = "../../../core", default-features = false }
+clinkz-wot-property-read-binding-fixture = { path = "../property-read-binding", default-features = false }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc"] }
+
+[features]
+default = ["std", "validated-thing"]
+std = ["td-candidate/std", "clinkz-wot-foundation/std", "clinkz-wot-core/std", "clinkz-wot-property-read-binding-fixture/std", "serde_json/std"]
+async = ["td-candidate/async", "clinkz-wot-foundation/async", "clinkz-wot-core/async"]
+validated-thing = ["td-candidate/readmission", "serde_json/arbitrary_precision"]
+ap = ["serde_json/arbitrary_precision"]
+order = ["td-candidate/order", "serde_json/preserve_order"]

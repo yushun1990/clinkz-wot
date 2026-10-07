@@ -1,0 +1,16 @@
+[package]
+name="readmission-downstream"
+version="0.0.0"
+edition="2024"
+publish=false
+[dependencies]
+candidate={package="consumer-borrowed-readmission-probe",path="../..",default-features=false}
+clinkz-wot-foundation={path="../../../../../foundation",default-features=false}
+serde_json={version="1.0.149",default-features=false,features=["alloc"]}
+[features]
+default=["std"]
+std=["candidate/std"]
+async=["candidate/async"]
+validated-thing=["candidate/validated-thing"]
+ap=["serde_json/arbitrary_precision"]
+order=["candidate/order","serde_json/preserve_order"]
