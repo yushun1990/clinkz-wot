@@ -24,6 +24,12 @@ pub struct Context {
 mod normalized_snapshot_probe;
 
 impl Context {
+    /// Borrowed field access for TD's complete typed inspection program.
+    #[cfg(feature = "validated-thing")]
+    pub(crate) fn admission_entries(&self) -> &[ContextEntry] {
+        &self.entries
+    }
+
     /// Create a standard WoT 1.1 Context.
     /// By default, it contains only the 1.1 URI.
     pub fn new() -> Self {

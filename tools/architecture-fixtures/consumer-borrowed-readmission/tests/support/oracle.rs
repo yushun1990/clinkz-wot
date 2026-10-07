@@ -1,4 +1,6 @@
 //! Recursive *test-only* public-field oracle. No candidate Task/slot/serializer.
+extern crate alloc;
+use alloc::{format, string::String};
 use serde_json::Value;
 use td_candidate::{
     data_schema::DataSchema, data_type::Metadata, form::Form, security_scheme::SecurityScheme,
@@ -176,7 +178,7 @@ impl Totals {
             _ => {}
         }
     }
-    fn schema_map(&mut self, v: &std::collections::BTreeMap<String, DataSchema>) {
+    fn schema_map(&mut self, v: &alloc::collections::BTreeMap<String, DataSchema>) {
         for (k, s) in v {
             self.text(k);
             self.schema(s);

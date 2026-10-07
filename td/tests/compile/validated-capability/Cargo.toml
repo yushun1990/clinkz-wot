@@ -1,0 +1,21 @@
+[workspace]
+[package]
+name = "td-validated-capability"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[dependencies]
+td = { package = "clinkz-wot-td", path = "../../..", default-features = false }
+foundation = { package = "clinkz-wot-foundation", path = "../../../../foundation", default-features = false }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc"] }
+sibling = { package = "td-validated-sibling", path = "sibling", optional = true }
+[features]
+default = ["std"]
+std = ["td/std", "foundation/std"]
+async = ["foundation/async"]
+capability = ["td/validated-thing"]
+ap = ["serde_json/arbitrary_precision"]
+order = ["serde_json/preserve_order"]
+sibling = ["dep:sibling"]
+positive = []
+negative = []
