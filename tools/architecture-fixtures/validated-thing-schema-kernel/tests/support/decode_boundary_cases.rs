@@ -1,4 +1,4 @@
-// Compile this identical corpus against unchanged production and the existing
+// Compile this identical corpus against current production and the existing
 // public-source Basic candidate. All decode observations use public TD/serde
 // calls. These adversarial keys are input data, never parser dispatch rules.
 use serde_json::{Map, Value};
@@ -244,17 +244,10 @@ fn decoded_overflow_reaches_all_five_amended_predicates() {
             .unwrap();
             assert!(property_schema(&thing)._context._extra_fields[field].is_number());
             let result = thing.validate_with_level(ValidationLevel::Basic);
-            if AMENDED_BASIC {
-                assert!(
-                    matches!(result, Err(ValidateError::InvalidSchema(_))),
-                    "{field}: {key}"
-                );
-            } else {
-                assert!(
-                    result.is_ok(),
-                    "unchanged failed-projection-as-absent oracle"
-                );
-            }
+            assert!(
+                matches!(result, Err(ValidateError::InvalidSchema(_))),
+                "{field}: {key}"
+            );
         }
     }
 }

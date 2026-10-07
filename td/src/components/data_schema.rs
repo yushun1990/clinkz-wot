@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -1140,18 +1140,6 @@ impl DataSchema {
             Self::Null(schema) => &schema._context,
         }
     }
-
-    fn expected_data_type(&self) -> &'static str {
-        match self {
-            Self::Array(_) => "array",
-            Self::Boolean(_) => "boolean",
-            Self::Number(_) => "number",
-            Self::Integer(_) => "integer",
-            Self::Object(_) => "object",
-            Self::String(_) => "string",
-            Self::Null(_) => "null",
-        }
-    }
 }
 
 impl Validate for DataSchema {
@@ -1159,191 +1147,10 @@ impl Validate for DataSchema {
         if matches!(level, ValidationLevel::Minimal) {
             return Ok(());
         }
-
-        validate_schema_type_consistency(self)?;
-        validate_schema_context(self.context(), level)?;
-
-        match self {
-            Self::Array(schema) => {
-                validate_ordered("minItems", schema.min_items, "maxItems", schema.max_items)?;
-                validate_nested_schemas(schema.items.as_deref(), level)?;
-            }
-            Self::Number(schema) => {
-                validate_numeric_bounds(
-                    schema.minimum,
-                    schema.exclusive_minimum,
-                    schema.maximum,
-                    schema.exclusive_maximum,
-                )?;
-                validate_positive("multipleOf", schema.multiple_of)?;
-            }
-            Self::Integer(schema) => {
-                validate_numeric_bounds(
-                    schema.minimum,
-                    schema.exclusive_minimum,
-                    schema.maximum,
-                    schema.exclusive_maximum,
-                )?;
-                validate_positive("multipleOf", schema.multiple_of)?;
-            }
-            Self::Object(schema) => {
-                if let Some(properties) = &schema.properties {
-                    for (name, schema) in properties {
-                        schema.validate_with_level(level).map_err(|err| {
-                            ValidateError::InvalidSchema(format_schema_path(
-                                format_args!("properties.{}", name),
-                                err,
-                            ))
-                        })?;
-                    }
-                }
-            }
-            Self::String(schema) => {
-                validate_ordered(
-                    "minLength",
-                    schema.min_length,
-                    "maxLength",
-                    schema.max_length,
-                )?;
-            }
-            Self::Boolean(_) | Self::Null(_) => {}
-        }
-
-        Ok(())
-    }
-}
-
-fn validate_schema_type_consistency(schema: &DataSchema) -> Result<(), ValidateError> {
-    let Some(data_type) = schema.context().data_type.as_deref() else {
-        return Ok(());
-    };
-
-    let expected = schema.expected_data_type();
-    if data_type == expected {
-        return Ok(());
-    }
-
-    Err(ValidateError::InvalidSchema(format!(
-        "type '{}' does not match {} schema",
-        data_type, expected
-    )))
-}
-
-fn validate_schema_context(
-    context: &DataSchemaContext,
-    level: ValidationLevel,
-) -> Result<(), ValidateError> {
-    validate_nested_schemas(context.one_of.as_deref(), level)?;
-
-    // JSON Schema / TD 1.1: a schema MUST NOT be both readOnly and writeOnly.
-    if context.read_only && context.write_only {
-        return Err(ValidateError::InvalidSchema(String::from(
-            "readOnly and writeOnly must not both be true",
-        )));
-    }
-
-    let fields = &context._extra_fields;
-    validate_ordered(
-        "minItems",
-        value_as_u64(fields.get("minItems")),
-        "maxItems",
-        value_as_u64(fields.get("maxItems")),
-    )?;
-    validate_ordered(
-        "minLength",
-        value_as_u64(fields.get("minLength")),
-        "maxLength",
-        value_as_u64(fields.get("maxLength")),
-    )?;
-    validate_json_number_bounds(fields)?;
-
-    if let Some(multiple_of) = value_as_f64(fields.get("multipleOf")) {
-        validate_positive("multipleOf", Some(multiple_of))?;
-    }
-
-    Ok(())
-}
-
-fn validate_nested_schemas(
-    schemas: Option<&[DataSchema]>,
-    level: ValidationLevel,
-) -> Result<(), ValidateError> {
-    if let Some(schemas) = schemas {
-        for (index, schema) in schemas.iter().enumerate() {
-            schema.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format_schema_path(format_args!("[{}]", index), err))
-            })?;
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_ordered<T: PartialOrd>(
-    min_name: &str,
-    min: Option<T>,
-    max_name: &str,
-    max: Option<T>,
-) -> Result<(), ValidateError> {
-    match (min, max) {
-        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
-            "{} must be less than or equal to {}",
-            min_name, max_name
-        ))),
-        _ => Ok(()),
-    }
-}
-
-fn validate_numeric_bounds<T: PartialOrd + Copy>(
-    minimum: Option<T>,
-    exclusive_minimum: Option<T>,
-    maximum: Option<T>,
-    exclusive_maximum: Option<T>,
-) -> Result<(), ValidateError> {
-    validate_ordered("minimum", minimum, "maximum", maximum)?;
-    validate_ordered("minimum", minimum, "exclusiveMaximum", exclusive_maximum)?;
-    validate_ordered("exclusiveMinimum", exclusive_minimum, "maximum", maximum)?;
-    validate_ordered(
-        "exclusiveMinimum",
-        exclusive_minimum,
-        "exclusiveMaximum",
-        exclusive_maximum,
-    )
-}
-
-fn validate_json_number_bounds(fields: &ExtensionMap) -> Result<(), ValidateError> {
-    validate_numeric_bounds(
-        value_as_f64(fields.get("minimum")),
-        value_as_f64(fields.get("exclusiveMinimum")),
-        value_as_f64(fields.get("maximum")),
-        value_as_f64(fields.get("exclusiveMaximum")),
-    )
-}
-
-fn validate_positive<T: PartialOrd + Default>(
-    name: &str,
-    value: Option<T>,
-) -> Result<(), ValidateError> {
-    match value {
-        Some(value) if value <= T::default() => Err(ValidateError::InvalidSchema(format!(
-            "{} must be greater than 0",
-            name
-        ))),
-        _ => Ok(()),
-    }
-}
-
-fn value_as_u64(value: Option<&serde_json::Value>) -> Option<u64> {
-    value.and_then(serde_json::Value::as_u64)
-}
-
-fn value_as_f64(value: Option<&serde_json::Value>) -> Option<f64> {
-    value.and_then(serde_json::Value::as_f64)
-}
-
-fn format_schema_path(path: core::fmt::Arguments<'_>, err: ValidateError) -> String {
-    match err {
-        ValidateError::InvalidSchema(message) => alloc::format!("{}: {}", path, message),
-        other => alloc::format!("{}: {}", path, other),
+        crate::validate::schema_kernel::validate(
+            &crate::validate::schema_access::TypedAccess,
+            self,
+            &crate::validate::schema_diagnostics::PublicSchemaSink,
+        )
     }
 }

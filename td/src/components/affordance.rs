@@ -9,7 +9,7 @@ use serde_with::skip_serializing_none;
 
 use crate::{
     data_type::{ExtensionMap, METADATA_KEYS, Metadata, MetadataHelper, Operation},
-    validate::{Validate, ValidateError, ValidationLevel, schema_error_message},
+    validate::{Validate, ValidateError, ValidationLevel},
 };
 
 #[cfg(feature = "td2-preview")]
@@ -163,19 +163,15 @@ impl Validate for PropertyAffordance {
         if matches!(level, ValidationLevel::Minimal) {
             return Ok(());
         }
-
-        self._schema.validate_with_level(level)?;
-        validate_interaction_schemas(&self._interaction, level)?;
-
-        self._interaction.validate_ops("PropertyAffordance", |op| {
-            matches!(
-                op,
-                Operation::ReadProperty
-                    | Operation::WriteProperty
-                    | Operation::ObserveProperty
-                    | Operation::UnobserveProperty
-            )
-        })
+        crate::validate::basic_kernel::validate_affordance(
+            &crate::validate::basic_typed::TypedBasicAccess(None),
+            crate::validate::basic_typed::Affordance::Property(self),
+            crate::validate::basic_kernel::Owner {
+                kind: crate::validate::basic_kernel::OwnerKind::Property,
+                ordinal: 0,
+            },
+            &crate::validate::basic_diagnostics::PublicSink { document: false },
+        )
     }
 }
 
@@ -329,25 +325,15 @@ impl Validate for ActionAffordance {
         if matches!(level, ValidationLevel::Minimal) {
             return Ok(());
         }
-
-        validate_interaction_schemas(&self._interaction, level)?;
-        if let Some(input) = &self.input {
-            input.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format!("input: {}", schema_error_message(err)))
-            })?;
-        }
-        if let Some(output) = &self.output {
-            output.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format!("output: {}", schema_error_message(err)))
-            })?;
-        }
-
-        self._interaction.validate_ops("ActionAffordance", |op| {
-            matches!(
-                op,
-                Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction
-            )
-        })
+        crate::validate::basic_kernel::validate_affordance(
+            &crate::validate::basic_typed::TypedBasicAccess(None),
+            crate::validate::basic_typed::Affordance::Action(self),
+            crate::validate::basic_kernel::Owner {
+                kind: crate::validate::basic_kernel::OwnerKind::Action,
+                ordinal: 0,
+            },
+            &crate::validate::basic_diagnostics::PublicSink { document: false },
+        )
     }
 }
 
@@ -525,32 +511,15 @@ impl Validate for EventAffordance {
         if matches!(level, ValidationLevel::Minimal) {
             return Ok(());
         }
-
-        validate_interaction_schemas(&self._interaction, level)?;
-        if let Some(subscription) = &self.subscription {
-            subscription.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format!("subscription: {}", schema_error_message(err)))
-            })?;
-        }
-        if let Some(data) = &self.data {
-            data.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format!("data: {}", schema_error_message(err)))
-            })?;
-        }
-        if let Some(data_response) = &self.data_response {
-            data_response.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format!("dataResponse: {}", schema_error_message(err)))
-            })?;
-        }
-        if let Some(cancellation) = &self.cancellation {
-            cancellation.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format!("cancellation: {}", schema_error_message(err)))
-            })?;
-        }
-
-        self._interaction.validate_ops("EventAffordance", |op| {
-            matches!(op, Operation::SubscribeEvent | Operation::UnsubscribeEvent)
-        })
+        crate::validate::basic_kernel::validate_affordance(
+            &crate::validate::basic_typed::TypedBasicAccess(None),
+            crate::validate::basic_typed::Affordance::Event(self),
+            crate::validate::basic_kernel::Owner {
+                kind: crate::validate::basic_kernel::OwnerKind::Event,
+                ordinal: 0,
+            },
+            &crate::validate::basic_diagnostics::PublicSink { document: false },
+        )
     }
 }
 
@@ -633,23 +602,4 @@ impl InteractionHelper for EventAffordanceBuilder {
     fn interaction(&mut self) -> &mut InteractionAffordance {
         &mut self.affordance._interaction
     }
-}
-
-fn validate_interaction_schemas(
-    interaction: &InteractionAffordance,
-    level: ValidationLevel,
-) -> Result<(), ValidateError> {
-    if let Some(uri_variables) = &interaction.uri_variables {
-        for (name, schema) in uri_variables {
-            schema.validate_with_level(level).map_err(|err| {
-                ValidateError::InvalidSchema(format!(
-                    "uriVariables.{}: {}",
-                    name,
-                    schema_error_message(err)
-                ))
-            })?;
-        }
-    }
-
-    Ok(())
 }

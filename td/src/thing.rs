@@ -251,6 +251,13 @@ impl Validate for Thing {
             return Ok(());
         }
 
+        if matches!(level, ValidationLevel::Basic) {
+            return crate::validate::basic_kernel::validate(
+                &crate::validate::basic_typed::TypedBasicAccess(Some(self)),
+                &crate::validate::basic_diagnostics::PublicSink { document: true },
+            );
+        }
+
         // Profile/Full: @context must contain a standard WoT context URI.
         validate_context_at_profile_level(&self.context, level)?;
 

@@ -72,7 +72,7 @@ mod tests {
     }
 
     #[test]
-    fn actual_synchronous_td_basic_base_rule_and_required_delta() {
+    fn actual_synchronous_td_basic_uses_the_admitted_projection_rule() {
         // All four bound pairings use binary64 rounding in the selected rule.
         for lower in ["minimum", "exclusiveMinimum"] {
             for upper in ["maximum", "exclusiveMaximum"] {
@@ -95,9 +95,8 @@ mod tests {
         assert!(!basic(&thing("\"multipleOf\":-1")));
         assert!(basic(&thing("\"multipleOf\":\"not-a-number\"")));
 
-        // AP accepts a short Number that current TD Basic silently skips
-        // at each of the five extension predicates. Future shared Basic must
-        // return InvalidSchema for a failed Number projection.
+        // Production Basic now implements the admitted failed-projection
+        // correction. This fixture still owns only its Number/feature claim.
         #[cfg(any(feature = "ap", feature = "validated-thing"))]
         {
             for name in [
@@ -108,7 +107,10 @@ mod tests {
                 "multipleOf",
             ] {
                 let td = thing(&format!("\"{name}\":1e309"));
-                assert!(basic(&td));
+                assert!(matches!(
+                    td.validate(),
+                    Err(clinkz_wot_td::validate::ValidateError::InvalidSchema(_))
+                ));
                 let DataSchema::String(schema) = &td.schema_definitions.as_ref().unwrap()["probe"]
                 else {
                     panic!()
