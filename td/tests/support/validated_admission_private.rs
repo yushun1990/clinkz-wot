@@ -227,6 +227,45 @@ fn content_and_structural_limits_precede_basic() {
     );
 }
 #[test]
+fn map_associations_do_not_add_json_value_nodes() {
+    let mut thing = base();
+    let proof = drive(&thing, &limits()).unwrap();
+    let nodes = proof.owner.counts.nodes;
+    let structural_work = proof.owner.trace.work[W::DocumentNodes as usize];
+    drop(proof);
+    for opaque in [false, true] {
+        let members = 3;
+        let entries = (0..members).map(|i| (format!("key{i}"), Value::Null));
+        thing._extra_fields.clear();
+        if opaque {
+            thing
+                ._extra_fields
+                .insert("opaque".into(), Value::Object(entries.collect()));
+        } else {
+            thing._extra_fields.extend(entries);
+        }
+        // Each supplied key/text and null is a value occurrence. The opaque
+        // case also adds its outer key and object; associations add no nodes.
+        let expected = nodes + 2 * members + if opaque { 2 } else { 0 };
+        let proof = drive(&thing, &limits()).unwrap();
+        assert_eq!(proof.owner.counts.nodes, expected, "opaque={opaque}");
+        assert!(proof.owner.trace.work[W::DocumentNodes as usize] > structural_work);
+        drop(proof);
+        assert!(
+            drive(
+                &thing,
+                &limits().with_limit(R::JsonValueNodesPerDocumentMax, Some(expected))
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            checked_limit(&thing, R::JsonValueNodesPerDocumentMax, expected - 1),
+            Cause::Limit(v) if v.kind() == R::JsonValueNodesPerDocumentMax
+                && v.observed() == expected
+        ));
+    }
+}
+#[test]
 fn numbers_have_lexical_limit_before_basic_and_projection_is_atomic() {
     use crate::data_schema::ContextHelper;
     for limit in [0usize, 64, 256] {

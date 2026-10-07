@@ -1029,8 +1029,12 @@ struct Counts {
 impl Counts {
     fn visit(&mut self, node: Node<'_>, mut scope: Scope, policy: Policy) -> Result<Scope, Cause> {
         let phase = Phase::Inspect;
-        self.nodes = add(self.nodes, 1, phase)?;
-        policy.check(R::JsonValueNodesPerDocumentMax, self.nodes, phase)?;
+        // Associations are paid traversal state, not supplied value nodes.
+        // Their key and value occurrences are visited separately.
+        if !matches!(node, Node::Entry(..)) {
+            self.nodes = add(self.nodes, 1, phase)?;
+            policy.check(R::JsonValueNodesPerDocumentMax, self.nodes, phase)?;
+        }
         if node.container() {
             scope.depth = add(scope.depth, 1, phase)?;
             policy.check(R::JsonNestingDepthMax, scope.depth, phase)?;
@@ -1570,7 +1574,9 @@ impl<'td> ValidatedThingCursor<'td> {
                 let scope = self.counts.visit(node, scope, self.policy)?;
                 #[cfg(test)]
                 {
-                    self.trace.entered += 1;
+                    if !matches!(node, Node::Entry(..)) {
+                        self.trace.entered += 1;
+                    }
                 }
                 match node {
                     Node::Text(v) => self.stack.push(Frame::Text(v, 0)),
