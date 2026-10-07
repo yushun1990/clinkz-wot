@@ -9,10 +9,6 @@ use crate::{
 };
 
 const NO_OPERATIONS: &[Operation] = &[];
-const PROPERTY_READ_WRITE_OPERATIONS: &[Operation] =
-    &[Operation::ReadProperty, Operation::WriteProperty];
-const PROPERTY_READ_OPERATIONS: &[Operation] = &[Operation::ReadProperty];
-const PROPERTY_WRITE_OPERATIONS: &[Operation] = &[Operation::WriteProperty];
 const ACTION_OPERATIONS: &[Operation] = &[Operation::InvokeAction];
 // TD 1.1 §5.4 Default Value Definitions: a form of an Event affordance without
 // an explicit `op` defaults to both `subscribeevent` and `unsubscribeevent`.
@@ -54,9 +50,11 @@ pub fn effective_form_operations<'a>(
 /// explicitly empty list. When the form omits `security`, Thing-level security
 /// is inherited.
 pub fn effective_form_security<'a>(thing: &'a Thing, form: &'a Form) -> &'a [String] {
-    form.security
-        .as_deref()
-        .unwrap_or(thing.security.as_slice())
+    crate::validate::basic_kernel::inherited_security(
+        thing.security.as_slice(),
+        form.security.as_deref(),
+    )
+    .0
 }
 
 /// Returns the content type that applies to an additional response after TD
@@ -88,16 +86,10 @@ pub fn default_operations_for_context(context: FormContext<'_>) -> &'static [Ope
 fn default_property_operations(property: &PropertyAffordance) -> &'static [Operation] {
     let schema = schema_context(&property._schema);
 
-    match (schema.read_only, schema.write_only) {
-        (true, false) => PROPERTY_READ_OPERATIONS,
-        (false, true) => PROPERTY_WRITE_OPERATIONS,
-        // `readOnly` and `writeOnly` both `true` is invalid per TD 1.1 / JSON
-        // Schema and is rejected by Basic validation. When validation is
-        // skipped (Minimal level), fall back to the neutral read+write default
-        // so the property stays usable instead of silently having no
-        // operations.
-        (true, true) | (false, false) => PROPERTY_READ_WRITE_OPERATIONS,
-    }
+    crate::validate::basic_kernel::default_property_operations((
+        schema.read_only,
+        schema.write_only,
+    ))
 }
 
 fn schema_context(schema: &DataSchema) -> &DataSchemaContext {

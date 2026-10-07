@@ -1518,13 +1518,6 @@ impl SecurityScheme {
         }
     }
 
-    fn string_field(&self, name: &str) -> Option<&str> {
-        self.context()
-            ._extra_fields
-            .get(name)
-            .and_then(serde_json::Value::as_str)
-    }
-
     fn one_of_references(&self) -> Cow<'_, [String]> {
         match self {
             Self::Combo(scheme) => Cow::Borrowed(&scheme.one_of),
@@ -1542,30 +1535,6 @@ impl SecurityScheme {
             )),
         }
     }
-
-    fn apikey_name(&self) -> Option<&str> {
-        match self {
-            Self::APIKey(scheme) => scheme.name.as_deref(),
-            _ => self.string_field("name"),
-        }
-    }
-
-    fn oauth2_flow(&self) -> Option<&str> {
-        match self {
-            Self::OAuth2(scheme) => Some(scheme.flow.as_str()),
-            _ => self.string_field("flow"),
-        }
-    }
-
-    fn oauth2_has_endpoint(&self, name: &str) -> bool {
-        match (self, name) {
-            (Self::OAuth2(scheme), "authorization") => scheme.authorization.is_some(),
-            (Self::OAuth2(scheme), "token") => scheme.token.is_some(),
-            _ => self
-                .string_field(name)
-                .is_some_and(|value| !value.is_empty()),
-        }
-    }
 }
 
 impl Validate for SecurityScheme {
@@ -1573,51 +1542,16 @@ impl Validate for SecurityScheme {
         if matches!(level, ValidationLevel::Minimal) {
             return Ok(());
         }
-
-        match self.scheme() {
-            "combo" => {
-                let one_of = self.one_of_references();
-                let all_of = self.all_of_references();
-                if one_of.is_empty() && all_of.is_empty() {
-                    return Err(invalid_security(
-                        "combo schemes must define at least one of oneOf or allOf",
-                    ));
-                }
-                validate_combo_members("oneOf", &one_of)?;
-                validate_combo_members("allOf", &all_of)?;
-            }
-            "apikey" => {
-                if self.apikey_name().unwrap_or("").is_empty() {
-                    return Err(ValidateError::MissingRequiredField("name".to_string()));
-                }
-            }
-            "oauth2" => validate_oauth2_scheme(self)?,
-            "nosec" | "auto" | "basic" | "digest" | "bearer" | "psk" => {}
-            scheme => return Err(invalid_security(format!("unsupported scheme '{}'", scheme))),
-        }
-
-        Ok(())
+        crate::validate::basic_kernel::validate_security_scheme(
+            &crate::validate::basic_typed::TypedBasicAccess(None),
+            self,
+            crate::validate::basic_kernel::Owner {
+                kind: crate::validate::basic_kernel::OwnerKind::SecurityDefinition,
+                ordinal: 0,
+            },
+            &crate::validate::basic_diagnostics::PublicSink { document: false },
+        )
     }
-}
-
-fn validate_combo_members(context: &str, references: &[String]) -> Result<(), ValidateError> {
-    if !references.is_empty() && references.len() < 2 {
-        return Err(invalid_security(format!(
-            "{} must contain at least two references",
-            context
-        )));
-    }
-
-    for reference in references {
-        if reference.is_empty() {
-            return Err(invalid_security(format!(
-                "{} must not contain empty references",
-                context
-            )));
-        }
-    }
-
-    Ok(())
 }
 
 fn validate_combo_references(
@@ -1635,34 +1569,6 @@ fn validate_combo_references(
     }
 
     Ok(())
-}
-
-fn validate_oauth2_scheme(scheme: &SecurityScheme) -> Result<(), ValidateError> {
-    match scheme.oauth2_flow().unwrap_or("") {
-        "code" => {
-            if !scheme.oauth2_has_endpoint("authorization") {
-                return Err(ValidateError::MissingRequiredField(
-                    "authorization".to_string(),
-                ));
-            }
-            if !scheme.oauth2_has_endpoint("token") {
-                return Err(ValidateError::MissingRequiredField("token".to_string()));
-            }
-        }
-        "client" | "device" => {}
-        flow => {
-            return Err(invalid_security(format!(
-                "unsupported OAuth2 flow '{}'",
-                flow
-            )));
-        }
-    }
-
-    Ok(())
-}
-
-fn invalid_security(message: impl Into<String>) -> ValidateError {
-    ValidateError::InvalidSecurity(message.into())
 }
 
 fn string_array_field(value: Option<&serde_json::Value>) -> Vec<String> {

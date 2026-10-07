@@ -1,7 +1,7 @@
 # WP-100 Consumer TD Admission
 
 Status: ADMITTED FOR IMPLEMENTATION. `WP-100-CONSUMER-VALIDATED-THING`
-is `planned` / `admitted` / `current` in [the work-package index](index.toml).
+is `in-progress` / `admitted` / `current` in [the work-package index](index.toml).
 The separate admission-only transition uses the
 [independent complete six-obligation acceptance on PR #130](https://github.com/yushun1990/clinkz-wot/pull/130#issuecomment-6034368557)
 of exact evidence head `81738ca24a5919314267c0ccaaa6638fb184a8b3`.

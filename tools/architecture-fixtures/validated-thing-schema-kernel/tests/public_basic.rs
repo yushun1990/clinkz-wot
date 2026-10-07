@@ -1,5 +1,5 @@
 //! The real public Thing/component call graph in the generated candidate,
-//! compared with unchanged production source under the same resolved graph.
+//! compared with current production source under the same resolved graph.
 use clinkz_wot_td as original;
 #[cfg(any(feature = "ap", feature = "validated-thing"))]
 use td_crate::thing::Thing;
@@ -112,7 +112,7 @@ fn typed_nonfinite_and_integer_fields_keep_existing_comparisons() {
 
 #[cfg(any(feature = "ap", feature = "validated-thing"))]
 #[test]
-fn five_predicate_delta_reaches_the_public_thing_at_every_schema_location() {
+fn five_predicate_rule_reaches_production_and_candidate_at_every_schema_location() {
     use original::validate::Validate as _;
     for field in [
         "minimum",
@@ -162,12 +162,23 @@ fn five_predicate_delta_reaches_the_public_thing_at_every_schema_location() {
             let input = serde_json::to_string(&document).unwrap();
             let before: original::thing::Thing = serde_json::from_str(&input).unwrap();
             let after: Thing = serde_json::from_str(&input).unwrap();
-            assert!(before.validate().is_ok(), "{input}");
+            assert!(
+                matches!(
+                    before.validate(),
+                    Err(original::validate::ValidateError::InvalidSchema(_))
+                ),
+                "{input}"
+            );
             assert!(
                 matches!(
                     after.validate(),
                     Err(td_crate::validate::ValidateError::InvalidSchema(_))
                 ),
+                "{input}"
+            );
+            assert_eq!(
+                before.validate().map_err(|e| e.to_string()),
+                after.validate().map_err(|e| e.to_string()),
                 "{input}"
             );
             assert!(after.validate_with_level(ValidationLevel::Minimal).is_ok());

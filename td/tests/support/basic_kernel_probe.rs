@@ -328,7 +328,7 @@ fn basic_kernel_numeric_amendment_participates_in_whole_document_order() {
         "probe".into(),
         serde_json::from_str(r#"{"type":"string","minimum":1e309}"#).unwrap(),
     )]));
-    let error = assert_parity(&thing, false).unwrap_err();
+    let error = assert_parity(&thing, true).unwrap_err();
     assert_eq!(error.site.field, Field::SchemaDefinitions);
     assert_eq!(
         error.rule,

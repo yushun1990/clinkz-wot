@@ -306,7 +306,7 @@ fn schema_kernel_preserves_nested_first_error_and_nonsemantic_map_history() {
 }
 
 #[test]
-fn schema_kernel_numeric_delta_preserves_non_numbers_rounding_and_opaque_numbers() {
+fn schema_kernel_numeric_rule_preserves_non_numbers_rounding_and_opaque_numbers() {
     for field in [
         "minimum",
         "exclusiveMinimum",
@@ -326,9 +326,10 @@ fn schema_kernel_numeric_delta_preserves_non_numbers_rounding_and_opaque_numbers
         }
         let overflow: DataSchema =
             serde_json::from_str(&format!(r#"{{"type":"string","{field}":1e309}}"#)).unwrap();
-        assert!(overflow.validate().is_ok()); // deliberate delta, not parity
+        // The admitted correction now also runs through production Basic.
+        assert!(overflow.validate().is_err());
         assert_eq!(
-            assert_parity(overflow, false).unwrap_err().rule,
+            assert_parity(overflow, true).unwrap_err().rule,
             Rule::FailedProjection(match field {
                 "minimum" => Field::Minimum,
                 "exclusiveMinimum" => Field::ExclusiveMinimum,

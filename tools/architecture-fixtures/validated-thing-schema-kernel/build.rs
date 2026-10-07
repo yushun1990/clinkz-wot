@@ -90,6 +90,21 @@ fn main() {
     );
     fs::write(candidate.join("lib.rs"), lib).unwrap();
 
+    // This historical candidate retains its own accepted rule program. The
+    // production extraction is checked by production tests and differential
+    // tests below; compiling an unused second program here adds no evidence.
+    let path = candidate.join("validate.rs");
+    let mut validation = fs::read_to_string(&path).unwrap();
+    let seam = "// Private rule/discovery program shared by the synchronous TD adapters.";
+    assert_eq!(
+        validation.matches(seam).count(),
+        1,
+        "Basic program seam changed"
+    );
+    validation.truncate(validation.find(seam).unwrap());
+    validation = validation.replace("basic_kernel::", "crate::basic_kernel::");
+    fs::write(path, validation).unwrap();
+
     // Borrow the established private Context sequence; serialization is not an
     // inspection seam (it can reject Basic-valid typed Contexts).
     let context_path = candidate.join("components/context.rs");
@@ -117,12 +132,6 @@ fn main() {
         );
     }
     let mut types_and_builders = types_and_builders.to_string();
-    replace_region(
-        &mut types_and_builders,
-        "    fn expected_data_type",
-        "\n}\n\n",
-        "",
-    );
     types_and_builders = types_and_builders.replace(
         "BTreeMap, format, string::String",
         "BTreeMap, string::String",
@@ -190,9 +199,26 @@ crate::schema_fields::metadata_fields!(define_metadata);
         1,
         "Thing Basic boundary changed"
     );
-    let after = after.replacen(point, &format!(
-        "        if matches!(level, ValidationLevel::Basic) {{\n            return crate::basic_kernel::validate(&crate::basic_typed::TypedBasicAccess(Some(self)), &crate::basic_diagnostics::PublicSink {{ document: true }});\n        }}\n\n{point}"
-    ), 1);
+    // Production now owns the shared program. This historical projection
+    // continues to test its own accepted program by changing only the entry.
+    let entry = "crate::validate::basic_kernel::validate(";
+    assert_eq!(
+        after.matches(entry).count(),
+        1,
+        "production Basic seam changed"
+    );
+    let after = after
+        .replacen(entry, "crate::basic_kernel::validate(", 1)
+        .replacen(
+            "crate::validate::basic_typed::TypedBasicAccess",
+            "crate::basic_typed::TypedBasicAccess",
+            1,
+        )
+        .replacen(
+            "crate::validate::basic_diagnostics::PublicSink",
+            "crate::basic_diagnostics::PublicSink",
+            1,
+        );
     fs::write(path, format!("{before}{seam}{after}")).unwrap();
 
     // Standalone affordance/security APIs share the same component rules too.
@@ -211,15 +237,6 @@ crate::schema_fields::metadata_fields!(define_metadata);
         );
         replace_region(&mut affordances, &start, &end, &replacement);
     }
-    // The now-orphaned final helper contains only the former component rules.
-    let helper = "fn validate_interaction_schemas(";
-    assert_eq!(
-        affordances.matches(helper).count(),
-        1,
-        "interaction helper acquired another caller"
-    );
-    affordances.truncate(affordances.find(helper).unwrap());
-    affordances = affordances.replace("ValidationLevel, schema_error_message", "ValidationLevel");
     fs::write(path, affordances).unwrap();
 
     let path = candidate.join("components/security_scheme.rs");
@@ -227,47 +244,16 @@ crate::schema_fields::metadata_fields!(define_metadata);
     replace_region(
         &mut security,
         "impl Validate for SecurityScheme {",
-        "fn validate_combo_members(",
+        "fn validate_combo_references(",
         "impl Validate for SecurityScheme {\n    fn validate_with_level(&self, level: ValidationLevel) -> Result<(), ValidateError> {\n        if matches!(level, ValidationLevel::Minimal) { return Ok(()); }\n        crate::basic_kernel::validate_security_scheme(\n            &crate::basic_typed::TypedBasicAccess(None), self,\n            crate::basic_kernel::Owner { kind: crate::basic_kernel::OwnerKind::SecurityDefinition, ordinal: 0 },\n            &crate::basic_diagnostics::PublicSink { document: false },\n        )\n    }\n}\n\n",
     );
-    // Keep the original named-reference helper for Profile/Full callers, but
-    // remove unreachable copies of the extracted local security predicates.
-    replace_region(
-        &mut security,
-        "fn validate_combo_members(",
-        "fn validate_combo_references(",
-        "",
-    );
-    replace_region(
-        &mut security,
-        "fn validate_oauth2_scheme(",
-        "fn string_array_field(",
-        "",
-    );
-    replace_region(
-        &mut security,
-        "    fn string_field(",
-        "    fn one_of_references(",
-        "",
-    );
-    replace_region(
-        &mut security,
-        "    fn apikey_name(",
-        "\n}\n\nimpl Validate",
-        "",
-    );
+    // Named-reference helpers still serve Thing Model/Profile adapters.
     fs::write(path, security).unwrap();
 
     // Reuse the existing query witness's helpers in the public-source candidate
     // too. This is a seam extraction, without validating inferred operations.
     let path = candidate.join("td_defaults.rs");
     let mut defaults = fs::read_to_string(&path).unwrap();
-    replace_region(
-        &mut defaults,
-        "const PROPERTY_READ_WRITE_OPERATIONS",
-        "const ACTION_OPERATIONS",
-        "",
-    );
     replace_region(
         &mut defaults,
         "pub fn effective_form_security",
