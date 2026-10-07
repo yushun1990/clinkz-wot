@@ -15,6 +15,11 @@ exact-head acceptance followed by a separate admission-only PR. Production TD
 completion must repeat these claims through its real public boundary, including
 actual Host and no_std allocator/runtime observations.
 
+The [independent review of `c4d0824`](https://github.com/yushun1990/clinkz-wot/pull/130#issuecomment-6031165897)
+required changes for two URI counterexamples; that head was not accepted.
+The current candidate corrects both with executable regressions below. Its new
+exact head still needs independent acceptance; the earlier review is preserved.
+
 ## Construction and review map
 
 `src/td.rs` compiles **inside** the existing TD source-projection candidate, under
@@ -98,13 +103,44 @@ prepaid fixed-block CleanupItems; cancellation/drop can release those blocks at
 zero new credit. Semantic failures retain their original cause on later polls.
 
 URI component discovery, authority scan, reverse merge search, prefix emission,
-segment classification, path pop, query/fragment emission, relative-double-slash
-shift and final UTF-8 validation retain positions and pay actual bounded byte
-actions. Scratch capacity is the configured 16-KiB/4-KiB ceiling, not the
-historical 256-byte fallback. Differential tests compare the public TD resolver
-on 152 component cases and 1,500 segment/base combinations. Ready UTF-8 and
-scope observations originate in the actual validator and iterator accesses,
-including downstream scope copying. Re-loans never rescan or resize facts.
+segment classification, path pop, in-place reversal, query/fragment emission,
+relative-double-slash shift and final UTF-8 validation retain positions and pay
+bounded byte actions. Scratch capacity is the configured 16-KiB/4-KiB ceiling.
+The rootless-base restriction includes an empty path, matching the public TD
+resolver and shared historical URI kernel. Basic-valid `foo:` with `x`, `/x`,
+`?q` or `//h/x` fails the semantic query; a later invalid original coordinate
+also fails the external Build with zero bounds calls, starts and aborts.
+
+Normalization visits the two external merge spans backward. Each `..` cancels
+a preceding normal segment, dots contribute no output, and the absolute root
+is retained. Merge-span boundaries are separators or the shared kernel's
+double-dot tail case. A scalar cancellation count and retained byte/segment
+positions suffice; no segment stack or intermediate merged string is allocated.
+Only surviving path bytes are emitted, initially in reverse order, then swapped
+in place before UTF-8 validation. Each source byte is visited a bounded number
+of times and each output byte participates in at most one swap. A swap checks
+four UriBytes plus two CodecOutputBytes together before either write. Short
+credit preserves the complete budget, lifetime, observations and continuation.
+`pop_bytes` observes actual predecessor-selection source reads;
+`reversed_bytes` observes the scratch bytes swapped, not a declared length.
+
+The unchanged gateway policy resolves the review's 16,371-byte base and 28-byte
+href to `https://h/x` (11 bytes), spending 69,814 lifetime units through Ready.
+It requests exactly the existing 16,384-byte URI block. Selected ceilings 64 and
+28 resolve the same 51-byte base/28-byte href to the same target: neither the
+base nor canceled transient path bytes acquire the Form-target limit. These
+requests are observed after validation frames die. Original href 28/27 and
+resolved target 54/53 boundary tests retain the correct resource and phase;
+an exact selected lifetime and one-unit-short failure preserve first cause.
+Gateway and small normalization cases also execute on the fully prepaid fixed
+allocator and complete a concrete owned handoff after Thing/registration drop.
+
+Differential tests compare the public TD resolver on 209 component cases,
+6,000 segment/base/tail combinations and 24 large canceled-path cases, including
+percent-encoded dots, empty segments, queries/fragments, cross-span cancellation
+and 4,096 outstanding pops. Ready UTF-8 and scope observations originate in
+the actual validator and iterator accesses, including downstream scope copying.
+Repeated zero-credit Ready loans never rescan or resize facts.
 
 **Observed profile intersection:** the unchanged static 16,384-unit lifetime
 rejects the tested 4-KiB *relative derived* target with Work Limit at observed
@@ -165,17 +201,19 @@ Observed with rustc 1.99.0 (`b940084d7`, 2026-09-28), LLVM 23.1.1:
 | Layout | x86_64 native no_std + alloc | thumbv7em-none-eabihf compile |
 | --- | ---: | ---: |
 | Inspect / progress | 10,584 / 10,584 | 8,296 / 8,296 |
-| Proof / semantic cursor | 10,216 / 11,448 | 8,112 / 8,816 |
+| Proof / semantic cursor | 10,216 / 11,472 | 8,112 / 8,840 |
 | Job frame | 424 | 296 |
-| Build / Step / Draft | 24,096 / 24,096 / 10,216 | 17,800 / 17,800 / 6,616 |
+| Build / Step / Draft | 24,120 / 24,120 / 10,216 | 17,824 / 17,824 / 6,616 |
 | Short semantic step | 192 | 112 |
 
 All those alignments are eight; URI byte alignment is one. The emitted
 `WP100_READMISSION_LAYOUT_WORDS` records the target compiler's actual values.
 The tests recompute Layouts rather than assert these observations as constants.
 Gateway F=144/native H=122,112; static F=80/native H=67,840,
-thumb H=47,360. Native two TD owner slots occupy 22,896 bytes; the five-scope
-gateway allowance is 145,008 bytes.
+thumb H=47,360. Native two TD owner slots occupy 22,944 bytes; the five-scope
+gateway allowance is 145,056 bytes. The reversal observation and cancellation
+counter add inline state; they create no additional heap site or larger URI
+request. Two native Build/Step slots occupy 48,240 bytes.
 
 The nested native corpus observes peak 20,352, largest request 16,384, five
 allocations and 29 paid frame moves. Its real upstream source, including the
@@ -186,8 +224,11 @@ backing and observer metadata; nested arena span is 25,440, including any unused
 gaps, and observed alignment padding is zero for these aligned requests.
 Fixed-pool and System live/request observations agree.
 
-The cancellation/drop corpus exhausts 499 inspection/Basic positions, 159
-semantic positions and 718 external-build positions. Both explicit cancellation
+The cancellation/drop corpus exhausts 499 inspection/Basic positions, 167
+semantic positions and 744 external-build positions. The small normalization
+counterexample additionally exhausts all 221 semantic positions and its four
+fallible allocation requests, covering source-pop and in-place-swap phases.
+Both explicit cancellation
 and abandonment are checked, including transfer and a started owned compiler.
 The closed MockCompilerCursor's abort is a scalar primitive and is observed
 exactly once whenever owned. Fixed Draft destruction visits at most 16 rows and
@@ -215,6 +256,14 @@ their scopes. Every command in the passed Producer gate is rerun, including
 seven real Host Zenoh loopback feedback tests. No falsified disjoint claim was
 observed. The orphan source-to-persistent-document method is still present and
 must be removed in its future admitted production change.
+
+The review corrections rerun the complete candidate matrix/runtime/layout and
+authority checks, Foundation/TD/Core/Planning regressions, and the discriminator.
+The other disjoint verification commands in `evidence.toml` retain their passed
+`c4d0824` provenance where marked `reused_from`. Their production/historical
+owners and dependencies are unchanged by these URI corrections; their original
+claims still apply. No old URI support claim is reused to prove the repaired
+candidate algorithm.
 
 Historical strict-value construction, field classification, atomic Number,
 RFC3339, arena, semantic and Snapshot handoff evidence is preserved. Its new
@@ -246,7 +295,7 @@ cargo rustc --locked --manifest-path tools/architecture-fixtures/consumer-borrow
 tools/check-design-artifacts.sh
 ```
 
-The 29 runtime tests execute under default BTree, preserve_order and native
+The 35 runtime tests execute under default BTree, preserve_order and native
 no_std + alloc/async graphs. The matrix separately checks eight Host default,
 four native no-default, eight thumb and twelve import/unification cells; the
 serde-only capability negatives cannot pass because another cell enabled it.

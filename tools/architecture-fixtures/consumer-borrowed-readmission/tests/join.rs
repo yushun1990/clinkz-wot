@@ -197,6 +197,79 @@ fn later_materialization_and_bounds_failure_have_zero_starts() {
     drop(g);
 }
 #[test]
+fn empty_rootless_base_rejection_at_a_later_coordinate_has_zero_bounds_and_starts() {
+    use consumer_borrowed_readmission_probe::{
+        data_type::{BaseUri, FormHref, resolve_form_href},
+        td::{ValidatedThingCause, ValidatedThingInvalidKind, ValidatedThingPhase},
+    };
+    for raw in ["x", "/x", "?q", "//h/x"] {
+        let mut t = input();
+        t.base = Some(BaseUri::parse("foo:").unwrap());
+        let forms = &mut t
+            .properties
+            .as_mut()
+            .unwrap()
+            .get_mut("zeta")
+            .unwrap()
+            ._interaction
+            .forms;
+        // The first readable coordinate is valid; failure is at original index 2.
+        forms[1].href = FormHref::parse("urn:first").unwrap();
+        forms[2].href = FormHref::parse(raw).unwrap();
+        assert!(resolve_form_href(t.base.as_ref(), &forms[2].href).is_err());
+        let r = planning::registration::registration();
+        let calls = Calls::default();
+        let g = support::start(None);
+        let e = complete(build(&t, &r, &calls, None, 100_000), &calls)
+            .err()
+            .unwrap();
+        assert!(
+            matches!(e, Cause::Td(ValidatedThingCause::Invalid(x)) if x.kind() == ValidatedThingInvalidKind::InvalidUri && x.phase() == ValidatedThingPhase::Semantics)
+        );
+        assert_eq!(
+            (calls.bounds.get(), calls.starts.get(), calls.aborts.get()),
+            (0, 0, 0)
+        );
+        assert_eq!(support::counts().live, 0);
+        drop(g);
+    }
+}
+#[test]
+fn normalized_gateway_and_small_targets_survive_real_owned_handoff() {
+    use clinkz_wot_foundation::ResourceKind as R;
+    for (ceiling, base_segment) in [(16384, 16360), (64, 40)] {
+        let limits = GatewayDefaultV1::limits()
+            .clone()
+            .with_limit(R::UriTemplateSourceBytesMax, Some(ceiling));
+        let t = normalization_source(base_segment);
+        let registration = planning::registration::registration();
+        let calls = Calls::default();
+        let proof = validate(&t, &limits, 4096).unwrap();
+        let g = support::start(None);
+        let d = complete(
+            Build::new(proof, &registration, &calls, 1_000_000, 100_000, None).unwrap(),
+            &calls,
+        )
+        .unwrap();
+        assert_eq!((calls.bounds.get(), calls.starts.get()), (1, 1));
+        assert_eq!(d.counts(), (1, 1));
+        assert_eq!(support::counts().live as u64, d.footprint().requested);
+        drop(t);
+        drop(registration);
+        let (plan, artifact) = d.select("p", Some(0)).unwrap();
+        assert_eq!(plan.resolved_target(), "https://h/x");
+        assert_eq!(
+            artifact.artifact().payload().target(),
+            Some(plan.resolved_target())
+        );
+        assert_eq!(d.raw_and_metadata(0).0, "bbbbbbbbbbbbbbbbbbbb/../../x");
+        drop(d);
+        assert_eq!(support::counts().live, 0);
+        assert_eq!(support::counts().allocations, support::counts().releases);
+        drop(g);
+    }
+}
+#[test]
 fn copy_and_cleanup_retry_never_revalidates_ready_uri_or_resizes_scopes() {
     let t = input();
     let r = planning::registration::registration();

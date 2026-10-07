@@ -45,7 +45,9 @@ id = 4
 claim = "Checked actual frame/URI Layouts and inline owners, old/new overlap, observed peak/largest/count, all TD allocator failures and pre-allocation limits, exhaustive fixed release/cancellation/drop, paired child capacity and retained actual upstream source. Explicit fixed allocator startup metadata/backing/alignment is included."
 witnesses = ["src/storage.rs", "src/api.rs", "src/lib.rs", "tests/resources.rs", "tests/support/mod.rs", "tests/support/pool.rs"]
 inspection_basic_suspension_positions = 499
-semantic_suspension_positions = 159
+semantic_suspension_positions = 167
+normalization_suspension_positions = 221
+normalization_allocation_failures = 4
 source_charge = "Caller source is external baseline; real engine-owned upstream Layouts keep original source/global charges through TD lending until actual Thing destruction. No reclassification or field-length allocation estimate."
 system_observer_scope = "requested Layout bytes/alignment; not malloc usable size or OS RAM"
 fixed_allocator_scope = "native execution of the no_std + alloc candidate using a caller-reserved fixed arena; full startup and unused capacity retained, zero additional child bytes at terminal"
@@ -60,7 +62,7 @@ concrete_compiler = "clinkz-wot-property-read-binding-fixture::MockCompiler"
 fixed_output_slots = 16
 fixed_scopes_per_row = 16
 fixed_release_block_maximum = 401
-build_suspension_positions = 718
+build_suspension_positions = 744
 allocation_failure_scope = "all fallible TD and materialization requests before bounds; the existing MockCompiler's infallible Box OOM is not injected or claimed"
 
 [[obligation]]
@@ -90,6 +92,16 @@ other_reused_owners = [
     "existing complete handoff registration and concrete Core mock compiler",
 ]
 historical_scope = "strict/field/date/arena/semantic/Snapshot handoff and discriminator suites retain narrower constructive claims; none becomes production constructibility by reinterpretation"
+disjoint_verification_reuse_ref = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
+disjoint_verification_reuse_basis = "Marked verification commands retain their prior passed provenance: their production/historical owners and dependencies are unchanged. Current-head candidate, matrix, ABI, authority, Foundation/TD/Core/Planning and discriminator checks are rerun; no prior URI support claim establishes the corrected algorithm."
+
+[review_corrections]
+reviewed_ref = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
+review_url = "https://github.com/yushun1990/clinkz-wot/pull/130#issuecomment-6031165897"
+review_disposition = "changes required; that head was not accepted; current candidate requires new independent exact-head review"
+empty_rootless_base = "Include empty paths in the shared TD rootless-base restriction; differential legal typed inputs and later invalid external-build coordinates reject with zero bounds/starts/aborts."
+transient_uri_projection = "Backward source-segment cancellation emits only final surviving bytes; paid in-place reversal uses the existing single URI-ceiling allocation, no intermediate/base limit or reduced profile support."
+witnesses = ["tests/boundary.rs", "tests/progress.rs", "tests/resources.rs", "tests/join.rs"]
 
 [deferred]
 claims = [
@@ -106,16 +118,22 @@ claims = [
 toolchain = "rustc 1.99.0 b940084d7eb6a299eb4bfeb8e34901bc051e7ac4; LLVM 23.1.1"
 native_target = "x86_64-unknown-linux-gnu"
 compile_target = "thumbv7em-none-eabihf"
-runtime_tests_per_graph = 29
+runtime_tests_per_graph = 35
 runtime_graphs = ["default BTree", "std preserve_order", "native no-default validated-thing,async"]
-uri_component_cases = 152
-uri_segment_cross_product_cases = 1500
-native_td_sizes = [10584, 10216, 11448, 10584]
-thumb_td_sizes = [8296, 8112, 8816, 8296]
+uri_component_cases = 209
+uri_segment_cross_product_cases = 6000
+uri_large_normalization_cases = 24
+normalization_gateway_base_bytes = 16371
+normalization_original_href_bytes = 28
+normalization_resolved_target_bytes = 11
+normalization_gateway_ready_work = 69814
+normalization_selected_uri_ceilings = [16384, 64, 28]
+native_td_sizes = [10584, 10216, 11472, 10584]
+thumb_td_sizes = [8296, 8112, 8840, 8296]
 native_frame_size = 424
 thumb_frame_size = 296
-native_build_step_draft_sizes = [24096, 24096, 10216]
-thumb_build_step_draft_sizes = [17800, 17800, 6616]
+native_build_step_draft_sizes = [24120, 24120, 10216]
+thumb_build_step_draft_sizes = [17824, 17824, 6616]
 native_nested_peak = 20352
 native_nested_largest_request = 16384
 native_nested_allocations = 5
@@ -133,7 +151,7 @@ observation_status = "measured fixture/compiler values; not fixed profile consta
 
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml"
-scope = "29 candidate runtime tests"
+scope = "35 candidate runtime tests, including both independent-review URI counterexamples"
 status = "passed-locally"
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml --features order"
@@ -167,18 +185,22 @@ status = "passed-locally"
 command = "cargo test --locked --offline -p clinkz-wot-foundation --no-default-features"
 scope = "portable Foundation borrowing, ledgers and linear work"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --test consumer_property_read_binding --test consumer_property_read_request --test property_read_response_sealing --test interaction_options --test interaction_output_test"
 scope = "portable completed exact WP-100/WP-300 leaves; also rerun with --features async"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --lib"
 scope = "portable completed WP-200 leaf; also rerun with --features async"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "every test_commands entry in docs/work-packages/property-read-architecture-gate.toml"
 scope = "existing passed Producer gate only, including seven real Host Zenoh loopback feedback tests"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-admission/Cargo.toml"
 scope = "unchanged #128 discriminator"
@@ -187,19 +209,24 @@ status = "passed-locally"
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing,order"
 scope = "shared public Basic, strict/field/Number construction historical boundaries"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-strict-number-lexeme/Cargo.toml"
 scope = "historical strict Number spelling"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-rfc3339-resumable/Cargo.toml"
 scope = "historical date construction only"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml"
 scope = "historical real arena requests/growth/transfer/release"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"
 [[verification]]
 command = "cargo test --locked --offline -p validated-thing-planning-handoff-probe"
 scope = "historical Snapshot/source-free concrete handoff only"
 status = "passed-locally"
+reused_from = "c4d0824924f4c8045762bc69d6faeecf342c9eb9"

@@ -383,6 +383,7 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
             o.segment_bytes += n.segment_bytes;
             o.pop_bytes += n.pop_bytes;
             o.emitted_bytes += n.emitted_bytes;
+            o.reversed_bytes += n.reversed_bytes;
             o.shifted_bytes += n.shifted_bytes;
             o.utf8_bytes += n.utf8_bytes;
         }

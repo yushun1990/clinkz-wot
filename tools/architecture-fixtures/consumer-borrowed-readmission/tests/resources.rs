@@ -199,6 +199,73 @@ fn every_inspect_basic_and_semantic_suspension_can_cancel_or_drop() {
     );
 }
 #[test]
+fn every_normalization_suspension_and_allocation_failure_preserves_terminal_ownership() {
+    let t = normalization_source(40);
+    let l = GatewayDefaultV1::limits()
+        .clone()
+        .with_limit(R::UriTemplateSourceBytesMax, Some(64));
+    let g = support::start(None);
+    let mut read = validate(&t, &l, 4096).unwrap().into_property_read();
+    let mut positions = 0;
+    loop {
+        positions += 1;
+        match read.step(&mut budget(4), false).unwrap() {
+            ValidatedPropertyReadStep::Ready(_) => read.acknowledge(),
+            ValidatedPropertyReadStep::Pending => {}
+            ValidatedPropertyReadStep::Done => break,
+        }
+    }
+    assert!(read.uri_observations().pop_bytes >= 40);
+    assert_eq!(read.uri_observations().reversed_bytes, 2);
+    drop(read);
+    let attempts = support::counts().attempts;
+    assert_eq!(support::counts().live, 0);
+    drop(g);
+    for fail in 1..=attempts {
+        let g = support::start(Some(fail));
+        let e = match validate(&t, &l, 4096) {
+            Err(e) => e,
+            Ok(proof) => {
+                let mut read = proof.into_property_read();
+                let e = drive(&mut read, 4).unwrap_err();
+                assert_eq!(read.step(&mut budget(0), true).err(), Some(e));
+                drop(read);
+                e
+            }
+        };
+        assert!(
+            matches!(e, ValidatedThingCause::Failed(x) if x.kind() == ValidatedThingFailureKind::AllocationFailed)
+        );
+        assert_eq!(support::counts().live, 0);
+        assert_eq!(support::counts().allocations, support::counts().releases);
+        drop(g);
+    }
+    for position in 0..positions {
+        for cancel in [false, true] {
+            let g = support::start(None);
+            let mut read = validate(&t, &l, 4096).unwrap().into_property_read();
+            for _ in 0..position {
+                match read.step(&mut budget(4), false).unwrap() {
+                    ValidatedPropertyReadStep::Ready(_) => read.acknowledge(),
+                    _ => {}
+                }
+            }
+            if cancel {
+                let e = read.step(&mut budget(0), true).err().unwrap();
+                assert!(matches!(e, ValidatedThingCause::Cancelled { .. }));
+                assert_eq!(read.step(&mut budget(4096), false).err(), Some(e));
+            }
+            drop(read);
+            assert_eq!(support::counts().live, 0);
+            assert_eq!(support::counts().allocations, support::counts().releases);
+            drop(g);
+        }
+    }
+    println!(
+        "normalization cancellation/drop positions={positions}; allocation failures={attempts}"
+    );
+}
+#[test]
 fn allocation_limits_reject_before_allocator_entry() {
     let t = source();
     let l = GatewayDefaultV1::LIMITS;
@@ -398,9 +465,16 @@ fn all_local_and_global_parent_capacities_cover_inline_return_overlap_before_ent
 #[test]
 fn fixed_pool_runtime_prepays_alignment_metadata_and_unused_allocator_capacity() {
     let t = nested(); // external typed source, provisioned before bounded entry
-    for limits in [
-        GatewayDefaultV1::limits(),
-        BenchmarkStaticReferenceV1::limits(),
+    let small = normalization_source(40);
+    let gateway = normalization_source(16360);
+    let small_limits = GatewayDefaultV1::limits()
+        .clone()
+        .with_limit(R::UriTemplateSourceBytesMax, Some(64));
+    for (t, limits) in [
+        (&t, GatewayDefaultV1::limits()),
+        (&t, BenchmarkStaticReferenceV1::limits()),
+        (&small, &small_limits),
+        (&gateway, GatewayDefaultV1::limits()),
     ] {
         let cfg = ValidatedThingAdmissionConfig::try_from_limits(limits).unwrap();
         let allocator = support::pool_owner_layout();
@@ -433,7 +507,7 @@ fn fixed_pool_runtime_prepays_alignment_metadata_and_unused_allocator_capacity()
             p.try_reserve(inline).unwrap().commit();
         }
         let g = support::start_pool();
-        let proof = validate(&t, limits, 4096).unwrap();
+        let proof = validate(t, limits, 4096).unwrap();
         let mut read = proof.into_property_read();
         drive(&mut read, 4).unwrap();
         let trace = read.trace();

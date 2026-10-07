@@ -1477,6 +1477,7 @@ impl<'a> Read<'a> {
                         self.uri_observed.segment_bytes += o.segment_bytes;
                         self.uri_observed.pop_bytes += o.pop_bytes;
                         self.uri_observed.emitted_bytes += o.emitted_bytes;
+                        self.uri_observed.reversed_bytes += o.reversed_bytes;
                         self.uri_observed.shifted_bytes += o.shifted_bytes;
                         self.uri_observed.utf8_bytes += o.utf8_bytes;
                     }

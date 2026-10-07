@@ -124,6 +124,9 @@ fn resumable_uri_matches_public_td_for_adversarial_components() {
         Some("https://example.test/a/b/c?old"),
         Some("https://example.test"),
         Some("urn:foo"),
+        Some("foo:"),
+        Some("foo:?old"),
+        Some("foo:#fragment"),
         Some("foo:/a/.."),
         Some("foo:/"),
         Some("https://example.test/a#fragment"),
@@ -189,30 +192,73 @@ fn uri_segment_cross_product_matches_existing_semantic_owner() {
         for left in segments {
             for right in segments {
                 for prefix in ["", "/", "./"] {
-                    let raw = format!("{prefix}{left}/{right}/end?q#f");
-                    let Ok(href) = FormHref::parse(&raw) else {
-                        continue;
-                    };
-                    let mut t = source();
-                    t.base = Some(BaseUri::parse(base).unwrap());
-                    t.properties
-                        .as_mut()
-                        .unwrap()
-                        .get_mut("p")
-                        .unwrap()
-                        ._interaction
-                        .forms[0]
-                        .href = href.clone();
-                    let expected =
-                        resolve_form_href(t.base.as_ref(), &href).map(|v| v.as_str().to_string());
-                    let actual = resolved(&t, 4);
-                    match (expected, actual) {
-                        (Ok(e), Ok(a)) => assert_eq!(e, a, "base={base} raw={raw}"),
-                        (Err(_), Err(ValidatedThingCause::Invalid(_))) => {}
-                        (e, a) => panic!("base={base} raw={raw}: {e:?} {a:?}"),
+                    for suffix in ["", "/", "/end?q#f", "?q#f"] {
+                        let raw = format!("{prefix}{left}/{right}{suffix}");
+                        let Ok(href) = FormHref::parse(&raw) else {
+                            continue;
+                        };
+                        let mut t = source();
+                        t.base = Some(BaseUri::parse(base).unwrap());
+                        t.properties
+                            .as_mut()
+                            .unwrap()
+                            .get_mut("p")
+                            .unwrap()
+                            ._interaction
+                            .forms[0]
+                            .href = href.clone();
+                        let expected = resolve_form_href(t.base.as_ref(), &href)
+                            .map(|v| v.as_str().to_string());
+                        let actual = resolved(&t, 4);
+                        match (expected, actual) {
+                            (Ok(e), Ok(a)) => assert_eq!(e, a, "base={base} raw={raw}"),
+                            (Err(_), Err(ValidatedThingCause::Invalid(_))) => {}
+                            (e, a) => panic!("base={base} raw={raw}: {e:?} {a:?}"),
+                        }
                     }
                 }
             }
+        }
+    }
+}
+#[test]
+fn large_normalization_cancellation_matches_public_td_without_a_target_fallback() {
+    let bases = [
+        format!("https://h/{}/", "a".repeat(8000)),
+        format!("https://h/{}", "a/".repeat(4096)),
+        format!("foo:/{}", "a/".repeat(4096)),
+    ];
+    let references = [
+        "bbbbbbbbbbbbbbbbbbbb/../../x".into(),
+        "bbbbbbbbbbbbbbbbbbbb/../x?q#f".into(),
+        "bbbbbbbbbbbbbbbbbbbb/.%2e/%2E%2e/x?query#fragment".into(),
+        "a//b/../../../x".into(),
+        "./a/./b/../../x/.".into(),
+        "/a//b/../../x".into(),
+        "//other/a/../../x".into(),
+        format!("{}x?q#f", "../".repeat(4096)),
+    ];
+    for base in &bases {
+        for raw in &references {
+            let mut t = source();
+            t.base = Some(BaseUri::parse(base).unwrap());
+            let href = FormHref::parse(raw).unwrap();
+            t.properties
+                .as_mut()
+                .unwrap()
+                .get_mut("p")
+                .unwrap()
+                ._interaction
+                .forms[0]
+                .href = href.clone();
+            let expected = resolve_form_href(t.base.as_ref(), &href).unwrap();
+            assert!(expected.as_str().len() <= 16384);
+            assert_eq!(
+                resolved(&t, 4).unwrap(),
+                expected.as_str(),
+                "base bytes={} raw={raw}",
+                base.len()
+            );
         }
     }
 }

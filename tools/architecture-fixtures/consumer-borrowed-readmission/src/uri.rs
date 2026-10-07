@@ -12,8 +12,11 @@ pub struct Observations {
     pub component_bytes: u64,
     pub merge_bytes: u64,
     pub segment_bytes: u64,
+    /// Actual source reads while locating predecessors for outstanding `..`.
     pub pop_bytes: u64,
     pub emitted_bytes: u64,
+    /// Initialized scratch bytes read and rewritten by in-place path swaps.
+    pub reversed_bytes: u64,
     pub shifted_bytes: u64,
     pub utf8_bytes: u64,
 }
@@ -166,6 +169,7 @@ pub struct Resolver<'a> {
     segment_end: usize,
     segment: [u8; 6],
     segment_len: usize,
+    cancel_segments: usize,
     merge: usize,
     merge_last: [u8; 6],
     merge_len: usize,
@@ -204,6 +208,7 @@ impl<'a> Resolver<'a> {
             segment_end: 0,
             segment: [0; 6],
             segment_len: 0,
+            cancel_segments: 0,
             merge: 0,
             merge_last: [0; 6],
             merge_len: 0,
@@ -248,6 +253,8 @@ impl<'a> Resolver<'a> {
         }
     }
     fn output(&mut self, storage: &mut Storage<Job<'a>>, byte: u8) -> Result<(), Cause> {
+        // Only final surviving bytes reach this buffer. Removed path segments
+        // are inspected in their source spans, never appended as scratch.
         if storage.len(Site::Bytes) == self.ceiling {
             return Err(Cause::Resource {
                 kind: R::UriTemplateSourceBytesMax,
@@ -262,6 +269,11 @@ impl<'a> Resolver<'a> {
     fn add_prefix(&mut self, s: Span) {
         self.prefix[self.prefix_count] = s;
         self.prefix_count += 1;
+    }
+    fn previous_segment(&mut self) {
+        self.segment_end = self.segment_start;
+        self.segment_len = 0;
+        self.stage = 6;
     }
     fn suffixes(&mut self) {
         self.suffix_count = 0;
@@ -311,7 +323,7 @@ impl<'a> Resolver<'a> {
                     (W::CodecOutputBytes, 1),
                     (W::CleanupItems, 0),
                 ],
-                16 | 17 => [
+                10 | 16 | 17 => [
                     (W::UriBytes, 4),
                     (W::CodecOutputBytes, 2),
                     (W::CleanupItems, 0),
@@ -374,8 +386,7 @@ impl<'a> Resolver<'a> {
                         return Err(Cause::Uri);
                     }
                     if b.authority.is_none()
-                        && b.path.0 < b.path.1
-                        && self.text(0).as_bytes()[b.path.0] != b'/'
+                        && (b.path.0 == b.path.1 || self.text(0).as_bytes()[b.path.0] != b'/')
                         && !matches!(self.href.as_str().as_bytes().first(), None | Some(b'#'))
                     {
                         return Err(Cause::Uri);
@@ -476,45 +487,52 @@ impl<'a> Resolver<'a> {
                         }
                     } else {
                         self.path_start = storage.len(Site::Bytes);
-                        self.path_piece = 0;
-                        self.position = self.paths[0].start;
                         self.absolute_path = self.paths[0].start < self.paths[0].end
                             && self.text(self.paths[0].source).as_bytes()[self.paths[0].start]
                                 == b'/';
-                        self.segment_start = self.position;
-                        self.segment_end = self.position;
+                        // split_inclusive('/') segments, visited backward across
+                        // both merge spans. A pending '..' discards a preceding
+                        // normal segment, except the absolute root. Dot segments
+                        // have no output. This is the shared forward pop meaning
+                        // evaluated before emission, with linear source scans.
+                        self.path_piece = self.path_count - 1;
+                        self.segment_end = self.paths[self.path_piece].end;
+                        self.segment_start = self.segment_end;
                         self.segment_len = 0;
                         self.stage = 6;
                     }
                 }
                 6 => {
-                    if self.path_piece == self.path_count {
-                        self.stage = 11;
-                        continue;
-                    }
                     let s = self.paths[self.path_piece];
-                    if self.segment_end == s.end {
-                        if self.segment_start < self.segment_end {
-                            self.position = self.segment_start;
-                            self.stage = 7;
+                    if self.segment_end == s.start {
+                        if self.path_piece == 0 {
+                            self.position = self.path_start;
+                            self.pop = storage.len(Site::Bytes);
+                            self.stage = 10;
                         } else {
-                            self.path_piece += 1;
-                            if self.path_piece < self.path_count {
-                                self.segment_start = self.paths[self.path_piece].start;
-                                self.segment_end = self.segment_start;
-                                self.segment_len = 0;
-                            }
+                            self.path_piece -= 1;
+                            self.segment_end = self.paths[self.path_piece].end;
+                            self.segment_start = self.segment_end;
                         }
+                    } else if self.segment_start == s.start {
+                        self.position = self.segment_end;
+                        self.stage = 7;
                     } else {
-                        let byte = self.text(s.source).as_bytes()[self.segment_end];
-                        self.segment_end += 1;
+                        self.segment_start -= 1;
+                        let byte = self.text(s.source).as_bytes()[self.segment_start];
                         self.observed.segment_bytes += 1;
-                        if byte == b'/' {
-                            self.position = self.segment_start;
+                        if self.cancel_segments != 0 {
+                            // Actual backward source reads selecting the path
+                            // predecessor to pop; no output prefix is replayed.
+                            self.observed.pop_bytes += 1;
+                        }
+                        if byte == b'/' && self.segment_start + 1 != self.segment_end {
+                            self.segment_start += 1;
+                            self.position = self.segment_end;
                             self.stage = 7;
-                        } else {
+                        } else if byte != b'/' {
                             if self.segment_len < 6 {
-                                self.segment[self.segment_len] = byte;
+                                self.segment[5 - self.segment_len] = byte;
                             }
                             self.segment_len += 1;
                         }
@@ -522,51 +540,57 @@ impl<'a> Resolver<'a> {
                 }
                 7 => {
                     let kind = if self.absolute_path && self.segment_len <= 6 {
-                        classify(&self.segment[..self.segment_len])
+                        classify(&self.segment[6 - self.segment_len..])
                     } else {
                         0
                     };
                     match kind {
-                        0 => self.stage = 8,
-                        1 => {
-                            self.segment_start = self.segment_end;
-                            self.segment_len = 0;
-                            self.stage = 6;
+                        0 => {
+                            let root = self.absolute_path
+                                && self.path_piece == 0
+                                && self.segment_start == self.paths[0].start
+                                && self.segment_end == self.segment_start + 1;
+                            if self.cancel_segments != 0 && !root {
+                                self.cancel_segments -= 1;
+                                self.previous_segment();
+                            } else {
+                                self.stage = 8;
+                            }
                         }
+                        1 => self.previous_segment(),
                         _ => {
-                            self.pop = storage.len(Site::Bytes).saturating_sub(1);
-                            self.stage = 9;
+                            self.cancel_segments = self
+                                .cancel_segments
+                                .checked_add(1)
+                                .ok_or(Cause::Arithmetic)?;
+                            self.previous_segment();
                         }
                     }
                 }
                 8 => {
-                    if self.position < self.segment_end {
+                    if self.position > self.segment_start {
                         let s = self.paths[self.path_piece];
+                        self.position -= 1;
                         let byte = self.text(s.source).as_bytes()[self.position];
                         self.output(storage, byte)?;
-                        self.position += 1;
                     } else {
-                        self.segment_start = self.segment_end;
-                        self.segment_len = 0;
-                        self.stage = 6;
+                        self.previous_segment();
                     }
                 }
-                9 => {
-                    if storage.len(Site::Bytes) > self.path_start + 1 && self.pop > self.path_start
-                    {
+                10 => {
+                    // The surviving path was appended in reverse byte order.
+                    // Reverse only that initialized range, one paid swap at a
+                    // time. Temporary UTF-8 is never lent before stage 14.
+                    if self.pop > self.position + 1 {
                         self.pop -= 1;
-                        let byte = storage.byte(self.pop);
-                        self.observed.pop_bytes += 1;
-                        if byte == b'/' {
-                            storage.truncate_bytes(self.pop + 1);
-                            self.segment_start = self.segment_end;
-                            self.segment_len = 0;
-                            self.stage = 6;
-                        }
+                        let left = storage.byte(self.position);
+                        let right = storage.byte(self.pop);
+                        storage.set_byte(self.position, right);
+                        storage.set_byte(self.pop, left);
+                        self.position += 1;
+                        self.observed.reversed_bytes += 2;
                     } else {
-                        self.segment_start = self.segment_end;
-                        self.segment_len = 0;
-                        self.stage = 6;
+                        self.stage = 11;
                     }
                 }
                 11 => {

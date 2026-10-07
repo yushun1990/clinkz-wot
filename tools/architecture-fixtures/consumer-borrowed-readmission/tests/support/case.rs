@@ -46,6 +46,20 @@ pub fn validate<'a>(
 pub fn source() -> Thing {
     serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"probe","id":"urn:probe","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},"properties":{"p":{"type":"null","forms":[{"href":"target"}]}}}"#).unwrap()
 }
+pub fn normalization_source(base_segment: usize) -> Thing {
+    use consumer_borrowed_readmission_probe::data_type::{BaseUri, FormHref};
+    let mut t = source();
+    t.base = Some(BaseUri::parse(&format!("https://h/{}/", "a".repeat(base_segment))).unwrap());
+    t.properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .href = FormHref::parse("bbbbbbbbbbbbbbbbbbbb/../../x").unwrap();
+    t
+}
 
 pub fn drive(
     read: &mut ValidatedPropertyReadCursor<'_>,

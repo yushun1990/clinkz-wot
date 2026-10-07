@@ -428,6 +428,173 @@ fn named_uri_targets_advance_with_small_credit_and_ready_retries_do_no_work() {
         }
     }
 }
+#[test]
+fn normalization_caps_original_and_final_targets_instead_of_removed_segments() {
+    use consumer_borrowed_readmission_probe::data_type::resolve_form_href;
+    // Includes the unchanged gateway counterexample and a base larger than the
+    // selected URI ceiling: the ceiling applies to Form targets, not the base.
+    for (ceiling, base_segment) in [(16384, 16360), (64, 40), (28, 40)] {
+        let l = GatewayDefaultV1::limits()
+            .clone()
+            .with_limit(R::UriTemplateSourceBytesMax, Some(ceiling));
+        let t = normalization_source(base_segment);
+        let href = FormHref::parse("bbbbbbbbbbbbbbbbbbbb/../../x").unwrap();
+        let expected = resolve_form_href(t.base.as_ref(), &href).unwrap();
+        assert_eq!(expected.as_str(), "https://h/x");
+        let proof = validate(&t, &l, 4096).unwrap();
+        let g = support::start(None);
+        let mut read = proof.into_property_read();
+        loop {
+            match read.step(&mut budget(4), false).unwrap() {
+                ValidatedPropertyReadStep::Ready(ValidatedPropertyReadEvent::Property {
+                    ..
+                }) => read.acknowledge(),
+                ValidatedPropertyReadStep::Ready(ValidatedPropertyReadEvent::Form(f)) => {
+                    assert_eq!(f.resolved_href(), expected.as_str());
+                    break;
+                }
+                ValidatedPropertyReadStep::Pending => {}
+                ValidatedPropertyReadStep::Done => panic!("missing normalized target"),
+            }
+        }
+        assert!(read.lifetime_remaining() > 0);
+        let observed = read.uri_observations();
+        assert_eq!(observed.utf8_bytes, 11);
+        assert_eq!(observed.emitted_bytes, 11);
+        assert!(observed.pop_bytes >= base_segment as u64);
+        let counts = support::counts();
+        let (requests, n) = support::requests();
+        assert_eq!(n, 1);
+        assert_eq!(requests[0], (ceiling as usize, 1));
+        assert_eq!(
+            (counts.live, counts.peak, counts.largest),
+            (ceiling as usize, ceiling as usize, ceiling as usize)
+        );
+        let trace = read.trace();
+        let life = read.lifetime_remaining();
+        for _ in 0..8 {
+            assert!(matches!(
+                read.step(&mut budget(0), false).unwrap(),
+                ValidatedPropertyReadStep::Ready(ValidatedPropertyReadEvent::Form(_))
+            ));
+            assert_eq!(read.trace(), trace);
+            assert_eq!(read.uri_observations(), observed);
+            assert_eq!(read.lifetime_remaining(), life);
+        }
+        drop(read);
+        assert_eq!(support::counts().live, 0);
+        assert_eq!(support::counts().allocations, support::counts().releases);
+        drop(g);
+        println!(
+            "normalization ceiling={ceiling}: {observed:?}; lifetime spent={}",
+            l.get(R::DocumentValidationWorkUnitsMax).unwrap() - life
+        );
+    }
+}
+#[test]
+fn normalized_path_swap_debits_are_atomic_and_target_limits_keep_their_scope() {
+    let original = GatewayDefaultV1::limits();
+    let l = original
+        .clone()
+        .with_limit(R::UriTemplateSourceBytesMax, Some(64));
+    let mut t = normalization_source(40);
+    t.properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .href = FormHref::parse("bbbbbbbbbbbbbbbbbbbb/../../long-target").unwrap();
+    let mut read = validate(&t, &l, 4096).unwrap().into_property_read();
+    while read.uri_observations().reversed_bytes == 0 {
+        match read.step(&mut budget(4), false).unwrap() {
+            ValidatedPropertyReadStep::Ready(_) => read.acknowledge(),
+            _ => {}
+        }
+    }
+    let trace = read.trace();
+    let observed = read.uri_observations();
+    let life = read.lifetime_remaining();
+    for (uri, output) in [(3, 2), (4, 1), (0, 0)] {
+        let mut b = budget(4);
+        b.set_remaining(W::UriBytes, uri);
+        b.set_remaining(W::CodecOutputBytes, output);
+        let before = W::ALL.map(|c| b.remaining(c));
+        assert!(matches!(
+            read.step(&mut b, false).unwrap(),
+            ValidatedPropertyReadStep::Pending
+        ));
+        assert_eq!(W::ALL.map(|c| b.remaining(c)), before);
+        assert_eq!(read.trace(), trace);
+        assert_eq!(read.uri_observations(), observed);
+        assert_eq!(read.lifetime_remaining(), life);
+    }
+    // Move the partially reversed cursor, then finish without replay.
+    let mut read = [read].into_iter().next().unwrap();
+    drive(&mut read, 4).unwrap();
+    let work = l.get(R::DocumentValidationWorkUnitsMax).unwrap() - read.lifetime_remaining();
+    let complete_observed = read.uri_observations();
+    drop(read);
+    for n in [work, work - 1] {
+        // Keep the configuration's container atomic envelopes supportable at
+        // this deliberately small work threshold; actual fixture counts fit.
+        let selected = l
+            .clone()
+            .with_limit(R::JsonMembersPerObjectMax, Some(64))
+            .with_limit(R::JsonArrayItemsMax, Some(64))
+            .with_limit(R::AffordancesPerThingMax, Some(16))
+            .with_limit(R::DocumentValidationWorkUnitsMax, Some(n));
+        let mut read = validate(&t, &selected, 4096).unwrap().into_property_read();
+        if n == work {
+            drive(&mut read, 4).unwrap();
+            assert_eq!(read.lifetime_remaining(), 0);
+            assert_eq!(read.uri_observations(), complete_observed);
+        } else {
+            let e = drive(&mut read, 4).unwrap_err();
+            assert!(
+                matches!(e, ValidatedThingCause::Limit(x) if x.kind() == R::DocumentValidationWorkUnitsMax && x.configured() == n && x.observed() == work)
+            );
+            assert_eq!(read.step(&mut budget(0), true).err(), Some(e));
+        }
+    }
+    // Original Form text is 28 bytes; neither the 51-byte base nor the
+    // unnormalized merged path acquires this resource's ceiling.
+    let t = normalization_source(40);
+    let below = original
+        .clone()
+        .with_limit(R::UriTemplateSourceBytesMax, Some(27));
+    let e = validate(&t, &below, 4096).err().unwrap();
+    assert!(
+        matches!(e, ValidatedThingCause::Limit(x) if x.kind() == R::UriTemplateSourceBytesMax && x.configured() == 27 && x.observed() == 28 && x.phase() == ValidatedThingPhase::Inspect)
+    );
+    // A genuinely long final target still rejects at its own boundary.
+    let mut t = normalization_source(40);
+    t.properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .href = FormHref::parse("end").unwrap();
+    for ceiling in [54, 53] {
+        let selected = original
+            .clone()
+            .with_limit(R::UriTemplateSourceBytesMax, Some(ceiling));
+        let mut read = validate(&t, &selected, 4096).unwrap().into_property_read();
+        if ceiling == 54 {
+            drive(&mut read, 4).unwrap();
+            assert_eq!(read.uri_observations().utf8_bytes, 54);
+        } else {
+            let e = drive(&mut read, 4).unwrap_err();
+            assert!(
+                matches!(e, ValidatedThingCause::Limit(x) if x.kind() == R::UriTemplateSourceBytesMax && x.configured() == 53 && x.observed() == 54 && x.phase() == ValidatedThingPhase::Semantics)
+            );
+            assert_eq!(read.step(&mut budget(0), true).err(), Some(e));
+        }
+    }
+}
 #[path = "support/oracle.rs"]
 mod oracle;
 #[test]
