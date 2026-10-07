@@ -4,8 +4,9 @@ Status: MIGRATED — design input and discriminator independently accepted in
 PR #128 at `4b2fd2f4a77d83ab78c360202f7cd000d8fd7e17`.
 
 The selected conclusion is projected by [ADR-0021](../docs/ADRs/0021-borrowed-consumer-td-admission.org)
-and the registered TD/Planning/Servient contracts. Independent review of the
-migration and separate evidence-backed readmission remain required. The original
+and the registered TD/Planning/Servient contracts.
+[The TD admission record](../docs/work-packages/WP-100-consumer-validated-thing-admission.md)
+owns implementation admission and its evidence authority. The original
 investigation and prototype claims below are retained as history; they are not
 current production authority or completion evidence.
 

@@ -112,6 +112,7 @@ caller-owned immutable input, complete bounded TD validation, paid semantic
 lending, owned Planning output and a Servient-owned transaction. The exact
 contracts and resource interpretation revision 2 are registered in
 `docs/spec/v5-authority-reset.toml`. Strict bounded ingestion is a separate
-future capability under ADR-0020. The 65/31/121 requirement dispositions,
-tranche/admission/gate statuses and prior production evidence are unchanged;
-independent authority acceptance and replacement readmission remain required.
+future capability under ADR-0020. The 65/31/121 requirement dispositions and prior
+production evidence are preserved. Implementation admission and its evidence
+boundary are owned by [the TD admission record](../work-packages/WP-100-consumer-validated-thing-admission.md)
+and [work-package index](../work-packages/index.toml).

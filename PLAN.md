@@ -33,16 +33,15 @@ active task session; they are not stored in this roadmap.
 ## Roadmap Frontier
 
 The v5.1 Consumer one-shot authority is active. The domain-entry review is
-complete, and the first WP-100 Consumer source tranche is complete. The next TD
-admission tranche remains `planned` / `candidate` after withdrawal
-of the opaque-container accounting candidate. ADR-0021 replaces its mandatory
+complete, and the first WP-100 Consumer source tranche is complete. The borrowed
+TD tranche is admitted for implementation under ADR-0013; its production
+completion remains open. [Its admission record](docs/work-packages/WP-100-consumer-validated-thing-admission.md)
+owns the exact implementation and evidence boundary. ADR-0021 replaces the mandatory
 normalized Snapshot with borrowed immutable typed Thing, bounded complete TD
 validation/semantic lending, owned Planning output and Servient transaction
 publication. Strict bounded JSON ingestion is a separate future capability,
 with its literal-value and field-decoding authority preserved. It is no longer
-a prerequisite of the first Consumer Property Read integration. Production work
-still requires independent acceptance of the migrated authority, replacement
-readmission evidence and a separate admission-only transition.
+a prerequisite of the first Consumer Property Read integration.
 The Consumer architecture gate is not registered until its
 source prerequisites are assembled. All six
 narrow Producer Property Read tranches and D48's
