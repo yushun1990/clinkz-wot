@@ -7,7 +7,8 @@ use clinkz_wot_foundation::{
 };
 use clinkz_wot_td::{
     ValidatedThingAdmissionConfig, ValidatedThingCause as Cause, ValidatedThingCursor,
-    ValidatedThingFailureKind, ValidatedThingProgress as Progress, thing::Thing,
+    ValidatedThingFailureKind, ValidatedThingPhase, ValidatedThingProgress as Progress,
+    thing::Thing, validate::Validate,
 };
 use std::{
     alloc::{GlobalAlloc, Layout, System},
@@ -279,4 +280,68 @@ fn zero_budget_entry_does_not_allocate_or_traverse() {
     let o = stop();
     assert_eq!(o.attempts, 0);
     assert_eq!(o.live, 0);
+}
+
+#[test]
+fn map_limits_terminate_with_the_configured_maximum_iterator_debit() {
+    const MEMBERS: u64 = 32;
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(R::JsonMembersPerObjectMax, Some(MEMBERS));
+    let config = ValidatedThingAdmissionConfig::try_from_limits(&limits).unwrap();
+    for opaque in [false, true] {
+        for members in [MEMBERS - 1, MEMBERS, MEMBERS + 1, 2 * MEMBERS + 1] {
+            let mut t = thing();
+            let entries = (0..members).map(|i| (format!("field{i:02}"), serde_json::Value::Null));
+            t._extra_fields.clear();
+            if opaque {
+                t._extra_fields.insert(
+                    "opaque".into(),
+                    serde_json::Value::Object(entries.collect()),
+                );
+            } else {
+                t._extra_fields.extend(entries);
+            }
+            assert!(t.validate().is_ok());
+            observe(0);
+            let mut cursor = ValidatedThingCursor::from_thing(&t, &config, ledger());
+            let mut steps = 0;
+            let (terminal, last_debit) = loop {
+                if steps == 20_000 {
+                    drop(cursor);
+                    break (None, 0);
+                }
+                steps += 1;
+                let mut allowance = budget();
+                allowance.set_remaining(WorkClass::DocumentNodes, MEMBERS + 1);
+                let progress = cursor.step(&mut allowance, false);
+                let debit = MEMBERS + 1 - allowance.remaining(WorkClass::DocumentNodes);
+                match progress {
+                    Progress::Pending(next) => cursor = next,
+                    Progress::Complete(proof) => {
+                        drop(proof);
+                        break (Some(Ok(())), debit);
+                    }
+                    Progress::Failed(cause) => break (Some(Err(cause)), debit),
+                }
+            };
+            let o = stop();
+            assert_eq!(o.live, 0);
+            assert_eq!(o.requests, o.freed);
+            if members <= MEMBERS {
+                assert_eq!(terminal, Some(Ok(())), "opaque={opaque}, members={members}");
+            } else {
+                match terminal {
+                    Some(Err(Cause::Limit(limit))) => {
+                        assert_eq!(limit.kind(), R::JsonMembersPerObjectMax);
+                        assert_eq!(limit.configured(), MEMBERS);
+                        assert_eq!(limit.observed(), members);
+                        assert_eq!(limit.phase(), ValidatedThingPhase::Inspect);
+                        assert_eq!(last_debit, 1);
+                    }
+                    _ => panic!("no map rejection: opaque={opaque}, members={members}"),
+                }
+            }
+        }
+    }
 }

@@ -1475,8 +1475,17 @@ impl<'td> ValidatedThingCursor<'td> {
                     _ => W::DocumentNodes,
                 };
                 if let Node::Map(map) = node {
+                    let len = map.len();
+                    // Reach rejection within the supported step envelope. An
+                    // oversized length needs only fixed structural work; no
+                    // iterator is initialized until counts.visit admits it.
+                    let debit = if len as u64 > self.policy.get(R::JsonMembersPerObjectMax) {
+                        1
+                    } else {
+                        iter_cost(len)
+                    };
                     [
-                        (W::DocumentNodes, iter_cost(map.len())),
+                        (W::DocumentNodes, debit),
                         (W::CodecInputBytes, 0),
                         (class, 0),
                     ]
