@@ -27,7 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
           toolchain: 1.95.0
-          targets: thumbv7em-none-eabihf
+          targets: thumbv7em-none-eabihf, thumbv6m-none-eabi
 
       - name: Check pull-request diff hygiene
         if: github.event_name == 'pull_request'
@@ -42,6 +42,13 @@ jobs:
 
       - name: Run locked workspace tests
         run: cargo test --workspace --locked
+
+      - name: Exercise product/runtime boundary investigation
+        run: |
+          runtime_probe_manifest=tools/architecture-fixtures/product-runtime-boundaries/Cargo.toml
+          cargo run --locked --manifest-path "$runtime_probe_manifest" -p runtime-boundary-compare
+          cargo check --locked --manifest-path "$runtime_probe_manifest" -p static-plan-probe --target thumbv6m-none-eabi
+          bash tools/architecture-fixtures/product-runtime-boundaries/check-normal-dependencies.sh
 
       - name: Check production bounded TD proof construction
         run: |

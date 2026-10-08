@@ -1,0 +1,12 @@
+[package]
+name = "runtime-contracts-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[features]
+default = []
+std = ["clinkz-wot-foundation/std"]
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../../foundation", default-features = false }

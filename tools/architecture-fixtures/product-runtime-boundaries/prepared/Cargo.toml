@@ -1,0 +1,15 @@
+[package]
+name = "static-plan-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+runtime-contracts-probe = { path = "../contracts", default-features = false }
+
+[build-dependencies]
+clinkz-wot-foundation = { path = "../../../../foundation" }
+clinkz-wot-core = { path = "../../../../core" }
+clinkz-wot-td = { path = "../../../../td" }
+clinkz-wot-planning = { path = "../../../../planning" }
+clinkz-wot-property-read-binding-fixture = { path = "../../property-read-binding" }
