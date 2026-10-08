@@ -32,7 +32,7 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
-- None.
+- [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 Composable Capabilities and Runtime Boundaries]]
 
 ** DECIDED
 

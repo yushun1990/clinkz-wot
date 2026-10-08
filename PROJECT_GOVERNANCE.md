@@ -72,6 +72,8 @@ loading a hand-maintained continuation file:
 2. Read `PLAN.md` for durable roadmap and milestone context.
 3. Identify the smallest relevant specifications, ADRs, work packages,
    workspace topics, audits, code, and tests.
+   Use `workspace/INDEX.org` to discover unresolved investigations relevant to
+   that scope.
 4. Inspect current implementation and executable evidence before asserting
    status or selecting a source-changing action.
 5. Derive the next engineering objective from project goals, roadmap,
