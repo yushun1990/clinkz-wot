@@ -48,7 +48,7 @@ jobs:
           runtime_probe_manifest=tools/architecture-fixtures/product-runtime-boundaries/Cargo.toml
           cargo run --locked --manifest-path "$runtime_probe_manifest" -p runtime-boundary-compare
           cargo check --locked --manifest-path "$runtime_probe_manifest" -p static-plan-probe --target thumbv6m-none-eabi
-          cargo tree --locked --manifest-path "$runtime_probe_manifest" -p static-plan-probe --target thumbv6m-none-eabi -e normal --prefix none
+          bash tools/architecture-fixtures/product-runtime-boundaries/check-normal-dependencies.sh
 
       - name: Check production bounded TD proof construction
         run: |

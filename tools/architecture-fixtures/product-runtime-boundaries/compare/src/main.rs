@@ -103,7 +103,9 @@ fn main() {
                 } else {
                     old::InteractionOutput::empty()
                 };
-                let Some(oo) = oo.with_status(old_status).try_with_metadata(om) else {
+                let oo = oo.with_status(old_status).try_with_metadata(om);
+                assert_eq!(oo.is_none(), flags & (32 | 64) == (32 | 64));
+                let Some(oo) = oo else {
                     constructor_rejections += 1;
                     continue;
                 };
@@ -127,6 +129,7 @@ fn main() {
                     None,
                 )
                 .unwrap();
+                let original = oo.clone();
                 let ores = old::validate_untrusted_binding_output(&request, oo);
                 let nres = new::validate_property_read_binding_output(
                     new::BindingId::new(17),
@@ -134,13 +137,49 @@ fn main() {
                     expected_new_plan,
                     no,
                 );
+                // Parity alone can pass a shared bug (even with six successes).
+                // Pin which corpus inputs are valid independently of either body.
+                assert_eq!(
+                    ores.is_ok(),
+                    flags == 0 && status_index == 0,
+                    "unexpected acceptance: flags={flags} native={native_status} normalized={status_index}"
+                );
                 assert_eq!(
                     ores.is_ok(),
                     nres.is_ok(),
                     "flags={flags} status={native_status}"
                 );
                 if let (Err(a), Err(b)) = (&ores, &nres) {
-                    assert_eq!(format!("{a:?}"), format!("{b:?}"));
+                    assert_eq!(
+                        a,
+                        &old::CoreError::Validation(
+                            old::ErrorContext::new(
+                                old::ErrorPhase::Validate,
+                                old::RetryClass::Never
+                            )
+                            .with_operation(clinkz_wot_td::data_type::Operation::ReadProperty)
+                            .with_plan(expected_old_plan)
+                            .with_binding(old::BindingId::new(17), old::BindingGeneration::INITIAL)
+                        )
+                    );
+                    assert_eq!(
+                        b,
+                        &new::CoreError::Validation(
+                            new::ErrorContext::new(
+                                new::ErrorPhase::Validate,
+                                new::RetryClass::Never
+                            )
+                            .with_operation(new::Operation::ReadProperty)
+                            .with_plan(expected_new_plan)
+                            .with_binding(new::BindingId::new(17), new::BindingGeneration::INITIAL)
+                        )
+                    );
+                }
+                if let (Ok(a), Ok(b)) = (&ores, &nres) {
+                    assert_eq!(a, &original);
+                    assert_eq!(b.data(), Some(&b"42"[..]));
+                    assert_eq!(b.status(), new_status);
+                    assert_eq!(b.metadata(), &nm);
                 }
                 successes += usize::from(ores.is_ok());
                 cases += 1;

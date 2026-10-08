@@ -23,7 +23,7 @@ Run from the repository root:
 rustup target add thumbv6m-none-eabi
 cargo run --locked --manifest-path tools/architecture-fixtures/product-runtime-boundaries/Cargo.toml -p runtime-boundary-compare
 cargo check --locked --manifest-path tools/architecture-fixtures/product-runtime-boundaries/Cargo.toml -p static-plan-probe --target thumbv6m-none-eabi
-cargo tree --locked --manifest-path tools/architecture-fixtures/product-runtime-boundaries/Cargo.toml -p static-plan-probe --target thumbv6m-none-eabi -e normal --prefix none
+bash tools/architecture-fixtures/product-runtime-boundaries/check-normal-dependencies.sh
 cargo fmt --manifest-path tools/architecture-fixtures/product-runtime-boundaries/Cargo.toml -p runtime-contracts-probe -p static-plan-probe -p runtime-boundary-compare -- --check
 ```
 
@@ -32,13 +32,14 @@ Cargo downloads the locked registry dependencies on the first run; add
 relative. The fixture lockfile was reduced from the master lockfile so shared
 registry dependencies retain master versions. The scratch lock had newer
 independently resolved versions; its successful run was reproduced separately.
-The mainline workflow executes the three positive evidence commands above.
+The mainline workflow executes the Host comparison, target check and dependency
+assertion above.
 They are investigation regression checks, not an architecture acceptance gate.
 
 Expected Host output on the recorded x86_64 toolchain:
 
 ```text
-frozen selection: 15 cases match owned production output; generation mismatch rejected
+frozen selection: 15 cases match expected outcomes (2 successes); 8 malformed outputs rejected
 response cases=3456; identical acceptance and diagnostics
 unreachable output combinations rejected by existing constructor=1152
 shared build/runtime leaf plan: readproperty form=1 target=zenoh+tcp://127.0.0.1:7447/sensor/temperature?unit=C
@@ -53,9 +54,12 @@ static-plan-probe -> runtime-contracts-probe -> clinkz-wot-foundation
 
 TD, Core, Planning and the existing mock compiler are build-side dependencies
 of `static-plan-probe`; the Host comparator also uses them normally. Successful
-target checking alone would not establish this separation; inspect the normal
-tree. An added normal dependency invalidates the recorded isolation claim even
-if compilation still succeeds.
+target checking alone would not establish this separation. The dependency script
+asserts the exact transitive normal package set, ignoring versions and checkout
+paths, and propagates Cargo failures. Any additional normal package fails CI,
+including TD, Core, Planning, allocation libraries or transport SDKs. Intentional
+Host build dependencies are excluded. This guards this experiment's graph; it
+does not analyze allocation inside the allowed packages or prove linked size.
 
 For the baseline counterexample, run this separately in the repository root:
 
@@ -74,9 +78,9 @@ proves all MCUs unsuitable nor expands supported platform requirements.
 | Probe | Production reuse and observed result | Evidence boundary |
 |---|---|---|
 | `contracts/build.rs` + borrowed views | Reads identity macros/values, errors, operation vocabulary, response metadata, artifact identities/references, response predicate and frozen selector directly from current production source | Only source projection plus observations. No complete registration, slot implementation, scheduler or sealing extraction |
-| `compare/src/main.rs` | Calls real `validate_untrusted_binding_output` on a real `OutboundRequest` versus the projected predicate. Eight shape/identity bits × six native statuses × three normalized statuses = 4,608 inputs; 1,152 rejected by production output construction, 3,456 compared, including six successful inputs. Acceptance and exact Debug error diagnostics agree | Finite corpus, not exhaustive equivalence. Native numeric statuses remain opaque. Constructor-rejected shapes are not predicate comparisons |
+| `compare/src/main.rs` | Calls real `validate_untrusted_binding_output` on a real `OutboundRequest` versus the projected predicate. Eight shape/identity bits × six native statuses × three normalized statuses = 4,608 inputs; 1,152 rejected by production output construction, 3,456 compared, including six successful inputs. Pins each input's acceptance and constructor rejection, complete typed validation errors, and successful output preservation | Finite corpus, not exhaustive equivalence. Native numeric statuses remain opaque. Constructor-rejected shapes are not predicate comparisons |
 | `plan_builder.rs` + `prepared/build.rs` | Runs real typed TD Basic validation, exact-coordinate `PropertyReadPlanCompiler` and existing `MockCompiler` in a Cargo build script. Explicitly selects original Form index 1 and resolves the relative URI above. Emits six logical/mock facts as Rust data | Leaf, not Consumer aggregate or production semantic lending. No emitter for real binding artifacts or deployable image |
-| `compare/src/selection.rs` | Compares extracted selector with actual Planning selector over 15 property/Form cases; compares returned references or exact Debug errors. A separately corrupted plan-set/plan generation reference is rejected by both | Frozen leaf shape only. The scratch tested corruption only on the extracted view; this fixture adds the matching production negative case |
+| `compare/src/selection.rs` | Compares extracted selector with actual Planning selector over 15 property/Form cases with fixed expected outcomes (two exact-reference successes), selection reasons and complete typed contexts. Both reject eight malformed production outputs: missing plan/envelope/reference, wrong slot, separate plan-set and plan generation mismatches, binding identity mismatch and a non-Consumer-call role | Frozen leaf shape only. The adapter observes each collection, envelope identity/compatibility/route and reference slot independently; no admission or ownership proof |
 | Target check and normal tree | Both projected predicates/value dependencies and generated projection type-check on `thumbv6m-none-eabi` with only Foundation on the normal path | No `alloc`, TD, Serde or atomic dependency in that path. No execution, linking, board fit, RAM/flash/WCET or protocol proof |
 
 Host sizes describe only three inline values, excluding allocations and nested
@@ -111,6 +115,11 @@ non-Clone single-use result authority, normal and cancellation-late validation,
 and absence of raw installed-client bypasses. This seam does not authorize a
 public application identity bag. The borrowed payload points into stable
 caller storage for a synchronous call; it proves no runtime slot lease.
+
+Parity alone is not a correctness oracle: the same extracted body can reproduce
+a production bug. Fixed corpus outcomes supplement the comparisons. Core error
+Debug text omits selection reasons, operation and retry advice, so it is not a
+complete error equality check; typed contexts and reasons are asserted directly.
 
 The generated `plan.rs` uses compiler output through Rust Debug string escaping;
 the comparator checks every emitted field against another Host call to the
