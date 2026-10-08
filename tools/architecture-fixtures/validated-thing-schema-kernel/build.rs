@@ -26,6 +26,18 @@ fn main() {
 
     let lib = fs::read_to_string(candidate.join("lib.rs")).unwrap();
     let mut lib = lib.replace("//!", "//").replace("#![no_std]", "");
+    // The historical candidate truncates production validate.rs and installs
+    // its own accepted kernels. Keep the new production admission owner out of
+    // that projection; production tests exercise it as an ordinary TD API.
+    lib = lib.replace(
+        "#[cfg(feature = \"validated-thing\")]\nmod validated;\n",
+        "",
+    );
+    let start = lib
+        .find("#[cfg(feature = \"validated-thing\")]\npub use validated::{")
+        .unwrap();
+    let end = start + lib[start..].find("};\n").unwrap() + 3;
+    lib.replace_range(start..end, "");
     for (module, file) in [
         ("schema_kernel", "kernel.rs"),
         ("schema_access", "typed_access.rs"),

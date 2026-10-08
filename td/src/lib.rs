@@ -125,13 +125,25 @@ extern crate std;
 
 extern crate alloc;
 
+#[cfg(all(test, feature = "validated-thing"))]
+extern crate self as td_candidate;
+
 pub mod core;
 pub mod td_defaults;
 pub mod thing;
 pub mod thing_model;
 pub mod validate;
+#[cfg(feature = "validated-thing")]
+mod validated;
 pub use core::data_type;
 pub use core::data_type::AbsoluteUri;
+#[cfg(feature = "validated-thing")]
+pub use validated::{
+    ValidatedThing, ValidatedThingAdmissionConfig, ValidatedThingCause, ValidatedThingConfigError,
+    ValidatedThingConfigErrorKind, ValidatedThingCursor, ValidatedThingFailure,
+    ValidatedThingFailureKind, ValidatedThingInvalid, ValidatedThingInvalidKind,
+    ValidatedThingLimit, ValidatedThingPhase, ValidatedThingProgress,
+};
 
 mod components;
 mod flat;
