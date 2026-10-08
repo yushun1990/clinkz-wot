@@ -345,3 +345,155 @@ fn map_limits_terminate_with_the_configured_maximum_iterator_debit() {
         }
     }
 }
+
+#[test]
+fn map_association_node_limits_match_the_admitted_counts() {
+    let mut t: Thing = serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"review","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}}}"#).unwrap();
+    // The admitted typed traversal counts 15 baseline nodes. The three
+    // association/key/null triples add nine; an outer opaque entry adds three.
+    for (opaque, expected) in [(false, 24), (true, 27)] {
+        let entries = ["a", "b", "c"]
+            .into_iter()
+            .map(|key| (key.into(), serde_json::Value::Null));
+        t._extra_fields.clear();
+        if opaque {
+            t._extra_fields.insert(
+                "opaque".into(),
+                serde_json::Value::Object(entries.collect()),
+            );
+        } else {
+            t._extra_fields.extend(entries);
+        }
+        assert!(t.validate().is_ok());
+        for ceiling in [20, expected - 1, expected, expected + 1] {
+            let limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .with_limit(R::JsonValueNodesPerDocumentMax, Some(ceiling));
+            let config = ValidatedThingAdmissionConfig::try_from_limits(&limits).unwrap();
+            observe(0);
+            let mut cursor = ValidatedThingCursor::from_thing(&t, &config, ledger());
+            let result = loop {
+                match cursor.step(&mut budget(), false) {
+                    Progress::Pending(next) => cursor = next,
+                    Progress::Complete(proof) => {
+                        drop(proof);
+                        break Ok(());
+                    }
+                    Progress::Failed(cause) => break Err(cause),
+                }
+            };
+            let o = stop();
+            assert_eq!(o.live, 0);
+            assert_eq!(o.requests, o.freed);
+            if ceiling >= expected {
+                assert_eq!(result, Ok(()), "opaque={opaque}, ceiling={ceiling}");
+            } else {
+                match result {
+                    Err(Cause::Limit(limit)) => {
+                        assert_eq!(limit.kind(), R::JsonValueNodesPerDocumentMax);
+                        assert_eq!(limit.configured(), ceiling);
+                        assert_eq!(limit.observed(), ceiling + 1);
+                        assert_eq!(limit.phase(), ValidatedThingPhase::Inspect);
+                    }
+                    _ => panic!("missing node rejection: opaque={opaque}, ceiling={ceiling}"),
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn retained_upstream_source_is_separate_from_td_temporary_capacity() {
+    const TEMPORARY: u64 = 65_536;
+    const SOURCE: usize = 131_072;
+    let json = br#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"review","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}}}"#;
+    let mut source = vec![b' '; SOURCE].into_boxed_slice();
+    source[..json.len()].copy_from_slice(json);
+    let t: Thing = serde_json::from_slice(&source).unwrap();
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(R::AdmissionTemporaryBytesPerOperationMax, Some(TEMPORARY))
+        .with_limit(R::AdmissionTemporaryBytesGlobalMax, Some(TEMPORARY))
+        .with_limit(R::PeakLiveBytesPerAdmissionMax, Some(TEMPORARY));
+    let config = ValidatedThingAdmissionConfig::try_from_limits(&limits).unwrap();
+    let charged_ledger = |bytes| {
+        let mut child = AdmissionLedger::new(
+            SlotIndex::new(1),
+            Generation::new(1).unwrap(),
+            SOURCE as u64,
+            TEMPORARY,
+            0,
+            0,
+            0,
+            0,
+        );
+        child
+            .try_reserve_source(R::RetainedSourceBytesPerOwnerMax, bytes)
+            .unwrap()
+            .commit();
+        child
+    };
+    let mut baseline = None;
+    for charged in [0, SOURCE as u64] {
+        let child = charged_ledger(charged);
+        assert_eq!(child.live_bytes(), charged);
+        observe(0);
+        let mut cursor = ValidatedThingCursor::from_thing(&t, &config, child);
+        let result = loop {
+            match cursor.step(&mut budget(), false) {
+                Progress::Pending(next) => cursor = next,
+                Progress::Complete(proof) => {
+                    drop(proof);
+                    break Ok(());
+                }
+                Progress::Failed(cause) => break Err(cause),
+            }
+        };
+        let o = stop();
+        assert_eq!(o.live, 0);
+        assert_eq!(o.requests, o.freed);
+        assert_eq!(result, Ok(()), "source charge={charged}");
+        if let Some(previous) = baseline {
+            let previous: Observation = previous;
+            assert_eq!(o.requests, previous.requests);
+            assert_eq!(o.sizes, previous.sizes);
+            assert_eq!(o.peak, previous.peak);
+        } else {
+            baseline = Some(o);
+        }
+    }
+    let first = baseline.unwrap().sizes[0] as u64 + 2 * std::mem::size_of::<Progress<'_>>() as u64;
+    for (resource, observed) in [
+        (R::AdmissionTemporaryBytesPerOperationMax, first),
+        (R::AdmissionTemporaryBytesGlobalMax, first),
+        (R::PeakLiveBytesPerAdmissionMax, first),
+        (R::AdmissionPeakLiveBytesGlobalMax, SOURCE as u64 + first),
+        (R::EngineLiveBytesGlobalMax, SOURCE as u64 + first),
+    ] {
+        let limits = limits.clone().with_limit(resource, Some(observed - 1));
+        let config = ValidatedThingAdmissionConfig::try_from_limits(&limits).unwrap();
+        let child = charged_ledger(SOURCE as u64);
+        observe(0);
+        let result =
+            ValidatedThingCursor::from_thing(&t, &config, child).step(&mut budget(), false);
+        let cause = match result {
+            Progress::Failed(cause) => cause,
+            _ => panic!("missing preallocation rejection for {resource:?}"),
+        };
+        let o = stop();
+        assert_eq!(o.attempts, 0);
+        assert_eq!(o.live, 0);
+        match cause {
+            Cause::Limit(limit) => {
+                assert_eq!(limit.kind(), resource);
+                assert_eq!(limit.configured(), observed - 1);
+                assert_eq!(limit.observed(), observed);
+                assert_eq!(limit.phase(), ValidatedThingPhase::Inspect);
+            }
+            _ => panic!("wrong preallocation cause for {resource:?}"),
+        }
+    }
+    // The physical upstream owner remains intact after proof drop and rejection.
+    assert_eq!(&source[..json.len()], json);
+    assert_eq!(source.len(), SOURCE);
+}

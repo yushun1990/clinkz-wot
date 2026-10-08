@@ -227,15 +227,16 @@ fn content_and_structural_limits_precede_basic() {
     );
 }
 #[test]
-fn map_associations_do_not_add_json_value_nodes() {
-    let mut thing = base();
-    let proof = drive(&thing, &limits()).unwrap();
-    let nodes = proof.owner.counts.nodes;
-    let structural_work = proof.owner.trace.work[W::DocumentNodes as usize];
-    drop(proof);
-    for opaque in [false, true] {
-        let members = 3;
-        let entries = (0..members).map(|i| (format!("key{i}"), Value::Null));
+fn map_associations_count_as_admitted_json_nodes() {
+    let mut thing: Thing = serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"review","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}}}"#).unwrap();
+    // The supplied typed model has 15 occurrences: nine records/containers,
+    // five text leaves and the security-definition association. Each added
+    // association/key/null contributes three; an outer opaque entry adds three.
+    assert_eq!(drive(&thing, &limits()).unwrap().owner.counts.nodes, 15);
+    for (opaque, expected) in [(false, 24), (true, 27)] {
+        let entries = ["a", "b", "c"]
+            .into_iter()
+            .map(|key| (key.into(), Value::Null));
         thing._extra_fields.clear();
         if opaque {
             thing
@@ -244,26 +245,67 @@ fn map_associations_do_not_add_json_value_nodes() {
         } else {
             thing._extra_fields.extend(entries);
         }
-        // Each supplied key/text and null is a value occurrence. The opaque
-        // case also adds its outer key and object; associations add no nodes.
-        let expected = nodes + 2 * members + if opaque { 2 } else { 0 };
         let proof = drive(&thing, &limits()).unwrap();
         assert_eq!(proof.owner.counts.nodes, expected, "opaque={opaque}");
-        assert!(proof.owner.trace.work[W::DocumentNodes as usize] > structural_work);
-        drop(proof);
-        assert!(
-            drive(
-                &thing,
-                &limits().with_limit(R::JsonValueNodesPerDocumentMax, Some(expected))
-            )
-            .is_ok()
-        );
-        assert!(matches!(
-            checked_limit(&thing, R::JsonValueNodesPerDocumentMax, expected - 1),
-            Cause::Limit(v) if v.kind() == R::JsonValueNodesPerDocumentMax
-                && v.observed() == expected
-        ));
+        assert_eq!(proof.owner.trace.entered, expected);
     }
+}
+
+#[test]
+fn upstream_source_charge_survives_frame_growth_and_proof() {
+    const SOURCE: usize = 131_072;
+    const TEMPORARY: u64 = 65_536;
+    let mut source = vec![b' '; SOURCE].into_boxed_slice();
+    source[..typed::CORPUS.len()].copy_from_slice(typed::CORPUS.as_bytes());
+    let thing: Thing = serde_json::from_slice(&source).unwrap();
+    let values = limits()
+        .with_limit(R::AdmissionTemporaryBytesPerOperationMax, Some(TEMPORARY))
+        .with_limit(R::AdmissionTemporaryBytesGlobalMax, Some(TEMPORARY))
+        .with_limit(R::PeakLiveBytesPerAdmissionMax, Some(TEMPORARY));
+    let mut child = AdmissionLedger::new(
+        SlotIndex::new(1),
+        Generation::new(1).unwrap(),
+        SOURCE as u64,
+        TEMPORARY,
+        0,
+        0,
+        0,
+        0,
+    );
+    child
+        .try_reserve_source(R::RetainedSourceBytesPerOwnerMax, SOURCE as u64)
+        .unwrap()
+        .commit();
+    let mut cursor = ValidatedThingCursor::from_thing(&thing, &config(&values), child);
+    let mut grew = false;
+    loop {
+        let stack = &cursor.stack;
+        let old = Layout::array::<Frame<'_>>(stack.frames.capacity)
+            .unwrap()
+            .size() as u64;
+        let new = stack.transfer.as_ref().map_or(0, |block| {
+            Layout::array::<Frame<'_>>(block.capacity).unwrap().size() as u64
+        });
+        assert_eq!(stack.ledger.live_bytes(), SOURCE as u64 + old + new);
+        grew |= old != 0 && new != 0;
+        match cursor.step(&mut budget(10_000), false) {
+            ValidatedThingProgress::Pending(next) => cursor = next,
+            ValidatedThingProgress::Complete(proof) => {
+                let stack = &proof.owner.stack;
+                assert!(stack.transfer.is_none());
+                let frames = Layout::array::<Frame<'_>>(stack.frames.capacity)
+                    .unwrap()
+                    .size() as u64;
+                assert_eq!(stack.ledger.live_bytes(), SOURCE as u64 + frames);
+                drop(proof);
+                break;
+            }
+            ValidatedThingProgress::Failed(cause) => panic!("precharged source failed: {cause:?}"),
+        }
+    }
+    assert!(grew, "must exercise old/new frame coexistence");
+    assert_eq!(&source[..typed::CORPUS.len()], typed::CORPUS.as_bytes());
+    assert_eq!(source.len(), SOURCE);
 }
 #[test]
 fn numbers_have_lexical_limit_before_basic_and_projection_is_atomic() {

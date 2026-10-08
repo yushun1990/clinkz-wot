@@ -1029,12 +1029,10 @@ struct Counts {
 impl Counts {
     fn visit(&mut self, node: Node<'_>, mut scope: Scope, policy: Policy) -> Result<Scope, Cause> {
         let phase = Phase::Inspect;
-        // Associations are paid traversal state, not supplied value nodes.
-        // Their key and value occurrences are visited separately.
-        if !matches!(node, Node::Entry(..)) {
-            self.nodes = add(self.nodes, 1, phase)?;
-            policy.check(R::JsonValueNodesPerDocumentMax, self.nodes, phase)?;
-        }
+        // The admitted typed traversal counts each association as well as its
+        // separately visited key and value occurrences.
+        self.nodes = add(self.nodes, 1, phase)?;
+        policy.check(R::JsonValueNodesPerDocumentMax, self.nodes, phase)?;
         if node.container() {
             scope.depth = add(scope.depth, 1, phase)?;
             policy.check(R::JsonNestingDepthMax, scope.depth, phase)?;
@@ -1306,6 +1304,7 @@ impl<'a> Stack<'a> {
         assert!(self.ledger.release_temporary(layout.size() as u64));
     }
     fn grow(&mut self, capacity: usize, policy: Policy, phase: Phase) -> Result<(), Cause> {
+        assert!(self.transfer.is_none());
         let layout = Layout::array::<Frame<'a>>(capacity).map_err(|_| arithmetic(phase))?;
         let bytes = layout.size() as u64;
         // Inline owner and return overlap is capacity, never a fake allocation
@@ -1313,11 +1312,22 @@ impl<'a> Stack<'a> {
         let inline = (mem::size_of::<ValidatedThingProgress<'a>>() as u64)
             .checked_mul(2)
             .ok_or(arithmetic(phase))?;
-        let live = add(add(self.ledger.live_bytes(), bytes, phase)?, inline, phase)?;
+        let retained = Layout::array::<Frame<'a>>(self.frames.capacity)
+            .expect("checked on acquisition")
+            .size() as u64;
+        // Only TD-owned old/new blocks and inline capacity consume this
+        // child's temporary/additional-admission ceiling. Existing upstream
+        // accounts remain in the aggregate for global live/peak checks.
+        let temporary = add(add(retained, bytes, phase)?, inline, phase)?;
         for kind in [
             R::AdmissionTemporaryBytesPerOperationMax,
             R::AdmissionTemporaryBytesGlobalMax,
             R::PeakLiveBytesPerAdmissionMax,
+        ] {
+            policy.check(kind, temporary, phase)?;
+        }
+        let live = add(add(self.ledger.live_bytes(), bytes, phase)?, inline, phase)?;
+        for kind in [
             R::AdmissionPeakLiveBytesGlobalMax,
             R::EngineLiveBytesGlobalMax,
         ] {
@@ -1330,7 +1340,7 @@ impl<'a> Stack<'a> {
             .ok_or(Cause::Limit(ValidatedThingLimit {
                 kind: R::AdmissionTemporaryBytesPerOperationMax,
                 configured: policy.get(R::AdmissionTemporaryBytesPerOperationMax),
-                observed: live,
+                observed: temporary,
                 phase,
             }))?;
         // SAFETY: checked nonzero Layout, charge held before the allocator. No
@@ -1574,9 +1584,7 @@ impl<'td> ValidatedThingCursor<'td> {
                 let scope = self.counts.visit(node, scope, self.policy)?;
                 #[cfg(test)]
                 {
-                    if !matches!(node, Node::Entry(..)) {
-                        self.trace.entered += 1;
-                    }
+                    self.trace.entered += 1;
                 }
                 match node {
                     Node::Text(v) => self.stack.push(Frame::Text(v, 0)),
