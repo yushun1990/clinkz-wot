@@ -1,0 +1,20 @@
+[package]
+name = "clinkz-wot-td-admission-runtime"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+clinkz-wot-td = { path = "../..", default-features = false, features = ["validated-thing"] }
+serde_json = { version = "=1.0.149", default-features = false, features = ["alloc"] }
+
+[features]
+async = ["clinkz-wot-foundation/async"]
+
+[profile.release]
+panic = "abort"
+debug = 1
+overflow-checks = true

@@ -311,6 +311,8 @@ pre_implementation_checks = [
     "cargo test --locked -p clinkz-wot-td --no-default-features --features validated-thing --lib validated::tests",
     "cargo test --locked -p clinkz-wot-td --no-default-features --features validated-thing --test validated_admission --test validated_lending",
     "cargo test --locked -p clinkz-wot-td --features validated-thing --doc",
+    "td/tests/runtime/run.sh",
+    "td/tests/runtime/run.sh --features async",
     "cargo check --locked --manifest-path td/tests/compile/validated-capability/Cargo.toml --features capability,positive",
     "cargo check --locked --manifest-path td/tests/compile/validated-capability/Cargo.toml --no-default-features --features async,sibling,positive",
     "cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features validated-thing",
