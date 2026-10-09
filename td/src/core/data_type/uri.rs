@@ -412,7 +412,7 @@ pub fn resolve_form_href(
     let mut bytes = alloc::vec::Vec::new();
     while !resolver.tick(&mut bytes) {}
     // The synchronous adapter owns parsing/allocation. Bounded lending uses
-    // the program's paid ASCII validation and never invokes this parser.
+    // the program's paid ASCII emission checks and never invokes this parser.
     let text = String::from_utf8(bytes).expect("URI program emits ASCII");
     Ok(ResolvedFormHref::Reference(
         UriReference::parse(&text).expect("valid resolved URI"),
@@ -459,6 +459,7 @@ pub(crate) mod lending {
         }
     }
     #[derive(Clone, Copy)]
+    #[cfg_attr(test, derive(Debug))]
     enum State {
         Merge,
         MergeClassify,
@@ -469,12 +470,14 @@ pub(crate) mod lending {
         Emit,
         Pop,
         Fix,
+        ExtendPath,
         Shift,
         Insert,
         Tail,
         Validate,
         Done,
     }
+    #[cfg_attr(test, derive(Debug))]
     pub(crate) struct Resolution<'a> {
         prefix: [&'a str; 4],
         paths: [&'a str; 2],
@@ -581,18 +584,44 @@ pub(crate) mod lending {
         }
         if segment.is_empty() { count } else { 0 }
     }
+    fn push_ascii(output: &mut impl Output, byte: u8) {
+        // Check the already-read source byte in its paid emission action.
+        // Only parsed URI components (never template/IRI text) are copied.
+        assert!(byte.is_ascii());
+        output.push(byte);
+    }
     impl Resolution<'_> {
         /// Conservative per-transition UriBytes envelope, including source and
         /// destination accesses. No text-length-dependent atomic action.
         #[cfg(feature = "validated-thing")]
         pub(crate) const WORK: u64 = 16;
         #[cfg(feature = "validated-thing")]
+        pub(crate) const OUTPUT_WORK: u64 = 2;
+        #[cfg(feature = "validated-thing")]
         pub(crate) fn work(&self) -> u64 {
             match self.state {
                 State::MergeClassify | State::Classify => Self::WORK,
-                State::Fix => 4,
-                State::Insert => 2,
+                State::Fix | State::ExtendPath | State::Insert => 2,
                 _ => 1,
+            }
+        }
+        /// Exact owned-byte writes in the next action. This reads only retained
+        /// positions and span lengths; inspecting the output to choose a repair
+        /// is a separate paid Fix action before ExtendPath can write anything.
+        #[cfg(feature = "validated-thing")]
+        pub(crate) fn output_work(&self) -> u64 {
+            match self.state {
+                State::Prefix if self.pos < self.prefix[self.part].len() => 1,
+                State::Tail if self.pos < self.tail[self.part].len() => 1,
+                State::Emit
+                    if self.merge < self.pos
+                        || (self.streaming && self.pos < self.paths[self.part].len()) =>
+                {
+                    1
+                }
+                State::Shift if self.merge > self.path_start => 1,
+                State::ExtendPath | State::Insert => Self::OUTPUT_WORK,
+                _ => 0,
             }
         }
         pub(crate) fn tick(&mut self, output: &mut impl Output) -> bool {
@@ -623,7 +652,7 @@ pub(crate) mod lending {
                         self.prefix[self.part]
                     };
                     if self.pos < text.len() {
-                        output.push(text.as_bytes()[self.pos]);
+                        push_ascii(output, text.as_bytes()[self.pos]);
                         self.pos += 1;
                     } else {
                         self.part += 1;
@@ -631,7 +660,6 @@ pub(crate) mod lending {
                         if self.part == 4 {
                             self.part = 0;
                             if tail {
-                                self.validate = 0;
                                 self.state = State::Validate;
                             } else {
                                 self.path_start = output.len();
@@ -691,11 +719,11 @@ pub(crate) mod lending {
                 }
                 State::Emit => {
                     if self.merge < self.pos {
-                        output.push(self.paths[self.part].as_bytes()[self.merge]);
+                        push_ascii(output, self.paths[self.part].as_bytes()[self.merge]);
                         self.merge += 1;
                     } else if self.streaming && self.pos < self.paths[self.part].len() {
                         let byte = self.paths[self.part].as_bytes()[self.pos];
-                        output.push(byte);
+                        push_ascii(output, byte);
                         self.pos += 1;
                         self.merge = self.pos;
                         if byte == b'/' {
@@ -723,15 +751,18 @@ pub(crate) mod lending {
                         && output.byte(self.path_start) == b'/'
                         && output.byte(self.path_start + 1) == b'/'
                     {
-                        self.merge = output.len();
-                        output.push(0);
-                        output.push(0);
-                        self.state = State::Shift;
+                        self.state = State::ExtendPath;
                     } else {
                         self.part = 0;
                         self.pos = 0;
                         self.state = State::Tail;
                     }
+                }
+                State::ExtendPath => {
+                    self.merge = output.len();
+                    output.push(0);
+                    output.push(0);
+                    self.state = State::Shift;
                 }
                 State::Shift => {
                     if self.merge > self.path_start {
@@ -750,14 +781,12 @@ pub(crate) mod lending {
                     self.state = State::Tail;
                 }
                 State::Validate => {
-                    if self.validate < output.len() {
-                        // Parsed URI (not IRI) components and punctuation are
-                        // ASCII. This charged pass certifies the fresh buffer.
-                        assert!(output.byte(self.validate).is_ascii());
-                        self.validate += 1;
-                    } else {
-                        self.state = State::Done;
-                    }
+                    // Every appended source byte was checked in its paid
+                    // emission action. Pop/truncate and shift preserve ASCII;
+                    // repair padding and punctuation are ASCII literals. The
+                    // completed buffer is valid UTF-8 by construction, without
+                    // replaying a full scan before Ready (or on Ready retries).
+                    self.state = State::Done;
                 }
                 State::Done => return true,
             }

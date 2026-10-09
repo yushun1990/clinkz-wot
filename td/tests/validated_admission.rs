@@ -503,7 +503,7 @@ fn retained_upstream_source_is_separate_from_td_temporary_capacity() {
 
 fn lending_thing() -> Thing {
     let mut t = thing();
-    t.base = Some(clinkz_wot_td::data_type::BaseUri::parse("http://example/a/b/").unwrap());
+    t.base = Some(clinkz_wot_td::data_type::BaseUri::parse("foo:/a/b/").unwrap());
     let forms = &mut t
         .properties
         .as_mut()
@@ -512,7 +512,9 @@ fn lending_thing() -> Thing {
         .unwrap()
         ._interaction
         .forms;
-    forms[0].href = clinkz_wot_td::data_type::FormHref::parse("../../value?x#f").unwrap();
+    // Exercise cancellation/drop during padding, shifting and insertion, as
+    // well as ordinary emission/pop and the second block's allocation.
+    forms[0].href = clinkz_wot_td::data_type::FormHref::parse("/a/../..//value?x#f").unwrap();
     let mut second = forms[0].clone();
     second.href =
         clinkz_wot_td::data_type::FormHref::parse(&format!("../{}", "v".repeat(128))).unwrap();

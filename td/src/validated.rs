@@ -347,11 +347,14 @@ impl ValidatedThingAdmissionConfig {
         policy.atomic[W::SecurityBranches as usize] = 1;
         policy.atomic[W::CleanupItems as usize] = 1;
         policy.atomic[W::UriBytes as usize] = crate::data_type::uri::lending::Resolution::WORK;
+        policy.atomic[W::CodecOutputBytes as usize] =
+            crate::data_type::uri::lending::Resolution::OUTPUT_WORK;
         // Recognition compares only fixed vocabulary with equal-length keys.
         // Each comparison is a separate, fully prepaid action.
         policy.atomic[W::CodecInputBytes as usize] =
             policy.atomic[W::CodecInputBytes as usize].max(108);
-        let required = native.saturating_add(1).max(109);
+        let uri = policy.atomic[W::UriBytes as usize] + policy.atomic[W::CodecOutputBytes as usize];
+        let required = native.saturating_add(1).max(109).max(uri);
         if work < required {
             return Err(ValidatedThingConfigError {
                 kind: ValidatedThingConfigErrorKind::UnsupportedLimit,
@@ -2424,7 +2427,8 @@ impl UriBlock {
         if self.len == 0 {
             return "";
         }
-        // Lent only at FormReady, after the program's charged ASCII pass. The
+        // Lent only at FormReady, after the program's paid ASCII construction
+        // and finalization. Pop/shift/repair preserve that invariant. The
         // block is private; no mutation or owner move can coexist with this loan.
         unsafe {
             core::str::from_utf8_unchecked(core::slice::from_raw_parts(self.pointer, self.len))
@@ -2830,7 +2834,10 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
             P::Security | P::Names => [(W::DocumentNodes, 1), (W::SecurityBranches, 1)],
             P::Uri => [
                 (W::UriBytes, self.resolver.as_ref().unwrap().work()),
-                (W::DocumentNodes, 0),
+                (
+                    W::CodecOutputBytes,
+                    self.resolver.as_ref().unwrap().output_work(),
+                ),
             ],
             P::Resolve => [(W::UriBytes, 1), (W::DocumentNodes, 0)],
             P::Allocate => [(W::DocumentNodes, 1), (W::CleanupItems, 1)],
@@ -2884,10 +2891,25 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
                 }
             }
             P::Security => {
-                self.names = crate::td_defaults::effective_form_security(
+                let names = crate::td_defaults::effective_form_security(
                     self.owner.thing,
                     self.current_form(),
                 );
+                // These per-plan limits apply to the effective references,
+                // after explicit-empty override/inheritance. This slice lends
+                // roots (depth one), not expanded combo expressions; Planning
+                // retains exactly-one-NoSec eligibility ownership.
+                self.owner.policy.check(
+                    R::SecurityBranchesPerPlanMax,
+                    names.len() as u64,
+                    Phase::Semantics,
+                )?;
+                self.owner.policy.check(
+                    R::SecurityExpressionDepthMax,
+                    u64::from(!names.is_empty()),
+                    Phase::Semantics,
+                )?;
+                self.names = names;
                 self.name_index = 0;
                 self.scheme = None;
                 self.phase = P::Names;

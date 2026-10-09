@@ -4,7 +4,7 @@ extern crate std;
 use super::*;
 use crate as td_crate;
 use crate::validate::Validate;
-use alloc::{format, vec};
+use alloc::{format, vec, vec::Vec};
 use clinkz_wot_foundation::{
     BenchmarkStaticReferenceV1, GatewayDefaultV1, Generation, SlotIndex, StaticResourceProfile,
 };
@@ -87,6 +87,12 @@ fn operation_projection_and_named_support() {
         assert!(
             checked.policy.atomic[W::CodecInputBytes as usize]
                 >= checked.policy.get(R::NumberLexemeBytesMax)
+        );
+        assert_eq!(checked.policy.atomic[W::CodecOutputBytes as usize], 2);
+        assert!(
+            checked.policy.atomic[W::UriBytes as usize]
+                + checked.policy.atomic[W::CodecOutputBytes as usize]
+                <= checked.policy.get(R::DocumentValidationWorkUnitsMax)
         );
     }
     let bad = limits().with_limit(
@@ -670,6 +676,200 @@ fn semantic_short_credit_has_no_traversal_allocation_or_carried_credit() {
         assert_eq!(c.owner.stack.ledger.live_bytes(), live);
     }
     semantics(&mut c).unwrap();
+}
+
+fn uri_input(base_uri: &str, raw: &str) -> Thing {
+    let mut t = base();
+    t.base = Some(crate::data_type::BaseUri::parse(base_uri).unwrap());
+    t.properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .href = crate::data_type::FormHref::parse(raw).unwrap();
+    t
+}
+fn uri_snapshot(c: &ValidatedPropertyReadCursor<'_>) -> (String, Vec<u8>, usize, u64, u64, Trace) {
+    (
+        format!("{:?}", c.resolver.as_ref().unwrap()),
+        (0..c.scratch.len).map(|i| c.scratch.byte(i)).collect(),
+        c.scratch.capacity,
+        c.owner.remaining,
+        c.owner.stack.ledger.live_bytes(),
+        c.owner.trace,
+    )
+}
+#[test]
+fn semantic_uri_short_copy_and_uri_credit_preserve_every_suspended_action() {
+    for (base, raw) in [
+        ("foo:/a/b", "/a/../..//x?query#fragment"),
+        ("http://a/base", "long-segment/a/%2e%2e/value"),
+    ] {
+        let t = uri_input(base, raw);
+        let mut c = drive(&t, &limits()).unwrap().into_property_read();
+        let mut repair_actions = 0;
+        for _ in 0..10_000 {
+            if c.phase == LendingPhase::Uri {
+                let r = c.resolver.as_ref().unwrap();
+                let (uri, copy) = (r.work(), r.output_work());
+                if copy == 2 {
+                    repair_actions += 1;
+                }
+                let before = uri_snapshot(&c);
+                for (uri_credit, copy_credit) in [(uri - 1, copy), (uri, copy.saturating_sub(1))] {
+                    if uri_credit >= uri && copy_credit >= copy {
+                        continue;
+                    }
+                    for _ in 0..3 {
+                        let mut short = budget(10_000)
+                            .with_remaining(W::UriBytes, uri_credit)
+                            .with_remaining(W::CodecOutputBytes, copy_credit);
+                        let credits = W::ALL.map(|w| short.remaining(w));
+                        assert!(matches!(
+                            c.step(&mut short, false).unwrap(),
+                            ValidatedPropertyReadStep::Pending
+                        ));
+                        assert!(c.phase == LendingPhase::Uri);
+                        assert_eq!(uri_snapshot(&c), before);
+                        assert_eq!(W::ALL.map(|w| short.remaining(w)), credits);
+                    }
+                }
+                let before_work = c.owner.remaining;
+                let before_copy = c.owner.trace.work[W::CodecOutputBytes as usize];
+                let mut exact = budget(10_000)
+                    .with_remaining(W::UriBytes, uri)
+                    .with_remaining(W::CodecOutputBytes, copy);
+                assert!(matches!(
+                    c.step(&mut exact, false).unwrap(),
+                    ValidatedPropertyReadStep::Pending
+                ));
+                assert_eq!(c.owner.remaining, before_work - uri - copy);
+                assert_eq!(
+                    c.owner.trace.work[W::CodecOutputBytes as usize],
+                    before_copy + copy
+                );
+            } else {
+                match c.step(&mut budget(10_000), false).unwrap() {
+                    ValidatedPropertyReadStep::Ready(_) => c.acknowledge(),
+                    ValidatedPropertyReadStep::Done => break,
+                    _ => {}
+                }
+            }
+        }
+        assert!(c.phase == LendingPhase::Done);
+        assert_eq!(repair_actions, if base.starts_with("foo:") { 2 } else { 0 });
+    }
+}
+#[test]
+fn semantic_uri_lifetime_exhaustion_precedes_copy_and_all_counter_changes() {
+    let t = uri_input("foo:/a/b", "/a/../..//x");
+    let mut c = drive(&t, &limits()).unwrap().into_property_read();
+    for _ in 0..10_000 {
+        if c.phase == LendingPhase::Uri && c.resolver.as_ref().unwrap().output_work() == 2 {
+            break;
+        }
+        if matches!(
+            c.step(&mut budget(10_000), false).unwrap(),
+            ValidatedPropertyReadStep::Ready(_)
+        ) {
+            c.acknowledge();
+        }
+    }
+    assert_eq!(c.resolver.as_ref().unwrap().output_work(), 2);
+    let total = c.resolver.as_ref().unwrap().work() + 2;
+    // Tighten the real owner's remaining allowance at this reached write,
+    // without minting a proof or allowing a reset.
+    c.owner.remaining = total - 1;
+    let before = uri_snapshot(&c);
+    let mut b = budget(10_000);
+    let cause = c.step(&mut b, false).err().unwrap();
+    assert!(
+        matches!(cause, Cause::Limit(l) if l.kind()==R::DocumentValidationWorkUnitsMax
+        && l.observed()==l.configured()+1 && l.phase()==Phase::Semantics)
+    );
+    for _ in 0..3 {
+        assert_eq!(uri_snapshot(&c), before);
+        assert_eq!(W::ALL.map(|w| b.remaining(w)), [10_000; 12]);
+        assert!(matches!(c.step(&mut b, true), Err(e) if e==cause));
+    }
+}
+#[test]
+fn uri_copy_debits_match_actual_append_shift_and_repair_writes() {
+    #[derive(Default)]
+    struct Writes {
+        bytes: Vec<u8>,
+        pushes: u64,
+        sets: u64,
+        pops: u64,
+    }
+    impl Output for Writes {
+        fn len(&self) -> usize {
+            self.bytes.len()
+        }
+        fn byte(&self, index: usize) -> u8 {
+            self.bytes[index]
+        }
+        fn push(&mut self, byte: u8) {
+            assert!(byte.is_ascii());
+            self.bytes.push(byte);
+            self.pushes += 1;
+        }
+        fn set(&mut self, index: usize, byte: u8) {
+            assert!(byte.is_ascii());
+            self.bytes[index] = byte;
+            self.sets += 1;
+        }
+        fn truncate(&mut self, len: usize) {
+            self.bytes.truncate(len);
+            self.pops += 1;
+        }
+    }
+    let (mut padding, mut shift, mut insert, mut pop, mut total) = (false, false, false, false, 0);
+    for base in ["http://a/base?old", "foo:/a/b", "http://a/a/%2e%2E"] {
+        for raw in [
+            "",
+            "../value?query#fragment",
+            "/a/../..//x",
+            "long-segment/a/b/../../c",
+            "%2e/next",
+            "//other/a/../b",
+        ] {
+            let base_uri = crate::data_type::BaseUri::parse(base).unwrap();
+            let href = crate::data_type::FormHref::parse(raw).unwrap();
+            let uri::Target::Resolve(mut r) =
+                uri::Target::new(Some(&base_uri), &href).ok().unwrap()
+            else {
+                panic!()
+            };
+            let mut output = Writes::default();
+            for _ in 0..10_000 {
+                let required = r.output_work();
+                assert!(required <= uri::Resolution::OUTPUT_WORK);
+                assert!(r.work() <= uri::Resolution::WORK);
+                let (pushes, sets) = (output.pushes, output.sets);
+                let done = r.tick(&mut output);
+                let (appended, replaced) = (output.pushes - pushes, output.sets - sets);
+                assert_eq!(required, appended + replaced, "{base} + {raw}");
+                assert!(output.bytes.is_ascii());
+                padding |= appended == 2;
+                shift |= replaced == 1;
+                insert |= replaced == 2;
+                total += required;
+                if done {
+                    break;
+                }
+            }
+            pop |= output.pops > 0;
+            let expected = fluent_uri::UriRef::parse(raw)
+                .unwrap()
+                .resolve_against(&fluent_uri::Uri::parse(base).unwrap())
+                .unwrap();
+            assert_eq!(output.bytes, expected.as_str().as_bytes());
+        }
+    }
+    assert!(padding && shift && insert && pop && total > 0);
 }
 #[test]
 fn semantic_content_and_resolved_uri_exact_boundaries() {

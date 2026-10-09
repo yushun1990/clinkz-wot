@@ -342,3 +342,181 @@ fn charged_uri_path_matches_shared_meaning_through_shift_pop_and_utf8() {
         assert_eq!(resolved, expected, "{base} + {raw}");
     }
 }
+
+fn review_input() -> Thing {
+    serde_json::from_str(
+        r#"{
+      "@context":"https://www.w3.org/2022/wot/td/v1.1",
+      "id":"urn:test","title":"test","base":"https://example.com/a/b/",
+      "security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},
+      "properties":{"p":{"type":"string","forms":[{"href":"../value"}]}}
+    }"#,
+    )
+    .unwrap()
+}
+#[test]
+fn effective_security_limits_reject_disabled_and_excess_roots_before_ready() {
+    for (resource, ceiling, roots) in [
+        (R::SecurityBranchesPerPlanMax, 0, 1),
+        (R::SecurityExpressionDepthMax, 0, 1),
+        (R::SecurityBranchesPerPlanMax, 1, 2),
+    ] {
+        let mut t = review_input();
+        if roots == 2 {
+            t.security_definitions
+                .insert("other".into(), t.security_definitions["none"].clone());
+            t.properties
+                .as_mut()
+                .unwrap()
+                .get_mut("p")
+                .unwrap()
+                ._interaction
+                .forms[0]
+                .security = Some(vec!["none".into(), "other".into()]);
+        }
+        let limits = GatewayDefaultV1::LIMITS
+            .clone()
+            .with_limit(resource, Some(ceiling));
+        let mut c = proof(&t, &limits).into_property_read();
+        let cause = loop {
+            match c.step(&mut budget(1000), false) {
+                Err(cause) => break cause,
+                Ok(Step::Pending) => {}
+                Ok(Step::Ready(Event::Property { .. })) => c.acknowledge(),
+                _ => panic!("resource-inadmissible security was lent"),
+            }
+        };
+        let Cause::Limit(limit) = cause else {
+            panic!("{cause:?}")
+        };
+        assert_eq!(limit.kind(), resource);
+        assert_eq!(limit.configured(), ceiling);
+        assert_eq!(limit.observed(), roots);
+        assert_eq!(limit.phase(), ValidatedThingPhase::Semantics);
+        for _ in 0..3 {
+            assert!(matches!(c.step(&mut budget(0), true), Err(same) if same == cause));
+        }
+    }
+}
+#[test]
+fn effective_security_limits_are_per_form_and_preserve_empty_overrides() {
+    let mut t = review_input();
+    for name in ["other", "third"] {
+        t.security_definitions
+            .insert(name.into(), t.security_definitions["none"].clone());
+    }
+    t.security_definitions.insert(
+        "combo".into(),
+        serde_json::from_str(r#"{"scheme":"combo","allOf":["none","other"]}"#).unwrap(),
+    );
+    t.security = vec!["none".into(), "other".into(), "third".into()];
+    let forms = &mut t
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms;
+    let original = forms[0].clone();
+    forms[0].op = Some(vec![]); // unreadable inherited roots do not form a plan
+    for names in [
+        vec![],
+        vec!["none"],
+        vec!["none", "other"],
+        vec!["none", "other"],
+        vec!["combo"],
+    ] {
+        let mut form = original.clone();
+        form.security = Some(names.into_iter().map(str::to_owned).collect());
+        forms.push(form);
+    }
+    for (branches, depth) in [(2, 1), (2, 2), (3, 1)] {
+        let limits = GatewayDefaultV1::LIMITS
+            .clone()
+            .with_limit(R::SecurityBranchesPerPlanMax, Some(branches))
+            .with_limit(R::SecurityExpressionDepthMax, Some(depth));
+        let mut c = proof(&t, &limits).into_property_read();
+        let forms: Vec<_> = pass(&mut c)
+            .into_iter()
+            .filter_map(|f| match f {
+                Fact::Form {
+                    index,
+                    security,
+                    scheme,
+                    ..
+                } => Some((index, security, scheme)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            forms.iter().map(|(i, n, _)| (*i, *n)).collect::<Vec<_>>(),
+            [(1, 0), (2, 1), (3, 2), (4, 2), (5, 1)]
+        );
+        // Lending direct roots does not expand combo expressions or decide
+        // Planning's exactly-one-NoSec eligibility.
+        assert_eq!(forms[4].2.as_deref(), Some("combo"));
+    }
+    t.properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms
+        .truncate(2);
+    let disabled = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(R::SecurityBranchesPerPlanMax, Some(0))
+        .with_limit(R::SecurityExpressionDepthMax, Some(0));
+    let mut c = proof(&t, &disabled).into_property_read();
+    let facts = pass(&mut c);
+    assert_eq!(facts.len(), 2);
+    assert!(matches!(
+        &facts[1],
+        Fact::Form {
+            index: 1,
+            security: 0,
+            ..
+        }
+    ));
+}
+#[test]
+fn derived_uri_stalls_without_output_credit_and_resumes_without_partial_debits() {
+    let t = review_input();
+    let mut c = proof(&t, GatewayDefaultV1::LIMITS).into_property_read();
+    for _ in 0..1000 {
+        let mut b = budget(1000).with_remaining(W::CodecOutputBytes, 0);
+        match c.step(&mut b, false).unwrap() {
+            Step::Pending => {}
+            Step::Ready(Event::Property { .. }) => c.acknowledge(),
+            _ => panic!("derived bytes were produced without output credit"),
+        }
+    }
+    for _ in 0..10 {
+        let mut b = budget(1000).with_remaining(W::CodecOutputBytes, 0);
+        assert!(matches!(c.step(&mut b, false).unwrap(), Step::Pending));
+        for class in W::ALL {
+            assert_eq!(
+                b.remaining(class),
+                if class == W::CodecOutputBytes {
+                    0
+                } else {
+                    1000
+                }
+            );
+        }
+    }
+    for _ in 0..1000 {
+        let mut b = budget(1000).with_remaining(W::CodecOutputBytes, 1);
+        match c.step(&mut b, false).unwrap() {
+            Step::Pending => {}
+            Step::Ready(Event::Form(form)) => {
+                assert_eq!(form.resolved_href(), "https://example.com/a/value");
+                return;
+            }
+            _ => panic!("lost current coordinate"),
+        }
+    }
+    panic!("URI failed to resume with copy credit")
+}
