@@ -4,6 +4,7 @@
 
 extern crate alloc;
 
+mod access;
 mod heap;
 mod scenarios;
 
@@ -68,7 +69,10 @@ core::arch::global_asm!(
     ".section .vector_table,\"a\"",
     ".word _stack_start",
     ".word Reset",
-    ".rept 14",
+    ".word Fault",       // NMI
+    ".word AccessFault", // HardFault (MPU faults with PRIMASK set)
+    ".word AccessFault", // MemManage
+    ".rept 11",
     ".word Fault",
     ".endr",
 );
@@ -103,7 +107,16 @@ unsafe extern "C" fn Reset() -> ! {
 #[cfg(target_os = "none")]
 #[unsafe(no_mangle)]
 extern "C" fn Fault() -> ! {
-    report(format_args!("FAIL: ARM exception"));
+    let (cfsr, hfsr, mmfar) = unsafe {
+        (
+            (0xe000_ed28 as *const u32).read_volatile(),
+            (0xe000_ed2c as *const u32).read_volatile(),
+            (0xe000_ed34 as *const u32).read_volatile(),
+        )
+    };
+    report(format_args!(
+        "FAIL: ARM exception cfsr={cfsr:#x} hfsr={hfsr:#x} mmfar={mmfar:#x}"
+    ));
     exit(1)
 }
 

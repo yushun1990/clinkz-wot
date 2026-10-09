@@ -1,6 +1,9 @@
 //! Caller-supplied fixed backing, including metadata, padding and redzones.
 //! Provisioning and TD use separate regions so an immutable caller source can
 //! stay live while every TD suspension is rerun. No TD algorithm lives here.
+use crate::access::Region;
+#[cfg(target_os = "none")]
+use core::sync::atomic::AtomicUsize;
 use core::{
     alloc::{GlobalAlloc, Layout},
     cell::{Cell, UnsafeCell},
@@ -18,6 +21,7 @@ const GUARD: usize = 8;
 pub struct Request {
     pub bytes: usize,
     pub align: usize,
+    pub live_before: usize,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Trace {
@@ -38,15 +42,20 @@ const EMPTY: Trace = Trace {
     peak: 0,
     largest: 0,
     span: 0,
-    requests: [Request { bytes: 0, align: 0 }; REQUESTS],
+    requests: [Request {
+        bytes: 0,
+        align: 0,
+        live_before: 0,
+    }; REQUESTS],
 };
 #[derive(Clone, Copy)]
 struct Slot {
     offset: usize,
     bytes: usize,
     align: usize,
+    isolated: usize,
 }
-#[repr(C, align(64))]
+#[repr(C, align(4096))]
 struct Arena([MaybeUninit<u8>; BYTES]);
 struct Metadata {
     slots: [Option<Slot>; SLOTS],
@@ -75,7 +84,7 @@ impl Pool {
         // formed while live suballocations have outstanding raw pointers.
         self.arena.get().cast()
     }
-    fn allocate(&self, layout: Layout, record: bool) -> *mut u8 {
+    fn allocate(&self, layout: Layout, record: bool, isolate: bool) -> *mut u8 {
         // Metadata is disjoint from all live allocation ranges. The sole
         // caller holds this loan only until the allocator method returns.
         let m = unsafe { &mut *self.metadata.get() };
@@ -88,6 +97,7 @@ impl Pool {
             m.trace.requests[m.trace.attempts - 1] = Request {
                 bytes: layout.size(),
                 align: layout.align(),
+                live_before: m.trace.live,
             };
         }
         if m.fail == m.trace.attempts {
@@ -97,17 +107,29 @@ impl Pool {
             return ptr::null_mut();
         };
         let base = self.base();
+        let Some(payload) = layout.size().checked_add(GUARD).filter(|&n| n <= BYTES) else {
+            return ptr::null_mut();
+        };
+        // An isolated allocation owns its entire power-of-two page region.
+        // Permission changes never cover a sibling, metadata or live frame.
+        // Extra alignment/unused page capacity stays in the startup backing,
+        // not in the production request Layout or child byte count.
+        let isolated = if isolate {
+            payload.next_power_of_two().max(4096)
+        } else {
+            0
+        };
+        let align = layout.align().max(isolated);
         let Some(aligned) = (base as usize)
             .checked_add(m.next)
-            .and_then(|n| n.checked_add(layout.align() - 1))
-            .map(|n| n & !(layout.align() - 1))
+            .and_then(|n| n.checked_add(align - 1))
+            .map(|n| n & !(align - 1))
         else {
             return ptr::null_mut();
         };
         let offset = aligned - base as usize;
         let Some(end) = offset
-            .checked_add(layout.size())
-            .and_then(|n| n.checked_add(GUARD))
+            .checked_add(if isolate { isolated } else { payload })
             .filter(|&n| n <= BYTES)
         else {
             return ptr::null_mut();
@@ -116,6 +138,7 @@ impl Pool {
             offset,
             bytes: layout.size(),
             align: layout.align(),
+            isolated,
         });
         m.next = end;
         m.trace.allocations += 1;
@@ -157,11 +180,28 @@ impl Pool {
         assert_eq!(m.trace.live, 0);
         assert!(m.slots.iter().all(Option::is_none));
     }
+    fn regions(&self) -> impl Iterator<Item = Region> + '_ {
+        let m = unsafe { &*self.metadata.get() };
+        m.slots.iter().flatten().filter_map(|s| {
+            (s.isolated != 0).then_some(Region {
+                base: self.base() as usize + s.offset,
+                bytes: s.isolated,
+            })
+        })
+    }
 }
 struct State {
     source: Pool,
     td: Pool,
     observing: Cell<bool>,
+    isolate_source: Cell<bool>,
+    #[cfg(target_os = "none")]
+    controls: AccessControls,
+}
+#[cfg(target_os = "none")]
+pub struct AccessControls {
+    pub expected: AtomicUsize,
+    pub observed: AtomicUsize,
 }
 // This binary never starts threads; ARM interrupts are disabled before entry.
 // Allocator methods neither allocate, invoke callbacks nor retain a state loan.
@@ -170,15 +210,23 @@ static STATE: State = State {
     source: Pool::new(),
     td: Pool::new(),
     observing: Cell::new(false),
+    isolate_source: Cell::new(false),
+    #[cfg(target_os = "none")]
+    controls: AccessControls {
+        expected: AtomicUsize::new(0),
+        observed: AtomicUsize::new(0),
+    },
 };
 
 pub struct Allocator;
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if STATE.observing.get() {
-            STATE.td.allocate(layout, true)
+            STATE.td.allocate(layout, true, layout.align() == 1)
         } else {
-            STATE.source.allocate(layout, false)
+            STATE
+                .source
+                .allocate(layout, false, STATE.isolate_source.get())
         }
     }
     unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
@@ -219,4 +267,20 @@ pub fn assert_empty() {
     assert!(!STATE.observing.get());
     STATE.source.empty();
     STATE.td.empty();
+}
+pub fn isolated_source<T>(make: impl FnOnce() -> T) -> T {
+    assert!(!STATE.observing.get() && !STATE.isolate_source.replace(true));
+    let value = make();
+    STATE.isolate_source.set(false);
+    value
+}
+pub fn byte_regions(include_source: bool) -> impl Iterator<Item = Region> {
+    STATE
+        .td
+        .regions()
+        .chain(STATE.source.regions().filter(move |_| include_source))
+}
+#[cfg(target_os = "none")]
+pub fn access_controls() -> &'static AccessControls {
+    &STATE.controls
 }

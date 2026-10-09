@@ -9,8 +9,8 @@ fn main() {
             println!("cargo:rustc-link-search={}", out.display());
             println!("cargo:rustc-link-arg=-Tmemory.x");
         }
-        // libc supplies native startup, memory intrinsics and write(2). Neither
-        // the runner nor its Rust dependency graph links Rust std or malloc.
+        // libc supplies startup, intrinsics, console and the mprotect/fork/wait
+        // access oracle. Neither this binary nor its Rust graph uses std/malloc.
         "linux" => println!("cargo:rustc-link-lib=c"),
         os => panic!("runtime witness supports Linux and bare ARM, got {os}"),
     }

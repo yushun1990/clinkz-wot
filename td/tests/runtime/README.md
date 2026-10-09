@@ -26,7 +26,8 @@ owner/allocator Layouts, work debits and allocator traces. It builds into
 `target/td-admission-runtime`. A panic, ARM exception or timeout fails the command.
 Mainline CI runs both commands on its pinned Rust toolchain. Runtime dependencies
 use the repository's locked versions and enable no Rust `std` feature. Linux
-uses libc only for startup, memory intrinsics and console/exit; ARM uses a small
+uses libc for startup, memory intrinsics, console/exit and the access oracle's
+page permissions and fork/wait controls; ARM uses a small
 reset vector and semihosting console/exit. Unexpected native unwind entry fails
 the run; the binary's panic strategy is abort.
 
@@ -38,16 +39,25 @@ The two unchanged named policies exercise:
 - Actual geometric frame allocations, old/new coexistence, current URI
   replacement, exact requested sizes/alignments, allocation count, simultaneous
   peak and largest request. Exact and one-byte-short boundaries cover all six
-  TD physical controls before allocator entry. Inline movement/return capacity
-  is computed from the running production types and is not a fake heap request.
+  TD physical controls before allocator entry: the attempted Layouts must be
+  exactly the successful run's prefix before its first forbidden request, with
+  allocator-observed live bytes at each entry and peak below the tested ceiling.
+  Inline movement/return capacity is computed from the running production types
+  and is not a fake heap request.
 - Every inspection and semantic suspension in the corpus, unacknowledged Ready
   states and Done: cancellation and abandonment require zero extra work or
   allocations and leave zero TD live bytes. Every actual TD allocation request
   is injected with null. Semantic failures preserve the first cause.
 - Every URI/output action in the corpus with repeated one-unit-short credit:
   no partial multi-class debit or allocation, followed by the exact complete
-  facts, class-debit and allocator trace of the uninterrupted run. Ready retries
-  inspect the actual URI and scope loans at zero credit.
+  facts, class-debit and allocator trace of the uninterrupted run. Every semantic
+  position additionally runs with zero output credit and read-only URI storage,
+  including positions whose reported output debit is zero. URI write totals are
+  derived from the fixed inputs, independently of production WorkBudget debits.
+- Ready retries run with actual URI bytes inaccessible. A separate small source
+  isolates base/href bytes, scope strings and their String descriptors as well;
+  repeated zero/short output, URI and cleanup credit cannot read these regions.
+  Access is restored before the caller traverses the returned loans.
 - Exact lifetime exhaustion and repeated rewind without replenishment; complete
   4-KiB static and 16-KiB gateway resolved targets under their named work/memory
   ceilings; 63/64/65 and 255/256/257 Number boundaries and zero-disabled Numbers.
@@ -55,12 +65,34 @@ The two unchanged named policies exercise:
   the gateway's supported atomic iterator envelope. No named structural or URI
   ceiling is reduced.
 
+The fixed URI copy oracle requires 28 and 137 writes for the two main Forms
+(165 total): emitted bytes still count when popped; the authority-less repair
+also writes two padding bytes, shifts seven path bytes, and inserts `/.`.
+The simple long-URI cases require exactly 4,096/16,384 writes. These expectations
+are checked at each Form against CodecOutputBytes and feed the exact shared
+lifetime boundary. The one-unit-short sweep retains multi-class checks, while
+the independent zero-output sweep never drops a position based on a zero debit.
+
+The access oracle uses Linux [`mprotect`](https://man7.org/linux/man-pages/man2/mprotect.2.html)
+or the Cortex-M4 MPU ([Arm register definitions](https://github.com/ARM-software/CMSIS_5/blob/develop/CMSIS/Core/Include/core_cm4.h)).
+It observes real accesses, including stores of unchanged bytes, without TD hooks
+or a copied resolver. Both backends first demonstrate a denied load and a denied
+same-value store. Linux controls run in forked children and require SIGSEGV;
+ARM controls require DACCVIOL and the expected MMFAR, then restore access and
+retry only those deliberate control instructions. Interrupts remain masked, so
+ARM MPU faults escalate through HardFault. Any fault during TD execution fails
+the witness. This backend supports 4-KiB native pages and at most eight protected
+power-of-two regions; unsupported hardware/page configuration fails explicitly.
+
 The allocator has two fixed 128-KiB regions, fixed placement/observation metadata
 and eight-byte guards after each request. Its complete aligned backing Layout is
 charged once as startup storage. TD suballocations delegate that backing; their
 requested bytes are not charged again as new physical backing. Arena span also
-reports padding, guards and unreused holes. Deallocation checks the original
-pointer/Layout and guards before matching the release. The binary has one
+reports padding, guards and unreused holes. URI blocks and the selected Ready
+source allocations own isolated page regions; all their unused page capacity
+and the access-control metadata remain in the charged backing Layout.
+Deallocation checks the original pointer/Layout and guards before matching the
+release. The binary has one
 caller and no threads; ARM interrupts stay disabled. This allocator is an
 evidence backend, not a proposed product allocator or general concurrent API.
 The child temporary ledger is capped by the delegated TD region. Inline

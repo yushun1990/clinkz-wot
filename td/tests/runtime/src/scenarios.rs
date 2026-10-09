@@ -13,7 +13,10 @@ use clinkz_wot_td::{
 };
 use core::mem::size_of;
 
-use crate::{heap, report};
+use crate::{
+    access::{Guard, Permission},
+    heap, report,
+};
 
 const CREDIT: u64 = 256;
 const POLLS: usize = 300_000;
@@ -47,6 +50,7 @@ struct Run {
     digest: u64,
     work: [u64; CLASSES],
     inspection_work: u64,
+    uri_writes: u64,
 }
 impl Run {
     fn new() -> Self {
@@ -58,6 +62,7 @@ impl Run {
             digest: 0,
             work: [0; CLASSES],
             inspection_work: 0,
+            uri_writes: 0,
         }
     }
     fn debit(&mut self, budget: &WorkBudget) {
@@ -151,9 +156,9 @@ fn hash(mut h: u64, text: &str) -> u64 {
     }
     h
 }
-fn fact(event: Event<'_>) -> (bool, u64) {
+fn fact(event: Event<'_>) -> (bool, u64, u64) {
     match event {
-        Event::Property { ordinal, name } => (true, hash(ordinal as u64, name)),
+        Event::Property { ordinal, name } => (true, hash(ordinal as u64, name), 0),
         Event::Form(f) => {
             assert!(f.readable());
             if f.property_name() == "p" {
@@ -170,7 +175,14 @@ fn fact(event: Event<'_>) -> (bool, u64) {
                     f.copy_bytes(),
                     (1 + f.href().len() + f.resolved_href().len() + f.content_type().len()) as u64
                 );
-                return (false, hash(0, f.resolved_href()));
+                // This fixture has no dot removal or repair: every prefix and
+                // href byte is written exactly once. No production debit is
+                // an input to the expected copy charge.
+                return (
+                    false,
+                    hash(0, f.resolved_href()),
+                    (prefix.len() + f.href().len()) as u64,
+                );
             }
             assert_eq!((f.property_ordinal(), f.property_name()), (1, "zeta"));
             assert!(matches!(f.original_index(), 1 | 2));
@@ -193,18 +205,24 @@ fn fact(event: Event<'_>) -> (bool, u64) {
                 + f.subprotocol().map_or(0, str::len)
                 + bytes as usize;
             assert_eq!(f.copy_bytes(), copy as u64);
-            if f.original_index() == 1 {
+            let writes = if f.original_index() == 1 {
                 assert_eq!(f.resolved_href(), "foo:/.//value?x#f");
                 assert_eq!(f.security_count(), 1);
                 assert_eq!(f.security_name(), Some("none"));
                 assert_eq!(f.security_scheme(), Some("nosec"));
                 assert_eq!((scopes.len(), scopes.byte_len()), (3, 6));
+                // Hand-derived writes for this fixed URI: prefix; /a/ then
+                // /value (popped bytes still cost); two repair padding bytes;
+                // seven shifted path bytes; '/.' insertion; ?x#f tail.
+                "foo:".len() + "/a/".len() + "/value".len() + 2 + "//value".len() + 2 + "?x#f".len()
             } else {
                 assert_eq!(f.security_count(), 0); // explicit empty overrides root
                 assert!(f.security_name().is_none() && f.security_scheme().is_none());
                 assert_eq!(f.resolved_href().len(), "foo:/a/".len() + 128);
-            }
-            (false, h)
+                // /b/ is popped after emission; its writes remain charged.
+                "foo:".len() + "/a/b/".len() + 128
+            };
+            (false, h, writes as u64)
         }
     }
 }
@@ -228,8 +246,14 @@ fn semantic_poll(c: &mut Read<'_>, run: &mut Run) -> Result<(bool, Cost), Cause>
             // Re-lend and inspect actual facts/URI/scopes at zero credit. No
             // allocation, copy, sizing scan or new TD work is available.
             for _ in 0..3 {
-                let Step::Ready(event) = c.step(&mut WorkBudget::new(), false)? else {
-                    panic!("Ready must persist until acknowledgement");
+                let event = {
+                    // Actual URI bytes are inaccessible during production's
+                    // Ready step. Restore access before the caller reads them.
+                    let _guard = Guard::new(heap::byte_regions(false), Permission::None);
+                    let Step::Ready(event) = c.step(&mut WorkBudget::new(), false)? else {
+                        panic!("Ready must persist until acknowledgement");
+                    };
+                    event
                 };
                 assert_eq!(fact(event), expected);
                 assert_eq!(heap::trace(), before);
@@ -238,6 +262,12 @@ fn semantic_poll(c: &mut Read<'_>, run: &mut Run) -> Result<(bool, Cost), Cause>
                 run.properties += 1;
             } else {
                 run.forms += 1;
+                run.uri_writes += expected.2;
+                assert_eq!(
+                    run.work[W::CodecOutputBytes as usize],
+                    run.uri_writes,
+                    "mandatory URI writes must debit CodecOutputBytes and the shared lifetime"
+                );
             }
             run.digest = run.digest.wrapping_mul(16777619) ^ expected.1;
             c.acknowledge();
@@ -344,9 +374,55 @@ fn physical_boundaries(t: &Thing, limits: &ResourceLimits, source: usize, baseli
                     (limit.kind(), limit.configured(), limit.observed()),
                     (kind, ceiling, observed)
                 );
+                let requested_total = |request: &heap::Request| -> u64 {
+                    if kind == R::LargestContiguousAllocationBytesMax {
+                        request.bytes as u64
+                    } else {
+                        let retained = if matches!(
+                            kind,
+                            R::AdmissionPeakLiveBytesGlobalMax | R::EngineLiveBytesGlobalMax
+                        ) {
+                            source as u64
+                        } else {
+                            0
+                        };
+                        retained + inline + request.live_before as u64 + request.bytes as u64
+                    }
+                };
+                let prefix = baseline.requests[..baseline.attempts]
+                    .iter()
+                    .take_while(|request| requested_total(request) <= ceiling)
+                    .count();
+                assert_eq!(
+                    trace.attempts, prefix,
+                    "reject before the first forbidden allocator entry: {kind:?}"
+                );
+                assert_eq!(
+                    &trace.requests[..trace.attempts],
+                    &baseline.requests[..prefix]
+                );
                 assert!(
-                    trace.attempts < baseline.attempts,
-                    "reject before over-limit allocator entry"
+                    trace.requests[..trace.attempts]
+                        .iter()
+                        .all(|r| requested_total(r) <= ceiling)
+                );
+                let actual = if kind == R::LargestContiguousAllocationBytesMax {
+                    trace.largest as u64
+                } else {
+                    inline
+                        + trace.peak as u64
+                        + if matches!(
+                            kind,
+                            R::AdmissionPeakLiveBytesGlobalMax | R::EngineLiveBytesGlobalMax
+                        ) {
+                            source as u64
+                        } else {
+                            0
+                        }
+                };
+                assert!(
+                    actual <= ceiling,
+                    "allocator-observed peak/request exceeded {kind:?}"
                 );
             }
         }
@@ -357,8 +433,8 @@ fn physical_boundaries(t: &Thing, limits: &ResourceLimits, source: usize, baseli
     ));
     for request in &baseline.requests[..baseline.attempts] {
         report(format_args!(
-            "  Layout bytes={} align={}",
-            request.bytes, request.align
+            "  Layout bytes={} align={} live_before={}",
+            request.bytes, request.align, request.live_before
         ));
     }
 }
@@ -447,6 +523,20 @@ fn sweep(
                 assert_eq!(heap::source_live(), source);
             }
         }
+        // Select every position independently of observed debits. Even a
+        // target-specific missing/zero output charge must encounter read-only
+        // real URI storage before it can write. This also catches same-value
+        // stores that comparing buffer contents cannot observe.
+        heap::begin(0);
+        let (mut c, _) = semantic_prefix(t, limits, source, position);
+        {
+            let _guard = Guard::new(heap::byte_regions(false), Permission::ReadOnly);
+            let mut zero_output = budget().with_remaining(W::CodecOutputBytes, 0);
+            c.step(&mut zero_output, false).unwrap();
+            assert_eq!(zero_output.remaining(W::CodecOutputBytes), 0);
+        }
+        drop(c);
+        heap::end();
         for (class, required) in [
             (W::UriBytes, costs[position].uri),
             (W::CodecOutputBytes, costs[position].output),
@@ -460,7 +550,10 @@ fn sweep(
             for _ in 0..3 {
                 let mut short = budget().with_remaining(class, required - 1);
                 let unchanged = W::ALL.map(|w| short.remaining(w));
-                assert!(matches!(c.step(&mut short, false), Ok(Step::Pending)));
+                {
+                    let _guard = Guard::new(heap::byte_regions(false), Permission::ReadOnly);
+                    assert!(matches!(c.step(&mut short, false), Ok(Step::Pending)));
+                }
                 assert_eq!(W::ALL.map(|w| short.remaining(w)), unchanged); // no partial multiclass debit
                 assert_eq!(heap::trace(), before);
             }
@@ -473,12 +566,94 @@ fn sweep(
     }
     failures(t, limits, source, baseline);
     report(format_args!(
-        "lifecycle: inspect_positions={} semantic_positions={} ready_positions={} short_actions={} failures={} terminal_td_bytes=0",
+        "lifecycle: inspect_positions={} semantic_positions={} ready_positions={} short_actions={} independent_zero_output_probes={} failures={} terminal_td_bytes=0",
         expected.inspect,
         expected.semantics + 1,
         costs.iter().filter(|cost| cost.ready).count(),
         shortages,
+        expected.semantics,
         baseline.attempts
+    ));
+}
+fn ready_accesses(limits: &ResourceLimits) {
+    let mut t: Thing = serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"guard","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},"properties":{"guard":{"type":"null","forms":[{"href":"/p"}]}}}"#).unwrap();
+    // Isolate source bytes and scope String descriptors, not the Form itself:
+    // constructing its fixed loan is allowed; scanning bytes or scope entries
+    // is forbidden. The allocator owns all page padding in its charged backing.
+    t.base = Some(heap::isolated_source(|| {
+        clinkz_wot_td::data_type::BaseUri::parse("foo:/a/b/").unwrap()
+    }));
+    let f = &mut t
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("guard")
+        .unwrap()
+        ._interaction
+        .forms[0];
+    f.href = heap::isolated_source(|| FormHref::parse("../ready").unwrap());
+    f.scopes = Some(heap::isolated_source(|| {
+        alloc::vec!["one".to_string(), "二".to_string()]
+    }));
+    heap::begin(0);
+    let mut c = proof(cursor(&t, limits, 0), &mut Run::new())
+        .unwrap()
+        .into_property_read();
+    let mut found = false;
+    for _ in 0..POLLS {
+        match c.step(&mut budget(), false).unwrap() {
+            Step::Pending => {}
+            Step::Ready(Event::Property { .. }) => c.acknowledge(),
+            Step::Ready(Event::Form(_)) => {
+                found = true;
+                break;
+            }
+            Step::Done => panic!("missing guarded Form"),
+        }
+    }
+    assert!(found);
+    assert_eq!(heap::byte_regions(true).count(), 6);
+    let before = heap::trace();
+    let mut retries = 0;
+    for _ in 0..3 {
+        for mut b in [
+            WorkBudget::new(),
+            budget().with_remaining(W::UriBytes, 0),
+            budget().with_remaining(W::CodecOutputBytes, 1),
+            budget().with_remaining(W::CleanupItems, 0),
+        ] {
+            let remaining = W::ALL.map(|w| b.remaining(w));
+            let event = {
+                let _guard = Guard::new(heap::byte_regions(true), Permission::None);
+                let Step::Ready(event) = c.step(&mut b, false).unwrap() else {
+                    panic!("protected Ready changed phase");
+                };
+                event
+            };
+            let Event::Form(f) = event else {
+                panic!("protected Form changed event");
+            };
+            // The caller traverses actual bytes only after access is restored.
+            assert_eq!(f.resolved_href(), "foo:/a/ready");
+            assert_eq!(f.href(), "../ready");
+            let scopes = f.scopes();
+            let mut iter = scopes.iter();
+            assert_eq!(iter.next(), Some("one"));
+            assert_eq!(iter.next(), Some("二"));
+            assert_eq!(iter.next(), None);
+            assert_eq!(scopes.byte_len(), 6);
+            assert_eq!(W::ALL.map(|w| b.remaining(w)), remaining);
+            assert_eq!(heap::trace(), before);
+            retries += 1;
+        }
+    }
+    c.acknowledge();
+    drop(c);
+    heap::end();
+    drop(t);
+    heap::assert_empty();
+    report(format_args!(
+        "ready access oracle: retries={retries} source_uri_scope_regions=5 derived_uri_regions=1 forbidden_reads=0"
     ));
 }
 fn failures(t: &Thing, limits: &ResourceLimits, source: usize, baseline: heap::Trace) {
@@ -501,7 +676,8 @@ fn failures(t: &Thing, limits: &ResourceLimits, source: usize, baseline: heap::T
     }
 }
 fn lifetime(t: &Thing, limits: &ResourceLimits, source: usize, expected: &Run) {
-    let total: u64 = expected.work.iter().sum();
+    let total = expected.work.iter().sum::<u64>() - expected.work[W::CodecOutputBytes as usize]
+        + expected.uri_writes;
     let pass_work = total - expected.inspection_work;
     // The gateway's admitted atomic iterator envelope can exceed this small
     // input's first-pass cost. Reach an exact boundary with additional complete
@@ -568,8 +744,8 @@ fn lifetime(t: &Thing, limits: &ResourceLimits, source: usize, expected: &Run) {
     drop(c);
     heap::end();
     report(format_args!(
-        "work: first_pass={total} classes={:?} exact_passes={exact_passes} exact_total={exact_total} completed_passes_before_limit={passes}",
-        expected.work
+        "work: first_pass={total} classes={:?} independent_uri_writes={} exact_passes={exact_passes} exact_total={exact_total} completed_passes_before_limit={passes}",
+        expected.work, expected.uri_writes
     ));
 }
 fn named_uri(limits: &ResourceLimits) {
@@ -657,6 +833,7 @@ pub fn run() {
     // Heap child capacity delegates the already charged fixed TD region;
     // movement/return slots require their own additional inline provision.
     startup.try_reserve(inline_bytes()).unwrap().commit();
+    crate::access::self_test();
     for limits in [BenchmarkStaticReferenceV1::LIMITS, GatewayDefaultV1::LIMITS] {
         let t = input();
         let source = heap::source_live();
@@ -708,6 +885,7 @@ pub fn run() {
         assert!(upstream.release_committed(source as u64));
         assert_eq!(upstream.used(), 0);
         named_uri(limits);
+        ready_accesses(limits);
         number_boundaries(limits);
         heap::assert_empty();
     }
