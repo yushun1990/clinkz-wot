@@ -394,28 +394,374 @@ pub fn resolve_form_href(
     base: Option<&BaseUri>,
     href: &FormHref,
 ) -> Result<ResolvedFormHref, ResolveFormHrefError> {
-    let reference = match href {
-        FormHref::Template(template) => {
-            return Ok(ResolvedFormHref::Template(template.clone()));
+    let target = lending::Target::new(base, href).map_err(|error| match error {
+        lending::Error::TemplateBase => {
+            ResolveFormHrefError::TemplateBase(base.unwrap().as_str().to_owned())
         }
-        FormHref::Reference(reference) => reference,
+        lending::Error::Resolve(error) => error.into(),
+    })?;
+    let mut resolver = match target {
+        lending::Target::Alias(_) => {
+            return Ok(match href {
+                FormHref::Template(value) => ResolvedFormHref::Template(value.clone()),
+                FormHref::Reference(value) => ResolvedFormHref::Reference(value.clone()),
+            });
+        }
+        lending::Target::Resolve(resolver) => resolver,
     };
+    let mut bytes = alloc::vec::Vec::new();
+    while !resolver.tick(&mut bytes) {}
+    // The synchronous adapter owns parsing/allocation. Bounded lending uses
+    // the program's paid ASCII validation and never invokes this parser.
+    let text = String::from_utf8(bytes).expect("URI program emits ASCII");
+    Ok(ResolvedFormHref::Reference(
+        UriReference::parse(&text).expect("valid resolved URI"),
+    ))
+}
 
-    if reference.0.has_scheme() {
-        return Ok(ResolvedFormHref::Reference(reference.clone()));
+/// One production URI meaning, driven either synchronously above or under the
+/// proof's work/account owner. All source handles refer to immutable caller
+/// storage; every transition reads/writes at most sixteen bytes. Cached public
+/// fluent-uri component access is fixed work, never a reparsing shortcut.
+pub(crate) mod lending {
+    use super::*;
+
+    pub(crate) enum Error {
+        TemplateBase,
+        Resolve(ResolveError),
     }
-
-    let Some(base) = base else {
-        return Ok(ResolvedFormHref::Reference(reference.clone()));
-    };
-
-    let base = match base {
-        BaseUri::Absolute(base) => base.as_uri(),
-        BaseUri::Template(template) => {
-            return Err(ResolveFormHrefError::TemplateBase(template.clone()));
+    pub(crate) enum Target<'a> {
+        Alias(&'a str),
+        Resolve(Resolution<'a>),
+    }
+    pub(crate) trait Output {
+        fn len(&self) -> usize;
+        fn byte(&self, index: usize) -> u8;
+        fn push(&mut self, byte: u8);
+        fn set(&mut self, index: usize, byte: u8);
+        fn truncate(&mut self, len: usize);
+    }
+    impl Output for alloc::vec::Vec<u8> {
+        fn len(&self) -> usize {
+            self.len()
         }
-    };
-
-    let resolved = reference.0.resolve_against(base)?;
-    Ok(ResolvedFormHref::Reference(UriReference(resolved.into())))
+        fn byte(&self, index: usize) -> u8 {
+            self[index]
+        }
+        fn push(&mut self, byte: u8) {
+            self.push(byte);
+        }
+        fn set(&mut self, index: usize, byte: u8) {
+            self[index] = byte;
+        }
+        fn truncate(&mut self, len: usize) {
+            self.truncate(len);
+        }
+    }
+    #[derive(Clone, Copy)]
+    enum State {
+        Merge,
+        MergeClassify,
+        Configure,
+        Prefix,
+        Segment,
+        Classify,
+        Emit,
+        Pop,
+        Fix,
+        Shift,
+        Insert,
+        Tail,
+        Validate,
+        Done,
+    }
+    pub(crate) struct Resolution<'a> {
+        prefix: [&'a str; 4],
+        paths: [&'a str; 2],
+        tail: [&'a str; 4],
+        state: State,
+        part: usize,
+        pos: usize,
+        start: usize,
+        path_start: usize,
+        normalize: bool,
+        authority: bool,
+        merge: usize,
+        validate: usize,
+        streaming: bool,
+    }
+    impl<'a> Target<'a> {
+        pub(crate) fn new(base: Option<&'a BaseUri>, href: &'a FormHref) -> Result<Self, Error> {
+            let FormHref::Reference(reference) = href else {
+                return Ok(Self::Alias(href.as_str()));
+            };
+            let r = &reference.0;
+            if r.has_scheme() || base.is_none() {
+                return Ok(Self::Alias(href.as_str()));
+            }
+            let base = match base.unwrap() {
+                BaseUri::Absolute(base) => base.as_uri(),
+                BaseUri::Template(_) => return Err(Error::TemplateBase),
+            };
+            if base.has_fragment() {
+                return Err(Error::Resolve(ResolveError::BaseWithFragment));
+            }
+            if !base.has_authority()
+                && base.path().is_rootless()
+                && !matches!(r.as_str().as_bytes().first(), None | Some(b'#'))
+            {
+                return Err(Error::Resolve(
+                    ResolveError::InvalidReferenceAgainstOpaqueBase,
+                ));
+            }
+            let authority = r.authority().or_else(|| base.authority());
+            let mut paths = [r.path().as_str(), ""];
+            let mut query = r.query();
+            let mut state = State::Configure;
+            if !r.has_authority() {
+                if r.path().is_empty() {
+                    paths[0] = base.path().as_str();
+                    query = query.or_else(|| base.query());
+                } else if !r.path().is_absolute() {
+                    paths = [
+                        if base.path().is_empty() {
+                            "/"
+                        } else {
+                            base.path().as_str()
+                        },
+                        r.path().as_str(),
+                    ];
+                    state = State::Merge;
+                }
+            }
+            Ok(Self::Resolve(Resolution {
+                prefix: [
+                    base.scheme().as_str(),
+                    ":",
+                    if authority.is_some() { "//" } else { "" },
+                    authority.map_or("", |a| a.as_str()),
+                ],
+                paths,
+                tail: [
+                    if query.is_some() { "?" } else { "" },
+                    query.map_or("", |q| q.as_str()),
+                    if r.has_fragment() { "#" } else { "" },
+                    r.fragment().map_or("", |f| f.as_str()),
+                ],
+                state,
+                part: 0,
+                pos: 0,
+                start: 0,
+                path_start: 0,
+                normalize: false,
+                authority: authority.is_some(),
+                merge: paths[0].len(),
+                validate: 0,
+                streaming: false,
+            }))
+        }
+    }
+    // Percent-encoded dots follow the resolved fluent-uri behavior, including
+    // mixed literal/encoded spellings. At most six bytes are inspected.
+    fn dots(mut segment: &[u8]) -> u8 {
+        let mut count = 0;
+        while !segment.is_empty() && count < 2 {
+            if segment[0] == b'.' {
+                segment = &segment[1..];
+            } else if segment.len() >= 3
+                && segment[0] == b'%'
+                && segment[1] == b'2'
+                && matches!(segment[2], b'e' | b'E')
+            {
+                segment = &segment[3..];
+            } else {
+                return 0;
+            }
+            count += 1;
+        }
+        if segment.is_empty() { count } else { 0 }
+    }
+    impl Resolution<'_> {
+        /// Conservative per-transition UriBytes envelope, including source and
+        /// destination accesses. No text-length-dependent atomic action.
+        #[cfg(feature = "validated-thing")]
+        pub(crate) const WORK: u64 = 16;
+        #[cfg(feature = "validated-thing")]
+        pub(crate) fn work(&self) -> u64 {
+            match self.state {
+                State::MergeClassify | State::Classify => Self::WORK,
+                State::Fix => 4,
+                State::Insert => 2,
+                _ => 1,
+            }
+        }
+        pub(crate) fn tick(&mut self, output: &mut impl Output) -> bool {
+            match self.state {
+                State::Merge => {
+                    if self.merge > 0 && self.paths[0].as_bytes()[self.merge - 1] != b'/' {
+                        self.merge -= 1;
+                    } else {
+                        self.state = State::MergeClassify;
+                    }
+                }
+                State::MergeClassify => {
+                    let suffix = &self.paths[0].as_bytes()[self.merge..];
+                    if dots(suffix) != 2 {
+                        self.paths[0] = &self.paths[0][..self.merge];
+                    }
+                    self.state = State::Configure;
+                }
+                State::Configure => {
+                    self.normalize = self.paths[0].starts_with('/');
+                    self.state = State::Prefix;
+                }
+                State::Prefix | State::Tail => {
+                    let tail = matches!(self.state, State::Tail);
+                    let text = if tail {
+                        self.tail[self.part]
+                    } else {
+                        self.prefix[self.part]
+                    };
+                    if self.pos < text.len() {
+                        output.push(text.as_bytes()[self.pos]);
+                        self.pos += 1;
+                    } else {
+                        self.part += 1;
+                        self.pos = 0;
+                        if self.part == 4 {
+                            self.part = 0;
+                            if tail {
+                                self.validate = 0;
+                                self.state = State::Validate;
+                            } else {
+                                self.path_start = output.len();
+                                self.state = State::Segment;
+                            }
+                        }
+                    }
+                }
+                State::Segment => {
+                    let path = self.paths[self.part];
+                    // A dot segment has at most six bytes. Once seven bytes
+                    // have been inspected, stream the rest directly: a long
+                    // ordinary segment needs no complete scan before copying.
+                    if self.pos - self.start == 7 {
+                        self.streaming = true;
+                        self.merge = self.start;
+                        self.state = State::Emit;
+                    } else if self.pos < path.len() && path.as_bytes()[self.pos] != b'/' {
+                        self.pos += 1;
+                    } else if self.pos > self.start || self.pos < path.len() {
+                        self.state = State::Classify;
+                    } else {
+                        self.part += 1;
+                        self.pos = 0;
+                        self.start = 0;
+                        if self.part == 2 {
+                            self.state = State::Fix;
+                        }
+                    }
+                }
+                State::Classify => {
+                    let path = self.paths[self.part];
+                    let end = self.pos;
+                    if self.pos < path.len() {
+                        self.pos += 1;
+                    }
+                    let kind = if self.normalize {
+                        dots(&path.as_bytes()[self.start..end])
+                    } else {
+                        0
+                    };
+                    match kind {
+                        1 => self.start = self.pos,
+                        2 if output.len() > self.path_start + 1 => {
+                            self.state = State::Pop;
+                            self.validate = output.len() - 1;
+                        }
+                        2 => self.start = self.pos,
+                        _ => {
+                            self.merge = self.start;
+                            self.state = State::Emit;
+                        }
+                    }
+                    if kind != 0 && !matches!(self.state, State::Pop) {
+                        self.state = State::Segment;
+                    }
+                }
+                State::Emit => {
+                    if self.merge < self.pos {
+                        output.push(self.paths[self.part].as_bytes()[self.merge]);
+                        self.merge += 1;
+                    } else if self.streaming && self.pos < self.paths[self.part].len() {
+                        let byte = self.paths[self.part].as_bytes()[self.pos];
+                        output.push(byte);
+                        self.pos += 1;
+                        self.merge = self.pos;
+                        if byte == b'/' {
+                            self.streaming = false;
+                            self.start = self.pos;
+                            self.state = State::Segment;
+                        }
+                    } else {
+                        self.streaming = false;
+                        self.start = self.pos;
+                        self.state = State::Segment;
+                    }
+                }
+                State::Pop => {
+                    self.validate -= 1;
+                    if output.byte(self.validate) == b'/' {
+                        output.truncate(self.validate + 1);
+                        self.start = self.pos;
+                        self.state = State::Segment;
+                    }
+                }
+                State::Fix => {
+                    if !self.authority
+                        && output.len() >= self.path_start + 2
+                        && output.byte(self.path_start) == b'/'
+                        && output.byte(self.path_start + 1) == b'/'
+                    {
+                        self.merge = output.len();
+                        output.push(0);
+                        output.push(0);
+                        self.state = State::Shift;
+                    } else {
+                        self.part = 0;
+                        self.pos = 0;
+                        self.state = State::Tail;
+                    }
+                }
+                State::Shift => {
+                    if self.merge > self.path_start {
+                        self.merge -= 1;
+                        let byte = output.byte(self.merge);
+                        output.set(self.merge + 2, byte);
+                    } else {
+                        self.state = State::Insert;
+                    }
+                }
+                State::Insert => {
+                    output.set(self.path_start, b'/');
+                    output.set(self.path_start + 1, b'.');
+                    self.part = 0;
+                    self.pos = 0;
+                    self.state = State::Tail;
+                }
+                State::Validate => {
+                    if self.validate < output.len() {
+                        // Parsed URI (not IRI) components and punctuation are
+                        // ASCII. This charged pass certifies the fresh buffer.
+                        assert!(output.byte(self.validate).is_ascii());
+                        self.validate += 1;
+                    } else {
+                        self.state = State::Done;
+                    }
+                }
+                State::Done => return true,
+            }
+            matches!(self.state, State::Done)
+        }
+    }
 }

@@ -43,7 +43,14 @@ fn base() -> Thing {
     serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"Borrowed production", "security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},"properties":{"p":{"type":"null","forms":[{"href":"/p"}]}}}"#).unwrap()
 }
 fn drive<'a>(thing: &'a Thing, limits: &ResourceLimits) -> Result<ValidatedThing<'a>, Cause> {
-    let mut cursor = ValidatedThingCursor::from_thing(thing, &config(limits), ledger());
+    drive_with_ledger(thing, limits, ledger())
+}
+fn drive_with_ledger<'a>(
+    thing: &'a Thing,
+    limits: &ResourceLimits,
+    ledger: AdmissionLedger,
+) -> Result<ValidatedThing<'a>, Cause> {
+    let mut cursor = ValidatedThingCursor::from_thing(thing, &config(limits), ledger);
     for _ in 0..300_000 {
         match cursor.step(&mut budget(10_000), false) {
             ValidatedThingProgress::Pending(next) => cursor = next,
@@ -555,4 +562,277 @@ fn short_native_and_byte_allowances_preserve_the_exact_continuation() {
         }
     }
     panic!("no complete proof")
+}
+
+fn semantic_input() -> Thing {
+    let mut t = base();
+    t.base = Some(crate::data_type::BaseUri::parse("http://example/a/b/").unwrap());
+    t.properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .href = crate::data_type::FormHref::parse("../../value?x#f").unwrap();
+    t
+}
+fn semantics(c: &mut ValidatedPropertyReadCursor<'_>) -> Result<(), Cause> {
+    for _ in 0..1_000_000 {
+        match c.step(&mut budget(10_000), false)? {
+            ValidatedPropertyReadStep::Pending => {}
+            ValidatedPropertyReadStep::Ready(_) => c.acknowledge(),
+            ValidatedPropertyReadStep::Done => return Ok(()),
+        }
+    }
+    panic!("semantic progress")
+}
+#[test]
+fn semantic_work_remains_linear_across_ready_rewind_and_exact_exhaustion() {
+    let t = semantic_input();
+    let policy = limits().with_limit(R::JsonMembersPerObjectMax, Some(32));
+    let p = drive(&t, &policy).unwrap();
+    let validation = limits().document_validation_work_units_max().unwrap() - p.owner.remaining;
+    let mut c = p.into_property_read();
+    let before = c.owner.remaining;
+    semantics(&mut c).unwrap();
+    let one_pass = before - c.owner.remaining;
+    assert!(one_pass > 0);
+    let after = c.owner.remaining;
+    let trace = c.owner.trace;
+    for _ in 0..10 {
+        assert!(matches!(
+            c.step(&mut budget(0), true).unwrap(),
+            ValidatedPropertyReadStep::Done
+        ));
+    }
+    assert_eq!(c.owner.remaining, after);
+    assert_eq!(c.owner.trace, trace);
+    c = c.rewind();
+    assert_eq!(c.owner.remaining, after);
+    semantics(&mut c).unwrap();
+    assert_eq!(c.owner.remaining, after - one_pass);
+    drop(c);
+    let exact = policy.clone().with_limit(
+        R::DocumentValidationWorkUnitsMax,
+        Some(validation + one_pass),
+    );
+    let mut c = drive(&t, &exact).unwrap().into_property_read();
+    semantics(&mut c).unwrap();
+    assert_eq!(c.owner.remaining, 0);
+    c = c.rewind();
+    let cause = semantics(&mut c).unwrap_err();
+    assert!(
+        matches!(cause, Cause::Limit(l) if l.kind()==R::DocumentValidationWorkUnitsMax && l.phase()==Phase::Semantics)
+    );
+    let trace = c.owner.trace;
+    for _ in 0..5 {
+        assert!(matches!(c.step(&mut budget(10_000),true),Err(e) if e==cause));
+    }
+    assert_eq!(trace, c.owner.trace);
+    let short = policy.with_limit(
+        R::DocumentValidationWorkUnitsMax,
+        Some(validation + one_pass - 1),
+    );
+    let mut c = drive(&t, &short).unwrap().into_property_read();
+    assert!(
+        matches!(semantics(&mut c),Err(Cause::Limit(l)) if l.kind()==R::DocumentValidationWorkUnitsMax)
+    );
+}
+#[test]
+fn semantic_short_credit_has_no_traversal_allocation_or_carried_credit() {
+    let t = semantic_input();
+    let mut c = drive(&t, &limits()).unwrap().into_property_read();
+    for _ in 0..10_000 {
+        if c.phase == LendingPhase::Uri {
+            break;
+        }
+        match c.step(&mut budget(10_000), false).unwrap() {
+            ValidatedPropertyReadStep::Ready(_) => c.acknowledge(),
+            _ => {}
+        }
+    }
+    assert!(c.phase == LendingPhase::Uri);
+    let required = c.resolver.as_ref().unwrap().work();
+    let trace = c.owner.trace;
+    let remaining = c.owner.remaining;
+    let live = c.owner.stack.ledger.live_bytes();
+    for _ in 0..100 {
+        let mut short = budget(10_000).with_remaining(W::UriBytes, required - 1);
+        assert!(matches!(
+            c.step(&mut short, false).unwrap(),
+            ValidatedPropertyReadStep::Pending
+        ));
+        assert_eq!(short.remaining(W::UriBytes), required - 1);
+        assert_eq!(c.scratch.len, 0);
+        assert_eq!(c.owner.remaining, remaining);
+        assert_eq!(c.owner.trace, trace);
+        assert_eq!(c.owner.stack.ledger.live_bytes(), live);
+    }
+    semantics(&mut c).unwrap();
+}
+#[test]
+fn semantic_content_and_resolved_uri_exact_boundaries() {
+    let t = semantic_input();
+    let mut c = drive(&t, &limits()).unwrap().into_property_read();
+    semantics(&mut c).unwrap();
+    let effective = c.effective;
+    let resolved = c.scratch.len as u64;
+    assert!(effective > c.owner.counts.content);
+    drop(c);
+    for (resource, observed) in [
+        (R::GeneratedEffectiveDocumentBytesMax, effective),
+        (R::UriTemplateSourceBytesMax, resolved),
+    ] {
+        for limit in [observed - 1, observed, observed + 1] {
+            let policy = limits().with_limit(resource, Some(limit));
+            let mut c = drive(&t, &policy).unwrap().into_property_read();
+            let result = semantics(&mut c);
+            if limit < observed {
+                assert!(
+                    matches!(result,Err(Cause::Limit(l)) if l.kind()==resource && l.observed()==observed && l.phase()==Phase::Semantics)
+                );
+            } else {
+                result.unwrap();
+            }
+        }
+    }
+}
+#[test]
+fn semantic_upstream_charge_and_preallocation_thresholds() {
+    const SOURCE: u64 = 131072;
+    let t = semantic_input();
+    let source = vec![0u8; SOURCE as usize].into_boxed_slice();
+    let mut child = AdmissionLedger::new(
+        SlotIndex::new(1),
+        Generation::new(1).unwrap(),
+        SOURCE,
+        8 << 20,
+        0,
+        0,
+        0,
+        0,
+    );
+    child
+        .try_reserve_source(R::RetainedSourceBytesPerOwnerMax, SOURCE)
+        .unwrap()
+        .commit();
+    let p = drive_with_ledger(&t, &limits(), child).unwrap();
+    let frame_bytes = p.owner.stack.ledger.live_bytes() - SOURCE;
+    let mut c = p.into_property_read();
+    semantics(&mut c).unwrap();
+    assert_eq!(
+        c.owner.stack.ledger.live_bytes(),
+        SOURCE + frame_bytes + c.scratch.capacity as u64
+    );
+    let temporary = frame_bytes + c.scratch.capacity as u64 + inline_bytes();
+    let request = c.scratch.capacity as u64;
+    // Drop does not release a physically live upstream owner on our behalf.
+    c.scratch.release(&mut c.owner.stack.ledger);
+    assert_eq!(c.owner.stack.ledger.live_bytes(), SOURCE + frame_bytes);
+    drop(c);
+    assert_eq!(source.len() as u64, SOURCE);
+    for resource in [
+        R::AdmissionTemporaryBytesPerOperationMax,
+        R::AdmissionTemporaryBytesGlobalMax,
+        R::PeakLiveBytesPerAdmissionMax,
+        R::EngineLiveBytesGlobalMax,
+        R::AdmissionPeakLiveBytesGlobalMax,
+        R::LargestContiguousAllocationBytesMax,
+    ] {
+        // Isolate this semantic request after a production proof. No proof or
+        // allowance is fabricated; test-only mutation tightens one policy row.
+        let mut c = drive(&t, &limits()).unwrap().into_property_read();
+        let observed = if resource == R::LargestContiguousAllocationBytesMax {
+            request
+        } else {
+            temporary
+        };
+        c.owner.policy.values[CATALOG.iter().position(|r| *r == resource).unwrap()] = observed - 1;
+        assert!(
+            matches!(semantics(&mut c),Err(Cause::Limit(l)) if l.kind()==resource && l.observed()==observed && l.phase()==Phase::Semantics)
+        );
+        assert_eq!(c.scratch.capacity, 0);
+    }
+}
+
+#[test]
+fn named_uri_lengths_fit_linear_production_support() {
+    // The static work ceiling is deliberately much smaller than gateway's.
+    // These real named policies exercise a full-sized composite URI without
+    // replacing the work/temporary ceilings with fixture-specific allowances.
+    for policy in [GatewayDefaultV1::LIMITS, BenchmarkStaticReferenceV1::LIMITS] {
+        let mut t = base();
+        let prefix = "http://a/";
+        let maximum = policy.uri_template_source_bytes_max().unwrap() as usize;
+        t.base = Some(crate::data_type::BaseUri::parse(prefix).unwrap());
+        let raw = "a".repeat(maximum - prefix.len());
+        t.properties
+            .as_mut()
+            .unwrap()
+            .get_mut("p")
+            .unwrap()
+            ._interaction
+            .forms[0]
+            .href = crate::data_type::FormHref::parse(&raw).unwrap();
+        let mut c = drive(&t, policy).unwrap().into_property_read();
+        semantics(&mut c).unwrap();
+        assert_eq!(c.scratch.len, maximum);
+        assert!(c.owner.remaining > 0);
+    }
+}
+
+#[test]
+fn semantic_native_and_common_prefix_search_never_replay_on_short_credit() {
+    let mut t = semantic_input();
+    let prefix = "common-prefix-".repeat(32);
+    t.security_definitions.clear();
+    t.security_definitions
+        .insert(format!("{prefix}a"), SecurityScheme::nosec());
+    t.security_definitions
+        .insert(format!("{prefix}b"), SecurityScheme::nosec());
+    t.security = vec![format!("{prefix}b")];
+    let mut c = drive(&t, &limits()).unwrap().into_property_read();
+    let mut native = false;
+    let mut compare = false;
+    for _ in 0..50_000 {
+        let freeze = if !native && c.phase == LendingPhase::Property {
+            native = true;
+            Some((W::DocumentNodes, 1))
+        } else if !compare && c.phase == LendingPhase::Compare {
+            compare = true;
+            Some((W::CodecInputBytes, 1))
+        } else {
+            None
+        };
+        if let Some((class, credit)) = freeze {
+            let trace = c.owner.trace;
+            let remaining = c.owner.remaining;
+            let pos = c.compare;
+            for _ in 0..10 {
+                let mut short = budget(10_000).with_remaining(class, credit);
+                assert!(matches!(
+                    c.step(&mut short, false).unwrap(),
+                    ValidatedPropertyReadStep::Pending
+                ));
+                assert_eq!(c.owner.trace, trace);
+                assert_eq!(c.owner.remaining, remaining);
+                assert_eq!(c.compare, pos);
+                assert_eq!(short.remaining(class), credit);
+            }
+        }
+        match c.step(&mut budget(10_000), false).unwrap() {
+            ValidatedPropertyReadStep::Pending => {}
+            ValidatedPropertyReadStep::Ready(ValidatedPropertyReadEvent::Property { .. }) => {
+                c.acknowledge()
+            }
+            ValidatedPropertyReadStep::Ready(ValidatedPropertyReadEvent::Form(f)) => {
+                assert_eq!(f.security_scheme(), Some("nosec"));
+                assert!(native && compare);
+                return;
+            }
+            ValidatedPropertyReadStep::Done => panic!("no readable Form"),
+        }
+    }
+    panic!("no semantic progress")
 }

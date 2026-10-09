@@ -3,8 +3,10 @@
 // not enable the TD capability. Positive graphs are ordinary downstream edges.
 #[cfg(any(feature = "positive", feature = "negative"))]
 pub use td::{
-    ValidatedThing, ValidatedThingAdmissionConfig, ValidatedThingCause, ValidatedThingCursor,
-    ValidatedThingPhase, ValidatedThingProgress,
+    ValidatedPropertyReadCursor, ValidatedPropertyReadEvent, ValidatedPropertyReadForm,
+    ValidatedPropertyReadStep, ValidatedTextSequence, ValidatedThing,
+    ValidatedThingAdmissionConfig, ValidatedThingCause, ValidatedThingCursor, ValidatedThingPhase,
+    ValidatedThingProgress,
 };
 #[cfg(feature = "positive")]
 pub fn checked(

@@ -202,3 +202,118 @@ fn security_builders_report_invalid_uri_inputs() {
         .expect_err("invalid token should fail the builder");
     assert!(oauth_err.to_string().contains("token: /relative-token"));
 }
+
+// Differential against the dependency that implemented the pre-lending public
+// resolver. This remains an independent oracle after the production extraction.
+#[test]
+fn shared_uri_program_matches_original_resolver() {
+    use clinkz_wot_td::data_type::{BaseUri, FormHref, resolve_form_href};
+    use fluent_uri::{Uri, UriRef};
+    let bases = [
+        "http://a/b/c/d;p?q",
+        "http://a",
+        "http://a/",
+        "http://a/a/..",
+        "http://a/a/%2e%2E",
+        "foo:/a/b",
+        "foo:/",
+        "foo:",
+        "urn:opaque",
+        "http://a/b#fragment",
+        "foo:/.//a/b",
+        "http://a//b///c",
+    ];
+    let references = [
+        "g:h",
+        "g",
+        "./g",
+        "g/",
+        "/g",
+        "//g",
+        "?y",
+        "g?y",
+        "#s",
+        "g#s",
+        "g?y#s",
+        ";x",
+        "g;x",
+        "g;x?y#s",
+        "",
+        ".",
+        "./",
+        "..",
+        "../",
+        "../g",
+        "../..",
+        "../../",
+        "../../g",
+        "../../../g",
+        "../../../../g",
+        "/./g",
+        "/../g",
+        "g.",
+        ".g",
+        "g..",
+        "..g",
+        "./../g",
+        "./g/.",
+        "g/./h",
+        "g/../h",
+        "g;x=1/./y",
+        "g;x=1/../y",
+        "g?y/./x",
+        "g?y/../x",
+        "g#s/./x",
+        "g#s/../x",
+        "%2e",
+        "%2E%2e",
+        ".%2e",
+        "%2e.",
+        "%2e%2e/next",
+        "%2F/..//x",
+        "a//../../x",
+        "//host/a/../b?query#fragment",
+        "/a/..//x",
+        "/a/%2E/b/%2e%2E/c",
+        "/a/../..//x",
+    ];
+    for base in bases {
+        let typed = BaseUri::parse(base).unwrap();
+        let parsed = Uri::parse(base).unwrap();
+        for reference in references {
+            let href = FormHref::parse(reference).unwrap();
+            let r = UriRef::parse(reference).unwrap();
+            let expected = if r.has_scheme() {
+                Ok(reference.to_owned())
+            } else {
+                r.resolve_against(&parsed).map(|v| v.as_str().to_owned())
+            };
+            let actual = resolve_form_href(Some(&typed), &href);
+            assert_eq!(actual.is_ok(), expected.is_ok(), "{base} + {reference}");
+            if let (Ok(actual), Ok(expected)) = (actual, expected) {
+                assert_eq!(actual.as_str(), expected, "{base} + {reference}");
+            }
+        }
+    }
+    // Segment combinations expose merge/pop/authority-less path escaping,
+    // rather than only examples containing one dot removal.
+    for a in ["a", ".", "..", "%2e", "%2e.", ""] {
+        for b in ["b", ".", "..", ".%2E", ""] {
+            for c in ["c", ".", "..", "%2E%2e", ""] {
+                let reference = format!("{a}/{b}/{c}");
+                for base in bases {
+                    let typed = BaseUri::parse(base).unwrap();
+                    let href = FormHref::parse(&reference).unwrap();
+                    let expected = UriRef::parse(reference.as_str())
+                        .unwrap()
+                        .resolve_against(&Uri::parse(base).unwrap());
+                    let actual = resolve_form_href(Some(&typed), &href);
+                    assert_eq!(actual.is_ok(), expected.is_ok(), "{base} + {reference}");
+                    if let (Ok(actual), Ok(expected)) = (actual, expected) {
+                        assert_eq!(actual.as_str(), expected.as_str(), "{base} + {reference}");
+                    }
+                }
+            }
+        }
+    }
+}
