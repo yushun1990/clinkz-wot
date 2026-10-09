@@ -984,6 +984,7 @@ pub(crate) mod basic_kernel {
         Cancellation,
         FormSecurity,
         FormOperation,
+        FormHref,
     }
 
     impl Field {
@@ -1009,6 +1010,7 @@ pub(crate) mod basic_kernel {
                 Self::Cancellation => "cancellation",
                 Self::FormSecurity => "security",
                 Self::FormOperation => "op",
+                Self::FormHref => "href",
             }
         }
     }

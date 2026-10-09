@@ -50,15 +50,15 @@ jobs:
           cargo check --locked --manifest-path "$runtime_probe_manifest" -p static-plan-probe --target thumbv6m-none-eabi
           bash tools/architecture-fixtures/product-runtime-boundaries/check-normal-dependencies.sh
 
-      - name: Check production bounded TD proof construction
+      - name: Check production bounded TD admission and lending
         run: |
           for td_features in validated-thing validated-thing,serde_json/preserve_order; do
             cargo test --locked -p clinkz-wot-td --features "$td_features" --lib validated::tests
-            cargo test --locked -p clinkz-wot-td --features "$td_features" --test validated_admission
+            cargo test --locked -p clinkz-wot-td --features "$td_features" --test validated_admission --test validated_lending
           done
           for td_features in validated-thing validated-thing,clinkz-wot-foundation/async validated-thing,td2-preview; do
             cargo test --locked -p clinkz-wot-td --no-default-features --features "$td_features" --lib validated::tests
-            cargo test --locked -p clinkz-wot-td --no-default-features --features "$td_features" --test validated_admission
+            cargo test --locked -p clinkz-wot-td --no-default-features --features "$td_features" --test validated_admission --test validated_lending
             cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features "$td_features"
           done
           cargo test --locked -p clinkz-wot-td --features validated-thing --doc

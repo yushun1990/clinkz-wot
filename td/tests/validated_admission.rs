@@ -462,7 +462,10 @@ fn retained_upstream_source_is_separate_from_td_temporary_capacity() {
             baseline = Some(o);
         }
     }
-    let first = baseline.unwrap().sizes[0] as u64 + 2 * std::mem::size_of::<Progress<'_>>() as u64;
+    let first = baseline.unwrap().sizes[0] as u64
+        + 2 * std::mem::size_of::<Progress<'_>>().max(std::mem::size_of::<
+            clinkz_wot_td::ValidatedPropertyReadCursor<'_>,
+        >()) as u64;
     for (resource, observed) in [
         (R::AdmissionTemporaryBytesPerOperationMax, first),
         (R::AdmissionTemporaryBytesGlobalMax, first),
@@ -496,4 +499,135 @@ fn retained_upstream_source_is_separate_from_td_temporary_capacity() {
     // The physical upstream owner remains intact after proof drop and rejection.
     assert_eq!(&source[..json.len()], json);
     assert_eq!(source.len(), SOURCE);
+}
+
+fn lending_thing() -> Thing {
+    let mut t = thing();
+    t.base = Some(clinkz_wot_td::data_type::BaseUri::parse("foo:/a/b/").unwrap());
+    let forms = &mut t
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("p")
+        .unwrap()
+        ._interaction
+        .forms;
+    // Exercise cancellation/drop during padding, shifting and insertion, as
+    // well as ordinary emission/pop and the second block's allocation.
+    forms[0].href = clinkz_wot_td::data_type::FormHref::parse("/a/../..//value?x#f").unwrap();
+    let mut second = forms[0].clone();
+    second.href =
+        clinkz_wot_td::data_type::FormHref::parse(&format!("../{}", "v".repeat(128))).unwrap();
+    forms.push(second); // force a larger second URI block and old-block release
+    t
+}
+fn lending_proof<'a>(t: &'a Thing) -> clinkz_wot_td::ValidatedThing<'a> {
+    let mut c = ValidatedThingCursor::from_thing(t, &checked(), ledger());
+    loop {
+        match c.step(&mut budget(), false) {
+            Progress::Pending(next) => c = next,
+            Progress::Complete(proof) => return proof,
+            Progress::Failed(cause) => {
+                stop();
+                panic!("{cause:?}");
+            }
+        }
+    }
+}
+fn lending_poll(c: &mut clinkz_wot_td::ValidatedPropertyReadCursor<'_>) -> Result<bool, Cause> {
+    use clinkz_wot_td::ValidatedPropertyReadStep as Step;
+    match c.step(&mut budget(), false)? {
+        Step::Pending => Ok(false),
+        Step::Ready(_) => {
+            c.acknowledge();
+            Ok(false)
+        }
+        Step::Done => Ok(true),
+    }
+}
+#[test]
+fn semantic_actual_allocations_failure_and_every_suspended_cancellation_drop() {
+    let t = lending_thing();
+    let mut c = lending_proof(&t).into_property_read();
+    // Only semantic allocations are observed; validation's frame block remains
+    // live outside this interval and is released after observation stops.
+    observe(0);
+    let mut steps = 0;
+    while !lending_poll(&mut c).unwrap() {
+        steps += 1;
+    }
+    let baseline = stop();
+    assert_eq!(baseline.attempts, 2);
+    assert_eq!(baseline.freed, 1);
+    assert!(baseline.live > 0);
+    drop(c);
+    for fail in 1..=baseline.attempts {
+        let mut c = lending_proof(&t).into_property_read();
+        observe(fail);
+        let cause = loop {
+            match lending_poll(&mut c) {
+                Err(cause) => break cause,
+                Ok(false) => {}
+                Ok(true) => {
+                    stop();
+                    panic!("failed request admitted")
+                }
+            }
+        };
+        let Cause::Failed(failure) = cause else {
+            stop();
+            panic!("wrong allocation cause")
+        };
+        assert_eq!(failure.kind(), ValidatedThingFailureKind::AllocationFailed);
+        assert_eq!(failure.phase(), ValidatedThingPhase::Semantics);
+        assert!(matches!(c.step(&mut budget(),true),Err(same) if same==cause));
+        // Release only the observed URI block while observation is active;
+        // frames came from the earlier unobserved validation interval.
+        // To observe complete cleanup accurately, repeat from the full entry
+        // below with every physical allocation in one interval.
+        stop();
+        drop(c);
+    }
+    // Track all physical requests for each cancellation and abandonment point,
+    // including an already-ready target and both URI allocation sizes.
+    for position in 0..=steps {
+        for cancel in [false, true] {
+            observe(0);
+            let mut c = lending_proof(&t).into_property_read();
+            for _ in 0..position {
+                if lending_poll(&mut c).unwrap() {
+                    break;
+                }
+            }
+            if cancel {
+                assert!(matches!(
+                    c.step(&mut WorkBudget::new(), true),
+                    Err(Cause::Cancelled {
+                        phase: ValidatedThingPhase::Semantics
+                    })
+                ));
+            }
+            drop(c);
+            let o = stop();
+            assert_eq!(o.live, 0, "position {position}, cancellation {cancel}");
+            assert_eq!(o.freed, o.requests);
+        }
+    }
+    // Failure injection for both URI requests with all validation allocations
+    // included proves terminal fixed cleanup leaves zero physical children.
+    observe(0);
+    let p = lending_proof(&t);
+    let prior = OBS.with(Cell::get).attempts;
+    stop();
+    drop(p);
+    for fail in prior + 1..=prior + baseline.attempts {
+        observe(fail);
+        let mut c = lending_proof(&t).into_property_read();
+        while let Ok(false) = lending_poll(&mut c) {}
+        drop(c);
+        let o = stop();
+        assert_eq!(o.live, 0);
+        assert_eq!(o.freed, o.requests);
+    }
+    assert!(t.base.is_some()); // caller source remains live/owned
 }

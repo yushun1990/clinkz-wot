@@ -139,7 +139,9 @@ pub use core::data_type;
 pub use core::data_type::AbsoluteUri;
 #[cfg(feature = "validated-thing")]
 pub use validated::{
-    ValidatedThing, ValidatedThingAdmissionConfig, ValidatedThingCause, ValidatedThingConfigError,
+    ValidatedPropertyReadCursor, ValidatedPropertyReadEvent, ValidatedPropertyReadForm,
+    ValidatedPropertyReadStep, ValidatedTextSequence, ValidatedThing,
+    ValidatedThingAdmissionConfig, ValidatedThingCause, ValidatedThingConfigError,
     ValidatedThingConfigErrorKind, ValidatedThingCursor, ValidatedThingFailure,
     ValidatedThingFailureKind, ValidatedThingInvalid, ValidatedThingInvalidKind,
     ValidatedThingLimit, ValidatedThingPhase, ValidatedThingProgress,

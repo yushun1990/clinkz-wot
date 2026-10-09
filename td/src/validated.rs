@@ -1,8 +1,8 @@
 //! Bounded admission of a caller-owned, immutable typed Thing.
 //!
 //! Inspection and Basic share one move-only work/account owner. The proof is
-//! deliberately opaque: the separately implemented semantic lending boundary
-//! will consume this owner, never reconstruct a proof from a raw Thing.
+//! deliberately opaque: semantic lending consumes this owner, never
+//! reconstructing a proof from a raw Thing.
 use crate::validate::{basic_kernel::BasicAccess, schema_kernel::SchemaAccess};
 use crate::{
     data_schema::DataSchema,
@@ -54,6 +54,7 @@ enum Rule {
     ComboEmpty,
     Flow,
     Undefined,
+    Uri,
     Operation(crate::data_type::Operation),
     Schema(s::Rule),
 }
@@ -345,11 +346,15 @@ impl ValidatedThingAdmissionConfig {
         policy.atomic[W::JsonSchemaNodes as usize] = 1;
         policy.atomic[W::SecurityBranches as usize] = 1;
         policy.atomic[W::CleanupItems as usize] = 1;
+        policy.atomic[W::UriBytes as usize] = crate::data_type::uri::lending::Resolution::WORK;
+        policy.atomic[W::CodecOutputBytes as usize] =
+            crate::data_type::uri::lending::Resolution::OUTPUT_WORK;
         // Recognition compares only fixed vocabulary with equal-length keys.
         // Each comparison is a separate, fully prepaid action.
         policy.atomic[W::CodecInputBytes as usize] =
             policy.atomic[W::CodecInputBytes as usize].max(108);
-        let required = native.saturating_add(1).max(109);
+        let uri = policy.atomic[W::UriBytes as usize] + policy.atomic[W::CodecOutputBytes as usize];
+        let required = native.saturating_add(1).max(109).max(uri);
         if work < required {
             return Err(ValidatedThingConfigError {
                 kind: ValidatedThingConfigErrorKind::UnsupportedLimit,
@@ -364,15 +369,13 @@ impl ValidatedThingAdmissionConfig {
 
 /// A proof of complete typed inspection and shared Basic validity.
 /// Neither the input loan nor the remaining lifetime allowance can be cloned.
-/// Semantic lending will consume this same private owner.
+/// Semantic lending consumes this same private owner.
 ///
 /// ```compile_fail
 /// use clinkz_wot_td::ValidatedThing;
 /// fn refill(proof: ValidatedThing<'_>) -> ValidatedThing<'_> { proof.clone() }
 /// ```
 pub struct ValidatedThing<'td> {
-    // Consumed by the remaining semantic lending implementation.
-    #[allow(dead_code)]
     owner: ValidatedThingCursor<'td>,
 }
 /// Consuming progress prevents retaining scratch loans across owner moves.
@@ -1309,9 +1312,7 @@ impl<'a> Stack<'a> {
         let bytes = layout.size() as u64;
         // Inline owner and return overlap is capacity, never a fake allocation
         // request. Its parent provision belongs to the advanced child caller.
-        let inline = (mem::size_of::<ValidatedThingProgress<'a>>() as u64)
-            .checked_mul(2)
-            .ok_or(arithmetic(phase))?;
+        let inline = inline_bytes();
         let retained = Layout::array::<Frame<'a>>(self.frames.capacity)
             .expect("checked on acquisition")
             .size() as u64;
@@ -2350,6 +2351,711 @@ impl<'td> ValidatedThingCursor<'td> {
         Ok(false)
     }
 }
+// The semantic owner keeps the validation owner, its ledger and its exact work
+// remainder. It adds one current URI block, never a derived-document table.
+use crate::data_type::uri::lending::{self as uri, Output};
+use crate::{affordance::PropertyAffordance, data_type::Operation};
+
+fn inline_bytes() -> u64 {
+    // Provision movement/return overlap for either consuming validation or
+    // semantic ownership. Inline capacity is not an allocator request.
+    2 * mem::size_of::<ValidatedThingProgress<'static>>()
+        .max(mem::size_of::<ValidatedPropertyReadCursor<'static>>()) as u64
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum LendingPhase {
+    Start,
+    Property,
+    PropertyReady,
+    Form,
+    Operations,
+    Security,
+    Names,
+    Definitions,
+    Compare,
+    Scopes,
+    Resolve,
+    Allocate,
+    Uri,
+    Finish,
+    FormReady,
+    Done,
+}
+struct UriBlock {
+    pointer: *mut u8,
+    capacity: usize,
+    len: usize,
+}
+impl Default for UriBlock {
+    fn default() -> Self {
+        Self {
+            pointer: ptr::null_mut(),
+            capacity: 0,
+            len: 0,
+        }
+    }
+}
+impl Output for UriBlock {
+    fn len(&self) -> usize {
+        self.len
+    }
+    fn byte(&self, index: usize) -> u8 {
+        assert!(index < self.len);
+        unsafe { *self.pointer.add(index) }
+    }
+    fn push(&mut self, byte: u8) {
+        assert!(self.len < self.capacity);
+        unsafe {
+            self.pointer.add(self.len).write(byte);
+        }
+        self.len += 1;
+    }
+    fn set(&mut self, index: usize, byte: u8) {
+        assert!(index < self.len);
+        unsafe {
+            self.pointer.add(index).write(byte);
+        }
+    }
+    fn truncate(&mut self, len: usize) {
+        assert!(len <= self.len);
+        self.len = len;
+    }
+}
+impl UriBlock {
+    fn text(&self) -> &str {
+        if self.len == 0 {
+            return "";
+        }
+        // Lent only at FormReady, after the program's paid ASCII construction
+        // and finalization. Pop/shift/repair preserve that invariant. The
+        // block is private; no mutation or owner move can coexist with this loan.
+        unsafe {
+            core::str::from_utf8_unchecked(core::slice::from_raw_parts(self.pointer, self.len))
+        }
+    }
+    fn release(&mut self, ledger: &mut AdmissionLedger) {
+        if self.capacity != 0 {
+            let layout = Layout::array::<u8>(self.capacity).expect("checked allocation");
+            unsafe {
+                dealloc(self.pointer, layout);
+            }
+            assert!(ledger.release_temporary(layout.size() as u64));
+            *self = Self::default();
+        }
+    }
+}
+
+/// Paid short loans from one validated input. Ready events remain stable until
+/// acknowledgement. Moving/rewinding the owner cannot extend a scratch loan.
+///
+/// ```compile_fail
+/// use clinkz_wot_td::{ValidatedPropertyReadCursor, ValidatedPropertyReadStep};
+/// use clinkz_wot_foundation::WorkBudget;
+/// fn retain(cursor: &mut ValidatedPropertyReadCursor<'_>, budget: &mut WorkBudget) {
+///     let loan = cursor.step(budget, false).unwrap();
+///     cursor.acknowledge();
+///     if let ValidatedPropertyReadStep::Ready(_) = loan {}
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_td::{ValidatedPropertyReadCursor, ValidatedPropertyReadStep};
+/// use clinkz_wot_foundation::WorkBudget;
+/// fn move_ready(mut cursor: ValidatedPropertyReadCursor<'_>, budget: &mut WorkBudget) {
+///     let loan = cursor.step(budget, false).unwrap();
+///     let moved = cursor.rewind();
+///     drop(loan);
+///     drop(moved);
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_td::ValidatedPropertyReadCursor;
+/// fn refill(cursor: ValidatedPropertyReadCursor<'_>) { let duplicate = cursor.clone(); }
+/// ```
+pub struct ValidatedPropertyReadCursor<'td> {
+    owner: ValidatedThingCursor<'td>,
+    phase: LendingPhase,
+    cause: Option<Cause>,
+    properties: Option<btree_map::Iter<'td, String, PropertyAffordance>>,
+    property: Option<(&'td str, &'td PropertyAffordance)>,
+    ordinal: u64,
+    form: usize,
+    operation: usize,
+    readable: bool,
+    names: &'td [String],
+    name_index: usize,
+    definitions: Option<btree_map::Iter<'td, String, SecurityScheme>>,
+    definition: Option<(&'td str, &'td SecurityScheme)>,
+    compare: usize,
+    scheme: Option<&'td str>,
+    scope: usize,
+    scope_bytes: u64,
+    copy_bytes: u64,
+    alias: Option<&'td str>,
+    resolver: Option<uri::Resolution<'td>>,
+    scratch: UriBlock,
+    effective: u64,
+}
+/// One result of a bounded semantic poll.
+pub enum ValidatedPropertyReadStep<'step> {
+    Pending,
+    Ready(ValidatedPropertyReadEvent<'step>),
+    Done,
+}
+/// Original property order and readable Form coordinates.
+pub enum ValidatedPropertyReadEvent<'step> {
+    Property { ordinal: u32, name: &'step str },
+    Form(ValidatedPropertyReadForm<'step>),
+}
+/// Fully paid immutable facts. Planning decides eligibility and owns copies.
+pub struct ValidatedPropertyReadForm<'step> {
+    ordinal: u32,
+    name: &'step str,
+    index: u32,
+    form: &'step Form,
+    resolved: &'step str,
+    names: &'step [String],
+    scheme: Option<&'step str>,
+    scope_bytes: u64,
+    copy_bytes: u64,
+}
+impl<'step> ValidatedPropertyReadForm<'step> {
+    pub fn property_ordinal(&self) -> u32 {
+        self.ordinal
+    }
+    pub fn property_name(&self) -> &'step str {
+        self.name
+    }
+    pub fn original_index(&self) -> u32 {
+        self.index
+    }
+    pub fn href(&self) -> &'step str {
+        self.form.href.as_str()
+    }
+    pub fn resolved_href(&self) -> &'step str {
+        self.resolved
+    }
+    pub fn content_type(&self) -> &'step str {
+        &self.form.content_type
+    }
+    pub fn content_coding(&self) -> Option<&'step str> {
+        self.form.content_coding.as_deref()
+    }
+    pub fn subprotocol(&self) -> Option<&'step str> {
+        self.form.subprotocol.as_deref()
+    }
+    pub fn scopes(&self) -> ValidatedTextSequence<'step> {
+        ValidatedTextSequence {
+            source: self.form.scopes.as_deref().unwrap_or(&[]),
+            bytes: self.scope_bytes,
+        }
+    }
+    pub fn readable(&self) -> bool {
+        true
+    }
+    pub fn security_count(&self) -> u64 {
+        self.names.len() as u64
+    }
+    pub fn security_name(&self) -> Option<&'step str> {
+        if self.names.len() == 1 {
+            Some(self.names[0].as_str())
+        } else {
+            None
+        }
+    }
+    pub fn security_scheme(&self) -> Option<&'step str> {
+        self.scheme
+    }
+    pub fn copy_bytes(&self) -> u64 {
+        self.copy_bytes
+    }
+}
+/// Paid sequence size; the receiver pays each advance/copy before using it.
+pub struct ValidatedTextSequence<'step> {
+    source: &'step [String],
+    bytes: u64,
+}
+impl<'step> ValidatedTextSequence<'step> {
+    pub fn len(&self) -> usize {
+        self.source.len()
+    }
+    pub fn byte_len(&self) -> u64 {
+        self.bytes
+    }
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &'step str> + 'step {
+        self.source.iter().map(String::as_str)
+    }
+}
+impl<'td> ValidatedThing<'td> {
+    pub fn into_property_read(mut self) -> ValidatedPropertyReadCursor<'td> {
+        self.owner.phase = Phase::Semantics;
+        let effective = self.owner.counts.content;
+        ValidatedPropertyReadCursor {
+            owner: self.owner,
+            phase: LendingPhase::Start,
+            cause: None,
+            properties: None,
+            property: None,
+            ordinal: 0,
+            form: 0,
+            operation: 0,
+            readable: false,
+            names: &[],
+            name_index: 0,
+            definitions: None,
+            definition: None,
+            compare: 0,
+            scheme: None,
+            scope: 0,
+            scope_bytes: 0,
+            copy_bytes: 0,
+            alias: None,
+            resolver: None,
+            scratch: UriBlock::default(),
+            effective,
+        }
+    }
+}
+impl<'td> ValidatedPropertyReadCursor<'td> {
+    pub fn id(&self) -> Option<&str> {
+        self.owner.thing.id.as_ref().map(|id| id.as_str())
+    }
+    pub fn acknowledge(&mut self) {
+        match self.phase {
+            LendingPhase::PropertyReady => self.phase = LendingPhase::Form,
+            LendingPhase::FormReady => {
+                self.form += 1;
+                self.phase = LendingPhase::Form;
+            }
+            _ => {}
+        }
+    }
+    pub fn rewind(mut self) -> Self {
+        if self.phase == LendingPhase::Done {
+            self.phase = LendingPhase::Start;
+            self.properties = None;
+            self.property = None;
+            self.ordinal = 0;
+            self.effective = self.owner.counts.content;
+        }
+        self
+    }
+    pub fn step(
+        &mut self,
+        budget: &mut WorkBudget,
+        cancel_requested: bool,
+    ) -> Result<ValidatedPropertyReadStep<'_>, Cause> {
+        if let Some(cause) = self.cause {
+            return Err(cause);
+        }
+        if self.phase == LendingPhase::Done {
+            return Ok(ValidatedPropertyReadStep::Done);
+        }
+        if cancel_requested {
+            let cause = Cause::Cancelled {
+                phase: Phase::Semantics,
+            };
+            self.cause = Some(cause);
+            return Err(cause);
+        }
+        if !matches!(
+            self.phase,
+            LendingPhase::PropertyReady | LendingPhase::FormReady
+        ) {
+            if budget.is_exhausted() {
+                return Ok(ValidatedPropertyReadStep::Pending);
+            }
+            if let Err(cause) = self.tick_semantics(budget) {
+                self.cause = Some(cause);
+                return Err(cause);
+            }
+        }
+        let event = match self.phase {
+            LendingPhase::Done => return Ok(ValidatedPropertyReadStep::Done),
+            LendingPhase::PropertyReady => ValidatedPropertyReadEvent::Property {
+                ordinal: self.ordinal as u32,
+                name: self.property.unwrap().0,
+            },
+            LendingPhase::FormReady => {
+                ValidatedPropertyReadEvent::Form(ValidatedPropertyReadForm {
+                    ordinal: self.ordinal as u32,
+                    name: self.property.unwrap().0,
+                    index: self.form as u32,
+                    form: self.current_form(),
+                    resolved: self.alias.unwrap_or_else(|| self.scratch.text()),
+                    names: self.names,
+                    scheme: self.scheme,
+                    scope_bytes: self.scope_bytes,
+                    copy_bytes: self.copy_bytes,
+                })
+            }
+            _ => return Ok(ValidatedPropertyReadStep::Pending),
+        };
+        Ok(ValidatedPropertyReadStep::Ready(event))
+    }
+    fn current_form(&self) -> &'td Form {
+        &self.property.unwrap().1._interaction.forms[self.form]
+    }
+    fn uri_error(&self) -> Cause {
+        let mut site = b::Site::new(
+            b::Owner {
+                kind: b::OwnerKind::Property,
+                ordinal: self.ordinal as usize,
+            },
+            b::Field::FormHref,
+        );
+        site.index = self.form;
+        Cause::Invalid(ValidatedThingInvalid {
+            kind: ValidatedThingInvalidKind::InvalidUri,
+            phase: Phase::Semantics,
+            node_ordinal: self.ordinal,
+            site,
+            rule: Rule::Uri,
+        })
+    }
+    fn allocate_uri(&mut self) -> Result<(), Cause> {
+        // A fixed upper bound from already inspected lengths, including merge
+        // coexistence and the authority-less '/.' escape. Only the *finished*
+        // target is subject to the resolved-target ceiling: reducible paths
+        // may temporarily be longer, and must not be falsely rejected as URIs.
+        let bytes = add(
+            add(
+                self.owner
+                    .thing
+                    .base
+                    .as_ref()
+                    .map_or(0, |b| b.as_str().len()) as u64,
+                self.current_form().href.as_str().len() as u64,
+                Phase::Semantics,
+            )?,
+            4,
+            Phase::Semantics,
+        )?;
+        let capacity = usize::try_from(bytes).map_err(|_| arithmetic(Phase::Semantics))?;
+        let layout = Layout::array::<u8>(capacity).map_err(|_| arithmetic(Phase::Semantics))?;
+        if capacity <= self.scratch.capacity {
+            self.scratch.len = 0;
+            return Ok(());
+        }
+        // The previous target is no longer lent. Its block release was prepaid;
+        // release before the new acquisition, with no unnecessary copy/growth.
+        self.scratch.release(&mut self.owner.stack.ledger);
+        let retained = Layout::array::<Frame<'td>>(self.owner.stack.frames.capacity)
+            .unwrap()
+            .size() as u64;
+        let temporary = add(
+            add(retained, bytes, Phase::Semantics)?,
+            inline_bytes(),
+            Phase::Semantics,
+        )?;
+        for kind in [
+            R::AdmissionTemporaryBytesPerOperationMax,
+            R::AdmissionTemporaryBytesGlobalMax,
+            R::PeakLiveBytesPerAdmissionMax,
+        ] {
+            self.owner.policy.check(kind, temporary, Phase::Semantics)?;
+        }
+        let live = add(
+            add(
+                self.owner.stack.ledger.live_bytes(),
+                bytes,
+                Phase::Semantics,
+            )?,
+            inline_bytes(),
+            Phase::Semantics,
+        )?;
+        for kind in [
+            R::AdmissionPeakLiveBytesGlobalMax,
+            R::EngineLiveBytesGlobalMax,
+        ] {
+            self.owner.policy.check(kind, live, Phase::Semantics)?;
+        }
+        self.owner.policy.check(
+            R::LargestContiguousAllocationBytesMax,
+            bytes,
+            Phase::Semantics,
+        )?;
+        let reservation = self
+            .owner
+            .stack
+            .ledger
+            .try_reserve_temporary(R::AdmissionTemporaryBytesPerOperationMax, bytes)
+            .ok_or(Cause::Limit(ValidatedThingLimit {
+                kind: R::AdmissionTemporaryBytesPerOperationMax,
+                configured: self
+                    .owner
+                    .policy
+                    .get(R::AdmissionTemporaryBytesPerOperationMax),
+                observed: temporary,
+                phase: Phase::Semantics,
+            }))?;
+        let pointer = unsafe { alloc(layout) };
+        if pointer.is_null() {
+            return Err(Cause::Failed(ValidatedThingFailure {
+                kind: ValidatedThingFailureKind::AllocationFailed,
+                phase: Phase::Semantics,
+                requested_bytes: bytes,
+            }));
+        }
+        reservation.commit();
+        self.scratch = UriBlock {
+            pointer,
+            capacity,
+            len: 0,
+        };
+        Ok(())
+    }
+    fn tick_semantics(&mut self, budget: &mut WorkBudget) -> Result<(), Cause> {
+        use LendingPhase as P;
+        let costs = match self.phase {
+            P::Start | P::Property => [
+                (
+                    W::DocumentNodes,
+                    iter_cost(
+                        self.owner
+                            .thing
+                            .properties
+                            .as_ref()
+                            .map_or(0, BTreeMap::len),
+                    ),
+                ),
+                (W::CodecInputBytes, 0),
+            ],
+            P::Definitions => [
+                (
+                    W::DocumentNodes,
+                    iter_cost(self.owner.thing.security_definitions.len()),
+                ),
+                (W::SecurityBranches, 1),
+            ],
+            P::Compare => [(W::DocumentNodes, 0), (W::CodecInputBytes, 2)],
+            P::Security | P::Names => [(W::DocumentNodes, 1), (W::SecurityBranches, 1)],
+            P::Uri => [
+                (W::UriBytes, self.resolver.as_ref().unwrap().work()),
+                (
+                    W::CodecOutputBytes,
+                    self.resolver.as_ref().unwrap().output_work(),
+                ),
+            ],
+            P::Resolve => [(W::UriBytes, 1), (W::DocumentNodes, 0)],
+            P::Allocate => [(W::DocumentNodes, 1), (W::CleanupItems, 1)],
+            _ => [(W::DocumentNodes, 1), (W::CodecInputBytes, 0)],
+        };
+        if !self.owner.pay(budget, &costs)? {
+            return Ok(());
+        }
+        match self.phase {
+            P::Start => {
+                self.properties = self.owner.thing.properties.as_ref().map(BTreeMap::iter);
+                self.phase = P::Property;
+            }
+            P::Property => {
+                self.property = self
+                    .properties
+                    .as_mut()
+                    .and_then(Iterator::next)
+                    .map(|(name, p)| (name.as_str(), p));
+                if self.property.is_some() {
+                    self.form = 0;
+                    self.phase = P::PropertyReady;
+                } else {
+                    self.phase = P::Done;
+                }
+            }
+            P::Form => {
+                if self.form == self.property.unwrap().1._interaction.forms.len() {
+                    self.ordinal += 1;
+                    self.phase = P::Property;
+                } else {
+                    self.operation = 0;
+                    self.readable = false;
+                    self.phase = P::Operations;
+                }
+            }
+            P::Operations => {
+                let form = self.current_form();
+                let ops = crate::td_defaults::effective_form_operations(
+                    crate::td_defaults::FormContext::Property(self.property.unwrap().1),
+                    form,
+                );
+                if self.operation < ops.len() {
+                    self.readable |= ops[self.operation] == Operation::ReadProperty;
+                    self.operation += 1;
+                } else if self.readable {
+                    self.phase = P::Security;
+                } else {
+                    self.form += 1;
+                    self.phase = P::Form;
+                }
+            }
+            P::Security => {
+                let names = crate::td_defaults::effective_form_security(
+                    self.owner.thing,
+                    self.current_form(),
+                );
+                // These per-plan limits apply to the effective references,
+                // after explicit-empty override/inheritance. This slice lends
+                // roots (depth one), not expanded combo expressions; Planning
+                // retains exactly-one-NoSec eligibility ownership.
+                self.owner.policy.check(
+                    R::SecurityBranchesPerPlanMax,
+                    names.len() as u64,
+                    Phase::Semantics,
+                )?;
+                self.owner.policy.check(
+                    R::SecurityExpressionDepthMax,
+                    u64::from(!names.is_empty()),
+                    Phase::Semantics,
+                )?;
+                self.names = names;
+                self.name_index = 0;
+                self.scheme = None;
+                self.phase = P::Names;
+            }
+            P::Names => {
+                if self.name_index < self.names.len() {
+                    self.name_index += 1;
+                } else if self.names.len() == 1 {
+                    // Initialization uses the same conservative native envelope
+                    // as advance, separately paid in Definitions.
+                    self.definitions = None;
+                    self.phase = P::Definitions;
+                } else {
+                    self.scope = 0;
+                    self.scope_bytes = 0;
+                    self.phase = P::Scopes;
+                }
+            }
+            P::Definitions => {
+                if self.definitions.is_none() {
+                    self.definitions = Some(self.owner.thing.security_definitions.iter());
+                } else {
+                    self.definition = self
+                        .definitions
+                        .as_mut()
+                        .unwrap()
+                        .next()
+                        .map(|(n, d)| (n.as_str(), d));
+                    let (name, definition) =
+                        self.definition.expect("Basic proved reference existence");
+                    if name.len() == self.names[0].len() {
+                        self.compare = 0;
+                        if name.is_empty() {
+                            self.scheme = Some(&bt::security_context(definition).scheme);
+                            self.scope = 0;
+                            self.scope_bytes = 0;
+                            self.phase = P::Scopes;
+                        } else {
+                            self.phase = P::Compare;
+                        }
+                    }
+                }
+            }
+            P::Compare => {
+                let (name, definition) = self.definition.unwrap();
+                if name.as_bytes()[self.compare] != self.names[0].as_bytes()[self.compare] {
+                    self.phase = P::Definitions;
+                } else {
+                    self.compare += 1;
+                    if self.compare == name.len() {
+                        self.scheme = Some(&bt::security_context(definition).scheme);
+                        self.scope = 0;
+                        self.scope_bytes = 0;
+                        self.phase = P::Scopes;
+                    }
+                }
+            }
+            P::Scopes => {
+                let scopes = self.current_form().scopes.as_deref().unwrap_or(&[]);
+                if self.scope < scopes.len() {
+                    self.scope_bytes = add(
+                        self.scope_bytes,
+                        scopes[self.scope].len() as u64,
+                        Phase::Semantics,
+                    )?;
+                    self.scope += 1;
+                } else {
+                    self.phase = P::Resolve;
+                }
+            }
+            P::Resolve => {
+                match uri::Target::new(self.owner.thing.base.as_ref(), &self.current_form().href)
+                    .map_err(|_| self.uri_error())?
+                {
+                    uri::Target::Alias(raw) => {
+                        self.alias = Some(raw);
+                        self.resolver = None;
+                        self.phase = P::Finish;
+                    }
+                    uri::Target::Resolve(resolver) => {
+                        self.alias = None;
+                        self.resolver = Some(resolver);
+                        self.phase = P::Allocate;
+                    }
+                }
+            }
+            P::Allocate => {
+                self.allocate_uri()?;
+                self.phase = P::Uri;
+            }
+            P::Uri => {
+                if self.resolver.as_mut().unwrap().tick(&mut self.scratch) {
+                    self.phase = P::Finish;
+                }
+            }
+            P::Finish => {
+                let resolved_len = self.alias.map_or(self.scratch.len, str::len) as u64;
+                self.owner.policy.check(
+                    R::UriTemplateSourceBytesMax,
+                    resolved_len,
+                    Phase::Semantics,
+                )?;
+                let effective = add(
+                    self.effective,
+                    if self.alias.is_none() {
+                        resolved_len
+                    } else {
+                        0
+                    },
+                    Phase::Semantics,
+                )?;
+                self.owner.policy.check(
+                    R::GeneratedEffectiveDocumentBytesMax,
+                    effective,
+                    Phase::Semantics,
+                )?;
+                let form = self.current_form();
+                let mut copy = self.scope_bytes;
+                for length in [
+                    self.id().map_or(0, str::len),
+                    self.property.unwrap().0.len(),
+                    form.href.as_str().len(),
+                    resolved_len as usize,
+                    form.content_type.len(),
+                    form.content_coding.as_deref().map_or(0, str::len),
+                    form.subprotocol.as_deref().map_or(0, str::len),
+                ] {
+                    copy = add(copy, length as u64, Phase::Semantics)?;
+                }
+                self.copy_bytes = copy;
+                self.effective = effective;
+                self.phase = P::FormReady;
+            }
+            P::PropertyReady | P::FormReady | P::Done => unreachable!("handled before debit"),
+        }
+        Ok(())
+    }
+}
+impl Drop for ValidatedPropertyReadCursor<'_> {
+    fn drop(&mut self) {
+        // Only one trivial byte block plus Stack's fixed catalog. No caller TD
+        // destruction, recursive output drop, allocation or unpaid traversal.
+        self.scratch.release(&mut self.owner.stack.ledger);
+    }
+}
+
 #[cfg(test)]
 #[derive(Default, Clone, Copy, Debug, Eq, PartialEq)]
 struct Trace {
