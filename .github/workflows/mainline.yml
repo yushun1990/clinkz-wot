@@ -63,6 +63,14 @@ jobs:
           done
           cargo test --locked -p clinkz-wot-td --features validated-thing --doc
 
+      - name: Install ARM runtime emulator
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-arm
+
+      - name: Execute production TD with native and bare ARM allocators
+        run: |
+          td/tests/runtime/run.sh
+          td/tests/runtime/run.sh --features async
+
       - name: Check production TD capability dependencies
         run: |
           td_capability_manifest=td/tests/compile/validated-capability/Cargo.toml
