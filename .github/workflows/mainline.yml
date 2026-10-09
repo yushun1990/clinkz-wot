@@ -66,6 +66,16 @@ jobs:
       - name: Install ARM runtime emulator
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-arm
 
+      - name: Join production TD semantics to Core plans and binding artifacts
+        run: |
+          semantic_join_manifest=td/tests/semantic-join/Cargo.toml
+          cargo test --locked --manifest-path "$semantic_join_manifest"
+          cargo test --locked --manifest-path "$semantic_join_manifest" --features order
+          cargo test --locked --manifest-path "$semantic_join_manifest" --no-default-features
+          cargo test --locked --manifest-path "$semantic_join_manifest" --no-default-features --features async
+          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$semantic_join_manifest" --no-default-features
+          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$semantic_join_manifest" --no-default-features --features async
+
       - name: Execute production TD with native and bare ARM allocators
         run: |
           td/tests/runtime/run.sh
