@@ -2,8 +2,9 @@
 //! Production TD is unmodified. Denied accesses terminate the witness, including
 //! stores of an unchanged byte and scans whose result never escapes the cursor.
 use crate::{heap, report};
+use core::cell::Cell;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
 pub struct Region {
     pub base: usize,
     pub bytes: usize,
@@ -14,33 +15,90 @@ pub enum Permission {
     None,
 }
 
-pub struct Guard {
+#[derive(Clone, Copy)]
+pub struct Protection {
     regions: [Region; 8],
     count: usize,
+    permission: Option<Permission>,
 }
+impl Protection {
+    pub const EMPTY: Self = Self {
+        regions: [Region { base: 0, bytes: 0 }; 8],
+        count: 0,
+        permission: None,
+    };
+    fn add(&mut self, region: Region) {
+        if self.regions[..self.count].contains(&region) {
+            return;
+        }
+        assert!(
+            self.count < self.regions.len(),
+            "MPU region catalog exceeded"
+        );
+        assert!(region.bytes >= 4096 && region.bytes.is_power_of_two());
+        assert_eq!(region.base % region.bytes, 0);
+        self.regions[self.count] = region;
+        self.count += 1;
+    }
+    fn protect(&self) {
+        if let Some(permission) = self.permission {
+            platform::protect(&self.regions[..self.count], permission);
+        }
+    }
+    fn restore(&self) {
+        if self.permission.is_some() {
+            platform::restore(&self.regions[..self.count]);
+        }
+    }
+}
+
+pub struct Guard;
 impl Guard {
     pub fn new(regions: impl Iterator<Item = Region>, permission: Permission) -> Self {
-        let mut guard = Self {
-            regions: [Region::default(); 8],
-            count: 0,
+        let state = heap::protection();
+        assert!(state.get().permission.is_none(), "nested access guard");
+        let mut protection = Protection {
+            permission: Some(permission),
+            ..Protection::EMPTY
         };
         for region in regions {
-            assert!(
-                guard.count < guard.regions.len(),
-                "MPU region catalog exceeded"
-            );
-            assert!(region.bytes >= 4096 && region.bytes.is_power_of_two());
-            assert_eq!(region.base % region.bytes, 0);
-            guard.regions[guard.count] = region;
-            guard.count += 1;
+            protection.add(region);
         }
-        platform::protect(&guard.regions[..guard.count], permission);
-        guard
+        state.set(protection);
+        protection.protect();
+        Self
     }
 }
 impl Drop for Guard {
     fn drop(&mut self) {
-        platform::restore(&self.regions[..self.count]);
+        heap::protection().replace(Protection::EMPTY).restore();
+    }
+}
+
+// The sole allocator briefly restores permissions for its own canary access.
+// It invokes no caller/TD code in that interval. Re-arm the complete catalog,
+// including a newly acquired byte block, before returning control or a pointer
+// to TD. Released ranges stay guarded until the enclosing step ends.
+pub struct AllocatorAccess {
+    state: &'static Cell<Protection>,
+}
+impl AllocatorAccess {
+    pub fn new() -> Self {
+        let state = heap::protection();
+        state.get().restore();
+        Self { state }
+    }
+    pub fn acquired(&self, region: Region) {
+        let mut protection = self.state.get();
+        if protection.permission.is_some() {
+            protection.add(region);
+            self.state.set(protection);
+        }
+    }
+}
+impl Drop for AllocatorAccess {
+    fn drop(&mut self) {
+        self.state.get().protect();
     }
 }
 

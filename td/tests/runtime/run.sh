@@ -23,3 +23,6 @@ done
 timeout 300 "$qemu" -M mps2-an386 -display none -monitor none -serial none \
     -semihosting-config enable=on,target=native \
     -kernel "$artifact_dir/thumbv7em-none-eabihf/release/clinkz-wot-td-admission-runtime"
+
+# Each mutant must compile, execute and fail through the intended runtime oracle.
+python3 "$runtime_dir/check_mutations.py" "$@"

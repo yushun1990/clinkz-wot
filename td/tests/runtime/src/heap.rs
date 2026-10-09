@@ -1,7 +1,7 @@
 //! Caller-supplied fixed backing, including metadata, padding and redzones.
 //! Provisioning and TD use separate regions so an immutable caller source can
 //! stay live while every TD suspension is rerun. No TD algorithm lives here.
-use crate::access::Region;
+use crate::access::{AllocatorAccess, Protection, Region};
 #[cfg(target_os = "none")]
 use core::sync::atomic::AtomicUsize;
 use core::{
@@ -12,7 +12,10 @@ use core::{
 };
 
 pub const REGION_BYTES: usize = 131_072;
-const BYTES: usize = REGION_BYTES;
+// Ordinary serde provisioning plus isolated URI pages use this caller region.
+// Its entire physical capacity remains charged at startup. TD delegation and
+// every named production resource ceiling retain their original values.
+const SOURCE_BYTES: usize = 262_144;
 const SLOTS: usize = 256;
 const REQUESTS: usize = 32;
 const GUARD: usize = 8;
@@ -56,18 +59,18 @@ struct Slot {
     isolated: usize,
 }
 #[repr(C, align(4096))]
-struct Arena([MaybeUninit<u8>; BYTES]);
+struct Arena<const BYTES: usize>([MaybeUninit<u8>; BYTES]);
 struct Metadata {
     slots: [Option<Slot>; SLOTS],
     next: usize,
     fail: usize,
     trace: Trace,
 }
-struct Pool {
-    arena: UnsafeCell<Arena>,
+struct Pool<const BYTES: usize> {
+    arena: UnsafeCell<Arena<BYTES>>,
     metadata: UnsafeCell<Metadata>,
 }
-impl Pool {
+impl<const BYTES: usize> Pool<BYTES> {
     const fn new() -> Self {
         Self {
             arena: UnsafeCell::new(Arena([MaybeUninit::uninit(); BYTES])),
@@ -146,10 +149,19 @@ impl Pool {
         m.trace.peak = m.trace.peak.max(m.trace.live);
         m.trace.largest = m.trace.largest.max(layout.size());
         m.trace.span = m.trace.span.max(end);
+        let access = AllocatorAccess::new();
         unsafe {
             base.add(offset + layout.size()).write_bytes(0xa5, GUARD);
-            base.add(offset)
         }
+        if isolated != 0 {
+            access.acquired(Region {
+                base: aligned,
+                bytes: isolated,
+            });
+        }
+        // AllocatorAccess re-protects this payload before TD receives it.
+        drop(access);
+        base.wrapping_add(offset)
     }
     fn release(&self, pointer: *mut u8, layout: Layout) {
         let m = unsafe { &mut *self.metadata.get() };
@@ -162,6 +174,7 @@ impl Pool {
             .expect("release must match a live physical child");
         let slot = m.slots[index].take().unwrap();
         assert_eq!((slot.bytes, slot.align), (layout.size(), layout.align()));
+        let _access = AllocatorAccess::new();
         for i in 0..GUARD {
             assert_eq!(
                 unsafe { base.add(offset + slot.bytes + i).read() },
@@ -191,10 +204,11 @@ impl Pool {
     }
 }
 struct State {
-    source: Pool,
-    td: Pool,
+    source: Pool<SOURCE_BYTES>,
+    td: Pool<REGION_BYTES>,
     observing: Cell<bool>,
     isolate_source: Cell<bool>,
+    protection: Cell<Protection>,
     #[cfg(target_os = "none")]
     controls: AccessControls,
 }
@@ -211,6 +225,7 @@ static STATE: State = State {
     td: Pool::new(),
     observing: Cell::new(false),
     isolate_source: Cell::new(false),
+    protection: Cell::new(Protection::EMPTY),
     #[cfg(target_os = "none")]
     controls: AccessControls {
         expected: AtomicUsize::new(0),
@@ -231,7 +246,7 @@ unsafe impl GlobalAlloc for Allocator {
     }
     unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
         let base = STATE.td.base() as usize;
-        if (base..base + BYTES).contains(&(pointer as usize)) {
+        if (base..base + REGION_BYTES).contains(&(pointer as usize)) {
             STATE.td.release(pointer, layout);
         } else {
             STATE.source.release(pointer, layout);
@@ -279,6 +294,9 @@ pub fn byte_regions(include_source: bool) -> impl Iterator<Item = Region> {
         .td
         .regions()
         .chain(STATE.source.regions().filter(move |_| include_source))
+}
+pub fn protection() -> &'static Cell<Protection> {
+    &STATE.protection
 }
 #[cfg(target_os = "none")]
 pub fn access_controls() -> &'static AccessControls {

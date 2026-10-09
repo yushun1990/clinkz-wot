@@ -10,8 +10,8 @@ The ARM run executes the allocator, moves, URI program and cleanup; it is more
 than a target compile. QEMU execution supplies no device cycle, stack-margin or
 product RAM claim.
 
-From the repository root, with Rust, the ARM Rust target, `timeout`, a native C
-linker and `qemu-system-arm` installed:
+From the Git repository root, with Rust, the ARM Rust target, Python 3, `timeout`,
+a native C linker and `qemu-system-arm` installed:
 
 ```sh
 rustup target add thumbv7em-none-eabihf
@@ -52,8 +52,9 @@ The two unchanged named policies exercise:
   no partial multi-class debit or allocation, followed by the exact complete
   facts, class-debit and allocator trace of the uninterrupted run. Every semantic
   position additionally runs with zero output credit and read-only URI storage,
-  including positions whose reported output debit is zero. URI write totals are
-  derived from the fixed inputs, independently of production WorkBudget debits.
+  and with zero URI credit and inaccessible source/derived URI bytes, including
+  positions whose reported debit is zero. Both URI class totals are derived
+  from the fixed inputs, independently of production WorkBudget debits.
 - Ready retries run with actual URI bytes inaccessible. A separate small source
   isolates base/href bytes, scope strings and their String descriptors as well;
   repeated zero/short output, URI and cleanup credit cannot read these regions.
@@ -68,10 +69,38 @@ The two unchanged named policies exercise:
 The fixed URI copy oracle requires 28 and 137 writes for the two main Forms
 (165 total): emitted bytes still count when popped; the authority-less repair
 also writes two padding bytes, shifts seven path bytes, and inserts `/.`.
-The simple long-URI cases require exactly 4,096/16,384 writes. These expectations
-are checked at each Form against CodecOutputBytes and feed the exact shared
-lifetime boundary. The one-unit-short sweep retains multi-class checks, while
-the independent zero-output sweep never drops a position based on a zero debit.
+The simple long-URI cases require exactly 4,096/16,384 writes.
+
+The independent URI-meaning oracle counts the declared resolver actions for
+these fixed inputs. Each classification costs 16 UriBytes, fix/extend/insertion
+actions cost 2, and other transitions cost 1. This arithmetic does not call the
+production resolver or inspect its debits. `N` is the long Form's href length:
+
+| Stage | First main Form | Second main Form | Long Form |
+| --- | ---: | ---: | ---: |
+| Target setup | 1 | 1 | 1 |
+| Merge and merge classification | 0 | 17 | 17 |
+| Configure | 1 | 1 | 1 |
+| Prefix bytes and four span advances | 8 | 8 | 12 |
+| Path segments, pops, stream and span advances | 129 | 221 | N + 30 |
+| Fix, extend, shift and insertion | 14 | 2 | 2 |
+| Tail bytes and four span advances | 8 | 4 | 4 |
+| UTF-8 completion | 1 | 1 | 1 |
+| **UriBytes total** | **162** | **255** | **N + 68** |
+
+For the first path, the six segment costs are 19, 21, 21, 19, 19 and 28,
+followed by two path-span advances. The second path has root/a/b costs
+19 + 21 + 21, one span advance, parent-pop cost 21, and a 128-byte streaming
+segment plus ten transition/scan actions. The long path has root cost 19,
+one span advance, and N + 10 streaming actions. These expectations require
+417 main-pass UriBytes and 4,155/16,443 for the long cases. Both URI class
+oracles are checked at each Form and feed the exact shared lifetime boundary.
+The one-unit-short sweep retains multi-class checks. Both independent zero-class
+sweeps cover all 287 positions without selecting them from reported debits.
+Zero-debit Pending retries contribute no accepted step; actions belonging only
+to other classes may progress and are recorded once. Each run then resumes and
+must reproduce the complete facts, class totals, step count and allocator trace.
+This also observes unpaid scalar state changes that touch no protected bytes.
 
 The access oracle uses Linux [`mprotect`](https://man7.org/linux/man-pages/man2/mprotect.2.html)
 or the Cortex-M4 MPU ([Arm register definitions](https://github.com/ARM-software/CMSIS_5/blob/develop/CMSIS/Core/Include/core_cm4.h)).
@@ -81,20 +110,40 @@ same-value store. Linux controls run in forked children and require SIGSEGV;
 ARM controls require DACCVIOL and the expected MMFAR, then restore access and
 retry only those deliberate control instructions. Interrupts remain masked, so
 ARM MPU faults escalate through HardFault. Any fault during TD execution fails
-the witness. This backend supports 4-KiB native pages and at most eight protected
-power-of-two regions; unsupported hardware/page configuration fails explicitly.
+the witness. A guard's catalog stays active throughout the step: new byte blocks
+are registered and protected **before allocator return**, including initial
+acquisition and replacement. The allocator restores access only within its
+own fixed canary initialization/check, invokes no TD/caller code there, and
+re-arms all ranges before handing back control. Released ranges remain guarded
+until the step ends. This backend supports 4-KiB native pages and at most eight
+protected power-of-two regions; unsupported hardware/page configuration fails
+explicitly.
 
-The allocator has two fixed 128-KiB regions, fixed placement/observation metadata
-and eight-byte guards after each request. Its complete aligned backing Layout is
-charged once as startup storage. TD suballocations delegate that backing; their
+Both registered commands also run `check_mutations.py`. It copies the current
+tracked worktree and runtime sources into a disposable directory, compiles each
+counterexample, and executes native and booted ARM binaries. The baseline must
+pass; a compile failure never counts as rejection. Retained cases cover the
+reviewer's extra copy immediately after acquisition, copies conditional on zero
+output credit at initial acquisition and replacement, ARM-only missing URI
+charging, and its zero-URI-credit-only variant. Acquisition cases require actual
+access faults; missing-charge cases require the independent URI oracle or access
+fault. The unchanged native branches must pass. Logs/build artifacts are under
+`target/td-admission-mutations`; production worktree sources remain untouched.
+
+The allocator has fixed 256-KiB caller-source and 128-KiB TD regions, fixed
+placement/observation metadata and eight-byte guards after each request. Source
+capacity includes ordinary serde provisioning and isolated URI page padding;
+the TD delegation and named production ceilings keep their original values.
+Its complete aligned backing Layout is charged once as startup storage.
+TD suballocations delegate that backing; their
 requested bytes are not charged again as new physical backing. Arena span also
 reports padding, guards and unreused holes. URI blocks and the selected Ready
 source allocations own isolated page regions; all their unused page capacity
 and the access-control metadata remain in the charged backing Layout.
 Deallocation checks the original pointer/Layout and guards before matching the
-release. The binary has one
-caller and no threads; ARM interrupts stay disabled. This allocator is an
-evidence backend, not a proposed product allocator or general concurrent API.
+release. The binary has one caller and no threads; ARM interrupts stay disabled.
+This allocator is an evidence backend, not a proposed product allocator or
+general concurrent API.
 The child temporary ledger is capped by the delegated TD region. Inline
 movement/return capacity is reserved separately before entry and released only
 after physical children reach zero; the backing reservation stays live.

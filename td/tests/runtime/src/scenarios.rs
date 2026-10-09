@@ -51,6 +51,7 @@ struct Run {
     work: [u64; CLASSES],
     inspection_work: u64,
     uri_writes: u64,
+    uri_work: u64,
 }
 impl Run {
     fn new() -> Self {
@@ -63,6 +64,7 @@ impl Run {
             work: [0; CLASSES],
             inspection_work: 0,
             uri_writes: 0,
+            uri_work: 0,
         }
     }
     fn debit(&mut self, budget: &WorkBudget) {
@@ -89,14 +91,21 @@ fn input() -> Box<Thing> {
     }"#).unwrap();
     // The later Form forces current URI capacity replacement without copying
     // the previous target. Its original index remains two.
-    t.properties
+    t.base = Some(heap::isolated_source(|| {
+        clinkz_wot_td::data_type::BaseUri::parse("foo:/a/b/").unwrap()
+    }));
+    let forms = &mut t
+        .properties
         .as_mut()
         .unwrap()
         .get_mut("zeta")
         .unwrap()
         ._interaction
-        .forms[2]
-        .href = FormHref::parse(&format!("../{}", "v".repeat(128))).unwrap();
+        .forms;
+    forms[1].href = heap::isolated_source(|| FormHref::parse("/a/../..//value?x#f").unwrap());
+    let last = format!("../{}", "v".repeat(128));
+    forms[2].href = heap::isolated_source(|| FormHref::parse(&last).unwrap());
+    drop(last);
     assert!(t.validate().is_ok());
     Box::new(t)
 }
@@ -156,9 +165,22 @@ fn hash(mut h: u64, text: &str) -> u64 {
     }
     h
 }
-fn fact(event: Event<'_>) -> (bool, u64, u64) {
+type Facts = (bool, u64, u64, u64);
+enum Observation {
+    Pending,
+    Done,
+    Ready(Facts),
+}
+fn observe(step: Step<'_>) -> Observation {
+    match step {
+        Step::Pending => Observation::Pending,
+        Step::Done => Observation::Done,
+        Step::Ready(event) => Observation::Ready(fact(event)),
+    }
+}
+fn fact(event: Event<'_>) -> Facts {
     match event {
-        Event::Property { ordinal, name } => (true, hash(ordinal as u64, name), 0),
+        Event::Property { ordinal, name } => (true, hash(ordinal as u64, name), 0, 0),
         Event::Form(f) => {
             assert!(f.readable());
             if f.property_name() == "p" {
@@ -182,6 +204,10 @@ fn fact(event: Event<'_>) -> (bool, u64, u64) {
                     false,
                     hash(0, f.resolved_href()),
                     (prefix.len() + f.href().len()) as u64,
+                    // Fixed-input stage counts: setup/merge/configure/prefix,
+                    // one root segment, streamed href, fix/tail/validate.
+                    // See the README table; never learn this from work debits.
+                    (1 + 17 + 1 + 12 + (f.href().len() + 30) + 2 + 4 + 1) as u64,
                 );
             }
             assert_eq!((f.property_ordinal(), f.property_name()), (1, "zeta"));
@@ -222,26 +248,41 @@ fn fact(event: Event<'_>) -> (bool, u64, u64) {
                 // /b/ is popped after emission; its writes remain charged.
                 "foo:".len() + "/a/b/".len() + 128
             };
-            (false, h, writes as u64)
+            // Independent fixed-input transition counts (README table).
+            // Classify/MergeClassify cost 16; repair costs 2; other actions 1.
+            let uri_work = if f.original_index() == 1 {
+                1 + 0 + 1 + 8 + 129 + 14 + 8 + 1
+            } else {
+                1 + 17 + 1 + 8 + 221 + 2 + 4 + 1
+            };
+            (false, h, writes as u64, uri_work)
         }
     }
 }
 fn semantic_poll(c: &mut Read<'_>, run: &mut Run) -> Result<(bool, Cost), Cause> {
     let mut b = budget();
-    let result = c.step(&mut b, false)?;
+    let result = observe(c.step(&mut b, false)?);
+    record_poll(c, run, spent(&b), result)
+}
+fn record_poll(
+    c: &mut Read<'_>,
+    run: &mut Run,
+    debit: [u64; CLASSES],
+    result: Observation,
+) -> Result<(bool, Cost), Cause> {
     run.semantics += 1;
-    run.debit(&b);
-    let debit = spent(&b);
+    for (total, debit) in run.work.iter_mut().zip(debit) {
+        *total += debit;
+    }
     let cost = Cost {
         uri: debit[W::UriBytes as usize],
         output: debit[W::CodecOutputBytes as usize],
-        ready: matches!(&result, Step::Ready(_)),
+        ready: matches!(&result, Observation::Ready(_)),
     };
     match result {
-        Step::Pending => Ok((false, cost)),
-        Step::Done => Ok((true, cost)),
-        Step::Ready(event) => {
-            let expected = fact(event);
+        Observation::Pending => Ok((false, cost)),
+        Observation::Done => Ok((true, cost)),
+        Observation::Ready(expected) => {
             let before = heap::trace();
             // Re-lend and inspect actual facts/URI/scopes at zero credit. No
             // allocation, copy, sizing scan or new TD work is available.
@@ -263,10 +304,16 @@ fn semantic_poll(c: &mut Read<'_>, run: &mut Run) -> Result<(bool, Cost), Cause>
             } else {
                 run.forms += 1;
                 run.uri_writes += expected.2;
+                run.uri_work += expected.3;
                 assert_eq!(
                     run.work[W::CodecOutputBytes as usize],
                     run.uri_writes,
                     "mandatory URI writes must debit CodecOutputBytes and the shared lifetime"
+                );
+                assert_eq!(
+                    run.work[W::UriBytes as usize],
+                    run.uri_work,
+                    "mandatory URI meaning must debit UriBytes and the shared lifetime"
                 );
             }
             run.digest = run.digest.wrapping_mul(16777619) ^ expected.1;
@@ -524,19 +571,50 @@ fn sweep(
             }
         }
         // Select every position independently of observed debits. Even a
-        // target-specific missing/zero output charge must encounter read-only
-        // real URI storage before it can write. This also catches same-value
-        // stores that comparing buffer contents cannot observe.
-        heap::begin(0);
-        let (mut c, _) = semantic_prefix(t, limits, source, position);
-        {
-            let _guard = Guard::new(heap::byte_regions(false), Permission::ReadOnly);
-            let mut zero_output = budget().with_remaining(W::CodecOutputBytes, 0);
-            c.step(&mut zero_output, false).unwrap();
-            assert_eq!(zero_output.remaining(W::CodecOutputBytes), 0);
+        // target-specific missing/zero charge must encounter read-only URI
+        // storage at zero output credit, or inaccessible source/derived bytes
+        // at zero URI credit. New blocks join the active guard before return.
+        for class in [W::CodecOutputBytes, W::UriBytes] {
+            heap::begin(0);
+            let (mut c, mut run) = semantic_prefix(t, limits, source, position);
+            let mut done = false;
+            for _ in 0..3 {
+                let mut zero = budget().with_remaining(class, 0);
+                let initial = W::ALL.map(|w| zero.remaining(w));
+                let before = heap::trace();
+                let result = {
+                    let uri = class == W::UriBytes;
+                    let _guard = Guard::new(
+                        heap::byte_regions(uri),
+                        if uri {
+                            Permission::None
+                        } else {
+                            Permission::ReadOnly
+                        },
+                    );
+                    c.step(&mut zero, false).unwrap()
+                };
+                assert_eq!(zero.remaining(class), 0);
+                let debit = core::array::from_fn(|i| initial[i] - zero.remaining(W::ALL[i]));
+                let result = observe(result); // caller bytes after protection ends
+                if debit == [0; CLASSES] {
+                    assert!(matches!(result, Observation::Pending));
+                    assert_eq!(heap::trace(), before);
+                } else {
+                    // Actions belonging only to other classes may progress.
+                    // Record them once; rejected zero-debit polls contribute
+                    // nothing. Full replay detects unpaid scalar state changes.
+                    done = record_poll(&mut c, &mut run, debit, result).unwrap().0;
+                    break;
+                }
+            }
+            if !done {
+                finish(&mut c, &mut run).unwrap();
+            }
+            drop(c);
+            assert_eq!(&run, expected);
+            assert_eq!(heap::end(), baseline);
         }
-        drop(c);
-        heap::end();
         for (class, required) in [
             (W::UriBytes, costs[position].uri),
             (W::CodecOutputBytes, costs[position].output),
@@ -566,12 +644,12 @@ fn sweep(
     }
     failures(t, limits, source, baseline);
     report(format_args!(
-        "lifecycle: inspect_positions={} semantic_positions={} ready_positions={} short_actions={} independent_zero_output_probes={} failures={} terminal_td_bytes=0",
+        "lifecycle: inspect_positions={} semantic_positions={} ready_positions={} short_actions={} independent_zero_output_and_uri_probes={} failures={} terminal_td_bytes=0",
         expected.inspect,
         expected.semantics + 1,
         costs.iter().filter(|cost| cost.ready).count(),
         shortages,
-        expected.semantics,
+        expected.semantics * 2,
         baseline.attempts
     ));
 }
@@ -676,8 +754,11 @@ fn failures(t: &Thing, limits: &ResourceLimits, source: usize, baseline: heap::T
     }
 }
 fn lifetime(t: &Thing, limits: &ResourceLimits, source: usize, expected: &Run) {
-    let total = expected.work.iter().sum::<u64>() - expected.work[W::CodecOutputBytes as usize]
-        + expected.uri_writes;
+    let total = expected.work.iter().sum::<u64>()
+        - expected.work[W::CodecOutputBytes as usize]
+        - expected.work[W::UriBytes as usize]
+        + expected.uri_writes
+        + expected.uri_work;
     let pass_work = total - expected.inspection_work;
     // The gateway's admitted atomic iterator envelope can exceed this small
     // input's first-pass cost. Reach an exact boundary with additional complete
@@ -744,15 +825,18 @@ fn lifetime(t: &Thing, limits: &ResourceLimits, source: usize, expected: &Run) {
     drop(c);
     heap::end();
     report(format_args!(
-        "work: first_pass={total} classes={:?} independent_uri_writes={} exact_passes={exact_passes} exact_total={exact_total} completed_passes_before_limit={passes}",
-        expected.work, expected.uri_writes
+        "work: first_pass={total} classes={:?} independent_uri_writes={} independent_uri_work={} exact_passes={exact_passes} exact_total={exact_total} completed_passes_before_limit={passes}",
+        expected.work, expected.uri_writes, expected.uri_work
     ));
 }
 fn named_uri(limits: &ResourceLimits) {
     let mut t: Thing = serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"long","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},"properties":{"p":{"type":"null","forms":[{"href":"/p"}]}}}"#).unwrap();
     let prefix = "http://a/";
     let maximum = limits.get(R::UriTemplateSourceBytesMax).unwrap() as usize;
-    t.base = Some(clinkz_wot_td::data_type::BaseUri::parse(prefix).unwrap());
+    t.base = Some(heap::isolated_source(|| {
+        clinkz_wot_td::data_type::BaseUri::parse(prefix).unwrap()
+    }));
+    let href = "a".repeat(maximum - prefix.len());
     t.properties
         .as_mut()
         .unwrap()
@@ -760,7 +844,8 @@ fn named_uri(limits: &ResourceLimits) {
         .unwrap()
         ._interaction
         .forms[0]
-        .href = FormHref::parse(&"a".repeat(maximum - prefix.len())).unwrap();
+        .href = heap::isolated_source(|| FormHref::parse(&href).unwrap());
+    drop(href);
     heap::begin(0);
     let run = complete(&t, limits, 0).unwrap();
     assert_eq!((run.properties, run.forms), (1, 1));
@@ -768,8 +853,8 @@ fn named_uri(limits: &ResourceLimits) {
     physical_boundaries(&t, limits, 0, trace);
     failures(&t, limits, 0, trace);
     report(format_args!(
-        "named_uri: bytes={maximum} heap_peak={} largest={} terminal_td_bytes=0",
-        trace.peak, trace.largest
+        "named_uri: bytes={maximum} independent_uri_writes={} independent_uri_work={} heap_peak={} largest={} terminal_td_bytes=0",
+        run.uri_writes, run.uri_work, trace.peak, trace.largest
     ));
 }
 fn number_boundaries(limits: &ResourceLimits) {
