@@ -40,6 +40,7 @@ struct Cost {
     uri: u64,
     output: u64,
     ready: bool,
+    form_ready: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Run {
@@ -278,6 +279,7 @@ fn record_poll(
         uri: debit[W::UriBytes as usize],
         output: debit[W::CodecOutputBytes as usize],
         ready: matches!(&result, Observation::Ready(_)),
+        form_ready: matches!(&result, Observation::Ready((false, ..))),
     };
     match result {
         Observation::Pending => Ok((false, cost)),
@@ -485,6 +487,18 @@ fn physical_boundaries(t: &Thing, limits: &ResourceLimits, source: usize, baseli
         ));
     }
 }
+fn two_byte_copy_positions(costs: &[Cost]) -> [(usize, &'static str); 2] {
+    // Anchor to the public first Form event, never to an output/URI debit.
+    // Its fixed suffix is: insertion; four tail bytes and four span advances;
+    // UTF-8 completion; Finish (which returns Ready). Before insertion there
+    // are seven shifted "//value" bytes and one shift-end transition. Padding
+    // precedes those eight actions. See the independent fixture arithmetic in
+    // the README. A changed action schedule must update this fixture oracle.
+    let ready = costs.iter().position(|cost| cost.form_ready).unwrap();
+    let insertion = ready.checked_sub("?x#f".len() + 4 + 1 + 1).unwrap();
+    let padding = insertion.checked_sub("//value".len() + 1 + 1).unwrap();
+    [(padding, "padding"), (insertion, "insertion")]
+}
 fn sweep(
     t: &Thing,
     limits: &ResourceLimits,
@@ -493,6 +507,7 @@ fn sweep(
     baseline: heap::Trace,
     costs: &[Cost],
 ) {
+    let two_byte_copies = two_byte_copy_positions(costs);
     for position in 0..expected.inspect {
         for cancel in [false, true] {
             heap::begin(0);
@@ -615,9 +630,20 @@ fn sweep(
             assert_eq!(&run, expected);
             assert_eq!(heap::end(), baseline);
         }
+        let copy_repair = two_byte_copies
+            .iter()
+            .find(|(index, _)| *index == position)
+            .map(|(_, name)| *name);
         for (class, required) in [
             (W::UriBytes, costs[position].uri),
-            (W::CodecOutputBytes, costs[position].output),
+            (
+                W::CodecOutputBytes,
+                if copy_repair.is_some() {
+                    2 // fixture-owned requirement, even if production reports 0/1
+                } else {
+                    costs[position].output
+                },
+            ),
         ] {
             if required == 0 {
                 continue;
@@ -625,6 +651,12 @@ fn sweep(
             heap::begin(0);
             let (mut c, mut run) = semantic_prefix(t, limits, source, position);
             let before = heap::trace();
+            let repair = copy_repair.filter(|_| class == W::CodecOutputBytes);
+            if let Some(name) = repair {
+                report(format_args!(
+                    "two-byte copy predebit: action={name} position={position} output_credit=1"
+                ));
+            }
             for _ in 0..3 {
                 let mut short = budget().with_remaining(class, required - 1);
                 let unchanged = W::ALL.map(|w| short.remaining(w));
@@ -635,6 +667,16 @@ fn sweep(
                 assert_eq!(W::ALL.map(|w| short.remaining(w)), unchanged); // no partial multiclass debit
                 assert_eq!(heap::trace(), before);
             }
+            if repair.is_some() {
+                let mut exact = budget().with_remaining(W::CodecOutputBytes, 2);
+                let initial = W::ALL.map(|w| exact.remaining(w));
+                let result = observe(c.step(&mut exact, false).unwrap());
+                assert!(matches!(result, Observation::Pending));
+                let debit = core::array::from_fn(|i| initial[i] - exact.remaining(W::ALL[i]));
+                assert_eq!(debit[W::CodecOutputBytes as usize], 2);
+                assert_eq!(debit[W::UriBytes as usize], 2);
+                assert!(!record_poll(&mut c, &mut run, debit, result).unwrap().0);
+            }
             finish(&mut c, &mut run).unwrap();
             drop(c);
             assert_eq!(&run, expected); // full remaining semantics and work trace, not only counters
@@ -644,12 +686,13 @@ fn sweep(
     }
     failures(t, limits, source, baseline);
     report(format_args!(
-        "lifecycle: inspect_positions={} semantic_positions={} ready_positions={} short_actions={} independent_zero_output_and_uri_probes={} failures={} terminal_td_bytes=0",
+        "lifecycle: inspect_positions={} semantic_positions={} ready_positions={} short_actions={} independent_zero_output_and_uri_probes={} independent_two_byte_copy_actions={} failures={} terminal_td_bytes=0",
         expected.inspect,
         expected.semantics + 1,
         costs.iter().filter(|cost| cost.ready).count(),
         shortages,
         expected.semantics * 2,
+        two_byte_copies.len(),
         baseline.attempts
     ));
 }

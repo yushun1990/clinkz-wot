@@ -3,7 +3,7 @@
 
 Only disposable source copies are mutated. A compile failure is never evidence
 of rejection: each case must build, then fail through the intended access/work
-oracle. The conditional cases keep complete-run facts and charges unchanged.
+oracle. Zero-credit and compensated cases preserve complete-run facts/charges.
 """
 import hashlib
 import os
@@ -22,7 +22,7 @@ def replace_once(source, before, after):
     return source.replace(before, after, 1)
 
 
-def cases(source):
+def cases(source, uri_source):
     allocation = """            P::Allocate => {
                 self.allocate_uri()?;
                 self.phase = P::Uri;
@@ -43,13 +43,24 @@ def cases(source):
             }""".replace("CONDITION", condition)
         if condition == "true":
             injected = injected.replace("                let replacement = self.scratch.capacity != 0;\n", "")
-        yield name, replace_once(source, allocation, injected), False
+        yield name, replace_once(source, allocation, injected), uri_source, False
     work = "self.resolver.as_ref().unwrap().work()"
     for name, condition in [
         ("arm-missing-uri-charge", 'cfg!(target_os = "none")'),
         ("arm-zero-credit-missing-uri-charge", 'cfg!(target_os = "none") && budget.remaining(W::UriBytes) == 0'),
     ]:
-        yield name, replace_once(source, work, f"if {condition} {{ 0 }} else {{ {work} }}"), True
+        yield name, replace_once(source, work, f"if {condition} {{ 0 }} else {{ {work} }}"), uri_source, True
+    # Undercharge each two-byte repair, then recover both missing units from
+    # the first two tail bytes. Per-Form/lifetime totals and zero-credit probes
+    # cannot distinguish this from a correctly prepaid run.
+    tail = "                State::Tail if self.pos < self.tail[self.part].len() => 1,"
+    compensated = replace_once(uri_source, tail, """                State::Tail
+                    if self.part < 2 && self.pos == 0 && self.merge == self.path_start => 2,
+""" + tail)
+    compensated = replace_once(compensated,
+                               "                State::ExtendPath | State::Insert => Self::OUTPUT_WORK,",
+                               "                State::ExtendPath | State::Insert => 1,")
+    yield "compensated-repair-copy-charge", source, compensated, False
 
 
 def main():
@@ -80,9 +91,14 @@ def main():
         shutil.copytree(repo / "td/tests/runtime", snapshot / "td/tests/runtime", dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns("target", "__pycache__"))
         production = snapshot / "td/src/validated.rs"
+        uri = snapshot / "td/src/core/data_type/uri.rs"
         source = production.read_text()
-        for name, mutated, arm_only in [("baseline", source, False), *cases(source)]:
+        uri_source = uri.read_text()
+        for name, mutated, mutated_uri, arm_only in [
+            ("baseline", source, uri_source, False), *cases(source, uri_source)
+        ]:
             production.write_text(mutated)
+            uri.write_text(mutated_uri)
             for target in [native, arm]:
                 log = logs / f"{name}-{target}.log"
                 with log.open("w") as output:
@@ -107,10 +123,12 @@ def main():
                 else:
                     marker = "mandatory URI meaning" if name == "arm-missing-uri-charge" else "FAIL: forbidden TD access"
                     valid = result.returncode == 1 and marker in observed
+                if name == "compensated-repair-copy-charge":
+                    valid = valid and "two-byte copy predebit: action=padding" in observed
                 if not valid:
                     raise RuntimeError(f"unexpected {name}/{target} exit={result.returncode}: {log}\n{observed[-4000:]}")
                 print(f"{name}: {target} exit={result.returncode} expected={'PASS' if success else 'REJECT'}", flush=True)
-    print("PASS: production acquisition/replacement and URI predebit negative controls", flush=True)
+    print("PASS: production acquisition/replacement and URI/copy predebit negative controls", flush=True)
 
 
 if __name__ == "__main__":

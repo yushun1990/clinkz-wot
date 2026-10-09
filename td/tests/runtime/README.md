@@ -54,7 +54,9 @@ The two unchanged named policies exercise:
   position additionally runs with zero output credit and read-only URI storage,
   and with zero URI credit and inaccessible source/derived URI bytes, including
   positions whose reported debit is zero. Both URI class totals are derived
-  from the fixed inputs, independently of production WorkBudget debits.
+  from the fixed inputs, independently of production WorkBudget debits. The
+  two-byte repair actions also get independently selected one-output-unit
+  probes; their requirement is never learned from the reported copy debit.
 - Ready retries run with actual URI bytes inaccessible. A separate small source
   isolates base/href bytes, scope strings and their String descriptors as well;
   repeated zero/short output, URI and cleanup credit cannot read these regions.
@@ -102,6 +104,24 @@ to other classes may progress and are recorded once. Each run then resumes and
 must reproduce the complete facts, class totals, step count and allocator trace.
 This also observes unpaid scalar state changes that touch no protected bytes.
 
+Equal eventual totals cannot establish prepayment of an individual action: a
+two-byte write could debit one unit and recover the missing unit later. The
+fixed first Form therefore has an independent action-position oracle anchored
+to its public Form Ready event, without consulting either URI class debit.
+Insertion precedes Ready by ten actions: four `?x#f` bytes, four tail-span
+advances, UTF-8 completion and Finish. Padding precedes insertion by nine:
+seven shifted `//value` bytes, one shift-end transition and insertion itself.
+At both positions, three one-output-unit retries run with URI storage read-only
+and require Pending, unchanged credit in every class and an identical allocator
+trace. Stores (including same-value stores) fault. Exactly two output units and
+two URI units must then advance that action; full replay must preserve facts,
+work, step count and allocator trace. These are the corpus's only multi-byte
+copy actions; all positions still get the independent zero-output probe. A
+change to the action schedule requires updating this fixed-fixture oracle.
+Other positive UriBytes shortages still use observed debits; the independent
+meaning total and zero-credit probes do not establish exhaustive per-action
+meaning charges against every possible redistribution.
+
 The access oracle uses Linux [`mprotect`](https://man7.org/linux/man-pages/man2/mprotect.2.html)
 or the Cortex-M4 MPU ([Arm register definitions](https://github.com/ARM-software/CMSIS_5/blob/develop/CMSIS/Core/Include/core_cm4.h)).
 It observes real accesses, including stores of unchanged bytes, without TD hooks
@@ -125,10 +145,13 @@ counterexample, and executes native and booted ARM binaries. The baseline must
 pass; a compile failure never counts as rejection. Retained cases cover the
 reviewer's extra copy immediately after acquisition, copies conditional on zero
 output credit at initial acquisition and replacement, ARM-only missing URI
-charging, and its zero-URI-credit-only variant. Acquisition cases require actual
-access faults; missing-charge cases require the independent URI oracle or access
-fault. The unchanged native branches must pass. Logs/build artifacts are under
-`target/td-admission-mutations`; production worktree sources remain untouched.
+charging, its zero-URI-credit-only variant, and undercharged two-byte repairs
+compensated by later tail charges. The compensated mutation preserves final
+totals and must fault at the independent one-credit padding probe. Acquisition
+cases require actual access faults; missing-charge cases require the independent
+URI oracle or access fault. The unchanged native branches must pass. Logs/build
+artifacts are under `target/td-admission-mutations`; production worktree sources
+remain untouched.
 
 The allocator has fixed 256-KiB caller-source and 128-KiB TD regions, fixed
 placement/observation metadata and eight-byte guards after each request. Source
