@@ -31,15 +31,15 @@ pub use binding::{
     BindingRegistrationIdentity, BindingResourceDeclarations, BindingStateLayout,
     BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext, CleanupReservation,
     CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
-    CleanupTransferTarget, ClientRequestSlot, CollisionDomainId, EndpointReservationKey,
-    NoCleanupSuccessor, PollClientBinding, PollServerBinding, PrepareInput, RouteAcceptClaim,
-    RouteAcceptClaimError, RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome,
-    RouteActivationPermit, RouteCleanupOutcome, RouteCleanupSuccessor, RouteCommitOutcome,
-    RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility, RoutePrepareOutcome,
-    RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity, RouteResponseOpportunity,
-    RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority,
-    StaticBindingComponents, StaticBindingRegistration, StaticBindingRegistrationInput,
-    StaticConsumerPropertyReadSlot,
+    CleanupTransferTarget, ClientRequestSlot, CollisionDomainId, ConsumerCompilerRegistration,
+    EndpointReservationKey, NoCleanupSuccessor, PollClientBinding, PollServerBinding, PrepareInput,
+    RouteAcceptClaim, RouteAcceptClaimError, RouteAcceptEvent, RouteAcceptLease,
+    RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome, RouteCleanupSuccessor,
+    RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility,
+    RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity,
+    RouteResponseOpportunity, RouteTerminal, ServerResponseSlot, ServerRouteSlot,
+    ServingActivationAuthority, StaticBindingComponents, StaticBindingRegistration,
+    StaticBindingRegistrationInput, StaticConsumerPropertyReadSlot,
 };
 #[cfg(feature = "std")]
 pub use binding::{
@@ -53,7 +53,8 @@ pub use binding_compiler::{
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,
     BindingArtifactRejection, BindingArtifactRejectionReason, BindingArtifactRole,
     BindingCompilerBounds, BindingCompilerExtension, BindingCompilerFailure, BindingCompilerInput,
-    BindingCompilerOutput, BindingCompilerStep, StaticBindingCompilerRegistration,
+    BindingCompilerOutput, BindingCompilerStep, ConsumerCompilerSupport, ResolvedTargetArtifact,
+    ResolvedTargetCompiler, ResolvedTargetCompilerCursor, StaticBindingCompilerRegistration,
 };
 #[cfg(feature = "std")]
 pub use binding_compiler::{
