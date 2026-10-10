@@ -63,6 +63,8 @@ The tests falsify:
   inherited/default/explicit semantics, or loss of coding, subprotocol and UTF-8/
   empty scopes;
 - missing empty lookup rows, including an entirely empty readable aggregate;
+- overlap or cross-property selection between two readable properties separated
+  by an empty range, with a trailing empty range and distinct original indices;
 - input/registration retention in the concrete draft (also required `'static`),
   incorrect artifact/plan/registration identity, or protocol execution;
 - starts after later materialization failure, later semantic failure or an
@@ -101,10 +103,9 @@ trusted aggregate entry. Implementing a general aggregate/publication transactio
 would cross the separately admitted WP-200/WP-400 boundary.
 
 This is candidate integration evidence, not WP-100 completion or gate acceptance.
-WP-100 still needs a same-head reconciliation of the full six production
-obligations: complete feature/lifetime/field/Basic/structural/resource/work and
-failure coverage, the orphaned source-reclassification removal, disjoint evidence
-reaffirmation and its independently accepted production completion record.
+The [registered WP-100 completion evidence](../../../docs/evidence/WP-100-consumer-borrowed-td-admission.toml)
+owns the same-head reconciliation of all six production obligations and their
+independent acceptance boundary.
 
 WP-200 owns the actual aggregate, generic supported compilers and owned Pending
 artifacts, pre-admitted/actual costs, variable rollback/reclaim and exact
