@@ -1,12 +1,17 @@
-# WP-200 Consumer compiler support admission candidate
+# WP-200 Consumer compiler support admission
 
-Status: candidate only under ADR-0013, design revision v5.1. No production source
-is admitted or completed by this record. Independent review must examine the
-exact candidate head before a separate admission transition and source work.
+Status: ADMITTED under ADR-0013, design revision v5.1. The tranche remains
+`planned` / `admitted` / `current` in [the work-package index](index.toml).
+The separate admission transition accepts the
+[independent scoped review on PR #144](https://github.com/yushun1990/clinkz-wot/pull/144#issuecomment-6097700130)
+of exact candidate head `c64ab912ba48aff4b61460d25fcfdc0a88a3ab91` against base
+`493704ff7e9b27048ee38c10e656138b78639d27`. The merged admission basis
+`98af47cbc6046c64ceec4d27547890d77ad2004d` has the same tree as that reviewed head.
+Production implementation and completion evidence remain required.
 
 ## Scope and decision
 
-`WP-200-CONSUMER-COMPILER-SUPPORT` prepares the narrow compiler precursor needed
+`WP-200-CONSUMER-COMPILER-SUPPORT` admits the narrow compiler precursor needed
 by the paired Consumer aggregate. Its registered owner is WP-200, which already
 owns Core's compiler/artifact SPI. The exact behavioral/API owner is
 [Binding SPI: closed Consumer support](../spec/binding-spi.md#closed-consumer-compiler-support).
@@ -50,8 +55,10 @@ Alternatives rejected at this boundary:
 ## Exact implementation envelope
 
 Predecessors are the completed/current exact-coordinate
-`WP-200-CONSUMER-PROPERTY-READ-PLANNING` and complete Consumer bundle
-`WP-300-CONSUMER-PROPERTY-READ-BINDING`. WP-000 is the complete package dependency.
+[`WP-200-CONSUMER-PROPERTY-READ-PLANNING`](../evidence/WP-200-consumer-property-read-planning-selection.toml)
+and complete Consumer bundle
+[`WP-300-CONSUMER-PROPERTY-READ-BINDING`](../evidence/WP-300-consumer-property-read-binding-execution.toml),
+with their declared passing evidence present. WP-000 is the complete package dependency.
 The TD tranche is disjoint: this precursor takes already resolved Core input and
 does not consume or reinterpret a Thing or its validation proof.
 
@@ -119,12 +126,21 @@ constructed and correctly rejected as unsupported. These are pre-code
 constructibility discriminators. They neither complete the precursor nor prove
 the proposed public Core names already exist.
 
-Independent admission review must assess whether the closed primitive belongs
-in Core, whether its limited usefulness justifies the additive surface, whether
-the checked complete-owner construction is sufficient, and whether the retained
-slot preserves the existing public projections. Review must distinguish those
-direction judgments from the valid current counterexamples. The candidate cannot
-be admitted merely because its tests pass. No independent acceptance is recorded.
+The accepted exact-head review found no blocking findings and supported this
+separate admission transition. It judged the closed Core primitive, immutable
+configuration and complete-owner capture reasonable, and the retained slot a
+smaller correction than a compiler-wide allocator SPI or general certification
+framework. It explicitly distinguished the positive transport model from the
+required production public Host evidence. Its two nonblocking observations are
+mandatory production completion obligations below.
+
+Topic [0077](../../workspace/0077-consumer-compiler-admission-boundary.md) is
+migrated into the registered owners. The still-discussing topic
+[0076](../../workspace/0076-composable-capabilities-and-runtime-boundaries.md#reevaluation-timing-and-possible-migration)
+leaves broader Contracts/image/deployment alternatives unresolved but explicitly
+does not make that redesign a prerequisite of this compiler boundary. No
+unresolved finding intersects the admitted scope. Aggregate, gate and milestone
+acceptance remain separate.
 
 ## Required production completion
 
@@ -138,11 +154,21 @@ public Core surface, not just the model, and cover:
 - absent support, a same-compatibility foreign compiler, ordinary Host erasure,
   mismatched actual configuration, role/cell mismatch, every qualified identity
   mismatch and attempted support reuse, all before preparation callbacks;
+- successful complete-owner capture and preparation with nondefault binding IDs,
+  later generations and nonzero priority in both typed and public Host-erased
+  representations, preserving every registration identity field; the model's
+  fixed factory identity and mismatch negatives alone do not establish this;
 - pre-bounds/compatibility/start/step/abort and destructor costs, fixed native
   storage, exact slot/owner Layouts and simultaneous native-output/slot overlap;
 - failure at every new actual allocation point, including startup adapter and
   per-coordinate slot acquisition, retained other owners and unchanged rejection
   ownership; no native start on slot-acquisition failure;
+- allocation-failure rollback restores live charges and returns the ledger owner
+  while retaining Foundation's reservation history in peak/largest counters;
+  for the reviewed 160-byte model reservation, `(live, peak, largest)` changes
+  from `(7, 7, 7)` to `(7, 167, 160)` after rollback. Those historical counters
+  do not establish physical backing, and production evidence must use its actual
+  Layout rather than assume the model size;
 - repeated zero/short Pending, paid Pending, Failed and fresh-budget retries
   without reboxing or refilling the coordinate remainder; exactly-once abort,
   output destruction and physical release;

@@ -242,13 +242,14 @@ implementation checkpoint and passing results for:
 Completion of this tranche does not claim broad WP-200 completion, WP-300,
 WP-400, or the Consumer Property Read architecture gate.
 
-### ADR-0013 candidate: `WP-200-CONSUMER-COMPILER-SUPPORT`
+### ADR-0013 admitted precursor: `WP-200-CONSUMER-COMPILER-SUPPORT`
 
-The [exact precursor candidate](WP-200-consumer-compiler-support-admission.md)
+The [exact precursor admission](WP-200-consumer-compiler-support-admission.md)
 owns Core source scope, predecessors, checks and required completion evidence
 for closed compiler support through complete registrations. Its `index.toml`
-record is planned/candidate, not source admission. It preserves the portable
-compiler SPI and supports one closed target-copy primitive, with separate
+record is planned/admitted; production implementation and completion remain.
+It preserves the portable compiler SPI and supports one closed target-copy
+primitive, with separate
 typed and held-slot Host mechanisms. It admits neither arbitrary native
 compilers nor aggregate implementation. The [Binding SPI](../spec/binding-spi.md#closed-consumer-compiler-support)
 owns the detailed contract.
