@@ -2,7 +2,7 @@ schema_version = 1
 design_revision = "5.1"
 work_package = "WP-100"
 tranche = "WP-100-CONSUMER-VALIDATED-THING"
-implementation_ref = "f4b65ffd1b7f43acc88c9323dc21bcb8677ef728"
+implementation_ref = "a3e84f85679c9f5adf67140833a20496ed3e2f7a"
 recorded_on = "2026-10-10"
 status = "ready"
 evidence_key = "consumer-borrowed-td-admission"
@@ -67,9 +67,9 @@ evidence = [
 id = 4
 name = "Actual resources and terminal ownership"
 evidence = [
-    "td/tests/support/admission_boundaries.rs supplies independent literal expectations for 20 logical catalog rows; public Host and native/booted ARM runners check one-short/exact/one-spare (60 outcomes per policy), exact cause/resource/configured/observed/phase and zero terminal controlled bytes",
+    "td/tests/support/admission_boundaries.rs supplies 22 independent literal cases for 20 logical catalog rows; public Host and native/booted ARM runners check one-short/exact/one-spare (66 outcomes per policy), exact cause/resource/configured/observed/phase and zero terminal controlled bytes",
     "Existing runtime exact/one-byte-short sweeps cover all six physical catalog controls before allocator entry, with actual Layout sizes/alignments/counts, geometric old/new overlap, inline movement/return capacity, simultaneous peaks, largest request and each fallible TD allocation request",
-    "Production tests separately exercise derived-URI/effective-document semantic limits and exact lifetime work, completing all 27 TD catalog rows; no profile/row value or WorkClass changes",
+    "Two shared cases reach derived-URI/effective-document semantic limits with admissible original href/supplied content, preventing inspection from masking a missing late check. Both ARM-only omitted-limit mutants compile and fail at their exact semantic boundaries while native branches pass, in default and async graphs. Exact lifetime work completes all 27 TD catalog rows; no profile/row value or WorkClass changes",
     "Runtime cancels/drops at every public inspect/Basic/semantic suspension, Ready and Done, with prepaid fixed cleanup, stable first cause and no added work/allocation. Every failed request physically releases its children before terminal reporting",
     "The real caller source allocator and upstream account remain live through TD outcomes; zero-source projection yields identical TD traces. Only physical caller destruction releases its original charge; startup backing remains charged. The fixed arena includes alignment/guards/padding/observer capacity and delegates child storage without double-counting backing",
 ]
