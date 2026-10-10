@@ -98,6 +98,19 @@ technical direction, AI must ask whether the proposed direction is actually the
 best fit for the project goals and current evidence, not merely whether it can
 be made internally consistent.
 
+For architecture-sensitive decisions, the AI technical lead challenges the
+problem framing before selecting a remedy. Reconstruct relevant accepted
+authority, prior architecture reviews, and unresolved workspace investigations;
+distinguish shared semantics and ownership invariants from platform- or
+representation-specific mechanisms; and compare local repair with a narrower
+boundary correction. Rejecting a broad redesign does not by itself reject an
+applicable principle identified by that redesign. A non-authoritative review
+is evidence to examine, not permission to bypass accepted contracts.
+
+Keep material alternatives and their disposition in the existing decision,
+PR, or authoritative owner. Escalate concrete conflicts through the existing
+architecture process, not a new checklist, gate, or routine Owner approval.
+
 Accepted architecture remains binding implementation authority until changed
 through the applicable architecture process. Questioning an accepted design is
 permitted and expected when new evidence justifies it; silently diverging from
@@ -172,6 +185,14 @@ more of:
 The fresh reviewer reconstructs the intended result from repository authority,
 the exact reviewed diff, and executable evidence. It must not assume the
 implementation conversation's summary or conclusion is correct.
+
+For architecture-sensitive acceptance, independently challenge the problem
+definition and selected direction, not only the correctness of the proposed
+change. Compare relevant earlier investigations and credible narrower
+alternatives. Evidence that a defect exists does not establish that its
+proposed remedy or abstraction boundary is the right one. State explicitly
+when a review accepts only a scoped finding or implementation and leaves a
+successor architecture decision unproven. This adds no universal review stage.
 
 ## Gate Status Authority
 
