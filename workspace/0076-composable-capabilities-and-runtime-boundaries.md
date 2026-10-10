@@ -248,7 +248,11 @@ legacy success and the real-target Producer probe do not answer that question.
 
 Escalate earlier if implementation exposes a concrete conflict with role-only
 construction, accepted ownership, resource/lifecycle assumptions or other
-product boundaries. Use the existing
+product boundaries. Topic [0077](0077-consumer-compiler-admission-boundary.md)
+applies that rule to compiler admission now: shared Planning semantics and
+representation-specific support must be distinguished before aggregate
+admission. This does not select the broader Contracts/image proposal here or
+make a crate/runtime split its prerequisite. Use the existing
 [decision behavior](../PROJECT_GOVERNANCE.md#technical-decision-behavior),
 [implementation escalation](../PROJECT_GOVERNANCE.md#risk-proportional-implementation-admission)
 and [architecture change control](../ARCHITECTURE_GOVERNANCE.md#architecture-change-control).

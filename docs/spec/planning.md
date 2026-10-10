@@ -1178,6 +1178,35 @@ first Consumer gate MUST NOT depend on those deferred mechanisms.
 
 ### First Consumer Property Read aggregate
 
+#### Shared semantics and representation applicability
+
+This is a dynamic preparation capability with application-static and public
+Host-erased representations. Application-static describes typed dispatch and
+storage ownership, not a hardware target, heapless execution, or a requirement
+to run Planning on embedded devices. Host/static completion covers the declared
+common capability; it does not establish every embedded deployment. Fixed-image
+preparation/installation remains a separate, unadmitted trust boundary.
+
+The shared contract is TD-owned meaning, deterministic coordinate/candidate
+selection, complete preflight, all bounds before any start, owned immutable
+output, qualified identities, monotonic work, whole-transaction failure and
+bounded terminal ownership. Concrete binding compilers lower resolved inputs
+into protocol artifacts; they do not repeat TD semantics or select candidates.
+Core owns safe Host erasure. Allocation, storage Layouts, cursor transport and
+destruction primitives are supported per preparation representation. Servient
+owns policy capture, parent/global capacity pairing and publication. Sharing
+the Planning program requires none of a common allocator implementation,
+identical output containers, identical physical costs or separate Runtime crates.
+
+Host/static parity compares logical facts, selected identities, common supported
+outcomes and lifecycle/resource invariants. Each representation independently
+proves its physical capacity, work and cleanup costs. An unsupported compiler or
+representation fails eligibility before callbacks; representation-specific
+capacity exhaustion need not occur at the same byte ceiling. No Host allocation
+or destructor proof is inherited by a static implementation, or vice versa.
+
+#### Aggregate construction
+
 The first aggregate contains every effective readable Property Read Form from
 one TD-owned validated immutable Thing loan and exactly one finalized complete
 Consumer-capable Property Read registration. Properties use Thing's BTreeMap key
@@ -1225,8 +1254,8 @@ helper modules are implementation mechanics):
 ```rust
 pub trait ConsumerPropertyReadRegistration: private::Sealed {
     type Artifact: 'static;
-    // Implemented only for complete Core Host/static registrations; immutable
-    // identity/capability/compiler/declared memory-work-abort projections.
+    // Identity/capability/compiler projections from complete Core Host/static
+    // registrations; forwarding alone confers no compiler-support attestation.
 }
 pub struct ConsumerPropertyReadBuildConfig { /* checked fixed Planning projection */ }
 pub struct ConsumerPropertyReadRollback<A: 'static> { /* owned output, accounts, fixed cause/positions */ }
@@ -1274,19 +1303,29 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
 
 The checked Planning projection covers only existing structural/candidate/output,
 artifact/cursor/temporary, compile-step and reclaim fields consumed by this slice.
-It rejects missing values/arithmetic/support failure before progress; complete
+It rejects missing values/arithmetic failure before progress and certifies only
+that limits projection, not compiler behavior. Complete
 Consumer role/profile/registration eligibility is Servient's checked capture.
 Config constructors allocate/scan no external input. The build copies fixed config
 and captures complete registration identity; its entry does no variable work.
-The sealed registration adapter is implemented generically for complete Core
-Host/static registrations, with their actual artifact/cursor types; it confers no
-downstream trusted proof factory and cannot install a compiler-only component.
-The checked Consumer policy binds the selected closed compiler set to explicit
-bounds/start/step/abort primitive costs, cursor/temporary/allocator contracts and
-artifact destructor costs. A complete registration alone is not that support
-attestation; an extension lacking this reviewed bounded contract is ineligible.
+The sealed registration adapter may forward complete Core Host/static
+registration projections generically, with their actual artifact/cursor types;
+this is not blanket eligibility. The checked Consumer policy must bind support
+to the actual compiler implementation, complete registration identity and
+selected preparation representation/configuration before any compiler callback.
+Bounds/start/step/abort primitive costs, cursor/temporary storage, allocation
+behavior and artifact destruction are part of that support. A limits projection,
+compatibility identifier or complete-registration validity alone is not a support
+attestation. The exact checked carrier and its consuming construction must be
+specified and externally exercised before aggregate implementation admission;
+the build signature alone does not supply it. No downstream trusted proof factory
+or installable compiler-only component is introduced by this requirement.
 No concrete protocol dependency or unsafe type identification enters Planning.
 Binding authors still use the existing complete Core registration SPI.
+
+Preflight is emitted only through the consumed `ConsumerPropertyReadBuild::step`
+result; there is no separate standalone preflight entry with a second transaction
+owner.
 
 Preflight is emitted once, leaving the returned owner waiting for matching runtime
 capacity. `admit_runtime` moves the coordinator's capped output ledger into that
@@ -1331,7 +1370,14 @@ bounds, before calling them; returned bounds cannot retrospectively pay for the
 callback. Obtain conservative cursor/temporary storage before start and check
 actual requests before allocation, not after an infallible callback has exceeded
 capacity. The admitted binding set provides an allocation/cleanup adapter or
-source-level proof for every callback. A `'static` artifact bound is necessary;
+source-level proof for every callback, specific to the selected representation.
+An inline/static compiler may prove fixed storage and bounded destruction without
+an allocator adapter. An allocating compiler or erasure adapter must either
+preserve ownership on allocation failure or prove backing storage cannot fail
+under its held reservation. A logical ledger allowance alone does not reserve
+allocator storage. Checking a returned artifact after infallible allocation is
+not such a proof. No universal allocator trait or rewrite of all compiler
+implementations follows from this obligation. A `'static` artifact bound is necessary;
 concrete no-source-pointer/callback, declaration honesty and post-destruction
 execution evidence are also required. Each callback receives a short owned-input
 loan; suspended compiler state owns data or checked positions, never a loan into
@@ -1545,6 +1591,13 @@ accounting separates logical strings/programs, table capacity, candidates/lookup
 artifacts, compiler/cursor/temporary overlap, registration/erasure/record deltas,
 inline capacity and rollback/reclaim metadata. Persistent output allowances are
 logical sums; largest-contiguous observes only individual actual checked Layouts.
+BindingArtifactFootprint measures the binding-authored payload. Core erasure and
+storage-owner costs are composed separately into the selected representation's
+admission/PlanFootprint, without changing that payload declaration or counting
+inline payload storage twice. Equal binding bounds therefore do not imply equal
+physical admission totals. A Host preparation tool cannot authorize target storage
+from Host Layouts; any future generated-image path must prove target capacity at
+its own installation boundary.
 A variable output rollback/reclaimer retains monotonic item/byte positions, owns
 complete artifacts, admits bounded destructor primitives and releases children
 before parents. `Vec` nesting is not evidence of bounded Drop.
