@@ -9,6 +9,8 @@ Its library and `witness` binary are historical model evidence. The
 against this isolated dependency graph. Those tests construct the actual public
 typed and supported Host complete registrations and production compiler. No
 manifest or root dependency change is needed.
+Production measurements and the independent acceptance boundary are recorded in
+[the completion evidence candidate](../../../docs/evidence/WP-200-consumer-compiler-support.toml).
 
 ```sh
 RUSTUP_TOOLCHAIN=1.95.0 cargo run --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --bin witness

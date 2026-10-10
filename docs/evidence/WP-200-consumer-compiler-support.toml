@@ -1,0 +1,253 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-200"
+tranche = "WP-200-CONSUMER-COMPILER-SUPPORT"
+implementation_ref = "bb35f688e713d2656476cce7896b8755ac06bdf1"
+recorded_on = "2026-10-10"
+status = "pending-independent-acceptance"
+execution_status = "passed"
+evidence_key = "consumer-compiler-support"
+admission_review = "github-pr:144#issuecomment-6097700130"
+
+# This is implementation evidence, not a completion or gate transition. The
+# registered tranche remains planned/admitted/current. No acceptance is asserted.
+requirement_ids = [
+    "PLAN-ARTIFACT-001", "PLAN-COST-003", "BIND-REG-001", "BIND-MEM-001",
+    "CONSTRAINED-WORK-001", "CONSTRAINED-OWN-001", "ADMIT-MEM-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+production_paths = [
+    "core/src/binding_compiler.rs", "core/src/binding.rs", "core/src/lib.rs",
+]
+test_paths = [
+    "core/tests/consumer_compiler_support.rs",
+    "tools/architecture-fixtures/consumer-compiler-support/tests/production.rs",
+]
+coverage = [
+    "Actual ResolvedTargetCompiler configuration is private, immutable and checked in 1..=64; capacity zero, 65 and usize::MAX reject. The digest is an injective versioned encoding of that actual configuration, and lowering copies only the already resolved UTF-8 target.",
+    "Consuming typed capture uses safe concrete type identity; Host capture requires the private adapter issued by try_new_consumer. Both retain the original complete Consumer-capable registration and issue only borrowed read-only support metadata, without preparation callbacks or allocation.",
+    "A same-compatibility foreign compiler with the same associated cursor/artifact types, ordinary generic Host erasure even of the real closed compiler, actual-configuration mismatch, Producer-only capabilities and unsupported representation cells are rejected while preserving the original owners. Foreign compatibility is invoked at startup only; no foreign preparation callback is reached.",
+    "Private-field and use-after-consumption rustdoc negatives reject fabrication of support/checked owners and support reuse. These execute in the isolated Core feature cells; an arbitrary open compiler declaration cannot acquire support.",
+    "Typed and public Host preparation succeed with binding IDs 203 and 206, two and five binding-generation increments, diagnostic ordinals 15 and 18, candidate order 19, later plan-set/plan generations, exact actual configuration and compatibility, and ConsumerCall role. Every complete registration identity field and artifact envelope identity is preserved.",
+    "Both representations produce owned usable artifacts after actual destruction of the source LogicalInteractionPlan and complete registration. Endpoint drop counters establish complete-owner destruction; typed execution covers UTF-8 and the 64-byte capacity boundary. Host payload projection also establishes that the concrete payload resides inside the acquired slot.",
+    "Qualified expected-owner mismatches are exercised before preparation through the existing immutable full identity and candidate projections in both representations. This downstream construction discriminator is explicitly separate from the unadmitted Planning aggregate preflight. Production native cursors additionally capture plan/candidate scalars and reject cross-coordinate progress.",
+    "Source-owned fixed pre-bounds/compatibility/start/step/abort/destruction costs and actual native/Host Layouts are queried before preparation. No caller-supplied cost, attestation, lowering callback, destructor, allocator SPI or WorkClass is introduced.",
+    "Null is injected through the real global allocator at each new allocation point: startup adapter and per-coordinate slot. Startup rejection returns the same immutable compiler. Slot failure preserves the input/registration and a second physically held coordinate; the private unit trace independently proves no native start occurs before successful slot acquisition.",
+    "Foundation rollback restores live charges while preserving peak/largest reservation history using the production slot Layout. Logical reservation is never reported as physical backing; Core does not own the caller's ledger or a parent/global governor.",
+    "Repeated zero/short Pending, paid Pending, Failed and fresh-budget retries retain the same physical backing, perform no post-callback allocation or reboxing, and cannot refill the two-step coordinate allowance. The private callback trace proves short Host retries and exhausted Host retries invoke no native callback, and explicit abort invokes it once.",
+    "Failed native start frees its acquired vacant slot once. Explicit abort, abandoned pure cursor drop, completed artifact drop and successful consuming payload projection each release the sole slot once. Native cursor/artifact destructors are trivial, allocation-free and own no external cleanup obligation.",
+    "Public compatibility/type projection mismatches return the unchanged erased artifact or cursor without allocation or release, including both directions between generic and supported storage kinds. Consumer envelopes retain no Producer route reservation; existing Producer metadata/admission/projection tests and all ten registered Producer gate commands pass.",
+    "The isolated fixture runs the actual public production tests (nine under std, four in each portable cell) alongside its historical model. No production measurement or support claim is derived from that model.",
+    "Locked workspace validation passes 592 tests with three ignored. Isolated Core and Planning full tests/checks pass in std, no-default and async-no-std. ARM thumbv7em-none-eabihf Core/Planning checks pass for both portable cells; these are compile evidence only.",
+]
+
+# PR #144 called the fifth Core registration field priority. Its authoritative
+# name is diagnostic_ordinal; Core has no separate priority field. The positive
+# tests preserve that nonzero field and the nonzero candidate-order field; they
+# introduce no new priority semantics or Planning registration abstraction.
+registration_ordering_note = "Nonzero diagnostic_ordinal and candidate_order cover the actual Core contract; no independent Core priority field exists."
+
+remaining_acceptance_evidence = [
+    "A fresh independent acceptance context must reconstruct the admitted contracts, compare the exact final PR base/head, and assess public API/type eligibility, complete-owner capture, immutable configuration and source/registration loan termination.",
+    "The independent reviewer must reproduce the public typed/Host positives, both actual null-allocation sites, reservation-history rollback, retained-other-owner and retry/abort/output-release cases, and inspect the raw allocation/Box ownership transfer and conservative temporary-cost accounting.",
+    "Read passing required mainline/validation results for the exact final PR head from GitHub. Local execution results and an implementation-context review are not substitutes for that remote evidence or independent acceptance.",
+    "Only a separate authorized acceptance transition may mark this evidence passed and the tranche complete/current. Aggregate, gate and milestone admission/acceptance remain separate claims.",
+]
+excluded_claims = [
+    "WP-200 aggregate implementation/admission, all-coordinate TD preflight, exact aggregate PlanFootprint or bounded aggregate rollback",
+    "Parent/global admission pairing, installation, Servient publication or terminal-retention policy",
+    "Support for foreign/open compilers, concrete Zenoh lowering, all profile-permitted target lengths, or a general allocator/certification mechanism",
+    "Bare-device runtime parity, exact machine stack peak, allocator metadata/fragmentation bounds or whole-process peak memory",
+    "Tranche completion, independent acceptance, Producer gate reaffirmation or any gate/milestone status transition",
+]
+
+[measurements]
+toolchain = "rustc 1.95.0 (59807616e 2026-04-14)"
+target = "x86_64-unknown-linux-gnu"
+# Every pair is [size, alignment], measured/checked with actual production types.
+startup_adapter_layout = [1, 1]
+native_cursor_layout = [76, 4]
+binding_payload_layout = [65, 1]
+native_output_layout = [152, 8]
+native_step_result_layout = [312, 8]
+host_slot_layout = [152, 8]
+host_cursor_owner_layout = [16, 8]
+host_output_owner_layout = [104, 8]
+native_temporary_allowance = [840, 8]
+host_temporary_allowance = [1088, 8]
+physical_accounting = "The slot includes its tag, padding, native cursor/output metadata and the binding payload once. Add the applicable outer owner and conservative temporary overlap separately; do not add the 65-byte payload as another retained allocation. SPI cursor/artifact byte declarations remain native semantic declarations; the checked support descriptor supplies actual Host physical Layouts. Startup registration/adapter provisioning is a separate baseline."
+temporary_accounting = "The native allowance includes the cursor, step result, native output, inline payload and structured error; Host adds its outer step-result transport. This conservatively covers native output coexisting with the held slot, but is not a compiler-generated machine-stack measurement. Layouts must be queried on the target, not copied as portable constants."
+rollback_before_live_peak_largest = [7, 7, 7]
+rollback_after_live_peak_largest = [7, 159, 152]
+rollback_physical_allocations_acquired = 0
+rollback_with_other_held_slot_live_peak_largest = [159, 311, 152]
+
+[fixed_work]
+callback_class = "BindingPolls"
+cleanup_class = "CleanupItems"
+compatibility = 1
+bounds = 1
+start_native = 1
+step_native = 2
+step_host_including_transport = 3
+maximum_paid_steps = 2
+abort_native = 1
+destruction_native = 1
+allocation_host = 1
+release_host = 1
+prepayment = "Only step receives/debits a budget under the preserved SPI. The caller prepays the other fixed callbacks and lifetime acquisition/cleanup work from the descriptor before invocation; the precursor introduces no admission governor. Captured Host compatibility/support queries avoid native callbacks entirely."
+
+[memory_check]
+tool = "Valgrind 3.27.1 Memcheck"
+production_tests_passed = 9
+errors = 0
+definitely_lost_bytes = 0
+indirectly_lost_bytes = 0
+possibly_lost_bytes = 48
+still_reachable_bytes = 544
+residual_attribution = "The full allocation stacks identify the 48-byte block as std::thread::current::init_current via libtest's mpsc context, and the 544-byte block as std's stack-overflow thread-info BTree. Neither stack traverses the new production allocation helper. Exact observed production slot/adapter requests are paired with release; no whole-process zero-retention claim is made."
+reproduction = "Build the Core consumer_compiler_support integration executable with cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support --no-run --message-format=json, then run the emitted executable under valgrind --leak-check=full --errors-for-leak-kinds=definite,indirect --show-leak-kinds=all --error-exitcode=97 <executable> --test-threads=1."
+
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+command = "cargo test --workspace --locked --offline"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-core"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-servient --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-servient --lib"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-servient --no-default-features --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo check --offline --locked -p clinkz-wot-property-read-binding-fixture --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-property-read-binding-fixture"
+status = "passed"
+
+[[verification]]
+command = "cargo check --offline --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-property-read-architecture-runner"
+status = "passed"
+
+[[verification]]
+command = "cargo test --offline --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-core"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-core --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-planning --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-core --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-planning --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo run --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --bin witness"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --target thumbv7em-none-eabihf -p clinkz-wot-core --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --target thumbv7em-none-eabihf -p clinkz-wot-planning --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --target thumbv7em-none-eabihf -p clinkz-wot-core --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --target thumbv7em-none-eabihf -p clinkz-wot-planning --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "rustfmt --edition 2024 --check core/src/binding.rs core/src/binding_compiler.rs core/src/lib.rs core/tests/consumer_compiler_support.rs"
+status = "passed"
+
+[[verification]]
+command = "cargo fmt --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml -- --check"
+status = "passed"
+
+[[verification]]
+command = "git diff --check"
+status = "passed"
