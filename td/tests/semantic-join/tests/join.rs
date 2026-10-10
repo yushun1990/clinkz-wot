@@ -157,6 +157,68 @@ fn assert_output(draft: &Draft) {
     assert!(first.scopes[3].is_none());
 }
 #[test]
+fn readable_properties_have_disjoint_ranges_and_property_specific_selection() {
+    let mut source = input();
+    source.properties = Some(serde_json::from_str(r#"{
+      "a-read":{"type":"null","forms":[{"href":"ignored","op":[]},{"href":"first"}]},
+      "b-empty":{"type":"null","forms":[]},
+      "c-read":{"type":"null","forms":[{"href":"second"},{"href":"ignored","op":[]},{"href":"third"}]},
+      "d-tail":{"type":"null","forms":[]}
+    }"#).unwrap());
+    let r = registration::registration();
+    let calls = Calls::default();
+    let mut b = build(&source, &r, &calls, Limits::default()).unwrap();
+    let draft = loop {
+        if calls.starts.get() != 0 {
+            assert_eq!(calls.bounds.get(), 3);
+        }
+        match b.step(&mut budget(4096), false) {
+            Step::Pending(next) => b = next,
+            Step::Complete(draft) => break draft,
+            Step::Failed(cause) => panic!("{cause:?}"),
+        }
+    };
+    drop(source);
+    drop(r);
+    assert_eq!(draft.counts(), (4, 3));
+    for (name, range) in [
+        ("a-read", (0, 1)),
+        ("b-empty", (1, 1)),
+        ("c-read", (1, 3)),
+        ("d-tail", (3, 3)),
+    ] {
+        assert_eq!(draft.lookup_range(name), Some(range));
+    }
+    for (name, ordinal, index, target) in [
+        ("a-read", 0, 1, "https://example.test/a/b/first"),
+        ("c-read", 2, 0, "https://example.test/a/b/second"),
+        ("c-read", 2, 2, "https://example.test/a/b/third"),
+    ] {
+        let row = draft.select(name, Some(index)).unwrap();
+        assert_eq!(row.property_ordinal, ordinal);
+        assert_eq!(row.plan.property_name(), name);
+        assert_eq!(row.plan.form_index(), index);
+        assert_eq!(row.plan.resolved_target(), target);
+        assert_eq!(
+            row.artifact.as_ref().unwrap().artifact().payload().target(),
+            Some(target)
+        );
+    }
+    assert_eq!(draft.select("a-read", None).unwrap().plan.form_index(), 1);
+    assert_eq!(draft.select("c-read", None).unwrap().plan.form_index(), 0);
+    for (name, index) in [
+        ("a-read", 0),
+        ("a-read", 2),
+        ("c-read", 1),
+        ("b-empty", 1),
+        ("d-tail", 2),
+    ] {
+        assert!(draft.select(name, Some(index)).is_none());
+    }
+    assert_eq!((calls.bounds.get(), calls.starts.get()), (3, 3));
+}
+
+#[test]
 fn production_cursor_yields_owned_core_plans_and_concrete_artifacts() {
     let source = input();
     let registration = registration::registration();

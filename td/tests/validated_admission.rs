@@ -14,6 +14,35 @@ use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
 };
+#[path = "support/admission_boundaries.rs"]
+mod boundaries;
+
+#[test]
+fn every_logical_resource_has_an_independent_exact_boundary() {
+    boundaries::for_each(|case| {
+        assert!(case.thing.validate().is_ok());
+        for maximum in [case.maximum - 1, case.maximum, case.maximum + 1] {
+            let limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .with_limit(case.kind, Some(maximum));
+            observe(0);
+            let result = boundaries::execute(&case.thing, &limits, ledger(), 10_000);
+            let observation = stop();
+            assert_eq!(observation.live, 0);
+            assert_eq!(observation.requests, observation.freed);
+            if maximum < case.maximum {
+                assert!(
+                    matches!(result, Err(Cause::Limit(l)) if l.kind() == case.kind
+                    && l.configured() == maximum && l.observed() == case.maximum && l.phase() == case.phase),
+                    "{:?}={maximum}: {result:?}",
+                    case.kind
+                );
+            } else {
+                assert!(result.is_ok(), "{:?}={maximum}: {result:?}", case.kind);
+            }
+        }
+    });
+}
 #[derive(Clone, Copy)]
 struct Observation {
     active: bool,

@@ -208,9 +208,9 @@ loans end and bounded build cleanup finishes before final reconciliation/checks
 and publication permit. No still-live owner is discharged by ending a borrow.
 Published carries independently committed runtime/registration/lifecycle/cleanup
 charges only. Generic source, temporary, persistent-document and runtime accounts
-remain for their actual lifecycles. The already orphaned
-`AdmissionLedger::reclassify_source_to_persistent_document` remains a future
-source-removal obligation, not a typed publication step.
+remain for their actual lifecycles. The orphaned
+`AdmissionLedger::reclassify_source_to_persistent_document` is removed under
+the admitted borrowed-TD change; ending a loan never transfers a source charge.
 
 Future strict ingestion accounts all controlled parse/source state from its first
 allocation, retains upstream charges while lending and proves bounded physical

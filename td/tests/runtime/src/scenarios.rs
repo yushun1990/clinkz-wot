@@ -17,6 +17,8 @@ use crate::{
     access::{Guard, Permission},
     heap, report,
 };
+#[path = "../../support/admission_boundaries.rs"]
+mod boundaries;
 
 const CREDIT: u64 = 256;
 const POLLS: usize = 300_000;
@@ -499,6 +501,90 @@ fn two_byte_copy_positions(costs: &[Cost]) -> [(usize, &'static str); 2] {
     let padding = insertion.checked_sub("//value".len() + 1 + 1).unwrap();
     [(padding, "padding"), (insertion, "insertion")]
 }
+fn uri_credit_oracle(costs: &[Cost]) -> [u64; SEMANTIC_STEPS] {
+    // Literal action schedules for the two fixed targets, anchored at public
+    // Form Ready events. No resolver state, reported debit or work() query
+    // selects a required credit. (charge, repeat); README explains the stages.
+    const FIRST: &[(u64, usize)] = &[
+        (1, 1),
+        (0, 1),
+        (1, 9), // resolve, allocate, configure/prefix
+        (1, 1),
+        (16, 1),
+        (1, 2), // root slash
+        (1, 2),
+        (16, 1),
+        (1, 3), // a/
+        (1, 3),
+        (16, 1),
+        (1, 2), // ../ and two pop actions
+        (1, 3),
+        (16, 1), // ../ at root
+        (1, 1),
+        (16, 1),
+        (1, 2), // empty segment
+        (1, 6),
+        (16, 1),
+        (1, 6), // value
+        (1, 2), // path-span advances
+        (2, 2),
+        (1, 8),
+        (2, 1), // fix, padding, shift/end, insertion
+        (1, 9),
+        (0, 1), // tail/UTF-8 completion, Finish/Ready
+    ];
+    const SECOND: &[(u64, usize)] = &[
+        (1, 1),
+        (0, 1),
+        (1, 1),
+        (16, 1),
+        (1, 9), // resolve/allocate/merge/configure/prefix
+        (1, 1),
+        (16, 1),
+        (1, 2), // root slash
+        (1, 2),
+        (16, 1),
+        (1, 3), // a/
+        (1, 2),
+        (16, 1),
+        (1, 3), // b/
+        (1, 1), // base path-span advance
+        (1, 3),
+        (16, 1),
+        (1, 2),   // ../ and pop
+        (1, 138), // seven scans, switch, 128 writes, end, path-span advance
+        (2, 1),
+        (1, 5),
+        (0, 1), // fix, empty tail/UTF-8, Finish/Ready
+    ];
+    let mut expected = [0; SEMANTIC_STEPS];
+    let mut events = costs.iter().enumerate().filter(|(_, c)| c.form_ready);
+    for (schedule, total) in [(FIRST, 162), (SECOND, 255)] {
+        assert_eq!(
+            schedule
+                .iter()
+                .map(|(charge, n)| charge * *n as u64)
+                .sum::<u64>(),
+            total
+        );
+        let (ready, _) = events.next().unwrap();
+        let length = schedule.iter().map(|(_, n)| n).sum::<usize>();
+        let mut position = ready + 1 - length;
+        for &(charge, count) in schedule {
+            expected[position..position + count].fill(charge);
+            position += count;
+        }
+        assert_eq!(position, ready + 1);
+    }
+    assert!(events.next().is_none());
+    for (position, cost) in costs.iter().enumerate() {
+        assert_eq!(
+            cost.uri, expected[position],
+            "independent URI action {position}"
+        );
+    }
+    expected
+}
 fn sweep(
     t: &Thing,
     limits: &ResourceLimits,
@@ -508,6 +594,7 @@ fn sweep(
     costs: &[Cost],
 ) {
     let two_byte_copies = two_byte_copy_positions(costs);
+    let uri_credits = uri_credit_oracle(costs);
     for position in 0..expected.inspect {
         for cancel in [false, true] {
             heap::begin(0);
@@ -635,7 +722,7 @@ fn sweep(
             .find(|(index, _)| *index == position)
             .map(|(_, name)| *name);
         for (class, required) in [
-            (W::UriBytes, costs[position].uri),
+            (W::UriBytes, uri_credits[position]),
             (
                 W::CodecOutputBytes,
                 if copy_repair.is_some() {
@@ -664,7 +751,11 @@ fn sweep(
                     let _guard = Guard::new(heap::byte_regions(false), Permission::ReadOnly);
                     assert!(matches!(c.step(&mut short, false), Ok(Step::Pending)));
                 }
-                assert_eq!(W::ALL.map(|w| short.remaining(w)), unchanged); // no partial multiclass debit
+                assert_eq!(
+                    W::ALL.map(|w| short.remaining(w)),
+                    unchanged,
+                    "independent positive URI/copy credit at action {position}"
+                ); // no partial multiclass debit
                 assert_eq!(heap::trace(), before);
             }
             if repair.is_some() {
@@ -929,6 +1020,32 @@ fn number_boundaries(limits: &ResourceLimits) {
         maximum + 1
     ));
 }
+fn logical_boundaries(limits: &ResourceLimits) {
+    let mut checked = 0;
+    boundaries::for_each(|case| {
+        assert!(case.thing.validate().is_ok());
+        for maximum in [case.maximum - 1, case.maximum, case.maximum + 1] {
+            let policy = limits.clone().with_limit(case.kind, Some(maximum));
+            heap::begin(0);
+            let result = boundaries::execute(&case.thing, &policy, ledger(&policy, 0), CREDIT);
+            heap::end(); // requires actual zero TD bytes and matching releases
+            if maximum < case.maximum {
+                assert!(
+                    matches!(result, Err(Cause::Limit(l)) if l.kind() == case.kind
+                    && l.configured() == maximum && l.observed() == case.maximum && l.phase() == case.phase),
+                    "{:?}={maximum}: {result:?}",
+                    case.kind
+                );
+            } else {
+                assert!(result.is_ok(), "{:?}={maximum}: {result:?}", case.kind);
+            }
+            checked += 1;
+        }
+    });
+    report(format_args!(
+        "independent logical boundaries: {checked} exact/short/spare outcomes; td_live=0"
+    ));
+}
 pub fn run() {
     report(format_args!(
         "production TD runtime: pointer_bits={} async={}",
@@ -963,6 +1080,7 @@ pub fn run() {
     startup.try_reserve(inline_bytes()).unwrap().commit();
     crate::access::self_test();
     for limits in [BenchmarkStaticReferenceV1::LIMITS, GatewayDefaultV1::LIMITS] {
+        logical_boundaries(limits);
         let t = input();
         let source = heap::source_live();
         let mut upstream = ResourceAccount::new(

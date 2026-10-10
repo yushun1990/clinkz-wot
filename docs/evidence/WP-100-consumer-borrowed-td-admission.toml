@@ -1,0 +1,143 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-100"
+tranche = "WP-100-CONSUMER-VALIDATED-THING"
+implementation_ref = "a3e84f85679c9f5adf67140833a20496ed3e2f7a"
+recorded_on = "2026-10-10"
+status = "ready"
+evidence_key = "consumer-borrowed-td-admission"
+admission_review = "github-pr:130#issuecomment-6034368557"
+acceptance = "pending-independent-acceptance-at-exact-reviewed-head"
+assessment = "ready-for-final-independent-review-of-the-borrowed-TD-tranche"
+
+requirement_ids = [
+    "DOC-RUNTIME-001", "RES-LIMIT-001", "RES-LIMIT-002", "RES-LIMIT-003",
+    "API-RESOURCE-001", "ADMIT-MEM-001", "ADMIT-TXN-001",
+    "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001",
+]
+compilation_cells = ["no-default+validated-thing", "async-no-std+validated-thing", "std+validated-thing"]
+resource_interpretation_revision = 2
+document_projection = "typed-content-v1"
+production_paths = [
+    "foundation/src/resource.rs", "td/src/validated.rs", "td/src/validate.rs",
+    "td/src/td_defaults.rs", "td/src/core/data_type/uri.rs",
+    "td/src/components", "td/src/thing.rs", "td/src/lib.rs",
+]
+scope = "Production borrowed immutable typed Thing admission, complete inspection/Basic, paid Consumer Property Read lending, and the fixed external owned Core plan/artifact witness. Caller provisioning/destruction remains external; actual upstream source charges survive lending. This record is an implementation/evidence candidate, not independent acceptance."
+excluded = [
+    "WP-200 generic aggregate/compiler support, owned Pending artifacts/callbacks, variable output cleanup and exact PlanFootprint",
+    "WP-400 captured full policy/registration, simultaneous parent/global accounting, slot/generation/cancellation races, cleanup transfer, publication permit/install, leases/drain/reclaim",
+    "Strict bounded JSON/literal field/Number/date ingestion, first-allocation source accounting, Directory/Discovery",
+    "Real protocol Consumer execution, hardware cycle/stack/whole-process RAM claims, Consumer gate registration or acceptance, completion of the broader WP-100 package",
+]
+composition_assessment = "No accepted production assumption was falsified within this TD/fixed-witness boundary. New probes close missing threshold, positive URI prepayment, late-reference and range-isolation evidence. Local child-ledger evidence and fixed compiler cleanup deliberately cannot certify the WP-200/WP-400 production aggregate or transaction. Independent review must assess all six obligations together at the final reviewed head."
+
+[[obligation]]
+id = 1
+name = "Capability and lifetimes"
+evidence = [
+    "td/tests/compile/validated-capability: 24 Host and 12 ARM requested/resolved off/direct/sibling cells; std base/AP/order/combined and portable/async base/AP; expected E0432 negatives remain absent under serde-only activation",
+    "Normal-dependency Host runtime checks distinguish lexical base/AP resolution and exercise actual public Thing/schema Basic, including all five failed projections, rounding, underflow and non-Number predicates",
+    "td/src/validated.rs: eight compile-fail examples prohibit forged config/proof, proof/cursor cloning, premature input destruction, scratch loans across acknowledgement/movement and replaced Snapshot factory/footprint/view imports",
+    "td/tests/semantic-join: three compile-fail examples prohibit raw Thing aggregate entry and premature source/registration destruction; consuming completion returns an actual static draft inspected after both are destroyed",
+]
+
+[[obligation]]
+id = 2
+name = "Complete typed meaning"
+evidence = [
+    "validated::tests::whole_typed_content_matches_independent_field_oracle compares supplied-field byte/read/checksum totals against the recursive test-only public-field oracle; private Context, metadata/date/version/link/response, all schema/security variants, Actions/Events and opaque subtrees participate",
+    "validated::tests::complete_basic_first_coordinate_parity drives the complete shared Basic corpus through production and compares independent owner/field/ordinal/index/member expectations; eight added common-prefix cases cover a valid last definition and late missing root, combo oneOf/allOf, Property/Action/Event/root Form references",
+    "Production Basic and typed corpus tests retain OneOf-before-flags/native child order, absent ID, serializer-failing Basic-valid values, explicit-empty/default distinctions, mutable discriminators, numeric slow paths and the five-predicate amendment",
+    "td/tests/validated_lending.rs and the external join retain original property/Form coordinates, paid operations, inherited/explicit-empty security, relative/template URI meaning, metadata, UTF-8/empty scopes and checked copy totals",
+]
+
+[[obligation]]
+id = 3
+name = "Support and progress"
+evidence = [
+    "validated::tests::operation_projection_and_named_support rejects every missing TD catalog value and unsupported position/Number/work envelopes before an owner/input/allocation exists, ignores unrelated NA and constructs both unchanged named policies",
+    "Production traversal retains BTree/serde iterators and byte positions with the len+1 initialization/advance envelope; repeated insufficient native/byte credit preserves the exact continuation, work and accounts without prefix replay",
+    "Production URI actions are byte-resumable; native/ARM access guards exercise zero URI/output credit, Ready retries with inaccessible URI/source/scope regions, both two-byte repair actions, growth/replacement and prepaid release",
+    "Runtime literal 71/181-action schedules anchored to public Form Ready events independently require every positive UriBytes debit (162/255 totals). Repeated one-short retries preserve all classes/allocator state and resume to identical facts/work/requests. The positive-15-unit-only classification undercharge mutant compiles and is rejected on native and booted ARM, in default and async graphs",
+    "Number evidence covers zero, 63/64/65 and 255/256/257, failed/non-finite public projection, atomic whole debit, lifetime Limit and cancellation. Inspection/Basic/lending/preflight/materialization/rewind share one non-resettable TD remainder; exact total and repeated-pass exhaustion are executable",
+]
+
+[[obligation]]
+id = 4
+name = "Actual resources and terminal ownership"
+evidence = [
+    "td/tests/support/admission_boundaries.rs supplies 22 independent literal cases for 20 logical catalog rows; public Host and native/booted ARM runners check one-short/exact/one-spare (66 outcomes per policy), exact cause/resource/configured/observed/phase and zero terminal controlled bytes",
+    "Existing runtime exact/one-byte-short sweeps cover all six physical catalog controls before allocator entry, with actual Layout sizes/alignments/counts, geometric old/new overlap, inline movement/return capacity, simultaneous peaks, largest request and each fallible TD allocation request",
+    "Two shared cases reach derived-URI/effective-document semantic limits with admissible original href/supplied content, preventing inspection from masking a missing late check. Both ARM-only omitted-limit mutants compile and fail at their exact semantic boundaries while native branches pass, in default and async graphs. Exact lifetime work completes all 27 TD catalog rows; no profile/row value or WorkClass changes",
+    "Runtime cancels/drops at every public inspect/Basic/semantic suspension, Ready and Done, with prepaid fixed cleanup, stable first cause and no added work/allocation. Every failed request physically releases its children before terminal reporting",
+    "The real caller source allocator and upstream account remain live through TD outcomes; zero-source projection yields identical TD traces. Only physical caller destruction releases its original charge; startup backing remains charged. The fixed arena includes alignment/guards/padding/observer capacity and delegates child storage without double-counting backing",
+]
+
+[[obligation]]
+id = 5
+name = "External semantic join"
+evidence = [
+    "td/tests/semantic-join normally depends on production TD/Foundation/Core and the complete concrete Property Read registration; no candidate TD or copied semantic algorithm participates",
+    "Both passes consume the paid trusted cursor. Actual Core logical plans and concrete binding artifacts retain original non-first coordinates, raw/resolved targets, metadata/scopes and complete identity after actual input/registration destruction; protocol execution is poisoned",
+    "Empty ranges, an entirely empty aggregate and two readable properties separated by an empty range with a trailing empty range have literal lookup/selection/artifact expectations",
+    "Later materialization, semantic and actual compiler-bound failures have zero starts; all actual bounds precede every start. Every observed fallible pre-start allocation, insufficient copy/item/release credit and public join cancellation/drop suspension has bounded fixed rollback and exactly-once pending-cursor abort",
+    "Eleven integration tests and three compile-fail examples run in std/order/no-default/async graphs; both ARM portable/async graphs compile. The join is Host execution evidence; the separate TD runtime owns booted ARM execution",
+]
+
+[[obligation]]
+id = 6
+name = "Disjoint evidence and impact"
+evidence = [
+    "The admitted orphaned AdmissionLedger::reclassify_source_to_persistent_document and its four obsolete transfer tests are removed; API ownership now records its current path as absent. General source/temporary/persistent-document/runtime accounts and reservation/release APIs remain",
+    "Foundation #69 general ledger/work/resource primitives and Context #70 discovery are reaffirmed by workspace, portable/async Foundation, whole-field and actual runtime evidence; no current production caller of the removed method existed",
+    "docs/resource-limits.csv is unchanged (Git blob e4cce306dedc799f1b62c687f85b4508ae1ceb67): 196 rows/three profiles, ordering/values and all twelve WorkClasses retain their meaning",
+    "The locked workspace suite (579 passed cases, 66 successful summaries), authority validation and no-default Property Read integration reaffirm completed exact WP-100 call/response, WP-200 leaf, WP-300 execution and the Producer gate within their original boundaries",
+    "Historical borrowed readmission, semantic/strict/date/arena/handoff witnesses remain narrower evidence. The readmission suite also passes the expanded shared Basic corpus; mainline retains their registered matrices. No successor admission, milestone or accepted gate status changes",
+]
+
+[reproduction]
+toolchain = "Rust 1.95.0"
+host = "x86_64-unknown-linux-gnu"
+target = "thumbv7em-none-eabihf; QEMU mps2-an386 Cortex-M4 boot/runtime"
+local_emulator = "QEMU 7.2.22"
+dependency_policy = "Retain all checked-in locks. TD's caret public API floor remains serde_json 1.0.149; runtime resolves 1.0.149 and workspace/capability/join resolve 1.0.151. Feature trees are emitted per independent normal-dependency cell; locks are reproducibility inputs, not private-layout support contracts."
+workflow = ".github/workflows/mainline.yml"
+matrix_steps = [
+    "Check production bounded TD admission and lending",
+    "Check production TD capability dependencies",
+    "Join production TD semantics to Core plans and binding artifacts",
+]
+matrix_results = "All registered steps rerun locally: five production variants plus portable target checks and eight TD compile-fail examples; 24 Host/12 ARM capability cells; four join runtime/doctest graphs and two ARM checks."
+
+[[verification]]
+command = "td/tests/runtime/run.sh"
+status = "passed"
+
+[[verification]]
+command = "td/tests/runtime/run.sh --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --workspace --locked"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-foundation --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-foundation --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml"
+status = "passed"
+
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+status = "passed"

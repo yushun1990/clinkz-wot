@@ -259,6 +259,62 @@ fn fault(thing: &mut Thing, stage: usize) {
 
 pub fn cases() -> Vec<Case> {
     let mut cases = Vec::new();
+    // Equal-length long names force byte-resumable comparisons all the way to
+    // the last definition, including a late missing reference at every Basic
+    // reference owner. Expected original sites are independent of the kernel.
+    for location in 0..=7 {
+        let mut thing = base();
+        let prefix = "shared-prefix-".repeat(8);
+        let first = format!("{prefix}00");
+        let last = format!("{prefix}31");
+        let missing = format!("{prefix}99");
+        for i in 0..32 {
+            thing
+                .security_definitions
+                .insert(format!("{prefix}{i:02}"), SecurityScheme::nosec());
+        }
+        thing.security = vec![last.clone()];
+        let mut expected = First {
+            owner: "Thing",
+            ordinal: 0,
+            field: "Security",
+            index: 0,
+            member: 1,
+        };
+        match location {
+            0 => {} // valid root must find the last common-prefix name
+            1 => thing.security.push(missing),
+            2 | 3 => {
+                let (one, all) = if location == 2 {
+                    (vec![last.clone(), missing], vec![first, last])
+                } else {
+                    (vec![first, last.clone()], vec![last, missing])
+                };
+                let mut combo = SecurityScheme::combo_one_of(one);
+                if let SecurityScheme::Combo(value) = &mut combo {
+                    value.all_of = all;
+                }
+                thing.security_definitions.insert("zz-combo".into(), combo);
+                expected.owner = "SecurityDefinition";
+                expected.ordinal = 34; // none, other, 32 shared-prefix names
+                expected.field = if location == 2 { "OneOf" } else { "AllOf" };
+            }
+            4..=7 => {
+                let kind = location - 4;
+                forms(&mut thing, kind)[1].security = Some(vec![last, missing]);
+                expected.owner = ["Property", "Action", "Event", "Thing"][kind];
+                expected.field = "FormSecurity";
+                expected.index = 1;
+            }
+            _ => unreachable!(),
+        }
+        cases.push(Case {
+            label: format!("long late reference {location}"),
+            thing,
+            valid: location == 0,
+            first: if location == 0 { None } else { Some(expected) },
+        });
+    }
     for start in 0..=LADDER.len() {
         let mut thing = base();
         for stage in start..LADDER.len() {

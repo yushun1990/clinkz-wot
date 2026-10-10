@@ -9,7 +9,7 @@ ResourceKind,type,clinkz-wot-foundation,resource,public,clinkz_wot_foundation::R
 ResourceAccount,type,clinkz-wot-foundation,resource,public,clinkz_wot_foundation::ResourceAccount,no-default|async-no-std|std,all,all,all,API-RESOURCE-001|ADMIT-MEM-001,foundation/src/resource.rs,keep,frozen
 ResourceReservation,type,clinkz-wot-foundation,resource,public,clinkz_wot_foundation::ResourceReservation,no-default|async-no-std|std,all,all,all,API-RESOURCE-001,foundation/src/resource.rs,keep,frozen
 AdmissionLedger,type,clinkz-wot-foundation,resource,public,clinkz_wot_foundation::AdmissionLedger,no-default|async-no-std|std,all,all,all,API-RESOURCE-001|ADMIT-TXN-001,foundation/src/resource.rs,keep,frozen
-admission_ledger_reclassify_source_to_persistent_document,function,clinkz-wot-foundation,resource,public,clinkz_wot_foundation::AdmissionLedger::reclassify_source_to_persistent_document,no-default|async-no-std|std,all,all,consumer,ADMIT-MEM-001|ADMIT-TXN-001,foundation/src/resource.rs,remove,removed
+admission_ledger_reclassify_source_to_persistent_document,function,clinkz-wot-foundation,resource,public,clinkz_wot_foundation::AdmissionLedger::reclassify_source_to_persistent_document,no-default|async-no-std|std,all,all,consumer,ADMIT-MEM-001|ADMIT-TXN-001,absent,remove,removed
 ClockId,type,clinkz-wot-foundation,time,public,clinkz_wot_foundation::ClockId,no-default|async-no-std|std,all,all,all,TIME-001,absent,add,frozen
 MonotonicInstant,type,clinkz-wot-foundation,time,public,clinkz_wot_foundation::MonotonicInstant,no-default|async-no-std|std,all,all,all,TIME-001,absent,add,frozen
 RuntimeClock,trait,clinkz-wot-foundation,time,public,clinkz_wot_foundation::RuntimeClock,no-default|async-no-std|std,all,all,all,API-SURFACE-001|TIME-001,absent,add,frozen

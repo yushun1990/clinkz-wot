@@ -98,7 +98,8 @@ jobs:
               td_axis_features="${td_profile_features}"
               if [ "$td_axis" != base ]; then td_axis_features+="$td_axis,"; fi
               for td_activation in capability sibling; do
-                cargo check --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features}${td_activation},positive"
+                cargo test --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features}${td_activation},positive"
+                cargo tree --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features}${td_activation},positive" --edges normal --format '{p} features=[{f}]'
               done
               td_negative_log="$(mktemp)"
               if cargo check --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features}negative" >"$td_negative_log" 2>&1; then
@@ -107,10 +108,26 @@ jobs:
               fi
               grep -E 'unresolved imports.*td::ValidatedThing' "$td_negative_log" || { cat "$td_negative_log"; exit 1; }
               rm "$td_negative_log"
+              cargo test --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features%,}"
+              cargo tree --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features%,}" --edges normal --format '{p} features=[{f}]'
             done
           done
-          for td_features in capability,positive ap async,capability,positive async,ap sibling,positive; do
-            cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "$td_features"
+          for td_prefix in '' async,; do
+            for td_axis in '' ap,; do
+              for td_activation in capability sibling; do
+                td_features="${td_prefix}${td_axis}${td_activation},positive"
+                cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "$td_features"
+                cargo tree --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "$td_features" --edges normal --format '{p} features=[{f}]'
+              done
+              td_negative_log="$(mktemp)"
+              if cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "${td_prefix}${td_axis}negative" >"$td_negative_log" 2>&1; then
+                cat "$td_negative_log"
+                exit 1
+              fi
+              grep -E 'unresolved imports.*td::ValidatedThing' "$td_negative_log" || { cat "$td_negative_log"; exit 1; }
+              rm "$td_negative_log"
+              cargo tree --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "${td_prefix}${td_axis}negative" --edges normal --format '{p} features=[{f}]'
+            done
           done
 
       # Workspace tests cover the default graph; the snapshot's JSON object

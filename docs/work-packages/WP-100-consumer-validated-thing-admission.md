@@ -10,6 +10,9 @@ transition, including the [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission
 authority migrated by github-pr:129. The admitted technical contract and
 accepted executable witnesses are preserved. Production implementation and
 completion, successor admission and Consumer gate registration remain separate.
+The [registered production completion candidate](../evidence/WP-100-consumer-borrowed-td-admission.toml)
+owns its exact implementation reference, six-obligation evidence reconciliation
+and pending independent acceptance boundary.
 
 The normalized-owner authority from github-pr:78 and its later refinements is
 superseded for typed Consumer admission. The github-pr:75 withdrawal after the
@@ -906,7 +909,7 @@ neither admission nor the non-production witnesses establish production completi
 6. **Disjoint evidence and impact.** Reaffirm Foundation #69 and Context #70,
    general ledger/work primitives, the unchanged row/value schema, completed
    exact WP-100 call/response, WP-200 leaf, WP-300 execution and Producer gate.
-   Remove the orphaned reclassification method only in its future admitted
+   Remove the orphaned reclassification method only in its admitted
    source change. Semantic/strict/date/arena/handoff fixtures remain at their
    narrower boundaries. Reopen any actually falsified owner; don't erase history.
 
