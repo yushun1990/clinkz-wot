@@ -1,6 +1,6 @@
 # Consumer aggregate semantics and representation admission
 
-Status: DISCUSSING
+Status: MIGRATED
 
 ## Question and authority
 
@@ -27,8 +27,10 @@ owns the corrected shared/representation contract. The
 owns source scope and later completion. This topic records investigation,
 alternatives and remaining admission questions under
 [ADR-0013](../docs/ADRs/0013-work-package-scoped-implementation-admission.org).
-It does not admit production changes or claim independent acceptance. The exact
-checked support construction remains unresolved, so this topic stays DISCUSSING.
+It does not admit production changes or claim independent acceptance. The later
+construction decision below is migrated into the Binding SPI, Planning and the
+registered precursor candidate. Migration of that decision does not admit the
+precursor or complete its required production evidence.
 
 ## Conclusion and assumptions challenged
 
@@ -176,60 +178,73 @@ rely on incidental System allocator success, or intercept arbitrary process
 allocations as a hidden common policy. Core-private costs cannot be fixed by
 post-hoc Planning footprint checks.
 
-## Precise next admission boundary
+## Construction decision and migration
 
-The next boundary is **checked compiler support for this dynamic aggregate,
-including the selected static and public Host preparation representations**,
-not broad WP-200 completion or a new runtime architecture. Before registering
-aggregate implementation:
+The new [downstream construction witness](../tools/architecture-fixtures/consumer-compiler-support/README.md)
+adds evidence beyond the earlier allocation observation. Its upstream model owns
+one private, immutable target-copy compiler and the support issuer. It creates
+real complete Consumer-capable Core registrations; the caller can choose checked
+configuration, but cannot supply a callback, destructor, implementation identity,
+cost attestation or support constructor. A same-compatibility impostor is rejected.
+The actual private capacity/configuration is compared with the complete owner,
+not trusted from its identity tuple. The checked carrier owns that entire bundle;
+preparation borrows it, and consuming completion ends the loan.
 
-1. Freeze a constructible checked carrier and its ownership/API projections.
-   It must connect the actual reviewed compiler implementation, complete
-   registration identity, preparation representation/configuration and costs.
-   Specify who constructs it, who retains it, how Servient captures eligibility,
-   and how Planning consumes it without concrete protocol dependencies or an
-   independent installable compiler half. A user-supplied flag/identity tuple,
-   limits-only config or arbitrary third-party attestation cannot be authority.
-2. Identify the supported closed implementation set and each callback/cleanup
-   primitive, including pre-bounds cost and any compatibility callback used
-   during the build. Prove cursor/input loans, Pending/Failed transport,
-   exactly-once abort and post-registration artifact destruction. An inline
-   compiler needs fixed storage evidence; allocating compiler/Host paths need
-   actual Layout/overlap authorization and ownership-preserving failure, or a
-   source-proved reservation that holds the physical backing through use.
-3. Exercise that entry in a downstream pre-aggregate fixture through **complete
-   registrations**, not only these compiler components. Reject absent, mismatched
-   or unsupported support before callbacks. Check both physical representations,
-   negative allocation/reservation cases and retained owners; do not demand the
-   full aggregate's completion evidence before admitting its precursor.
-4. If the Host path or support exposure changes Core, admit only that exact
-   Core-owned precursor under ADR-0013, with exact paths/API/dependencies and
-   regression evidence for the completed compiler/registration/Producer leaves.
-   Complete it before the aggregate consumes the changed contract. Keep the
-   portable compiler trait unless a concrete counterexample requires changing
-   it. The remaining choice of backing proof versus additive fallible/reserved
-   Host construction must be resolved in that admission design, not guessed
-   inside aggregate implementation.
+The Host transport model acquires one cursor/output slot before native start,
+keeps its address across unpaid retries, paid Pending and Failed, and transfers
+it to source-independent output without allocation after a callback. Injected
+null acquisition leaves the original ledger and another held owner intact.
+Actual typed and model-Host outputs remain usable after input and registration
+destruction. Commands, measured Layouts and the distinction from current public
+Host erasure belong to the fixture README. In particular, the existing public
+Host complete registration is constructed and rejected as unsupported; its
+positive production replacement remains completion work, not a result of this
+model.
 
-This PR does not register either precursor or aggregate. Independent exact-head
-review must assess the authority correction; author validation is not independent
-acceptance. Subsequent formal admission must reconcile the frozen support API
-with all affected owners and exact evidence before production changes begin.
+This resolves the issuer question narrowly: the supported first implementation
+is a **closed Core-owned resolved-target copy primitive** with immutable checked
+configuration. It performs no protocol or TD rule. Core knows its callback and
+destruction bodies; erasure records the actual private implementation/adapter
+kind, and only complete-registration capture can create the supported owner.
+The open native compiler SPI cannot certify itself. Accepting arbitrary binding
+compilers would require a separate explicit trusted source-admission boundary,
+which is unnecessary for this first constructibility proof. The existing
+allocating mock and future Zenoh compilers are not silently admitted.
 
-The paired aggregate then retains its existing completion key/path and all
-variable output, all-bounds, monotonic work, exact-coordinate regression, consuming
-completion, exact PlanFootprint and bounded rollback obligations. Both declared
-exact predecessors retain their narrower accepted evidence; no broad package
-completion is required. WP-400 separately owes parent/global pairing, slots,
-cancellation/cleanup retention, permit/install, leases/drain and final reclaim.
-The Consumer gate and real Host protocol path remain later claims.
+The [Binding SPI](../docs/spec/binding-spi.md#closed-consumer-compiler-support)
+owns the exact additive API and one held-slot Host mechanism. The
+[precursor candidate](../docs/work-packages/WP-200-consumer-compiler-support-admission.md)
+and `docs/work-packages/index.toml` own its three Core production paths, complete
+predecessors, all three feature cells, prechecks, exclusions and production
+completion key. Planning projects that checked complete owner as its existing
+registration parameter. There is no installable compiler half, public proof
+factory, portable compiler-trait change or generic allocator framework.
 
-Unresolved risks are the exact non-forgeable support construction across erased
-registration, physical backing/failure guarantees, variable artifact destructor
-costs, and complete aggregate/global composition. Reviewed support concerns
-trusted Cargo-linked implementations; it is not a sandbox for arbitrary native
-extensions. Generated images, genuine
-client-only construction, real Pico ownership/progress, constrained hardware fit
-and protocol-shape neutrality remain 0076 or their own successors. No resource
-row, WorkClass, profile value, package dependency, roadmap ordering, milestone or
-gate status change is justified by this reevaluation.
+A separately held allocation cannot authorize today's boxes, and fallible
+boxing after Complete has no place to retain the consumed result. Acquiring the
+one fixed cursor/output slot before native start preserves the existing failure
+shape. Static storage stays inline and pays its own physical costs. The Core
+helper's narrow capacity and lack of foreign callbacks are intentional scope,
+not evidence for arbitrary native compilation or whole-device fit.
+
+Startup and aggregate work are distinct: ordinary complete construction already
+calls compatibility. Those startup costs are separately owned; support capture
+itself invokes no compiler callback, and all later aggregate callbacks are
+prepaid. This removes a literal timing contradiction without weakening aggregate
+eligibility or all-bounds-before-start.
+
+This topic's decision is migrated. The precursor is only planned/candidate and
+still needs independent exact-head admission review, followed by implementation
+and positive evidence through the real public Host/static Core surface. The
+model cannot substitute for that completion. Independent review must challenge
+whether Core's closed helper earns its API/ownership cost, not merely accept the
+valid allocation counterexamples as proof of the proposed remedy.
+
+The aggregate remains unadmitted until the precursor is complete/current. Its
+existing TD enumeration, all-bounds barrier, variable output, exact footprint,
+rollback and paired representation completion claims are preserved. WP-400
+separately owns parent/global capacity, publication and terminal retention.
+Topic 0076 still owns product/deployment alternatives; real protocols, genuine
+client-only construction, generated images, Pico progress and hardware fit are
+outside this decision. No existing completion, gate, milestone, resource value
+or roadmap status is changed or independently accepted here.

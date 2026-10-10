@@ -33,13 +33,14 @@ Topics are retained after migration as decision history.
 ** DISCUSSING
 
 - [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 Composable Capabilities and Runtime Boundaries]]
-- [[file:0077-consumer-compiler-admission-boundary.md][0077 Consumer Aggregate Compiler Admission Boundary]]
 
 ** DECIDED
 
 - None.
 
 ** MIGRATED
+
+- [[file:0077-consumer-compiler-admission-boundary.md][0077 Consumer Aggregate Compiler Admission Boundary]]
 
 - [[file:0074-consumer-td-admission-architecture-proposal.md][0074 Consumer TD Admission Architecture Proposal and Impact Review]]
 - [[file:0075-consumer-borrowed-admission-construction.md][0075 Consumer Borrowed Admission Construction]]

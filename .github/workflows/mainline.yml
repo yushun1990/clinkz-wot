@@ -50,6 +50,14 @@ jobs:
           cargo check --locked --manifest-path "$runtime_probe_manifest" -p static-plan-probe --target thumbv6m-none-eabi
           bash tools/architecture-fixtures/product-runtime-boundaries/check-normal-dependencies.sh
 
+      - name: Check closed Consumer compiler support construction
+        run: |
+          compiler_support_manifest=tools/architecture-fixtures/consumer-compiler-support/Cargo.toml
+          cargo run --locked --manifest-path "$compiler_support_manifest" --bin witness
+          cargo test --locked --manifest-path "$compiler_support_manifest"
+          cargo test --locked --manifest-path "$compiler_support_manifest" --no-default-features
+          cargo test --locked --manifest-path "$compiler_support_manifest" --no-default-features --features async
+
       - name: Check production bounded TD admission and lending
         run: |
           for td_features in validated-thing validated-thing,serde_json/preserve_order; do

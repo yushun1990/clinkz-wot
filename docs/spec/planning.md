@@ -1254,8 +1254,8 @@ helper modules are implementation mechanics):
 ```rust
 pub trait ConsumerPropertyReadRegistration: private::Sealed {
     type Artifact: 'static;
-    // Identity/capability/compiler projections from complete Core Host/static
-    // registrations; forwarding alone confers no compiler-support attestation.
+    // Projection from Core's checked ConsumerCompilerRegistration<R>, which
+    // retains the complete Host/static registration and its closed support.
 }
 pub struct ConsumerPropertyReadBuildConfig { /* checked fixed Planning projection */ }
 pub struct ConsumerPropertyReadRollback<A: 'static> { /* owned output, accounts, fixed cause/positions */ }
@@ -1308,18 +1308,24 @@ that limits projection, not compiler behavior. Complete
 Consumer role/profile/registration eligibility is Servient's checked capture.
 Config constructors allocate/scan no external input. The build copies fixed config
 and captures complete registration identity; its entry does no variable work.
-The sealed registration adapter may forward complete Core Host/static
-registration projections generically, with their actual artifact/cursor types;
-this is not blanket eligibility. The checked Consumer policy must bind support
+The sealed registration adapter projects Core's checked
+`ConsumerCompilerRegistration<R>` with the actual artifact/cursor types. Raw
+complete-registration forwarding remains insufficient for aggregate eligibility.
+The checked Consumer policy must bind support
 to the actual compiler implementation, complete registration identity and
-selected preparation representation/configuration before any compiler callback.
+selected preparation representation/configuration before any aggregate compiler callback.
 Bounds/start/step/abort primitive costs, cursor/temporary storage, allocation
 behavior and artifact destruction are part of that support. A limits projection,
 compatibility identifier or complete-registration validity alone is not a support
-attestation. The exact checked carrier and its consuming construction must be
-specified and externally exercised before aggregate implementation admission;
-the build signature alone does not supply it. No downstream trusted proof factory
-or installable compiler-only component is introduced by this requirement.
+attestation. [Core's closed support contract](binding-spi.md#closed-consumer-compiler-support)
+owns the consuming complete-owner construction, actual immutable compiler
+configuration and selected Host adapter. The first eligible implementation is
+the fixed resolved-target copy primitive, not the open native compiler trait.
+The [precursor](../work-packages/WP-200-consumer-compiler-support-admission.md)
+must complete its public Host/static evidence before aggregate admission. The
+existing build signature takes the checked owner as `R`; its limits-only config
+does not mint support. No downstream trusted proof factory or installable
+compiler-only component is introduced by this requirement.
 No concrete protocol dependency or unsafe type identification enters Planning.
 Binding authors still use the existing complete Core registration SPI.
 
