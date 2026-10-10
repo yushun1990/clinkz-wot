@@ -375,6 +375,19 @@ impl ValidatedThingAdmissionConfig {
 /// use clinkz_wot_td::ValidatedThing;
 /// fn refill(proof: ValidatedThing<'_>) -> ValidatedThing<'_> { proof.clone() }
 /// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_td::{ValidatedThing, ValidatedThingCursor};
+/// fn forge(cursor: ValidatedThingCursor<'_>) -> ValidatedThing<'_> {
+///     ValidatedThing { owner: cursor }
+/// }
+/// ```
+///
+/// The replaced Snapshot factory, footprint and raw view are absent.
+///
+/// ```compile_fail
+/// use clinkz_wot_td::{ValidatedThingBuilder, ValidatedThingFootprint, ValidatedThingView};
+/// ```
 pub struct ValidatedThing<'td> {
     owner: ValidatedThingCursor<'td>,
 }
