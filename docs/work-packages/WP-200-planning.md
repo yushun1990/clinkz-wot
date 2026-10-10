@@ -275,8 +275,20 @@ policy/proof/registration identity. Planning owns variable bounded rollback/recl
 exact PlanFootprint and supported callback/abort/destructor evidence. Servient
 retains the complete registration separately and owns capacity pairing/publication.
 
+Admission must first identify the constructible checked compiler-support carrier
+required by the [shared/representation contract](../spec/planning.md#shared-semantics-and-representation-applicability).
+Generic complete-registration forwarding is not compiler eligibility. Static and
+Host support/physical-cost evidence are distinct obligations of this paired
+boundary; neither implies on-device embedded Planning. A necessary Core erasure
+or support-interface correction requires its own exact ADR-0013 precursor
+admission and evidence before this tranche consumes it. It is outside the
+Planning paths below. No Core-wide compiler rewrite or shared allocator is a
+prerequisite by default.
+
 Permitted production paths are exactly:
 
+- `planning/Cargo.toml`, solely to request TD's existing `validated-thing`
+  capability explicitly in normal dependencies;
 - `planning/src/consumer_property_read.rs`;
 - `planning/src/property_read.rs`; and
 - `planning/src/lib.rs`.
@@ -314,7 +326,13 @@ Planning work, exact-coordinate regression, draft independence from TD and
 compiler inputs, an external consuming-completion proof that ends all input/scratch loans and
 uses concrete output after Thing and compiler-registration destruction; supported
 compiler Pending/abort and variable output cleanup, Host/static parity, and the
-three Planning feature cells. It
+three Planning feature cells. Parity covers shared semantics/invariants;
+allocation, erasure, inline storage and physical failure/cleanup evidence are
+required separately for each supported representation. Standalone normal
+dependency graphs must activate `validated-thing` in std, no-default and async
+without std, without dev/sibling feature unification. Preflight is emitted by
+the consumed `ConsumerPropertyReadBuild::step` contract, not a second standalone
+preflight entry. This future path clarification grants no source admission. It
 claims no WP-400 publication/execution or Consumer architecture gate.
 
 ## Requirements

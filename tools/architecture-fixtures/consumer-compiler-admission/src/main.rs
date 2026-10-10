@@ -1,4 +1,6 @@
 //! Observe existing compiler callbacks; implement no aggregate or TD semantics.
+mod inline;
+
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     mem,
@@ -187,4 +189,5 @@ fn main() {
         "Host artifact erasure delta: {} requested bytes; no aggregate or admission claim",
         mem::size_of::<MockArtifact>()
     );
+    inline::compare(plan, candidate);
 }
