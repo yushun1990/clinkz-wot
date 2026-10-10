@@ -33,15 +33,16 @@ the run; the binary's panic strategy is abort.
 
 The two unchanged named policies exercise:
 
-- Twenty logical resource categories use fixed public-input oracles with
-  one-short, exact and one-spare limits (60 outcomes per policy). Document,
+- Twenty logical resource categories use 22 fixed public-input oracles with
+  one-short, exact and one-spare limits (66 outcomes per policy). Document,
   text, extension, Number, JSON depth/member/item/node, affordance/Form,
   additional-response/URI-variable, schema node/depth/edge, URI source and
   effective security root/depth limits all check the exact first cause and
   terminal allocator release. Inputs are provisioned one at a time outside
   admission. Existing lifetime and six physical boundary sweeps complete the
-  27-row TD operation catalog; derived URI/effective-document limits also have
-  separate semantic-phase boundaries in production TD tests.
+  27-row TD operation catalog. Two cases specifically reach the derived URI
+  and effective-document semantic limits with an admissible original href and
+  supplied content, so inspection cannot mask a missing late check.
 - Whole typed inspection and shared Basic followed by lending of non-first
   original Forms, an empty readable range, defaults, explicit-empty security,
   relative URI resolution, path pop/repair and Unicode scope/copy totals.
@@ -172,7 +173,9 @@ undercharges classification only when offered 15 units; full-credit and zero
 credit runs remain unchanged, while the independently selected positive probe
 must reject it on both targets. Missing-charge cases require the independent
 URI oracle or access fault. The unchanged native branches of ARM-only mutations
-must pass. Logs/build artifacts are under `target/td-admission-mutations`; production worktree sources
+must pass. ARM-only omission of either resolved-URI or effective-content checks
+must also be rejected at the exact semantic boundary, while native execution
+continues to pass. Logs/build artifacts are under `target/td-admission-mutations`; production worktree sources
 remain untouched.
 
 The allocator has fixed 256-KiB caller-source and 128-KiB TD regions, fixed

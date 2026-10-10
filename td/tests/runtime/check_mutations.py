@@ -54,6 +54,20 @@ def cases(source, uri_source):
     # independently selected positive shortage can expose this undercharge.
     yield "positive-uri-short-only", replace_once(source, work,
         f"if budget.remaining(W::UriBytes) == 15 && {work} == 16 {{ 15 }} else {{ {work} }}"), uri_source, False
+    for name, check in [
+        ("arm-missing-resolved-uri-limit", """                self.owner.policy.check(
+                    R::UriTemplateSourceBytesMax,
+                    resolved_len,
+                    Phase::Semantics,
+                )?;"""),
+        ("arm-missing-effective-content-limit", """                self.owner.policy.check(
+                    R::GeneratedEffectiveDocumentBytesMax,
+                    effective,
+                    Phase::Semantics,
+                )?;"""),
+    ]:
+        yield name, replace_once(source, check,
+            '                if !cfg!(target_os = "none") {\n' + check + '\n                }'), uri_source, True
     # Undercharge each two-byte repair, then recover both missing units from
     # the first two tail bytes. Per-Form/lifetime totals and zero-credit probes
     # cannot distinguish this from a correctly prepaid run.
@@ -128,9 +142,12 @@ def main():
                     else:
                         valid = result.returncode == -signal.SIGSEGV
                 else:
-                    marker = ("mandatory URI meaning" if name == "arm-missing-uri-charge" else
-                              "independent positive URI/copy credit" if name == "positive-uri-short-only" else
-                              "FAIL: forbidden TD access")
+                    marker = {
+                        "arm-missing-uri-charge": "mandatory URI meaning",
+                        "positive-uri-short-only": "independent positive URI/copy credit",
+                        "arm-missing-resolved-uri-limit": "UriTemplateSourceBytesMax=9: Ok(())",
+                        "arm-missing-effective-content-limit": "GeneratedEffectiveDocumentBytesMax=113: Ok(())",
+                    }.get(name, "FAIL: forbidden TD access")
                     valid = result.returncode == 1 and marker in observed
                 if name == "compensated-repair-copy-charge":
                     valid = valid and "two-byte copy predebit: action=padding" in observed

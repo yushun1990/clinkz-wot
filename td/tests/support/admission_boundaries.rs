@@ -116,6 +116,34 @@ pub fn for_each(mut check: impl FnMut(Case)) {
         "/original/value".len() as u64,
         Phase::Inspect,
     );
+    // The original href fits both short ceilings. Only the completed derived
+    // target/effective content exceeds them, so inspection cannot mask a
+    // missing semantic-phase check on either execution target.
+    let relative = r#""base":"http://a/","properties":{"p":{"type":"null","observable":false,"forms":[{"href":"p"}]}}"#;
+    let resolved = "http://a/p".len() as u64;
+    // Added leaves: base, property key/type, readOnly/writeOnly/observable
+    // scalars, raw href and default content type.
+    let supplied = text
+        + "http://a/".len() as u64
+        + 1
+        + "null".len() as u64
+        + 8
+        + 8
+        + 8
+        + 1
+        + "application/json".len() as u64;
+    add(
+        with_fields(relative),
+        R::UriTemplateSourceBytesMax,
+        resolved,
+        Phase::Semantics,
+    );
+    add(
+        with_fields(relative),
+        R::GeneratedEffectiveDocumentBytesMax,
+        supplied + resolved,
+        Phase::Semantics,
+    );
     let security = r#""properties":{"p":{"type":"null","forms":[{"href":"/p","security":["none","none","none"]}]}}"#;
     for (kind, maximum) in [
         (R::SecurityBranchesPerPlanMax, 3),
