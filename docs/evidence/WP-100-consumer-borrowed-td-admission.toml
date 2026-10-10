@@ -4,11 +4,11 @@ work_package = "WP-100"
 tranche = "WP-100-CONSUMER-VALIDATED-THING"
 implementation_ref = "a3e84f85679c9f5adf67140833a20496ed3e2f7a"
 recorded_on = "2026-10-10"
-status = "ready"
+status = "passed"
 evidence_key = "consumer-borrowed-td-admission"
 admission_review = "github-pr:130#issuecomment-6034368557"
-acceptance = "pending-independent-acceptance-at-exact-reviewed-head"
-assessment = "ready-for-final-independent-review-of-the-borrowed-TD-tranche"
+acceptance = "github-pr:139#issuecomment-6094394538"
+assessment = "independently-accepted-production-completion-of-the-borrowed-TD-tranche"
 
 requirement_ids = [
     "DOC-RUNTIME-001", "RES-LIMIT-001", "RES-LIMIT-002", "RES-LIMIT-003",

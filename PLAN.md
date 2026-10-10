@@ -34,8 +34,8 @@ active task session; they are not stored in this roadmap.
 
 The v5.1 Consumer one-shot authority is active. The domain-entry review is
 complete, and the first WP-100 Consumer source tranche is complete. The borrowed
-TD tranche is admitted for implementation under ADR-0013; its production
-completion remains open. [Its admission record](docs/work-packages/WP-100-consumer-validated-thing-admission.md)
+TD tranche is complete within its admitted ADR-0013 boundary; the broader WP-100
+package remains open. [Its admission record](docs/work-packages/WP-100-consumer-validated-thing-admission.md)
 owns the exact implementation and evidence boundary. ADR-0021 replaces the mandatory
 normalized Snapshot with borrowed immutable typed Thing, bounded complete TD
 validation/semantic lending, owned Planning output and Servient transaction

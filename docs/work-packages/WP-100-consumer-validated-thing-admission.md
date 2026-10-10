@@ -1,18 +1,21 @@
 # WP-100 Consumer TD Admission
 
-Status: ADMITTED FOR IMPLEMENTATION. `WP-100-CONSUMER-VALIDATED-THING`
-is `in-progress` / `admitted` / `current` in [the work-package index](index.toml).
-The separate admission-only transition uses the
+Status: COMPLETE. `WP-100-CONSUMER-VALIDATED-THING`
+is `complete` / `admitted` / `current` in [the work-package index](index.toml).
+The separate admission-only transition used the
 [independent complete six-obligation acceptance on PR #130](https://github.com/yushun1990/clinkz-wot/pull/130#issuecomment-6034368557)
 of exact evidence head `81738ca24a5919314267c0ccaaa6638fb184a8b3`.
-That review accepts the entire borrowed-TD pre-readmission boundary for this
+That review accepted the entire borrowed-TD pre-readmission boundary for that
 transition, including the [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org)
 authority migrated by github-pr:129. The admitted technical contract and
-accepted executable witnesses are preserved. Production implementation and
-completion, successor admission and Consumer gate registration remain separate.
-The [registered production completion candidate](../evidence/WP-100-consumer-borrowed-td-admission.toml)
-owns its exact implementation reference, six-obligation evidence reconciliation
-and pending independent acceptance boundary.
+accepted executable witnesses are preserved. The separate completion transition
+records the [independent production acceptance on PR #139](https://github.com/yushun1990/clinkz-wot/pull/139#issuecomment-6094394538)
+at exact reviewed head `42274f173c761adaab3bd4c4cb68e4dbad8c52de`.
+The [registered production completion evidence](../evidence/WP-100-consumer-borrowed-td-admission.toml)
+retains its implementation reference and six-obligation technical evidence.
+Completion covers only the borrowed-TD/fixed-witness tranche; the broader WP-100
+package, WP-200/WP-400 responsibilities, successor admission and Consumer gate
+registration/acceptance remain separate.
 
 The normalized-owner authority from github-pr:78 and its later refinements is
 superseded for typed Consumer admission. The github-pr:75 withdrawal after the
@@ -866,7 +869,7 @@ review. No new Foundation account, WorkClass or resource row is authorized.
 ## Evidence required before separate readmission
 
 These replacement obligations supersede the eight Snapshot-specific items.
-The independent acceptance linked above establishes the **complete six-obligation
+The independent readmission acceptance on PR #130 establishes the **complete six-obligation
 pre-readmission boundary** at the accepted evidence head. The following obligations
 remain the boundary to repeat through production for completion. Reusable
 historical witnesses count only where their actual claim matches the obligation;
