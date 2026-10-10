@@ -1,0 +1,12 @@
+[package]
+name = "consumer-compiler-admission-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-core = { path = "../../../core" }
+clinkz-wot-foundation = { path = "../../../foundation" }
+clinkz-wot-property-read-binding-fixture = { path = "../property-read-binding" }
