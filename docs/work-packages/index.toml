@@ -404,7 +404,7 @@ id = "WP-200-CONSUMER-COMPILER-SUPPORT"
 work_package = "WP-200"
 sequence = 320
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-200-CONSUMER-PROPERTY-READ-PLANNING", "WP-300-CONSUMER-PROPERTY-READ-BINDING"]
 depends_on_packages = ["WP-000"]
@@ -443,7 +443,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features --features async",
     "cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning",
 ]
-admission_review = "pending-independent-review:docs/work-packages/WP-200-consumer-compiler-support-admission.md"
+admission_review = "github-pr:144#issuecomment-6097700130"
 completion_evidence_keys = ["consumer-compiler-support"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-compiler-support.toml"
 
