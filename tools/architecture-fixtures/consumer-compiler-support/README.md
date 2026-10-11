@@ -1,11 +1,16 @@
 # Closed Consumer compiler support construction
 
-This isolated, non-publishable crate supplies pre-admission construction evidence
-for [topic 0077](../../../workspace/0077-consumer-compiler-admission-boundary.md)
-and the [exact Core precursor candidate](../../../docs/work-packages/WP-200-consumer-compiler-support-admission.md).
-Its library models the proposed upstream issuer. The separate downstream binary
-and integration test use only its public API and actual production Core complete
-registration constructors. It changes no production source or root dependency.
+This isolated, non-publishable crate retains the construction model for
+[topic 0077](../../../workspace/0077-consumer-compiler-admission-boundary.md)
+and the [admitted Core precursor](../../../docs/work-packages/WP-200-consumer-compiler-support-admission.md).
+Its library and `witness` binary are historical model evidence. The
+[`production` integration tests](tests/production.rs) reuse
+[Core's external completion tests](../../../core/tests/consumer_compiler_support.rs)
+against this isolated dependency graph. Those tests construct the actual public
+typed and supported Host complete registrations and production compiler. No
+manifest or root dependency change is needed.
+Production measurements and the independent acceptance boundary are recorded in
+[the completion evidence candidate](../../../docs/evidence/WP-200-consumer-compiler-support.toml).
 
 ```sh
 RUSTUP_TOOLCHAIN=1.95.0 cargo run --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --bin witness
@@ -67,13 +72,13 @@ The successful Host result is a **new transport model borrowing a complete
 typed Core registration**. It is not a successful call through production
 `HostBindingCompilerRegistration`. The binary separately constructs a real
 Consumer-capable `HostBindingRegistration` and rejects its current ordinary
-adapter as unsupported, even for the known compiler. The precursor must repeat
-the positive, failure injection, payload projections and ownership evidence
-through its real public Host surface after independent admission and source
-implementation. Its startup adapter acquisition is another completion failure
-site that this model does not measure.
+adapter as unsupported, even for the known compiler. The production tests now
+repeat the positive, failure injection, payload projections and ownership
+evidence through the real public Core surface, including its fallible startup
+adapter acquisition. Their measured Layouts are independent of the model's
+constants.
 
 No aggregate, variable rollback, parent/global governor, installation, Producer
-execution, real protocol, bare-device runtime or acceptance is proved. The
-Core helper's usefulness and ownership remain questions for exact-head
-independent admission review. The existing allocating mock is not made eligible.
+execution, real protocol, bare-device runtime or acceptance is proved.
+Independent completion acceptance remains required. The existing allocating
+mock is not made eligible.

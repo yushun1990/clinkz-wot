@@ -26,7 +26,10 @@ use crate::{
     InteractionInput, InteractionOutput, InteractionStatus, OutboundRequest, PlanId,
     PlanSetGeneration, ResponsePayloadRole, RetryClass, StartStatus, ThingId,
 };
-use crate::{BindingCompilerExtension, StaticBindingCompilerRegistration};
+use crate::{
+    BindingCompilerExtension, ConsumerCompilerSupport, ResolvedTargetCompiler,
+    StaticBindingCompilerRegistration,
+};
 #[cfg(feature = "std")]
 use crate::{HostBindingArtifact, HostBindingCompilerRegistration};
 
@@ -2400,6 +2403,74 @@ where
     input: StaticBindingRegistrationInput<B>,
 }
 
+/// One complete registration and Core-issued closed Consumer support.
+///
+/// Borrowing the registration's compiler keeps the complete owner alive. The
+/// descriptor is metadata, not a certificate that can be paired with another
+/// owner. Only consuming capture below can construct this carrier.
+///
+/// ```compile_fail
+/// # use clinkz_wot_core::{ConsumerCompilerRegistration, ConsumerCompilerSupport};
+/// let forged = ConsumerCompilerRegistration { registration: (), support: unsafe { core::mem::zeroed::<ConsumerCompilerSupport>() } };
+/// ```
+///
+/// ```compile_fail
+/// # use clinkz_wot_core::ConsumerCompilerRegistration;
+/// # fn reuse<R>(checked: ConsumerCompilerRegistration<R>) {
+/// let original = checked.into_registration();
+/// let reused = checked.support();
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct ConsumerCompilerRegistration<R> {
+    registration: R,
+    support: ConsumerCompilerSupport,
+}
+
+impl<R> ConsumerCompilerRegistration<R> {
+    /// Borrows the original validated complete registration.
+    pub const fn registration(&self) -> &R {
+        &self.registration
+    }
+    /// Borrows its read-only, source-owned support descriptor.
+    pub const fn support(&self) -> &ConsumerCompilerSupport {
+        &self.support
+    }
+    /// Consumes support and returns the original complete registration.
+    pub fn into_registration(self) -> R {
+        self.registration
+    }
+}
+
+impl<B: PollServerBinding> StaticBindingRegistration<B>
+where
+    B::Compiler: 'static,
+{
+    /// Captures only the actual closed compiler and its checked configuration.
+    /// Rejection returns the unchanged complete owner, without a callback.
+    pub fn try_into_consumer_compiler(
+        self,
+    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
+        let actual = (self.input.compiler.compiler() as &dyn core::any::Any)
+            .downcast_ref::<ResolvedTargetCompiler>();
+        if self.input.capabilities.supports_consumer_property_read()
+            && self.input.execution.supports_application_static()
+            && let Some(actual) = actual
+            && self.identity().configuration() == actual.configuration()
+            && self.identity().artifact_compatibility()
+                == crate::binding_compiler::resolved_target_compatibility()
+        {
+            let support = actual.support(false);
+            return Ok(ConsumerCompilerRegistration {
+                registration: self,
+                support,
+            });
+        }
+        let error = registration_error(self.identity(), 323);
+        Err(BindingInputRejection::new(self, error))
+    }
+}
+
 impl<B> StaticBindingRegistration<B>
 where
     B: PollServerBinding,
@@ -3585,6 +3656,27 @@ pub struct HostBindingRegistration {
 
 #[cfg(feature = "std")]
 impl HostBindingRegistration {
+    /// Captures only Core's fallible supported Host adapter and actual config.
+    /// Generic erasure confers no support, even for the closed compiler type.
+    pub fn try_into_consumer_compiler(
+        self,
+    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
+        if self.input.capabilities.supports_consumer_property_read()
+            && self.input.execution.supports_host_erased()
+            && let Some(support) = self.input.compiler.consumer_support()
+            && self.identity().configuration() == support.configuration()
+            && self.identity().artifact_compatibility()
+                == crate::binding_compiler::resolved_target_compatibility()
+        {
+            return Ok(ConsumerCompilerRegistration {
+                registration: self,
+                support,
+            });
+        }
+        let error = registration_error(self.identity(), 323);
+        Err(BindingInputRejection::new(self, error))
+    }
+
     /// Validates compiler/server identity and every narrow declaration.
     pub fn new(
         input: HostBindingRegistrationInput,
