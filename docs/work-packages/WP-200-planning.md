@@ -247,20 +247,22 @@ WP-400, or the Consumer Property Read architecture gate.
 The [exact precursor admission](WP-200-consumer-compiler-support-admission.md)
 owns Core source scope, predecessors, checks and required completion evidence
 for closed compiler support through complete registrations. Its `index.toml`
-record is planned/admitted; production implementation and completion remain.
+record and [completion evidence](../evidence/WP-200-consumer-compiler-support.toml)
+own its accepted completion boundary.
 It preserves the portable compiler SPI and supports one closed target-copy
 primitive, with separate
 typed and held-slot Host mechanisms. It admits neither arbitrary native
 compilers nor aggregate implementation. The [Binding SPI](../spec/binding-spi.md#closed-consumer-compiler-support)
 owns the detailed contract.
 
-### Unadmitted successor boundary: `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE`
+### Admission candidate: `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE`
 
-This is a future sequential ADR-0013 boundary, not a registered or admitted
-tranche. It may enter `index.toml` only after
+The [admission candidate](WP-200-consumer-property-read-aggregate-admission.md)
+registers the sequential ADR-0013 boundary without admitting source work. Its
+entry requires
 `WP-100-CONSUMER-VALIDATED-THING` and the existing
 `WP-200-CONSUMER-PROPERTY-READ-PLANNING` exact-coordinate tranche and the
-`WP-200-CONSUMER-COMPILER-SUPPORT` precursor are
+`WP-200-CONSUMER-COMPILER-SUPPORT` precursor to be
 `complete/current` with passed evidence.
 
 The tranche owns one-registration/all-readable preflight, conservative
@@ -288,7 +290,7 @@ policy/proof/registration identity. Planning owns variable bounded rollback/recl
 exact PlanFootprint and supported callback/abort/destructor evidence. Servient
 retains the complete registration separately and owns capacity pairing/publication.
 
-Admission must first complete the checked complete-registration support carrier
+Admission consumes the completed checked complete-registration support carrier
 required by the [shared/representation contract](../spec/planning.md#shared-semantics-and-representation-applicability)
 and [Core precursor](WP-200-consumer-compiler-support-admission.md).
 Generic complete-registration forwarding is not compiler eligibility. Static and

@@ -23,7 +23,7 @@ broader alternatives and their unknowns.
 
 The [Planning specification](../docs/spec/planning.md#first-consumer-property-read-aggregate)
 owns the corrected shared/representation contract. The
-[unadmitted work-package boundary](../docs/work-packages/WP-200-planning.md#unadmitted-successor-boundary-wp-200-consumer-property-read-aggregate)
+[unadmitted work-package boundary](../docs/work-packages/WP-200-planning.md#admission-candidate-wp-200-consumer-property-read-aggregate)
 owns source scope and later completion. This topic records investigation,
 alternatives and remaining admission questions under
 [ADR-0013](../docs/ADRs/0013-work-package-scoped-implementation-admission.org).

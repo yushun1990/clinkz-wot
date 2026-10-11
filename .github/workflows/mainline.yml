@@ -58,6 +58,15 @@ jobs:
           cargo test --locked --manifest-path "$compiler_support_manifest" --no-default-features
           cargo test --locked --manifest-path "$compiler_support_manifest" --no-default-features --features async
 
+      - name: Check Consumer aggregate admission composition
+        run: |
+          aggregate_admission_manifest=tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml
+          cargo test --locked --manifest-path "$aggregate_admission_manifest"
+          cargo test --locked --manifest-path "$aggregate_admission_manifest" --no-default-features
+          cargo test --locked --manifest-path "$aggregate_admission_manifest" --no-default-features --features async
+          cargo check --locked --manifest-path "$aggregate_admission_manifest" --no-default-features --target thumbv7em-none-eabihf
+          cargo check --locked --manifest-path "$aggregate_admission_manifest" --no-default-features --features async --target thumbv7em-none-eabihf
+
       - name: Check production bounded TD admission and lending
         run: |
           for td_features in validated-thing validated-thing,serde_json/preserve_order; do

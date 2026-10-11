@@ -1,4 +1,5 @@
-//! Non-production construction witness. No production support authority is minted.
+//! Non-production construction witness. Only production Core capture can mint
+//! the real checked owners used by the separate aggregate composition probe.
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
@@ -12,6 +13,9 @@ pub use compiler::{
 };
 #[cfg(feature = "std")]
 pub use registration::legacy_host_registration;
+#[cfg(feature = "std")]
+pub use registration::production_host_registration;
+pub use registration::production_static_registration;
 pub use registration::{
     CaptureError, CheckedRegistration, CompleteRegistration, Representation, StaticCursor,
     StaticStep, capture, mismatched_configuration_registration, producer_only_registration,
