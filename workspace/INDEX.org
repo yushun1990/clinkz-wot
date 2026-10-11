@@ -40,6 +40,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0078-consumer-aggregate-capacity-handoff.md][0078 Consumer Aggregate Capacity Handoff]]
+
 - [[file:0077-consumer-compiler-admission-boundary.md][0077 Consumer Aggregate Compiler Admission Boundary]]
 
 - [[file:0074-consumer-td-admission-architecture-proposal.md][0074 Consumer TD Admission Architecture Proposal and Impact Review]]

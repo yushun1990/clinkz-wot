@@ -1264,8 +1264,9 @@ pub enum ConsumerPropertyReadRollbackStep<A: 'static> {
     Pending(ConsumerPropertyReadRollback<A>), Complete(CoreError),
 }
 impl<A: 'static> ConsumerPropertyReadCleanupSlot<A> {
-    pub fn try_new(config: &ConsumerPropertyReadBuildConfig,
-                   capacity: ResourceReservation) -> Result<Self, CoreError>;
+    pub fn try_new<'capacity>(config: &ConsumerPropertyReadBuildConfig,
+                   capacity: ResourceReservation<'capacity>)
+        -> Result<Self, (ResourceReservation<'capacity>, CoreError)>;
     pub fn take(&mut self) -> Option<ConsumerPropertyReadRollback<A>>;
 }
 impl<A: 'static> ConsumerPropertyReadRollback<A> {
@@ -1333,13 +1334,26 @@ Preflight is emitted only through the consumed `ConsumerPropertyReadBuild::step`
 result; there is no separate standalone preflight entry with a second transaction
 owner.
 
-Preflight is emitted once, leaving the returned owner waiting for matching runtime
-capacity. `admit_runtime` moves the coordinator's capped output ledger into that
-owner only in this waiting phase after checking its transaction/account/capacity
-association. A wrong phase or mismatched ledger returns the unchanged build and
-ledger with a fixed error, without work or lost capacity. It never publishes or
-invents parent authority; the coordinator retains paired allowances/nonce and
-reconciliation. Waiting polls return Pending without source replay.
+Preflight is emitted once, leaving the returned owner waiting for runtime
+capacity. The coordinator associates that immutable requirement with its live
+transaction, policy, registration, generation and paired parent allowances before
+calling `admit_runtime`. That method moves the coordinator's capped child output
+ledger into the unique waiting build. A wrong phase returns the unchanged build
+and ledger with a fixed error, without work or lost capacity. Waiting polls return
+Pending without source replay.
+
+An `AdmissionLedger` is local accounting, not a transaction/policy certificate.
+It has no public origin, policy or nonce inspection and can be constructed by a
+caller. Planning must not claim to authenticate parent capacity or a ledger's
+transaction provenance, infer it from equal numeric ceilings, or introduce a
+synthetic reservation to inspect private ledger identity. Its private phase owner
+keeps preflight attached to the original TD continuation, config and registration;
+it does not accept a detached preflight as authority for another build. Planning
+enforces its copied policy and every actual Layout/local charge before allocation.
+An insufficient child account fails the unpublished build and follows rollback;
+it does not trigger a smaller successful subset. Servient separately proves the
+matching transaction and simultaneous parent/global reservation. This advanced
+Planning handoff neither publishes nor independently certifies that pairing.
 Complete consumes/destroys all input/config/registration/compiler-bearing
 state before exposing the source-free draft payload; destructuring Complete leaves
 no generic terminal cursor keeping the TD loan alive. Failed first ends TD/external-input loans and performs the supported prepaid
@@ -1351,13 +1365,18 @@ The fixed cause/diagnostic has admitted bounded storage; a compiler CoreError is
 reduced to that category without uncharged formatting or an unbounded destructor.
 Cleanup completion is not admission success.
 
-The checked cleanup-slot constructor moves an existing logical cleanup-capacity
-reservation of sufficient size/alignment for the fixed Rollback owner slot,
-validates its account/generation/policy association and allocates nothing. A slot
-is vacant on construction and reserves both the complete-object destination and
-its runtime retention. The coordinator pairs its parent allowance; no logical
-slot reservation is submitted as a contiguous allocation. It is reserved before
-entry/output construction, never allocated
+The cleanup-slot constructor checks the cleanup resource kind and sufficient
+bytes for its actual fixed inline destination, captures the reservation's owner,
+generation and amount as fixed metadata, and commits the guard on success. Its
+Rust storage supplies the destination's alignment. Rejection returns the original
+uncommitted guard and a fixed error. Committing ends the temporary mutable account
+loan; it does not release the charge or transfer the account into the slot.
+The coordinator retains that account and its paired parent allowance until the
+actual slot is released and every deposited/taken cleanup child is terminal.
+The coordinator validates transaction/policy association before construction;
+the public Foundation guard alone cannot certify it. No allocator request or
+synthetic contiguous allocation is made for this inline logical reservation.
+The slot is vacant and reserved before entry/output construction, never allocated
 on drop. `CleanupSlot::take(&mut self) -> Option<Rollback<A>>` moves the complete
 cleanup object to its driver, and `Rollback::step` consumes/returns its owner.
 The slot owns complete pending output/accounts, not merely a cleanup record.

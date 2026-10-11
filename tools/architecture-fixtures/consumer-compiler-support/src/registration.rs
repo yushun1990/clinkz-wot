@@ -10,10 +10,13 @@ use core::{
     task::{Context, Poll},
 };
 
-struct Endpoint<C>(PhantomData<C>);
+struct Endpoint<C>(PhantomData<C>, BindingArtifactCompatibility);
 impl<C> Endpoint<C> {
     fn new() -> Self {
-        Self(PhantomData)
+        Self(PhantomData, COMPATIBILITY)
+    }
+    fn for_compatibility(compatibility: BindingArtifactCompatibility) -> Self {
+        Self(PhantomData, compatibility)
     }
 }
 
@@ -23,7 +26,7 @@ impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
     type ReadinessState = ();
     type ResponseState = ();
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        COMPATIBILITY
+        self.1
     }
     fn route_state_layout(&self) -> BindingStateLayout {
         BindingStateLayout::of::<()>(BindingLifetimeFootprint::new(0, 0))
@@ -226,7 +229,7 @@ impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
     type Compiler = C;
     type RequestState = ();
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        COMPATIBILITY
+        self.1
     }
     fn request_state_layout(&self) -> BindingStateLayout {
         BindingStateLayout::of::<()>(BindingLifetimeFootprint::new(0, 0))
@@ -280,7 +283,7 @@ impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
 #[cfg(feature = "std")]
 impl<C: BindingCompilerExtension + Send + Sync> RouteServerBinding for Endpoint<C> {
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        COMPATIBILITY
+        self.1
     }
     fn prepare(
         &self,
@@ -375,7 +378,7 @@ impl<C: BindingCompilerExtension + Send + Sync> RouteServerBinding for Endpoint<
 #[cfg(feature = "std")]
 impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for Endpoint<C> {
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        COMPATIBILITY
+        self.1
     }
     fn invoke(
         &self,
@@ -393,6 +396,63 @@ impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for Endpoint<C> {
 }
 
 type Complete<C> = StaticBindingRegistration<StaticBindingComponents<Endpoint<C>, Endpoint<C>>>;
+
+// Inert execution halves reused by the aggregate admission witness. These
+// factories capture production Core support; none of the model issuer below
+// participates. No protocol operation is performed by this fixture.
+pub fn production_static_registration(
+    compiler: ResolvedTargetCompiler,
+    identity: BindingRegistrationIdentity,
+) -> ConsumerCompilerRegistration<
+    StaticBindingRegistration<impl PollServerBinding<Compiler = ResolvedTargetCompiler>>,
+> {
+    let compatibility = identity.artifact_compatibility();
+    let input = StaticBindingRegistrationInput::producer_and_consumer_property_read(
+        identity,
+        BindingExecutionSupport::application_static(),
+        StaticBindingCompilerRegistration::new(compiler),
+        StaticBindingComponents::new(
+            Endpoint::for_compatibility(compatibility),
+            Endpoint::for_compatibility(compatibility),
+        ),
+        resources(),
+        BindingIngressPolicy::hidden(),
+        BindingStatusPolicy::new(3, 5),
+    );
+    StaticBindingRegistration::producer_and_consumer_property_read(input)
+        .unwrap_or_else(|_| panic!("production complete static registration"))
+        .try_into_consumer_compiler()
+        .unwrap_or_else(|_| panic!("production static support capture"))
+}
+
+#[cfg(feature = "std")]
+pub fn production_host_registration(
+    compiler: ResolvedTargetCompiler,
+    identity: BindingRegistrationIdentity,
+) -> ConsumerCompilerRegistration<HostBindingRegistration> {
+    let compatibility = identity.artifact_compatibility();
+    let compiler = HostBindingCompilerRegistration::try_new_consumer(compiler)
+        .unwrap_or_else(|_| panic!("production supported Host adapter"));
+    let input = HostBindingRegistrationInput::producer_and_consumer_property_read(
+        identity,
+        BindingExecutionSupport::host_erased(),
+        compiler,
+        Box::new(Endpoint::<ResolvedTargetCompiler>::for_compatibility(
+            compatibility,
+        )),
+        Box::new(Endpoint::<ResolvedTargetCompiler>::for_compatibility(
+            compatibility,
+        )),
+        resources(),
+        BindingIngressPolicy::hidden(),
+        BindingStatusPolicy::new(3, 5),
+    );
+    HostBindingRegistration::new(input)
+        .unwrap_or_else(|_| panic!("production complete Host registration"))
+        .try_into_consumer_compiler()
+        .unwrap_or_else(|_| panic!("production Host support capture"))
+}
+
 enum Registration {
     Inline(Complete<InlineCompiler>),
     Impostor(Complete<Impostor>),

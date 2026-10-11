@@ -1,13 +1,15 @@
 # WP-200 Consumer compiler support admission
 
-Status: ADMITTED under ADR-0013, design revision v5.1. The tranche remains
-`planned` / `admitted` / `current` in [the work-package index](index.toml).
+Admission was granted under ADR-0013, design revision v5.1. The
+[work-package index](index.toml) owns current completion state; the
+[completion evidence](../evidence/WP-200-consumer-compiler-support.toml) records
+independent production acceptance. The original admission basis follows.
 The separate admission transition accepts the
 [independent scoped review on PR #144](https://github.com/yushun1990/clinkz-wot/pull/144#issuecomment-6097700130)
 of exact candidate head `c64ab912ba48aff4b61460d25fcfdc0a88a3ab91` against base
 `493704ff7e9b27048ee38c10e656138b78639d27`. The merged admission basis
 `98af47cbc6046c64ceec4d27547890d77ad2004d` has the same tree as that reviewed head.
-Production implementation and completion evidence remain required.
+The production obligations below are preserved as the admitted completion contract.
 
 ## Scope and decision
 

@@ -177,8 +177,9 @@ authoring compile-testable without waiting for the WP-300 execution API.
 
 ### Closed Consumer compiler support
 
-This is the target contract for the admitted ADR-0013 precursor; these additive
-Core APIs still require production implementation and completion evidence.
+This is the contract of the completed ADR-0013 precursor. Its
+[registered evidence](../evidence/WP-200-consumer-compiler-support.toml) owns the
+accepted production boundary and its exclusions.
 
 The first dynamic Consumer aggregate uses a closed compiler support path. An
 open `BindingCompilerExtension`, its compatibility value, or a complete bundle

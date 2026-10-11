@@ -448,6 +448,80 @@ completion_evidence_keys = ["consumer-compiler-support"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-compiler-support.toml"
 
 [[tranche]]
+id = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
+work_package = "WP-200"
+sequence = 330
+status = "planned"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = ["WP-100-CONSUMER-VALIDATED-THING", "WP-200-CONSUMER-PROPERTY-READ-PLANNING", "WP-200-CONSUMER-COMPILER-SUPPORT"]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "DOC-RUNTIME-001", "PLAN-REQUEST-001", "PLAN-COST-001", "PLAN-COST-003",
+    "PLAN-BOUND-001", "PLAN-SET-001", "PLAN-ARTIFACT-001", "API-OPTIONS-001",
+    "BIND-REG-001", "BIND-MEM-001", "RES-LIMIT-001", "RES-LIMIT-002",
+    "RES-LIMIT-003", "ADMIT-MEM-001", "ADMIT-TXN-001",
+    "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001",
+]
+owner_packages = ["clinkz-wot-planning"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/ADRs/0021-borrowed-consumer-td-admission.org",
+    "docs/api-ownership.csv",
+    "docs/requirements.csv",
+    "docs/resource-limits.csv",
+    "docs/state-machines.toml",
+    "docs/spec/foundation.md",
+    "docs/spec/runtime-safety.md",
+    "docs/spec/interaction-core.md",
+    "docs/spec/binding-spi.md",
+    "docs/spec/planning.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/WP-200-consumer-property-read-aggregate-admission.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "ConsumerPropertyReadRegistration", "ConsumerPropertyReadBuildConfig",
+    "ConsumerPropertyReadBuild", "ConsumerPropertyReadBuildStep",
+    "ConsumerPropertyReadPreflight", "ConsumerPropertyReadDraft",
+    "ConsumerPropertyReadSelection", "ConsumerPropertyReadRollback",
+    "ConsumerPropertyReadRollbackStep", "ConsumerPropertyReadCleanupSlot", "PlanFootprint",
+    "build_consumer_property_read_aggregate", "select_consumer_property_read_aggregate",
+    "consumer_property_read_build_config_try_from_limits", "consumer_property_read_build_step",
+    "consumer_property_read_build_admit_runtime", "consumer_property_read_cleanup_slot_try_new",
+    "consumer_property_read_cleanup_slot_take", "consumer_property_read_rollback_step",
+]
+state_machines = ["consumer-property-read-admission"]
+resource_changes = ["No schema/profile/WorkClass/getter change; compose actual static/Host costs into exact PlanFootprint, finite phase work and source-free variable rollback. Child ledger is local accounting; Servient retains transaction provenance, paired parents and committed cleanup-slot accounts."]
+old_api_removals = []
+performance_workloads = []
+implementation_paths = ["planning/Cargo.toml", "planning/src/consumer_property_read.rs", "planning/src/property_read.rs", "planning/src/lib.rs"]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --workspace --locked --offline",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features --features async",
+    "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml",
+    "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features --features async",
+    "cargo check --locked --offline -p clinkz-wot-planning",
+    "cargo check --locked --offline -p clinkz-wot-planning --no-default-features",
+    "cargo check --locked --offline -p clinkz-wot-planning --no-default-features --features async",
+]
+admission_review = "pending-independent-exact-head-review"
+completion_evidence_keys = ["consumer-property-read-aggregate"]
+completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-aggregate.toml"
+
+[[tranche]]
 id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 work_package = "WP-300"
 sequence = 310

@@ -128,6 +128,16 @@ registration/erasure/record and cleanup costs remain distinct, including inline
 and transfer overlap. No mandatory Snapshot exists and no synthetic source release
 or reclassification occurs.
 
+Before the advanced Planning runtime-capacity handoff or cleanup-slot construction,
+the coordinator validates the live transaction nonce, captured policy/registration,
+generation and matching held parent allowance. A caller-constructible child
+`AdmissionLedger` or equal reservation-owner tuple is not that authority. Planning
+enforces local charges under its copied policy. The coordinator retains the actual
+committed cleanup-slot account and paired parent until the destination and every
+deposited/taken cleanup child are terminal; ending a reservation loan releases
+neither charge. The [Planning handoff](../spec/planning.md#aggregate-construction)
+owns local progress and guard-preserving constructor rejection.
+
 A private permit closes cancellation under exclusive installation authority, then
 performs the preallocated atomic install without allocation, callback, yield,
 source query, fallible operation or retry. Failure before permit publishes neither

@@ -197,7 +197,14 @@ The admission coordinator pairs local child capacity with parent/global
 allowances before work/allocation, retains parents while any protected child is
 live, reconciles actual owners and releases children before parents on every
 failure/abandonment/success path. AdmissionLedger alone is not the global
-aggregator. A rejected charge does no allocator work. Allocation ordering is:
+aggregator. Its public constructor and a reservation's owner tuple are local
+bookkeeping, not proof of policy/transaction provenance or a held parent allowance.
+`ResourceReservation::commit` consumes a temporary account loan and leaves the
+charge in the original account. A source-free inline cleanup destination may
+retain fixed charge metadata after that commit; its coordinator must retain
+the actual account and parent charge until the destination and all children are
+terminal. Dropping a receipt or ending a loan releases no physical owner.
+A rejected charge does no allocator work. Allocation ordering is:
 check structure/support and lifetime work; predebit accepted work and fixed
 release; check current/replacement capacity and actual Layout; obtain matching
 local/parent temporary/runtime/peak/contiguous authorization; allocate; transfer
