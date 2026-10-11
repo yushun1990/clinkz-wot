@@ -4,13 +4,14 @@ work_package = "WP-200"
 tranche = "WP-200-CONSUMER-COMPILER-SUPPORT"
 implementation_ref = "bb35f688e713d2656476cce7896b8755ac06bdf1"
 recorded_on = "2026-10-10"
-status = "pending-independent-acceptance"
+status = "passed"
 execution_status = "passed"
 evidence_key = "consumer-compiler-support"
 admission_review = "github-pr:144#issuecomment-6097700130"
+acceptance = "github-pr:146#issuecomment-6105680238"
 
-# This is implementation evidence, not a completion or gate transition. The
-# registered tranche remains planned/admitted/current. No acceptance is asserted.
+# Independent acceptance completes only this precursor. Execution evidence alone
+# does not authorize aggregate, gate or milestone admission/acceptance.
 requirement_ids = [
     "PLAN-ARTIFACT-001", "PLAN-COST-003", "BIND-REG-001", "BIND-MEM-001",
     "CONSTRAINED-WORK-001", "CONSTRAINED-OWN-001", "ADMIT-MEM-001",
@@ -47,7 +48,7 @@ coverage = [
 # introduce no new priority semantics or Planning registration abstraction.
 registration_ordering_note = "Nonzero diagnostic_ordinal and candidate_order cover the actual Core contract; no independent Core priority field exists."
 
-remaining_acceptance_evidence = [
+acceptance_requirements = [
     "A fresh independent acceptance context must reconstruct the admitted contracts, compare the exact final PR base/head, and assess public API/type eligibility, complete-owner capture, immutable configuration and source/registration loan termination.",
     "The independent reviewer must reproduce the public typed/Host positives, both actual null-allocation sites, reservation-history rollback, retained-other-owner and retry/abort/output-release cases, and inspect the raw allocation/Box ownership transfer and conservative temporary-cost accounting.",
     "Read passing required mainline/validation results for the exact final PR head from GitHub. Local execution results and an implementation-context review are not substitutes for that remote evidence or independent acceptance.",
@@ -58,7 +59,7 @@ excluded_claims = [
     "Parent/global admission pairing, installation, Servient publication or terminal-retention policy",
     "Support for foreign/open compilers, concrete Zenoh lowering, all profile-permitted target lengths, or a general allocator/certification mechanism",
     "Bare-device runtime parity, exact machine stack peak, allocator metadata/fragmentation bounds or whole-process peak memory",
-    "Tranche completion, independent acceptance, Producer gate reaffirmation or any gate/milestone status transition",
+    "Execution evidence alone does not establish tranche completion, independent acceptance, Producer gate reaffirmation or any gate/milestone status transition",
 ]
 
 [measurements]
