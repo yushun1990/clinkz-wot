@@ -22,6 +22,15 @@ pub use property_read::{
     PropertyReadBuildCursor, PropertyReadPlanCompiler, select_consumer_property_read,
 };
 
+mod consumer_property_read;
+pub use consumer_property_read::{
+    ConsumerPropertyReadBuild, ConsumerPropertyReadBuildConfig, ConsumerPropertyReadBuildStep,
+    ConsumerPropertyReadCleanupSlot, ConsumerPropertyReadDraft, ConsumerPropertyReadPreflight,
+    ConsumerPropertyReadRegistration, ConsumerPropertyReadRollback,
+    ConsumerPropertyReadRollbackStep, ConsumerPropertyReadSelection, PlanFootprint,
+    build_consumer_property_read_aggregate, select_consumer_property_read_aggregate,
+};
+
 /// Borrowed immutable inputs for one plan-build transaction.
 #[derive(Clone, Copy)]
 pub struct PlanBuildInput<'a, R: ?Sized> {

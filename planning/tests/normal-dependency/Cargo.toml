@@ -1,0 +1,15 @@
+[package]
+name = "consumer-aggregate-normal-dependency"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-planning = { path = "../..", default-features = false }
+
+[features]
+default = ["std"]
+std = ["clinkz-wot-planning/std"]
+async = ["clinkz-wot-planning/async"]
