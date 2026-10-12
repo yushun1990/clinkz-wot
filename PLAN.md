@@ -166,8 +166,10 @@ Objective: produce immutable bounded plan sets and binding artifacts without
 runtime Thing Description rescanning or protocol execution ownership.
 
 Current status: the narrow Property Read plan, Producer-route, and
-route-reservation projections are complete. Broad selection, fallback,
-caching, lazy compilation, bounds, and generation evidence remains.
+route-reservation projections and the unpublished Consumer Property Read
+aggregate are complete within their admitted boundaries. Consumer Servient
+integration remains unadmitted. Broad selection, fallback, caching, lazy
+compilation, bounds, and generation evidence remains.
 
 Exit goals: deterministic admitted plans; complete ownership, rollback,
 complexity, and generation evidence; no runtime TD reinterpretation; and

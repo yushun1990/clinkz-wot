@@ -144,7 +144,7 @@ Explicitly excluded:
 ### Unadmitted successor boundary: `WP-400-CONSUMER-PROPERTY-READ-RUNTIME`
 
 This future ADR-0013 tranche is defined but not registered or admitted. It may
-enter `index.toml` only when the reopened
+enter `index.toml` only when
 `WP-300-CONSUMER-PROPERTY-READ-BINDING` and
 `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` nodes are both
 `complete/current` with passed replacement/completion evidence.

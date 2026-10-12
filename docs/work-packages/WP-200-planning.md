@@ -259,7 +259,10 @@ owns the detailed contract.
 
 The [exact admission record](WP-200-consumer-property-read-aggregate-admission.md)
 owns the sequential ADR-0013 implementation and evidence envelope; `index.toml`
-owns its admission state. Entry requires
+owns its admission and completion state. The
+[registered completion evidence](../evidence/WP-200-consumer-property-read-aggregate.toml)
+records the independently accepted unpublished aggregate in static and public
+Host representations. Entry requires
 `WP-100-CONSUMER-VALIDATED-THING` and the existing
 `WP-200-CONSUMER-PROPERTY-READ-PLANNING` exact-coordinate tranche and the
 `WP-200-CONSUMER-COMPILER-SUPPORT` precursor to be
@@ -275,13 +278,13 @@ does not own persistent-capacity reservation, publication, the retained
 registration owner, `ValidatedThing` lifetime after handoff, call execution, or
 plan-set lifecycle state.
 
-ADR-0021 changes this future aggregate's trusted input to the TD-owned paid
+ADR-0021 changes this aggregate's trusted input to the TD-owned paid
 semantic cursor over `ValidatedThing<'td>`. Its exact consumed build/progress and
 registration-adapter contracts belong to the [Planning specification](../spec/planning.md#first-consumer-property-read-aggregate).
 No raw Thing aggregate entry, synchronous source lookup, self-borrow into owned
 scratch, unpaid Ready sizing/URI replay or lifetime-refilling second pass is legal.
 The completed exact-coordinate leaf remains regression authority at its narrower
-boundary; adapting shared preparation belongs to this future tranche.
+boundary; adapting shared preparation belongs to this tranche.
 
 The draft owns all runtime facts and concrete artifacts independent of TD,
 compiler input and registration callbacks. Completion consumes input-bearing state
@@ -332,7 +335,7 @@ compiled-runtime, artifact, temporary, per-step, and reclaim limits. It adds no
 resource row, getter, capability index, lazy/cache state, fallback, credential,
 additional operation, or runtime registration snapshot.
 
-The future completion evidence key is
+The completion evidence key is
 `consumer-property-read-aggregate`, at
 `docs/evidence/WP-200-consumer-property-read-aggregate.toml`. Evidence must
 cover deterministic multi-property/multi-Form ordering, empty-vs-missing
@@ -348,8 +351,8 @@ required separately for each supported representation. Standalone normal
 dependency graphs must activate `validated-thing` in std, no-default and async
 without std, without dev/sibling feature unification. Preflight is emitted by
 the consumed `ConsumerPropertyReadBuild::step` contract, not a second standalone
-preflight entry. This future path clarification grants no source admission. It
-claims no WP-400 publication/execution or Consumer architecture gate.
+preflight entry. Completion claims no WP-400 publication/execution or Consumer
+architecture gate.
 
 ## Requirements
 
