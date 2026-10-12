@@ -1,0 +1,408 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-200"
+tranche = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
+implementation_ref = "82ee122cc0d239e608ba7169d9b383290067b4cd"
+recorded_on = "2026-10-12"
+evidence_key = "consumer-property-read-aggregate"
+status = "candidate"
+execution_status = "passed"
+assessment = "Production execution evidence for independent acceptance; no tranche, gate or milestone transition."
+admission_review = "github-pr:148#issuecomment-6108374621"
+requirement_ids = [
+    "DOC-RUNTIME-001", "PLAN-REQUEST-001", "PLAN-COST-001", "PLAN-COST-003",
+    "PLAN-BOUND-001", "PLAN-SET-001", "PLAN-ARTIFACT-001", "API-OPTIONS-001",
+    "BIND-REG-001", "BIND-MEM-001", "RES-LIMIT-001", "RES-LIMIT-002",
+    "RES-LIMIT-003", "ADMIT-MEM-001", "ADMIT-TXN-001",
+    "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001",
+]
+compilation_cells = ["std", "no-default", "async-no-std"]
+production_paths = [
+    "planning/Cargo.toml", "planning/src/consumer_property_read.rs", "planning/src/lib.rs",
+]
+test_paths = [
+    "tools/architecture-fixtures/consumer-aggregate-admission/tests/aggregate.rs",
+    "planning/tests/support/consumer_property_read.rs",
+    "planning/tests/normal-dependency",
+]
+scope = "Unpublished, one checked complete registration, all-readable Consumer Property Read preparation in static and public Host representations."
+excluded_claims = [
+    "Independent acceptance, tranche completion, Consumer gate registration, or any gate/milestone status change",
+    "Servient policy/transaction capture, paired parent/global provenance, publication, install permits, leases or published-output reclamation",
+    "Other operations/security, open/foreign compilers, real protocol execution, generated images or fixed-image installation",
+    "Bare-device runtime behavior, compiler-generated machine stack size, allocator metadata/fragmentation or whole-process RAM bounds",
+]
+
+[[obligation]]
+id = 1
+name = "Checked capability and config"
+evidence = [
+    "The public sealed projection accepts Core's production ConsumerCompilerRegistration over StaticBindingRegistration or the public HostBindingRegistration. No Core/TD/Foundation/Servient production source or open compiler eligibility changes.",
+    "Config copies 27 existing limits, checks lifetime products and selected table Layouts before progress, and checks support payload/cursor/temporary capacities before callbacks. Missing limits, overflowing structural/work products and disabled step/cleanup/candidate cells reject.",
+    "Both public representations reject Basic-valid missing ID, explicit empty effective security, multiple effective definitions and non-NoSec before emitting preflight/output admission. Explicit empty ops produce empty ranges.",
+    "Production Planning rustdoc negatives reject raw Thing, a raw compiler, and premature source/complete-registration destruction. Existing Core support tests retain role, identity, actual compiler/configuration and unsupported-cell negatives.",
+    "Cleanup constructor rejection preserves the original guard for undersized and wrong-kind cases. Wrong-phase runtime admission returns the unchanged build and capped child ledger; public reservation operations verify the returned child's original ceiling/history.",
+]
+
+[[obligation]]
+id = 2
+name = "Complete deterministic lookup"
+evidence = [
+    "The public fixture has four BTree-ordered property rows: a-read with original indices 1 and 2, b-empty, c-温度 with original index 1, and z-empty. It retains UTF-8 and empty scopes, relative/raw/resolved targets, content coding and subprotocol.",
+    "Both representations select every concrete artifact, preserve candidate ordinal/order zero and full qualified artifact/reference identity, distinguish missing/present-empty/strict-index mismatch, and select the first readable original index when omitted.",
+    "An entirely empty readable aggregate retains all four rows. Lookup binary-searches the sealed property table and scans only that row's range; it has no TD or registration access or mutable rebuild path.",
+]
+
+[[obligation]]
+id = 3
+name = "Paid passes and all-bounds barrier"
+evidence = [
+    "Public tests observe exactly one preflight, then repeat waiting polls with fresh budgets before runtime admission. No preflight replay or source reconstruction occurs.",
+    "The public TD-lifetime discriminator lowers only test policy member/number maxima to make the total observable. Inspection/Basic plus both aggregate passes require exactly 2097 units for its source. 2096 fails with DocumentValidationWorkUnitsMax during the second pass after preflight; 2097 and 2098 complete despite intervening zero/fresh budgets.",
+    "The exact production source under cfg(test) retains a Form Ready event through twelve one-short copy retries. Items/cleanup and TD semantic classes remain unchanged; no coordinate is acknowledged/partially copied. Exact and one-spare credit copy it once, in both representations.",
+    "The test-only observer wraps real checked Core owners without opening production eligibility. Successful preparation records three bounds, three starts and six paid steps in each representation. Every start observes the complete three-bound barrier.",
+    "Every materialization allocation failure records zero starts. A real later over-capacity resolved target records three bounds and zero starts in static and Host. Synthetic first/last zero bounds also fail before starts.",
+]
+
+[[obligation]]
+id = 4
+name = "Compiler work and cleanup primitives"
+evidence = [
+    "Each sequential coordinate retains its original bound remainder. Repeated fresh one-short BindingPolls budgets invoke no step callback; each real compiler completes in its supported two paid steps. Step debits flow once from the child budget into caller and phase/coordinate remainders.",
+    "The production bound validator is exercised with zero, each foreign WorkClass, over-step units and checked count-product overflow. Those synthetic declarations are test values, never assertions that the closed compiler emits them.",
+    "Bounds/start are prepaid from Core's fixed support; abort/allocation/destruction/release are prepaid before acquisition. Cancellation after the first pending step records three bounds, one start, one step and exactly one abort in both representations.",
+]
+
+[[obligation]]
+id = 5
+name = "Finite phase envelopes and atomic work"
+evidence = [
+    "For P rows, F readable Forms and S scope entries, materialization has P+F+S+5 items and T copy bytes, where T sums every copied occurrence, including repeated IDs/property names/defaults and security names. Its allocation/release envelope is 2*(P+9*F+S+3). Tables use exact checked capacity Layouts, with no Vec growth or shrink.",
+    "Bounds have F+1 items and F*bounds_work; compilation has F items, F*(start_work+compile_step_max) binding work and F times the supported fixed cleanup primitives; sealing has P+F+2 items. Preflight reports the checked sum of remaining item phases. Phase owners and Ready retries cannot refill those allowances.",
+    "Reclaim reserves P+F+S+4 item/cleanup operations and the output capacity as byte allowance. It drains one scope/coordinate/row/table operation per call; its byte cursor can span calls under PlanReclaimBytesPerStepMax. Child destruction precedes ledger release.",
+    "Atomic Cost tests preserve all classes/lifetime counters on one-short credit, consume exact credit once, retain one-spare credit, and reject exhausted lifetime. Public static and Host output ledgers exercise retained-capacity minus one, exact and plus one, failing the whole aggregate on exhaustion. Capped-child rejection is bounded Backpressure; it never fabricates an exceeded copied policy ceiling that the opaque ledger cannot expose.",
+]
+
+[[obligation]]
+id = 6
+name = "Exact output and disjoint physical accounting"
+evidence = [
+    "The public footprint's disjoint retained categories exactly equal observed live output allocations. Static inline payload is counted once within coordinate capacity; Host payload is counted once inside each supported slot, with outer erased owners in the coordinate table.",
+    "Source/lazy/retained-registration deltas are zero. Registration provisioning and caller source are baseline accounts. The committed cleanup destination/transport account is separate from the output ledger; measured inline slot/draft owners are reported below.",
+    "Logical peak includes output, the selected fixed build owner and conservative source-level construction/result transport overlap, plus the supported compiler temporary allowance. It is distinct from allocator-observed heap peak and makes no machine-frame/whole-process claim. Largest request is the checked coordinate allocation, not the output or cleanup allowance sum.",
+    "The fixed allocator observer is armed after preflight and covers every subsequent request. This source reuses TD scratch acquired during preflight: the 31 static requests are 26 nonempty text copies, two scope tables and three fixed/outer table allocations; Host adds three slots. TD scratch/source accounts remain separately owned by TD/the caller. Actual retained output equals observed remaining live allocations after completion. All failure runs preserve a separately allocated independent owner.",
+]
+
+[[obligation]]
+id = 7
+name = "Source-free failure and terminal root"
+evidence = [
+    "A fallibly acquired stable output block is installed under the pre-reserved inline manual root before variable collections. The slot and one exclusive state-selected build/draft/rollback lease share its local backing. No suspended pointer targets movable output or a caller frame.",
+    "Public null injection covers all 31 observed static and 34 Host requests: the output block, exact tables, each nonempty text/scope copy and all three Host slots. TD's reused preflight scratch acquires no new backing in this trace; its precursor retains its own allocation-failure evidence. Zero child capacity rejects before an allocator request. Every run preserves another live owner and returns physical controlled bytes to zero.",
+    "Cancellation and abandonment are exercised at every actual public step boundary in both representations. First cause survives zero/short byte and item cleanup polls. Failed and successful terminal handles permit actual source and complete-registration destruction before use/cleanup.",
+    "The occupied-slot entry rejects before work/allocation. Draft abandonment, rollback take/drop/take, root movement, explicit consuming draft-to-rollback and root-driven terminal release retain all variable output/account objects. No variable collection Drop occurs on build/draft/rollback abandonment.",
+    "The advanced coordinator must retain and drive its root and committed account until children are terminal. Dropping an undriven root is not completion or an automatic unbounded destructor. Tests retain that required root; they observe all child allocations released with only the fixed block remaining, then release the block through terminal take/refresh before releasing the cleanup account.",
+]
+
+[[obligation]]
+id = 8
+name = "Consuming completion and existing regressions"
+evidence = [
+    "Complete destroys the generic input-bearing build before exposing ConsumerPropertyReadDraft<A>. Public tests actually destroy Thing and the complete static/Host registration, then select and inspect every concrete artifact, owned logical input and identity.",
+    "The completed exact-coordinate Consumer leaf is unchanged. Locked workspace tests pass 642 cases with three ignored; all ten registered Producer commands pass, including no-default Property Read and the real Zenoh target-feedback probe.",
+    "Draft identity and footprint are observations. This change creates no Published state, permit, installation or Servient coordinator path.",
+]
+
+[[obligation]]
+id = 9
+name = "Representation and isolated feature evidence"
+evidence = [
+    "The aggregate integration executable passes 18 cases in std and 12 in each portable/async cell. Static/public Host share lookup, capacity, invalid input, failure and root-lifecycle expectations while independently exercising their physical slot/output paths.",
+    "planning/tests/normal-dependency has exactly Planning as its normal dependency and no dev dependencies. Its normal trees resolve TD validated-thing in all three cells; the product manifest itself requests that capability. Thus this evidence does not rely on the external fixture's direct TD dependency or dev/sibling activation.",
+    "Both portable isolated graphs compile actual Planning for thumbv7em-none-eabihf. Historical admission/compiler/TD join matrices and authority checks also pass. ARM results are compile evidence only.",
+]
+
+[measurements]
+toolchain = "rustc 1.95.0 (59807616e 2026-04-14)"
+target = "x86_64-unknown-linux-gnu"
+environment = "CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0; shared CARGO_TARGET_DIR is optional."
+layout_format = "Every Layout pair is [size, alignment]; private storage uses the exact source compiled under cfg(test). Values are target observations, never portable constants."
+property_count = 4
+coordinate_count = 3
+copied_text_bytes = 262
+scope_program_capacity_bytes = 48
+node_layout = [1376, 8]
+data_layout = [1368, 8]
+property_row_layout = [32, 8]
+reclaim_layout = [64, 8]
+inline_cleanup_slot_layout = [608, 8]
+draft_handle_layout = [8, 8]
+binding_payload_layout = [65, 1]
+two_pass_td_lifetime_exact = 2097
+accounting_boundary = "Retained output bytes are requested heap capacity, including fixed block/table padding. Build/compiler/transport capacities and external inline cleanup/terminal owners are separate. The committed cleanup allowance includes its inline destination and conservative fixed transport, never a synthetic contiguous allocation. Coordinator parent/global provenance and TD/source baseline pairing remain external."
+
+[measurements.static]
+coordinate_layout = [808, 8]
+native_cursor_layout = [76, 4]
+compiler_temporary_layout = [840, 8]
+owned_text_bytes = 262
+owned_program_bytes = 48
+property_table_bytes = 128
+coordinate_table_bytes = 1497
+logical_owner_bytes = 312
+candidate_and_reference_bytes = 420
+artifact_bytes = 195
+fixed_owner_bytes = 1312
+reclaim_metadata_bytes = 64
+build_owner_bytes = 2596
+planning_temporary_bytes = 5384
+retained_source_bytes = 0
+lazy_bytes = 0
+registration_delta_bytes = 0
+retained_bytes = 4238
+allocator_live_peak_largest = [4238, 4238, 2424]
+output_ledger_live_peak_largest = [4238, 4238, 2424]
+logical_peak_live_bytes = 13134
+allocation_requests_and_injected_failures = 31
+cleanup_committed_live_peak = [2208, 2208]
+after_children_live_bytes = 1376
+after_root_live_bytes = 0
+after_slot_account_release_live_bytes = 0
+
+[measurements.host]
+coordinate_layout = [760, 8]
+host_cursor_layout = [16, 8]
+host_slot_layout = [152, 8]
+compiler_temporary_layout = [1088, 8]
+owned_text_bytes = 262
+owned_program_bytes = 48
+property_table_bytes = 128
+coordinate_table_bytes = 1548
+logical_owner_bytes = 312
+candidate_and_reference_bytes = 420
+artifact_bytes = 456
+fixed_owner_bytes = 1312
+reclaim_metadata_bytes = 64
+build_owner_bytes = 2608
+planning_temporary_bytes = 5288
+retained_source_bytes = 0
+lazy_bytes = 0
+registration_delta_bytes = 0
+retained_bytes = 4550
+allocator_live_peak_largest = [4550, 4550, 2280]
+output_ledger_live_peak_largest = [4550, 4550, 2280]
+logical_peak_live_bytes = 13550
+allocation_requests_and_injected_failures = 34
+cleanup_committed_live_peak = [2160, 2160]
+after_children_live_bytes = 1376
+after_root_live_bytes = 0
+after_slot_account_release_live_bytes = 0
+
+[memory_check]
+tool = "Valgrind 3.27.1 Memcheck"
+aggregate_cases_passed = 18
+errors = 0
+definitely_lost_bytes = 0
+indirectly_lost_bytes = 0
+possibly_lost_bytes = 48
+still_reachable_bytes = 544
+residual_attribution = "Full allocation stacks identify the 48-byte block as std::thread::current::init_current through libtest mpmc context and the 544-byte block as std's stack-overflow thread-info initialization. Neither stack is an aggregate output allocation. Observed output requests are paired with release; no whole-process zero-retention claim."
+reproduction = "Build cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --test aggregate --no-run --message-format=json, then run its emitted executable under valgrind --leak-check=full --errors-for-leak-kinds=definite,indirect --show-leak-kinds=all --error-exitcode=97 <executable> --test-threads=1."
+
+[acceptance_boundary]
+required = "A fresh independent context must reconstruct the admitted contracts, exact PR base/head, public and test-only evidence, unsafe storage/loan proofs, complete failure/cleanup paths and required remote CI. This candidate does not perform or claim that acceptance."
+
+[[verification]]
+category = "registered"
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --workspace --locked --offline"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo check --locked --offline -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo check --locked --offline -p clinkz-wot-planning --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo check --locked --offline -p clinkz-wot-planning --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-core"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-servient --test property_read"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-servient --lib"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-servient --no-default-features --test property_read"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-property-read-binding-fixture"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-property-read-architecture-runner"
+status = "passed"
+
+[[verification]]
+category = "producer-regression"
+command = "cargo --offline test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1"
+status = "passed"
+
+[[verification]]
+category = "isolated-normal"
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml"
+status = "passed"
+
+[[verification]]
+category = "isolated-features"
+command = "cargo tree --locked --offline --edges normal --format '{p} features=[{f}]' --manifest-path planning/tests/normal-dependency/Cargo.toml"
+status = "passed"
+
+[[verification]]
+category = "isolated-normal"
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "isolated-features"
+command = "cargo tree --locked --offline --edges normal --format '{p} features=[{f}]' --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "isolated-normal"
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "isolated-features"
+command = "cargo tree --locked --offline --edges normal --format '{p} features=[{f}]' --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "isolated-arm"
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+category = "isolated-arm"
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+category = "aggregate-measurements"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --test aggregate -- --test-threads=1 --nocapture"
+status = "passed"
+
+[[verification]]
+category = "aggregate-measurements"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --test aggregate -- --test-threads=1 --nocapture"
+status = "passed"
+
+[[verification]]
+category = "aggregate-measurements"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async --test aggregate -- --test-threads=1 --nocapture"
+status = "passed"
+
+[[verification]]
+category = "format"
+command = "rustfmt --edition 2024 --check planning/src/lib.rs planning/src/consumer_property_read.rs planning/tests/support/consumer_property_read.rs planning/tests/normal-dependency/src/lib.rs tools/architecture-fixtures/consumer-aggregate-admission/tests/aggregate.rs"
+status = "passed"
+
+[[verification]]
+category = "diff"
+command = "git diff --check"
+status = "passed"
