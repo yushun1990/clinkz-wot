@@ -522,6 +522,73 @@ completion_evidence_keys = ["consumer-property-read-aggregate"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-aggregate.toml"
 
 [[tranche]]
+id = "WP-300-CONSUMER-ONLY-REGISTRATION"
+work_package = "WP-300"
+sequence = 340
+status = "planned"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = ["WP-300-CONSUMER-PROPERTY-READ-BINDING", "WP-200-CONSUMER-COMPILER-SUPPORT", "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "BIND-REG-001", "BIND-STORAGE-001", "BIND-MEM-001", "BIND-DELIVERY-001",
+    "BIND-IO-001", "BIND-OUT-001", "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001",
+    "API-HOT-ID-001", "API-PAYLOAD-001", "PLAN-ARTIFACT-001", "PLAN-COST-003",
+]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-planning"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0009-protocol-binding-integration-and-deployment.org",
+    "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/api-ownership.csv", "docs/requirements.csv", "docs/resource-limits.csv",
+    "docs/spec/binding-spi.md", "docs/spec/interaction-core.md", "docs/spec/planning.md",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/work-packages/WP-300-bindings.md",
+    "docs/work-packages/WP-300-consumer-only-registration-admission.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "StaticConsumerBindingRegistrationInput",
+    "StaticConsumerBindingRegistration",
+    "HostConsumerBindingRegistrationInput",
+    "HostConsumerBindingRegistration",
+    "binding_registration_capabilities_consumer_property_read",
+    "static_consumer_binding_registration_input_new",
+    "static_consumer_binding_registration_new",
+    "static_consumer_binding_registration_try_into_consumer_compiler",
+    "static_consumer_binding_registration_start_consumer_property_read",
+    "host_consumer_binding_registration_input_new",
+    "host_consumer_binding_registration_new",
+    "host_consumer_binding_registration_try_into_consumer_compiler",
+    "host_consumer_binding_registration_start_consumer_property_read",
+    "static_consumer_binding_registration_poll_consumer_property_read",
+    "static_consumer_binding_registration_start_cancel_consumer_property_read",
+    "static_consumer_binding_registration_poll_cancel_consumer_property_read",
+    "static_consumer_binding_registration_acknowledge_consumer_property_read",
+    "ConsumerPropertyReadRegistration",
+]
+state_machines = []
+resource_changes = ["No schema/profile/WorkClass change; omit nonexistent Producer owners, count actual complete static slot/Host decorator/support/registration layouts once. No new call-allocation or parent/global admission guarantee."]
+old_api_removals = []
+performance_workloads = []
+implementation_paths = ["core/src/binding.rs", "core/src/lib.rs", "planning/src/consumer_property_read.rs"]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --workspace --locked --offline",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
+    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --test consumer_property_read_binding",
+    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async --test consumer_property_read_binding",
+]
+admission_review = "required: fresh independent exact-head ADR-0013 admission review"
+completion_evidence_keys = ["consumer-only-registration"]
+completion_evidence_path = "docs/evidence/WP-300-consumer-only-registration.toml"
+
+[[tranche]]
 id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 work_package = "WP-300"
 sequence = 310

@@ -149,6 +149,27 @@ enter `index.toml` only when
 `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` nodes are both
 `complete/current` with passed replacement/completion evidence.
 
+Those predecessors alone are insufficient for admission. The
+[Consumer-only complete-registration precursor](WP-300-consumer-only-registration-admission.md)
+must also be complete/current with passed evidence; a dummy Producer server is
+not a Consumer product boundary. Before registering this runtime candidate,
+resolve the intersecting Host ownership/call-construction investigation in
+[topic 0076](../../workspace/0076-composable-capabilities-and-runtime-boundaries.md)
+and migrate the selected representation into the exact owners. The
+[entry investigation](../../workspace/0079-consumer-runtime-entry-constructibility.md)
+records the alternatives and why the complete transaction/facade is not yet
+the smallest reviewable step.
+
+The completed Planning draft, cleanup root and rollback lease are local/non-Send.
+A lifetime-free type or thread-safe concrete artifact cannot authorize sharing
+that graph. A local Host driver, explicit quiescent output transfer and a shared
+carrier have different ownership/cleanup costs and need their own construction
+evidence. Retain the actual manual root and its committed account until terminal
+release. Likewise compiler backing support does not certify Host call/decorator
+allocation or callback bounds. The future candidate must establish an executable
+choice, physical storage and complete source/account/parent ownership without
+unsafe Send/Sync assertions, fictitious parent provenance or hidden fallible gaps.
+
 The tranche owns Host/static transaction and facade composition under ADR-0021:
 checked immutable Consumer policy/registration capture, paired local/parent build
 and runtime allowances, generation/registry slots, cleanup/rollback transfer,
@@ -185,7 +206,8 @@ successful install wins.
 All earlier failures retain first cause and bounded complete-object cleanup until
 children are physically released before parent allowances.
 
-Permitted product and cross-package fixture paths are exactly:
+The proposed runtime source envelope below remains provisional until those
+prerequisites are resolved and an exact ADR-0013 candidate is reviewed:
 
 - `servient/src/consumer_property_read.rs`;
 - `servient/src/lib.rs`;

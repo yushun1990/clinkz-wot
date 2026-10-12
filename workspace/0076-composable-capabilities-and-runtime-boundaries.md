@@ -275,6 +275,23 @@ Project Governance only gains index navigation for session reconstruction.
 
 ## Evidence still needed to decide
 
+The [runtime-entry discriminator](../tools/architecture-fixtures/consumer-runtime-entry/README.md)
+now applies the existing early-escalation rule to actual completed aggregate
+output. Its draft, cleanup destination and rollback lease are local/non-Send,
+including when their concrete Host artifact is Send + Sync. A local unpublished
+owner can retain and reclaim them after source/registration destruction; this
+does not demonstrate a shared Host record, executor cleanup transfer or root-drop
+recovery. Host invocation also retains infallible call/decorator allocations,
+distinct from the compiler's fallible backing proof. Before WP-400 admission,
+compare a local Host driver with a quiescent owned-output transfer or a separately
+proved shared carrier, and settle the exact call backing/cleanup boundary.
+Do not add unsafe auto-trait claims or a second global ledger to conceal the gap.
+
+The narrower role-only construction question has a
+[migrated correction and alternatives](0079-consumer-runtime-entry-constructibility.md)
+and a separate WP-300 candidate. It neither settles these runtime choices nor
+selects Contracts extraction, optional Discovery migration or generated images.
+
 The [fixture documentation](../tools/architecture-fixtures/product-runtime-boundaries/README.md)
 owns commands, measured results and recovery limitations. Predicate parity and
 target compilation do not establish complete runtime feasibility or savings.
