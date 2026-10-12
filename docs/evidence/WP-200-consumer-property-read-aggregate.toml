@@ -2,7 +2,7 @@ schema_version = 1
 design_revision = "5.1"
 work_package = "WP-200"
 tranche = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
-implementation_ref = "6026df9969edc48774c3e63023be26d52681d53d"
+implementation_ref = "82ee122cc0d239e608ba7169d9b383290067b4cd"
 recorded_on = "2026-10-12"
 evidence_key = "consumer-property-read-aggregate"
 status = "candidate"
@@ -80,7 +80,7 @@ evidence = [
     "For P rows, F readable Forms and S scope entries, materialization has P+F+S+5 items and T copy bytes, where T sums every copied occurrence, including repeated IDs/property names/defaults and security names. Its allocation/release envelope is 2*(P+9*F+S+3). Tables use exact checked capacity Layouts, with no Vec growth or shrink.",
     "Bounds have F+1 items and F*bounds_work; compilation has F items, F*(start_work+compile_step_max) binding work and F times the supported fixed cleanup primitives; sealing has P+F+2 items. Preflight reports the checked sum of remaining item phases. Phase owners and Ready retries cannot refill those allowances.",
     "Reclaim reserves P+F+S+4 item/cleanup operations and the output capacity as byte allowance. It drains one scope/coordinate/row/table operation per call; its byte cursor can span calls under PlanReclaimBytesPerStepMax. Child destruction precedes ledger release.",
-    "Atomic Cost tests preserve all classes/lifetime counters on one-short credit, consume exact credit once, retain one-spare credit, and reject exhausted lifetime. Public static and Host output ledgers exercise retained-capacity minus one, exact and plus one, failing the whole aggregate on exhaustion.",
+    "Atomic Cost tests preserve all classes/lifetime counters on one-short credit, consume exact credit once, retain one-spare credit, and reject exhausted lifetime. Public static and Host output ledgers exercise retained-capacity minus one, exact and plus one, failing the whole aggregate on exhaustion. Capped-child rejection is bounded Backpressure; it never fabricates an exceeded copied policy ceiling that the opaque ledger cannot expose.",
 ]
 
 [[obligation]]
