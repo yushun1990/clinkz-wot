@@ -434,10 +434,7 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
         let (cause, owner) = result
             .err()
             .unwrap_or_else(|| panic!("allocation {index} unexpectedly succeeded"));
-        assert!(matches!(
-            cause,
-            CoreError::Backpressure(_) | CoreError::Validation(_)
-        ));
+        assert!(matches!(cause, CoreError::Backpressure(_)));
         reclaim(owner);
         assert!(root.take().is_none());
         assert_eq!(trace().live, 0, "leaked allocation at {index}");
@@ -446,7 +443,7 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
         disarm();
     }
     // A capped child rejects before its unauthorized first allocator request.
-    let (_, owner) = finish(
+    let (cause, owner) = finish(
         build_consumer_property_read_aggregate(
             proof(&source),
             r,
@@ -461,6 +458,7 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
     )
     .err()
     .unwrap();
+    assert!(matches!(cause, CoreError::Backpressure(_)));
     assert_eq!(trace().requests, 0);
     reclaim(owner);
     assert!(root.take().is_none());
@@ -833,8 +831,9 @@ fn output_boundaries<R: ConsumerPropertyReadRegistration>(r: R) {
                 drop(draft);
                 reclaim(root.take().unwrap());
             }
-            Err((_, owner)) => {
+            Err((cause, owner)) => {
                 assert_eq!(bytes, exact - 1);
+                assert!(matches!(cause, CoreError::Backpressure(_)));
                 reclaim(owner);
             }
         }

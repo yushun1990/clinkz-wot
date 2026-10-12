@@ -156,6 +156,13 @@ fn invariant() -> CoreError {
 fn cancelled() -> CoreError {
     CoreError::Cancelled(context())
 }
+fn unavailable() -> CoreError {
+    // A capped child ledger deliberately exposes no ceiling/provenance getter.
+    // Its rejection must not fabricate an exceeded copied policy limit.
+    CoreError::Backpressure(
+        context().with_redacted_cause(331, "capped aggregate capacity unavailable"),
+    )
+}
 fn limit(k: K, max: u64, requested: u64) -> CoreError {
     CoreError::LimitExceeded {
         resource: k,
@@ -763,13 +770,7 @@ impl<A: 'static> Data<A> {
         let reservation = self
             .runtime
             .try_reserve_persistent_runtime(K::CompiledRuntimeBytesPerThingMax, bytes)
-            .ok_or_else(|| {
-                limit(
-                    K::CompiledRuntimeBytesPerThingMax,
-                    self.config.get(K::CompiledRuntimeBytesPerThingMax),
-                    next,
-                )
-            })?;
+            .ok_or_else(unavailable)?;
         self.footprint.largest_allocation = self.footprint.largest_allocation.max(bytes);
         let pointer =
             NonNull::new(unsafe { alloc(l) }).ok_or_else(|| CoreError::Backpressure(context()))?;
@@ -1265,7 +1266,7 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                         K::AdmissionTemporaryBytesPerOperationMax,
                         self.fixed_charge,
                     )
-                    .ok_or_else(invalid)?;
+                    .ok_or_else(unavailable)?;
                 guard.commit();
                 self.phase = Phase::Preflight;
                 self.td.as_ref().unwrap().id().ok_or_else(invalid)?;
@@ -1448,7 +1449,7 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             .as_mut()
             .unwrap()
             .try_reserve_persistent_runtime(K::CompiledRuntimeBytesPerThingMax, n)
-            .ok_or_else(invalid)?;
+            .ok_or_else(unavailable)?;
         let pointer = NonNull::new(unsafe { alloc(l) })
             .ok_or_else(|| CoreError::Backpressure(context()))?
             .cast::<Node<R::Artifact>>();
@@ -1567,7 +1568,7 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                         .as_mut()
                         .unwrap()
                         .try_reserve_temporary(K::AdmissionTemporaryBytesPerOperationMax, bytes)
-                        .ok_or_else(invalid)?;
+                        .ok_or_else(unavailable)?;
                     guard.commit();
                     d.temporary_charge = bytes;
                     d.observe();
@@ -1793,7 +1794,7 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                                 K::CompiledRuntimeBytesPerThingMax,
                                 self.host_backing,
                             )
-                            .ok_or_else(invalid)?,
+                            .ok_or_else(unavailable)?,
                     )
                 } else {
                     None
