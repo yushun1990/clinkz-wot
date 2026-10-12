@@ -55,6 +55,12 @@ broad domain entry; it must not add a second runtime envelope.
 
 ## Scoped Property Read Technical Boundary
 
+The additive [Consumer-only complete-registration candidate](WP-300-consumer-only-registration-admission.md)
+separately closes the product construction gap left by the completed dual-role
+Consumer slice. It retains the existing compiler/support, sealed execution and
+resource semantics, with no dummy Producer component. `index.toml` owns its
+candidate/admission state; this package description grants no source admission.
+
 The narrow Property Read surface introduces the route, permit, response,
 cleanup, resource, and host/static ownership boundary. It constructs one complete registration
 that advertises only the Producer Property Read server role and consumes one

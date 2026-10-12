@@ -1330,6 +1330,14 @@ compiler-only component is introduced by this requirement.
 No concrete protocol dependency or unsafe type identification enters Planning.
 Binding authors still use the existing complete Core registration SPI.
 
+The additive [Consumer-only registration precursor](../work-packages/WP-300-consumer-only-registration-admission.md)
+extends this sealed adapter to checked complete static/Host Consumer-only owners.
+It changes no aggregate algorithm, eligibility rule, public build signature,
+lookup, rollback or parent-provenance authority. Existing Producer and dual-role
+owners remain separate supported registrations. The new adapters require that
+precursor's independent admission; they are not authorized by prior aggregate
+completion.
+
 Preflight is emitted only through the consumed `ConsumerPropertyReadBuild::step`
 result; there is no separate standalone preflight entry with a second transaction
 owner.

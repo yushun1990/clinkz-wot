@@ -1956,6 +1956,28 @@ complete cleanup, residual cleanup, or wake registration.
 
 ## API ownership roles
 
+### Consumer-only complete Property Read registration
+
+A complete registration is complete for its advertised role; Consumer-only
+construction does not require a Producer server. The additive static and Host
+bundle contracts and exact candidate scope are owned by the
+[WP-300 admission record](../work-packages/WP-300-consumer-only-registration-admission.md).
+They pair compiler and private client with immutable complete identity,
+representation, resources and status, without a server or ingress owner.
+The existing Producer and dual-role interfaces retain their semantics.
+
+Consumer-only installed execution uses the same Core-private single-use seal,
+normal/late response validator, static terminal acknowledgement and Host
+decorated-call accounting as dual-role execution. Raw clients remain authoring
+components and are not projected by an installed bundle. Only Core's consuming
+closed-support capture makes the new complete owners eligible for the aggregate.
+Neither role completeness nor compatibility identity proves bounded callbacks,
+fallible Host call backing or Servient parent-capacity provenance.
+
+This refinement introduces no protocol, global governor, lifecycle machine or
+support issuer. The work-package candidate remains unadmitted until independent
+review and a separate admission transition.
+
 The API ownership matrix provides exact public paths. It must represent these
 roles without creating a dependency from core to planning, Servient, or a
 concrete binding:
