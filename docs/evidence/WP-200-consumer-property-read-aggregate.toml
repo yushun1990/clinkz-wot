@@ -5,10 +5,11 @@ tranche = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
 implementation_ref = "82ee122cc0d239e608ba7169d9b383290067b4cd"
 recorded_on = "2026-10-12"
 evidence_key = "consumer-property-read-aggregate"
-status = "candidate"
+status = "passed"
 execution_status = "passed"
-assessment = "Production execution evidence for independent acceptance; no tranche, gate or milestone transition."
+assessment = "Independently accepted completion of the unpublished Planning aggregate; no WP-400, gate or milestone transition."
 admission_review = "github-pr:148#issuecomment-6108374621"
+acceptance = "github-pr:150#issuecomment-6118559011"
 requirement_ids = [
     "DOC-RUNTIME-001", "PLAN-REQUEST-001", "PLAN-COST-001", "PLAN-COST-003",
     "PLAN-BOUND-001", "PLAN-SET-001", "PLAN-ARTIFACT-001", "API-OPTIONS-001",
@@ -27,7 +28,7 @@ test_paths = [
 ]
 scope = "Unpublished, one checked complete registration, all-readable Consumer Property Read preparation in static and public Host representations."
 excluded_claims = [
-    "Independent acceptance, tranche completion, Consumer gate registration, or any gate/milestone status change",
+    "Broader WP-200 completion, WP-400 admission/completion, Consumer gate registration, or any gate/milestone status change",
     "Servient policy/transaction capture, paired parent/global provenance, publication, install permits, leases or published-output reclamation",
     "Other operations/security, open/foreign compilers, real protocol execution, generated images or fixed-image installation",
     "Bare-device runtime behavior, compiler-generated machine stack size, allocator metadata/fragmentation or whole-process RAM bounds",
@@ -210,7 +211,10 @@ residual_attribution = "Full allocation stacks identify the 48-byte block as std
 reproduction = "Build cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --test aggregate --no-run --message-format=json, then run its emitted executable under valgrind --leak-check=full --errors-for-leak-kinds=definite,indirect --show-leak-kinds=all --error-exitcode=97 <executable> --test-threads=1."
 
 [acceptance_boundary]
-required = "A fresh independent context must reconstruct the admitted contracts, exact PR base/head, public and test-only evidence, unsafe storage/loan proofs, complete failure/cleanup paths and required remote CI. This candidate does not perform or claim that acceptance."
+requirements = "A fresh independent context must reconstruct the admitted contracts, exact PR base/head, public and test-only evidence, unsafe storage/loan proofs, complete failure/cleanup paths and required remote CI. Execution results alone do not establish acceptance."
+reviewed_base = "2cff3715a1aa4243538be0eb0f3f3bdc9f9e9c9f"
+reviewed_head = "362e56295d408548bfe6eccf18a02051934da814"
+scope = "The linked independent review accepts the complete unpublished Planning aggregate and its execution evidence in static and public Host representations. The caller must retain and drive the manual cleanup root and its committed account; Servient transaction/capacity/publication and real Consumer protocol execution remain successor obligations."
 
 [[verification]]
 category = "registered"

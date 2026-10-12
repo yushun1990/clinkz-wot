@@ -187,7 +187,10 @@ admission. Requiring them before writing the admitted source would recreate the
 evidence recursion rejected by ADR-0013 and topic 0017. Conversely, the model
 cannot be carried forward as if it measured the production implementation.
 
-The aggregate stays unadmitted until this precursor is complete/current. It
-still owes all-coordinate TD preflight, all bounds before start, variable output,
-exact PlanFootprint and bounded rollback. WP-400 still owns parent/global pairing,
-publication and terminal retention. Neither gate nor milestone status changes.
+Aggregate admission and completion require this precursor to be complete/current
+but remain separate claims owned by the
+[aggregate record](WP-200-consumer-property-read-aggregate-admission.md).
+This precursor's evidence does not establish all-coordinate TD preflight,
+all bounds before start, variable output, exact PlanFootprint or bounded rollback.
+WP-400 still owns parent/global pairing, publication and terminal retention.
+Neither gate nor milestone status changes.

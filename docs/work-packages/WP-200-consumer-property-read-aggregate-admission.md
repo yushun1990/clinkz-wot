@@ -9,8 +9,15 @@ the exact implementation and evidence envelope.
 [Independent admission review of PR #148](https://github.com/yushun1990/clinkz-wot/pull/148#issuecomment-6108374621)
 accepted base `dd03a0a88b3762d9e934f931ccc678cec2e677ad` to head
 `cc92ba381411c9266c3c49310e2f68d4ba973fbd` with no blocking findings.
-That acceptance covers this admission basis only; production completion remains
-subject to the criteria below.
+That acceptance covers the admission basis only. The separate
+[independent production review of PR #150](https://github.com/yushun1990/clinkz-wot/pull/150#issuecomment-6118559011)
+accepted the complete unpublished Planning aggregate and its execution evidence
+at head `362e56295d408548bfe6eccf18a02051934da814`.
+The [registered completion evidence](../evidence/WP-200-consumer-property-read-aggregate.toml)
+retains the implementation reference, nine-obligation results and separate
+static/public Host measurements. Completion covers this tranche only; broader
+WP-200, WP-400 admission/completion, Consumer gate registration/acceptance and
+milestones remain separate.
 
 ## Decision and challenged assumptions
 
@@ -76,7 +83,7 @@ Permitted production paths are exactly:
   preserves the completed leaf's public behavior; and
 - `planning/src/lib.rs`, for the registered public projection.
 
-No production changes are made by this admission. Future tests may use
+No production changes were made by the admission itself. Tests may use
 `planning/tests/consumer_property_read_aggregate.rs`, its focused support files,
 and the existing external admission fixture. Core, Foundation, TD, Servient,
 protocol and legacy production changes are outside this envelope. A concrete
@@ -108,12 +115,13 @@ prototype global governor, exact aggregate PlanFootprint, or publication proof.
 They use ordinary test-side owned copies and do not claim fallible aggregate
 allocation handling or full phase work enforcement. Prior TD/Core evidence
 retains its original narrower claim and must not be relabeled as aggregate
-completion. Product Planning's normal dependency does not yet enable the TD
-capability; the allowed manifest change and isolated completion checks must fix
-that, without relying on this fixture's direct TD dependency.
+completion. At admission, product Planning's normal dependency did not yet
+enable the TD capability. The allowed manifest change and isolated normal-graph
+checks are now covered by the registered production completion evidence,
+without relying on this fixture's direct TD dependency.
 
-Run the registered commands with Rust 1.95.0. They are executable before target
-code exists: authority validation, locked workspace tests, the new fixture in
+Run the registered commands with Rust 1.95.0. They were executable before target
+code existed: authority validation, locked workspace tests, the fixture in
 std/no-default/async, the existing public compiler fixture in those cells, the
 production TD semantic join in those cells, and current Planning feature checks.
 The admission fixture's rustdoc negatives cover raw Thing input, a raw compiler
