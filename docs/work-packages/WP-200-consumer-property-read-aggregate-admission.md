@@ -1,10 +1,16 @@
-# WP-200 Consumer Property Read aggregate admission candidate
+# WP-200 Consumer Property Read aggregate admission
 
-This is an ADR-0013 admission candidate for v5.1, not source admission or
-independent acceptance. [The index](index.toml) owns its state. The
+This is the ADR-0013 implementation admission record for v5.1.
+[The index](index.toml) owns its state. The
 [Planning specification](../spec/planning.md#first-consumer-property-read-aggregate)
 owns behavior and the public consumed build/rollback boundary. This record owns
 the exact implementation and evidence envelope.
+
+[Independent admission review of PR #148](https://github.com/yushun1990/clinkz-wot/pull/148#issuecomment-6108374621)
+accepted base `dd03a0a88b3762d9e934f931ccc678cec2e677ad` to head
+`cc92ba381411c9266c3c49310e2f68d4ba973fbd` with no blocking findings.
+That acceptance covers this admission basis only; production completion remains
+subject to the criteria below.
 
 ## Decision and challenged assumptions
 
@@ -70,7 +76,7 @@ Permitted production paths are exactly:
   preserves the completed leaf's public behavior; and
 - `planning/src/lib.rs`, for the registered public projection.
 
-No production changes are made by this candidate. Future tests may use
+No production changes are made by this admission. Future tests may use
 `planning/tests/consumer_property_read_aggregate.rs`, its focused support files,
 and the existing external admission fixture. Core, Foundation, TD, Servient,
 protocol and legacy production changes are outside this envelope. A concrete
@@ -197,5 +203,4 @@ capacity provenance, simultaneous global accounting, slot/generation/cancellatio
 races, final reconciliation/permit/install, publication, leases/drain and
 published-output reclamation. Real Consumer protocol execution follows that
 integration. Those are neither waived nor prerequisites masquerading as completed
-implementation here. Independent exact-head review of this candidate, followed
-by a separate admission-only transition, is the next boundary before source work.
+implementation here.
