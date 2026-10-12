@@ -452,7 +452,7 @@ id = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
 work_package = "WP-200"
 sequence = 330
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-100-CONSUMER-VALIDATED-THING", "WP-200-CONSUMER-PROPERTY-READ-PLANNING", "WP-200-CONSUMER-COMPILER-SUPPORT"]
 depends_on_packages = ["WP-000"]
@@ -517,7 +517,7 @@ pre_implementation_checks = [
     "cargo check --locked --offline -p clinkz-wot-planning --no-default-features",
     "cargo check --locked --offline -p clinkz-wot-planning --no-default-features --features async",
 ]
-admission_review = "pending-independent-exact-head-review"
+admission_review = "github-pr:148#issuecomment-6108374621"
 completion_evidence_keys = ["consumer-property-read-aggregate"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-aggregate.toml"
 

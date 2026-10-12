@@ -255,11 +255,11 @@ typed and held-slot Host mechanisms. It admits neither arbitrary native
 compilers nor aggregate implementation. The [Binding SPI](../spec/binding-spi.md#closed-consumer-compiler-support)
 owns the detailed contract.
 
-### Admission candidate: `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE`
+### ADR-0013 admission: `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE`
 
-The [admission candidate](WP-200-consumer-property-read-aggregate-admission.md)
-registers the sequential ADR-0013 boundary without admitting source work. Its
-entry requires
+The [exact admission record](WP-200-consumer-property-read-aggregate-admission.md)
+owns the sequential ADR-0013 implementation and evidence envelope; `index.toml`
+owns its admission state. Entry requires
 `WP-100-CONSUMER-VALIDATED-THING` and the existing
 `WP-200-CONSUMER-PROPERTY-READ-PLANNING` exact-coordinate tranche and the
 `WP-200-CONSUMER-COMPILER-SUPPORT` precursor to be
