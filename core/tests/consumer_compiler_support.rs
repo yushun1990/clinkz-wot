@@ -1619,3 +1619,508 @@ fn dropping_a_completed_host_artifact_releases_backing_once_without_extraction()
     let ((), requests) = observe(false, || drop(output));
     released(requests, request);
 }
+
+mod consumer_only_support {
+    use super::*;
+    struct CaptureClient<C> {
+        marker: PhantomData<C>,
+        compatibility: BindingArtifactCompatibility,
+        drops: Arc<AtomicUsize>,
+    }
+    impl<C> Drop for CaptureClient<C> {
+        fn drop(&mut self) {
+            self.drops.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    impl<C> CaptureClient<C> {
+        fn new(compatibility: BindingArtifactCompatibility, drops: &Arc<AtomicUsize>) -> Self {
+            Self {
+                marker: PhantomData,
+                compatibility,
+                drops: drops.clone(),
+            }
+        }
+    }
+    impl<C: BindingCompilerExtension> PollClientBinding for CaptureClient<C> {
+        type Compiler = C;
+        type RequestState = ();
+        fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
+            self.compatibility
+        }
+        fn request_state_layout(&self) -> BindingStateLayout {
+            BindingStateLayout::of::<()>(BindingLifetimeFootprint::new(0, 0))
+        }
+        fn start_request(
+            &mut self,
+            request: OutboundRequest,
+            artifact: &BindingArtifactEnvelope<
+                <Self::Compiler as BindingCompilerExtension>::Artifact,
+            >,
+            slot: &mut ClientRequestSlot<Self::RequestState>,
+            budget: &mut WorkBudget,
+        ) -> Result<
+            StartStatus<CoreResult<InteractionOutput>>,
+            BindingInputRejection<OutboundRequest>,
+        > {
+            Err(BindingInputRejection::new(
+                request,
+                BindingOperationalError::new(test_error()),
+            ))
+        }
+        fn poll_request(
+            &mut self,
+            cx: &mut Context<'_>,
+            slot: &mut ClientRequestSlot<Self::RequestState>,
+            budget: &mut WorkBudget,
+        ) -> Poll<CoreResult<InteractionOutput>> {
+            panic!("execution is outside this compiler-only witness")
+        }
+        fn start_cancel_request(
+            &mut self,
+            cx: &mut Context<'_>,
+            cleanup: CleanupPhaseContext,
+            slot: &mut ClientRequestSlot<Self::RequestState>,
+            budget: &mut WorkBudget,
+        ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+            panic!("execution is outside this compiler-only witness")
+        }
+        fn poll_cancel_request(
+            &mut self,
+            cx: &mut Context<'_>,
+            slot: &mut ClientRequestSlot<Self::RequestState>,
+            budget: &mut WorkBudget,
+        ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+            panic!("execution is outside this compiler-only witness")
+        }
+        fn acknowledge_request(
+            &mut self,
+            slot: &mut ClientRequestSlot<Self::RequestState>,
+        ) -> CoreResult<()> {
+            panic!("execution is outside this compiler-only witness")
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for CaptureClient<C> {
+        fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
+            self.compatibility
+        }
+        fn invoke(
+            &self,
+            request: OutboundRequest,
+            artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+        ) -> Result<
+            HostBindingCallBox<CoreResult<InteractionOutput>>,
+            BindingInputRejection<OutboundRequest>,
+        > {
+            Err(BindingInputRejection::new(
+                request,
+                BindingOperationalError::new(test_error()),
+            ))
+        }
+    }
+
+    fn typed<C: BindingCompilerExtension>(
+        compiler: C,
+        id: BindingRegistrationIdentity,
+        drops: &Arc<AtomicUsize>,
+    ) -> StaticConsumerBindingRegistration<CaptureClient<C>> {
+        StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+            id,
+            BindingExecutionSupport::application_static(),
+            StaticBindingCompilerRegistration::new(compiler),
+            CaptureClient::new(id.artifact_compatibility(), drops),
+            resources(),
+            BindingStatusPolicy::new(3, 5),
+        ))
+        .unwrap_or_else(|_| panic!("Consumer-only static"))
+    }
+    #[cfg(feature = "std")]
+    fn host_registration(
+        compiler: HostBindingCompilerRegistration,
+        id: BindingRegistrationIdentity,
+        consumer: bool,
+        execution: BindingExecutionSupport,
+        drops: &Arc<AtomicUsize>,
+    ) -> Result<
+        HostConsumerBindingRegistration,
+        BindingInputRejection<HostConsumerBindingRegistrationInput>,
+    > {
+        assert!(consumer);
+        HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+            id,
+            execution,
+            compiler,
+            Box::new(CaptureClient::<ResolvedTargetCompiler>::new(
+                id.artifact_compatibility(),
+                drops,
+            )),
+            resources(),
+            BindingStatusPolicy::new(3, 5),
+        ))
+    }
+    #[cfg(feature = "std")]
+    fn host(
+        compiler: ResolvedTargetCompiler,
+        id: BindingRegistrationIdentity,
+        drops: &Arc<AtomicUsize>,
+    ) -> HostConsumerBindingRegistration {
+        host_registration(
+            HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),
+            id,
+            true,
+            BindingExecutionSupport::host_erased(),
+            drops,
+        )
+        .unwrap_or_else(|_| panic!("Consumer-only Host"))
+    }
+
+    #[test]
+    fn consumer_only_typed_complete_owner_and_nondefault_identity_survive_actual_source_destruction()
+     {
+        for (capacity, variant) in [(32, 2), (64, 5)] {
+            let drops = Arc::new(AtomicUsize::new(0));
+            let c = ResolvedTargetCompiler::try_new(capacity).unwrap();
+            let id = identity(&c, variant);
+            let (checked, trace) = observe(false, || {
+                typed(c, id, &drops)
+                    .try_into_consumer_compiler()
+                    .unwrap_or_else(|_| panic!("capture"))
+            });
+            no_requests(trace);
+            check_descriptor(checked.support(), capacity, false);
+            assert_eq!(checked.registration().identity(), id);
+            assert!(
+                !checked
+                    .registration()
+                    .capabilities()
+                    .supports_producer_property_read()
+            );
+            let source = plan("mock://s/温度");
+            let input = BindingCompilerInput::new(
+                &source,
+                candidate(id),
+                BindingArtifactRole::ConsumerCall,
+            );
+            let compiler = checked.registration().compiler().compiler();
+            let (output, trace) = observe(false, || {
+                let bounds = compiler.bounds(&input).unwrap();
+                let cursor = compiler.start(&input).unwrap();
+                let mut budget = bounds.into_work();
+                let BindingCompilerStep::Pending(cursor) =
+                    compiler.step(&input, cursor, &mut budget)
+                else {
+                    panic!("first paid step")
+                };
+                let BindingCompilerStep::Complete(output) =
+                    compiler.step(&input, cursor, &mut budget)
+                else {
+                    panic!("second paid step")
+                };
+                output
+            });
+            no_requests(trace);
+            let qualified = artifact_identity(id, &source);
+            let envelope = BindingArtifactEnvelope::try_new(
+                qualified,
+                output.artifact().footprint(),
+                output.into_artifact(),
+            )
+            .unwrap();
+            drop(checked);
+            drop(source);
+            assert_eq!(drops.load(Ordering::SeqCst), 1);
+            assert_eq!(envelope.identity(), qualified);
+            assert_eq!(envelope.artifact().payload().target(), "mock://s/温度");
+            let ((), trace) = observe(false, || drop(envelope));
+            no_requests(trace);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn consumer_only_public_host_complete_owner_retains_one_actual_slot_through_completion() {
+        for (capacity, variant) in [(32, 2), (64, 5)] {
+            let drops = Arc::new(AtomicUsize::new(0));
+            let c = ResolvedTargetCompiler::try_new(capacity).unwrap();
+            let id = identity(&c, variant);
+            let owner = host(c, id, &drops);
+            let (checked, trace) = observe(false, || {
+                owner
+                    .try_into_consumer_compiler()
+                    .unwrap_or_else(|_| panic!("capture"))
+            });
+            no_requests(trace);
+            check_descriptor(checked.support(), capacity, true);
+            assert_eq!(checked.registration().identity(), id);
+            assert!(
+                !checked
+                    .registration()
+                    .capabilities()
+                    .supports_producer_property_read()
+            );
+            let layout = checked.support().host_slot_layout().unwrap();
+            let source = plan("mock://s/温度");
+            let input = BindingCompilerInput::new(
+                &source,
+                candidate(id),
+                BindingArtifactRole::ConsumerCall,
+            );
+            let compiler = checked.registration().compiler();
+            let bounds = compiler.bounds(&input).unwrap();
+            let (cursor, trace) = observe(false, || compiler.start(&input).unwrap());
+            let request = acquired(trace, layout, true);
+            let mut budget = bounds.into_work();
+            let (output, trace) = observe(false, || {
+                let BindingCompilerStep::Pending(cursor) =
+                    compiler.step(&input, cursor, &mut budget)
+                else {
+                    panic!("first paid step")
+                };
+                let BindingCompilerStep::Complete(output) =
+                    compiler.step(&input, cursor, &mut budget)
+                else {
+                    panic!("second paid step")
+                };
+                output
+            });
+            no_requests(trace);
+            let qualified = artifact_identity(id, &source);
+            let envelope = BindingArtifactEnvelope::try_new(
+                qualified,
+                output.artifact().footprint(),
+                output.into_artifact(),
+            )
+            .unwrap();
+            drop(checked);
+            drop(source);
+            assert_eq!(drops.load(Ordering::SeqCst), 1);
+            assert_eq!(envelope.identity(), qualified);
+            let (payload, trace) = observe(false, || {
+                envelope
+                    .into_artifact()
+                    .try_into_payload::<ResolvedTargetArtifact>(id.artifact_compatibility())
+                    .unwrap()
+            });
+            released(trace, request);
+            assert_eq!(payload.target(), "mock://s/温度");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn consumer_only_every_new_actual_allocation_can_fail_and_slot_rollback_retains_ledger_history()
+    {
+        let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
+        let id = identity(&compiler, 3);
+        let (rejection, requests) = observe(true, || {
+            HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap_err()
+        });
+        acquired(requests, Layout::new::<ResolvedTargetCompiler>(), false);
+        assert_eq!(rejection.input().configuration(), id.configuration());
+        let (adapter, requests) = observe(false, || {
+            HostBindingCompilerRegistration::try_new_consumer(rejection.into_input()).unwrap()
+        });
+        let startup = acquired(requests, Layout::new::<ResolvedTargetCompiler>(), true);
+        let drops = Arc::new(AtomicUsize::new(0));
+        let complete = host_registration(
+            adapter,
+            id,
+            true,
+            BindingExecutionSupport::host_erased(),
+            &drops,
+        )
+        .unwrap_or_else(|_| panic!("Host"));
+        let checked = complete
+            .try_into_consumer_compiler()
+            .unwrap_or_else(|_| panic!("capture"));
+        let layout = checked.support().host_slot_layout().unwrap();
+        let source = plan("mock://s/temperature");
+        let input =
+            BindingCompilerInput::new(&source, candidate(id), BindingArtifactRole::ConsumerCall);
+        let mut ledger =
+            AdmissionLedger::new(SlotIndex::new(41), Generation::INITIAL, 0, 0, 0, 4096, 0, 0);
+        ledger
+            .try_reserve_persistent_runtime(ResourceKind::CompiledRuntimeBytesPerThingMax, 7)
+            .unwrap()
+            .commit();
+        assert_eq!(
+            (
+                ledger.live_bytes(),
+                ledger.peak_live_bytes(),
+                ledger.largest_contiguous_allocation()
+            ),
+            (7, 7, 7)
+        );
+        // The caller owns logical admission. Core acquires physical backing only.
+        let reservation = ledger
+            .try_reserve_persistent_runtime(
+                ResourceKind::CompiledRuntimeBytesPerThingMax,
+                layout.size() as u64,
+            )
+            .unwrap();
+        let (failure, requests) = observe(true, || checked.registration().compiler().start(&input));
+        acquired(requests, layout, false);
+        assert!(matches!(failure, Err(CoreError::Backpressure(_))));
+        drop(reservation);
+        assert_eq!(
+            (
+                ledger.live_bytes(),
+                ledger.peak_live_bytes(),
+                ledger.largest_contiguous_allocation()
+            ),
+            (7, 7 + layout.size() as u64, layout.size() as u64)
+        );
+        println!(
+            "production slot rollback: (live, peak, largest) = ({}, {}, {}); no physical backing acquired",
+            ledger.live_bytes(),
+            ledger.peak_live_bytes(),
+            ledger.largest_contiguous_allocation()
+        );
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        assert_eq!(checked.registration().identity(), id);
+        let reservation = ledger
+            .try_reserve_persistent_runtime(
+                ResourceKind::CompiledRuntimeBytesPerThingMax,
+                layout.size() as u64,
+            )
+            .unwrap();
+        let (held, requests) = observe(false, || {
+            checked.registration().compiler().start(&input).unwrap()
+        });
+        let first = acquired(requests, layout, true);
+        reservation.commit();
+        let live_before = ledger.live_bytes();
+        let reservation = ledger
+            .try_reserve_persistent_runtime(
+                ResourceKind::CompiledRuntimeBytesPerThingMax,
+                layout.size() as u64,
+            )
+            .unwrap();
+        let (failure, requests) = observe(true, || checked.registration().compiler().start(&input));
+        acquired(requests, layout, false);
+        assert!(failure.is_err());
+        drop(reservation);
+        assert_eq!(ledger.live_bytes(), live_before);
+        assert_eq!(ledger.peak_live_bytes(), live_before + layout.size() as u64);
+        let (result, requests) = observe(false, || checked.registration().compiler().abort(held));
+        assert!(result.is_ok());
+        released(requests, first);
+        assert!(ledger.release_persistent_runtime(layout.size() as u64));
+        assert_eq!(ledger.live_bytes(), 7);
+        // A native start failure releases the already acquired vacant slot.
+        let invalid_source = plan(&"x".repeat(65));
+        let invalid = BindingCompilerInput::new(
+            &invalid_source,
+            candidate(id),
+            BindingArtifactRole::ConsumerCall,
+        );
+        let (failure, requests) =
+            observe(false, || checked.registration().compiler().start(&invalid));
+        assert!(failure.is_err());
+        assert_eq!((requests.allocations, requests.releases), (1, 1));
+        assert_eq!(requests.allocated[0], requests.released[0]);
+        assert_eq!(requests.allocated[0].size, layout.size());
+        // Recovering the complete owner and destroying it releases its startup
+        // adapter exactly once; endpoint allocations are baseline, separately owned.
+        let complete = checked.into_registration();
+        let ((), requests) = observe(false, || drop(complete));
+        assert_eq!(requests.allocations, 0);
+        assert_eq!(
+            requests.released[..requests.releases]
+                .iter()
+                .filter(|r| **r == startup)
+                .count(),
+            1
+        );
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn closed_support_rejects_same_compatibility_and_actual_configuration_without_owner_loss() {
+        let drops = Arc::new(AtomicUsize::new(0));
+        let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
+        let id = identity(&compiler, 7);
+        let callbacks = Arc::new(AtomicUsize::new(0));
+        let owner = typed(ForeignCompiler(callbacks.clone()), id, &drops);
+        assert_eq!(callbacks.load(Ordering::SeqCst), 1);
+        let (rejected, trace) = observe(false, || {
+            owner.try_into_consumer_compiler().err().expect("impostor")
+        });
+        no_requests(trace);
+        assert_eq!(callbacks.load(Ordering::SeqCst), 1);
+        assert_eq!(rejected.input().identity(), id);
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        let owner = rejected.into_input();
+        assert_eq!(
+            owner.into_input().client().compatibility,
+            id.artifact_compatibility()
+        );
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+        let owner = typed(ResolvedTargetCompiler::try_new(32).unwrap(), id, &drops);
+        let (rejected, trace) = observe(false, || {
+            owner
+                .try_into_consumer_compiler()
+                .err()
+                .expect("actual config")
+        });
+        no_requests(trace);
+        assert_eq!(rejected.input().identity(), id);
+        assert_eq!(
+            rejected.input().compiler().compiler().configuration(),
+            ResolvedTargetCompiler::try_new(32).unwrap().configuration()
+        );
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+        drop(rejected.into_input());
+        assert_eq!(drops.load(Ordering::SeqCst), 2);
+    }
+    #[cfg(feature = "std")]
+    #[test]
+    fn host_support_requires_the_actual_supported_adapter_and_returns_exact_client() {
+        let drops = Arc::new(AtomicUsize::new(0));
+        let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
+        let id = identity(&compiler, 7);
+        let callbacks = Arc::new(AtomicUsize::new(0));
+        for compiler in [
+            HostBindingCompilerRegistration::new(compiler),
+            HostBindingCompilerRegistration::new(ForeignCompiler(callbacks.clone())),
+            HostBindingCompilerRegistration::try_new_consumer(
+                ResolvedTargetCompiler::try_new(32).unwrap(),
+            )
+            .unwrap(),
+        ] {
+            let client: Box<dyn ClientBinding> = Box::new(
+                CaptureClient::<ResolvedTargetCompiler>::new(id.artifact_compatibility(), &drops),
+            );
+            let pointer = &*client as *const dyn ClientBinding as *const ();
+            let input = HostConsumerBindingRegistrationInput::new(
+                id,
+                BindingExecutionSupport::host_erased(),
+                compiler,
+                client,
+                resources(),
+                BindingStatusPolicy::new(3, 5),
+            );
+            let owner = HostConsumerBindingRegistration::new(input)
+                .unwrap_or_else(|_| panic!("valid native declaration"));
+            let before = drops.load(Ordering::SeqCst);
+            let (rejected, trace) = observe(false, || {
+                owner
+                    .try_into_consumer_compiler()
+                    .err()
+                    .expect("unsupported capture")
+            });
+            no_requests(trace);
+            assert_eq!(rejected.input().identity(), id);
+            assert_eq!(drops.load(Ordering::SeqCst), before);
+            let returned = rejected.into_input().into_input();
+            assert_eq!(
+                returned.client() as *const dyn ClientBinding as *const (),
+                pointer
+            );
+            drop(returned);
+            assert_eq!(drops.load(Ordering::SeqCst), before + 1);
+        }
+        assert_eq!(callbacks.load(Ordering::SeqCst), 1);
+    }
+}

@@ -39,14 +39,15 @@ pub use binding::{
     RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity,
     RouteResponseOpportunity, RouteTerminal, ServerResponseSlot, ServerRouteSlot,
     ServingActivationAuthority, StaticBindingComponents, StaticBindingRegistration,
-    StaticBindingRegistrationInput, StaticConsumerPropertyReadSlot,
+    StaticBindingRegistrationInput, StaticConsumerBindingRegistration,
+    StaticConsumerBindingRegistrationInput, StaticConsumerPropertyReadSlot,
 };
 #[cfg(feature = "std")]
 pub use binding::{
     HostActiveRouteGuard, HostBindingCall, HostBindingCallBox, HostBindingRegistration,
-    HostBindingRegistrationInput, HostCommittedRouteGuard, HostPreparedRouteGuard,
-    HostRouteCleanupSuccessor, HostShutdownRouteGuard, RouteAbortInput, RouteServerBinding,
-    RouteShutdownInput,
+    HostBindingRegistrationInput, HostCommittedRouteGuard, HostConsumerBindingRegistration,
+    HostConsumerBindingRegistrationInput, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
+    HostShutdownRouteGuard, RouteAbortInput, RouteServerBinding, RouteShutdownInput,
 };
 pub use binding_compiler::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,

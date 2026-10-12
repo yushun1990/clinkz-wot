@@ -1,8 +1,27 @@
-# Consumer runtime entry discriminator
+# Consumer runtime entry evidence
+
+`src/production.rs` is a downstream client with no server trait or component.
+`tests/production.rs` constructs the actual Consumer-only Core owners, captures
+closed support and runs the public paid Planning aggregate. Both representations
+execute concrete artifacts after TD destruction, then destroy requests and the
+separate complete registration and explicitly drive the original cleanup
+root/account to terminal. Allocation failure runs cover every materialization
+and supported Host compiler-slot request. The existing exact-source observer
+also verifies the all-bounds barrier for both new checked adapters.
+
+The production tests measure static and Host layouts, separate provisioning,
+output and call allocations, and zero retained bytes after explicit cleanup.
+The normal library exposes target layout observations for the two ARM compile
+cells. ARM compilation is not device runtime or device-fit evidence. Core's
+public tests separately cover result-shape failures, cancellation, compiler
+support rejection and the two supported fallible allocation sites.
+
+The table below retains the original pre-implementation discriminator and its
+limits. Its model constructors are not production eligibility evidence.
 
 Non-production evidence for the [entry investigation](../../../workspace/0079-consumer-runtime-entry-constructibility.md)
-and the [Consumer-only registration candidate](../../../docs/work-packages/WP-300-consumer-only-registration-admission.md).
-This isolated, non-publishable crate adds no production registration or runtime.
+and the [admitted Consumer-only registration tranche](../../../docs/work-packages/WP-300-consumer-only-registration-admission.md).
+This isolated, non-publishable crate defines no product runtime or authority.
 
 | Evidence | What runs | Limit |
 | --- | --- | --- |
@@ -14,10 +33,10 @@ This isolated, non-publishable crate adds no production registration or runtime.
 
 The static model's closed compiler/configuration check combines only construction
 facts; it does not emulate Core's trusted support issuer. The production
-successor must test actual capture, unsupported/impostor/configuration rejection
-and retained-slot allocation failure. Existing complete static-slot accounting
+tests above and Core support tests exercise actual capture, unsupported/impostor/
+configuration rejection and retained-slot allocation failure. Existing complete static-slot accounting
 is projected with checked public item/byte arithmetic and `size_of`; model
-agreement does not prove the future mediator or its exact representation cost.
+agreement does not replace the production mediator and its measured representation cost.
 
 The local owner keeps output, manual cleanup destination and the original charged
 Foundation account together. Zero-budget reclaim is Pending. Dropping a draft or

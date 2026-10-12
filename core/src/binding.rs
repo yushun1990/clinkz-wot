@@ -265,6 +265,14 @@ impl BindingRegistrationCapabilities {
         Self::new(true)
     }
 
+    /// Declares Consumer Property Read without a Producer role.
+    pub const fn consumer_property_read() -> Self {
+        Self {
+            producer_property_read: false,
+            consumer_property_read: true,
+        }
+    }
+
     /// Declares the admitted dual-role Producer and Consumer Property Read bundle.
     pub const fn producer_and_consumer_property_read() -> Self {
         Self {
@@ -2451,16 +2459,12 @@ where
     pub fn try_into_consumer_compiler(
         self,
     ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
-        let actual = (self.input.compiler.compiler() as &dyn core::any::Any)
-            .downcast_ref::<ResolvedTargetCompiler>();
-        if self.input.capabilities.supports_consumer_property_read()
-            && self.input.execution.supports_application_static()
-            && let Some(actual) = actual
-            && self.identity().configuration() == actual.configuration()
-            && self.identity().artifact_compatibility()
-                == crate::binding_compiler::resolved_target_compatibility()
-        {
-            let support = actual.support(false);
+        if let Some(support) = static_consumer_support(
+            self.identity(),
+            self.execution(),
+            self.capabilities(),
+            &self.input.compiler,
+        ) {
             return Ok(ConsumerCompilerRegistration {
                 registration: self,
                 support,
@@ -2677,80 +2681,25 @@ where
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
     {
-        if !slot.is_vacant()
-            || !self.input.capabilities.supports_consumer_property_read()
-            || !consumer_request_matches_registration(self.input.identity, &request, artifact)
-        {
-            return Err(reject_consumer_request(
-                request,
-                303,
-                "Consumer request does not match the installed registration",
-            ));
-        }
-
-        let accepted_contract_error = consumer_request_error(
-            &request,
-            304,
-            "accepted static Consumer request did not retain its exact slot identity",
-        );
-        let seal = ConsumerResultSeal::from_request(&request);
-        let started =
-            self.input
-                .server
-                .client
-                .start_request(request, artifact, &mut slot.raw, budget)?;
-
-        slot.seal = Some(seal);
-        match started {
-            StartStatus::Ready(result) => {
-                slot.state = StaticConsumerCallState::Terminal;
-                if !slot.raw.is_vacant() {
-                    return Ok(StartStatus::Ready(Err(accepted_contract_error)));
-                }
-                Ok(StartStatus::Ready(slot.seal_synchronous(result)))
-            }
-            StartStatus::Pending => {
-                slot.state = StaticConsumerCallState::Running;
-                let accepted_exact_request = !slot.raw.is_vacant()
-                    && slot
-                        .seal
-                        .as_ref()
-                        .is_some_and(|seal| seal.matches_request(slot.raw.request()));
-                if !accepted_exact_request {
-                    slot.state = StaticConsumerCallState::Terminal;
-                    return Ok(StartStatus::Ready(Err(accepted_contract_error)));
-                }
-                Ok(StartStatus::Pending)
-            }
-        }
+        start_static_consumer_property_read(
+            self.input.identity,
+            self.input.capabilities,
+            &mut self.input.server.client,
+            request,
+            artifact,
+            slot,
+            budget,
+        )
     }
 
-    /// Polls one installed pending Consumer Property Read and seals its result.
+    /// Polls one installed pending Consumer call and seals its result.
     pub fn poll_consumer_property_read(
         &mut self,
         cx: &mut Context<'_>,
         slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        if !matches!(slot.state, StaticConsumerCallState::Running) {
-            return Poll::Ready(Err(slot.error(
-                305,
-                "Consumer result poll requires a running installed call",
-            )));
-        }
-
-        match self
-            .input
-            .server
-            .client
-            .poll_request(cx, &mut slot.raw, budget)
-        {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(result) => {
-                slot.state = StaticConsumerCallState::Terminal;
-                Poll::Ready(slot.seal_against_live_request(result))
-            }
-        }
+        poll_static_consumer_property_read(&mut self.input.server.client, cx, slot, budget)
     }
 
     /// Starts cancellation without admitting a static cleanup-transfer owner.
@@ -2761,54 +2710,23 @@ where
         slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
         budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if !matches!(slot.state, StaticConsumerCallState::Running) {
-            return Err(slot.error(
-                306,
-                "Consumer cancellation requires a running installed call",
-            ));
-        }
-        let cleanup = match cleanup.try_into_transfer_request() {
-            Err(cleanup) => cleanup,
-            Ok(_) => {
-                return Err(slot.error(307, "static Consumer cancellation has no transfer owner"));
-            }
-        };
-
-        slot.state = StaticConsumerCallState::Cancelling;
-        let started =
-            self.input
-                .server
-                .client
-                .start_cancel_request(cx, cleanup, &mut slot.raw, budget)?;
-        self.seal_static_cancellation(started, slot)
+        start_cancel_static_consumer_property_read(
+            &mut self.input.server.client,
+            cx,
+            cleanup,
+            slot,
+            budget,
+        )
     }
 
-    /// Polls an accepted installed Consumer cancellation to sealed settlement.
+    /// Polls accepted cancellation to a sealed settlement.
     pub fn poll_cancel_consumer_property_read(
         &mut self,
         cx: &mut Context<'_>,
         slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if !matches!(slot.state, StaticConsumerCallState::Cancelling) {
-            return Poll::Ready(Err(slot.error(
-                308,
-                "Consumer cancellation poll requires an accepted cancellation",
-            )));
-        }
-
-        match self
-            .input
-            .server
-            .client
-            .poll_cancel_request(cx, &mut slot.raw, budget)
-        {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
-            Poll::Ready(Ok(settlement)) => {
-                Poll::Ready(self.seal_static_cancellation_settlement(settlement, slot))
-            }
-        }
+        poll_cancel_static_consumer_property_read(&mut self.input.server.client, cx, slot, budget)
     }
 
     /// Acknowledges only a sealed result or terminal cancellation disposition.
@@ -2816,82 +2734,205 @@ where
         &mut self,
         slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
     ) -> CoreResult<()> {
-        if !matches!(slot.state, StaticConsumerCallState::Terminal) {
-            return Err(slot.error(
-                309,
-                "Consumer acknowledgement requires a sealed terminal disposition",
-            ));
-        }
+        acknowledge_static_consumer_property_read(&mut self.input.server.client, slot)
+    }
+}
 
-        if !slot.raw.is_vacant() {
-            self.input
-                .server
-                .client
-                .acknowledge_request(&mut slot.raw)?;
-            slot.raw.clear();
-        }
-        slot.seal = None;
-        slot.state = StaticConsumerCallState::Vacant;
-        Ok(())
+fn start_static_consumer_property_read<C: PollClientBinding>(
+    identity: BindingRegistrationIdentity,
+    capabilities: BindingRegistrationCapabilities,
+    client: &mut C,
+    request: OutboundRequest,
+    artifact: &BindingArtifactEnvelope<<C::Compiler as BindingCompilerExtension>::Artifact>,
+    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+    budget: &mut WorkBudget,
+) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>> {
+    if !slot.is_vacant()
+        || !capabilities.supports_consumer_property_read()
+        || !consumer_request_matches_registration(identity, &request, artifact)
+    {
+        return Err(reject_consumer_request(
+            request,
+            303,
+            "Consumer request does not match the installed registration",
+        ));
     }
 
-    fn seal_static_cancellation(
-        &mut self,
-        started: StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        match started {
-            StartStatus::Pending => Ok(StartStatus::Pending),
-            StartStatus::Ready(settlement) => self
-                .seal_static_cancellation_settlement(settlement, slot)
-                .map(StartStatus::Ready),
-        }
-    }
+    let accepted_contract_error = consumer_request_error(
+        &request,
+        304,
+        "accepted static Consumer request did not retain its exact slot identity",
+    );
+    let seal = ConsumerResultSeal::from_request(&request);
+    let started = client.start_request(request, artifact, &mut slot.raw, budget)?;
 
-    fn seal_static_cancellation_settlement(
-        &mut self,
-        settlement: BindingCallSettlement<CoreResult<InteractionOutput>>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    ) -> CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>> {
-        match settlement {
-            BindingCallSettlement::Returned(result) => {
-                slot.state = StaticConsumerCallState::Terminal;
-                Ok(BindingCallSettlement::Returned(
-                    slot.seal_against_live_request(result),
-                ))
+    slot.seal = Some(seal);
+    match started {
+        StartStatus::Ready(result) => {
+            slot.state = StaticConsumerCallState::Terminal;
+            if !slot.raw.is_vacant() {
+                return Ok(StartStatus::Ready(Err(accepted_contract_error)));
             }
-            BindingCallSettlement::Cancelled {
+            Ok(StartStatus::Ready(slot.seal_synchronous(result)))
+        }
+        StartStatus::Pending => {
+            slot.state = StaticConsumerCallState::Running;
+            let accepted_exact_request = !slot.raw.is_vacant()
+                && slot
+                    .seal
+                    .as_ref()
+                    .is_some_and(|seal| seal.matches_request(slot.raw.request()));
+            if !accepted_exact_request {
+                slot.state = StaticConsumerCallState::Terminal;
+                return Ok(StartStatus::Ready(Err(accepted_contract_error)));
+            }
+            Ok(StartStatus::Pending)
+        }
+    }
+}
+
+fn poll_static_consumer_property_read<C: PollClientBinding>(
+    client: &mut C,
+    cx: &mut Context<'_>,
+    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+    budget: &mut WorkBudget,
+) -> Poll<CoreResult<InteractionOutput>> {
+    if !matches!(slot.state, StaticConsumerCallState::Running) {
+        return Poll::Ready(Err(slot.error(
+            305,
+            "Consumer result poll requires a running installed call",
+        )));
+    }
+
+    match client.poll_request(cx, &mut slot.raw, budget) {
+        Poll::Pending => Poll::Pending,
+        Poll::Ready(result) => {
+            slot.state = StaticConsumerCallState::Terminal;
+            Poll::Ready(slot.seal_against_live_request(result))
+        }
+    }
+}
+
+fn start_cancel_static_consumer_property_read<C: PollClientBinding>(
+    client: &mut C,
+    cx: &mut Context<'_>,
+    cleanup: CleanupPhaseContext,
+    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+    budget: &mut WorkBudget,
+) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+    if !matches!(slot.state, StaticConsumerCallState::Running) {
+        return Err(slot.error(
+            306,
+            "Consumer cancellation requires a running installed call",
+        ));
+    }
+    let cleanup = match cleanup.try_into_transfer_request() {
+        Err(cleanup) => cleanup,
+        Ok(_) => {
+            return Err(slot.error(307, "static Consumer cancellation has no transfer owner"));
+        }
+    };
+
+    slot.state = StaticConsumerCallState::Cancelling;
+    let started = client.start_cancel_request(cx, cleanup, &mut slot.raw, budget)?;
+    seal_static_cancellation(started, slot)
+}
+
+fn poll_cancel_static_consumer_property_read<C: PollClientBinding>(
+    client: &mut C,
+    cx: &mut Context<'_>,
+    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+    budget: &mut WorkBudget,
+) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+    if !matches!(slot.state, StaticConsumerCallState::Cancelling) {
+        return Poll::Ready(Err(slot.error(
+            308,
+            "Consumer cancellation poll requires an accepted cancellation",
+        )));
+    }
+
+    match client.poll_cancel_request(cx, &mut slot.raw, budget) {
+        Poll::Pending => Poll::Pending,
+        Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+        Poll::Ready(Ok(settlement)) => {
+            Poll::Ready(seal_static_cancellation_settlement(settlement, slot))
+        }
+    }
+}
+
+fn acknowledge_static_consumer_property_read<C: PollClientBinding>(
+    client: &mut C,
+    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+) -> CoreResult<()> {
+    if !matches!(slot.state, StaticConsumerCallState::Terminal) {
+        return Err(slot.error(
+            309,
+            "Consumer acknowledgement requires a sealed terminal disposition",
+        ));
+    }
+
+    if !slot.raw.is_vacant() {
+        client.acknowledge_request(&mut slot.raw)?;
+        slot.raw.clear();
+    }
+    slot.seal = None;
+    slot.state = StaticConsumerCallState::Vacant;
+    Ok(())
+}
+
+fn seal_static_cancellation<S>(
+    started: StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>,
+    slot: &mut StaticConsumerPropertyReadSlot<S>,
+) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+    match started {
+        StartStatus::Pending => Ok(StartStatus::Pending),
+        StartStatus::Ready(settlement) => {
+            seal_static_cancellation_settlement(settlement, slot).map(StartStatus::Ready)
+        }
+    }
+}
+
+fn seal_static_cancellation_settlement<S>(
+    settlement: BindingCallSettlement<CoreResult<InteractionOutput>>,
+    slot: &mut StaticConsumerPropertyReadSlot<S>,
+) -> CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>> {
+    match settlement {
+        BindingCallSettlement::Returned(result) => {
+            slot.state = StaticConsumerCallState::Terminal;
+            Ok(BindingCallSettlement::Returned(
+                slot.seal_against_live_request(result),
+            ))
+        }
+        BindingCallSettlement::Cancelled {
+            retry_class,
+            disposition: BindingCancellationDisposition::Complete { successor },
+        } => {
+            slot.state = StaticConsumerCallState::Terminal;
+            Ok(BindingCallSettlement::Cancelled {
                 retry_class,
                 disposition: BindingCancellationDisposition::Complete { successor },
-            } => {
-                slot.state = StaticConsumerCallState::Terminal;
-                Ok(BindingCallSettlement::Cancelled {
-                    retry_class,
-                    disposition: BindingCancellationDisposition::Complete { successor },
-                })
-            }
-            BindingCallSettlement::Cancelled {
-                retry_class,
-                disposition:
-                    BindingCancellationDisposition::ResidualExternalState { successor, record },
-            } => {
-                slot.state = StaticConsumerCallState::Terminal;
-                Ok(BindingCallSettlement::Cancelled {
-                    retry_class,
-                    disposition: BindingCancellationDisposition::ResidualExternalState {
-                        successor,
-                        record,
-                    },
-                })
-            }
-            BindingCallSettlement::Cancelled {
-                disposition: BindingCancellationDisposition::TransferRequired(_),
-                ..
-            } => Err(slot.error(
-                310,
-                "static Consumer binding fabricated cleanup-transfer authority",
-            )),
+            })
         }
+        BindingCallSettlement::Cancelled {
+            retry_class,
+            disposition: BindingCancellationDisposition::ResidualExternalState { successor, record },
+        } => {
+            slot.state = StaticConsumerCallState::Terminal;
+            Ok(BindingCallSettlement::Cancelled {
+                retry_class,
+                disposition: BindingCancellationDisposition::ResidualExternalState {
+                    successor,
+                    record,
+                },
+            })
+        }
+        BindingCallSettlement::Cancelled {
+            disposition: BindingCancellationDisposition::TransferRequired(_),
+            ..
+        } => Err(slot.error(
+            310,
+            "static Consumer binding fabricated cleanup-transfer authority",
+        )),
     }
 }
 
@@ -3661,13 +3702,12 @@ impl HostBindingRegistration {
     pub fn try_into_consumer_compiler(
         self,
     ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
-        if self.input.capabilities.supports_consumer_property_read()
-            && self.input.execution.supports_host_erased()
-            && let Some(support) = self.input.compiler.consumer_support()
-            && self.identity().configuration() == support.configuration()
-            && self.identity().artifact_compatibility()
-                == crate::binding_compiler::resolved_target_compatibility()
-        {
+        if let Some(support) = host_consumer_support(
+            self.identity(),
+            self.execution(),
+            self.capabilities(),
+            &self.input.compiler,
+        ) {
             return Ok(ConsumerCompilerRegistration {
                 registration: self,
                 support,
@@ -3739,50 +3779,14 @@ impl HostBindingRegistration {
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
     > {
-        if !self.input.capabilities.supports_consumer_property_read()
-            || !consumer_request_matches_registration(self.input.identity, &request, artifact)
-        {
-            return Err(reject_consumer_request(
-                request,
-                312,
-                "Consumer request does not match the installed registration",
-            ));
-        }
-
-        let resource_error = consumer_request_error(
-            &request,
-            313,
-            "accepted Host Consumer call exceeds its admitted retained footprint",
-        );
-        let seal = ConsumerResultSeal::from_request(&request);
-        let client = self
-            .input
-            .client
-            .as_deref()
-            .expect("validated Consumer registration retains its private client");
-        let mut raw = client.invoke(request, artifact)?;
-        let raw_footprint = raw.as_pin_mut().lifetime_footprint();
-        let combined = raw_footprint.checked_add(SealedHostConsumerCall::overhead());
-
-        if let Some(footprint) = combined
-            && footprint.fits_within(self.input.resources.admitted())
-        {
-            return Ok(HostBindingCallBox::new(SealedHostConsumerCall {
-                raw,
-                seal: Some(seal),
-                footprint,
-            }));
-        }
-
-        let rejected_footprint = raw_footprint
-            .checked_add(RejectedAcceptedHostConsumerCall::overhead())
-            .unwrap_or(BindingLifetimeFootprint::new(u32::MAX, u64::MAX));
-        Ok(HostBindingCallBox::new(RejectedAcceptedHostConsumerCall {
-            _raw: raw,
-            _seal: seal,
-            error: Some(resource_error),
-            reported_footprint: rejected_footprint,
-        }))
+        start_host_consumer_property_read(
+            self.input.identity,
+            self.input.capabilities,
+            self.input.client.as_deref(),
+            self.input.resources,
+            request,
+            artifact,
+        )
     }
 
     /// Returns validated retained-resource declarations.
@@ -3803,5 +3807,453 @@ impl HostBindingRegistration {
     /// Consumes the bundle back into its complete validated input.
     pub fn into_input(self) -> HostBindingRegistrationInput {
         self.input
+    }
+}
+
+#[cfg(feature = "std")]
+fn start_host_consumer_property_read(
+    identity: BindingRegistrationIdentity,
+    capabilities: BindingRegistrationCapabilities,
+    client: Option<&dyn ClientBinding>,
+    resources: BindingResourceDeclarations,
+    request: OutboundRequest,
+    artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
+{
+    if !capabilities.supports_consumer_property_read()
+        || !consumer_request_matches_registration(identity, &request, artifact)
+    {
+        return Err(reject_consumer_request(
+            request,
+            312,
+            "Consumer request does not match the installed registration",
+        ));
+    }
+
+    let resource_error = consumer_request_error(
+        &request,
+        313,
+        "accepted Host Consumer call exceeds its admitted retained footprint",
+    );
+    let seal = ConsumerResultSeal::from_request(&request);
+    let client = client.expect("validated Consumer registration retains its private client");
+    let mut raw = client.invoke(request, artifact)?;
+    let raw_footprint = raw.as_pin_mut().lifetime_footprint();
+    let combined = raw_footprint.checked_add(SealedHostConsumerCall::overhead());
+
+    if let Some(footprint) = combined
+        && footprint.fits_within(resources.admitted())
+    {
+        return Ok(HostBindingCallBox::new(SealedHostConsumerCall {
+            raw,
+            seal: Some(seal),
+            footprint,
+        }));
+    }
+
+    let rejected_footprint = raw_footprint
+        .checked_add(RejectedAcceptedHostConsumerCall::overhead())
+        .unwrap_or(BindingLifetimeFootprint::new(u32::MAX, u64::MAX));
+    Ok(HostBindingCallBox::new(RejectedAcceptedHostConsumerCall {
+        _raw: raw,
+        _seal: seal,
+        error: Some(resource_error),
+        reported_footprint: rejected_footprint,
+    }))
+}
+
+fn static_consumer_support<C: BindingCompilerExtension + 'static>(
+    identity: BindingRegistrationIdentity,
+    execution: BindingExecutionSupport,
+    capabilities: BindingRegistrationCapabilities,
+    compiler: &StaticBindingCompilerRegistration<C>,
+) -> Option<ConsumerCompilerSupport> {
+    let actual =
+        (compiler.compiler() as &dyn core::any::Any).downcast_ref::<ResolvedTargetCompiler>();
+    if capabilities.supports_consumer_property_read()
+        && execution.supports_application_static()
+        && let Some(actual) = actual
+        && identity.configuration() == actual.configuration()
+        && identity.artifact_compatibility()
+            == crate::binding_compiler::resolved_target_compatibility()
+    {
+        Some(actual.support(false))
+    } else {
+        None
+    }
+}
+
+#[cfg(feature = "std")]
+fn host_consumer_support(
+    identity: BindingRegistrationIdentity,
+    execution: BindingExecutionSupport,
+    capabilities: BindingRegistrationCapabilities,
+    compiler: &HostBindingCompilerRegistration,
+) -> Option<ConsumerCompilerSupport> {
+    if capabilities.supports_consumer_property_read()
+        && execution.supports_host_erased()
+        && let Some(support) = compiler.consumer_support()
+        && identity.configuration() == support.configuration()
+        && identity.artifact_compatibility()
+            == crate::binding_compiler::resolved_target_compatibility()
+    {
+        Some(support)
+    } else {
+        None
+    }
+}
+
+/// Recoverable author input for a complete Consumer-only static registration.
+pub struct StaticConsumerBindingRegistrationInput<C: PollClientBinding> {
+    identity: BindingRegistrationIdentity,
+    execution: BindingExecutionSupport,
+    compiler: StaticBindingCompilerRegistration<C::Compiler>,
+    client: C,
+    resources: BindingResourceDeclarations,
+    status: BindingStatusPolicy,
+}
+impl<C: PollClientBinding> StaticConsumerBindingRegistrationInput<C> {
+    /// Assembles the client-only input without performing protocol work.
+    pub const fn new(
+        identity: BindingRegistrationIdentity,
+        execution: BindingExecutionSupport,
+        compiler: StaticBindingCompilerRegistration<C::Compiler>,
+        client: C,
+        resources: BindingResourceDeclarations,
+        status: BindingStatusPolicy,
+    ) -> Self {
+        Self {
+            identity,
+            execution,
+            compiler,
+            client,
+            resources,
+            status,
+        }
+    }
+    /// Returns the unchanged registration identity.
+    pub const fn identity(&self) -> BindingRegistrationIdentity {
+        self.identity
+    }
+    /// Borrows the authoring compiler.
+    pub const fn compiler(&self) -> &StaticBindingCompilerRegistration<C::Compiler> {
+        &self.compiler
+    }
+    /// Borrows the authoring client, before installation or after recovery.
+    pub const fn client(&self) -> &C {
+        &self.client
+    }
+}
+
+/// Validated complete static Consumer owner, with a private installed client.
+///
+/// ```compile_fail
+/// # use clinkz_wot_core::{PollClientBinding, StaticConsumerBindingRegistration};
+/// # fn bypass<C: PollClientBinding>(r: &StaticConsumerBindingRegistration<C>) {
+/// let raw = r.client();
+/// # }
+/// ```
+/// ```compile_fail
+/// # use clinkz_wot_core::{PollClientBinding, StaticConsumerBindingRegistration};
+/// # fn mutate<C: PollClientBinding>(r: &mut StaticConsumerBindingRegistration<C>) {
+/// let compiler = r.compiler_mut();
+/// # }
+/// ```
+pub struct StaticConsumerBindingRegistration<C: PollClientBinding> {
+    input: StaticConsumerBindingRegistrationInput<C>,
+}
+impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
+    /// Validates compiler/client compatibility and the complete retained slot.
+    /// Rejection preserves the exact complete input without protocol work.
+    pub fn new(
+        input: StaticConsumerBindingRegistrationInput<C>,
+    ) -> Result<Self, BindingInputRejection<StaticConsumerBindingRegistrationInput<C>>> {
+        let identity = input.identity;
+        let expected = identity.artifact_compatibility();
+        let compiler_compatibility = input.compiler.compiler().compatibility();
+        let client_compatibility = input.client.artifact_compatibility();
+        let slot_fits = complete_static_consumer_slot_fits::<C::RequestState>(
+            input.client.request_state_layout(),
+            input.resources,
+        );
+        if !(input.execution.supports_application_static()
+            && expected == compiler_compatibility
+            && expected == client_compatibility
+            && input.resources.is_valid()
+            && slot_fits)
+        {
+            return Err(BindingInputRejection::new(
+                input,
+                registration_error(identity, 324),
+            ));
+        }
+        Ok(Self { input })
+    }
+    /// Returns the immutable complete identity.
+    pub const fn identity(&self) -> BindingRegistrationIdentity {
+        self.input.identity
+    }
+    /// Returns the Consumer-only capability metadata.
+    pub const fn capabilities(&self) -> BindingRegistrationCapabilities {
+        BindingRegistrationCapabilities::consumer_property_read()
+    }
+    /// Returns selected execution metadata.
+    pub const fn execution(&self) -> BindingExecutionSupport {
+        self.input.execution
+    }
+    /// Borrows the compiler while retaining the complete owner.
+    pub const fn compiler(&self) -> &StaticBindingCompilerRegistration<C::Compiler> {
+        &self.input.compiler
+    }
+    /// Returns the validated declarations, without charging nonexistent owners.
+    pub const fn resources(&self) -> BindingResourceDeclarations {
+        self.input.resources
+    }
+    /// Returns the retained-status policy.
+    pub const fn status(&self) -> BindingStatusPolicy {
+        self.input.status
+    }
+    /// Recovers the complete input, including its original private client.
+    pub fn into_input(self) -> StaticConsumerBindingRegistrationInput<C> {
+        self.input
+    }
+
+    /// Starts one installed Consumer Property Read through Core result sealing.
+    pub fn start_consumer_property_read(
+        &mut self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<<C::Compiler as BindingCompilerExtension>::Artifact>,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
+    {
+        start_static_consumer_property_read(
+            self.input.identity,
+            self.capabilities(),
+            &mut self.input.client,
+            request,
+            artifact,
+            slot,
+            budget,
+        )
+    }
+
+    /// Polls one installed pending Consumer call and seals its result.
+    pub fn poll_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<InteractionOutput>> {
+        poll_static_consumer_property_read(&mut self.input.client, cx, slot, budget)
+    }
+
+    /// Starts cancellation without admitting a static cleanup-transfer owner.
+    pub fn start_cancel_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: CleanupPhaseContext,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+        start_cancel_static_consumer_property_read(
+            &mut self.input.client,
+            cx,
+            cleanup,
+            slot,
+            budget,
+        )
+    }
+
+    /// Polls accepted cancellation to a sealed settlement.
+    pub fn poll_cancel_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+        poll_cancel_static_consumer_property_read(&mut self.input.client, cx, slot, budget)
+    }
+
+    /// Acknowledges only a sealed result or terminal cancellation disposition.
+    pub fn acknowledge_consumer_property_read(
+        &mut self,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+    ) -> CoreResult<()> {
+        acknowledge_static_consumer_property_read(&mut self.input.client, slot)
+    }
+}
+impl<C: PollClientBinding> StaticConsumerBindingRegistration<C>
+where
+    C::Compiler: 'static,
+{
+    /// Consumes the exact complete owner to capture Core's closed support.
+    /// Generic native compiler validity alone does not confer aggregate support.
+    pub fn try_into_consumer_compiler(
+        self,
+    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
+        if let Some(support) = static_consumer_support(
+            self.identity(),
+            self.execution(),
+            self.capabilities(),
+            &self.input.compiler,
+        ) {
+            return Ok(ConsumerCompilerRegistration {
+                registration: self,
+                support,
+            });
+        }
+        let error = registration_error(self.identity(), 323);
+        Err(BindingInputRejection::new(self, error))
+    }
+}
+
+#[cfg(feature = "std")]
+/// Recoverable author input for a complete Consumer-only Host registration.
+pub struct HostConsumerBindingRegistrationInput {
+    identity: BindingRegistrationIdentity,
+    execution: BindingExecutionSupport,
+    compiler: HostBindingCompilerRegistration,
+    client: Box<dyn ClientBinding>,
+    resources: BindingResourceDeclarations,
+    status: BindingStatusPolicy,
+}
+#[cfg(feature = "std")]
+impl HostConsumerBindingRegistrationInput {
+    /// Assembles the client-only input without protocol work or ingress state.
+    pub fn new(
+        identity: BindingRegistrationIdentity,
+        execution: BindingExecutionSupport,
+        compiler: HostBindingCompilerRegistration,
+        client: Box<dyn ClientBinding>,
+        resources: BindingResourceDeclarations,
+        status: BindingStatusPolicy,
+    ) -> Self {
+        Self {
+            identity,
+            execution,
+            compiler,
+            client,
+            resources,
+            status,
+        }
+    }
+    /// Returns the unchanged registration identity.
+    pub const fn identity(&self) -> BindingRegistrationIdentity {
+        self.identity
+    }
+    /// Borrows the authoring compiler.
+    pub const fn compiler(&self) -> &HostBindingCompilerRegistration {
+        &self.compiler
+    }
+    /// Borrows the authoring client, before installation or after recovery.
+    pub fn client(&self) -> &dyn ClientBinding {
+        &*self.client
+    }
+}
+
+#[cfg(feature = "std")]
+/// Validated complete Host Consumer owner, with a private installed client.
+///
+/// ```compile_fail
+/// # use clinkz_wot_core::HostConsumerBindingRegistration;
+/// # fn bypass(r: &HostConsumerBindingRegistration) {
+/// let raw = r.client();
+/// # }
+/// ```
+/// ```compile_fail
+/// # use clinkz_wot_core::HostConsumerBindingRegistration;
+/// # fn mutate(r: &mut HostConsumerBindingRegistration) {
+/// let compiler = r.compiler_mut();
+/// # }
+/// ```
+pub struct HostConsumerBindingRegistration {
+    input: HostConsumerBindingRegistrationInput,
+}
+#[cfg(feature = "std")]
+impl HostConsumerBindingRegistration {
+    /// Validates the selected cell, compiler/client identity and declarations.
+    pub fn new(
+        input: HostConsumerBindingRegistrationInput,
+    ) -> Result<Self, BindingInputRejection<HostConsumerBindingRegistrationInput>> {
+        let identity = input.identity;
+        let expected = identity.artifact_compatibility();
+        let compiler_compatibility = input.compiler.compatibility();
+        let client_compatibility = input.client.artifact_compatibility();
+        if !(input.execution.supports_host_erased()
+            && expected == compiler_compatibility
+            && expected == client_compatibility
+            && input.resources.is_valid())
+        {
+            return Err(BindingInputRejection::new(
+                input,
+                registration_error(identity, 325),
+            ));
+        }
+        Ok(Self { input })
+    }
+    /// Returns the immutable complete identity.
+    pub const fn identity(&self) -> BindingRegistrationIdentity {
+        self.input.identity
+    }
+    /// Returns the Consumer-only capability metadata.
+    pub const fn capabilities(&self) -> BindingRegistrationCapabilities {
+        BindingRegistrationCapabilities::consumer_property_read()
+    }
+    /// Returns selected execution metadata.
+    pub const fn execution(&self) -> BindingExecutionSupport {
+        self.input.execution
+    }
+    /// Borrows the compiler while retaining the complete owner.
+    pub const fn compiler(&self) -> &HostBindingCompilerRegistration {
+        &self.input.compiler
+    }
+    /// Returns the validated declarations, without charging nonexistent owners.
+    pub const fn resources(&self) -> BindingResourceDeclarations {
+        self.input.resources
+    }
+    /// Returns the retained-status policy.
+    pub const fn status(&self) -> BindingStatusPolicy {
+        self.input.status
+    }
+    /// Recovers the complete input, including its original private client.
+    pub fn into_input(self) -> HostConsumerBindingRegistrationInput {
+        self.input
+    }
+    /// Consumes only Core's supported fallible adapter and actual configuration.
+    pub fn try_into_consumer_compiler(
+        self,
+    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
+        if let Some(support) = host_consumer_support(
+            self.identity(),
+            self.execution(),
+            self.capabilities(),
+            &self.input.compiler,
+        ) {
+            return Ok(ConsumerCompilerRegistration {
+                registration: self,
+                support,
+            });
+        }
+        let error = registration_error(self.identity(), 323);
+        Err(BindingInputRejection::new(self, error))
+    }
+    /// Starts an installed Consumer call through the shared Core seal/decorator.
+    pub fn start_consumer_property_read(
+        &self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> Result<
+        HostBindingCallBox<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    > {
+        start_host_consumer_property_read(
+            self.input.identity,
+            self.capabilities(),
+            Some(&*self.input.client),
+            self.input.resources,
+            request,
+            artifact,
+        )
     }
 }
