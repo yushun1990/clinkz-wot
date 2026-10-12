@@ -1960,7 +1960,7 @@ complete cleanup, residual cleanup, or wake registration.
 
 A complete registration is complete for its advertised role; Consumer-only
 construction does not require a Producer server. The additive static and Host
-bundle contracts and exact candidate scope are owned by the
+bundle contracts and exact implementation envelope are owned by the
 [WP-300 admission record](../work-packages/WP-300-consumer-only-registration-admission.md).
 They pair compiler and private client with immutable complete identity,
 representation, resources and status, without a server or ingress owner.
@@ -1975,8 +1975,9 @@ Neither role completeness nor compatibility identity proves bounded callbacks,
 fallible Host call backing or Servient parent-capacity provenance.
 
 This refinement introduces no protocol, global governor, lifecycle machine or
-support issuer. The work-package candidate remains unadmitted until independent
-review and a separate admission transition.
+support issuer. [The work-package index](../work-packages/index.toml) owns
+admission state; the admission record retains the independent review reference
+and required production completion evidence.
 
 The API ownership matrix provides exact public paths. It must represent these
 roles without creating a dependency from core to planning, Servient, or a

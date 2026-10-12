@@ -1,9 +1,16 @@
-# Consumer-only complete registration admission candidate
+# Consumer-only complete registration admission
 
-`index.toml` owns the state of `WP-300-CONSUMER-ONLY-REGISTRATION`: planned,
-candidate, current. This record proposes the exact ADR-0013 implementation
-envelope. Independent exact-head admission review and a separate admission
-transition are required before production work.
+[The index](index.toml) owns the state of
+`WP-300-CONSUMER-ONLY-REGISTRATION`. This record defines its exact v5.1 ADR-0013
+implementation and evidence envelope.
+
+[Independent admission review of PR #152](https://github.com/yushun1990/clinkz-wot/pull/152#issuecomment-6120235799)
+accepted base `5ed0ad7c1713794a2c7cacac2094f57d3d14b81c` to head
+`ef0e9ec2c1621e10d5c265b9904ed49dd760f93e` with no blocking findings, subject
+to successful required CI. This separate admission transition follows that
+acceptance and satisfied CI condition. Admission covers this envelope only;
+production completion still requires the evidence and independent acceptance
+defined below.
 
 ## Decision and scope
 
@@ -163,4 +170,5 @@ Required public production evidence:
 The fresh reviewer must challenge the additive public types and private sharing,
 reconstruct exact base/head and executable evidence, and assess the real public
 positives. Admission and later completion are independent decisions. This
-candidate claims neither and does not admit WP-400 or register a Consumer gate.
+admission claims no production completion and does not admit WP-400 or register
+a Consumer gate.
