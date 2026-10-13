@@ -20,6 +20,7 @@ use std::{
 
 std::thread_local! {
     static ALLOCATIONS: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
+    static FAILED_REQUESTS: Cell<Option<usize>> = const { Cell::new(None) };
     static ACCEPTED: Cell<bool> = const { Cell::new(false) };
     static WATCHED: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }
@@ -34,6 +35,9 @@ unsafe impl GlobalAlloc for Observer {
                     return false;
                 };
                 count.set(Some((requests + 1, fail)));
+                if requests == fail {
+                    FAILED_REQUESTS.with(|f| f.set(Some(requests + 1)));
+                }
                 requests == fail
             })
             .unwrap_or(false);
@@ -60,11 +64,15 @@ unsafe impl GlobalAlloc for Observer {
     }
 }
 fn observe(fail: usize) {
+    FAILED_REQUESTS.with(|f| f.set(None));
     ALLOCATIONS.with(|count| count.set(Some((0, fail))));
     ACCEPTED.with(|accepted| accepted.set(false));
 }
 fn disarm() -> usize {
-    ALLOCATIONS.with(|count| count.replace(None).unwrap().0)
+    ALLOCATIONS
+        .with(|count| count.replace(None).map(|(n, _)| n))
+        .or_else(|| FAILED_REQUESTS.with(|f| f.replace(None)))
+        .expect("armed or recovered failure observation")
 }
 
 struct ObservedClient(production::Client);
@@ -471,19 +479,37 @@ fn host_backing_failure_child() {
             .unwrap();
     let request =
         OutboundRequest::property_read(selected.artifact_ref(), BTreeMap::new(), None).unwrap();
+    let expected =
+        OutboundRequest::property_read(selected.artifact_ref(), BTreeMap::new(), None).unwrap();
     observe(fail);
-    let call = registration
-        .start_consumer_property_read(request, selected.artifact())
-        .unwrap();
+    let result = registration.start_consumer_property_read(request, selected.artifact());
     let allocations = disarm();
     eprintln!("CALL_ALLOCATION_REQUESTS={allocations}");
-    drop(call);
+    match result {
+        Err(rejection) => {
+            assert_eq!(
+                fail, 0,
+                "only the Core envelope is recoverable in this infallible raw client"
+            );
+            assert_eq!(rejection.into_input(), expected);
+            assert!(!ACCEPTED.with(Cell::get));
+            eprintln!("CORE_BACKING_RECOVERED_BEFORE_RAW_INVOCATION");
+        }
+        Ok(mut call) => {
+            assert!(
+                call.as_pin_mut()
+                    .poll_result(&mut Context::from_waker(Waker::noop()), &mut budget(1))
+                    .is_ready()
+            );
+            drop(call);
+        }
+    }
     drop(registration);
     reclaim(draft, slot, account);
 }
 
 #[test]
-fn host_call_allocation_failure_is_fatal_including_after_raw_acceptance() {
+fn host_core_backing_recovers_but_infallible_raw_construction_still_aborts() {
     fn child(fail: usize, overrun: bool) -> std::process::Output {
         let mut command = std::process::Command::new(std::env::current_exe().unwrap());
         command
@@ -513,17 +539,24 @@ fn host_call_allocation_failure_is_fatal_including_after_raw_acceptance() {
         assert!(allocations >= 2);
         for fail in 0..allocations {
             let output = child(fail, overrun);
+            let diagnostic = String::from_utf8_lossy(&output.stderr);
+            if fail == 0 {
+                assert!(output.status.success(), "{diagnostic}");
+                assert!(
+                    diagnostic.contains("CORE_BACKING_RECOVERED_BEFORE_RAW_INVOCATION"),
+                    "{diagnostic}"
+                );
+                continue;
+            }
             assert!(
                 !output.status.success(),
                 "infallible allocation unexpectedly recovered"
             );
-            let diagnostic = String::from_utf8_lossy(&output.stderr);
-            let marker = if fail == allocations - 1 {
-                "FAIL_AFTER_RAW_ACCEPTANCE"
-            } else {
-                "FAIL_BEFORE_RAW_ACCEPTANCE"
-            };
-            assert!(diagnostic.contains(marker), "index={fail}: {diagnostic}");
+            assert!(
+                diagnostic.contains("FAIL_BEFORE_RAW_ACCEPTANCE"),
+                "index={fail}: {diagnostic}"
+            );
+            assert!(!diagnostic.contains("FAIL_AFTER_RAW_ACCEPTANCE"));
             assert!(diagnostic.contains("memory allocation of"), "{diagnostic}");
             #[cfg(unix)]
             {
@@ -532,7 +565,7 @@ fn host_call_allocation_failure_is_fatal_including_after_raw_acceptance() {
             }
         }
         println!(
-            "Host construction (overrun={overrun}): {allocations} allocator requests; final request follows raw acceptance; every injected failure aborts"
+            "Host construction (overrun={overrun}): {allocations} allocator requests; Core backing failure recovers; remaining infallible raw allocations abort before acceptance"
         );
     }
 }

@@ -45,6 +45,10 @@ use clinkz_wot_foundation::{
 
 const COMPATIBILITY: BindingArtifactCompatibility = BindingArtifactCompatibility::new([41; 16]);
 
+#[cfg(feature = "std")]
+#[path = "consumer_property_read_binding/call_construction.rs"]
+mod call_construction;
+
 #[derive(Debug, Eq, PartialEq)]
 struct TestArtifact {
     resolved_target: Box<str>,

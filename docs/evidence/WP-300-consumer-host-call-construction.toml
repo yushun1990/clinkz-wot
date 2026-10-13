@@ -1,0 +1,297 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-300"
+tranche = "WP-300-CONSUMER-HOST-CALL-CONSTRUCTION"
+evidence_key = "consumer-host-call-construction"
+base_ref = "988acf30e9820dfa8f3cb0a8e78d7fb4c2490e0c"
+implementation_ref = "9355d2d68fd3855f20fe3eeb8fa2b691dbd19d03"
+recorded_on = "2026-10-13"
+status = "ready"
+execution_status = "passed"
+assessment = "Production construction and focused regression evidence ready for fresh independent acceptance. No completion, gate or milestone transition is made. The unrelated existing workspace-format failure is recorded separately."
+admission_review = "github-pr:161#issuecomment-6142207093"
+requirement_ids = [
+    "BIND-REG-001", "BIND-MEM-001", "BIND-IO-001", "BIND-OUT-001",
+    "BIND-DELIVERY-001", "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001",
+    "API-PAYLOAD-001", "PLAN-ARTIFACT-001",
+]
+compilation_cells = ["std", "no-default", "async-no-std"]
+production_paths = ["core/src/binding.rs", "core/src/binding_compiler.rs"]
+test_paths = [
+    "core/tests/consumer_property_read_binding.rs",
+    "core/tests/consumer_property_read_binding/call_construction.rs",
+    "core/tests/consumer_compiler_support.rs",
+    "tools/architecture-fixtures/consumer-runtime-entry/tests/construction.rs",
+    "tools/architecture-fixtures/consumer-runtime-entry/tests/production.rs",
+]
+scope = "One complete private Core envelope fallibly backed before raw Consumer invocation, the additive recoverable HostBindingCallBox::try_new constructor, unchanged Core mediator algorithms and focused concrete authoring evidence."
+predecessor_impact = "Reaffirmed at implementation_ref: Core sealing/validation, both complete Host registrations, cancellation/transfer, compiler support, static acknowledgement, portable cells and all ten registered Producer gate commands. The old 112-byte normal decorator and downstream 352-byte complete-call measurements remain historical; the new envelope is 344 bytes in both branches and the downstream complete call is 584 bytes. No other authority or accepted gate claim is changed."
+acceptance_requirements = [
+    "A fresh independent context must reconstruct the admission, actual Core code, exact PR diff and six obligations, including the safety of allocation initialization/pinning and retention in both mediators.",
+    "Independently review native Layouts, vacant/raw construction overlap, failed-state destruction, checked/saturated reporting, concrete input/callback limits and the distinct future parent/global capacity obligations.",
+    "Reproduce the focused production suites and affected registered checks; inspect the required GitHub validation result on the exact final PR head. Its lightweight diff-hygiene result is not a package test claim.",
+    "Only a subsequent authorized completion transition may mark this record passed or the tranche complete. This implementation context does not supply independent acceptance.",
+]
+unresolved_obligations = [
+    "Completion obligation 6 requires fresh exact-head independent production acceptance and verification of required CI by that reviewer; author execution does not discharge acceptance.",
+]
+excluded_claims = [
+    "WP-400 implementation, runtime eligibility policy, arbitrary client callback/destructor boundedness, protocol eligibility or a new call-support issuer",
+    "Parent/global reservation provenance, paired runtime call/cleanup capacity, executor shutdown recovery or a Consumer architecture gate",
+    "Call pools, runtime slots, static carrier changes, new public SPI abstractions, features, dependencies or Producer implementation changes",
+    "Allocator metadata, fragmentation, compiler-generated stack frames, whole-process zero retention, physical device fit or full workload/performance completion",
+    "Whole-workspace test or formatting success; only the checks and failure dispositions recorded below are claimed",
+]
+
+[[obligation]]
+id = 1
+name = "Actual recoverable public concrete construction"
+evidence = [
+    "public_try_new_handles_zst_overalignment_pinning_and_returns_original_concrete_owner uses the production public method. ZST construction attempts zero allocations and destroys once. The 256-byte/256-aligned !Unpin owner attempts exactly one matching Layout; null returns its original request, URI string address and shared identity without pinning or destruction. Success preserves the pinned concrete address while moving the erased owning box and releases exactly once.",
+    "both_backing_failures_return_the_exact_request_before_protocol_work injects null at each actual Core/raw allocation through both complete registrations and both prospective normal/overrun resource ceilings. Core failure invokes no raw callback. Raw failure recovers the unchanged request before failed-state destruction. No footprint, result or cancellation callback runs, no acceptance/protocol side effect occurs, and the original URI allocation is destroyed once only after explicit returned-request release.",
+    "The finite supported witness prepares its output and request backing before observation, then attempts only the recoverable concrete call box. No response construction or other raw allocation is hidden inside invoke. This evidence applies to the fresh fixed helper inputs and prebuilt output, not arbitrary equal-looking String capacities or protocol clients.",
+]
+
+[[obligation]]
+id = 2
+name = "Complete Core backing and exact accepted ownership"
+evidence = [
+    "Identity mismatch is rejected with no allocation or raw invocation. Envelope null returns structured Binding-phase Backpressure with original plan/binding context and complete input. Raw rejection after provisioning releases the vacant envelope once and returns the exact second request without acceptance.",
+    "Both complete registrations measure the same Core-first/raw-second allocations, one raw footprint inspection and no construction polling. Normal, item-only overflow, byte-only overflow and combined overflow all attempt zero allocations after acceptance; the owner survives terminal reporting until explicit release. Separate finite byte ceiling minus-one/exact/plus-one and item ceiling minus-one/exact/plus-one cases select the expected normal/accepted-error mediator.",
+    "The !Unpin raw witness checks its concrete address in footprint/deadline/result/cancel callbacks and Drop. The production envelope contains only movable Pin<Box<_>> owners; safe Unpin projections never move concrete pinned raw state. Accepted-error reporting never polls raw state or manufactures request rejection.",
+]
+
+[[obligation]]
+id = 3
+name = "Unchanged sealing, settlement and whole-call cleanup"
+evidence = [
+    "normal_and_both_late_paths_preserve_validation_raw_errors_budget_and_deadline covers normal poll_result, immediate start_cancel Returned and pending-then-poll_cancel Returned in both complete Host forms. All nine existing invalid identity/shape cases, valid/native-status-599 output and exact structured raw errors keep the original normal-versus-Returned classification. Zero-credit calls remain Pending; deadlines delegate unchanged; all observed callbacks allocate zero times.",
+    "cancellation_and_rejected_accepted_settlement_retain_raw_until_explicit_release covers Pending, zero-credit cancellation, explicit Complete settlement and accepted-overflow Returned(error). The latter retains raw state/seal, delegates no raw callbacks, reports saturated accounting and preserves its terminal poll_cancel error. Successful and rejected-accepted raw owners are destroyed exactly once at final explicit release.",
+    "cleanup_offers_preserve_complete_call_first_cause_accounting_and_unused_seal covers accepted and rejected offers in both complete forms. The complete original phase, named owner, reservation, first cause, raw owner and footprint survive. Cleanup capacity is conservatively declared as eight items/4096 bytes. A late Returned result still consumes the original unused Core seal after succession, with zero allocation and final exact raw/envelope release.",
+    "Existing static and Host integration tests, compile-fail contracts and the downstream local-worker discriminator are rerun. Static Running/Cancelling/Terminal acknowledgement, generation checks, no raw installed bypass and caller-disinterest ownership remain unchanged. The Core decorators' result/cancel/transfer algorithms are unchanged.",
+]
+
+[[obligation]]
+id = 4
+name = "Native allocation, transport and transient accounting"
+evidence = [
+    "The private Core unit observation records envelope/disposition/backing-attempt Layouts, both mediators, seal and fixed error. The external observer pairs concrete allocation and deallocation pointers/Layouts and checks live/peak bytes, exactly one release per block and zero tracked terminal bytes. No logical declaration is treated as an allocator request.",
+    "Core backing is one item/344 bytes, including vacant/tag/maximum branch storage, in both reported footprints. Normal mediation's 112-byte member is inside that allocation and is not added again. Raw allowance 7/2048 plus envelope 1/344 reports 8/2392; either arithmetic overflow saturates both dimensions. The immutable 16-byte boxed carrier and 432-byte installed Result remain distinct inline transport costs.",
+    "The concrete construction interval has 344-byte vacant Core backing overlapping 400-byte raw backing: 744 live bytes, both retained until release. Fresh request storage is separately observed as 552 bytes. Output construction has a temporary four-byte Vec, 24-byte Arc body and 16-byte content type, with 40 bytes retained. Raw state, request and response fit the conservative 2048-byte raw declaration. Shared client/statistics and artifact owners are separately provisioned, not charged as a second call envelope.",
+    "The 2048-byte binding-private transient declaration covers finite raw value/return transport and failed-state destruction. Core's vacant allocation is already charged once and must be reserved across raw construction/failure by the future runtime. Native inline Layouts are observed separately; no generated stack-frame bound is inferred. Parent/global authority and actual runtime capacity admission remain WP-400 obligations outside this precursor.",
+    "The unchanged older downstream fixture now measures heap peaks 512/520/512 and complete declaration 584 (raw 240 plus Core 344), with five allocation requests per call and complete terminal release. Historical 280/288/280 peaks and 352-byte declarations are not carried forward as current evidence.",
+]
+
+[[obligation]]
+id = 5
+name = "Finite callback attestation, portable cells and Producer compatibility"
+evidence = [
+    "The witness is bound to the existing TestCompiler/TestArtifact complete registration helpers: Host-erased, binding 43, initial generation, configuration [47;32], compatibility [41;16], plan 72 and fresh one-entry room=west requests with four-byte String backing. Output is one prebuilt four-byte payload with fixed content type or fixed Core error. Larger inputs, over-capacity equal-looking strings and real protocol libraries are not attested.",
+    "invoke performs fixed identity/input inspection, one nonblocking try_lock/take, one Arc clone and one recoverable concrete allocation. Footprint/deadline read fixed fields. Each result/cancel step prepays one BindingPolls unit, has fixed entry cost and finite settlement; zero credit makes no progress and needs caller credit/refill, while ready output needs no wake registration. Drop releases one finite map, at most one fixed output and a shared counter reference. Null-path and terminal destruction allocate zero times. No hard wall-clock or generic callback certificate follows.",
+    "The older downstream client deliberately retains HostBindingCallBox::new: the actual Core envelope failure now recovers, while its four remaining raw infallible allocation sites still SIGABRT before raw acceptance in both resource branches. This negative eligibility evidence demonstrates that new, valid registration and compiler support do not imply bounded Consumer runtime eligibility.",
+    "Core std/no-default/async-no-std suites and std+async target binding/compiler suites pass; runtime-entry passes all three cells and compiles its actual normal-library dependencies in both ARM cells. Rust 1.95.0 and 1.99.0 focused suites and private Layout observations agree. All ten registered Producer commands pass, including seven real Zenoh feedback cases. Static source/contracts, Producer implementation and manifests are unchanged.",
+]
+
+[[obligation]]
+id = 6
+name = "Exact production evidence prepared for independent acceptance"
+evidence = [
+    "All affected scoped execution, the historical baseline/preallocated/inline discriminators and memory checks are recorded below at their actual source/toolchain boundary. The production/test implementation is implementation_ref; subsequent evidence/README-only changes do not silently change that executable boundary.",
+    "Fresh independent exact-final-head review and required GitHub validation inspection remain acceptance work. This ready record grants no completion, gate or milestone transition. No full manual workflow or whole-workspace test success is asserted.",
+]
+
+[measurements]
+target = "x86_64-unknown-linux-gnu"
+toolchains = ["rustc 1.99.0 (b940084d7 2026-09-28)", "rustc 1.95.0 (59807616e 2026-04-14)"]
+core_envelope_layout = [344, 8]
+core_disposition_layout = [344, 8]
+core_backing_attempt_return_layout = [344, 8]
+normal_mediator_layout = [112, 8]
+accepted_error_mediator_layout = [344, 8]
+private_seal_layout = [76, 4]
+fixed_core_error_layout = [232, 8]
+witness_raw_layout = [400, 8]
+witness_raw_construction_return_layout = [400, 8]
+installed_call_layout = [16, 8]
+installed_start_return_layout = [432, 8]
+request_owner_layout = [128, 8]
+raw_result_inline_layout = [232, 8]
+cleanup_transport_layout = [424, 8]
+pinned_overaligned_layout = [256, 256]
+pinned_overaligned_return_layout = [256, 256]
+zst_layout = [0, 1]
+client_layout = [272, 8]
+shared_stats_value_layout = [48, 8]
+construction_allocation_layouts = [[344, 8], [400, 8]]
+post_acceptance_allocation_requests = 0
+observed_vacant_raw_heap_overlap_bytes = 744
+request_allocation_layouts = [[4, 1], [4, 1], [544, 8]]
+request_heap_bytes = 552
+response_construction_allocation_layouts = [[4, 1], [24, 8], [16, 1]]
+response_retained_heap_bytes = 40
+raw_declaration = [7, 2048]
+complete_reported_footprint = [8, 2392]
+binding_private_transient_declaration_bytes = 2048
+terminal_tracked_call_backing_bytes = 0
+downstream_call_heap_peaks = [512, 520, 512]
+downstream_complete_call_declaration_bytes = 584
+downstream_allocation_requests_per_call = 5
+interpretation = "Native Layouts and measured observation intervals only. Prebuilt request/response and shared provisioning are separate. No allocator metadata, machine-stack, global simultaneous-peak or device-fit bound is established."
+
+[execution_summary]
+core_std_passed = 188
+core_no_default_passed = 146
+core_async_no_std_passed = 163
+core_ignored_in_each_full_cell = 2
+focused_std_binding_and_compiler_passed_per_toolchain = 42
+focused_std_async_binding_and_compiler_passed = 44
+new_construction_regressions_passed = 8
+private_layout_observations_passed_per_toolchain = 1
+runtime_entry_std_passed = 31
+runtime_entry_no_default_passed = 15
+runtime_entry_async_no_std_passed = 15
+producer_registered_commands_passed = 10
+real_zenoh_feedback_cases_passed = 7
+arm_compilation_cells_passed = 2
+performance_scope = "PERF-GW-009/010/028 construction and invariant discriminators only; no full workload completion or timing/throughput claim."
+
+[memory_check]
+tool = "Valgrind 3.27.1 Memcheck"
+source_ref = "9355d2d68fd3855f20fe3eeb8fa2b691dbd19d03"
+tests_passed = 8
+errors = 0
+definitely_lost_bytes = 0
+indirectly_lost_bytes = 0
+possibly_lost_bytes = 48
+still_reachable_bytes = 548
+residual_attribution = "48 bytes: std::thread::current::init_current through libtest mpmc context. 544 bytes: std stack-overflow thread-info BTree. 4 bytes: its current-thread name. Full stacks attribute all three residual blocks to the test runtime; no whole-process zero-retention claim is made."
+command = "valgrind --leak-check=full --errors-for-leak-kinds=definite,indirect --show-leak-kinds=all --error-exitcode=97 target/debug/deps/consumer_property_read_binding-43a8139644041ef1 call_construction --test-threads=1"
+reproduction = "Build the default Core integration executable with cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --no-run --message-format=json; use the emitted executable path for the same filter and Valgrind arguments."
+
+[formatting_limitation]
+command = "cargo +stable fmt --all -- --check"
+status = "failed"
+disposition = "Preexisting and outside the admitted production scope. Reproduced in a disposable archive of base_ref; the exact three unchanged Zenoh files have the same import/module-order diffs. Scoped changed-source rustfmt and the runtime-entry fixture formatting pass."
+unchanged_paths = ["protocol-bindings/protocols/zenoh/src/lib.rs", "protocol-bindings/protocols/zenoh/src/protocol_binding.rs", "protocol-bindings/protocols/zenoh/src/runtime.rs"]
+
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --features async --test consumer_property_read_binding --test consumer_compiler_support"
+status = "passed"
+
+[[verification]]
+command = "cargo +1.95.0 test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "cargo +1.95.0 test --locked --offline -p clinkz-wot-core --lib host_consumer_call_layouts -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-servient --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-servient --lib"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-property-read-binding-fixture --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-property-read-binding-fixture"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-property-read-architecture-runner --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-property-read-architecture-runner"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+command = "cargo fmt --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml -- --check"
+status = "passed"
+
+[[verification]]
+command = "git diff --check"
+status = "passed"
+
+[[verification]]
+command = "cargo +stable test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support"
+status = "passed"
+
+[[verification]]
+command = "cargo +stable test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test construction host_core_backing_recovers_but_infallible_raw_construction_still_aborts -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "rustfmt +stable --edition 2024 --check core/src/binding.rs core/src/binding_compiler.rs core/tests/consumer_property_read_binding.rs"
+status = "passed"
+
+[[verification]]
+command = "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --baseline"
+status = "passed"
+source_ref = "988acf30e9820dfa8f3cb0a8e78d7fb4c2490e0c"
+interpretation = "Historical admission discriminator; not production completion evidence. Driver pins the source boundary explicitly."
+
+[[verification]]
+command = "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative preallocated"
+status = "passed"
+source_ref = "988acf30e9820dfa8f3cb0a8e78d7fb4c2490e0c"
+interpretation = "Historical admission discriminator; not production completion evidence. Driver pins the source boundary explicitly."
+
+[[verification]]
+command = "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative inline"
+status = "passed"
+source_ref = "988acf30e9820dfa8f3cb0a8e78d7fb4c2490e0c"
+interpretation = "Historical admission discriminator; not production completion evidence. Driver pins the source boundary explicitly."

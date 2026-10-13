@@ -62,7 +62,7 @@ the original owners without work. Zero credit returns Backpressure; exact credit
 prepays detach and reattachment. Public compile contracts keep local handles
 local and reject clone/forge/Sync/non-Send transfer claims for the unique owner.
 
-Source inspection additionally finds infallible `Box::pin` in
+At the pre-implementation boundary, source inspection found infallible `Box::pin` in
 `HostBindingCallBox::new`, reached for raw call/decorator construction. That is
 not exercised as an OOM recovery test here; null allocation can abort. A paid
 compiler slot or retained-footprint declaration does not supply physical backing
@@ -96,9 +96,9 @@ drive it. The public implementation and completion obligations are owned by the
 [admitted tranche](../../../docs/work-packages/WP-200-consumer-output-ownership-admission.md);
 the private appendix does not satisfy them.
 
-The fatal-allocation tests arm failure only in subprocesses, mark whether the
-raw client has returned acceptance, check the allocation-abort diagnostic and
-on Unix require SIGABRT. They exercise actual Core calls rather than a model
+The historical fatal-allocation tests armed failure only in subprocesses, marked whether the
+raw client had returned acceptance, checked the allocation-abort diagnostic and
+on Unix required SIGABRT. They exercised actual Core calls rather than a model
 allocator return path. A fallible raw box alone would leave Core's accepted
 wrapper allocation gap. No attempt is made to recover from abort with panic
 handling. These tests add no new checker or fixture package; the existing
@@ -133,12 +133,15 @@ gate or milestone status is changed.
 
 ## Host call construction candidate
 
+This section retains the historical admission alternatives and their source boundary.
+
 The [WP-300 candidate](../../../docs/work-packages/WP-300-consumer-host-call-construction-admission.md)
 selects a private complete Core envelope backed fallibly **before** raw invocation,
 with an optional recoverable raw-call constructor. It keeps both installed
 start signatures and the raw SPI. This fixture adds no production code or admission.
 
-`probes/run_host_call_candidate.py` archives the current Git HEAD to a disposable
+`probes/run_host_call_candidate.py` archives its explicit `--source-revision`
+(default `988acf3`, the admitted pre-implementation master) to a disposable
 directory, optionally applies one checked experimental patch there, and appends
 `probes/host_call_candidate.rs` to the existing Core binding integration test.
 It runs the actual Core program and existing validators/tests, not a second
@@ -148,8 +151,8 @@ also changes the disposable Core export and one cleanup-carrier type alias.
 Production files, manifests, locks and CI workflows are not patched. This is a
 small reproduction driver, not a checker or new fixture package.
 
-Run from the repository root with Rust 1.95.0 (`stable` currently resolves to that
-exact version; use `--toolchain 1.95.0` to select the installed named toolchain):
+Run from the repository root; use `--toolchain 1.95.0` to reproduce the original
+compiler. The driver prints the compiler actually used (`stable` may change):
 
 ```sh
 python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --baseline
@@ -217,3 +220,29 @@ additional production tests (including ZST/over-aligned/pinned owners), concrete
 cost attestations, independent admission, implementation acceptance and separate
 completion. Required GitHub `validation` checks diff hygiene only; scoped local
 commands supply the evidence under the new CI policy, with no manual full run.
+
+## Production Host call construction evidence
+
+The production implementation is in Core, within the
+[admission envelope](../../../docs/work-packages/WP-300-consumer-host-call-construction-admission.md).
+[Ready completion evidence](../../../docs/evidence/WP-300-consumer-host-call-construction.toml)
+owns the exact source boundary, native allocation/transport/overlap measurements,
+finite witness input and callback attestation, executed checks and outstanding
+independent acceptance. Tranche, gate and milestone state are unchanged.
+
+`core/tests/consumer_property_read_binding/call_construction.rs` exercises the
+actual public constructor and both complete Host registrations. It extends the
+historical discriminators with zero-sized, over-aligned and pinned owners, exact
+request recovery/release, both late-return paths and complete cleanup succession.
+The older downstream client remains an explicit negative eligibility case:
+Core backing failure recovers, while its infallible raw allocations still abort
+before acceptance. The new evidence replaces its historical normal-wrapper
+byte measurements at the production implementation boundary.
+
+Run the production evidence directly:
+
+```sh
+cargo +stable test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support -- --nocapture
+cargo +stable test --locked --offline -p clinkz-wot-core --lib host_consumer_call_layouts -- --nocapture
+cargo +stable test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test construction -- --nocapture
+```
