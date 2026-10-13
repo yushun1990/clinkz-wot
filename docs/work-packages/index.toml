@@ -680,3 +680,47 @@ pre_implementation_checks = [
 admission_review = "github-pr:66"
 completion_evidence_keys = ["consumer-property-read-binding-execution"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-property-read-binding-execution.toml"
+
+[[tranche]]
+id = "WP-200-CONSUMER-OUTPUT-OWNERSHIP"
+work_package = "WP-200"
+sequence = 350
+status = "planned"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = ["WP-200-CONSUMER-PROPERTY-READ-AGGREGATE", "WP-300-CONSUMER-ONLY-REGISTRATION"]
+depends_on_packages = ["WP-000"]
+requirements = ["PLAN-SET-001", "PLAN-COST-003", "PLAN-ARTIFACT-001", "ADMIT-TXN-001", "ADMIT-MEM-001", "CONSTRAINED-OWN-001", "CONSTRAINED-WORK-001"]
+owner_packages = ["clinkz-wot-planning"]
+feature_cells = ["std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0021-borrowed-consumer-td-admission.org",
+    "docs/spec/planning.md", "docs/spec/foundation.md", "docs/spec/runtime-safety.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/api-ownership.csv", "docs/requirements.csv", "docs/resource-limits.csv",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/WP-200-consumer-output-ownership-admission.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "ConsumerPropertyReadOwnedOutput", "consumer_property_read_owned_output_try_from_local", "consumer_property_read_owned_output_into_local",
+    "ConsumerPropertyReadOwnedRollback", "consumer_property_read_owned_rollback_try_from_local", "consumer_property_read_owned_rollback_into_local",
+]
+state_machines = []
+resource_changes = ["Move existing backing/ledger and physical root identity without new allocation or charge; prepay one fixed PlanningItems detach/reattach pair; retain original cleanup account separately. No parent-capacity or runtime permit."]
+old_api_removals = []
+performance_workloads = []
+implementation_paths = ["planning/src/consumer_property_read.rs", "planning/src/lib.rs"]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --workspace --locked --offline",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
+]
+admission_review = "pending-independent-review"
+completion_evidence_keys = ["consumer-output-ownership"]
+completion_evidence_path = "docs/evidence/WP-200-consumer-output-ownership.toml"

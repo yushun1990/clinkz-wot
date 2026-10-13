@@ -44,6 +44,24 @@ use core::mem::size_of;
 /// ```
 pub struct CurrentBoundary;
 
+/// Wrapping the current graph does not change its ownership capabilities.
+/// ```compile_fail
+/// use std::sync::{Arc, Mutex};
+/// use clinkz_wot_core::HostBindingArtifact;
+/// use clinkz_wot_planning::ConsumerPropertyReadDraft;
+/// fn movable<T: Send>() {}
+/// movable::<Arc<Mutex<ConsumerPropertyReadDraft<HostBindingArtifact>>>>();
+/// ```
+/// ```compile_fail
+/// use std::sync::Arc;
+/// use clinkz_wot_core::HostBindingArtifact;
+/// use clinkz_wot_planning::ConsumerPropertyReadDraft;
+/// fn shared<T: Send + Sync>() {}
+/// shared::<Arc<ConsumerPropertyReadDraft<HostBindingArtifact>>>();
+/// ```
+#[cfg(feature = "std")]
+pub struct HostRootWrappers;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Rejection {
     Cell,
