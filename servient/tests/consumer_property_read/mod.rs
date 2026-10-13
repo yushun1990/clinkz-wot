@@ -1,0 +1,1339 @@
+use binding::{Clock, Mode, StaticClient, Stats};
+use clinkz_wot_consumer_property_read_binding_fixture as binding;
+use clinkz_wot_core::*;
+use clinkz_wot_foundation::*;
+use clinkz_wot_servient::{CompiledPlanSetState, consumer_property_read::*};
+use std::{
+    alloc::{GlobalAlloc, Layout, System},
+    cell::{Cell, RefCell},
+    sync::{Arc, atomic::Ordering},
+    task::{Context, Waker},
+};
+
+#[derive(Clone, Copy, Default, Debug)]
+struct Block {
+    address: usize,
+    bytes: usize,
+    align: usize,
+}
+#[derive(Clone, Copy, Debug)]
+struct Trace {
+    armed: bool,
+    fail: usize,
+    requests: usize,
+    live: usize,
+    peak: usize,
+    largest: usize,
+    releases: usize,
+    records: [Block; 256],
+    layouts: [(usize, usize); 256],
+}
+const EMPTY: Trace = Trace {
+    armed: false,
+    fail: usize::MAX,
+    requests: 0,
+    live: 0,
+    peak: 0,
+    largest: 0,
+    releases: 0,
+    records: [Block {
+        address: 0,
+        bytes: 0,
+        align: 0,
+    }; 256],
+    layouts: [(0, 0); 256],
+};
+std::thread_local! { static TRACE: Cell<Trace> = const { Cell::new(EMPTY) }; }
+std::thread_local! { static DROP_CHECK: RefCell<Option<Arc<dyn Fn()>>> = const { RefCell::new(None) }; }
+struct Allocator;
+#[global_allocator]
+static ALLOCATOR: Allocator = Allocator;
+unsafe impl GlobalAlloc for Allocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let fail = TRACE
+            .try_with(|t| {
+                let mut s = t.get();
+                if !s.armed {
+                    return false;
+                }
+                let index = s.requests;
+                s.requests += 1;
+                if index < s.layouts.len() {
+                    s.layouts[index] = (layout.size(), layout.align());
+                }
+                s.largest = s.largest.max(layout.size());
+                t.set(s);
+                index == s.fail
+            })
+            .unwrap_or(false);
+        if fail {
+            return std::ptr::null_mut();
+        }
+        let p = unsafe { System.alloc(layout) };
+        if !p.is_null() {
+            let _ = TRACE.try_with(|t| {
+                let mut s = t.get();
+                if s.armed {
+                    let index = s
+                        .records
+                        .iter()
+                        .position(|b| b.address == 0)
+                        .expect("fixed trace capacity");
+                    s.records[index] = Block {
+                        address: p as usize,
+                        bytes: layout.size(),
+                        align: layout.align(),
+                    };
+                    s.live += layout.size();
+                    s.peak = s.peak.max(s.live);
+                    t.set(s);
+                }
+            });
+        }
+        p
+    }
+    unsafe fn dealloc(&self, p: *mut u8, layout: Layout) {
+        let tracked = TRACE
+            .try_with(|t| t.get().records.iter().any(|b| b.address == p as usize))
+            .unwrap_or(false);
+        if tracked {
+            let _ = DROP_CHECK.try_with(|check| {
+                if let Some(check) = &*check.borrow() {
+                    check();
+                }
+            });
+        }
+        let _ = TRACE.try_with(|t| {
+            let mut s = t.get();
+            if let Some(i) = s.records.iter().position(|b| b.address == p as usize) {
+                assert_eq!(
+                    (s.records[i].bytes, s.records[i].align),
+                    (layout.size(), layout.align())
+                );
+                s.live -= layout.size();
+                s.releases += 1;
+                s.records[i] = Block::default();
+                t.set(s);
+            }
+        });
+        unsafe { System.dealloc(p, layout) }
+    }
+}
+fn observe(fail: usize) {
+    TRACE.with(|t| {
+        assert_eq!(t.get().live, 0);
+        t.set(Trace {
+            armed: true,
+            fail,
+            ..EMPTY
+        });
+    });
+}
+fn trace() -> Trace {
+    TRACE.with(Cell::get)
+}
+fn disarm() {
+    TRACE.with(|t| {
+        let mut s = t.get();
+        s.armed = false;
+        t.set(s);
+    });
+}
+fn work(n: u64) -> WorkBudget {
+    WorkClass::ALL
+        .into_iter()
+        .fold(WorkBudget::new(), |b, w| b.with_remaining(w, n))
+}
+fn cx() -> Context<'static> {
+    Context::from_waker(Waker::noop())
+}
+fn policy() -> ConsumerPropertyReadPolicy {
+    policy_with(GatewayDefaultV1::LIMITS.clone())
+}
+fn policy_with(limits: ResourceLimits) -> ConsumerPropertyReadPolicy {
+    ConsumerPropertyReadPolicy::try_new(
+        limits,
+        BindingLifetimeFootprint::new(4, 4096),
+        BindingLifetimeFootprint::new(8, 1280),
+        [1, 64, 64, 64],
+        [64, 32],
+        [2, 2, 1, 1, 1, 1, 1],
+        [50, 5],
+        65536,
+    )
+    .unwrap()
+}
+fn source() -> clinkz_wot_td::thing::Thing {
+    serde_json::from_str(r#"{
+ "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"aggregate","id":"urn:aggregate:id","base":"https://peer.test/a/",
+ "security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},
+ "properties":{
+  "a-read":{"forms":[{"href":"skip","op":[]},{"href":"../first","scopes":["二",""]},{"href":"second","contentCoding":"gzip"}]},
+  "b-empty":{"forms":[{"href":"skip","op":[]}]},
+  "c-温度":{"forms":[{"href":"skip","op":["writeproperty"]},{"href":"last","scopes":["three"]}]},
+  "z-empty":{"forms":[]}
+ }}"#).unwrap()
+}
+fn outputs() -> [Option<InteractionOutput>; 8] {
+    core::array::from_fn(|_| {
+        Some(InteractionOutput::with_data(Payload::new(
+            &b"17"[..],
+            "application/json",
+        )))
+    })
+}
+type ReportStorage = (
+    Cell<(Option<CleanupOutcome>, [u64; 4])>,
+    Cell<u8>,
+    RefCell<ResourceAccount>,
+);
+fn report_storage() -> ReportStorage {
+    (
+        Cell::new((None, [0; 4])),
+        Cell::new(0),
+        RefCell::new(ResourceAccount::new(
+            SlotIndex::new(50),
+            Generation::INITIAL,
+            ResourceKind::CleanupBytesMax,
+            8192,
+        )),
+    )
+}
+fn category(result: CoreResult<InteractionOutput>) -> &'static str {
+    match result {
+        Ok(o) => {
+            assert_eq!(o.data().unwrap().body.as_ref(), b"17");
+            assert_eq!(o.metadata().binding_response().unwrap().status_code(), 599);
+            "ok"
+        }
+        Err(CoreError::Validation(_)) => "validation",
+        Err(CoreError::Binding(_)) => "binding",
+        Err(CoreError::Cancelled(_)) => "cancelled",
+        Err(CoreError::TimedOut(_)) => "deadline",
+        Err(e) => panic!("unexpected result {e:?}"),
+    }
+}
+const CASE_TABLE_VERSION: u32 = 1;
+const CASES: [(Mode, bool, bool, &str); 9] = [
+    (Mode::Normal, false, false, "ok"),
+    (Mode::Error, false, false, "binding"),
+    (Mode::InvalidIdentity, false, false, "validation"),
+    (Mode::InvalidShape, false, false, "validation"),
+    (Mode::LateStart, true, false, "ok"),
+    (Mode::LatePoll, true, false, "ok"),
+    (Mode::Complete, true, false, "cancelled"),
+    (Mode::Residual, true, false, "cancelled"),
+    (Mode::CancelError, true, true, "binding"),
+];
+
+#[test]
+fn static_common_case_table_and_exact_acknowledgement() {
+    println!("static common case table version={CASE_TABLE_VERSION}");
+    for (mode, cancel, advance, expected) in CASES {
+        let stats = Arc::new(Stats::default());
+        stats.set_mode(mode);
+        let registration =
+            binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+        let policy = policy();
+        let parent = RefCell::new(policy.parent_accounts());
+        let mut report = report_storage();
+        let clock = Clock::default();
+        let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+            registration,
+            policy,
+            &clock,
+            &parent,
+            &mut report,
+        )
+        .unwrap_or_else(|_| panic!("construct static"));
+        let source = source();
+        assert!(matches!(
+            runtime.consume(&source, &mut work(100000), |b| {
+                for _ in 0..100000 {
+                    b.step(&mut work(4096));
+                    if b.is_finished() {
+                        return;
+                    }
+                }
+                panic!("build stalled");
+            }),
+            Ok(StartStatus::Ready(()))
+        ));
+        drop(source);
+        let generation = runtime
+            .read_property(
+                "a-read",
+                InteractionOptions::new().with_form_index(2),
+                &mut work(100000),
+            )
+            .unwrap();
+        assert!(
+            runtime
+                .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                .is_err()
+        );
+        let before = stats.polls.load(Ordering::SeqCst);
+        runtime.step(&mut cx(), &mut work(0));
+        assert_eq!(stats.polls.load(Ordering::SeqCst), before);
+        if cancel {
+            runtime.cancel(generation).unwrap();
+        }
+        if advance {
+            runtime.step(&mut cx(), &mut work(100000));
+            for _ in 0..4 {
+                runtime.step(&mut cx(), &mut work(100000));
+            }
+            assert_eq!(stats.cancels.load(Ordering::SeqCst), 1, "no cleanup retry");
+            clock.0.store(16, Ordering::SeqCst);
+        }
+        for _ in 0..4 {
+            runtime.step(&mut cx(), &mut work(100000));
+        }
+        assert_eq!(
+            category(
+                runtime
+                    .try_take(generation, &mut work(100000))
+                    .unwrap()
+                    .unwrap()
+            ),
+            expected,
+            "{mode:?}"
+        );
+        assert_eq!(
+            stats.acknowledgements.load(Ordering::SeqCst),
+            usize::from(!advance)
+        );
+        assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
+        runtime.close();
+        for _ in 0..10000 {
+            if matches!(
+                runtime.shutdown(&mut cx(), &mut work(4096)),
+                StartStatus::Ready(_)
+            ) {
+                break;
+            }
+        }
+        assert_eq!(runtime.state(), CompiledPlanSetState::Reclaimed);
+        drop(runtime);
+        assert!(observer().0.is_some());
+        drop(observer);
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+        assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
+fn static_distinct_compiled_coordinates_repeated_reads_and_generation_reuse() {
+    let stats = Arc::new(Stats::default());
+    let registration = binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+    let policy = policy();
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    let mut previous = runtime.generations();
+    for _ in 0..2 {
+        let source = source();
+        runtime
+            .consume(&source, &mut work(100000), |b| {
+                for _ in 0..100000 {
+                    b.step(&mut work(4096));
+                    if b.is_finished() {
+                        return;
+                    }
+                }
+                panic!();
+            })
+            .unwrap();
+        drop(source);
+        let current = runtime.generations();
+        assert_ne!((previous.0, previous.1), (current.0, current.1));
+        previous = current;
+        for (name, form, target) in [
+            ("a-read", 2, "https://peer.test/a/second"),
+            ("c-温度", 1, "https://peer.test/a/last"),
+        ] {
+            let generation = runtime
+                .read_property(
+                    name,
+                    InteractionOptions::new().with_form_index(form),
+                    &mut work(100000),
+                )
+                .unwrap();
+            runtime.step(&mut cx(), &mut work(100000));
+            assert_eq!(
+                category(
+                    runtime
+                        .try_take(generation, &mut work(100000))
+                        .unwrap()
+                        .unwrap()
+                ),
+                "ok"
+            );
+            let n = stats.target_len.load(Ordering::SeqCst);
+            let bytes: Vec<_> = stats.target[..n]
+                .iter()
+                .map(|v| v.load(Ordering::SeqCst))
+                .collect();
+            assert_eq!(bytes, target.as_bytes());
+            assert!(runtime.cancel(Generation::INITIAL).is_err());
+        }
+        runtime.close();
+        for _ in 0..10000 {
+            runtime.step(&mut cx(), &mut work(4096));
+            if runtime.state() == CompiledPlanSetState::Reclaimed {
+                break;
+            }
+        }
+    }
+    for _ in 0..10000 {
+        if matches!(
+            runtime.shutdown(&mut cx(), &mut work(4096)),
+            StartStatus::Ready(_)
+        ) {
+            break;
+        }
+    }
+    drop(runtime);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+    assert_eq!(stats.starts.load(Ordering::SeqCst), 4);
+}
+
+#[test]
+fn static_final_root_drop_is_finite_source_free_and_reported_before_destruction() {
+    let stats = Arc::new(Stats::default());
+    stats.set_mode(Mode::Pending);
+    let registration = binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+    let policy = policy();
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    observe(usize::MAX);
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    disarm();
+    let source = source();
+    TRACE.with(|t| {
+        let mut s = t.get();
+        s.armed = true;
+        t.set(s);
+    });
+    runtime
+        .consume(&source, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        })
+        .unwrap();
+    runtime
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    let before = trace();
+    let polls = stats.polls.load(Ordering::SeqCst);
+    let cancels = stats.cancels.load(Ordering::SeqCst);
+    drop(runtime);
+    let after = trace();
+    disarm();
+    assert_eq!(after.requests, before.requests);
+    assert_eq!(after.live, 0);
+    assert_eq!(stats.polls.load(Ordering::SeqCst), polls);
+    assert_eq!(stats.cancels.load(Ordering::SeqCst), cancels);
+    assert!(observer().0.unwrap().is_residual());
+    assert!(observer().1[0] <= observer().1[1]);
+    let terminal = observer().1;
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+    println!(
+        "static build: live={}, peak={}, largest={}, requests={}; terminal={terminal:?}; deallocations={}",
+        before.live, before.peak, before.largest, before.requests, after.releases
+    );
+}
+
+#[test]
+fn static_whole_provisioning_request_call_and_global_live_measurements() {
+    let thing = source();
+    observe(usize::MAX);
+    let stats = Arc::new(Stats::default());
+    let registration = binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+    let binding_provision = trace();
+    let policy = policy();
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    let provision = trace();
+    assert_eq!(provision.requests, binding_provision.requests);
+    runtime
+        .consume(&thing, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!("bounded fixture build stalled");
+        })
+        .unwrap();
+    let built = trace();
+    let mut options = InteractionOptions::new();
+    options.uri_variables.insert("room".into(), "west".into());
+    let request = trace();
+    let generation = runtime
+        .read_property("a-read", options, &mut work(100000))
+        .unwrap();
+    let accepted = trace();
+    runtime.step(&mut cx(), &mut work(100000));
+    assert_eq!(
+        category(
+            runtime
+                .try_take(generation, &mut work(100000))
+                .unwrap()
+                .unwrap()
+        ),
+        "ok"
+    );
+    assert_eq!(trace().requests, request.requests);
+    for _ in 0..100000 {
+        if let StartStatus::Ready(outcome) = runtime.shutdown(&mut cx(), &mut work(4096)) {
+            assert!(outcome.is_complete());
+            break;
+        }
+    }
+    assert_eq!(runtime.state(), CompiledPlanSetState::Reclaimed);
+    drop(runtime);
+    assert!(observer().0.unwrap().is_complete());
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+    drop(stats);
+    let final_trace = trace();
+    disarm();
+    assert_eq!(final_trace.live, 0);
+    println!(
+        "whole static fixture: binding provisioning live={}, allocations={}; runtime provisioning allocations={}; build live={}, peak={}, largest={}; request allocations={:?}; call allocations={}; global peak={}, final retained={}, releases={}",
+        binding_provision.live,
+        binding_provision.requests,
+        provision.requests - binding_provision.requests,
+        built.live,
+        built.peak,
+        built.largest,
+        &request.layouts[built.requests..request.requests],
+        accepted.requests - request.requests,
+        final_trace.peak,
+        final_trace.live,
+        final_trace.releases
+    );
+}
+
+#[cfg(feature = "std")]
+mod host;
+
+#[test]
+fn static_every_build_allocation_failure_recovers_and_releases_original_accounts() {
+    let mut sites = 0;
+    for fail in 0..256 {
+        let stats = Arc::new(Stats::default());
+        let registration =
+            binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+        let policy = policy();
+        let parent = RefCell::new(policy.parent_accounts());
+        let clock = Clock::default();
+        let mut report = report_storage();
+        let source = source();
+        let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+            registration,
+            policy,
+            &clock,
+            &parent,
+            &mut report,
+        )
+        .unwrap_or_else(|_| panic!());
+        observe(fail);
+        let result = runtime.consume(&source, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        });
+        let requests = trace().requests;
+        disarm();
+        if fail < requests {
+            assert!(result.is_err(), "site {fail}: {result:?}");
+            sites += 1;
+        } else {
+            assert!(matches!(result, Ok(StartStatus::Ready(()))));
+        }
+        assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+        for _ in 0..10000 {
+            if matches!(
+                runtime.shutdown(&mut cx(), &mut work(4096)),
+                StartStatus::Ready(_)
+            ) {
+                break;
+            }
+        }
+        assert_eq!(
+            runtime.state(),
+            CompiledPlanSetState::Reclaimed,
+            "site {fail}"
+        );
+        drop(runtime);
+        drop(observer);
+        assert_eq!(trace().live, 0, "site {fail}");
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+        if fail >= requests {
+            break;
+        }
+    }
+    assert!(sites > 20);
+    println!("static recoverable build allocation sites={sites}");
+}
+
+#[test]
+fn static_abandon_and_cancel_at_every_build_step_keep_a_bounded_cleanup_owner() {
+    let mut completed_at = 0;
+    for cutoff in (0..20000).step_by(1) {
+        let stats = Arc::new(Stats::default());
+        let registration =
+            binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+        let policy = policy();
+        let parent = RefCell::new(policy.parent_accounts());
+        let clock = Clock::default();
+        let mut report = report_storage();
+        let source = source();
+        let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+            registration,
+            policy,
+            &clock,
+            &parent,
+            &mut report,
+        )
+        .unwrap_or_else(|_| panic!());
+        let mut finished = false;
+        observe(usize::MAX);
+        let _ = runtime.consume(&source, &mut work(0), |b| {
+            for _ in 0..cutoff {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    finished = true;
+                    break;
+                }
+            }
+            if cutoff % 2 == 1 {
+                b.cancel();
+                b.step(&mut work(0));
+            }
+        });
+        let before = trace();
+        drop(runtime);
+        let after = trace();
+        disarm();
+        assert_eq!(before.requests, after.requests, "abandoned step {cutoff}");
+        assert_eq!(after.live, 0, "abandoned step {cutoff}");
+        assert!(observer().0.unwrap().is_residual());
+        assert!(observer().1[0] <= observer().1[1]);
+        drop(observer);
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+        assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+        if finished {
+            completed_at = cutoff;
+            break;
+        }
+    }
+    assert!(completed_at > 30);
+    println!("static unpublished step boundaries={completed_at}");
+}
+
+#[test]
+fn static_deadline_first_cause_fabricated_transfer_and_unread_result_cleanup() {
+    for mode in [
+        Mode::Pending,
+        Mode::Transfer,
+        Mode::Normal,
+        Mode::AckFailure,
+    ] {
+        let stats = Arc::new(Stats::default());
+        stats.set_mode(mode);
+        let registration =
+            binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+        let policy = policy();
+        let parent = RefCell::new(policy.parent_accounts());
+        let clock = Clock::default();
+        let mut report = report_storage();
+        let source = source();
+        let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+            registration,
+            policy,
+            &clock,
+            &parent,
+            &mut report,
+        )
+        .unwrap_or_else(|_| panic!());
+        runtime
+            .consume(&source, &mut work(100000), |b| {
+                for _ in 0..100000 {
+                    b.step(&mut work(4096));
+                    if b.is_finished() {
+                        return;
+                    }
+                }
+                panic!();
+            })
+            .unwrap();
+        let generation = runtime
+            .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+            .unwrap();
+        if mode == Mode::Normal || mode == Mode::AckFailure {
+            runtime.step(&mut cx(), &mut work(100000));
+        } else {
+            runtime.cancel(generation).unwrap();
+            runtime.close();
+            runtime.step(&mut cx(), &mut work(100000));
+            assert!(
+                runtime
+                    .try_take(generation, &mut work(100000))
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(
+                runtime.next_deadline().unwrap().instant().unwrap().ticks(),
+                15
+            );
+            clock.0.store(16, Ordering::SeqCst);
+            runtime.step(&mut cx(), &mut work(100000));
+            let error = runtime
+                .try_take(generation, &mut work(100000))
+                .unwrap()
+                .unwrap()
+                .unwrap_err();
+            if mode == Mode::Transfer {
+                assert!(matches!(error, CoreError::Validation(_)));
+            } else {
+                assert_eq!(error.context().cause_code(), Some(401));
+            } // Manual wins over Drain/expiry.
+            assert!(runtime.cleanup_record().unwrap().is_residual());
+        }
+        let before = trace();
+        drop(runtime);
+        assert_eq!(trace().requests, before.requests);
+        assert!(observer().0.unwrap().is_residual());
+        drop(observer);
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+    }
+}
+
+#[test]
+fn static_final_credit_rejection_input_capacity_and_partial_rollback() {
+    let stats = Arc::new(Stats::default());
+    let registration = binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+    let policy = policy();
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let source = source();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    runtime
+        .consume(&source, &mut work(0), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        })
+        .unwrap();
+    assert_eq!(runtime.state(), CompiledPlanSetState::Frozen);
+    let mut short = work(ConsumerPropertyReadPolicy::FINAL_INSTALL_WORK - 1);
+    runtime.step(&mut cx(), &mut short);
+    assert_eq!(runtime.state(), CompiledPlanSetState::Frozen);
+    assert_eq!(
+        short.remaining(WorkClass::PlanningItems),
+        ConsumerPropertyReadPolicy::FINAL_INSTALL_WORK - 1
+    );
+    runtime.step(
+        &mut cx(),
+        &mut work(ConsumerPropertyReadPolicy::FINAL_INSTALL_WORK),
+    );
+    assert_eq!(runtime.state(), CompiledPlanSetState::Published);
+    let mut oversized = String::with_capacity(128);
+    oversized.push_str("west");
+    let address = oversized.as_ptr();
+    let mut options = InteractionOptions::new();
+    options.uri_variables.insert("room".into(), oversized);
+    let rejection = runtime
+        .read_property("a-read", options, &mut work(100000))
+        .unwrap_err();
+    let (options, request) = rejection.into_input();
+    assert!(request.is_none());
+    assert_eq!(options.uri_variables["room"].as_ptr(), address);
+    assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+    runtime.close();
+    // One byte of the original rollback is paid; Drop must continue with that
+    // retained partial byte credit and a single finite, non-refilled allowance.
+    runtime.step(&mut cx(), &mut work(1));
+    let before = trace();
+    drop(runtime);
+    assert_eq!(trace().requests, before.requests);
+    assert!(observer().0.unwrap().is_residual());
+    assert!(observer().1[0] <= observer().1[1]);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn static_two_roots_exhaust_the_same_real_build_output_and_call_parent() {
+    for resource in [
+        ResourceKind::AdmissionTemporaryBytesGlobalMax,
+        ResourceKind::CompiledRuntimeBytesGlobalMax,
+        ResourceKind::PlanPinsGlobalMax,
+    ] {
+        let policy_a = policy();
+        let policy_b = policy();
+        let mut accounts = policy_a.parent_accounts();
+        let index = ConsumerPropertyReadPolicy::PARENT_KINDS
+            .iter()
+            .position(|&k| k == resource)
+            .unwrap();
+        let cap = match resource {
+            ResourceKind::AdmissionTemporaryBytesGlobalMax => 69000,
+            ResourceKind::CompiledRuntimeBytesGlobalMax => 6000,
+            _ => 1,
+        };
+        accounts[index] =
+            ResourceAccount::new(SlotIndex::new(0), Generation::INITIAL, resource, cap);
+        let parent = RefCell::new(accounts);
+        let clock = Clock::default();
+        let mut report_a = report_storage();
+        let mut report_b = report_storage();
+        let stats_a = Arc::new(Stats::default());
+        let stats_b = Arc::new(Stats::default());
+        let (mut a, observer_a) = StaticConsumerPropertyReadRuntime::try_new(
+            binding::static_registration(StaticClient::new(stats_a, outputs())),
+            policy_a,
+            &clock,
+            &parent,
+            &mut report_a,
+        )
+        .unwrap_or_else(|_| panic!());
+        let (mut b, observer_b) = StaticConsumerPropertyReadRuntime::try_new(
+            binding::static_registration(StaticClient::new(stats_b.clone(), outputs())),
+            policy_b,
+            &clock,
+            &parent,
+            &mut report_b,
+        )
+        .unwrap_or_else(|_| panic!());
+        let thing = source();
+        a.consume(&thing, &mut work(100000), |build| {
+            if resource == ResourceKind::AdmissionTemporaryBytesGlobalMax {
+                assert!(matches!(
+                    b.consume(&thing, &mut work(100000), |_| panic!(
+                        "no capacity may reach TD"
+                    )),
+                    Err(CoreError::Backpressure(_))
+                ));
+            }
+            for _ in 0..100000 {
+                build.step(&mut work(4096));
+                if build.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        })
+        .unwrap();
+        if resource != ResourceKind::AdmissionTemporaryBytesGlobalMax {
+            let result = b.consume(&thing, &mut work(100000), |build| {
+                for _ in 0..100000 {
+                    build.step(&mut work(4096));
+                    if build.is_finished() {
+                        return;
+                    }
+                }
+                panic!();
+            });
+            if resource == ResourceKind::CompiledRuntimeBytesGlobalMax {
+                assert!(result.is_err());
+            } else {
+                result.unwrap();
+                a.read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                    .unwrap();
+                assert!(matches!(
+                    b.read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                        .unwrap_err()
+                        .error()
+                        .error(),
+                    CoreError::Backpressure(_)
+                ));
+            }
+        }
+        assert_eq!(stats_b.starts.load(Ordering::SeqCst), 0);
+        drop(a);
+        drop(b);
+        drop(observer_a);
+        drop(observer_b);
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+    }
+}
+
+#[test]
+fn static_missing_id_and_later_bounds_reject_before_any_client_start() {
+    for missing_id in [true, false] {
+        let mut thing = source();
+        if missing_id {
+            thing.id = None;
+        } else {
+            thing
+                .properties
+                .as_mut()
+                .unwrap()
+                .get_mut("c-温度")
+                .unwrap()
+                ._interaction
+                .forms[1]
+                .href = clinkz_wot_td::data_type::FormHref::parse(&format!(
+                "https://peer.test/{}",
+                "x".repeat(80)
+            ))
+            .unwrap();
+        }
+        let stats = Arc::new(Stats::default());
+        let policy = policy();
+        let parent = RefCell::new(policy.parent_accounts());
+        let clock = Clock::default();
+        let mut report = report_storage();
+        let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+            binding::static_registration(StaticClient::new(stats.clone(), outputs())),
+            policy,
+            &clock,
+            &parent,
+            &mut report,
+        )
+        .unwrap_or_else(|_| panic!());
+        let result = runtime.consume(&thing, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        });
+        assert!(result.is_err());
+        assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+        if missing_id {
+            assert_eq!(parent.borrow()[3].peak(), 0);
+        }
+        drop(runtime);
+        assert!(observer().0.unwrap().is_residual());
+        drop(observer);
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+    }
+}
+
+#[test]
+fn static_normal_immediate_and_polled_late_results_share_core_validation() {
+    for mode in [Mode::Normal, Mode::LateStart, Mode::LatePoll] {
+        for validation in 1..=3 {
+            let stats = Arc::new(Stats::default());
+            stats.set_mode(mode);
+            stats.validation.store(validation, Ordering::SeqCst);
+            let policy = policy();
+            let parent = RefCell::new(policy.parent_accounts());
+            let clock = Clock::default();
+            let mut report = report_storage();
+            let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+                binding::static_registration(StaticClient::new(stats.clone(), outputs())),
+                policy,
+                &clock,
+                &parent,
+                &mut report,
+            )
+            .unwrap_or_else(|_| panic!());
+            let thing = source();
+            runtime
+                .consume(&thing, &mut work(100000), |b| {
+                    for _ in 0..100000 {
+                        b.step(&mut work(4096));
+                        if b.is_finished() {
+                            return;
+                        }
+                    }
+                    panic!();
+                })
+                .unwrap();
+            let generation = runtime
+                .read_property(
+                    "c-温度",
+                    InteractionOptions::new().with_form_index(1),
+                    &mut work(100000),
+                )
+                .unwrap();
+            if mode != Mode::Normal {
+                runtime.cancel(generation).unwrap();
+            }
+            for _ in 0..3 {
+                runtime.step(&mut cx(), &mut work(100000));
+            }
+            assert_eq!(
+                category(
+                    runtime
+                        .try_take(generation, &mut work(100000))
+                        .unwrap()
+                        .unwrap()
+                ),
+                if validation == 3 {
+                    "binding"
+                } else {
+                    "validation"
+                }
+            );
+            assert_eq!(stats.starts.load(Ordering::SeqCst), 1);
+            assert_eq!(stats.acknowledgements.load(Ordering::SeqCst), 1);
+            drop(runtime);
+            drop(observer);
+            assert!(parent.borrow().iter().all(|a| a.used() == 0));
+        }
+    }
+}
+
+#[test]
+fn static_ack_failure_is_bounded_by_independent_shutdown_deadline() {
+    let stats = Arc::new(Stats::default());
+    stats.set_mode(Mode::AckFailure);
+    let policy = policy();
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats.clone(), outputs())),
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    let thing = source();
+    runtime
+        .consume(&thing, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        })
+        .unwrap();
+    runtime
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    runtime.step(&mut cx(), &mut work(100000));
+    assert!(matches!(
+        runtime.shutdown(&mut cx(), &mut work(100000)),
+        StartStatus::Pending
+    ));
+    clock.0.store(16, Ordering::SeqCst);
+    for _ in 0..10000 {
+        if let StartStatus::Ready(outcome) = runtime.shutdown(&mut cx(), &mut work(4096)) {
+            assert!(outcome.is_residual());
+            break;
+        }
+    }
+    assert_eq!(runtime.state(), CompiledPlanSetState::Reclaimed);
+    assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
+    drop(runtime);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn static_policy_qualification_is_before_clock_parent_input_and_allocation() {
+    struct ClockObserved(core::sync::atomic::AtomicUsize);
+    impl RuntimeClock for ClockObserved {
+        fn now(&self) -> MonotonicInstant {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            MonotonicInstant::new(ClockId::new(1), 10)
+        }
+        fn ticks_per_second(&self) -> core::num::NonZeroU64 {
+            core::num::NonZeroU64::new(1000).unwrap()
+        }
+    }
+    let stats = Arc::new(Stats::default());
+    let registration = binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+    let policy = ConsumerPropertyReadPolicy::try_new(
+        GatewayDefaultV1::LIMITS.clone(),
+        BindingLifetimeFootprint::new(4, 4096),
+        BindingLifetimeFootprint::new(17, 8193),
+        [1, 64, 64, 64],
+        [64, 32],
+        [2, 2, 1, 1, 1, 1, 1],
+        [50, 5],
+        65536,
+    )
+    .unwrap();
+    let parent = RefCell::new(policy.parent_accounts());
+    let mut report = report_storage();
+    let clock = ClockObserved(core::sync::atomic::AtomicUsize::new(0));
+    observe(0);
+    let rejected = match StaticConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    ) {
+        Err(e) => e,
+        Ok(_) => panic!(),
+    };
+    assert_eq!(trace().requests, 0);
+    disarm();
+    assert_eq!(clock.0.load(Ordering::SeqCst), 0);
+    assert!(parent.borrow().iter().all(|a| a.peak() == 0));
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 0);
+    drop(rejected);
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+    assert!(
+        ConsumerPropertyReadPolicy::try_new(
+            GatewayDefaultV1::LIMITS.clone(),
+            BindingLifetimeFootprint::new(4, 4096),
+            BindingLifetimeFootprint::new(8, 1280),
+            [1, 64, 64, 64],
+            [64, 32],
+            [0, 2, 1, 1, 1, 1, 1],
+            [50, 5],
+            65536
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn static_native_layouts_and_original_td_diagnostic() {
+    use core::mem::{align_of, size_of};
+    println!(
+        "static layouts: runtime={:?}, build={:?}, slot={:?}, state={:?}, registration={:?}, request={:?}, result={:?}, report={:?}",
+        (
+            size_of::<StaticConsumerPropertyReadRuntime<'static, StaticClient>>(),
+            align_of::<StaticConsumerPropertyReadRuntime<'static, StaticClient>>()
+        ),
+        (
+            size_of::<StaticConsumerPropertyReadBuild<'static, 'static, 'static, StaticClient>>(),
+            align_of::<StaticConsumerPropertyReadBuild<'static, 'static, 'static, StaticClient>>()
+        ),
+        (
+            size_of::<StaticConsumerPropertyReadSlot<binding::State>>(),
+            align_of::<StaticConsumerPropertyReadSlot<binding::State>>()
+        ),
+        (size_of::<binding::State>(), align_of::<binding::State>()),
+        (
+            size_of::<ConsumerCompilerRegistration<StaticConsumerBindingRegistration<StaticClient>>>(
+            ),
+            align_of::<ConsumerCompilerRegistration<StaticConsumerBindingRegistration<StaticClient>>>(
+            )
+        ),
+        (size_of::<OutboundRequest>(), align_of::<OutboundRequest>()),
+        (
+            size_of::<CoreResult<InteractionOutput>>(),
+            align_of::<CoreResult<InteractionOutput>>()
+        ),
+        (size_of::<ReportStorage>(), align_of::<ReportStorage>())
+    );
+    let stats = Arc::new(Stats::default());
+    let policy = policy();
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats.clone(), outputs())),
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    let mut thing = source();
+    thing._metadata.title = None;
+    assert!(
+        runtime
+            .consume(&thing, &mut work(100000), |b| {
+                for _ in 0..100000 {
+                    b.step(&mut work(4096));
+                    if b.is_finished() {
+                        return;
+                    }
+                }
+                panic!();
+            })
+            .is_err()
+    );
+    assert!(matches!(
+        runtime.td_diagnostic(),
+        Some(clinkz_wot_td::ValidatedThingCause::Invalid(_))
+    ));
+    drop(runtime);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn static_reference_profile_constructs_reads_and_reclaims_without_changing_budgets() {
+    let stats = Arc::new(Stats::default());
+    let policy = policy_with(BenchmarkStaticReferenceV1::LIMITS.clone());
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats, outputs())),
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!("reference construction"));
+    let thing = source();
+    assert!(matches!(
+        runtime.consume(&thing, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        }),
+        Ok(StartStatus::Ready(()))
+    ));
+    let generation = runtime
+        .read_property(
+            "c-温度",
+            InteractionOptions::new().with_form_index(1),
+            &mut work(100000),
+        )
+        .unwrap();
+    runtime.step(&mut cx(), &mut work(4096));
+    assert_eq!(
+        category(
+            runtime
+                .try_take(generation, &mut work(4096))
+                .unwrap()
+                .unwrap()
+        ),
+        "ok"
+    );
+    for _ in 0..10000 {
+        if matches!(
+            runtime.shutdown(&mut cx(), &mut work(4096)),
+            StartStatus::Ready(_)
+        ) {
+            break;
+        }
+    }
+    assert_eq!(runtime.state(), CompiledPlanSetState::Reclaimed);
+    drop(runtime);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn static_late_manual_cancel_gets_fresh_drain_time_without_refill_extension() {
+    let stats = Arc::new(Stats::default());
+    stats.set_mode(Mode::Pending);
+    let policy = policy();
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats, outputs())),
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    let thing = source();
+    runtime
+        .consume(&thing, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!();
+        })
+        .unwrap();
+    let generation = runtime
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    clock.0.store(1000, Ordering::SeqCst);
+    runtime.cancel(generation).unwrap();
+    runtime.step(&mut cx(), &mut work(0));
+    for _ in 0..5 {
+        runtime.step(&mut cx(), &mut work(100000));
+        assert_eq!(
+            runtime.next_deadline().unwrap().instant().unwrap().ticks(),
+            1005
+        );
+        assert!(
+            runtime
+                .try_take(generation, &mut work(100000))
+                .unwrap()
+                .is_none()
+        );
+    }
+    clock.0.store(1006, Ordering::SeqCst);
+    runtime.step(&mut cx(), &mut work(100000));
+    let error = runtime
+        .try_take(generation, &mut work(100000))
+        .unwrap()
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(error.context().cause_code(), Some(401));
+    for _ in 0..10000 {
+        if matches!(
+            runtime.shutdown(&mut cx(), &mut work(4096)),
+            StartStatus::Ready(_)
+        ) {
+            break;
+        }
+    }
+    drop(runtime);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}

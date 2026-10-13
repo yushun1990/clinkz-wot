@@ -311,6 +311,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-consumer-property-read-binding-fixture"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+]
+
+[[package]]
+name = "clinkz-wot-consumer-property-read-runtime-runner"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-consumer-property-read-binding-fixture",
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-servient",
+ "clinkz-wot-td",
+ "serde_json",
+]
+
+[[package]]
 name = "clinkz-wot-core"
 version = "0.1.0"
 dependencies = [
@@ -419,6 +439,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "clinkz-wot-codec-cbor",
+ "clinkz-wot-consumer-property-read-binding-fixture",
  "clinkz-wot-core",
  "clinkz-wot-discovery",
  "clinkz-wot-foundation",

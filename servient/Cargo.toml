@@ -21,6 +21,7 @@ async-trait = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 
 [dev-dependencies]
+clinkz-wot-consumer-property-read-binding-fixture = { path = "../tools/architecture-fixtures/consumer-property-read-binding", default-features = false }
 clinkz-wot-codec-cbor = { path = "../codecs/cbor" }
 clinkz-wot-property-read-binding-fixture = { path = "../tools/architecture-fixtures/property-read-binding" }
 serde_json = { version = "1" }
@@ -38,6 +39,7 @@ std = [
     "clinkz-wot-planning/std",
     "clinkz-wot-protocol-bindings/std",
     "clinkz-wot-td/std",
+    "clinkz-wot-consumer-property-read-binding-fixture/std",
 ]
 ## Native-async Servient surface (consume/produce handles, async handler
 ## setters, async local dispatch). Driving is binding-owned; the Servient
