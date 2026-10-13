@@ -1,8 +1,17 @@
-# Consumer Host call construction admission candidate
+# Consumer Host call construction admission
 
-`index.toml` owns `WP-300-CONSUMER-HOST-CALL-CONSTRUCTION`, currently
-**planned/candidate/current** under v5.1 ADR-0013. Independent admission review
-and a separate admission transition are required before production changes.
+`index.toml` owns the state of `WP-300-CONSUMER-HOST-CALL-CONSTRUCTION`.
+This record defines its exact v5.1 ADR-0013 implementation and evidence envelope.
+
+[Independent admission review of PR #161](https://github.com/yushun1990/clinkz-wot/pull/161#issuecomment-6142207093)
+accepted base `d22d5af6ae98211d56709b9ffebcf4fe8a86c601` to head
+`19f4d27651ea88b1fa58412e7b1854ee796fca1c` with no blocking findings.
+The reviewed head and merged master `07dcbb93a98a2bd7a68025a0c0f91dff9488684e`
+have the same tree `51fccd29a99cc65075905f5424039474e83037c9`.
+Required [exact-head validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38372424155)
+and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38374873316)
+passed. This separate admission transition follows that acceptance; it permits
+only the implementation envelope below, with production completion outstanding.
 The patches in the existing runtime-entry fixture are disposable experiments,
 not production implementation or completion evidence.
 
@@ -145,11 +154,11 @@ is required for these scoped candidate experiments. Run authority validation,
 baseline/candidate discriminators and the inline comparator; retain their exact
 source boundary and toolchain. No full workspace success is asserted.
 
-Before admission: independent review must reconstruct this candidate's exact
-diff, challenge the alternative selection and raw callback limitations, reproduce
-both accepted branches and allocation failures, check authoritative projections
-and required CI, then record an explicit ADR-0013 admission revision. This PR
-does not supply that independent review or transition.
+Admission required independent review of the candidate's exact diff, challenge
+of the alternative selection and raw callback limitations, reproduction of
+both accepted branches and allocation failures, and checks of authoritative
+projections and required CI. The review above supplies that pre-implementation
+decision; production acceptance and completion remain separate.
 
 After admission, completion evidence `consumer-host-call-construction` must prove:
 

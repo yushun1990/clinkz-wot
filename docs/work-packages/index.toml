@@ -730,7 +730,7 @@ id = "WP-300-CONSUMER-HOST-CALL-CONSTRUCTION"
 work_package = "WP-300"
 sequence = 360
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-300-CONSUMER-PROPERTY-READ-BINDING", "WP-300-CONSUMER-ONLY-REGISTRATION", "WP-200-CONSUMER-COMPILER-SUPPORT"]
 depends_on_packages = ["WP-000"]
@@ -762,6 +762,6 @@ pre_implementation_checks = [
     "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative inline",
     "git diff --check",
 ]
-admission_review = "pending independent review of this candidate PR"
+admission_review = "github-pr:161#issuecomment-6142207093"
 completion_evidence_keys = ["consumer-host-call-construction"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-host-call-construction.toml"
