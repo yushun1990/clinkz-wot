@@ -346,15 +346,15 @@ complete Host/static sealing and cleanup matrix, compile-fail proof of the
 removed API, and a `reaffirmed` gate disposition. The detailed readmission
 boundary is owned by `WP-300-consumer-property-read-binding-admission.md`.
 
-### Candidate Consumer Host call construction prerequisite
+### Consumer Host call construction prerequisite
 
-The [separate construction admission candidate](WP-300-consumer-host-call-construction-admission.md)
+The [separate construction admission](WP-300-consumer-host-call-construction-admission.md)
 owns `WP-300-CONSUMER-HOST-CALL-CONSTRUCTION`: one private Core envelope backed
 fallibly before raw invocation, preserving the raw/installed SPI, both existing
 Core seal mediators, exact rejection and whole-call cleanup transfer. Only an
-additive recoverable raw-call constructor is proposed. It changes no static or
+additive recoverable raw-call constructor is admitted. It changes no static or
 Producer semantics and grants no arbitrary callback/destructor guarantee. The
-candidate must be independently admitted, implemented and accepted before
+tranche must be implemented and independently accepted before
 WP-400 can consume its production evidence. Existing completed Binding claims
 retain their narrower historical scope; this is no broad package/gate transition.
 

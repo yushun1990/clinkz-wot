@@ -175,7 +175,7 @@ terminal release, including while detached or pending rollback.
 Fallible Host call construction is a separate runtime prerequisite. The actual
 raw client and Core success/accepted-overrun wrappers still allocate infallibly;
 compiler backing and declaration checks do not certify them. The separate
-[Core/Binding construction candidate](WP-300-consumer-host-call-construction-admission.md)
+[Core/Binding construction admission](WP-300-consumer-host-call-construction-admission.md)
 selects one complete private Core envelope backed before raw invocation, with
 an additive recoverable raw-call constructor and unchanged invocation/installed
 SPI. `WP-300-CONSUMER-HOST-CALL-CONSTRUCTION` must be complete/current with
