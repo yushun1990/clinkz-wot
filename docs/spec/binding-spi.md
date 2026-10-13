@@ -1560,6 +1560,32 @@ late-return classification on validation failure. If cleanup transfer is
 offered, accepted, or rejected, the complete decorated call, unused seal, and
 combined accounting remain one work object.
 
+### Candidate: recoverable Consumer Host call backing
+
+The separately recorded
+[WP-300 construction candidate](../work-packages/WP-300-consumer-host-call-construction-admission.md)
+defines a target correction under ADR-0013; it is not yet admitted or implemented.
+Keep the raw and installed signatures above. Prepare one complete private Core
+envelope fallibly before `invoke`; it must hold either the normal seal mediator
+or the accepted-resource-error mediator. Failure returns the exact request with
+structured Binding-phase Backpressure before any raw callback. Raw rejection
+releases the vacant envelope. Acceptance populates and erases the already backed
+envelope with no allocation, preserving both current mediator algorithms and
+cleanup ownership. Checked footprint includes the maximum complete envelope
+Layout, including variant/vacant storage, once. Declaration checks do not create
+its physical backing or certify raw callbacks.
+
+The only proposed additive authoring method is
+`HostBindingCallBox::try_new<B>(B) -> Result<Self, B>` for `B: HostBindingCall<T, C>`.
+It returns the original concrete owner on allocation failure; a binding must
+recover its unchanged request before pre-acceptance rejection. It neither makes
+construction of `B` fallible nor admits arbitrary callbacks/destructors. Existing
+`new` retains its infallible semantics. The exact candidate requires concrete
+constructor, footprint/deadline, result/cancel, storage and destruction evidence
+for the runtime-selected binding and finite input limits. Compiler support stays
+compilation-only authority. No new public support issuer, static slot change or
+Consumer runtime eligibility is established by this candidate.
+
 The raw static authoring SPI remains `PollClientBinding` with its
 `ClientRequestSlot<C::RequestState>`. Installed application-static execution
 uses a distinct opaque Core-owned carrier:
