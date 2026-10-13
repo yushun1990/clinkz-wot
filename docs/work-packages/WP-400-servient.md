@@ -172,15 +172,13 @@ and completion state; its admission establishes neither production support nor
 WP-400 admission. Retain the actual manual root and its committed account until
 terminal release, including while detached or pending rollback.
 
-Fallible Host call construction is a separate runtime prerequisite. The actual
-raw client and Core success/accepted-overrun wrappers still allocate infallibly;
-compiler backing and declaration checks do not certify them. The separate
+Fallible Host call construction is a separate runtime prerequisite. The
 [Core/Binding construction admission](WP-300-consumer-host-call-construction-admission.md)
-selects one complete private Core envelope backed before raw invocation, with
+defines one complete private Core envelope backed before raw invocation, with
 an additive recoverable raw-call constructor and unchanged invocation/installed
 SPI. `WP-300-CONSUMER-HOST-CALL-CONSTRUCTION` must be complete/current with
-passed production evidence before this runtime's admission. Its experiments do
-not implement or admit that correction. WP-400 must also bind actual selected
+passed production evidence before this runtime's admission. That completion
+covers construction mechanics only. WP-400 must also bind actual selected
 client constructor/callback/storage/destructor bounds and finite input limits
 in its private policy; the generic constructor, compatibility and compiler
 support do not establish runtime eligibility. Unsupported clients fail before
