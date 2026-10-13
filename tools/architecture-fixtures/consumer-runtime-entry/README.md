@@ -9,8 +9,17 @@ root/account to terminal. Allocation failure runs cover every materialization
 and supported Host compiler-slot request. The existing exact-source observer
 also verifies the all-bounds barrier for both new checked adapters.
 
-The production tests measure static and Host layouts, separate provisioning,
-output and call allocations, and zero retained bytes after explicit cleanup.
+The std production tests also exercise the public Planning terminal ownership
+bridge. A paid Host output moves to a second thread, reattaches to the original
+selector, executes the concrete artifact through Core's sealed call path, and
+returns as the same unique backing. A partially paid rollback then moves to a
+second thread and resumes the existing bounded reclaimer from its exact byte
+position. The original cleanup account stays separately charged until the
+original node and every child have been released.
+
+The production tests measure static and Host layouts, ownership owner/return
+layouts, separate provisioning, output and call allocations, and zero retained
+bytes after explicit cleanup.
 The normal library exposes target layout observations for the two ARM compile
 cells. ARM compilation is not device runtime or device-fit evidence. Core's
 public tests separately cover result-shape failures, cancellation, compiler
@@ -47,6 +56,12 @@ event remains an unproved runtime obligation. The retained charge is logical
 accounting; these tests do not measure allocator backing, machine stack, global
 simultaneous peaks, fragmentation or device RAM.
 
+The advanced std bridge consumes only a matching draft/root or variable
+rollback/root pair. Wrong equal-looking, vacant, occupied and fixed roots return
+the original owners without work. Zero credit returns Backpressure; exact credit
+prepays detach and reattachment. Public compile contracts keep local handles
+local and reject clone/forge/Sync/non-Send transfer claims for the unique owner.
+
 Source inspection additionally finds infallible `Box::pin` in
 `HostBindingCallBox::new`, reached for raw call/decorator construction. That is
 not exercised as an OOM recovery test here; null allocation can abort. A paid
@@ -61,7 +76,7 @@ candidate must choose and prove its call/cleanup admission boundary.
 | Experiment | Result on Rust 1.95.0, x86_64 Linux | Limit |
 | --- | --- | --- |
 | Local worker | Actual paid aggregate, original root/account, bounded one-element command/reply lanes; caller abandons reply before zero-credit Pending then paid sealed call settlement and reclaim | Demonstrates feasibility of a local driver, not runtime scheduling, multiple calls, fairness, deadlines or worker/executor shutdown recovery |
-| Quiescent output | Same node and artifact addresses cross a thread in one unique owner; detach/reattach each make zero allocator requests; original selector/sealed Core call/reclaimer; original node freed exactly once. Native Layouts: node 1376 bytes, original local pair 616 bytes, each unique owner 24 bytes, all aligned to 8 | Private experiment; no public production ownership API, Published record or drop recovery |
+| Quiescent output | Same node and artifact addresses cross a thread in one unique owner; detach/reattach each make zero allocator requests; original selector/sealed Core call/reclaimer; original node freed exactly once. Native Layouts: node 1376 bytes, original local pair 616 bytes, each unique owner 24 bytes, all aligned to 8 | Private admission precursor retained as comparative evidence; the production proof now uses the public bridge. No Published record or drop recovery. |
 | Partially paid rollback | Matching node/root and original account cross a thread; zero-allocation conversions retain reclaim observations and partial byte credit; abandonment returns to the same original root | No second reclaim algorithm; fixed pre-allocation cleanup deliberately outside bridge scope |
 | Root discrimination | Two equal public reservation tuples fail actual pointer matching, return both graphs for complete reclaim; short credit returns the original pair | Public identity equality is not ownership; no parent authority is issued |
 | Shared graph | Public compile negatives reject `Arc<Draft>` and `Arc<Mutex<Draft>>`; a detached unique owner can be parked under a mutex with structural Send | Neither a full shared carrier nor callback-under-lock behavior is implemented |
@@ -77,8 +92,9 @@ It supplies no unsafe Send/Sync implementation and no second semantic program.
 Its unsafe allocation round trip requires independent review. Whole-root
 abandonment still leaks rather than performing unbudgeted variable destruction,
 just as the original advanced manual root does; the tests explicitly retain and
-drive it. The proposed public bridge and production completion obligations are
-owned by [its candidate](../../../docs/work-packages/WP-200-consumer-output-ownership-admission.md).
+drive it. The public implementation and completion obligations are owned by the
+[admitted tranche](../../../docs/work-packages/WP-200-consumer-output-ownership-admission.md);
+the private appendix does not satisfy them.
 
 The fatal-allocation tests arm failure only in subprocesses, mark whether the
 raw client has returned acceptance, check the allocation-abort diagnostic and
@@ -110,8 +126,7 @@ hardware runtime. The lockfile starts from the accepted aggregate fixture's pins
 no dependency update is intended. Mainline runs these five commands without
 `--offline` to populate its clean runner cache.
 
-Production completion must exercise new complete role-only public constructors,
-support capture, aggregate adapters, sealed normal/late execution and exact
-resources, and reaffirm intersecting Producer evidence. Passing this fixture is
-neither that completion nor independent admission review. WP-400 stays
-unregistered; no Consumer gate or milestone status is changed.
+Passing this fixture supplies executable implementation evidence for the admitted
+output-ownership tranche. It is not independent acceptance and does not mark the
+tranche complete. WP-400 implementation is outside this fixture; no Consumer
+gate or milestone status is changed.
