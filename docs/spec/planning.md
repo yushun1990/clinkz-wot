@@ -1397,15 +1397,15 @@ If another live owner occupies the destination the entry is rejected before work
 no fallback allocation or lost owner is allowed. No detached cleanup retains a
 caller input loan, and no variable collection Drop is hidden in abandonment.
 
-The additive [terminal ownership bridge candidate](../work-packages/WP-200-consumer-output-ownership-admission.md)
+The additive [terminal ownership bridge](../work-packages/WP-200-consumer-output-ownership-admission.md)
 projects a consuming transfer of the actual matching draft/root or variable
 rollback/root allocation into a unique source-free owner. It preserves the
 original output, ledger and bounded reclaimer, derives `Send` structurally when
 the artifact is Send, and promises no Sync capability. Existing build and local
 handle contracts remain unchanged. Physical root identity, fixed prepaid work,
-unchanged-owner rejection, original cleanup-account retention and exact proposed
-signatures are owned by that candidate; they authorize no source implementation
-until its ADR-0013 admission. No public ledger observation becomes a parent permit,
+unchanged-owner rejection, original cleanup-account retention and exact
+signatures are owned by that admission record; implementation is limited to its
+ADR-0013 envelope. No public ledger observation becomes a parent permit,
 and no wrapper around the existing local graph is claimed to make it transferable.
 
 Compiler bounds/start/step/abort callbacks are themselves supported bounded

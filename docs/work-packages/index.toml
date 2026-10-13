@@ -686,7 +686,7 @@ id = "WP-200-CONSUMER-OUTPUT-OWNERSHIP"
 work_package = "WP-200"
 sequence = 350
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-200-CONSUMER-PROPERTY-READ-AGGREGATE", "WP-300-CONSUMER-ONLY-REGISTRATION"]
 depends_on_packages = ["WP-000"]
@@ -721,6 +721,6 @@ pre_implementation_checks = [
     "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf",
     "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
 ]
-admission_review = "pending-independent-review"
+admission_review = "github-pr:156#issuecomment-6137329268"
 completion_evidence_keys = ["consumer-output-ownership"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-output-ownership.toml"
