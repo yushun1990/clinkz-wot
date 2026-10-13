@@ -19,6 +19,15 @@ adds three pre-implementation discriminators against production baseline
   freed once, and original child/root/account are released before a real held
   parent cleanup reservation. This proves a finite local-discard witness.
 
+The terminal witness rearms allocation observation before output reattachment,
+preserving the original pointer/Layout records. It compares request counts only
+after the final root, original account and parent reservation have been released;
+expected deallocations remain allowed. It restores the previous armed state
+before diagnostic output. Disposable negative controls insert one allocated and
+released 64-byte block immediately after the residual marker or after the final
+account release. Both fail the allocation assertion with 35 requests versus 34;
+the unmodified witness passes with zero additional requests.
+
 These are **admission experiments**, not a production Servient registry, driver,
 shutdown destructor or capacity governor. The six-unit final debit belongs only
 to the publication model. The terminal witness derives conservative finite

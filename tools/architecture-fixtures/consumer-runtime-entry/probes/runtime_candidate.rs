@@ -209,6 +209,15 @@ fn terminal_local_discard_uses_one_finite_budget_and_releases_real_parent_last()
     );
     parent.try_reserve(held).unwrap().commit();
     assert!(parent.try_reserve(1).is_none());
+    // Preserve the existing pointer/Layout records while observing the whole
+    // discard interval. Expected child/root deallocations remain allowed.
+    let before = trace();
+    TRACE.with(|t| {
+        t.set(Trace {
+            armed: true,
+            ..before
+        })
+    });
     let report = AtomicU8::new(0);
     let (draft, mut root) = output.into_local();
     let footprint = draft.footprint().retained_bytes();
@@ -227,7 +236,6 @@ fn terminal_local_discard_uses_one_finite_budget_and_releases_real_parent_last()
         .with_remaining(W::PlanningItems, items)
         .with_remaining(W::CleanupItems, items)
         .with_remaining(W::CodecInputBytes, footprint);
-    let requests = trace().requests;
     let mut done = false;
     let mut iterations = 0;
     // Residual disposition is committed BEFORE any local object destruction.
@@ -251,11 +259,17 @@ fn terminal_local_discard_uses_one_finite_budget_and_releases_real_parent_last()
         "discard cannot report successful cleanup"
     );
     assert!(root.take().is_none());
-    assert_eq!(trace().requests, requests);
     release_root(root, account);
     assert_eq!(trace().node_releases, 1);
     assert!(parent.release_committed(held));
     assert_eq!(parent.used(), 0);
+    let mut after = trace();
+    after.armed = before.armed;
+    TRACE.with(|t| t.set(after));
+    assert_eq!(
+        after.requests, before.requests,
+        "terminal discard allocated"
+    );
     println!(
         "terminal witness: byte allowance={footprint}, item allowance={items}, step bound={steps}, actual steps={iterations}"
     );
