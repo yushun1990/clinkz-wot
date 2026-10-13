@@ -8,9 +8,19 @@ implementation and evidence envelope.
 accepted base `e725de484d62b17e07fccd19e7cf5f8e437c6f20` to head
 `7923a966238e2c4efb5dde5afd5538448f0da793` with no blocking findings, subject
 to successful required CI. This separate admission transition follows that
-acceptance and satisfied CI condition. Admission covers this envelope only;
-production completion still requires the evidence and independent acceptance
-defined below.
+acceptance and satisfied CI condition. Admission covers this envelope only.
+
+[Independent production review of PR #159](https://github.com/yushun1990/clinkz-wot/pull/159#issuecomment-6138896086)
+accepted the implementation and completion evidence at exact head
+`e517cef15528417a70d415327697681bbfe9d1d5` with no blocking findings. Its
+reviewed tree `cecf6020bcbe0c7216073dae70d3b207c8f4aff1` is exactly the tree of
+merged master commit `8a13e295b1d847a92937c9ee59e989d72e9e6202`; the required exact-head
+and merge-push validation runs passed. The
+[registered completion evidence](../evidence/WP-200-consumer-output-ownership.toml)
+retains the implementation reference, six obligation results, native resource
+measurements and accepted scope exclusions. Completion covers this tranche
+only; broader WP-200, WP-400 implementation/admission, Consumer gate acceptance
+and every gate/milestone transition remain separate.
 
 ## Decision and bounded claim
 
