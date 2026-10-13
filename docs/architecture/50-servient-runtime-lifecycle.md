@@ -164,16 +164,17 @@ names in API, plan, or diagnostics, never in
 cleanup owners, and starts monotonic reclamation only after terminal ownership
 is proved.
 
-The bounded [Consumer Runtime candidate](../work-packages/WP-400-consumer-property-read-runtime-admission.md)
+The admitted [Consumer Runtime tranche](../work-packages/WP-400-consumer-property-read-runtime-admission.md)
 projects this lifecycle into one generation and one active/read-result opportunity.
 Host parks the unique transferable output/rollback owner, checks it out outside
 structural locks, and prepays its return bridge before lending local selections.
 The manual root retains complete call, plan lease, original cleanup account and
 parent capacity when caller interest disappears. Static retains the corresponding
 typed root and associated-state slot directly. This projection adds no worker,
-executor, call pool or lower-layer contract change; admission remains independent.
+executor, call pool or lower-layer contract change; implementation acceptance
+remains independent.
 
-The candidate requires final-root abandonment to commit residual/incomplete
+The tranche requires final-root abandonment to commit residual/incomplete
 shutdown to a caller-retained fixed report before bounded local destruction.
 It then uses the original Planning reclaimer and a single prepaid finite terminal
 allowance, without protocol progress, allocation or work refill, releasing parent

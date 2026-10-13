@@ -1,9 +1,24 @@
-# Consumer Property Read Runtime admission candidate
+# Consumer Property Read Runtime admission
 
 `index.toml` owns `WP-400-CONSUMER-PROPERTY-READ-RUNTIME` admission and completion
-state. This is its v5.1 ADR-0013 candidate, requiring fresh independent review
-of the exact diff before production implementation. It grants no admission,
-Consumer gate, milestone, broad WP-400 or protocol-production acceptance.
+state. This record defines its admitted v5.1 ADR-0013 implementation and evidence
+envelope.
+
+[Independent re-review of PR #165](https://github.com/yushun1990/clinkz-wot/pull/165#pullrequestreview-5505656673)
+accepted base `4892a5ca8224dde1328a93460a862cdc826dbb5f` to head
+`cf68b6250fefe9c311784aaabfac3bbb380bc1d5` with no remaining blocking findings,
+superseding the initial changes-requested conclusion. The reviewed head and
+merged master commit `6ee94a06865f92da079e560a90f0d8c51931c047` have the same tree
+`6818ddcad576741f2f4dfd5bbd5c7c29ba854177`.
+Required [exact-head validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38417119093)
+and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38419010198)
+passed; these checks cover diff hygiene only. The review records exact-head
+prechecks separately from the broader checks at the initial candidate revision.
+
+This separate docs-only transition records admission following that acceptance.
+It permits only the implementation envelope below. Runtime completion, Consumer
+architecture-gate acceptance, milestones, broad WP-400 completion and protocol
+production remain separate evidence and acceptance boundaries.
 
 ## Result and reconstruction
 
@@ -111,7 +126,7 @@ is `docs/evidence/WP-400-consumer-property-read-runtime.toml` with stable key
 
 No legacy public API is removed in this bounded change. Every new entry has zero
 target-to-legacy calls. Broad ConsumedThing migration retains its own removal
-obligations. No production source is changed by this admission candidate.
+obligations. No production source is changed by this admission transition.
 
 ## Owners and publication
 
@@ -374,12 +389,18 @@ for this bounded path and projected here and in the lifecycle owner. Its broader
 deployment/package/image questions remain disjoint and DISCUSSING. Topic 0079's
 role-only decision remains migrated. Review 07 is not accepted as a wholesale
 redesign. The broad WP-400 two-Thing/two-binding scheduler checkpoint is neither
-a predecessor nor satisfied by this candidate. Existing Producer gate status,
+a predecessor nor satisfied by this admission. Existing Producer gate status,
 65/31/121 authority identities, resource schema/defaults and PLAN stay unchanged.
 
-Independent admission must challenge this boundary, the trusted client-authoring
-contract, last-root discard bound, ownership graph, all seven predecessor records
-and exact precheck results. Record its exact-head review before a separate
-admission transition. Implementation acceptance and any Consumer architecture
-gate registration remain subsequent independent boundaries; do not add product
-code merely to register the gate.
+[Topic 0081](../../workspace/0081-reusable-plan-and-thing-identity.md) remains
+OPEN and non-blocking for this bounded proof. Unique per-Thing lifecycle/root
+ownership and the one-generation limit do not require physical duplication of
+compatible immutable execution data or equate Thing, device and transport-session
+counts. Rejecting shared access to the current local Draft/root graph leaves
+future compatible separation of reusable immutable execution data from per-Thing
+context and lifecycle ownership open; this admission selects no sharing
+representation or fleet-scalability claim.
+
+Implementation acceptance and any Consumer architecture-gate registration remain
+subsequent independent boundaries; do not add product code merely to register
+the gate.
