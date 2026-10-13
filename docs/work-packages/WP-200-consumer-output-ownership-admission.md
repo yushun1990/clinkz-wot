@@ -1,9 +1,16 @@
-# Consumer output ownership admission candidate
+# Consumer output ownership admission
 
-[`index.toml`](index.toml) records `WP-200-CONSUMER-OUTPUT-OWNERSHIP` as
-planned/candidate. This v5.1 ADR-0013 record proposes an implementation boundary;
-it is not admission, independent acceptance, completion or a gate transition.
-No production source is changed by this candidate.
+[`index.toml`](index.toml) owns the state of
+`WP-200-CONSUMER-OUTPUT-OWNERSHIP`. This record defines its exact v5.1 ADR-0013
+implementation and evidence envelope.
+
+[Independent admission review of PR #156](https://github.com/yushun1990/clinkz-wot/pull/156#issuecomment-6137329268)
+accepted base `e725de484d62b17e07fccd19e7cf5f8e437c6f20` to head
+`7923a966238e2c4efb5dde5afd5538448f0da793` with no blocking findings, subject
+to successful required CI. This separate admission transition follows that
+acceptance and satisfied CI condition. Admission covers this envelope only;
+production completion still requires the evidence and independent acceptance
+defined below.
 
 ## Decision and bounded claim
 
@@ -29,7 +36,7 @@ or acceptance of the proposed public API. The production aggregate's accepted
 local/manual-root contract remains valid. The correction preserves architecture
 ownership and semantics and needs no new ADR, crate, scheduler or resource schema.
 
-## Proposed public surface and invariants
+## Admitted public surface and invariants
 
 The additive advanced surface is `std` only, in `clinkz-wot-planning`:
 
@@ -134,17 +141,17 @@ quiescent alternatives, wrong-root/short-credit rejection, partially paid cleanu
 original backing release, real parent cleanup reservation and isolated fatal Host
 allocation failures. Current public auto-trait negatives remain applicable.
 
-Topic 0076's ownership subquestion is migrated into this candidate and Planning's
+Topic 0076's ownership subquestion is migrated into this record and Planning's
 projection. Its still-open call allocation, callback support, runtime parent
 pairing, shutdown, deployment and broader capability questions are disjoint from
 this no-callback/no-allocation bridge. They are **not** disjoint from the future
-WP-400 runtime. No accepted predecessor evidence is invalidated, and no existing
-admission/completion/impact/gate status is changed.
+WP-400 runtime. No accepted predecessor evidence is invalidated. Existing
+predecessor admission/completion/impact and gate states remain unchanged.
 
-An independent review must reconstruct this exact candidate and executable
-experiment, challenge the selected boundary, and accept the unsafe allocation
-ownership proof and manual-retention limitation before a separate admission
-change can authorize production implementation.
+The linked independent admission review covers this exact record and executable
+experiment, the selected boundary, unsafe allocation ownership proof and
+manual-retention limitation. Production completion requires the public evidence
+below and separate independent acceptance.
 
 ## Required production completion
 
