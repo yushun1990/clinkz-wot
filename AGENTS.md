@@ -171,6 +171,17 @@ same conclusion into multiple current-state documents.
 - Add a checker only when it protects a stable invariant that existing code,
   tests, or generic validation cannot already falsify.
 
+## CI Run Selection
+
+The automatic required `validation` status is a fast Git diff-hygiene check,
+not a whole-project test claim. Never infer package or architecture acceptance
+from it. For each task, run scoped local/remote evidence appropriate to its
+registered requirements; use `Actions → manual-validation → Run workflow`
+against the intended branch only when a broader authority, workspace, feature
+matrix, or full CI pass is warranted. State the checks and exact revisions
+actually verified in the PR/review. No scheduled full CI is required for ordinary
+progress; accepted contracts and independent evidence obligations remain binding.
+
 ## Git and Remote Handoff
 
 Use Git as the recoverable implementation history and GitHub pull requests as
