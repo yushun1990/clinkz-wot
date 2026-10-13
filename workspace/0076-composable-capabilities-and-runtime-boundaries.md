@@ -346,15 +346,15 @@ resource declaration, `Arc` around a registration, or a different Planning
 carrier cannot repair that behavior.
 
 A fallible raw-call helper alone would leave Core's post-acceptance allocation
-gap. Preallocating the complete Core wrapper before invoking the raw client is
-a credible narrow correction; an inline sealed-call return carrier or typed
-pre-backed call adapter is also credible, but changes more public representation.
-The next Core/binding candidate must compare those concrete choices, cover raw
-construction failure with exact request return and both accepted branches, and
-bind actual callback/storage/destruction support. Catching panic cannot turn
-allocator abort into a structured rejection, and no unsafe Send/Sync claim or
-blanket allocation-free Host assertion is justified. This correction is a real
-prerequisite of full runtime admission, disjoint from the selected Planning bridge.
+gap. The independent [call-construction investigation](0080-consumer-host-call-construction.md)
+compares actual Core-backed and inline-owner experiments and migrates the narrow
+decision to its separate [WP-300 candidate](../docs/work-packages/WP-300-consumer-host-call-construction-admission.md).
+That candidate covers raw construction failure and both accepted branches; it
+does not attest arbitrary callbacks or install a WP-400 policy. Catching panic
+cannot turn allocator abort into a structured rejection, and no unsafe Send/Sync
+claim or blanket allocation-free Host assertion is justified. This subquestion
+is migrated, disjoint from the accepted Planning bridge; broader runtime/product
+questions in this DISCUSSING topic remain open.
 
 Parent construction is different. Two real child ledgers still produce equal
 public tuples without any parent reservation. Another test holds and exhausts

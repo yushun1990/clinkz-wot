@@ -102,7 +102,7 @@ on Unix require SIGABRT. They exercise actual Core calls rather than a model
 allocator return path. A fallible raw box alone would leave Core's accepted
 wrapper allocation gap. No attempt is made to recover from abort with panic
 handling. These tests add no new checker or fixture package; the existing
-mainline runtime-entry command executes them.
+opt-in `manual-validation` full runtime-entry command executes them.
 
 Run just the discriminators with output:
 
@@ -110,7 +110,7 @@ Run just the discriminators with output:
 cargo +1.95.0 test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test construction -- --nocapture
 ```
 
-Run the full fixture with mainline's Rust 1.95.0 from the repository root:
+Run the full fixture with Rust 1.95.0 from the repository root:
 
 ```sh
 cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml
@@ -123,10 +123,97 @@ cargo check --locked --offline --manifest-path tools/architecture-fixtures/consu
 Portable tests run on the Host. ARM checks compile this normal library and its
 actual production dependencies, not tests, a linked firmware, protocol backend or
 hardware runtime. The lockfile starts from the accepted aggregate fixture's pins;
-no dependency update is intended. Mainline runs these five commands without
+no dependency update is intended. Opt-in full validation runs these commands without
 `--offline` to populate its clean runner cache.
 
 Passing this fixture supplies executable implementation evidence for the admitted
 output-ownership tranche. It is not independent acceptance and does not mark the
 tranche complete. WP-400 implementation is outside this fixture; no Consumer
 gate or milestone status is changed.
+
+## Host call construction candidate
+
+The [WP-300 candidate](../../../docs/work-packages/WP-300-consumer-host-call-construction-admission.md)
+selects a private complete Core envelope backed fallibly **before** raw invocation,
+with an optional recoverable raw-call constructor. It keeps both installed
+start signatures and the raw SPI. This fixture adds no production code or admission.
+
+`probes/run_host_call_candidate.py` archives the current Git HEAD to a disposable
+directory, optionally applies one checked experimental patch there, and appends
+`probes/host_call_candidate.rs` to the existing Core binding integration test.
+It runs the actual Core program and existing validators/tests, not a second
+sealing algorithm. The selected patch touches only disposable copies of Binding
+and the existing compiler allocation primitive's visibility. The inline comparator
+also changes the disposable Core export and one cleanup-carrier type alias.
+Production files, manifests, locks and CI workflows are not patched. This is a
+small reproduction driver, not a checker or new fixture package.
+
+Run from the repository root with Rust 1.95.0 (`stable` currently resolves to that
+exact version; use `--toolchain 1.95.0` to select the installed named toolchain):
+
+```sh
+python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --baseline
+python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative preallocated
+python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative inline
+```
+
+The driver prints the source commit and compiler version. Patch contexts must
+apply exactly. All Cargo commands are locked/offline and serialized. Each variant
+reuses Core's two focused integration suites (14 compiler cases and 20 binding
+cases) plus four constructor discriminators. Candidate variants also compile Core
+in no-default and async-no-std cells. Offline reproduction needs the locked
+dependency cache; populating a missing cache does not justify changing pins.
+No whole-workspace, ARM/device or full performance run is asserted here.
+
+At production baseline `d22d5af6ae98211d56709b9ffebcf4fe8a86c601`, native
+x86_64 Linux/Rust 1.95.0 observations are:
+
+| Variant | Normal allocation requests, in order `(bytes, alignment)` | Accepted-overflow requests | Requests after raw acceptance | Installed call / Result Layout |
+| --- | --- | --- | --- | --- |
+| Existing Core, fixed-output client | `(256, 8)`, `(112, 8)` | `(256, 8)`, `(344, 8)` | 1 in either branch | `(16, 8)` / `(432, 8)` |
+| Selected pre-backed complete envelope | `(344, 8)`, `(256, 8)` | Same | 0 in either branch | `(16, 8)` / `(432, 8)` |
+| Inline installed owner comparator | `(256, 8)` | Same | 0 in either branch | `(344, 8)` / `(432, 8)` |
+
+The fixed-output client isolates backing: prepare a single response before call
+construction, restrict the URI map to the one fixed `room=west` input, use a
+nonblocking one-element source, and attempt one concrete raw box. Its constructor
+performs no protocol I/O. Its inspected finite input/output allocation requests
+plus the actual 256-byte state fit a conservative 2048-byte raw declaration;
+registration/shared source owners remain separate. The observation does not
+establish a global ledger, parent reservation or allocator metadata bound.
+
+The baseline null failures abort before raw acceptance at site 0 and after it
+at site 1, verified in subprocesses (SIGABRT on Unix). The selected candidate's
+site 0 returns the identical request without invoking the raw client; site 1
+returns it from the failed concrete raw owner. Both preserve its original URI
+string address, perform zero raw footprint/poll callbacks on failure and release
+every successfully allocated observed block once. In the inline comparator,
+site 0 is recoverable and site 1 is never attempted. These experiments cover
+both normal and accepted-overrun construction. The earlier production fixture
+above separately reproduces all five original allocations, including output
+construction; this fixed-output witness does not hide those original failures.
+
+Other discriminators check exact ceiling minus-one/exact/plus-one and arithmetic
+overflow, raw rejection after envelope provisioning, no constructor raw polling,
+zero allocation during the fixed result step, and exact raw/envelope release.
+The reused production tests cover Consumer-only and dual-role Core sealing,
+all invalid output shapes, normal/late failures, deadlines, Pending/zero-budget,
+accepted/rejected cleanup transfer, static acknowledgement and Producer compatibility.
+The copied Core result/cancel/transfer mediators are unchanged in both alternatives.
+
+The selected envelope retains the generic 16-byte boxed carrier and existing
+cleanup type while moving the allocation earlier. Its normal wrapper grows from
+112 to 344 bytes; record and reserve this actual maximum, including raw/seal/error/
+variant/vacant storage. The inline alternative removes that heap allocation but
+grows the installed carrier by 328 bytes and changes both installed return types.
+The Result's size stays unchanged because its existing rejection variant is larger.
+`size_of` observations are not machine-stack or simultaneous physical-peak proof.
+
+These results demonstrate a constructible admission target, not public production
+support. They do not certify arbitrary synchronous `invoke`, footprint/deadline,
+poll/cancel or Drop behavior, real protocol libraries, variable input destruction,
+executor/root shutdown or WP-400 eligibility. The candidate record defines
+additional production tests (including ZST/over-aligned/pinned owners), concrete
+cost attestations, independent admission, implementation acceptance and separate
+completion. Required GitHub `validation` checks diff hygiene only; scoped local
+commands supply the evidence under the new CI policy, with no manual full run.

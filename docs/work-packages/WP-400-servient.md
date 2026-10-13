@@ -174,12 +174,17 @@ terminal release, including while detached or pending rollback.
 
 Fallible Host call construction is a separate runtime prerequisite. The actual
 raw client and Core success/accepted-overrun wrappers still allocate infallibly;
-compiler backing and declaration checks do not certify them. Before runtime
-admission, a separately scoped Core/binding candidate must close recoverable raw
-call construction and both post-acceptance wrapper branches, preserve the exact
-request on pre-acceptance failure, and retain accepted ownership without a new
-fallible gap. Runtime support must also bind concrete callback/storage/destruction
-bounds; changing only `Box::pin` to a fallible helper would be insufficient.
+compiler backing and declaration checks do not certify them. The separate
+[Core/Binding construction candidate](WP-300-consumer-host-call-construction-admission.md)
+selects one complete private Core envelope backed before raw invocation, with
+an additive recoverable raw-call constructor and unchanged invocation/installed
+SPI. `WP-300-CONSUMER-HOST-CALL-CONSTRUCTION` must be complete/current with
+passed production evidence before this runtime's admission. Its experiments do
+not implement or admit that correction. WP-400 must also bind actual selected
+client constructor/callback/storage/destructor bounds and finite input limits
+in its private policy; the generic constructor, compatibility and compiler
+support do not establish runtime eligibility. Unsupported clients fail before
+runtime work. No new Foundation or public call-support issuer is implied.
 
 The demonstrated parent-capacity construction needs no Foundation precursor or
 public provenance token. The existing real parent account reserves cleanup capacity;

@@ -1,0 +1,184 @@
+--- a/core/src/binding.rs
++++ b/core/src/binding.rs
+@@ -3287,6 +3287,14 @@
+         Self(Box::pin(call))
+     }
+
++    /// Fallibly erases one call, returning its exact concrete owner on failure.
++    pub fn try_new<B>(call: B) -> Result<Self, B>
++    where
++        B: HostBindingCall<T, C>,
++    {
++        crate::binding_compiler::try_box(call).map(|call| Self(Box::into_pin(call)))
++    }
++
+     /// Returns the unique pinned call borrow used for progress.
+     pub fn as_pin_mut(&mut self) -> Pin<&mut dyn HostBindingCall<T, C>> {
+         self.0.as_mut()
+@@ -3303,6 +3311,76 @@
+ }
+
+ #[cfg(feature = "std")]
++enum HostConsumerCallDisposition {
++    Sealed(SealedHostConsumerCall),
++    AcceptedOverrun(RejectedAcceptedHostConsumerCall),
++}
++
++#[cfg(feature = "std")]
++struct HostConsumerCallEnvelope {
++    disposition: Option<HostConsumerCallDisposition>,
++}
++
++#[cfg(feature = "std")]
++impl HostConsumerCallEnvelope {
++    fn as_pin_mut(&mut self) -> Pin<&mut dyn HostBindingCall<CoreResult<InteractionOutput>>> {
++        match self
++            .disposition
++            .as_mut()
++            .expect("only populated envelopes are exposed")
++        {
++            HostConsumerCallDisposition::Sealed(call) => {
++                Pin::<&mut SealedHostConsumerCall>::new(call)
++            }
++            HostConsumerCallDisposition::AcceptedOverrun(call) => {
++                Pin::<&mut RejectedAcceptedHostConsumerCall>::new(call)
++            }
++        }
++    }
++}
++
++#[cfg(feature = "std")]
++impl HostBindingCall<CoreResult<InteractionOutput>> for HostConsumerCallEnvelope {
++    fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
++        match self.disposition.as_ref().expect("populated envelope") {
++            HostConsumerCallDisposition::Sealed(call) => call.lifetime_footprint(),
++            HostConsumerCallDisposition::AcceptedOverrun(call) => call.lifetime_footprint(),
++        }
++    }
++    fn next_deadline(&self) -> Option<Deadline> {
++        match self.disposition.as_ref().expect("populated envelope") {
++            HostConsumerCallDisposition::Sealed(call) => call.next_deadline(),
++            HostConsumerCallDisposition::AcceptedOverrun(call) => call.next_deadline(),
++        }
++    }
++    fn poll_result(
++        mut self: Pin<&mut Self>,
++        cx: &mut Context<'_>,
++        budget: &mut WorkBudget,
++    ) -> Poll<CoreResult<InteractionOutput>> {
++        self.as_mut().get_mut().as_pin_mut().poll_result(cx, budget)
++    }
++    fn start_cancel(
++        mut self: Pin<&mut Self>,
++        cx: &mut Context<'_>,
++        cleanup: CleanupPhaseContext,
++        budget: &mut WorkBudget,
++    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
++        self.as_mut()
++            .get_mut()
++            .as_pin_mut()
++            .start_cancel(cx, cleanup, budget)
++    }
++    fn poll_cancel(
++        mut self: Pin<&mut Self>,
++        cx: &mut Context<'_>,
++        budget: &mut WorkBudget,
++    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
++        self.as_mut().get_mut().as_pin_mut().poll_cancel(cx, budget)
++    }
++}
++
++#[cfg(feature = "std")]
+ struct SealedHostConsumerCall {
+     raw: HostBindingCallBox<CoreResult<InteractionOutput>>,
+     seal: Option<ConsumerResultSeal>,
+@@ -3312,7 +3390,7 @@
+ #[cfg(feature = "std")]
+ impl SealedHostConsumerCall {
+     const fn overhead() -> BindingLifetimeFootprint {
+-        BindingLifetimeFootprint::new(1, size_of::<Self>() as u64)
++        BindingLifetimeFootprint::new(1, size_of::<HostConsumerCallEnvelope>() as u64)
+     }
+
+     fn seal_result(
+@@ -3404,7 +3482,7 @@
+ #[cfg(feature = "std")]
+ impl RejectedAcceptedHostConsumerCall {
+     const fn overhead() -> BindingLifetimeFootprint {
+-        BindingLifetimeFootprint::new(1, size_of::<Self>() as u64)
++        BindingLifetimeFootprint::new(1, size_of::<HostConsumerCallEnvelope>() as u64)
+     }
+ }
+
+@@ -3836,6 +3914,20 @@
+         "accepted Host Consumer call exceeds its admitted retained footprint",
+     );
+     let seal = ConsumerResultSeal::from_request(&request);
++    let mut envelope =
++        match crate::binding_compiler::try_box(HostConsumerCallEnvelope { disposition: None }) {
++            Ok(envelope) => envelope,
++            Err(_) => {
++                let error = BindingOperationalError::new(CoreError::Backpressure(
++                    ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
++                        .with_operation(clinkz_wot_td::data_type::Operation::ReadProperty)
++                        .with_plan(request.plan_id())
++                        .with_binding(request.binding_id(), request.binding_generation())
++                        .with_redacted_cause(314, "Host Consumer call backing unavailable"),
++                ));
++                return Err(BindingInputRejection::new(request, error));
++            }
++        };
+     let client = client.expect("validated Consumer registration retains its private client");
+     let mut raw = client.invoke(request, artifact)?;
+     let raw_footprint = raw.as_pin_mut().lifetime_footprint();
+@@ -3844,22 +3936,28 @@
+     if let Some(footprint) = combined
+         && footprint.fits_within(resources.admitted())
+     {
+-        return Ok(HostBindingCallBox::new(SealedHostConsumerCall {
+-            raw,
+-            seal: Some(seal),
+-            footprint,
+-        }));
++        envelope.disposition = Some(HostConsumerCallDisposition::Sealed(
++            SealedHostConsumerCall {
++                raw,
++                seal: Some(seal),
++                footprint,
++            },
++        ));
++        return Ok(HostBindingCallBox(Box::into_pin(envelope)));
+     }
+
+     let rejected_footprint = raw_footprint
+         .checked_add(RejectedAcceptedHostConsumerCall::overhead())
+         .unwrap_or(BindingLifetimeFootprint::new(u32::MAX, u64::MAX));
+-    Ok(HostBindingCallBox::new(RejectedAcceptedHostConsumerCall {
+-        _raw: raw,
+-        _seal: seal,
+-        error: Some(resource_error),
+-        reported_footprint: rejected_footprint,
+-    }))
++    envelope.disposition = Some(HostConsumerCallDisposition::AcceptedOverrun(
++        RejectedAcceptedHostConsumerCall {
++            _raw: raw,
++            _seal: seal,
++            error: Some(resource_error),
++            reported_footprint: rejected_footprint,
++        },
++    ));
++    Ok(HostBindingCallBox(Box::into_pin(envelope)))
+ }
+
+ fn static_consumer_support<C: BindingCompilerExtension + 'static>(
+--- a/core/src/binding_compiler.rs
++++ b/core/src/binding_compiler.rs
+@@ -1002,7 +1002,7 @@
+ }
+
+ #[cfg(feature = "std")]
+-fn try_box<T>(value: T) -> Result<Box<T>, T> {
++pub(crate) fn try_box<T>(value: T) -> Result<Box<T>, T> {
+     let layout = Layout::new::<T>();
+     if layout.size() == 0 {
+         return Ok(Box::new(value));
