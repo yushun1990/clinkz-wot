@@ -6,10 +6,11 @@ evidence_key = "consumer-host-call-construction"
 base_ref = "988acf30e9820dfa8f3cb0a8e78d7fb4c2490e0c"
 implementation_ref = "9355d2d68fd3855f20fe3eeb8fa2b691dbd19d03"
 recorded_on = "2026-10-13"
-status = "ready"
+status = "passed"
 execution_status = "passed"
-assessment = "Production construction and focused regression evidence ready for fresh independent acceptance. No completion, gate or milestone transition is made. The unrelated existing workspace-format failure is recorded separately."
+assessment = "Independently accepted completion of the Consumer Host call construction tranche; no broader WP-300, WP-400 admission, gate or milestone transition. The unrelated existing workspace-format failure remains recorded separately."
 admission_review = "github-pr:161#issuecomment-6142207093"
+acceptance = "github-pr:163#pullrequestreview-5503833960"
 requirement_ids = [
     "BIND-REG-001", "BIND-MEM-001", "BIND-IO-001", "BIND-OUT-001",
     "BIND-DELIVERY-001", "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001",
@@ -32,9 +33,7 @@ acceptance_requirements = [
     "Reproduce the focused production suites and affected registered checks; inspect the required GitHub validation result on the exact final PR head. Its lightweight diff-hygiene result is not a package test claim.",
     "Only a subsequent authorized completion transition may mark this record passed or the tranche complete. This implementation context does not supply independent acceptance.",
 ]
-unresolved_obligations = [
-    "Completion obligation 6 requires fresh exact-head independent production acceptance and verification of required CI by that reviewer; author execution does not discharge acceptance.",
-]
+unresolved_obligations = []
 excluded_claims = [
     "WP-400 implementation, runtime eligibility policy, arbitrary client callback/destructor boundedness, protocol eligibility or a new call-support issuer",
     "Parent/global reservation provenance, paired runtime call/cleanup capacity, executor shutdown recovery or a Consumer architecture gate",
@@ -94,10 +93,10 @@ evidence = [
 
 [[obligation]]
 id = 6
-name = "Exact production evidence prepared for independent acceptance"
+name = "Exact production evidence independently accepted"
 evidence = [
     "All affected scoped execution, the historical baseline/preallocated/inline discriminators and memory checks are recorded below at their actual source/toolchain boundary. The production/test implementation is implementation_ref; subsequent evidence/README-only changes do not silently change that executable boundary.",
-    "Fresh independent exact-final-head review and required GitHub validation inspection remain acceptance work. This ready record grants no completion, gate or milestone transition. No full manual workflow or whole-workspace test success is asserted.",
+    "The independent production review linked by acceptance supports all six registered completion obligations. Required exact-head and merge-push validation passed, and the reviewed/merged trees match as recorded in the admission owner. This separate docs-only transition records completion of this tranche only; no gate/milestone transition, full manual workflow or whole-workspace test success is asserted.",
 ]
 
 [measurements]

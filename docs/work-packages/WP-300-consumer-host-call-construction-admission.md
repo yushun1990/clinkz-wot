@@ -11,9 +11,23 @@ have the same tree `51fccd29a99cc65075905f5424039474e83037c9`.
 Required [exact-head validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38372424155)
 and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38374873316)
 passed. This separate admission transition follows that acceptance; it permits
-only the implementation envelope below, with production completion outstanding.
+only the implementation envelope below; production completion is recorded separately.
 The patches in the existing runtime-entry fixture are disposable experiments,
 not production implementation or completion evidence.
+
+[Independent production review of PR #163](https://github.com/yushun1990/clinkz-wot/pull/163#pullrequestreview-5503833960)
+accepted exact head `8a4c46ab90d4157dee7f6d032dbb83c0480c190e` with no blocking
+findings across all six registered completion obligations. Its reviewed tree
+`93b4efc8cd8087ba1a6f8178bb409352991d03e5` is exactly the tree of merged master
+commit `e63ee8d760e756a99ec28b4d6da6a06de82e7f22`.
+Required [exact-head validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38385307273)
+and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38402610111)
+passed. The [registered completion evidence](../evidence/WP-300-consumer-host-call-construction.toml)
+retains the implementation reference, obligation results, native measurements,
+finite callback/input limits, scope exclusions and pre-existing workspace
+formatting limitation. This separate docs-only transition records completion of
+this tranche only. Broader WP-300 completion, WP-400 admission, Consumer
+architecture-gate acceptance and all gate/milestone transitions remain separate.
 
 ## Decision
 
@@ -146,7 +160,7 @@ evidence at the exact new head. Do not carry old normal-wrapper byte measurement
 forward silently. Topic 0076's broader runtime/product issues remain open but are
 disjoint from this mechanics-only precursor; its call subquestion is migrated.
 
-## Checks and exact remaining obligations
+## Checks and completion obligations
 
 The index records focused pre-implementation commands. The new CI policy's
 required `validation` context checks diff hygiene only; no full manual workflow
@@ -157,10 +171,11 @@ source boundary and toolchain. No full workspace success is asserted.
 Admission required independent review of the candidate's exact diff, challenge
 of the alternative selection and raw callback limitations, reproduction of
 both accepted branches and allocation failures, and checks of authoritative
-projections and required CI. The review above supplies that pre-implementation
-decision; production acceptance and completion remain separate.
+projections and required CI. Admission and production acceptance are separate
+decisions, recorded above.
 
-After admission, completion evidence `consumer-host-call-construction` must prove:
+Completion evidence `consumer-host-call-construction` is assessed against these
+six obligations:
 
 1. Actual public `try_new` handles nonzero, zero-sized, over-aligned and pinned
    concrete states; null returns the exact owner and original request with zero
