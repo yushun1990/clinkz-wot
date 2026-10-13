@@ -6,10 +6,11 @@ implementation_ref = "acbb225047862dd20bf64d71fd326891c7e5cb31"
 base_ref = "866333830d35e366db01e2b0c20f24bef2b8ec96"
 recorded_on = "2026-10-12"
 evidence_key = "consumer-only-registration"
-status = "ready"
+status = "passed"
 execution_status = "passed"
-assessment = "Implementation and executable evidence candidate; independent acceptance is outstanding. No tranche completion, gate transition, milestone transition or WP-400 admission is asserted."
+assessment = "Independently accepted completion of the Consumer-only complete registration tranche; no broader WP-300, WP-400, gate or milestone transition."
 admission_review = "github-pr:152#issuecomment-6120235799"
+acceptance = "github-pr:154#issuecomment-6135946450"
 requirement_ids = [
     "BIND-REG-001", "BIND-STORAGE-001", "BIND-MEM-001", "BIND-DELIVERY-001",
     "BIND-IO-001", "BIND-OUT-001", "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001",
