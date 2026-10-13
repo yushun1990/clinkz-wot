@@ -255,6 +255,15 @@ typed and held-slot Host mechanisms. It admits neither arbitrary native
 compilers nor aggregate implementation. The [Binding SPI](../spec/binding-spi.md#closed-consumer-compiler-support)
 owns the detailed contract.
 
+### ADR-0013 candidate: `WP-200-CONSUMER-OUTPUT-OWNERSHIP`
+
+The [ownership bridge candidate](WP-200-consumer-output-ownership-admission.md)
+owns a proposed allocation-free terminal draft/root and variable rollback/root
+transfer. It preserves local building, selection, artifacts and bounded reclaim;
+Host runtime sharing, parent governance, call backing and publication remain
+outside this Planning correction. Its index entry is planned/candidate and
+requires independent admission before production changes.
+
 ### ADR-0013 admission: `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE`
 
 The [exact admission record](WP-200-consumer-property-read-aggregate-admission.md)

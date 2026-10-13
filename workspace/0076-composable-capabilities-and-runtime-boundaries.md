@@ -309,3 +309,67 @@ commissioning remain unknown. Neither async adaptation nor code generation
 preempts an uncooperative handler or bounds a blocking C call. If the existing
 runtime fits the deployment and extraction/image complexity outweighs measured
 benefits, retaining it is the preferable outcome.
+
+## Bounded Host construction result
+
+The terminal ownership subquestion is resolved narrowly against fetched
+`e725de4` production source. The selected correction is migrated to the
+[Planning ownership admission candidate](../docs/work-packages/WP-200-consumer-output-ownership-admission.md),
+Planning's specification and WP-200/WP-400. This topic remains DISCUSSING for
+the distinct runtime/call and broader product questions; it does not block that
+no-callback/no-allocation candidate. Commands and measured observations belong
+to the [existing fixture](../tools/architecture-fixtures/consumer-runtime-entry/README.md#construction-boundary-experiments).
+
+| Alternative | Executable finding | Disposition |
+| --- | --- | --- |
+| Keep all output on a local Host driver | Build the actual source-free graph inside a worker, retain its original root/account, settle a zero-budget-Pending call after its delivery receiver is abandoned, then explicitly reclaim. No local graph crosses a thread. | Constructible, and valid for a deliberately local/manual runtime. Transferable public handles would also need bounded command/reply lanes, lifecycle and shutdown ownership. That product restriction and machinery are not necessary for the lower-layer correction. |
+| Quiescent complete graph transfer | Append a private adapter to an otherwise unchanged copy of production Planning. Consume the unique lease and its actual matching root, own the original allocation with `Box`, and let Rust derive Send. Transfer both completed output and partially paid rollback, reattach, use the original selector/Core sealed path/reclaimer and free the original node exactly once. | Selected next candidate: a small terminal ownership bridge, preserving local input-bearing build and unchanged algorithms. The experiment is not a public production API or runtime acceptance. |
+| Share the current root by wrapping it | Public compile failures reject `Arc<Draft>` and `Arc<Mutex<Draft>>`. Current Root has `NonNull`, an Rc marker, Cell counts/state and UnsafeCell output. Thread-safe artifacts and lifetime-free wrappers change none of those ownership facts. | Rejected as a remedy. Atomicizing just the count also leaves state/data and exclusive lease safety unproved. |
+| Build a new shared carrier | A unique detached owner can itself be parked under `Arc<Mutex<_>>` with structural Send; no unsafe auto-trait assertion is needed. That compile fact proves no multi-owner scheduling, lock-free callback loan, cleanup lease, publication or executor fallback. | Defer actual shared record/lease mechanics to WP-400. Replacing the whole build/root program now adds concurrency obligations without strengthening this handoff proof. |
+
+The transfer discriminator rejects two roots with identical public reservation
+tuples by **actual allocation identity** and returns both original graphs. A
+short work allowance returns them unchanged. Transfer and reattachment allocate
+nothing, preserve artifact addresses and partial cleanup observations, and
+reuse the original node/ledger and monotonic reclaimer. The unsafe allocation
+round trip still needs independent review. The unique owner has the original
+advanced manual-root retention obligation: abandoning the whole root is not
+recovery. Bounded runtime shutdown and delivery/cleanup fallback are successor
+obligations, not evidence that the entire local builder must become shared.
+
+Call backing is an independent boundary. The actual downstream client and Core
+installed start make five allocation requests for this deterministic call.
+Subprocess fault injection fails each request: every failure aborts; the final
+failure occurs **after** raw acceptance, in both the successful sealing wrapper
+and the accepted-footprint-overrun wrapper. A compiler backing slot, generous
+resource declaration, `Arc` around a registration, or a different Planning
+carrier cannot repair that behavior.
+
+A fallible raw-call helper alone would leave Core's post-acceptance allocation
+gap. Preallocating the complete Core wrapper before invoking the raw client is
+a credible narrow correction; an inline sealed-call return carrier or typed
+pre-backed call adapter is also credible, but changes more public representation.
+The next Core/binding candidate must compare those concrete choices, cover raw
+construction failure with exact request return and both accepted branches, and
+bind actual callback/storage/destruction support. Catching panic cannot turn
+allocator abort into a structured rejection, and no unsafe Send/Sync claim or
+blanket allocation-free Host assertion is justified. This correction is a real
+prerequisite of full runtime admission, disjoint from the selected Planning bridge.
+
+Parent construction is different. Two real child ledgers still produce equal
+public tuples without any parent reservation. Another test holds and exhausts
+an actual existing Foundation parent `ResourceAccount`, constructs a real cleanup
+root under that retained allowance, and releases the original child account
+before explicitly releasing the parent. Commit ends the borrow, not the charge.
+This establishes that no Foundation provenance getter, synthetic receipt, second
+global ledger or new token framework is needed for that pairing. It does not
+establish full simultaneous build/runtime peaks or prevent an arbitrary caller
+from deliberately releasing a parent early. Those invariants belong to the
+private Servient transaction and its policy/registration/phase/generation checks.
+
+The selected candidate changes only terminal Planning ownership, with the
+aggregate and client-only registration as completed predecessors. Call backing,
+concrete supported callback bounds, private parent pairing, publication/cancel
+linearization, live generation leases, drain and lossless executor/manual/root
+shutdown remain outside its claim. No full WP-400 candidate, runtime source,
+completion evidence or Consumer gate is registered by this investigation.

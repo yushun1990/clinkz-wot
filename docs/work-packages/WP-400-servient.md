@@ -163,12 +163,31 @@ the smallest reviewable step.
 The completed Planning draft, cleanup root and rollback lease are local/non-Send.
 A lifetime-free type or thread-safe concrete artifact cannot authorize sharing
 that graph. A local Host driver, explicit quiescent output transfer and a shared
-carrier have different ownership/cleanup costs and need their own construction
-evidence. Retain the actual manual root and its committed account until terminal
-release. Likewise compiler backing support does not certify Host call/decorator
-allocation or callback bounds. The future candidate must establish an executable
-choice, physical storage and complete source/account/parent ownership without
-unsafe Send/Sync assertions, fictitious parent provenance or hidden fallible gaps.
+carrier have different ownership/cleanup costs. The
+[bounded construction result](../../workspace/0076-composable-capabilities-and-runtime-boundaries.md#bounded-host-construction-result)
+selects the [Planning terminal ownership bridge candidate](WP-200-consumer-output-ownership-admission.md)
+as the smallest lower-layer correction: move the matching complete graph without
+making the input-bearing build shared. This is planned/candidate, not production
+support or WP-400 admission. Retain the actual manual root and its committed
+account until terminal release, including while detached or pending rollback.
+
+Fallible Host call construction is a separate runtime prerequisite. The actual
+raw client and Core success/accepted-overrun wrappers still allocate infallibly;
+compiler backing and declaration checks do not certify them. Before runtime
+admission, a separately scoped Core/binding candidate must close recoverable raw
+call construction and both post-acceptance wrapper branches, preserve the exact
+request on pre-acceptance failure, and retain accepted ownership without a new
+fallible gap. Runtime support must also bind concrete callback/storage/destruction
+bounds; changing only `Box::pin` to a fallible helper would be insufficient.
+
+The demonstrated parent-capacity construction needs no Foundation precursor or
+public provenance token. The existing real parent account reserves cleanup capacity;
+the private Servient transaction must bind it to policy/registration/phase and
+generation before local handoff and release children before parents. The bounded
+experiment covers only cleanup-root capacity, not global simultaneous peaks.
+Publication/cancellation races, shared record leases, executor rejection/shutdown
+and full runtime admission remain WP-400 obligations. The ownership bridge's
+manual-retention limitation cannot substitute for those proofs.
 
 The tranche owns Host/static transaction and facade composition under ADR-0021:
 checked immutable Consumer policy/registration capture, paired local/parent build
