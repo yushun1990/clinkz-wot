@@ -165,11 +165,12 @@ A lifetime-free type or thread-safe concrete artifact cannot authorize sharing
 that graph. A local Host driver, explicit quiescent output transfer and a shared
 carrier have different ownership/cleanup costs. The
 [bounded construction result](../../workspace/0076-composable-capabilities-and-runtime-boundaries.md#bounded-host-construction-result)
-selects the [Planning terminal ownership bridge candidate](WP-200-consumer-output-ownership-admission.md)
+selects the [Planning terminal ownership bridge admission](WP-200-consumer-output-ownership-admission.md)
 as the smallest lower-layer correction: move the matching complete graph without
-making the input-bearing build shared. This is planned/candidate, not production
-support or WP-400 admission. Retain the actual manual root and its committed
-account until terminal release, including while detached or pending rollback.
+making the input-bearing build shared. `index.toml` owns the bridge's admission
+and completion state; its admission establishes neither production support nor
+WP-400 admission. Retain the actual manual root and its committed account until
+terminal release, including while detached or pending rollback.
 
 Fallible Host call construction is a separate runtime prerequisite. The actual
 raw client and Core success/accepted-overrun wrappers still allocate infallibly;
