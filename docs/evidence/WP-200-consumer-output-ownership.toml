@@ -1,0 +1,192 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-200"
+tranche = "WP-200-CONSUMER-OUTPUT-OWNERSHIP"
+implementation_ref = "e41bf58982c8cf89669cacadb3f0f4b044cf3dfb"
+base_ref = "fa5cb445972a096fd018a5d472cccdb6867e6fa9"
+recorded_on = "2026-10-13"
+evidence_key = "consumer-output-ownership"
+status = "ready"
+execution_status = "passed"
+assessment = "Implementation and executable evidence candidate; independent acceptance is outstanding. No tranche completion, gate transition, milestone transition or WP-400 implementation is asserted."
+admission_review = "github-pr:156#issuecomment-6137329268"
+requirement_ids = [
+    "PLAN-SET-001", "PLAN-COST-003", "PLAN-ARTIFACT-001", "ADMIT-TXN-001",
+    "ADMIT-MEM-001", "CONSTRAINED-OWN-001", "CONSTRAINED-WORK-001",
+]
+compilation_cells = ["std", "no-default", "async-no-std"]
+production_paths = [
+    "planning/src/consumer_property_read.rs",
+    "planning/src/lib.rs",
+]
+test_paths = [
+    "tools/architecture-fixtures/consumer-runtime-entry/tests/production.rs",
+    "tools/architecture-fixtures/consumer-runtime-entry/README.md",
+]
+scope = "A std-only consuming ownership bridge for one complete Consumer Property Read draft and matching physical manual cleanup root, or its source-free variable rollback graph. The bridge moves the original backing/accounting without allocation, artifact copies, replacement selection/reclaim algorithms or publication authority."
+implementation_choice = "Consume the two local Root references into one ManuallyDrop<Box<Node<A>>> over the original globally allocated block. The ordinary Box structurally derives Send only when the complete Node<A> is Send; Cell/UnsafeCell keep it non-Sync. Reattachment leaks that Box back into exactly two local Root owners and resumes the existing selector, abandonment and rollback implementations. No unsafe auto-trait implementation or shared synchronization is introduced."
+predecessor_impact = "The completed Consumer aggregate and Consumer-only registration behavior is unchanged. Existing public static/Host aggregate execution, allocation-failure, portable and ARM evidence was re-executed. No prior evidence, gate state, roadmap state or resource limit is changed."
+
+acceptance_requirements = [
+    "A fresh independent context reconstructs the admitted ownership/resource contract, exact PR base/head and unsafe allocation round trip; it must challenge whether structural auto traits and two-reference validation justify every transfer.",
+    "Reproduce the real public Host output transfer and sealed call, repeated round trip, partially paid rollback transfer, wrong/equal/vacant/occupied/fixed root failures, compile contracts, original-node release and account ordering.",
+    "Read the passing required lightweight GitHub validation for the exact final PR head. Local execution and this implementation-context record do not supply independent acceptance.",
+    "Only a separate authorized acceptance transition may mark this evidence passed or the tranche complete. Gate/milestone changes and WP-400 implementation remain separate work.",
+]
+excluded_claims = [
+    "Tranche completion, Consumer architecture-gate acceptance, milestone closure or WP-400 implementation/admission",
+    "Published state, parent/global capacity provenance, runtime generation records, executor fallback, shutdown recovery or automatic Drop cleanup",
+    "Thread-safe build/TD/compiler progress, Sync output, arbitrary non-Send artifact transfer, callback support or a shared carrier",
+    "New protocol production evidence, bare-device runtime behavior, allocator metadata/fragmentation bounds or whole-process zero retention",
+]
+
+[[obligation]]
+id = 1
+name = "Unique structural transfer and exact reattachment"
+evidence = [
+    "ConsumerPropertyReadOwnedOutput and ConsumerPropertyReadOwnedRollback are public std-only, private-field, non-Clone owners. No unsafe Send/Sync implementation exists. Their ManuallyDrop<Box<Node<A>>> is structurally Send only when A and the complete retained graph are Send; Node's Cell/UnsafeCell representation supplies no Sync capability.",
+    "try_from_local checks that fixed cleanup is absent, the slot anchor and state-selected lease have the same physical pointer, the phase is exactly Draft or Rollback, and the node has exactly two references. Public reservation tuples, generation, ceilings and footprint are never treated as authority.",
+    "After all fallible validation and one PlanningItems debit, the two consumed Root destructors are suppressed and Box::from_raw assumes unique ownership of the original alloc(Layout::new::<Node<A>>()) block. Data remains ManuallyDrop. into_local uses Box::leak without allocation, restores reference count two and constructs one lease plus its original slot metadata before exposing a loan.",
+    "Rustdoc compile-fail contracts reject cloning, private-field construction, Sync use and Send transfer with Rc artifacts. Existing compile contracts continue to reject moving or sharing Draft, CleanupSlot and Rollback, including Arc/Mutex wrappers.",
+]
+
+[[obligation]]
+id = 2
+name = "Completed public output crosses a thread and executes"
+evidence = [
+    "The public test constructs an actual paid four-property/three-coordinate aggregate through the completed Host Consumer-only registration, destroys the TD, records full registration/generation identity, footprint, reservation, artifact reference and concrete artifact address, then calls ConsumerPropertyReadOwnedOutput::try_from_local.",
+    "The owner moves to another std thread, reattaches allocation-free, preserves every recorded value and runs the original public selector. The selected Host artifact keeps the same address and drives OutboundRequest::property_read through HostConsumerBindingRegistration::start_consumer_property_read and the sealed result path; the returned payload is the original resolved target.",
+    "The receiving thread consumes the same local pair into another owned output using fresh one-unit credit and returns it across the thread boundary. The origin reattaches it with no second charge. Both conversions leave all non-Planning work classes untouched; into_local accepts no budget.",
+]
+
+[[obligation]]
+id = 3
+name = "Partially paid rollback crosses a thread"
+evidence = [
+    "After the repeated output round trip, the original draft becomes the original variable rollback. One CodecInputBytes unit is paid against the final five-byte scope without releasing an object. First cause and live/peak/largest ledger observations are captured before transfer.",
+    "ConsumerPropertyReadOwnedRollback moves the complete rollback/root graph to another thread. Reattachment preserves first cause, all three ledger observations and reservation metadata. An exact four-byte budget then releases that five-byte scope; this executable boundary fails if the prior paid byte were reset or copied into a new reclaimer.",
+    "Dropping the reattached rollback returns its lease to the same root; take resumes the existing Rollback::step algorithm. Every child and the original node are explicitly drained on the receiving thread before the separately retained original cleanup account is released on the origin thread.",
+]
+
+[[obligation]]
+id = 4
+name = "Failure ownership and fixed work"
+evidence = [
+    "Zero credit returns the original draft/root or rollback/root with fixed Backpressure and no changed work counter. Exact credit consumes one PlanningItems unit only. Every repeated detach requires fresh caller credit; reattachment consumes none.",
+    "Two independent paid graphs have equal public reservation tuples. Cross-pairing their owners returns Validation, both original graphs, unchanged identity/footprint/artifact address/account charges and the unconsumed work unit. Vacant and fixed-occupied roots reject identically before work.",
+    "A pre-allocation fixed rollback is returned unchanged with UnsupportedOperation and uses its existing local fixed cleanup path. Draft abandonment and rollback abandonment return the variable lease to the original slot, which remains the sole manual cleanup root.",
+    "The downstream binding start counters remain zero across every conversion rejection. Source inspection and exact allocator snapshots show no selector/compiler/cleanup callback, variable traversal or semantic progress in either conversion method.",
+]
+
+[[obligation]]
+id = 5
+name = "No allocation, copy, forged account or premature release"
+evidence = [
+    "The fixture snapshots allocator request/deallocation counts, live/peak/largest bytes and every tracked pointer/Layout around each successful and failed conversion. All snapshots are byte-for-byte unchanged. The concrete artifact address and original node identity survive both completed-output round trips and rollback transfer.",
+    "The Host aggregate retains the predecessor's 34 real output allocation requests. Final explicit cleanup releases all 34 tracked requests, reports zero tracked live bytes and deallocates the first/original Node exactly once. Valgrind finds no invalid access and no definite or indirect leak.",
+    "The original committed cleanup ResourceAccount is a separate object: its charge is unchanged while the graph crosses either thread and while children drain. It is released only after the receiving thread has refreshed/destroyed the terminal slot and reported zero output backing.",
+    "No resource kind, WorkClass, parent permit, dependency or allocator path is added. Public owner/return/local-pair Layouts and conservative overlap remain below the existing 2160-byte Host cleanup capacity; no layout sum is presented as an allocator request.",
+]
+
+[[obligation]]
+id = 6
+name = "Existing algorithms, features and regressions"
+evidence = [
+    "Planning build, selection, artifact, allocation, footprint, ledger and Rollback::step bodies are unchanged. The bridge stores the original Node plus existing slot owner/generation/bytes only; it contains no selector, copier, callback, cleanup cursor or resource account.",
+    "The runtime-entry std fixture passes 24 integration/unit cases plus seven compile contracts, including static and Host aggregate execution, all materialization/Host-slot allocation failures, complete registration failures and the historical independent construction discriminators. Its no-default and async-no-std cells each pass ten integration/unit cases plus five compile contracts.",
+    "The actual runtime-entry normal library compiles for thumbv7em-none-eabihf in no-default and async-no-std cells. Those cells do not expose the std bridge and remain compile evidence only.",
+    "Rust 1.95.0 locked/offline workspace tests, active authority/API/DAG/ADR/resource/performance checks, formatting and diff hygiene pass. No gate manifest, tranche status, PLAN status or WP-400 source is modified.",
+]
+
+[measurements]
+toolchain = "rustc 1.95.0 (59807616e 2026-04-14)"
+target = "x86_64-unknown-linux-gnu"
+environment = "CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0; shared target directories are optional."
+layout_format = "Every pair is [size, alignment], measured with Layout::new over the public production types. Values are native observations, not portable constants."
+completed_local_pair_layout = [616, 8]
+rollback_local_pair_layout = [1192, 8]
+owned_output_layout = [24, 8]
+owned_rollback_layout = [24, 8]
+output_conversion_result_layout = [848, 8]
+rollback_conversion_result_layout = [1424, 8]
+maximum_inline_or_owner_overlap = 1424
+existing_host_cleanup_capacity = 2160
+planning_items_per_detach_reattach_pair = 1
+conversion_allocator_requests = 0
+conversion_deallocations = 0
+conversion_variable_releases = 0
+host_output_allocation_requests = 34
+original_node_releases = 1
+terminal_output_live_bytes = 0
+partial_scope_bytes = 5
+paid_before_rollback_transfer = 1
+paid_after_rollback_transfer = 4
+accounting_boundary = "Owner and Result Layouts are inline transport observations. maximum_inline_or_owner_overlap is the maximum of each Result Layout and each local-pair-plus-owned-owner Layout. The existing cleanup capacity remains a committed logical reservation, not one contiguous allocation. Output backing and the coordinator-owned cleanup account retain their existing separate ledgers."
+
+[memory_check]
+tool = "Valgrind 3.27.1 Memcheck"
+public_bridge_tests_passed = 2
+errors = 0
+definitely_lost_bytes = 0
+indirectly_lost_bytes = 0
+possibly_lost_bytes = 48
+still_reachable_bytes = 544
+total_allocations = 1509
+total_frees = 1507
+residual_attribution = "The full stacks attribute the 48-byte possible loss to std::thread::current::init_current through libtest's mpsc context and the 544 reachable bytes to std's stack-overflow thread-info initialization. Neither stack traverses the ownership bridge or retained Planning output."
+reproduction = "Build the std production integration executable with cargo +1.95.0 test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test production --no-run, then run Valgrind with --leak-check=full --show-leak-kinds=all --errors-for-leak-kinds=definite,indirect --error-exitcode=97 <executable> public_ --test-threads=1 --nocapture."
+
+[[verification]]
+category = "registered"
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --workspace --locked --offline"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+category = "registered"
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+category = "focused-public-api"
+command = "cargo +1.95.0 test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test production public_ -- --nocapture"
+status = "passed"
+
+[[verification]]
+category = "memory"
+command = "valgrind --leak-check=full --show-leak-kinds=all --errors-for-leak-kinds=definite,indirect --error-exitcode=97 <production-test-executable> public_ --test-threads=1 --nocapture"
+status = "passed"
+
+[[verification]]
+category = "format"
+command = "rustfmt +1.95.0 --edition 2024 --check planning/src/consumer_property_read.rs planning/src/lib.rs tools/architecture-fixtures/consumer-runtime-entry/tests/production.rs"
+status = "passed"
+
+[[verification]]
+category = "diff"
+command = "git diff --check"
+status = "passed"
