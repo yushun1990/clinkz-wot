@@ -179,6 +179,7 @@ fn request(plan_slot: u32) -> OutboundRequest {
 #[derive(Clone, Copy, Debug)]
 enum OutputKind {
     Valid,
+    NativeStatus(u16),
     BindingId,
     BindingGeneration,
     PlanId,
@@ -206,6 +207,10 @@ fn output_for(request: &OutboundRequest, kind: OutputKind) -> InteractionOutput 
     } else {
         request.plan_id()
     };
+    let native_status = match kind {
+        OutputKind::NativeStatus(code) => code,
+        _ => 200,
+    };
     let response = if matches!(kind, OutputKind::ResponseSelection) {
         let limits = GatewayDefaultV1::LIMITS
             .clone()
@@ -221,7 +226,12 @@ fn output_for(request: &OutboundRequest, kind: OutputKind) -> InteractionOutput 
         )
         .unwrap()
     } else {
-        BindingResponseMetadata::primary(binding_id, binding_generation, selected_plan, 200)
+        BindingResponseMetadata::primary(
+            binding_id,
+            binding_generation,
+            selected_plan,
+            native_status,
+        )
     };
     let mut metadata = InteractionOutputMetadata::default();
     if !matches!(kind, OutputKind::MissingMetadata) {
@@ -1973,4 +1983,621 @@ fn target_host_path_succeeds_with_every_legacy_client_entry_poisoned() {
         .start_consumer_property_read(request(73), &artifact)
         .unwrap();
     assert_eq!(LEGACY_CALLS.load(Ordering::SeqCst), 0);
+}
+
+// These clients implement no server trait. Every operation below enters through
+// the new complete production owner, never the raw authoring SPI.
+mod consumer_only {
+    use super::*;
+    #[cfg(feature = "std")]
+    use clinkz_wot_core::{HostConsumerBindingRegistration, HostConsumerBindingRegistrationInput};
+    use clinkz_wot_core::{
+        StaticConsumerBindingRegistration, StaticConsumerBindingRegistrationInput,
+    };
+
+    fn only_resources(
+        admitted: BindingLifetimeFootprint,
+        transient: BindingTransientFootprint,
+    ) -> BindingResourceDeclarations {
+        BindingResourceDeclarations::new(BindingLifetimeFootprint::new(0, 0), admitted)
+            .with_state_footprints(
+                BindingLifetimeFootprint::new(0, 0),
+                BindingLifetimeFootprint::new(0, 0),
+                BindingLifetimeFootprint::new(0, 0),
+            )
+            .with_transient(transient)
+    }
+    fn static_registration(
+        client: StaticClient,
+    ) -> StaticConsumerBindingRegistration<StaticClient> {
+        StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+            registration_identity(COMPATIBILITY),
+            BindingExecutionSupport::application_static(),
+            StaticBindingCompilerRegistration::new(TestCompiler),
+            client,
+            only_resources(
+                BindingLifetimeFootprint::new(8, 2048),
+                BindingTransientFootprint::new(0),
+            ),
+            BindingStatusPolicy::new(1, 64),
+        ))
+        .unwrap_or_else(|_| panic!("Consumer-only static"))
+    }
+    #[cfg(feature = "std")]
+    fn host_registration_with(
+        mode: HostMode,
+        output: OutputKind,
+        bytes: u64,
+    ) -> (
+        HostConsumerBindingRegistration,
+        Arc<AtomicUsize>,
+        Arc<AtomicUsize>,
+    ) {
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let effects = Arc::new(AtomicUsize::new(0));
+        let client = host_client(
+            mode,
+            output,
+            COMPATIBILITY,
+            accepted.clone(),
+            effects.clone(),
+        );
+        let owner =
+            HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+                registration_identity(COMPATIBILITY),
+                BindingExecutionSupport::host_erased(),
+                HostBindingCompilerRegistration::new(TestCompiler),
+                Box::new(client),
+                only_resources(
+                    BindingLifetimeFootprint::new(8, bytes),
+                    BindingTransientFootprint::new(0),
+                ),
+                BindingStatusPolicy::new(1, 64),
+            ))
+            .unwrap_or_else(|_| panic!("Consumer-only Host"));
+        (owner, accepted, effects)
+    }
+
+    #[test]
+    fn complete_static_slot_boundaries_and_atomic_rejection_preserve_client() {
+        let bytes = 64 + std::mem::size_of::<StaticConsumerPropertyReadSlot<StaticState>>() as u64;
+        for (items, ceiling, transient, valid) in [
+            (2, bytes - 1, 7, false),
+            (2, bytes, 7, true),
+            (2, bytes + 1, 7, true),
+            (1, bytes, 7, false),
+            (3, bytes, 7, true),
+            (2, bytes, 6, false),
+        ] {
+            let mut client = StaticClient::new(StaticMode::Pending)
+                .with_transient(BindingTransientFootprint::new(7));
+            client.calls = 71;
+            let input = StaticConsumerBindingRegistrationInput::new(
+                registration_identity(COMPATIBILITY),
+                BindingExecutionSupport::application_static(),
+                StaticBindingCompilerRegistration::new(TestCompiler),
+                client,
+                only_resources(
+                    BindingLifetimeFootprint::new(items, ceiling),
+                    BindingTransientFootprint::new(transient),
+                ),
+                BindingStatusPolicy::new(1, 64),
+            );
+            let returned = match StaticConsumerBindingRegistration::new(input) {
+                Ok(owner) => {
+                    assert!(valid);
+                    owner.into_input()
+                }
+                Err(e) => {
+                    assert!(!valid);
+                    e.into_input()
+                }
+            };
+            assert_eq!(returned.identity(), registration_identity(COMPATIBILITY));
+            assert_eq!(returned.client().calls, 71);
+        }
+        for (extra, execution, declared) in [
+            (
+                BindingLifetimeFootprint::new(u32::MAX, 0),
+                BindingExecutionSupport::application_static(),
+                0,
+            ),
+            (
+                BindingLifetimeFootprint::new(0, u64::MAX),
+                BindingExecutionSupport::application_static(),
+                0,
+            ),
+            (
+                BindingLifetimeFootprint::new(1, 64),
+                BindingExecutionSupport::host_erased(),
+                0,
+            ),
+            (
+                BindingLifetimeFootprint::new(1, 64),
+                BindingExecutionSupport::application_static(),
+                2049,
+            ),
+        ] {
+            let mut client = StaticClient::new(StaticMode::Pending);
+            client.lifetime = extra;
+            client.calls = 73;
+            let r = only_resources(
+                BindingLifetimeFootprint::new(8, 2048),
+                BindingTransientFootprint::new(0),
+            );
+            let r = if declared != 0 {
+                BindingResourceDeclarations::new(
+                    BindingLifetimeFootprint::new(1, declared),
+                    r.admitted(),
+                )
+            } else {
+                r
+            };
+            let input = StaticConsumerBindingRegistrationInput::new(
+                registration_identity(COMPATIBILITY),
+                execution,
+                StaticBindingCompilerRegistration::new(TestCompiler),
+                client,
+                r,
+                BindingStatusPolicy::new(1, 64),
+            );
+            let rejected = StaticConsumerBindingRegistration::new(input)
+                .err()
+                .expect("reject before execution")
+                .into_input();
+            assert_eq!(rejected.client().calls, 73);
+        }
+        for compiler_mismatch in [false, true] {
+            let mut client = StaticClient::new(StaticMode::Pending);
+            client.calls = 79;
+            if !compiler_mismatch {
+                client.compatibility = BindingArtifactCompatibility::new([99; 16]);
+            }
+            let identity = if compiler_mismatch {
+                registration_identity(BindingArtifactCompatibility::new([99; 16]))
+            } else {
+                registration_identity(COMPATIBILITY)
+            };
+            let input = StaticConsumerBindingRegistrationInput::new(
+                identity,
+                BindingExecutionSupport::application_static(),
+                StaticBindingCompilerRegistration::new(TestCompiler),
+                client,
+                resources(),
+                BindingStatusPolicy::new(1, 64),
+            );
+            let rejected = StaticConsumerBindingRegistration::new(input)
+                .err()
+                .expect("compatibility")
+                .into_input();
+            assert_eq!(rejected.identity(), identity);
+            assert_eq!(rejected.client().calls, 79);
+        }
+    }
+
+    #[test]
+    fn new_static_owner_seals_every_normal_and_late_shape_and_reuses_only_after_ack() {
+        let invalid = [
+            OutputKind::BindingId,
+            OutputKind::BindingGeneration,
+            OutputKind::PlanId,
+            OutputKind::ResponseSelection,
+            OutputKind::MissingMetadata,
+            OutputKind::MissingPayload,
+            OutputKind::Status,
+            OutputKind::PayloadRole,
+            OutputKind::ActionReference,
+        ];
+        for kind in invalid
+            .into_iter()
+            .chain([OutputKind::Valid, OutputKind::NativeStatus(599)])
+        {
+            for mode in [
+                StaticMode::Synchronous,
+                StaticMode::Pending,
+                StaticMode::LateOnCancel,
+            ] {
+                let mut owner = static_registration(StaticClient::new(mode).with_output(kind));
+                assert!(owner.capabilities().supports_consumer_property_read());
+                assert!(!owner.capabilities().supports_producer_property_read());
+                assert_eq!(owner.resources().route_state().retained_bytes(), 0);
+                let mut slot = StaticConsumerPropertyReadSlot::new();
+                let artifact = static_artifact(64);
+                let started = owner
+                    .start_consumer_property_read(
+                        request(64),
+                        &artifact,
+                        &mut slot,
+                        &mut binding_budget(1),
+                    )
+                    .unwrap();
+                let result = match started {
+                    StartStatus::Ready(r) => r,
+                    StartStatus::Pending => {
+                        assert!(owner.acknowledge_consumer_property_read(&mut slot).is_err());
+                        assert!(
+                            owner
+                                .start_consumer_property_read(
+                                    request(64),
+                                    &artifact,
+                                    &mut slot,
+                                    &mut binding_budget(1)
+                                )
+                                .is_err()
+                        );
+                        if matches!(mode, StaticMode::LateOnCancel) {
+                            assert!(matches!(
+                                owner.start_cancel_consumer_property_read(
+                                    &mut context(),
+                                    cleanup_phase(),
+                                    &mut slot,
+                                    &mut binding_budget(0)
+                                ),
+                                Ok(StartStatus::Pending)
+                            ));
+                            // Once cancelling, result polling cannot consume the late output.
+                            assert!(matches!(
+                                owner.poll_consumer_property_read(
+                                    &mut context(),
+                                    &mut slot,
+                                    &mut binding_budget(1)
+                                ),
+                                Poll::Ready(Err(_))
+                            ));
+                            // This client's delayed cancellation returns Complete. Exercise
+                            // late Returned through its synchronous cancellation in a fresh call below.
+                            assert!(matches!(
+                                owner.poll_cancel_consumer_property_read(
+                                    &mut context(),
+                                    &mut slot,
+                                    &mut binding_budget(1)
+                                ),
+                                Poll::Ready(Ok(BindingCallSettlement::Cancelled { .. }))
+                            ));
+                            owner.acknowledge_consumer_property_read(&mut slot).unwrap();
+                            owner
+                                .start_consumer_property_read(
+                                    request(64),
+                                    &artifact,
+                                    &mut slot,
+                                    &mut binding_budget(1),
+                                )
+                                .unwrap();
+                            match owner
+                                .start_cancel_consumer_property_read(
+                                    &mut context(),
+                                    cleanup_phase(),
+                                    &mut slot,
+                                    &mut binding_budget(1),
+                                )
+                                .unwrap()
+                            {
+                                StartStatus::Ready(BindingCallSettlement::Returned(r)) => r,
+                                _ => panic!("late result stays Returned"),
+                            }
+                        } else {
+                            assert!(matches!(
+                                owner.poll_consumer_property_read(
+                                    &mut context(),
+                                    &mut slot,
+                                    &mut binding_budget(0)
+                                ),
+                                Poll::Pending
+                            ));
+                            match owner.poll_consumer_property_read(
+                                &mut context(),
+                                &mut slot,
+                                &mut binding_budget(1),
+                            ) {
+                                Poll::Ready(r) => r,
+                                _ => panic!("result"),
+                            }
+                        }
+                    }
+                };
+                if matches!(kind, OutputKind::Valid | OutputKind::NativeStatus(_)) {
+                    let out = result.unwrap();
+                    assert_eq!(
+                        out.metadata().binding_response().unwrap().status_code(),
+                        match kind {
+                            OutputKind::NativeStatus(code) => code,
+                            _ => 200,
+                        }
+                    );
+                } else {
+                    assert!(matches!(result, Err(CoreError::Validation(_))));
+                }
+                owner.acknowledge_consumer_property_read(&mut slot).unwrap();
+                assert!(slot.is_vacant());
+                assert!(owner.acknowledge_consumer_property_read(&mut slot).is_err());
+                // A stale generation is rejected before the binding callback.
+                let old = artifact_identity(64);
+                let stale = BindingArtifactIdentity::new(
+                    old.plan_set_generation(),
+                    old.plan_id(),
+                    old.binding_id(),
+                    old.binding_generation().checked_next().unwrap(),
+                    old.configuration(),
+                    old.compatibility(),
+                    BindingArtifactRole::ConsumerCall,
+                );
+                let stale_request = OutboundRequest::property_read(
+                    BindingArtifactRef::new(stale, SlotIndex::new(53)),
+                    BTreeMap::new(),
+                    None,
+                )
+                .unwrap();
+                let returned = owner
+                    .start_consumer_property_read(
+                        stale_request,
+                        &artifact,
+                        &mut slot,
+                        &mut binding_budget(1),
+                    )
+                    .unwrap_err();
+                assert_eq!(
+                    returned.input().binding_generation(),
+                    stale.binding_generation()
+                );
+                assert!(slot.is_vacant());
+            }
+        }
+    }
+
+    #[test]
+    fn new_static_failures_and_fabricated_transfer_keep_terminal_ownership() {
+        for mode in [StaticMode::SynchronousFailure, StaticMode::PendingFailure] {
+            let mut owner = static_registration(StaticClient::new(mode));
+            let mut slot = StaticConsumerPropertyReadSlot::new();
+            let started = owner
+                .start_consumer_property_read(
+                    request(64),
+                    &static_artifact(64),
+                    &mut slot,
+                    &mut binding_budget(1),
+                )
+                .unwrap();
+            let result = match started {
+                StartStatus::Ready(r) => r,
+                StartStatus::Pending => match owner.poll_consumer_property_read(
+                    &mut context(),
+                    &mut slot,
+                    &mut binding_budget(1),
+                ) {
+                    Poll::Ready(r) => r,
+                    _ => panic!(),
+                },
+            };
+            assert!(matches!(result, Err(CoreError::Binding(_))));
+            owner.acknowledge_consumer_property_read(&mut slot).unwrap();
+        }
+        let mut owner = static_registration(StaticClient::new(StaticMode::FabricatedTransfer));
+        let mut slot = StaticConsumerPropertyReadSlot::new();
+        owner
+            .start_consumer_property_read(
+                request(64),
+                &static_artifact(64),
+                &mut slot,
+                &mut binding_budget(1),
+            )
+            .unwrap();
+        assert!(
+            owner
+                .start_cancel_consumer_property_read(
+                    &mut context(),
+                    cleanup_phase_with_transfer_owner(),
+                    &mut slot,
+                    &mut binding_budget(1)
+                )
+                .is_err()
+        );
+        assert!(
+            owner
+                .start_cancel_consumer_property_read(
+                    &mut context(),
+                    cleanup_phase(),
+                    &mut slot,
+                    &mut binding_budget(1)
+                )
+                .is_err()
+        );
+        assert!(owner.acknowledge_consumer_property_read(&mut slot).is_err());
+        assert!(matches!(
+            owner.poll_cancel_consumer_property_read(
+                &mut context(),
+                &mut slot,
+                &mut binding_budget(1)
+            ),
+            Poll::Ready(Ok(_))
+        ));
+        owner.acknowledge_consumer_property_read(&mut slot).unwrap();
+        assert!(slot.is_vacant());
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn new_host_owner_seals_every_normal_and_late_shape_and_retains_overruns() {
+        let invalid = [
+            OutputKind::BindingId,
+            OutputKind::BindingGeneration,
+            OutputKind::PlanId,
+            OutputKind::ResponseSelection,
+            OutputKind::MissingMetadata,
+            OutputKind::MissingPayload,
+            OutputKind::Status,
+            OutputKind::PayloadRole,
+            OutputKind::ActionReference,
+        ];
+        let artifact = host_artifact(72);
+        for kind in invalid
+            .into_iter()
+            .chain([OutputKind::Valid, OutputKind::NativeStatus(599)])
+        {
+            for mode in [HostMode::Result, HostMode::LateOnCancel] {
+                let (owner, accepted, effects) = host_registration_with(mode, kind, 2048);
+                assert!(!owner.capabilities().supports_producer_property_read());
+                assert_eq!(accepted.load(Ordering::SeqCst), 0);
+                let mut call = owner
+                    .start_consumer_property_read(request(72), &artifact)
+                    .unwrap();
+                assert_eq!(accepted.load(Ordering::SeqCst), 1);
+                let fp = call.as_pin_mut().lifetime_footprint();
+                assert_eq!(fp.retained_items(), 2);
+                assert!(fp.fits_within(owner.resources().admitted()));
+                assert_eq!(effects.load(Ordering::SeqCst), 0);
+                let result = if matches!(mode, HostMode::LateOnCancel) {
+                    match call
+                        .as_pin_mut()
+                        .start_cancel(&mut context(), cleanup_phase(), &mut binding_budget(1))
+                        .unwrap()
+                    {
+                        StartStatus::Ready(BindingCallSettlement::Returned(r)) => r,
+                        _ => panic!("late result stays Returned"),
+                    }
+                } else {
+                    assert!(matches!(
+                        call.as_pin_mut()
+                            .poll_result(&mut context(), &mut binding_budget(0)),
+                        Poll::Pending
+                    ));
+                    match call
+                        .as_pin_mut()
+                        .poll_result(&mut context(), &mut binding_budget(1))
+                    {
+                        Poll::Ready(r) => r,
+                        _ => panic!(),
+                    }
+                };
+                if matches!(kind, OutputKind::Valid | OutputKind::NativeStatus(_)) {
+                    assert!(result.is_ok());
+                } else {
+                    assert!(matches!(result, Err(CoreError::Validation(_))));
+                }
+                assert_eq!(effects.load(Ordering::SeqCst), 1);
+            }
+        }
+        let (owner, accepted, effects) =
+            host_registration_with(HostMode::Result, OutputKind::Valid, 1);
+        let mut call = owner
+            .start_consumer_property_read(request(72), &artifact)
+            .unwrap();
+        assert_eq!(accepted.load(Ordering::SeqCst), 1);
+        assert!(call.as_pin_mut().lifetime_footprint().retained_bytes() > 1);
+        assert!(matches!(
+            call.as_pin_mut()
+                .poll_result(&mut context(), &mut binding_budget(1)),
+            Poll::Ready(Err(CoreError::Validation(_)))
+        ));
+        assert_eq!(effects.load(Ordering::SeqCst), 0);
+    }
+    #[cfg(feature = "std")]
+    #[test]
+    fn new_host_transfer_moves_the_complete_decorator_and_failure_is_opaque() {
+        let artifact = host_artifact(72);
+        let (owner, _, _) = host_registration_with(HostMode::Failure, OutputKind::Valid, 2048);
+        let mut call = owner
+            .start_consumer_property_read(request(72), &artifact)
+            .unwrap();
+        assert!(matches!(
+            call.as_pin_mut()
+                .poll_result(&mut context(), &mut binding_budget(1)),
+            Poll::Ready(Err(CoreError::Binding(_)))
+        ));
+        let (owner, _, _) = host_registration_with(HostMode::Transfer, OutputKind::Valid, 2048);
+        let mut call = owner
+            .start_consumer_property_read(request(72), &artifact)
+            .unwrap();
+        let footprint = call.as_pin_mut().lifetime_footprint();
+        let StartStatus::Ready(BindingCallSettlement::Cancelled {
+            disposition: BindingCancellationDisposition::TransferRequired(transfer),
+            ..
+        }) = call
+            .as_pin_mut()
+            .start_cancel(
+                &mut context(),
+                cleanup_phase_with_transfer_owner(),
+                &mut binding_budget(1),
+            )
+            .unwrap()
+        else {
+            panic!("transfer")
+        };
+        let mut target = AcceptConsumerTransfer { accepted: None };
+        assert!(matches!(
+            target.try_accept(CleanupTransferEnvelope::new(transfer, call)),
+            CleanupTransferAcceptance::Accepted(_)
+        ));
+        let mut retained = target.accepted.take().unwrap().into_parts().1;
+        assert_eq!(retained.as_pin_mut().lifetime_footprint(), footprint);
+        assert!(matches!(
+            retained
+                .as_pin_mut()
+                .poll_cancel(&mut context(), &mut binding_budget(1)),
+            Poll::Ready(Ok(BindingCallSettlement::Cancelled { .. }))
+        ));
+    }
+    #[cfg(all(feature = "std", feature = "async"))]
+    #[test]
+    fn consumer_only_execution_ignores_poisoned_legacy_entries() {
+        let _poison = legacy_poison::PoisonLegacyClient;
+        let (owner, _, _) = host_registration_with(HostMode::Result, OutputKind::Valid, 2048);
+        let mut call = owner
+            .start_consumer_property_read(request(72), &host_artifact(72))
+            .unwrap();
+        assert!(matches!(
+            call.as_pin_mut()
+                .poll_result(&mut context(), &mut binding_budget(1)),
+            Poll::Ready(Ok(_))
+        ));
+        assert_eq!(legacy_poison::LEGACY_CALLS.load(Ordering::SeqCst), 0);
+    }
+    #[cfg(feature = "std")]
+    #[test]
+    fn host_input_rejection_returns_the_exact_boxed_client_and_full_identity() {
+        for case in 0..4 {
+            let accepted = Arc::new(AtomicUsize::new(0));
+            let effects = Arc::new(AtomicUsize::new(0));
+            let other = BindingArtifactCompatibility::new([99; 16]);
+            let client: Box<dyn TargetClientBinding> = Box::new(host_client(
+                HostMode::Result,
+                OutputKind::Valid,
+                if case == 0 { other } else { COMPATIBILITY },
+                accepted.clone(),
+                effects.clone(),
+            ));
+            let pointer = &*client as *const dyn TargetClientBinding as *const ();
+            let identity = registration_identity(if case == 1 { other } else { COMPATIBILITY });
+            let resources = if case == 3 {
+                BindingResourceDeclarations::new(
+                    BindingLifetimeFootprint::new(9, 4097),
+                    BindingLifetimeFootprint::new(8, 4096),
+                )
+            } else {
+                resources()
+            };
+            let input = HostConsumerBindingRegistrationInput::new(
+                identity,
+                if case == 2 {
+                    BindingExecutionSupport::application_static()
+                } else {
+                    BindingExecutionSupport::host_erased()
+                },
+                HostBindingCompilerRegistration::new(TestCompiler),
+                client,
+                resources,
+                BindingStatusPolicy::new(1, 64),
+            );
+            let returned = HostConsumerBindingRegistration::new(input)
+                .err()
+                .expect("reject before protocol work")
+                .into_input();
+            assert_eq!(returned.identity(), identity);
+            assert_eq!(
+                returned.client() as *const dyn TargetClientBinding as *const (),
+                pointer
+            );
+            assert_eq!(accepted.load(Ordering::SeqCst), 0);
+            assert_eq!(effects.load(Ordering::SeqCst), 0);
+        }
+    }
 }

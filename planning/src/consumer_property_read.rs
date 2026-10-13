@@ -143,6 +143,78 @@ impl ConsumerPropertyReadRegistration for ConsumerCompilerRegistration<HostBindi
     }
 }
 
+impl<C: PollClientBinding> private::Sealed
+    for ConsumerCompilerRegistration<StaticConsumerBindingRegistration<C>>
+where
+    C::Compiler: 'static,
+    <C::Compiler as BindingCompilerExtension>::Artifact: 'static,
+{
+}
+impl<C: PollClientBinding> ConsumerPropertyReadRegistration
+    for ConsumerCompilerRegistration<StaticConsumerBindingRegistration<C>>
+where
+    C::Compiler: 'static,
+    <C::Compiler as BindingCompilerExtension>::Artifact: 'static,
+{
+    type Artifact = <C::Compiler as BindingCompilerExtension>::Artifact;
+    type Cursor = <C::Compiler as BindingCompilerExtension>::Cursor;
+    fn identity(&self) -> BindingRegistrationIdentity {
+        self.registration().identity()
+    }
+    fn support(&self) -> &ConsumerCompilerSupport {
+        self.support()
+    }
+    fn bounds(&self, i: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+        self.registration().compiler().compiler().bounds(i)
+    }
+    fn start(&self, i: &BindingCompilerInput<'_>) -> CoreResult<Self::Cursor> {
+        self.registration().compiler().compiler().start(i)
+    }
+    fn progress(
+        &self,
+        i: &BindingCompilerInput<'_>,
+        c: Self::Cursor,
+        b: &mut WorkBudget,
+    ) -> BindingCompilerStep<Self::Cursor, Self::Artifact> {
+        self.registration().compiler().compiler().step(i, c, b)
+    }
+    fn abort(&self, c: Self::Cursor) {
+        self.registration().compiler().compiler().abort(c)
+    }
+}
+#[cfg(feature = "std")]
+impl private::Sealed for ConsumerCompilerRegistration<HostConsumerBindingRegistration> {}
+#[cfg(feature = "std")]
+impl ConsumerPropertyReadRegistration
+    for ConsumerCompilerRegistration<HostConsumerBindingRegistration>
+{
+    type Artifact = HostBindingArtifact;
+    type Cursor = HostBindingCompilerCursor;
+    fn identity(&self) -> BindingRegistrationIdentity {
+        self.registration().identity()
+    }
+    fn support(&self) -> &ConsumerCompilerSupport {
+        self.support()
+    }
+    fn bounds(&self, i: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+        self.registration().compiler().bounds(i)
+    }
+    fn start(&self, i: &BindingCompilerInput<'_>) -> CoreResult<Self::Cursor> {
+        self.registration().compiler().start(i)
+    }
+    fn progress(
+        &self,
+        i: &BindingCompilerInput<'_>,
+        c: Self::Cursor,
+        b: &mut WorkBudget,
+    ) -> BindingCompilerStep<Self::Cursor, Self::Artifact> {
+        self.registration().compiler().step(i, c, b)
+    }
+    fn abort(&self, c: Self::Cursor) {
+        assert!(self.registration().compiler().abort(c).is_ok());
+    }
+}
+
 fn context() -> ErrorContext {
     ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
         .with_operation(Operation::ReadProperty)

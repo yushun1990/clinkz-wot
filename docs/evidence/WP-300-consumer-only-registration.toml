@@ -1,0 +1,363 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-300"
+tranche = "WP-300-CONSUMER-ONLY-REGISTRATION"
+implementation_ref = "acbb225047862dd20bf64d71fd326891c7e5cb31"
+base_ref = "866333830d35e366db01e2b0c20f24bef2b8ec96"
+recorded_on = "2026-10-12"
+evidence_key = "consumer-only-registration"
+status = "ready"
+execution_status = "passed"
+assessment = "Implementation and executable evidence candidate; independent acceptance is outstanding. No tranche completion, gate transition, milestone transition or WP-400 admission is asserted."
+admission_review = "github-pr:152#issuecomment-6120235799"
+requirement_ids = [
+    "BIND-REG-001", "BIND-STORAGE-001", "BIND-MEM-001", "BIND-DELIVERY-001",
+    "BIND-IO-001", "BIND-OUT-001", "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001",
+    "API-HOT-ID-001", "API-PAYLOAD-001", "PLAN-ARTIFACT-001", "PLAN-COST-003",
+]
+compilation_cells = ["std", "no-default", "async-no-std"]
+production_paths = ["core/src/binding.rs", "core/src/lib.rs", "planning/src/consumer_property_read.rs"]
+test_paths = [
+    "core/tests/consumer_property_read_binding.rs",
+    "core/tests/consumer_compiler_support.rs",
+    "tools/architecture-fixtures/consumer-runtime-entry/src/production.rs",
+    "tools/architecture-fixtures/consumer-runtime-entry/tests/production.rs",
+]
+scope = "One complete Consumer Property Read registration in application-static and public Host-erased representations, with no Producer component; Core-issued closed support and two sealed adapters into the existing unpublished Planning aggregate."
+implementation_choice = "Use the two admitted additive owners and extract private mediation/capture functions from the dual-role implementation. Changing the existing generic Producer bundle would expand its public contract; dummy servers preserve fictitious ownership; a role framework adds unnecessary variants. No new semantic validator, support issuer or runtime abstraction is introduced."
+producer_gate_impact = "Reaffirmed within the existing registered Property Read scope: all ten PROPERTY-READ-ARCHITECTURE test_commands passed, including real-target Zenoh static/Host protocol I/O. Static and Host mediator bodies retain the original semantics through private helper extraction, including cancellation branches and resource overrun ownership. The gate manifest and all gate statuses are unchanged; this conclusion remains subject to independent review."
+acceptance_requirements = [
+    "A fresh independent context reconstructs admission authority and the exact PR base/head, challenges additive public types and private sharing, and assesses real public production positives and failures rather than the old assembly models.",
+    "Reproduce Core constructor/capture/sealing cases, both supported null-allocation sites, original reservation history and retained-other-slot cleanup, source-free aggregate execution and explicitly driven original root/account cleanup.",
+    "Read passing required mainline/validation for the exact final PR head from GitHub. Local execution and this implementation-context evidence record do not supply independent acceptance.",
+    "Only a separate authorized acceptance transition may mark this evidence passed or the tranche complete. WP-400 admission, Consumer gate registration and every gate/milestone transition remain separate decisions.",
+]
+excluded_claims = [
+    "Broader WP-300 completion, WP-400 implementation/admission, Servient publication, installation, call leases or global/parent admission provenance",
+    "A transferable/shared Planning root, unsafe Send/Sync, generated images, Discovery, ObserveProperty, real Consumer protocol integration or a new Host runtime carrier",
+    "Recoverable Host invocation OOM or bounded arbitrary client callbacks: HostBindingCallBox::new and the existing decorated-call allocation remain infallible",
+    "Bare-device runtime parity, device fit, compiler-generated machine stack bounds, allocator metadata/fragmentation bounds or whole-process zero retention",
+]
+
+[[obligation]]
+id = 1
+name = "Actual client-only complete construction"
+evidence = [
+    "The normal-library downstream Client implements PollClientBinding and target Host binding::ClientBinding, with no server trait/component. Actual Core owners construct and capture support with zero starts and zero server/route/readiness/response/ingress owner. Static provisioning allocates nothing; Host startup allocates only the supported compiler adapter and actual client.",
+    "Input rejection returns immutable complete identity and the exact client. Host rejection compares the original boxed trait-object data address; static rejection preserves preexisting client state. Recovered owners destroy exactly one client. Compiler capture rejects without replacing compiler/configuration or invoking compiler callbacks.",
+    "The Core public Host allocation failure scenario retains the original child ledger's 7-byte reservation, peaks/largest history and a separately held compiler slot. Failed acquisition and rollback preserve that owner; explicit abort releases only the original slot once.",
+]
+
+[[obligation]]
+id = 2
+name = "Atomic declaration and compile-contract negatives"
+evidence = [
+    "Actual constructors reject unsupported selected cells, compiler/identity and client compatibility mismatch, declarations exceeding admitted ceilings, byte/item arithmetic overflow and transient overrun before request execution.",
+    "Complete static slot tests cover byte ceiling minus one/exact/plus one, item minus one/exact/plus one and transient minus one/exact. They count the complete Core slot plus binding-private extra storage once, with zero Producer state declarations.",
+    "New production compile-fail rustdoc cases reject installed raw client access and mutable compiler access for each owner. Existing seal/support forgery and consuming-capture compile contracts remain enforced. The normal-library fixture checks the Host adapter in std and the static adapter in every cell, including both ARM cells.",
+]
+
+[[obligation]]
+id = 3
+name = "Closed support and actual fallible backing"
+evidence = [
+    "Both new complete owners capture the actual ResolvedTargetCompiler/supported Host adapter for capacities 32 and 64 and preserve the full nondefault binding identity, generation, configuration, compatibility and diagnostic ordinal through concrete artifact construction and source/registration destruction.",
+    "Same-compatibility open impostors, wrong actual configuration and generic Host erasure of even the closed native compiler reject with unchanged owners. Queries do not invoke unsupported compiler callbacks or allocate during capture.",
+    "Through the new public complete owner, injected null allocation at supported Host adapter startup returns the original native compiler; injected null at the retained compiler slot returns Backpressure and preserves reservation history. Successful acquisition/abort, another retained slot, invalid native start and final adapter destruction pair exact physical pointers/Layouts and release once.",
+]
+
+[[obligation]]
+id = 4
+name = "Public aggregate, source termination and concrete execution"
+evidence = [
+    "tests/production.rs uses the real public TD admission and Planning build/preflight/admit/step APIs with both new checked owners. Four ordered properties retain three readable coordinates, original Form indices 1/2/1, UTF-8, relative/raw targets and two empty ranges.",
+    "After TD destruction the separate complete registration remains alive, lookup selects concrete static/public Host artifacts and only the new owner's start/poll/acknowledge methods execute requests. Returned payload bytes equal each selected resolved target; binding-native status 599 remains opaque provenance.",
+    "Actual final-coordinate target over-capacity and every materialization/Host compiler-slot allocation failure return a source-free rollback owner through the public API. The existing exact-production-source observer separately corroborates three bounds and zero compiler starts on the later bound failure for each new adapter. It supplements the real public positives/failures.",
+]
+
+[[obligation]]
+id = 5
+name = "Shared sealing, cancellation and no bypass"
+evidence = [
+    "New-owner Core execution matrices cover synchronous, pending, binding-failed and cancellation-late results. Every existing identity/shape negative is exercised in normal and late branches: binding id/generation, plan id, additional-response selection, missing metadata/payload, status, payload role and action reference.",
+    "Static Running/Cancelling/Terminal acknowledgement and reuse remain sealed. Pending acknowledgement, live reuse, wrong-branch polling, stale generation and fabricated/caller-provided static transfer authority reject; explicit cancellation settlement permits exactly the original terminal acknowledgement.",
+    "Host complete-owner methods use the original decorator, keep accepted resource overrun ownership, preserve opaque binding failure and native status, and transfer the complete raw call/seal/accounting owner for cleanup. The public aggregate tests count exactly three request destructions and one client destruction per representation.",
+    "The new Host entry runs with legacy supports/supports_with_thing/invoke/subscribe poisoned and records zero legacy calls. Both public aggregate selectors receive poisoned legacy payload/URI/timeout options without changing the selected artifact reference; source destruction excludes runtime TD rescanning.",
+]
+
+[[obligation]]
+id = 6
+name = "Disjoint measurements and explicit original-root cleanup"
+evidence = [
+    "The observer measures provisioning, aggregate output and each call in separate allocation intervals. It retains/restores the outstanding output trace while measuring calls and retains the original Host provisioning trace until actual adapter/client destruction. Observer arming does not create a product allocator or admission claim.",
+    "Static State is included once inside the complete slot; 128 binding-private payload bytes are a separate declaration. Host raw declaration includes the actual State allocation plus that payload allowance; the original decorator delta is added once. Checked registration Layout includes the unchecked owner and support once, without adding the owner twice.",
+    "The public tests explicitly drop each output, acknowledge each static slot or destroy each Host call, destroy the separate complete registration, and drive the draft's source-free rollback through the original retained cleanup root/account. Abandoned cleanup leases return to that same root and are driven again. The original committed charge stays live until terminal refresh, root destruction and explicit account release.",
+    "Every success/failure terminal path asserts zero tracked artifact/root bytes, zero call payload/decorator bytes, zero retained Host adapter/client backing, exactly-once client/request destruction and zero original cleanup-account charge. Inline owner Layouts are not treated as heap allocations or device RAM bounds.",
+]
+
+[[obligation]]
+id = 7
+name = "Features, dependencies and Producer reaffirmation"
+evidence = [
+    "Rust 1.95.0 locked/offline workspace validation passes 658 tests with 3 ignored. Core/Planning portable and async-no-std tests, all isolated Consumer compiler/aggregate/runtime-entry regressions and TD semantic join regressions pass.",
+    "The actual runtime-entry library compiles in both thumbv7em-none-eabihf cells and emits target-specific Layout data. Isolated normal-dependency check/tree commands pass in std/no-default/async, without workspace feature unification establishing the capability.",
+    "All ten registered Producer gate commands, active authority/API/DAG/ADR/resource/performance checks and formatting/diff checks pass. No accepted claim was falsified; the registry, roadmap, state/resource contracts and gate statuses are unchanged.",
+]
+
+[measurements]
+toolchain = "rustc 1.95.0 (59807616e 2026-04-14)"
+host_target = "x86_64-unknown-linux-gnu"
+# Rows are [size, alignment]. The fixture's normal-library static exposes these
+# exact type queries for both targets; the ARM values come from emitted IR.
+layout_rows = ["static-registration", "checked-static-registration", "complete-static-slot", "raw-request-state", "client", "Planning-cleanup-root", "Planning-draft", "native-artifact"]
+x86_static_layouts = [[192, 8], [200, 8], [320, 8], [112, 8], [24, 8], [608, 8], [8, 8], [65, 1]]
+arm_target = "thumbv7em-none-eabihf"
+arm_no_default_layouts = [[192, 8], [200, 8], [272, 8], [76, 4], [20, 4], [608, 8], [4, 4], [65, 1]]
+arm_async_layouts = [[192, 8], [200, 8], [272, 8], [76, 4], [20, 4], [608, 8], [4, 4], [65, 1]]
+arm_extraction = "cargo rustc -- --emit=llvm-ir on the normal fixture library; decode its CONSUMER_ONLY_STATIC_LAYOUTS [8 x [2 x usize]] constant in each target IR. These are compile-time Layout observations, not ARM runtime results."
+host_registration_layout = [200, 8]
+checked_host_registration_layout = [208, 8]
+host_adapter_layout = [1, 1]
+host_client_layout = [24, 8]
+host_provisioning_allocations = 2
+host_provisioning_bytes = 25
+static_provisioning_allocations = 0
+static_output_bytes = 4238
+static_output_heap_peak = 4238
+static_output_largest_request = 2424
+static_output_allocation_requests = 31
+host_output_bytes = 4550
+host_output_heap_peak = 4550
+host_output_largest_request = 2280
+host_output_allocation_requests = 34
+host_call_heap_peaks = [280, 288, 280]
+host_call_allocation_requests = [5, 5, 5]
+host_raw_state_and_payload_declaration_bytes = 240
+host_decorator_delta_bytes = 112
+host_complete_call_declaration_bytes = 352
+static_complete_slot_and_private_declaration_bytes = 448
+terminal_tracked_registration_artifact_request_adapter_bytes = 0
+terminal_original_cleanup_account_bytes = 0
+physical_accounting = "Static client/compiler fields are included in the registration Layout. The checked registration includes support once. Host client/adapter heap provisioning is separate from the inline registration. Static associated State is included in the complete slot; Host State is included in its raw call declaration. Payload storage and the Host decorator are counted separately once. Aggregate output and its largest contiguous request remain separate observations; summed allowances are never allocator requests. Source and shared test counters are baseline caller owners."
+transient_accounting = "The downstream client declares 256 binding-private transient bytes and 128 retained payload bytes; Core adds zero transient allocation work. Source-level Layouts/heap intervals are observations, not compiler-generated stack frames or global simultaneous peaks. Existing compiler support reports its own conservative temporary allowance and physical slot Layout."
+
+[memory_check]
+tool = "Valgrind 3.27.1 Memcheck"
+core_consumer_only_tests_passed = 5
+public_production_tests_passed = 5
+exact_source_atomic_work_tests_passed = 1
+errors = 0
+definitely_lost_bytes_per_executable = 0
+indirectly_lost_bytes_per_executable = 0
+possibly_lost_bytes_per_executable = 48
+still_reachable_bytes_per_executable = 544
+residual_attribution = "Both full stacks attribute 48 bytes to std::thread::current::init_current through libtest's mpmc context and 544 bytes to std's stack-overflow thread-info BTree. These are test-runtime residuals. Exact product allocations are paired with release, without a whole-process zero-retention claim."
+reproduction = "Build the two integration executables with the registered --no-run --message-format=json commands, select the emitted executable, and run the recorded Valgrind arguments. The compiler executable uses the consumer_only_support filter; the public production executable runs all six cases."
+
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+command = "cargo test --workspace --locked --offline"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml"
+status = "passed"
+
+[[verification]]
+command = "cargo tree --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --edges normal --format \"{p} features=[{f}]\""
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo tree --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --edges normal --format \"{p} features=[{f}]\""
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo tree --locked --offline --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async --edges normal --format \"{p} features=[{f}]\""
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-core"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --lib"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-property-read-binding-fixture"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-property-read-architecture-runner"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --features async --test consumer_property_read_binding"
+status = "passed"
+
+[[verification]]
+command = "rustfmt --edition 2024 --check core/src/binding.rs core/src/lib.rs planning/src/consumer_property_read.rs core/tests/consumer_compiler_support.rs core/tests/consumer_property_read_binding.rs"
+status = "passed"
+
+[[verification]]
+command = "cargo fmt --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml -- --check"
+status = "passed"
+
+[[verification]]
+command = "git diff --check"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async -- --nocapture"
+status = "passed"
+
+[[verification]]
+command = "cargo rustc --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir"
+status = "passed"
+
+[[verification]]
+command = "cargo rustc --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support --no-run --message-format=json"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test production --no-run --message-format=json"
+status = "passed"
+
+[[verification]]
+command = "valgrind --leak-check=full --errors-for-leak-kinds=definite,indirect --show-leak-kinds=all --error-exitcode=97 target/debug/deps/consumer_compiler_support-161244033091e96d consumer_only_support --test-threads=1"
+status = "passed"
+
+[[verification]]
+command = "valgrind --leak-check=full --errors-for-leak-kinds=definite,indirect --show-leak-kinds=all --error-exitcode=97 tools/architecture-fixtures/consumer-runtime-entry/target/debug/deps/production-6f4eb2a5f4ea74e1 --test-threads=1"
+status = "passed"

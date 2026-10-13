@@ -1,13 +1,15 @@
-//! Non-production construction discriminator. These owners cannot be installed
-//! in Core or Servient and issue neither compiler support nor response seals.
+//! Entry discriminators and downstream production registration evidence.
+//! Models below issue no authority; `production` uses actual Core owners.
 #![no_std]
 extern crate alloc;
+
+pub mod production;
 
 use clinkz_wot_core::*;
 use core::mem::size_of;
 
-/// The existing complete static registration requires a server even when its
-/// intended operation is a Consumer call.
+/// The existing Producer/dual-role static registration requires a server.
+/// A client alone uses the separate Consumer-only complete owner.
 /// ```compile_fail
 /// use clinkz_wot_core::{PollClientBinding, StaticBindingRegistration};
 /// fn client_only<C: PollClientBinding>() {
