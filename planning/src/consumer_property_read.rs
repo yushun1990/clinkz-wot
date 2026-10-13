@@ -560,6 +560,9 @@ struct Root<A: 'static> {
 // exists; only that lease may access Data, and Draft exposes shared loans only.
 // All handles are local/non-Send. Terminal release follows explicit draining,
 // with no initialized collection elements or capacities left in the block.
+// The std terminal bridge may consume both references and own this same block
+// uniquely. While detached, no Root exists; reattachment restores the pair
+// before exposing any local handle or data loan.
 impl<A: 'static> Root<A> {
     fn node(&self) -> &Node<A> {
         unsafe { self.pointer.as_ref() }
@@ -748,6 +751,240 @@ impl<A: 'static> Drop for ConsumerPropertyReadDraft<A> {
         if self.root.node().state.get() == RootState::Draft {
             self.root.node().state.set(RootState::Available);
         }
+    }
+}
+
+#[cfg(feature = "std")]
+struct OwnedRoot<A: 'static> {
+    // Suppress even the Box deallocation: the original manual root may only
+    // release its backing after the existing budgeted reclaimer is terminal.
+    node: ManuallyDrop<Box<Node<A>>>,
+    owner: (SlotIndex, Generation),
+    bytes: u64,
+}
+
+#[cfg(feature = "std")]
+impl<A: 'static> OwnedRoot<A> {
+    fn prepay(
+        lease: &Root<A>,
+        slot: &ConsumerPropertyReadCleanupSlot<A>,
+        state: RootState,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        if slot.fixed.is_some()
+            || slot.root.as_ref().is_none_or(|anchor| {
+                anchor.pointer != lease.pointer
+                    || lease.node().state.get() != state
+                    || lease.node().references.get() != 2
+            })
+        {
+            return Err(CoreError::Validation(
+                context().with_redacted_cause(332, "terminal cleanup root mismatch"),
+            ));
+        }
+        // The coordinator supplies fresh fixed conversion credit, separate
+        // from the retained Planning/reclaim lifetime allowances in Data.
+        budget.consume(W::PlanningItems, 1).map_err(|_| {
+            CoreError::Backpressure(
+                context()
+                    .with_redacted_cause(333, "terminal ownership conversion credit unavailable"),
+            )
+        })
+    }
+
+    // Called only after prepay, with the consumed state-selected lease's Drop
+    // suppressed. No operation between validation and detach can add a loan or
+    // reference, change phase, run a callback, or fail.
+    fn detach(pointer: NonNull<Node<A>>, slot: ConsumerPropertyReadCleanupSlot<A>) -> Self {
+        let owner = slot.owner;
+        let bytes = slot.bytes;
+        core::mem::forget(slot);
+        // SAFETY: pointer is the original alloc(Layout::new::<Node<A>>())
+        // block. Both of its only two Root owners have now been forgotten.
+        // Consuming the lease ends every selection/data loan. Exactly this Box
+        // owns the initialized, aligned block; Data remains ManuallyDrop.
+        let node = unsafe { Box::from_raw(pointer.as_ptr()) };
+        node.references.set(0);
+        Self {
+            node: ManuallyDrop::new(node),
+            owner,
+            bytes,
+        }
+    }
+
+    fn into_local(self) -> (Root<A>, ConsumerPropertyReadCleanupSlot<A>) {
+        let node = ManuallyDrop::into_inner(self.node);
+        // Unique ownership ends before either local owner can expose a loan.
+        // Box::leak/NonNull preserve the original allocation without allocating
+        // or running Data's destructor. Root::drop resumes terminal release.
+        node.references.set(2);
+        let pointer = NonNull::from(Box::leak(node));
+        let root = || Root {
+            pointer,
+            _local: PhantomData,
+        };
+        (
+            root(),
+            ConsumerPropertyReadCleanupSlot {
+                root: Some(root()),
+                fixed: None,
+                owner: self.owner,
+                bytes: self.bytes,
+            },
+        )
+    }
+}
+
+/// Unique source-free owner of a completed draft and its physical manual root.
+///
+/// This std-only bridge is `Send` when `A: Send`, and is neither Clone nor Sync.
+/// Each successful detach prepays one `PlanningItems` credit for the complete
+/// detach/reattach pair. Conversions allocate nothing and drive no Planning,
+/// compiler or cleanup work. The coordinator must separately retain the
+/// original committed cleanup account while any child or backing remains.
+///
+/// Retain and explicitly drain this advanced manual owner: dropping it with
+/// live output leaks the graph, just as dropping the original manual root
+/// does. It supplies no publication permit or executor drop recovery.
+///
+/// The owner cannot be cloned, forged or shared, and a non-Send artifact keeps
+/// the complete graph local:
+/// ```compile_fail
+/// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
+/// fn cloneable<T: Clone>() {}
+/// cloneable::<ConsumerPropertyReadOwnedOutput<clinkz_wot_core::ResolvedTargetArtifact>>();
+/// ```
+/// ```compile_fail
+/// use clinkz_wot_core::ResolvedTargetArtifact;
+/// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
+/// let _ = ConsumerPropertyReadOwnedOutput::<ResolvedTargetArtifact> { root: todo!() };
+/// ```
+/// ```compile_fail
+/// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
+/// fn shared<T: Sync>() {}
+/// shared::<ConsumerPropertyReadOwnedOutput<clinkz_wot_core::ResolvedTargetArtifact>>();
+/// ```
+/// ```compile_fail
+/// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
+/// use std::rc::Rc;
+/// fn movable<T: Send>() {}
+/// movable::<ConsumerPropertyReadOwnedOutput<Rc<()>>>();
+/// ```
+#[cfg(feature = "std")]
+#[must_use = "retain the manual root and explicitly reclaim its output"]
+pub struct ConsumerPropertyReadOwnedOutput<A: 'static> {
+    root: OwnedRoot<A>,
+}
+
+#[cfg(feature = "std")]
+impl<A: 'static> ConsumerPropertyReadOwnedOutput<A> {
+    /// Consumes the matching local pair, or returns both owners unchanged.
+    /// Invalid roots/phases consume no work; short credit returns Backpressure.
+    pub fn try_from_local(
+        draft: ConsumerPropertyReadDraft<A>,
+        root: ConsumerPropertyReadCleanupSlot<A>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        Self,
+        (
+            ConsumerPropertyReadDraft<A>,
+            ConsumerPropertyReadCleanupSlot<A>,
+            CoreError,
+        ),
+    > {
+        if let Err(cause) = OwnedRoot::prepay(&draft.root, &root, RootState::Draft, budget) {
+            return Err((draft, root, cause));
+        }
+        let pointer = draft.root.pointer;
+        core::mem::forget(draft);
+        Ok(Self {
+            root: OwnedRoot::detach(pointer, root),
+        })
+    }
+
+    /// Restores exactly one matching local draft/root pair using prepaid work.
+    pub fn into_local(
+        self,
+    ) -> (
+        ConsumerPropertyReadDraft<A>,
+        ConsumerPropertyReadCleanupSlot<A>,
+    ) {
+        let (root, slot) = self.root.into_local();
+        (ConsumerPropertyReadDraft { root }, slot)
+    }
+}
+
+/// Unique source-free owner of variable rollback and its physical manual root.
+///
+/// Has the same fixed credit, auto traits, cleanup-account retention and manual
+/// draining obligation as [`ConsumerPropertyReadOwnedOutput`]. Partial byte
+/// credit, lifetime allowances and first cause remain in the original backing.
+/// ```compile_fail
+/// use clinkz_wot_planning::ConsumerPropertyReadOwnedRollback;
+/// fn shared<T: Sync>() {}
+/// shared::<ConsumerPropertyReadOwnedRollback<clinkz_wot_core::ResolvedTargetArtifact>>();
+/// ```
+/// ```compile_fail
+/// use clinkz_wot_planning::ConsumerPropertyReadOwnedRollback;
+/// use std::rc::Rc;
+/// fn movable<T: Send>() {}
+/// movable::<ConsumerPropertyReadOwnedRollback<Rc<()>>>();
+/// ```
+#[cfg(feature = "std")]
+#[must_use = "retain the manual root and explicitly drive rollback to terminal"]
+pub struct ConsumerPropertyReadOwnedRollback<A: 'static> {
+    root: OwnedRoot<A>,
+}
+
+#[cfg(feature = "std")]
+impl<A: 'static> ConsumerPropertyReadOwnedRollback<A> {
+    /// Consumes the matching variable rollback/root pair. A fixed rollback is
+    /// returned unchanged with UnsupportedOperation for the existing local path.
+    pub fn try_from_local(
+        rollback: ConsumerPropertyReadRollback<A>,
+        root: ConsumerPropertyReadCleanupSlot<A>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        Self,
+        (
+            ConsumerPropertyReadRollback<A>,
+            ConsumerPropertyReadCleanupSlot<A>,
+            CoreError,
+        ),
+    > {
+        let RollbackOwner::Shared(lease) = &rollback.owner else {
+            return Err((
+                rollback,
+                root,
+                CoreError::UnsupportedOperation(
+                    context().with_redacted_cause(334, "fixed rollback uses local cleanup"),
+                ),
+            ));
+        };
+        if let Err(cause) = OwnedRoot::prepay(lease, &root, RootState::Rollback, budget) {
+            return Err((rollback, root, cause));
+        }
+        let pointer = lease.pointer;
+        core::mem::forget(rollback);
+        Ok(Self {
+            root: OwnedRoot::detach(pointer, root),
+        })
+    }
+
+    /// Restores the original rollback lease/root pair without a second charge.
+    pub fn into_local(
+        self,
+    ) -> (
+        ConsumerPropertyReadRollback<A>,
+        ConsumerPropertyReadCleanupSlot<A>,
+    ) {
+        let (root, slot) = self.root.into_local();
+        (
+            ConsumerPropertyReadRollback {
+                owner: RollbackOwner::Shared(root),
+            },
+            slot,
+        )
     }
 }
 

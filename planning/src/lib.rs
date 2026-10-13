@@ -30,6 +30,10 @@ pub use consumer_property_read::{
     ConsumerPropertyReadRollbackStep, ConsumerPropertyReadSelection, PlanFootprint,
     build_consumer_property_read_aggregate, select_consumer_property_read_aggregate,
 };
+#[cfg(feature = "std")]
+pub use consumer_property_read::{
+    ConsumerPropertyReadOwnedOutput, ConsumerPropertyReadOwnedRollback,
+};
 
 /// Borrowed immutable inputs for one plan-build transaction.
 #[derive(Clone, Copy)]
