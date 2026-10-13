@@ -28,7 +28,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0081-reusable-plan-and-thing-identity.md][0081 Reusable Plan Semantics Versus Thing-Generation Ownership]]
 
 ** DISCUSSING
 
