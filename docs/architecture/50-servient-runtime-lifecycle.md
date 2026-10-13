@@ -149,7 +149,8 @@ Arc<Thing> retention cannot substitute for source-independent output.
 
 Host and application-static forms share these semantics but not a physical
 container or progress API. Host startup and every live consumed record retain
-shared ownership of the one complete `HostBindingRegistration`; a call and any
+shared ownership of the one complete Consumer-capable registration (including
+the client-only `HostConsumerBindingRegistration`); a call and any
 transferred cleanup owner retain the matching plan-set lease. The application-
 static form uses one caller-owned root containing the typed complete
 registration, aggregate record, build/reclaim progress, and request slots;
@@ -162,6 +163,23 @@ names in API, plan, or diagnostics, never in
 `OutboundRequest`. Close rejects new leases/calls, drains existing calls and
 cleanup owners, and starts monotonic reclamation only after terminal ownership
 is proved.
+
+The bounded [Consumer Runtime candidate](../work-packages/WP-400-consumer-property-read-runtime-admission.md)
+projects this lifecycle into one generation and one active/read-result opportunity.
+Host parks the unique transferable output/rollback owner, checks it out outside
+structural locks, and prepays its return bridge before lending local selections.
+The manual root retains complete call, plan lease, original cleanup account and
+parent capacity when caller interest disappears. Static retains the corresponding
+typed root and associated-state slot directly. This projection adds no worker,
+executor, call pool or lower-layer contract change; admission remains independent.
+
+The candidate requires final-root abandonment to commit residual/incomplete
+shutdown to a caller-retained fixed report before bounded local destruction.
+It then uses the original Planning reclaimer and a single prepaid finite terminal
+allowance, without protocol progress, allocation or work refill, releasing parent
+capacity last. Supported local destructors must be audited and finite. This is
+local resource disposition, not successful external cleanup. Leaking the advanced
+manual Planning root is not an implementation of that Runtime obligation.
 
 ## Scheduling and fairness
 

@@ -40,3 +40,4 @@ docs/work-packages/WP-200-consumer-property-read-aggregate-admission.md,consumer
 docs/work-packages/WP-300-consumer-only-registration-admission.md,consumer-only-registration-admission,normative-migration-plan,5.1,1,docs/design.md
 docs/work-packages/WP-200-consumer-output-ownership-admission.md,consumer-output-ownership-admission-candidate,normative-migration-plan,5.1,1,docs/design.md
 docs/work-packages/WP-300-consumer-host-call-construction-admission.md,consumer-host-call-construction-admission-candidate,normative-migration-plan,5.1,1,docs/design.md
+docs/work-packages/WP-400-consumer-property-read-runtime-admission.md,consumer-property-read-runtime-admission-candidate,normative-migration-plan,5.1,1,docs/design.md
