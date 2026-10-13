@@ -6,10 +6,11 @@ implementation_ref = "e41bf58982c8cf89669cacadb3f0f4b044cf3dfb"
 base_ref = "fa5cb445972a096fd018a5d472cccdb6867e6fa9"
 recorded_on = "2026-10-13"
 evidence_key = "consumer-output-ownership"
-status = "ready"
+status = "passed"
 execution_status = "passed"
-assessment = "Implementation and executable evidence candidate; independent acceptance is outstanding. No tranche completion, gate transition, milestone transition or WP-400 implementation is asserted."
+assessment = "Independently accepted completion of the Consumer output ownership tranche; no broader WP-200, WP-400, Consumer architecture-gate or milestone transition."
 admission_review = "github-pr:156#issuecomment-6137329268"
+acceptance = "github-pr:159#issuecomment-6138896086"
 requirement_ids = [
     "PLAN-SET-001", "PLAN-COST-003", "PLAN-ARTIFACT-001", "ADMIT-TXN-001",
     "ADMIT-MEM-001", "CONSTRAINED-OWN-001", "CONSTRAINED-WORK-001",
@@ -34,7 +35,7 @@ acceptance_requirements = [
     "Only a separate authorized acceptance transition may mark this evidence passed or the tranche complete. Gate/milestone changes and WP-400 implementation remain separate work.",
 ]
 excluded_claims = [
-    "Tranche completion, Consumer architecture-gate acceptance, milestone closure or WP-400 implementation/admission",
+    "Broader WP-200 completion, Consumer architecture-gate acceptance, milestone closure or WP-400 implementation/admission",
     "Published state, parent/global capacity provenance, runtime generation records, executor fallback, shutdown recovery or automatic Drop cleanup",
     "Thread-safe build/TD/compiler progress, Sync output, arbitrary non-Send artifact transfer, callback support or a shared carrier",
     "New protocol production evidence, bare-device runtime behavior, allocator metadata/fragmentation bounds or whole-process zero retention",
