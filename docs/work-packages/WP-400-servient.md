@@ -141,13 +141,13 @@ Explicitly excluded:
 - scheduler-wide fairness beyond the separately owned WP-400 early checkpoint;
 - production Zenoh.
 
-### Admission candidate: `WP-400-CONSUMER-PROPERTY-READ-RUNTIME`
+### Admitted tranche: `WP-400-CONSUMER-PROPERTY-READ-RUNTIME`
 
-The [Runtime admission candidate](WP-400-consumer-property-read-runtime-admission.md)
+The [Runtime admission record](WP-400-consumer-property-read-runtime-admission.md)
 owns the exact implementation envelope, owner graph, selected alternatives,
 callback authoring contract, resource/work admission, publication/cancellation,
 manual cleanup, final-root residual discard and falsifiable completion criteria.
-`index.toml` records it as a candidate; independent admission is still required.
+`index.toml` records admission and its accepted exact-head independent review.
 
 Its seven completed/current predecessors cover borrowed TD admission, closed
 compiler support, the complete unpublished aggregate, installed Consumer binding
@@ -162,8 +162,8 @@ driver and bounded generation/interest handles; static has a caller-owned typed
 root and actual associated-state request slot. No worker, executor or call pool
 is needed. Neither path uses the legacy TD-bearing Consumer or implicit Directory.
 
-The candidate adds no production implementation or acceptance claim. Its three
-new downstream discriminators use actual public output/root/reclaim and real
+The admission adds no production implementation or completion claim. Its three
+downstream discriminators use actual public output/root/reclaim and real
 accounts, with explicitly modeled publication/header logic. Exact source and
 limits are documented in the existing
 [runtime-entry fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md#runtime-admission-discriminators).
@@ -171,7 +171,7 @@ The separate early multi-owner scheduler checkpoint remains outside this scope.
 
 Completion evidence key `consumer-property-read-runtime` is reserved at
 `docs/evidence/WP-400-consumer-property-read-runtime.toml`; it does not yet exist.
-The candidate requires actual Host/static runtime fixtures, real registry races,
+The tranche requires actual Host/static runtime fixtures, real registry races,
 complete call/lease/manual-fallback retention, paired simultaneous parent peaks,
 finite last-root local discard with residual report and zero controlled retained
 bytes/charges after reclaim. The lower-layer manual-root limitation is not a

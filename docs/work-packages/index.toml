@@ -771,7 +771,7 @@ id = "WP-400-CONSUMER-PROPERTY-READ-RUNTIME"
 work_package = "WP-400"
 sequence = 410
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = [
     "WP-100-CONSUMER-VALIDATED-THING",
@@ -846,6 +846,6 @@ pre_implementation_checks = [
     "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
     "git diff --check",
 ]
-admission_review = "pending-independent-review"
+admission_review = "github-pr:165#pullrequestreview-5505656673"
 completion_evidence_keys = ["consumer-property-read-runtime"]
 completion_evidence_path = "docs/evidence/WP-400-consumer-property-read-runtime.toml"
