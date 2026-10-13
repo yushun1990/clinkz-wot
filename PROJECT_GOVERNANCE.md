@@ -319,6 +319,31 @@ implementation mechanics.
 
 ## Validation Governance
 
+### CI execution policy
+
+GitHub's required `validation` check on each PR/master push performs only
+checkout and Git diff hygiene. It is a fast merge-integrity signal, **not** proof
+that tests, technical-authority checks, registered tranche prechecks, or
+architecture-gate commands have passed.
+
+All substantial GitHub checks are **opt-in** under
+`Actions → manual-validation → Run workflow`. Select the relevant branch and
+one of: `authority` (design/ownership/resource checkers), `workspace` (authority
+and locked workspace tests), `feature-matrix` (workspace plus supported feature
+matrix and portable Property Read), or `full` (the comprehensive former mainline
+matrix plus the feature matrix, including ARM/QEMU). No nightly/full run is
+scheduled automatically. Scope-specific commands may also be executed locally
+and attached to PR evidence; they do not require an all-repository GitHub run.
+
+The PR author and independent reviewer must state **which checks actually ran**
+at the exact relevant revision. For high-risk ownership, unsafe, cancellation,
+resource, API, or gate changes, execute the registered affected checks and obtain
+independent acceptance as before. A green required lightweight `validation`
+context never substitutes for executable evidence or an accepted gate; a full
+manual run is not mandatory for every docs-only/status-only PR. Escalate depth
+when code/evidence scope warrants it, not because the workflow runs automatically.
+
+
 Validation protects technical invariants; it is not a project-management
 system.
 
