@@ -2,6 +2,28 @@
 
 Status: DISCUSSING
 
+## Scoped Runtime decision migration
+
+The remaining Consumer Property Read ownership, call admission, publication,
+parent capacity and root shutdown questions now have one bounded decision in
+[the WP-400 Runtime candidate](../docs/work-packages/WP-400-consumer-property-read-runtime-admission.md).
+It reconstructs current production and the accepted predecessors, compares
+credible alternatives and defines one complete manual consume/read/drain/reclaim
+tranche. Host uses the public unique output bridge and fixed interest/call cells;
+static keeps typed caller-owned state. Callback declarations are trusted binding
+author obligations bound to the actual captured complete owner, not inferred
+certificates. Last-root abandonment records residual before finite prepaid local
+discard; the advanced Planning root's retention limitation cannot be copied into
+Runtime Drop. The added discriminators' model/public-owner boundary is explicit
+in the fixture README.
+
+These scoped conclusions are migrated to that candidate and the lifecycle owner,
+requiring independent admission. They do not accept the broader package/image/
+deployment proposals below. Those remain DISCUSSING and are disjoint from the
+one-registration/one-generation/one-read Runtime. The older sections retain their
+historical experiment boundaries, rather than describing current missing
+lower-layer implementations. No production, gate or milestone claim is added.
+
 ## Engineering question and authority
 
 Should ClinkZ-WoT evolve toward composable Producer/Consumer capabilities,

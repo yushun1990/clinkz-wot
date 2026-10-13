@@ -1,5 +1,8 @@
 //! Completion candidate: actual downstream Core/Planning API execution.
 extern crate alloc;
+#[cfg(feature = "std")]
+#[path = "../probes/runtime_candidate.rs"]
+mod runtime_candidate;
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{
     AdmissionLedger, GatewayDefaultV1, Generation, ResourceAccount, ResourceKind as K, SlotIndex,

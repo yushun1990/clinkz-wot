@@ -141,139 +141,41 @@ Explicitly excluded:
 - scheduler-wide fairness beyond the separately owned WP-400 early checkpoint;
 - production Zenoh.
 
-### Unadmitted successor boundary: `WP-400-CONSUMER-PROPERTY-READ-RUNTIME`
+### Admission candidate: `WP-400-CONSUMER-PROPERTY-READ-RUNTIME`
 
-This future ADR-0013 tranche is defined but not registered or admitted. It may
-enter `index.toml` only when
-`WP-300-CONSUMER-PROPERTY-READ-BINDING` and
-`WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` nodes are both
-`complete/current` with passed replacement/completion evidence.
+The [Runtime admission candidate](WP-400-consumer-property-read-runtime-admission.md)
+owns the exact implementation envelope, owner graph, selected alternatives,
+callback authoring contract, resource/work admission, publication/cancellation,
+manual cleanup, final-root residual discard and falsifiable completion criteria.
+`index.toml` records it as a candidate; independent admission is still required.
 
-Those predecessors alone are insufficient for admission. The
-[Consumer-only complete-registration precursor](WP-300-consumer-only-registration-admission.md)
-must also be complete/current with passed evidence; a dummy Producer server is
-not a Consumer product boundary. Before registering this runtime candidate,
-resolve the intersecting Host ownership/call-construction investigation in
-[topic 0076](../../workspace/0076-composable-capabilities-and-runtime-boundaries.md)
-and migrate the selected representation into the exact owners. The
-[entry investigation](../../workspace/0079-consumer-runtime-entry-constructibility.md)
-records the alternatives and why the complete transaction/facade is not yet
-the smallest reviewable step.
+Its seven completed/current predecessors cover borrowed TD admission, closed
+compiler support, the complete unpublished aggregate, installed Consumer binding
+execution, Consumer-only registration, transferable output ownership and
+recoverable Host call construction. They are necessary but do not imply Runtime
+publication, global capacity or client callback eligibility.
 
-The completed Planning draft, cleanup root and rollback lease are local/non-Send.
-A lifetime-free type or thread-safe concrete artifact cannot authorize sharing
-that graph. A local Host driver, explicit quiescent output transfer and a shared
-carrier have different ownership/cleanup costs. The
-[bounded construction result](../../workspace/0076-composable-capabilities-and-runtime-boundaries.md#bounded-host-construction-result)
-selects the [Planning terminal ownership bridge admission](WP-200-consumer-output-ownership-admission.md)
-as the smallest lower-layer correction: move the matching complete graph without
-making the input-bearing build shared. `index.toml` owns the bridge's admission
-and completion state; its admission establishes neither production support nor
-WP-400 admission. Retain the actual manual root and its committed account until
-terminal release, including while detached or pending rollback.
+The selected coherent scope is one complete Consumer-only registration, one
+consumed generation and one active/read-result opportunity, with repeated reads
+and later generation reuse after terminal reclamation. Host has a unique manual
+driver and bounded generation/interest handles; static has a caller-owned typed
+root and actual associated-state request slot. No worker, executor or call pool
+is needed. Neither path uses the legacy TD-bearing Consumer or implicit Directory.
 
-Fallible Host call construction is a separate runtime prerequisite. The
-[Core/Binding construction admission](WP-300-consumer-host-call-construction-admission.md)
-defines one complete private Core envelope backed before raw invocation, with
-an additive recoverable raw-call constructor and unchanged invocation/installed
-SPI. `WP-300-CONSUMER-HOST-CALL-CONSTRUCTION` must be complete/current with
-passed production evidence before this runtime's admission. That completion
-covers construction mechanics only. WP-400 must also bind actual selected
-client constructor/callback/storage/destructor bounds and finite input limits
-in its private policy; the generic constructor, compatibility and compiler
-support do not establish runtime eligibility. Unsupported clients fail before
-runtime work. No new Foundation or public call-support issuer is implied.
+The candidate adds no production implementation or acceptance claim. Its three
+new downstream discriminators use actual public output/root/reclaim and real
+accounts, with explicitly modeled publication/header logic. Exact source and
+limits are documented in the existing
+[runtime-entry fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md#runtime-admission-discriminators).
+The separate early multi-owner scheduler checkpoint remains outside this scope.
 
-The demonstrated parent-capacity construction needs no Foundation precursor or
-public provenance token. The existing real parent account reserves cleanup capacity;
-the private Servient transaction must bind it to policy/registration/phase and
-generation before local handoff and release children before parents. The bounded
-experiment covers only cleanup-root capacity, not global simultaneous peaks.
-Publication/cancellation races, shared record leases, executor rejection/shutdown
-and full runtime admission remain WP-400 obligations. The ownership bridge's
-manual-retention limitation cannot substitute for those proofs.
-
-The tranche owns Host/static transaction and facade composition under ADR-0021:
-checked immutable Consumer policy/registration capture, paired local/parent build
-and runtime allowances, generation/registry slots, cleanup/rollback transfer,
-complete registration retention, final checks, private permit/install,
-leases/calls/drain and bounded reclaim. It reserves runtime after complete paid
-Planning preflight and before materialization. TD owns bounded whole-input
-inspection/Basic and semantic lending; Planning owns complete output/compiler
-barriers/variable rollback. Servient cannot repeat those semantics or build a
-second lookup. Host/static physical representations remain distinct.
-
-One checked Consumer policy at Servient startup binds complete selected role/cell
-applicability, TD and Planning opaque projections and supported registration
-callback/memory/abort declarations. Missing/unsupported configuration fails before
-allowance, ledger or input observation. Private transaction phase/nonce binds
-input proof, policy and registration identities to preflight/reservations. Caller
-Thing stays immutable/live until the input-bearing owner is consumed; legacy
-by-value consume is not a bounded source-destructor adapter.
-
-Before TD work, acquire build-owner/TD-scratch/diagnostic/cleanup slot capacity and
-paired local/parent allowances. Retain and reconcile actual controlled owners,
-inline/return overlap, registration/erasure deltas and upstream source charges.
-An aggregate allowance is not a contiguous physical request; releasing a loan
-cannot release live source memory. There is no mandatory Snapshot or copied
-source charge. Finish input/derived/config/compiler loans and stepped build scratch
-cleanup **before** final identity/generation/registration/resource/cancellation/
-publication-slot checks. Under exclusive slot mutation authority, a private permit
-closes cancellation and atomically installs the preallocated complete record with
-no allocation, callback, yield, source query, fallible release or new cancellation
-decision. Predebit the complete bounded PlanningItems envelope for final checks,
-permit and install before entering that exclusive sequence; zero/short credit
-leaves FinalChecks Pending without publication progress. No budget request or
-suspension occurs after permit. Cancellation before permit wins; after permit
-successful install wins.
-All earlier failures retain first cause and bounded complete-object cleanup until
-children are physically released before parent allowances.
-
-The proposed runtime source envelope below remains provisional until those
-prerequisites are resolved and an exact ADR-0013 candidate is reviewed:
-
-- `servient/src/consumer_property_read.rs`;
-- `servient/src/lib.rs`;
-- `servient/tests/consumer_property_read.rs`;
-- `tools/architecture-fixtures/consumer-property-read-binding/Cargo.toml`;
-- `tools/architecture-fixtures/consumer-property-read-binding/src/lib.rs`;
-- `tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml`;
-- `tools/architecture-fixtures/consumer-property-read-runner/src/lib.rs`;
-- `Cargo.toml`; and
-- `Cargo.lock`.
-
-Those new fixture packages are completion evidence produced by this tranche;
-they are not created later by gate registration. Host retains shared ownership
-of one complete registration and transfers the plan-set lease with any call or
-cleanup owner. The static caller-owned root retains the typed registration,
-aggregate, lifecycle/resource records, progress, and request slots directly;
-neither Published form retains TD proof/input/scratch loans or TD source/document
-charges attributable to this borrowed build. Both forms must produce equal
-plans, selections, name-free requests, failures, sealing outcomes, drain, and
-reclaim semantics without requiring equal public progress APIs.
-
-Every failure before permit rejects the whole generation and returns explicit
-cleanup ownership until reservations/physical children are terminal. No partial
-lookup or new compiler start occurs after failure. Close rejects new leases/calls;
-registration/aggregate runtime storage is reclaimed only after all calls, leases
-and cleanup owners settle. The runtime uses only the complete registration's
-sealed `start_consumer_property_read` path. Strict external ingestion remains a
-separate future capability and is not required by this typed runtime tranche.
-
-The future completion evidence key is
-`consumer-property-read-runtime`, at
-`docs/evidence/WP-400-consumer-property-read-runtime.toml`. It must name the
-exact Host/static fixture source and cover admission order, rollback at every
-unpublished phase, source-free consuming completion and concrete output use after Thing and compiler-
-registration destruction, actual local/global simultaneous peaks including live
-upstream source, variable cleanup/abort/transfer, zero retained TD charge in
-Published, real slot/cancellation races and the no-fallible-gap permit boundary,
-independent generation allocators, lookup without TD or registration scans,
-absence of request names, complete-registration no-bypass, normal/cancellation-
-late response sealing, cleanup/lease transfer, drain, and zero plan/artifact/
-registration/runtime-record bytes after reclamation. It
-does not register or pass the Consumer architecture gate, and it is not real
-Zenoh production evidence.
+Completion evidence key `consumer-property-read-runtime` is reserved at
+`docs/evidence/WP-400-consumer-property-read-runtime.toml`; it does not yet exist.
+The candidate requires actual Host/static runtime fixtures, real registry races,
+complete call/lease/manual-fallback retention, paired simultaneous parent peaks,
+finite last-root local discard with residual report and zero controlled retained
+bytes/charges after reclaim. The lower-layer manual-root limitation is not a
+Runtime Drop implementation. Real Host Zenoh remains WP-600 production evidence.
 
 Only after this tranche and every component predecessor are
 `complete/current`, all completion evidence is `passed`, and the exact fixture

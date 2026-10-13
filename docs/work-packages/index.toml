@@ -765,3 +765,87 @@ pre_implementation_checks = [
 admission_review = "github-pr:161#issuecomment-6142207093"
 completion_evidence_keys = ["consumer-host-call-construction"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-host-call-construction.toml"
+
+[[tranche]]
+id = "WP-400-CONSUMER-PROPERTY-READ-RUNTIME"
+work_package = "WP-400"
+sequence = 410
+status = "planned"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = [
+    "WP-100-CONSUMER-VALIDATED-THING",
+    "WP-200-CONSUMER-COMPILER-SUPPORT",
+    "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE",
+    "WP-300-CONSUMER-PROPERTY-READ-BINDING",
+    "WP-300-CONSUMER-ONLY-REGISTRATION",
+    "WP-200-CONSUMER-OUTPUT-OWNERSHIP",
+    "WP-300-CONSUMER-HOST-CALL-CONSTRUCTION",
+]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "DOC-RUNTIME-001", "PLAN-REQUEST-001", "PLAN-SET-001", "PLAN-ARTIFACT-001",
+    "PLAN-COST-001", "PLAN-COST-003", "PLAN-BOUND-001", "API-OPTIONS-001",
+    "API-PAYLOAD-001", "API-SOURCE-TIME-001", "BIND-REG-001", "BIND-STORAGE-001",
+    "BIND-MEM-001", "BIND-IO-001", "BIND-OUT-001", "BIND-DELIVERY-001",
+    "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001", "STATE-INFLIGHT-001",
+    "ADMIT-TXN-001", "ADMIT-MEM-001", "RES-LIMIT-001", "RES-LIMIT-002",
+    "RES-LIMIT-003", "CONSTRAINED-STORAGE-001", "CONSTRAINED-STORAGE-002",
+    "CONSTRAINED-PROGRESS-001", "CONSTRAINED-WORK-001", "CONSTRAINED-OWN-001",
+    "CONCUR-LOCK-001", "CONCUR-USER-001", "CONCUR-CRIT-001", "CONCUR-LIN-001",
+    "HANDLE-DROP-001", "CLEANUP-RECORD-001", "HOST-ASYNC-001", "TIME-001",
+    "ERR-TAXONOMY-001", "ERR-RETRY-001",
+]
+owner_packages = ["clinkz-wot-servient"]
+feature_cells = ["std", "no-default", "async-no-std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/ADRs/0021-borrowed-consumer-td-admission.org",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/spec/runtime-safety.md", "docs/spec/planning.md",
+    "docs/spec/binding-spi.md", "docs/spec/interaction-core.md",
+    "docs/spec/foundation.md", "docs/api-ownership.csv", "docs/requirements.csv",
+    "docs/resource-limits.csv", "docs/state-machines.toml",
+    "docs/performance/gateway.toml", "docs/performance/constrained.toml",
+    "docs/work-packages/WP-400-servient.md",
+    "docs/work-packages/WP-400-consumer-property-read-runtime-admission.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "ConsumerPropertyReadPolicy", "ConsumerPropertyReadRuntime",
+    "StaticConsumerPropertyReadRuntime", "HostConsumerPropertyReadBuild",
+    "StaticConsumerPropertyReadBuild", "ConsumerPropertyReadHandle",
+    "ConsumerPropertyReadCall",
+]
+state_machines = ["compiled-plan-set", "in-flight"]
+resource_changes = [
+    "One startup registration, one generation and one call/result opportunity; paired actual local/parent build/output/call/cleanup capacity, original cleanup account and preallocated complete record. No call pool, resource kind, schema/default or WorkClass change.",
+    "Measure actual provisioning, simultaneous live/peak/largest allocation, typed/erased storage and checkout/return overlap; prepay bridge return and a finite final-root local-discard envelope. Residual report precedes destruction; children release before parents.",
+]
+old_api_removals = []
+performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-CS-020", "PERF-GW-029", "PERF-CS-021"]
+implementation_paths = [
+    "servient/src/consumer_property_read.rs", "servient/src/consumer_property_read",
+    "servient/src/lib.rs", "servient/tests/consumer_property_read.rs",
+    "servient/tests/consumer_property_read", "servient/Cargo.toml",
+    "tools/architecture-fixtures/consumer-property-read-binding",
+    "tools/architecture-fixtures/consumer-property-read-runner",
+    "Cargo.toml", "Cargo.lock",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-servient --test property_read",
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test property_read",
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test property_read",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
+    "git diff --check",
+]
+admission_review = "pending-independent-review"
+completion_evidence_keys = ["consumer-property-read-runtime"]
+completion_evidence_path = "docs/evidence/WP-400-consumer-property-read-runtime.toml"
