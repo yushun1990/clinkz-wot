@@ -8,9 +8,16 @@ implementation and evidence envelope.
 accepted base `5ed0ad7c1713794a2c7cacac2094f57d3d14b81c` to head
 `ef0e9ec2c1621e10d5c265b9904ed49dd760f93e` with no blocking findings, subject
 to successful required CI. This separate admission transition follows that
-acceptance and satisfied CI condition. Admission covers this envelope only;
-production completion still requires the evidence and independent acceptance
-defined below.
+acceptance and satisfied CI condition. Admission covers this envelope only.
+
+[Independent production review of PR #154](https://github.com/yushun1990/clinkz-wot/pull/154#issuecomment-6135946450)
+accepted the implementation and completion evidence at exact head
+`ca01012127e32fd1ade34e8ce73e6c8b1e59d526` with no blocking findings.
+The [registered completion evidence](../evidence/WP-300-consumer-only-registration.toml)
+retains the implementation reference, seven-obligation results, separate
+static/Host measurements and scope exclusions. Completion covers this tranche
+only; broader WP-300, WP-400 admission/completion, Consumer gate registration
+and all gate/milestone transitions remain separate.
 
 ## Decision and scope
 
