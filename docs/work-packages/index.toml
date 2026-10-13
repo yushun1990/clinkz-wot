@@ -756,7 +756,7 @@ implementation_paths = ["core/src/binding.rs", "core/src/binding_compiler.rs"]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
     "cargo +stable test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support",
-    "cargo +stable test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test construction host_call_allocation_failure_is_fatal_including_after_raw_acceptance -- --nocapture",
+    "cargo +stable test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test construction host_core_backing_recovers_but_infallible_raw_construction_still_aborts -- --nocapture",
     "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --baseline",
     "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative preallocated",
     "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative inline",

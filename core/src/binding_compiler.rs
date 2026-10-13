@@ -1002,7 +1002,7 @@ impl HostBindingArtifact {
 }
 
 #[cfg(feature = "std")]
-fn try_box<T>(value: T) -> Result<Box<T>, T> {
+pub(crate) fn try_box<T>(value: T) -> Result<Box<T>, T> {
     let layout = Layout::new::<T>();
     if layout.size() == 0 {
         return Ok(Box::new(value));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run an unadmitted patch in a disposable snapshot, never in production files."""
+"""Reproduce the admission alternatives in a disposable historical snapshot."""
 import argparse
 import io
 import os
@@ -12,15 +12,18 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--baseline", action="store_true")
 parser.add_argument("--alternative", choices=["inline", "preallocated"], default="preallocated")
 parser.add_argument("--toolchain", default="stable")
+parser.add_argument("--source-revision", default="988acf3",
+                    help="pre-implementation source boundary (default: admitted master)")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[4]
 probe = Path(__file__).resolve().parent
-print("source_revision=" + subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(), flush=True)
+revision = subprocess.check_output(["git", "rev-parse", args.source_revision + "^{commit}"], cwd=root, text=True).strip()
+print("source_revision=" + revision, flush=True)
 print(subprocess.check_output(["rustc", f"+{args.toolchain}", "--version"], text=True).strip(), flush=True)
 
 with tempfile.TemporaryDirectory(prefix="clinkz-host-call-") as directory:
     snapshot = Path(directory)
-    archive = subprocess.check_output(["git", "archive", "HEAD"], cwd=root)
+    archive = subprocess.check_output(["git", "archive", revision], cwd=root)
     with tarfile.open(fileobj=io.BytesIO(archive)) as files:
         files.extractall(snapshot, filter="data")
     if not args.baseline:
