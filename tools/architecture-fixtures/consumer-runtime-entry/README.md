@@ -1,5 +1,55 @@
 # Consumer runtime entry evidence
 
+## Runtime admission discriminators
+
+`probes/runtime_candidate.rs`, included by the std production integration test,
+adds three pre-implementation discriminators against production baseline
+`4892a5ca8224dde1328a93460a862cdc826dbb5f`:
+
+- Actual complete public output/root ownership crosses a modeled fixed registry
+  slot, with zero/short/exact final work, stale slot rejection and both
+  publication/cancellation orders executed using scoped threads and barriers.
+  Installation allocates/destroys nothing; rejected output remains reclaimable.
+- Actual output is checked out into its original local pair, selected through
+  production Planning, cancelled through a separate header on another thread
+  and reparked allocation-free using one reserved bridge credit. The same
+  artifact reference/address and original cleanup charge survive.
+- Actual original rollback drains with one finite item/byte budget and no refill
+  or allocation. A residual marker precedes destruction; the original node is
+  freed once, and original child/root/account are released before a real held
+  parent cleanup reservation. This proves a finite local-discard witness.
+
+The terminal witness rearms allocation observation before output reattachment,
+preserving the original pointer/Layout records. It compares request counts only
+after the final root, original account and parent reservation have been released;
+expected deallocations remain allowed. It restores the previous armed state
+before diagnostic output. Disposable negative controls insert one allocated and
+released 64-byte block immediately after the residual marker or after the final
+account release. Both fail the allocation assertion with 35 requests versus 34;
+the unmodified witness passes with zero additional requests.
+
+These are **admission experiments**, not a production Servient registry, driver,
+shutdown destructor or capacity governor. The six-unit final debit belongs only
+to the publication model. The terminal witness derives conservative finite
+item/byte/step bounds from actual output footprint and row/coordinate counts;
+the production root must retain paid preflight and account coordinator/call/result
+destruction too. The
+parent test reserves cleanup capacity after output construction; it does not
+prove preflight ordering or simultaneous build/output/call/global peaks. It uses
+an atomic residual marker, not the eventual complete CleanupRecord/report. It
+does not qualify the old fixture Host client, exercise an accepted call during
+root destruction or prove Runtime root/handle lifetime behavior. Real Runtime
+races, bounded client construction and complete call/lease/report/account ownership
+remain the [candidate's completion obligations](../../../docs/work-packages/WP-400-consumer-property-read-runtime-admission.md).
+
+```sh
+cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test production runtime_candidate -- --nocapture
+```
+
+The same executable also retains the accepted public bridge, concrete selected
+call, partial rollback and allocator-failure regressions below. No production
+source, Cargo dependency or gate command is changed for these experiments.
+
 `src/production.rs` is a downstream client with no server trait or component.
 `tests/production.rs` constructs the actual Consumer-only Core owners, captures
 closed support and runs the public paid Planning aggregate. Both representations
