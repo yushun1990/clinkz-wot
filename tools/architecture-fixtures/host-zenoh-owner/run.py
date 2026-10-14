@@ -30,13 +30,15 @@ with tempfile.TemporaryDirectory(prefix="wp600-owner-") as directory:
     for name, path in dependencies.items():
         command.extend(["--extern", f"{name}={path}"])
     subprocess.run(command, cwd=ROOT, check=True)
-    for case in ["last-drop", "abandoned-close", "get-callback", "separate-owner", "closed-drop"]:
+    for case in ["last-drop", "abandoned-close", "get-callback", "separate-owner",
+                 "closed-drop", "query-start", "rx-limits", "original-close-timeout"]:
         subprocess.run([str(binary), case], cwd=ROOT, check=True, timeout=15)
-    # Fault injection affects only the thread performing final Session Drop.
-    # Disable core dumps before the deliberately aborting child is started.
+    # Fault injection affects only the thread doing SDK Drop or submission.
+    # Disable core dumps before either deliberately aborting child is started.
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    failed = subprocess.run([str(binary), "closed-drop-oom"], cwd=ROOT,
-                            text=True, capture_output=True, timeout=15)
-    assert failed.returncode == -signal.SIGABRT, failed
-    assert "memory allocation of" in failed.stderr, failed.stderr
-    print("closed-session-drop-oom: controlled allocation failure aborts child (SIGABRT)")
+    for case in ["closed-drop-oom", "query-start-oom"]:
+        failed = subprocess.run([str(binary), case], cwd=ROOT,
+                                text=True, capture_output=True, timeout=15)
+        assert failed.returncode == -signal.SIGABRT, failed
+        assert "memory allocation of" in failed.stderr, failed.stderr
+        print(f"{case}: controlled allocation failure aborts child (SIGABRT)")

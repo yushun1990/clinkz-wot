@@ -1965,7 +1965,10 @@ registration-retirement hook; support for any delegated owner must be qualified
 against its actual captured registration and account lifecycle, or require a
 scoped contract correction before implementation admission. The
 [WP-600 decision](../work-packages/WP-600-host-zenoh-owner-decision.md)
-owns the concrete candidate and unresolved qualification, not a new shared API.
+owns the concrete SDK prerequisite and subsequent complete-owner qualification,
+not a new shared API. Moving infallible SDK allocation to a worker does not
+provide recoverable or prebacked storage, and a configured receive pool or
+fragment-size limit is not by itself a complete physical input/byte contract.
 
 Zero never means unbounded. A disabled capability cannot be started. A
 declaration or actual footprint overrun is a binding contract violation and is
