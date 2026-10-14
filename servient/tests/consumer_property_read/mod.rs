@@ -163,6 +163,332 @@ fn policy_with(limits: ResourceLimits) -> ConsumerPropertyReadPolicy {
     )
     .unwrap()
 }
+fn publish_static(runtime: &mut StaticConsumerPropertyReadRuntime<'_, StaticClient>) {
+    let thing = source();
+    assert!(matches!(
+        runtime
+            .consume(&thing, &mut work(100000), |build| {
+                for _ in 0..100000 {
+                    build.step(&mut work(4096));
+                    if build.is_finished() {
+                        return;
+                    }
+                }
+                panic!("bounded fixture build stalled");
+            })
+            .unwrap(),
+        StartStatus::Ready(())
+    ));
+}
+fn policy_with_cleanup_costs(limits: ResourceLimits) -> ConsumerPropertyReadPolicy {
+    // A more conservative whole-target destructor declaration makes cancel
+    // plus release exceed a valid single-step quantum. Registration retirement
+    // still fits, so this tests deferral rather than startup rejection alone.
+    ConsumerPropertyReadPolicy::try_new(
+        limits,
+        BindingLifetimeFootprint::new(1, 4096),
+        BindingLifetimeFootprint::new(8, 1280),
+        [1, 64, 64, 64],
+        [64, 32],
+        [2, 2, 1, 1, 1, 4, 1],
+        [50, 5],
+        65536,
+    )
+    .unwrap()
+}
+fn rejected_static_startup(kind: ResourceKind, limit: u64) -> u64 {
+    let stats = Arc::new(Stats::default());
+    let registration = binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+    let identity = registration.registration().identity();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(kind, Some(limit)));
+    let policy = policy_with(limits);
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    observe(0);
+    let rejection = match StaticConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    ) {
+        Err(rejection) => rejection,
+        Ok(_) => panic!("unsupported static startup admitted"),
+    };
+    assert_eq!(trace().requests, 0);
+    disarm();
+    let (inputs, error) = rejection.into_parts();
+    let requested = match error.error() {
+        CoreError::LimitExceeded {
+            resource,
+            requested: Some(n),
+            ..
+        } => {
+            assert_eq!(*resource, kind);
+            *n
+        }
+        error => panic!("wrong static rejection: {error:?}"),
+    };
+    assert_eq!(inputs.0.registration().identity(), identity);
+    assert!(
+        parent
+            .borrow()
+            .iter()
+            .all(|a| a.used() == 0 && a.peak() == 0)
+    );
+    assert_eq!(report.0.get(), (None, [0; 4]));
+    assert_eq!(report.1.get(), 0);
+    assert_eq!(report.2.borrow().used(), 0);
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 0);
+    assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+    drop(inputs);
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+    requested
+}
+
+#[test]
+fn static_binding_storage_all_scopes_disable_and_boundary_before_invocation() {
+    let required = rejected_static_startup(ResourceKind::BindingSlotStateBytesPerItemMax, 0);
+    assert!(
+        required >= core::mem::size_of::<StaticConsumerPropertyReadSlot<binding::State>>() as u64
+    );
+    for kind in [
+        ResourceKind::BindingSlotStateBytesPerItemMax,
+        ResourceKind::BindingSlotStateBytesPerThingMax,
+        ResourceKind::BindingSlotStateBytesGlobalMax,
+    ] {
+        for limit in [0, required - 1] {
+            assert_eq!(rejected_static_startup(kind, limit), required);
+        }
+        for limit in [required, required + 1] {
+            let stats = Arc::new(Stats::default());
+            let registration =
+                binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+            let mut limits = GatewayDefaultV1::LIMITS.clone();
+            assert!(limits.set(kind, Some(limit)));
+            // Host storage is inapplicable to this representation.
+            assert!(limits.set(ResourceKind::HostBindingCallBytesGlobalMax, Some(0)));
+            let policy = policy_with(limits);
+            let parent = RefCell::new(policy.parent_accounts());
+            let clock = Clock::default();
+            let mut report = report_storage();
+            let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+                registration,
+                policy,
+                &clock,
+                &parent,
+                &mut report,
+            )
+            .unwrap_or_else(|_| panic!("exact complete slot bound rejected"));
+            publish_static(&mut runtime);
+            let generation = runtime
+                .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                .unwrap();
+            runtime.step(&mut cx(), &mut work(100000));
+            assert_eq!(
+                category(
+                    runtime
+                        .try_take(generation, &mut work(100000))
+                        .unwrap()
+                        .unwrap()
+                ),
+                "ok"
+            );
+            assert_eq!(stats.starts.load(Ordering::SeqCst), 1);
+            drop(runtime);
+            drop(observer);
+            assert!(parent.borrow().iter().all(|a| a.used() == 0));
+        }
+    }
+    println!("Static complete resident slot storage allowance={required}");
+}
+
+#[test]
+fn static_binding_storage_shared_parent_is_held_for_the_resident_complete_slot() {
+    let required = rejected_static_startup(ResourceKind::BindingSlotStateBytesGlobalMax, 0);
+    let policy_a = policy();
+    let mut accounts = policy_a.parent_accounts();
+    let index = ConsumerPropertyReadPolicy::PARENT_KINDS
+        .iter()
+        .position(|&k| k == ResourceKind::BindingSlotStateBytesGlobalMax)
+        .unwrap();
+    accounts[index] = ResourceAccount::new(
+        SlotIndex::new(91),
+        Generation::INITIAL,
+        ResourceKind::BindingSlotStateBytesGlobalMax,
+        required,
+    );
+    let parent = RefCell::new(accounts);
+    let clock = Clock::default();
+    let mut storage_a = report_storage();
+    let mut storage_b = report_storage();
+    let stats_a = Arc::new(Stats::default());
+    stats_a.set_mode(Mode::Complete);
+    let (mut runtime_a, observer_a) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats_a.clone(), outputs())),
+        policy_a,
+        &clock,
+        &parent,
+        &mut storage_a,
+    )
+    .unwrap_or_else(|_| panic!());
+    let stats_b = Arc::new(Stats::default());
+    let registration_b =
+        binding::static_registration(StaticClient::new(stats_b.clone(), outputs()));
+    let (registration_b, policy_b) = match StaticConsumerPropertyReadRuntime::try_new(
+        registration_b,
+        policy(),
+        &clock,
+        &parent,
+        &mut storage_b,
+    ) {
+        Err(rejection) => {
+            assert!(matches!(
+                rejection.error().error(),
+                CoreError::Backpressure(_)
+            ));
+            rejection.into_input()
+        }
+        Ok(_) => panic!("independent global slot budget bypassed"),
+    };
+    assert_eq!(parent.borrow()[index].used(), required);
+    publish_static(&mut runtime_a);
+    let generation = runtime_a
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    runtime_a.cancel(generation).unwrap();
+    runtime_a.step(&mut cx(), &mut work(100000));
+    assert_eq!(parent.borrow()[index].used(), required);
+    assert_eq!(
+        category(
+            runtime_a
+                .try_take(generation, &mut work(100000))
+                .unwrap()
+                .unwrap()
+        ),
+        "cancelled"
+    );
+    // A vacant slot still occupies its physically provisioned inline backing.
+    assert_eq!(parent.borrow()[index].used(), required);
+    drop(runtime_a);
+    assert_eq!(parent.borrow()[index].used(), 0);
+    drop(observer_a);
+    let (mut runtime_b, observer_b) = StaticConsumerPropertyReadRuntime::try_new(
+        registration_b,
+        policy_b,
+        &clock,
+        &parent,
+        &mut storage_b,
+    )
+    .unwrap_or_else(|_| panic!("released resident capacity unavailable"));
+    publish_static(&mut runtime_b);
+    let generation = runtime_b
+        .read_property("c-温度", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    runtime_b.step(&mut cx(), &mut work(100000));
+    assert_eq!(
+        category(
+            runtime_b
+                .try_take(generation, &mut work(100000))
+                .unwrap()
+                .unwrap()
+        ),
+        "ok"
+    );
+    assert_eq!(stats_b.starts.load(Ordering::SeqCst), 1);
+    drop(runtime_b);
+    drop(observer_b);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn static_report_complete_footprint_is_checked_before_provisioning() {
+    let required = rejected_static_startup(ResourceKind::CleanupItemBytesMax, 1);
+    assert_eq!(required, core::mem::size_of::<ReportStorage>() as u64);
+    for limit in [0, required - 1] {
+        assert_eq!(
+            rejected_static_startup(ResourceKind::CleanupItemBytesMax, limit),
+            required
+        );
+    }
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::CleanupItemBytesMax, Some(required)));
+    let policy = policy_with(limits);
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let stats = Arc::new(Stats::default());
+    let (runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats, outputs())),
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!("exact static report bound rejected"));
+    drop(runtime);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn static_cleanup_quantum_caps_the_whole_shutdown_and_retains_pending_work() {
+    for too_small in [1, 3] {
+        assert_eq!(
+            rejected_static_startup(ResourceKind::CleanupWorkItemsPerStepMax, too_small),
+            4
+        );
+    }
+    let stats = Arc::new(Stats::default());
+    stats.set_mode(Mode::Complete);
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::CleanupWorkItemsPerStepMax, Some(5)));
+    let policy = policy_with_cleanup_costs(limits);
+    let parent = RefCell::new(policy.parent_accounts());
+    let clock = Clock::default();
+    let mut report = report_storage();
+    let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats.clone(), outputs())),
+        policy,
+        &clock,
+        &parent,
+        &mut report,
+    )
+    .unwrap_or_else(|_| panic!());
+    publish_static(&mut runtime);
+    let generation = runtime
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    runtime.abandon_call(generation).unwrap();
+    let mut first = work(100000);
+    runtime.step(&mut cx(), &mut first);
+    assert_eq!(100000 - first.remaining(WorkClass::CleanupItems), 1);
+    assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 0);
+    assert_eq!(stats.acknowledgements.load(Ordering::SeqCst), 0);
+    let mut finished = false;
+    let mut pending = 0;
+    for _ in 0..10000 {
+        let mut budget = work(100000);
+        let status = runtime.shutdown(&mut cx(), &mut budget);
+        assert!(100000 - budget.remaining(WorkClass::CleanupItems) <= 5);
+        if let StartStatus::Ready(outcome) = status {
+            assert!(outcome.is_complete());
+            finished = true;
+            break;
+        }
+        pending += 1;
+    }
+    assert!(finished && pending > 0);
+    assert_eq!(stats.cancels.load(Ordering::SeqCst), 1);
+    assert_eq!(stats.acknowledgements.load(Ordering::SeqCst), 1);
+    assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+    drop(runtime);
+    drop(observer);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
 fn source() -> clinkz_wot_td::thing::Thing {
     serde_json::from_str(r#"{
  "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"aggregate","id":"urn:aggregate:id","base":"https://peer.test/a/",

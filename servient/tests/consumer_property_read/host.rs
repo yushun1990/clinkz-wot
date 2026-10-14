@@ -31,6 +31,347 @@ fn shutdown(runtime: &ConsumerPropertyReadRuntime) {
     panic!("shutdown stalled");
 }
 
+fn rejected_host_startup(kind: ResourceKind, limit: u64) -> u64 {
+    let stats = Arc::new(Stats::default());
+    let registration =
+        binding::host_registration(binding::HostClient::new(stats.clone(), outputs()));
+    let identity = registration.registration().identity();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(kind, Some(limit)));
+    let policy = policy_with(limits);
+    let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+    let clock: Arc<dyn RuntimeClock + Send + Sync> = Arc::new(Clock::default());
+    observe(0);
+    let rejection = match ConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        clock.clone(),
+        parent.clone(),
+    ) {
+        Err(rejection) => rejection,
+        Ok(_) => panic!("unsupported startup was admitted"),
+    };
+    assert_eq!(trace().requests, 0);
+    disarm();
+    let (inputs, error) = rejection.into_parts();
+    let requested = match error.error() {
+        CoreError::LimitExceeded {
+            resource,
+            requested: Some(n),
+            ..
+        } => {
+            assert_eq!(*resource, kind);
+            *n
+        }
+        error => panic!("wrong startup rejection: {error:?}"),
+    };
+    assert_eq!(inputs.0.registration().identity(), identity);
+    assert!(Arc::ptr_eq(&inputs.2, &clock));
+    assert!(Arc::ptr_eq(&inputs.3, &parent));
+    assert!(
+        parent
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|a| a.used() == 0 && a.peak() == 0)
+    );
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 0);
+    assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+    drop(inputs);
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+    requested
+}
+
+#[test]
+fn host_binding_storage_all_scopes_disable_and_boundary_before_invocation() {
+    let required = rejected_host_startup(ResourceKind::HostBindingCallBytesPerItemMax, 0);
+    for kind in [
+        ResourceKind::HostBindingCallBytesPerItemMax,
+        ResourceKind::HostBindingCallBytesPerBindingMax,
+        ResourceKind::HostBindingCallBytesPerThingMax,
+        ResourceKind::HostBindingCallBytesGlobalMax,
+    ] {
+        for limit in [0, required - 1] {
+            assert_eq!(rejected_host_startup(kind, limit), required);
+        }
+        for limit in [required, required + 1] {
+            let stats = Arc::new(Stats::default());
+            let registration =
+                binding::host_registration(binding::HostClient::new(stats.clone(), outputs()));
+            let mut limits = GatewayDefaultV1::LIMITS.clone();
+            assert!(limits.set(kind, Some(limit)));
+            // A disabled static representation must not disable Host.
+            assert!(limits.set(ResourceKind::BindingSlotStateBytesGlobalMax, Some(0)));
+            let policy = policy_with(limits);
+            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
+                registration,
+                policy,
+                Arc::new(Clock::default()),
+                parent.clone(),
+            )
+            .unwrap_or_else(|_| panic!("exact Host storage bound rejected"));
+            let handle = build(&runtime);
+            let mut call = handle
+                .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                .unwrap();
+            call.step(&mut cx(), &mut work(100000));
+            assert_eq!(
+                category(call.try_take(&mut work(100000)).unwrap().unwrap()),
+                "ok"
+            );
+            assert_eq!(stats.starts.load(Ordering::SeqCst), 1);
+            drop(call);
+            drop(handle);
+            shutdown(&runtime);
+            drop(runtime);
+            drop(observer);
+            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        }
+    }
+    println!("Host complete call storage allowance={required}");
+}
+
+#[test]
+fn host_binding_storage_shared_parent_is_held_through_transfer_and_unread_result() {
+    let required = rejected_host_startup(ResourceKind::HostBindingCallBytesGlobalMax, 0);
+    let policy_a = policy();
+    let policy_b = policy();
+    let mut accounts = policy_a.parent_accounts();
+    let index = ConsumerPropertyReadPolicy::PARENT_KINDS
+        .iter()
+        .position(|&k| k == ResourceKind::HostBindingCallBytesGlobalMax)
+        .unwrap();
+    accounts[index] = ResourceAccount::new(
+        SlotIndex::new(90),
+        Generation::INITIAL,
+        ResourceKind::HostBindingCallBytesGlobalMax,
+        required,
+    );
+    let parent = Arc::new(Mutex::new(accounts));
+    let stats_a = Arc::new(Stats::default());
+    stats_a.set_mode(Mode::Transfer);
+    let stats_b = Arc::new(Stats::default());
+    let (runtime_a, report_a) = ConsumerPropertyReadRuntime::try_new(
+        binding::host_registration(binding::HostClient::new(stats_a.clone(), outputs())),
+        policy_a,
+        Arc::new(Clock::default()),
+        parent.clone(),
+    )
+    .unwrap_or_else(|_| panic!());
+    let (runtime_b, report_b) = ConsumerPropertyReadRuntime::try_new(
+        binding::host_registration(binding::HostClient::new(stats_b.clone(), outputs())),
+        policy_b,
+        Arc::new(Clock::default()),
+        parent.clone(),
+    )
+    .unwrap_or_else(|_| panic!());
+    let handle_a = build(&runtime_a);
+    let handle_b = build(&runtime_b);
+    let mut call = handle_a
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    call.cancel().unwrap();
+    for phase in 0..3 {
+        assert_eq!(parent.lock().unwrap()[index].used(), required);
+        let mut options = InteractionOptions::new();
+        options.uri_variables.insert("room".into(), "west".into());
+        let address = options.uri_variables["room"].as_ptr();
+        observe(0);
+        let rejection = handle_b
+            .read_property("a-read", options, &mut work(100000))
+            .err()
+            .expect("shared Host byte capacity must reject before invocation");
+        assert_eq!(trace().requests, 0);
+        disarm();
+        assert!(matches!(
+            rejection.error().error(),
+            CoreError::Backpressure(_)
+        ));
+        let (options, request) = rejection.into_input();
+        assert!(request.is_none());
+        assert_eq!(options.uri_variables["room"].as_ptr(), address);
+        assert_eq!(stats_b.starts.load(Ordering::SeqCst), 0);
+        if phase != 2 {
+            runtime_a.step(&mut cx(), &mut work(100000));
+        }
+    }
+    assert!(report_a().0.unwrap().is_pending());
+    assert_eq!(
+        category(call.try_take(&mut work(100000)).unwrap().unwrap()),
+        "ok"
+    );
+    assert_eq!(parent.lock().unwrap()[index].used(), 0);
+    let mut next = handle_b
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    next.step(&mut cx(), &mut work(100000));
+    assert_eq!(
+        category(next.try_take(&mut work(100000)).unwrap().unwrap()),
+        "ok"
+    );
+    drop(next);
+    drop(call);
+    drop(handle_a);
+    drop(handle_b);
+    shutdown(&runtime_a);
+    shutdown(&runtime_b);
+    drop(runtime_a);
+    drop(runtime_b);
+    drop(report_a);
+    drop(report_b);
+    assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn host_report_complete_footprint_is_checked_before_provisioning() {
+    let required = rejected_host_startup(ResourceKind::CleanupItemBytesMax, 1);
+    for limit in [0, required - 1] {
+        assert_eq!(
+            rejected_host_startup(ResourceKind::CleanupItemBytesMax, limit),
+            required
+        );
+    }
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::CleanupItemBytesMax, Some(required)));
+    let policy = policy_with(limits);
+    let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+    let stats = Arc::new(Stats::default());
+    let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
+        binding::host_registration(binding::HostClient::new(stats, outputs())),
+        policy,
+        Arc::new(Clock::default()),
+        parent.clone(),
+    )
+    .unwrap_or_else(|_| panic!("exact report bound rejected"));
+    shutdown(&runtime);
+    drop(runtime);
+    drop(observer);
+    assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+    println!("Host complete cleanup report footprint={required}");
+}
+
+#[test]
+fn host_cleanup_quantum_caps_the_whole_shutdown_and_retains_pending_work() {
+    for too_small in [1, 3] {
+        assert_eq!(
+            rejected_host_startup(ResourceKind::CleanupWorkItemsPerStepMax, too_small),
+            4
+        );
+    }
+    let stats = Arc::new(Stats::default());
+    stats.set_mode(Mode::Complete);
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::CleanupWorkItemsPerStepMax, Some(4)));
+    let policy = policy_with_cleanup_costs(limits);
+    let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+    let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
+        binding::host_registration(binding::HostClient::new(stats.clone(), outputs())),
+        policy,
+        Arc::new(Clock::default()),
+        parent.clone(),
+    )
+    .unwrap_or_else(|_| panic!());
+    let handle = build(&runtime);
+    let call = handle
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    drop(call);
+    drop(handle);
+    let mut first = work(100000);
+    runtime.step(&mut cx(), &mut first);
+    assert_eq!(100000 - first.remaining(WorkClass::CleanupItems), 1);
+    assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 0);
+    let mut finished = false;
+    let mut pending = 0;
+    for _ in 0..10000 {
+        let mut budget = work(100000);
+        let status = runtime.shutdown(&mut cx(), &mut budget);
+        assert!(100000 - budget.remaining(WorkClass::CleanupItems) <= 4);
+        if let StartStatus::Ready(outcome) = status {
+            assert!(outcome.is_complete());
+            finished = true;
+            break;
+        }
+        pending += 1;
+    }
+    assert!(finished && pending > 0);
+    assert_eq!(stats.cancels.load(Ordering::SeqCst), 1);
+    assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+    drop(runtime);
+    drop(observer);
+    assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+}
+
+#[test]
+fn host_manual_cleanup_commits_terminal_report_before_delivery_or_discard_destruction() {
+    for discard in [false, true] {
+        for expire in [false, true] {
+            let stats = Arc::new(Stats::default());
+            stats.set_mode(Mode::Transfer);
+            let policy = policy();
+            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let clock = Arc::new(Clock::default());
+            let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
+                binding::host_registration(binding::HostClient::new(stats.clone(), outputs())),
+                policy,
+                clock.clone(),
+                parent.clone(),
+            )
+            .unwrap_or_else(|_| panic!());
+            let observer = Arc::new(observer);
+            let handle = build(&runtime);
+            let check = observer.clone();
+            let ordered = Arc::new(core::sync::atomic::AtomicBool::new(true));
+            let observed = ordered.clone();
+            let check: Arc<dyn Fn()> = Arc::new(move || {
+                // Persist the observation without unwinding from GlobalAlloc.
+                let terminal = check().0.is_some_and(|outcome| {
+                    outcome.is_residual() == expire && outcome.is_complete() != expire
+                });
+                observed.fetch_and(terminal, Ordering::SeqCst);
+            });
+            observe(usize::MAX);
+            let mut call = handle
+                .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                .unwrap();
+            call.cancel().unwrap();
+            runtime.step(&mut cx(), &mut work(100000));
+            assert!(observer().0.unwrap().is_pending());
+            if expire {
+                clock.0.store(1000, Ordering::SeqCst);
+            }
+            runtime.step(&mut cx(), &mut work(100000));
+            assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 0);
+            DROP_CHECK.with(|c| *c.borrow_mut() = Some(check));
+            if discard {
+                drop(call);
+                runtime.step(&mut cx(), &mut work(100000));
+            } else {
+                let result = call.try_take(&mut work(100000)).unwrap().unwrap();
+                assert_eq!(category(result), if expire { "cancelled" } else { "ok" });
+                drop(call);
+            }
+            DROP_CHECK.with(|c| *c.borrow_mut() = None);
+            assert!(
+                ordered.load(Ordering::SeqCst),
+                "terminal report must precede raw/Core deallocation"
+            );
+            assert_eq!(trace().live, 0);
+            disarm();
+            assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
+            assert_eq!(runtime.cleanup_record().unwrap().is_complete(), !expire);
+            assert_eq!(observer().0.unwrap().is_residual(), expire);
+            drop(handle);
+            shutdown(&runtime);
+            drop(runtime);
+            drop(observer);
+            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        }
+    }
+}
+
 #[test]
 fn host_every_runtime_build_and_call_allocation_failure_returns_complete_owners() {
     for fail in 0..2 {

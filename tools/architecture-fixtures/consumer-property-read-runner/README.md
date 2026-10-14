@@ -26,6 +26,21 @@ Static construction returns the registration and policy on rejection and leaves
 its borrowed clock, capacity bank and exclusively lent report storage unchanged.
 Both representations keep the original committed Planning cleanup account.
 
+Host call storage and complete static slot storage have independent byte limits
+and shared parent accounts in addition to engine bytes. Host reserves the whole
+call allowance before invocation and retains it through result/cleanup release.
+Static reserves its complete resident slot, including bounded indirect backing,
+at startup and retains that capacity while the runtime owns even a vacant slot.
+The independent report also has to fit the cleanup per-item limit at startup.
+
+Each progress/shutdown operation shares one configured cleanup work quantum
+across cancellation, release and reclamation. Excess caller credit remains
+unused. Startup rejects a quantum below an indivisible declared terminal
+operation; this fixture's four-item registration retirement requires four units.
+An acknowledged Host manual transfer changes its matching Pending report to
+Complete before raw-call destruction, including result discard. An existing
+residual report is preserved.
+
 `consume(thing, final_work, |build| ...)` lends a local, source-bearing adapter.
 Drive `build.step(work)` until `build.is_finished()`. The scope can wait for the
 application's work/timer, but cannot export a source loan or a local Planning

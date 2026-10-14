@@ -121,6 +121,18 @@ impl Root {
             r.0 = Some(outcome);
         }
     }
+    fn finish_transfer(&self, call: &CallOwner) {
+        let Some(request) = &call.transfer else {
+            return;
+        };
+        let mut report = lock(&self.report.get().value);
+        if let Some(CleanupOutcome::PendingCleanup(record)) = report.0
+            && record.subject() == request.phase().reservation().subject()
+            && record.owner() == request.requested_owner()
+        {
+            report.0 = Some(CleanupOutcome::Complete);
+        }
+    }
 }
 impl FinalRelease for Root {
     fn before_release(&mut self) {
@@ -206,13 +218,16 @@ impl ConsumerPropertyReadRuntime {
         {
             return Err(reject((registration, policy, clock, parent), e));
         }
+        let report_bytes = Shared::<Report>::allocation_layout().size() as u64;
+        let root_bytes = Shared::<Root>::allocation_layout().size() as u64;
+        if let Err(error) = check(&policy.limits, K::CleanupItemBytesMax, report_bytes) {
+            return Err(reject((registration, policy, clock, parent), error));
+        }
         let now = match policy.startup_time(&*clock, true) {
             Ok(now) => now,
             Err(error) => return Err(reject((registration, policy, clock, parent), error)),
         };
         let parent = HostParent(parent);
-        let report_bytes = Shared::<Report>::allocation_layout().size() as u64;
-        let root_bytes = Shared::<Root>::allocation_layout().size() as u64;
         let provision = (|| {
             check(
                 &policy.limits,
@@ -483,6 +498,14 @@ impl ConsumerPropertyReadRuntime {
         cx: &mut Context<'_>,
         work: &mut WorkBudget,
     ) -> StartStatus<CleanupOutcome> {
+        let cleanup = CleanupStep::new(
+            work,
+            self.root
+                .get()
+                .policy()
+                .limit(K::CleanupWorkItemsPerStepMax),
+        );
+        let work = &mut *cleanup.work;
         {
             let mut c = lock(&self.root.get().cell);
             c.kernel.closed = true;
@@ -504,7 +527,9 @@ impl ConsumerPropertyReadRuntime {
                 return StartStatus::Pending;
             };
             let policy = self.root.get().policy();
-            let cost = policy.work[5] * u64::from(policy.registration.retained_items().max(1));
+            let cost = policy
+                .registration_cleanup_work()
+                .expect("qualified cleanup quantum");
             if !pay(work, &[(W::CleanupItems, cost)]) {
                 return StartStatus::Pending;
             }
@@ -855,6 +880,7 @@ impl ConsumerPropertyReadHandle {
             (PEAK, temporary),
             (PINS, 1),
             (CALLS, 1),
+            (HOST_BYTES, call_bytes),
         ])) {
             lock(&self.root.get().cell).kernel.acknowledge();
             return Err(reject((options, None), e));
@@ -982,6 +1008,11 @@ impl ConsumerPropertyReadCall {
         work: &mut WorkBudget,
     ) -> CoreResult<Option<CoreResult<InteractionOutput>>> {
         let root = self.root.as_ref().ok_or_else(stale)?;
+        let cleanup = CleanupStep::new(
+            work,
+            root.get().policy().limit(K::CleanupWorkItemsPerStepMax),
+        );
+        let work = &mut *cleanup.work;
         let mut checkout = match Checkout::take(root, work) {
             Some(c) => c,
             None => return Ok(None),
@@ -1005,6 +1036,7 @@ impl ConsumerPropertyReadCall {
         drop(c);
         let driver = checkout.driver.as_mut().unwrap();
         let mut call = take_call(driver).expect("terminal whole call");
+        root.get().finish_transfer(&call);
         let result = call.result.take();
         drop(call); // No structural lock around raw destruction or release.
         let mut c = lock(&root.get().cell);
@@ -1163,6 +1195,11 @@ fn progress(
     work: &mut WorkBudget,
     offer: &mut impl FnMut(&CleanupTransferRequest) -> bool,
 ) -> StepStatus<()> {
+    let cleanup = CleanupStep::new(
+        work,
+        root.get().policy().limit(K::CleanupWorkItemsPerStepMax),
+    );
+    let work = &mut *cleanup.work;
     if lock(&root.get().cell).kernel.phase == CompiledPlanSetState::Frozen {
         let _ = install(root, work);
         return pending();
@@ -1261,7 +1298,9 @@ fn progress(
     {
         c.kernel.call_phase = CallPhase::Acknowledging;
         drop(c);
-        drop(take_call(driver));
+        let call = take_call(driver).expect("terminal whole call");
+        root.get().finish_transfer(&call);
+        drop(call);
         c = lock(&root.get().cell);
         c.kernel.acknowledge();
     }

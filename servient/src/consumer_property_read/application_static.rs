@@ -88,6 +88,29 @@ where
         if let Err(e) = supported {
             return Err(reject((registration, policy), e));
         }
+        // The complete Core slot is resident even while vacant. Add only the
+        // author's indirect/raw backing beyond its inline associated state.
+        let slot_bytes = (|| {
+            let state = size_of::<C::RequestState>() as u64;
+            if state > policy.call.retained_bytes() {
+                return Err(unsupported());
+            }
+            let bytes = add(
+                size_of::<StaticConsumerPropertyReadSlot<C::RequestState>>() as u64,
+                policy.call.retained_bytes() - state,
+            )?;
+            policy.check_binding_storage(false, bytes)?;
+            check(
+                &policy.limits,
+                K::CleanupItemBytesMax,
+                size_of::<ReportStorage>() as u64,
+            )?;
+            Ok(bytes)
+        })();
+        let slot_bytes = match slot_bytes {
+            Ok(bytes) => bytes,
+            Err(error) => return Err(reject((registration, policy), error)),
+        };
         let now = match policy.startup_time(clock, false) {
             Ok(now) => now,
             Err(error) => return Err(reject((registration, policy), error)),
@@ -122,7 +145,11 @@ where
                     )?,
                 )?,
             )?;
-            provision.grow(amounts(&[(ENGINE, root_bytes), (BINDINGS, 1)]))?;
+            provision.grow(amounts(&[
+                (ENGINE, root_bytes),
+                (BINDINGS, 1),
+                (SLOT_BYTES, slot_bytes),
+            ]))?;
             let held = parent.edit(|a| {
                 let wanted =
                     amounts(&[(ENGINE, bytes), (CLEANUP_BYTES, bytes), (CLEANUP_ITEMS, 1)]);
@@ -475,6 +502,8 @@ where
         generation: Generation,
         work: &mut WorkBudget,
     ) -> CoreResult<Option<CoreResult<InteractionOutput>>> {
+        let cleanup = CleanupStep::new(work, self.policy.limit(K::CleanupWorkItemsPerStepMax));
+        let work = &mut *cleanup.work;
         if generation != self.kernel.call || self.kernel.call_phase == CallPhase::Vacant {
             return Err(stale());
         }
@@ -557,6 +586,8 @@ where
         }
     }
     pub fn step(&mut self, cx: &mut Context<'_>, work: &mut WorkBudget) -> StepStatus<()> {
+        let cleanup = CleanupStep::new(work, self.policy.limit(K::CleanupWorkItemsPerStepMax));
+        let work = &mut *cleanup.work;
         if self.kernel.phase == CompiledPlanSetState::Frozen {
             let _ = self.install(work);
             return StepStatus::progress(None, Some(PendingWork::new(PendingWorkClass::Cleanup)));
@@ -680,6 +711,8 @@ where
         cx: &mut Context<'_>,
         work: &mut WorkBudget,
     ) -> StartStatus<CleanupOutcome> {
+        let cleanup = CleanupStep::new(work, self.policy.limit(K::CleanupWorkItemsPerStepMax));
+        let work = &mut *cleanup.work;
         self.kernel.closed = true;
         self.kernel.discard_results = true;
         self.close();
@@ -690,8 +723,10 @@ where
             return StartStatus::Pending;
         }
         if self.registration.is_some() {
-            let cost =
-                self.policy.work[5] * u64::from(self.policy.registration.retained_items().max(1));
+            let cost = self
+                .policy
+                .registration_cleanup_work()
+                .expect("qualified cleanup quantum");
             if !pay(work, &[(W::CleanupItems, cost)]) {
                 return StartStatus::Pending;
             }

@@ -46,7 +46,7 @@ pub use host::{
     HostConsumerPropertyReadBuild,
 };
 
-const N: usize = 14;
+const N: usize = 16;
 const ENGINE: usize = 0;
 const TEMP: usize = 1;
 const PEAK: usize = 2;
@@ -61,6 +61,8 @@ const CLEANUP_ITEMS: usize = 10;
 const CLEANUP_BYTES: usize = 11;
 const BINDINGS: usize = 12;
 const THINGS: usize = 13;
+const HOST_BYTES: usize = 14;
+const SLOT_BYTES: usize = 15;
 const KINDS: [K; N] = [
     K::EngineLiveBytesGlobalMax,
     K::AdmissionTemporaryBytesGlobalMax,
@@ -76,6 +78,8 @@ const KINDS: [K; N] = [
     K::CleanupBytesMax,
     K::BindingsGlobalMax,
     K::ThingsGlobalMax,
+    K::HostBindingCallBytesGlobalMax,
+    K::BindingSlotStateBytesGlobalMax,
 ];
 // Phase, nonce, policy owner, complete registration, three generations, backing,
 // pin gate, cancellation, destination, and install. Bridge return is additional.
@@ -128,6 +132,35 @@ fn pay(b: &mut WorkBudget, costs: &[(W, u64)]) -> bool {
         b.consume(w, n).expect("whole debit checked");
     }
     true
+}
+// One allowance covers every cleanup branch in a public progress operation,
+// including nested step during shutdown. Restore only the caller's withheld
+// excess; consumed credit is never refunded, including during unwinding.
+struct CleanupStep<'a> {
+    work: &'a mut WorkBudget,
+    withheld: u64,
+}
+impl<'a> CleanupStep<'a> {
+    fn new(work: &'a mut WorkBudget, limit: u64) -> Self {
+        let available = work.remaining(W::CleanupItems);
+        let allowed = available.min(limit);
+        work.set_remaining(W::CleanupItems, allowed);
+        Self {
+            work,
+            withheld: available - allowed,
+        }
+    }
+}
+impl Drop for CleanupStep<'_> {
+    fn drop(&mut self) {
+        self.work.set_remaining(
+            W::CleanupItems,
+            self.work
+                .remaining(W::CleanupItems)
+                .checked_add(self.withheld)
+                .expect("only unused caller credit is restored"),
+        );
+    }
 }
 fn reject<T>(input: T, error: CoreError) -> BindingInputRejection<T> {
     BindingInputRejection::new(input, BindingOperationalError::new(error))
@@ -222,7 +255,12 @@ impl ConsumerPropertyReadPolicy {
             check(&limits, kind, 1)?;
         }
         for kind in KINDS {
-            if kind != K::PendingClientCallsGlobalMax {
+            if !matches!(
+                kind,
+                K::PendingClientCallsGlobalMax
+                    | K::HostBindingCallBytesGlobalMax
+                    | K::BindingSlotStateBytesGlobalMax
+            ) {
                 check(&limits, kind, 1)?;
             }
         }
@@ -293,7 +331,20 @@ impl ConsumerPropertyReadPolicy {
         if host {
             check(&self.limits, K::PendingClientCallsPerBindingMax, 1)?;
             check(&self.limits, K::PendingClientCallsPerThingMax, 1)?;
+            self.check_binding_storage(true, self.call_bytes()?)?;
         }
+        let release = if host {
+            self.work[5]
+        } else {
+            add(self.work[5], self.work[6])?
+        };
+        // Complete registration destruction and Core's associated-state
+        // acknowledgement/destruction are indivisible existing operations.
+        check(
+            &self.limits,
+            K::CleanupWorkItemsPerStepMax,
+            release.max(self.registration_cleanup_work()?),
+        )?;
         check(
             &self.limits,
             K::BindingArtifactBytesPerItemMax,
@@ -311,6 +362,32 @@ impl ConsumerPropertyReadPolicy {
             self.call.retained_bytes().max(self.core_backing()),
         )?;
         Ok(())
+    }
+    fn check_binding_storage(&self, host: bool, bytes: u64) -> CoreResult<()> {
+        let kinds: &[K] = if host {
+            &[
+                K::HostBindingCallBytesPerItemMax,
+                K::HostBindingCallBytesPerBindingMax,
+                K::HostBindingCallBytesPerThingMax,
+                K::HostBindingCallBytesGlobalMax,
+            ]
+        } else {
+            &[
+                K::BindingSlotStateBytesPerItemMax,
+                K::BindingSlotStateBytesPerThingMax,
+                K::BindingSlotStateBytesGlobalMax,
+            ]
+        };
+        for &kind in kinds {
+            check(&self.limits, kind, bytes)?;
+        }
+        Ok(())
+    }
+    fn registration_cleanup_work(&self) -> CoreResult<u64> {
+        mul(
+            self.work[5],
+            u64::from(self.registration.retained_items().max(1)),
+        )
     }
     fn request_bound(&self) -> CoreResult<u64> {
         // A conservative native BTreeMap node envelope, separately measured in
