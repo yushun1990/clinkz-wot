@@ -4,9 +4,9 @@ work_package = "WP-400"
 tranche = "WP-400-CONSUMER-PROPERTY-READ-RUNTIME"
 evidence_key = "consumer-property-read-runtime"
 base_ref = "4f75a334f7aae4130bc1ba0784abb0470b442b4a"
-implementation_ref = "fe8035bb80a7f57f636cf6aa298a385d09bb008b"
-test_ref = "fe8035bb80a7f57f636cf6aa298a385d09bb008b"
-recorded_on = "2026-10-13"
+implementation_ref = "a7b3dacba4e51a5508cba0cd2e5cf0c9717682e9"
+test_ref = "a7b3dacba4e51a5508cba0cd2e5cf0c9717682e9"
+recorded_on = "2026-10-14"
 status = "candidate"
 execution_status = "passed"
 acceptance = "pending independent exact-head acceptance"
@@ -82,12 +82,20 @@ tests = [
     "every_mutable_final_check_rejects_without_replacing_the_original_graph_or_accounts",
     "host_two_roots_exhaust_real_parent_at_build_output_and_call_peaks",
     "static_two_roots_exhaust_the_same_real_build_output_and_call_parent",
+    "host_binding_storage_all_scopes_disable_and_boundary_before_invocation",
+    "static_binding_storage_all_scopes_disable_and_boundary_before_invocation",
+    "host_binding_storage_shared_parent_is_held_through_transfer_and_unread_result",
+    "static_binding_storage_shared_parent_is_held_for_the_resident_complete_slot",
+    "host_report_complete_footprint_is_checked_before_provisioning",
+    "static_report_complete_footprint_is_checked_before_provisioning",
 ]
 evidence = [
     "Null injection traverses both actual Host provisioning allocations, all 37 Host build sites, both Core/raw call sites and all 34 static build sites. Construction returns the original complete registration on failure; pre-acceptance read rejection preserves URI String addresses/capacities and the original map, including Core/raw rejection after request construction. Children reclaim before original accounts release, with no successful reservation or live tracked block left.",
     "Both representations enumerate 1299 actual one-unit unpublished step boundaries for abandonment/cancellation, including TD scratch and Planning scratch pending. The first structured failure remains observable; cancellation cannot overwrite it. Missing ID and a later out-of-bounds coordinate reject before the first compiler allocation/start or raw binding start. Exact original TD diagnostics are retained.",
     "The private final-check fixture corrupts nonce, Thing slot, plan generation, complete registration identity, held output capacity, cancellation and output destination independently. No handle publishes; original artifact address and parent usage survive rejection. Policy is immutable, and complete registration/provision/report charges are rechecked at installation.",
     "The public parent bank contains actual Foundation ResourceAccounts shared by both roots. Build scratch/diagnostic/root allowances precede TD work; complete output/artifact/pin/call-cleanup/terminal allowances precede admit_runtime/materialization. Two roots exhaust this same bank at build, retained output and call/cleanup peaks, so independent local ceilings cannot pass. Retained upstream provisioning remains charged through scratch/output lifetime.",
+    "Host byte admission independently checks item, binding, Thing and global limits against the whole-call allowance, reserving its separate parent byte account before invocation. Static checks item/Thing/global bounds for the complete resident Core slot plus author indirect backing and reserves that distinct global capacity at startup. Zero and minus-one reject before allocation/effects; exact and plus-one execute real sealed reads. Shared-parent storage exhaustion cannot be bypassed by the engine-byte allowance. The static resident charge survives vacant-slot acknowledgement until Runtime destruction.",
+    "The actual complete report footprint, including Host shared-node/account backing or static report tuple, is checked against CleanupItemBytesMax before startup provisioning. One-byte, zero and footprint-minus-one limits return original construction owners with zero allocation/parent peaks; exact report bounds construct successfully. Host observes 944 bytes and static 208 bytes on the native target.",
 ]
 
 [[obligation]]
@@ -119,12 +127,14 @@ tests = [
     "static_ack_failure_is_bounded_by_independent_shutdown_deadline",
     "host_late_manual_cancel_gets_fresh_drain_time_without_refill_extension",
     "static_late_manual_cancel_gets_fresh_drain_time_without_refill_extension",
+    "host_manual_cleanup_commits_terminal_report_before_delivery_or_discard_destruction",
 ]
 evidence = [
     "The shared version-1 table below executes identical normalized result cases in both cells. Saturating a pending/unread result cannot overwrite it or start another call. Zero work makes no binding progress. Normal and immediate/polled late results pass through the installed Core mediator once; invalid identity/shape stays Validation and raw errors keep their structured category. Accepted footprint overrun retains the decorated accepted-error owner and lease through terminal release, with no raw result poll or input-rejection rewrite.",
     "Bounded property-name/URI-count/UTF-8/capacity validation and comparison work precede invocation. URI maps move into the name-free selected request; no fallible copy or hidden scan is required. Preconstruction rejection returns options unchanged; Core rejection returns the original request plus remaining selection controls. A subsequent explicit call is a new attempt; Runtime never retries.",
     "First Manual/Deadline/Drop/Drain cause is stable. Child cancellation records intent; the next control step samples fresh time and binds an independent five-tick drain deadline once. Late Manual cancellation at tick 1000 gets deadline 1005 despite the original call deadline 60. Five work refills do not extend it; tick 1006 expires to residual. Callback-error cancellation preserves the original Binding error, retains the complete owner and performs no retry while waiting for residual expiry.",
     "Host TransferRequired validates the complete expected CleanupPhaseContext and named owner, then offers the original whole decorated call, lease, capacities and cause to its prepaid manual destination. Acknowledged acceptance permits manual retention; refusal returns the identical envelope to local retention without a false acknowledgement. Static Core rejects fabricated transfer authority and retains Cancelling associated state until normal acknowledgement or recorded residual followed by destruction. Static acknowledgement failure also reaches a bounded residual. No cleanup fallback allocates or needs another call slot.",
+    "On delivery or automatic discard of an acknowledged transferred call, the matching subject/owner PendingCleanup report changes to Complete before raw/Core deallocation and lease/account release. The allocator hook records this ordering without unwinding inside GlobalAlloc. Deadline residual reports remain residual in both release paths. An unread late Returned result still has a real pending owner until terminal destruction.",
 ]
 
 [[obligation]]
@@ -138,12 +148,15 @@ tests = [
     "host_actual_provisioning_build_call_and_final_root_measurements",
     "host_whole_provisioning_request_call_and_global_live_measurements",
     "static_whole_provisioning_request_call_and_global_live_measurements",
+    "host_cleanup_quantum_caps_the_whole_shutdown_and_retains_pending_work",
+    "static_cleanup_quantum_caps_the_whole_shutdown_and_retains_pending_work",
 ]
 evidence = [
     "Explicit shutdown stops admission, drains the call/result and original Planning rollback, retires the actual registration outside structural locks, and reports Complete only after that work. The independent report observer remains valid after every runtime facade, handle and ticket is gone. Physically live facade/report backing remains charged until those owners are destroyed.",
     "Final abandonment commits ResidualExternalState before deallocating the Host node or any unresolved child; the allocator's pre-deallocation hook checks the observer. Static commits its independent report before destroying the complete slot, output and registration. Abandoned builds, unread results, pending calls and partially paid rollback retain their original root/accounts until this disposition.",
     "No allocation, clock sampling, protocol poll/cancel or work refill occurs in final disposal. Source-free rollback uses the original reclaimer and its retained partial byte credit. Preflight prepays B=output_capacity_bytes, I=remaining_planning_items+3 and checked B+I coordinator steps, with separate fixed Runtime/registration/call release and bridge credits. The observed Host/static rollback uses 13 steps within 4581/4269 bounds. No unreachable ManuallyDrop root, detached status-only work or lost cleanup charge is accepted.",
     "After controlled owner and observer release, tracked bytes and actual committed local/parent accounts are zero. This is local destruction with recorded external uncertainty, not a claim of successful external compensation or hard elapsed-time cleanup.",
+    "One CleanupItems allowance caps the entire public progress/result-observation/shutdown operation, including cancellation, terminal acknowledgement/destruction, reclamation and nested step plus registration retirement. Unused excess caller credit is restored without refunding consumed work, including on unwind. Startup rejects a quantum below an indivisible declared release/retirement bound; the normal fixture needs four units for registration retirement. Valid Host/static discriminators declare four-unit destruction plus one-unit static acknowledgement and use quanta four/five: cancellation consumes one, terminal release remains pending until a subsequent step, and every generously supplied shutdown budget stays within the configured cap.",
 ]
 
 [[obligation]]
@@ -213,47 +226,49 @@ core_construction_return_layout = [432, 8]
 runtime_read_admission_return_layout = [552, 8]
 result_observation_return_layout = [240, 8]
 core_result_layout = [232, 8]
-provisioning_allocation_layouts = [[848, 8], [9520, 8]]
-provisioning_live_bytes = 10368
+provisioning_allocation_layouts = [[944, 8], [9904, 8]]
+provisioning_live_bytes = 10848
 provisioning_requests = 2
 retained_output_bytes = 4547
-published_engine_live_bytes = 14915
-build_engine_peak_bytes = 22043
-largest_engine_request_bytes = 9520
+published_engine_live_bytes = 15395
+build_engine_peak_bytes = 22523
+largest_engine_request_bytes = 9904
 provisioning_plus_build_requests = 39
 call_allocation_layouts = [[344, 8], [376, 8]]
 core_envelope_bytes = 344
 raw_owner_bytes = 376
 simultaneous_call_heap_bytes = 720
 call_allocation_requests = 2
-accepted_and_unread_result_engine_live_bytes = 15635
+binding_storage_reserved_bytes = 2992
+binding_storage_accounting = "The complete pre-admitted call/request/result allowance, independently checked against all four Host binding byte limits and reserved in the shared HostBindingCallBytesGlobalMax account before invocation. Retained through transfer and unread results until complete call destruction. This conservative allowance is separate from measured 720-byte Core/raw heap backing."
+accepted_and_unread_result_engine_live_bytes = 16115
 return_overlap = "The same 720-byte Core/raw backing remains live during the unread result, while a sealed result is retained inline. Core construction return (432), Runtime admission return (552), result observation return (240) and carrier (16) are actual inline Layouts, separate from heap/backing. Taking the result destroys raw/Core backing once and transfers the result to the caller without another allocation; no compiler stack layout is inferred."
 whole_binding_provisioning_live_bytes = 1345
 whole_binding_provisioning_requests = 19
-whole_all_provisioning_live_bytes = 12321
+whole_all_provisioning_live_bytes = 12881
 whole_all_provisioning_requests = 23
-whole_published_live_bytes = 16868
-whole_simultaneous_peak_bytes = 23996
-whole_largest_request_bytes = 9520
+whole_published_live_bytes = 17428
+whole_simultaneous_peak_bytes = 24556
+whole_largest_request_bytes = 9904
 whole_final_retained_bytes = 0
 whole_releases = 65
-observer_backing_after_abandoned_root_bytes = 848
+observer_backing_after_abandoned_root_bytes = 944
 final_install_planning_items = 12
 checkout_return_planning_items = 1
-terminal_fixed_root_cleanup_items = 80
+terminal_fixed_root_cleanup_items = 88
 terminal_rollback_steps_used = 13
 terminal_rollback_step_bound = 4581
 terminal_remaining_byte_credit = 1376
 terminal_remaining_planning_items = 21
 abandonment_allocation_requests = 0
 abandonment_protocol_callbacks = 0
-parent_kinds = ["EngineLiveBytesGlobalMax", "AdmissionTemporaryBytesGlobalMax", "AdmissionPeakLiveBytesGlobalMax", "CompiledRuntimeBytesGlobalMax", "BindingCompilerCursorBytesGlobalMax", "BindingArtifactsGlobalMax", "BindingArtifactBytesGlobalMax", "PlanSetsGlobalMax", "PlanPinsGlobalMax", "PendingClientCallsGlobalMax", "CleanupItemsMax", "CleanupBytesMax", "BindingsGlobalMax", "ThingsGlobalMax"]
-parent_peak_used = [95987, 68160, 95987, 4547, 76, 3, 456, 1, 1, 1, 3, 6576, 1, 1]
-accounting_interpretation = "Actual paired reservations in the shared Foundation account bank, measured separately from physical bytes. These are per-kind peaks and must not be added together. Admission scratch and retained upstream source/output/cleanup capacity are conservative allowances; the physical simultaneous whole-fixture peak is 23996. Report backing remains charged until observer release. Shared bank integrity is the caller's documented loan obligation."
+parent_kinds = ["EngineLiveBytesGlobalMax", "AdmissionTemporaryBytesGlobalMax", "AdmissionPeakLiveBytesGlobalMax", "CompiledRuntimeBytesGlobalMax", "BindingCompilerCursorBytesGlobalMax", "BindingArtifactsGlobalMax", "BindingArtifactBytesGlobalMax", "PlanSetsGlobalMax", "PlanPinsGlobalMax", "PendingClientCallsGlobalMax", "CleanupItemsMax", "CleanupBytesMax", "BindingsGlobalMax", "ThingsGlobalMax", "HostBindingCallBytesGlobalMax", "BindingSlotStateBytesGlobalMax"]
+parent_peak_used = [96963, 68272, 96963, 4547, 76, 3, 456, 1, 1, 1, 3, 6672, 1, 1, 2992, 0]
+accounting_interpretation = "Actual paired reservations in the shared Foundation account bank, measured separately from physical bytes. These are per-kind peaks and must not be added together. Admission scratch and retained upstream source/output/cleanup capacity are conservative allowances; the physical simultaneous whole-fixture peak is 24556. Report backing remains charged until observer release. Shared bank integrity is the caller's documented loan obligation."
 
 [measurements.application_static]
-runtime_std_layout = [10192, 8]
-runtime_no_default_and_async_layout = [10096, 8]
+runtime_std_layout = [10496, 8]
+runtime_no_default_and_async_layout = [10400, 8]
 build_layout = [2776, 8]
 associated_slot_layout = [584, 8]
 raw_state_layout = [376, 8]
@@ -262,6 +277,8 @@ request_layout = [128, 8]
 core_result_layout = [232, 8]
 report_storage_layout = [208, 8]
 runtime_provisioning_allocation_requests = 0
+binding_storage_reserved_bytes = 1488
+binding_storage_accounting = "Complete resident Core slot 584 plus author indirect/raw allowance 1280 minus associated-state inline size 376. All three static byte limits are checked before startup; the separate global account stays charged even after acknowledgement while the vacant slot remains resident, and releases at Runtime destruction. This allowance is not an allocator request."
 build_retained_bytes = 4235
 build_simultaneous_peak_bytes = 11819
 build_largest_request_bytes = 7552
@@ -278,7 +295,7 @@ whole_no_default_and_async_simultaneous_peak_bytes = 12283
 whole_largest_request_bytes = 7552
 whole_final_retained_bytes = 0
 whole_releases = 54
-terminal_fixed_root_cleanup_items = 80
+terminal_fixed_root_cleanup_items = 88
 terminal_rollback_steps_used = 13
 terminal_rollback_step_bound = 4269
 terminal_remaining_byte_credit = 1376
@@ -292,16 +309,16 @@ accounting_interpretation = "The runtime, complete registration, associated slot
 target = "thumbv7em-none-eabihf"
 toolchain = "rustc 1.99.0 (b940084d7 2026-09-28)"
 normal_library = "clinkz-wot-consumer-property-read-runtime-runner"
-no_default_layouts = [[9728, 8], [2200, 8], [544, 8], [352, 8], [760, 8], [112, 8], [232, 8], [208, 8]]
+no_default_layouts = [[10032, 8], [2200, 8], [544, 8], [352, 8], [760, 8], [112, 8], [232, 8], [208, 8]]
 layout_order = ["runtime", "build", "associated slot", "raw state", "complete registration", "request", "Core result", "report"]
 reproduction = "cargo rustc --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir; decode the little-endian u32 pairs in STATIC_RUNTIME_LAYOUTS in target/thumbv7em-none-eabihf/debug/deps/clinkz_wot_consumer_property_read_runtime_runner-*.ll."
 interpretation = "Actual target type Layouts and normal-library compile evidence only; no ARM execution, generated stack bound or physical device-fit claim."
 
 [execution_summary]
-runtime_std_integration_passed_per_toolchain = 34
+runtime_std_integration_passed_per_toolchain = 43
 runtime_std_private_final_check_unit_passed_per_toolchain = 1
-runtime_no_default_passed_per_toolchain = 16
-runtime_async_no_std_passed_per_toolchain = 16
+runtime_no_default_passed_per_toolchain = 20
+runtime_async_no_std_passed_per_toolchain = 20
 downstream_std_applications_passed_per_toolchain = 2
 downstream_no_default_applications_passed_per_toolchain = 1
 downstream_async_no_std_applications_passed_per_toolchain = 1
@@ -317,12 +334,12 @@ real_zenoh_producer_feedback_cases_passed = 7
 planning_library_cases_std = 10
 planning_library_cases_no_default = 9
 planning_library_cases_async_no_std = 9
-validation_dispositions = "Preliminary stale cached manifest paths were removed through Cargo package cleaning; a disk-full predecessor build was rerun successfully after cleaning generated package caches. Four extra sweep commands named nonexistent test targets and were replaced with the actual Core async suite and Planning library suites. No failed executable test or uncorrected implementation failure is hidden. The exhaustive phase probes run natively; the full Memcheck attempt was stopped for cost, and the final focused Memcheck below excludes only those two probes."
+validation_dispositions = "All 47 listed verification commands were rerun on implementation_ref after repairing the four independent review findings. The nine added integration regressions cover disabled/exact storage limits, original startup input recovery, real shared storage exhaustion, complete-operation cleanup quanta and transfer status before deallocation. The two exhaustive 1299-boundary enumerations run natively in all applicable cells; focused Memcheck excludes only those two probes."
 
 [memory_check]
 tool = "Valgrind 3.27.1 Memcheck"
-source_ref = "fe8035bb80a7f57f636cf6aa298a385d09bb008b"
-tests_passed = 32
+source_ref = "a7b3dacba4e51a5508cba0cd2e5cf0c9717682e9"
+tests_passed = 41
 tests_excluded = ["host_abandon_every_unpublished_step_keeps_original_graph_and_account", "static_abandon_and_cancel_at_every_build_step_keep_a_bounded_cleanup_owner"]
 errors = 0
 definitely_lost_bytes = 0
@@ -346,6 +363,17 @@ limit = "Only request/read-result/manual-cleanup dimensions; subscription, respo
 ids = ["PERF-GW-029", "PERF-CS-021"]
 evidence = "Actual eager atomic publication, pin-before-drain/pin-after-drain rejection, checked generation reuse, shared real parent exhaustion, original rollback/partial credit and bounded last-owner disposal."
 limit = "Only exercised eager Property Read plan-retention/lifecycle dimensions; lazy cache, reusable plan sharing, fleet behavior and full workload completion remain open. Manifests, fixtures and budgets are unchanged."
+
+[review_repairs]
+review = "github-pr:168#pullrequestreview-5512150863"
+reviewed_head = "7aff21293f53455659fa58d7af8fffbf5373ccec"
+source_ref = "a7b3dacba4e51a5508cba0cd2e5cf0c9717682e9"
+scope = "Four repairs enforce already accepted binding-storage, cleanup-item, per-step work and pending-owner status contracts. No lower-layer API, gate, milestone, admitted scope or workspace topic is changed; fresh independent acceptance remains required."
+new_integration_regressions = 9
+binding_storage_limits = "All four Host and all three static byte scopes independently reject disabled/undersized policies and accept exact/larger bounds. Each representation has its own actual shared parent byte account; Host call retention and static resident-slot retention are separately exercised."
+report_item_limit = "Complete report size is checked before provisioning; original registrations, policy, clock/parent owners and static report loans return unchanged on rejection."
+cleanup_quantum = "One allowance spans each whole public progress operation, including shutdown's nested step and final registration retirement. Indivisible declared operations must fit at startup; valid small-quantum tests defer terminal destruction after cancellation and preserve caller excess credit."
+transfer_terminal_report = "Matching acknowledged manual PendingCleanup changes to Complete before delivery/discard destroys raw/Core backing and releases capacities; previously recorded residuals remain residual."
 
 [[verification]]
 command = "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --nocapture"
