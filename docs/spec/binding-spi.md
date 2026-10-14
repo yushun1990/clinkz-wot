@@ -1931,6 +1931,42 @@ implementation proves a zero delta). Sealing is one constant-time step inside
 the same bounded callback quantum and creates no second work queue or resource
 pool.
 
+### Shared protocol infrastructure lifetime
+
+Terminal semantic-call acknowledgement and physical protocol retirement are
+separate boundaries. A session, SDK timeout task, callback or reactor job may
+outlive a returned result only while an actual admitted infrastructure owner
+retains its immutable maximum and original local/parent charges. Call capacity
+may then be reusable while infrastructure capacity remains consumed. References
+and call-local state are separately accounted; a shared physical owner is charged
+once, never omitted or freed because its last semantic result was delivered.
+
+The release barrier must cover the original operation plus all jobs/callbacks
+and final local destruction. A library's closed flag, receiver disconnection,
+deadline or successful retry of an abandoned close is not that barrier. Durable
+residual status permits truthful failure reporting; it does not release capacity
+for local SDK work that remains live. Such work needs its actual retained owner
+or an acknowledged complete-object successor with the original accounts.
+
+Capability composition confers no shared-resource shutdown authority: cancelling
+a Consumer call or retiring its epoch must not close another live Consumer or
+Producer's resources. Separate role registrations may use separate concrete
+infrastructure; sharing requires an explicitly qualified common owner and
+last-user release contract, not an assumed one-to-one relation between Things,
+registrations and transport sessions.
+
+An engine-owned registration/call destructor remains finite local disposal; it
+cannot invoke network close, thread join, allocation or replacement work on the
+Runtime's last-root path. Delegating SDK state to a concrete protocol worker
+requires complete ownership, bounded queues/jobs and original-account retention,
+including loss of that worker's final owner. Thread detachment or a Session clone
+does not establish this. The current Consumer Runtime has no asynchronous
+registration-retirement hook; support for any delegated owner must be qualified
+against its actual captured registration and account lifecycle, or require a
+scoped contract correction before implementation admission. The
+[WP-600 decision](../work-packages/WP-600-host-zenoh-owner-decision.md)
+owns the concrete candidate and unresolved qualification, not a new shared API.
+
 Zero never means unbounded. A disabled capability cannot be started. A
 declaration or actual footprint overrun is a binding contract violation and is
 reported before accepting new work where possible; already accepted ownership

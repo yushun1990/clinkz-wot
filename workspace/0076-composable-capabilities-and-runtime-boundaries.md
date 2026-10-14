@@ -2,6 +2,25 @@
 
 Status: DISCUSSING
 
+## Real Host protocol-owner intersection
+
+Preparation for the first real Consumer integration now supplies an earlier
+scoped reevaluation under this topic's existing escalation rule. Topic 0083's session/epoch work
+intersects the physical runtime principle here: terminal role/call owners and
+concrete SDK infrastructure can have different lifetimes. The current Runtime
+still destroys the captured registration during shutdown; a last Zenoh Session
+Drop is not its finite local destructor.
+
+The selected narrow direction and rejected alternatives are migrated to
+[the WP-600 owner decision](../docs/work-packages/WP-600-host-zenoh-owner-decision.md)
+and [Binding SPI](../docs/spec/binding-spi.md#shared-protocol-infrastructure-lifetime).
+The [new public-SDK fixture](../tools/architecture-fixtures/host-zenoh-owner/README.md)
+demonstrates a scoped separate owner and original account retention, not complete
+Runtime capture or final worker loss. Those qualification questions still block
+production admission. This does not select Contracts extraction, generated
+images, shared sessions across roles or new Host/embedded packages. No obsolete
+API or compatibility layer is required by the historical sketches below.
+
 ## Scoped Runtime decision migration
 
 The remaining Consumer Property Read ownership, call admission, publication,
