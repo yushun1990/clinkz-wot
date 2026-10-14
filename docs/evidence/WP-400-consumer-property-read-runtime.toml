@@ -7,11 +7,11 @@ base_ref = "4f75a334f7aae4130bc1ba0784abb0470b442b4a"
 implementation_ref = "cf2e0dec522f0854bcc898e1d437cab6e5fca57b"
 test_ref = "cf2e0dec522f0854bcc898e1d437cab6e5fca57b"
 recorded_on = "2026-10-14"
-status = "candidate"
+status = "passed"
 execution_status = "passed"
-acceptance = "pending independent exact-head acceptance"
+acceptance = "github-pr:168#pullrequestreview-5513459509"
 admission_review = "github-pr:165#pullrequestreview-5505656673"
-assessment = "Production implementation candidate for the six admitted Runtime obligations. Execution evidence supports review; it does not independently accept completion. The index remains planned/admitted/current. No architecture gate, milestone, PLAN or workspace-topic transition is made."
+assessment = "Independently accepted completion of all six admitted Consumer Property Read Runtime obligations at exact head b5517e8d9721084ba005d03c64f3cf32c7a1a79f. This separate docs-only transition records only the bounded tranche completion; no Consumer architecture gate, real Consumer protocol qualification, broader WP-400/milestone closure, full performance matrix or workspace-topic transition is made."
 compilation_cells = ["std", "no-default", "async-no-std"]
 production_paths = [
     "servient/src/consumer_property_read.rs",
@@ -42,16 +42,13 @@ requirement_ids = [
 ]
 scope = "One complete startup Consumer-only registration, one eager consumed generation and one manual read/result opportunity. Both representations construct independently, with no legacy consume/client, Directory, event broker, server, executor or call pool. Existing lower-layer implementations and signatures are unchanged."
 predecessor_impact = "The seven admitted predecessor contracts are reused: borrowed TD admission, closed compiler support, complete aggregate/all-bounds barrier, selected name-free Core execution/sealing, real client-only registration, unique Host output/rollback bridge, and recoverable Core-first Host call construction. Their source and accepted evidence remain unchanged. Registered entry, aggregate, Core, Foundation and Producer checks are reproduced below; these checks do not accept the new Runtime."
-unresolved_obligations = [
-    "Fresh independent acceptance must reconstruct all six obligations from the admission, exact final PR head, code, tests and this candidate record.",
-    "Inspect required validation on the exact final PR head. Its automatic diff-hygiene status is not a package or architecture acceptance result.",
-    "Only a subsequent authorized acceptance transition may change this record to passed or the index to complete.",
-]
+unresolved_obligations = []
 excluded_claims = [
     "Arbitrary typed source sizes, binding callbacks, allocator behavior, machine-stack bounds, allocator metadata/fragmentation, hard wall-clock cleanup or physical device fit",
     "Real protocol eligibility, real network Consumer behavior, full network/subscription/emission/fairness matrices, release performance completion or a Consumer architecture gate",
     "Multiple bindings, multiple simultaneous generations/calls, dynamic registration, executor adapters, automatic retry, call pools or new lower-layer/public support issuers",
     "Fleet scalability, physical duplication requirements or any resolution of OPEN workspace topic 0081; reusable immutable execution-data separation remains open",
+    "Any resolution of OPEN workspace topic 0082; logical versus physical subscription ownership remains a separate long-lived domain-entry investigation",
     "Whole-workspace test/format success, milestone closure, broader WP-400 completion or independent acceptance by the implementation context",
 ]
 
@@ -177,7 +174,7 @@ evidence = [
     "The fixed, nonallocating allocator observer pairs successful addresses/Layouts with deallocations and reports live, simultaneous peak, largest request and exact failure sites. Provisioning, build, request, accepted call, unread result and final disposal are distinct observation boundaries. Whole-fixture measurements include prebacked binding results, shared statistics, Host bank/clock and Runtime backing; the borrowed Thing and libtest/allocator internals are explicitly outside that physical interval.",
     "Both native toolchains reproduce the focused integration and application cells. Actual associated-state normal libraries compile for thumbv7em-none-eabihf without std, with and without async. ARM Layouts are extracted from the used normal-library STATIC_RUNTIME_LAYOUTS LLVM constant; ARM execution is not claimed.",
     "All admitted prechecks and affected predecessor, Foundation, TD, Planning, Core, Producer and concrete Zenoh feedback checks pass as listed. Authority/resource/API/ADR/legacy/performance validation covers the unchanged manifests and 66 harness cases, not new architecture acceptance. Scoped formatting and diff hygiene pass; four preexisting Producer clippy warnings remain outside this change.",
-    "This candidate record binds executable source/test revisions. Subsequent evidence-only commits do not alter that boundary. Required remote diff-hygiene CI and fresh independent review must be checked against the actual final PR head before any completion transition.",
+    "The independent production review linked by acceptance reconstructed and accepted all six obligations at exact final head b5517e8d9721084ba005d03c64f3cf32c7a1a79f, whose only change from implementation_ref is this evidence file. Required exact-head and merge-push diff-hygiene validation passed, and the reviewed/merged trees match as recorded in the admission owner. This separate docs-only transition preserves the executable revisions, measurements and verification results; it supplies no new implementation or broader acceptance.",
 ]
 
 [normalized_cases]
@@ -389,7 +386,7 @@ review = "github-pr:168#pullrequestreview-5512629306"
 reviewed_head = "4d05bc859ee6b16474d8308c8648d22d650df875"
 preceding_review = "github-pr:168#pullrequestreview-5512150863"
 source_ref = "cf2e0dec522f0854bcc898e1d437cab6e5fca57b"
-scope = "Repairs enforce already accepted binding-storage, callback temporary, cancellation-buffer, transfer-capacity, cleanup-item, per-step work and pending-owner status contracts. No lower-layer API, gate, milestone, admitted scope or workspace topic is changed; fresh independent acceptance remains required."
+scope = "Repairs enforce already accepted binding-storage, callback temporary, cancellation-buffer, transfer-capacity, cleanup-item, per-step work and pending-owner status contracts. The final independent review linked by acceptance verifies all six earlier findings fixed and supersedes their changes-required conclusions at the accepted head. No lower-layer API, gate, milestone, admitted scope or workspace topic is changed."
 new_integration_regressions = 4
 preceding_integration_regressions = 9
 binding_storage_limits = "All four Host and all three static byte scopes independently reject disabled/undersized policies and accept exact/larger bounds. Each representation has its own actual shared parent byte account; Host call retention and static resident-slot retention are separately exercised."
