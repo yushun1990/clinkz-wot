@@ -29,6 +29,7 @@ Topics are retained after migration as decision history.
 ** OPEN
 
 - [[file:0081-reusable-plan-and-thing-identity.md][0081 Reusable Plan Semantics Versus Thing-Generation Ownership]]
+- [[file:0082-logical-physical-subscription-decoupling.md][0082 Logical Subscriptions Versus Physical Broker Subscriptions]]
 
 ** DISCUSSING
 
