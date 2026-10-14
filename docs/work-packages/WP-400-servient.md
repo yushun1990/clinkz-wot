@@ -170,7 +170,7 @@ limits are documented in the existing
 The separate early multi-owner scheduler checkpoint remains outside this scope.
 
 Completion evidence key `consumer-property-read-runtime` is reserved at
-`docs/evidence/WP-400-consumer-property-read-runtime.toml`; it does not yet exist.
+`docs/evidence/WP-400-consumer-property-read-runtime.toml`.
 The tranche requires actual Host/static runtime fixtures, real registry races,
 complete call/lease/manual-fallback retention, paired simultaneous parent peaks,
 finite last-root local discard with residual report and zero controlled retained

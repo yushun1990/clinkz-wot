@@ -4,10 +4,11 @@
 //! into a single non-generic runtime: produce/consume/discover, binding-owned
 //! driving, frozen-TD lifecycle.
 //!
-//! The Servient fundamentally requires the `async` feature (it holds a
+//! The legacy Servient facade requires the `async` feature (it holds a
 //! `dyn Discoverer`, drives async handlers, and consumes via async
-//! `ClientBinding`s). On `no_std` that means `no_std + async` (embassy); bare
-//! `no_std` without `async` compiles only the data-registry primitives.
+//! `ClientBinding`s). The independent [`consumer_property_read`] runtime and
+//! static Property Read surface support manual progress in bare `no_std`.
+//! The `std` Consumer runtime also uses explicit manual progress.
 
 #![no_std]
 
@@ -16,6 +17,7 @@ extern crate std;
 
 extern crate alloc;
 
+pub mod consumer_property_read;
 mod error;
 mod property_read;
 mod registry;

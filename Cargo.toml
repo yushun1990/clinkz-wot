@@ -19,6 +19,8 @@ members = [
     "tools/design-check",
     "tools/architecture-fixtures/property-read-binding",
     "tools/architecture-fixtures/property-read-runner",
+    "tools/architecture-fixtures/consumer-property-read-binding",
+    "tools/architecture-fixtures/consumer-property-read-runner",
     "tools/architecture-fixtures/validated-thing-planning-handoff",
     "tools/performance-harness",
 ]
