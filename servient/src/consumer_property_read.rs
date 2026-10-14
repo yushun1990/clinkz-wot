@@ -46,7 +46,7 @@ pub use host::{
     HostConsumerPropertyReadBuild,
 };
 
-const N: usize = 16;
+const N: usize = 20;
 const ENGINE: usize = 0;
 const TEMP: usize = 1;
 const PEAK: usize = 2;
@@ -63,6 +63,10 @@ const BINDINGS: usize = 12;
 const THINGS: usize = 13;
 const HOST_BYTES: usize = 14;
 const SLOT_BYTES: usize = 15;
+const POLL_TEMP: usize = 16;
+const TRANSFER_SLOTS: usize = 17;
+const TRANSFER_BYTES: usize = 18;
+const CANCEL_BYTES: usize = 19;
 const KINDS: [K; N] = [
     K::EngineLiveBytesGlobalMax,
     K::AdmissionTemporaryBytesGlobalMax,
@@ -80,6 +84,10 @@ const KINDS: [K; N] = [
     K::ThingsGlobalMax,
     K::HostBindingCallBytesGlobalMax,
     K::BindingSlotStateBytesGlobalMax,
+    K::BindingPollTemporaryBytesGlobalMax,
+    K::CleanupTransferSlotsGlobalMax,
+    K::CleanupTransferBytesGlobalMax,
+    K::BindingCancelBufferBytesGlobalMax,
 ];
 // Phase, nonce, policy owner, complete registration, three generations, backing,
 // pin gate, cancellation, destination, and install. Bridge return is additional.
@@ -260,6 +268,10 @@ impl ConsumerPropertyReadPolicy {
                 K::PendingClientCallsGlobalMax
                     | K::HostBindingCallBytesGlobalMax
                     | K::BindingSlotStateBytesGlobalMax
+                    | K::BindingPollTemporaryBytesGlobalMax
+                    | K::CleanupTransferSlotsGlobalMax
+                    | K::CleanupTransferBytesGlobalMax
+                    | K::BindingCancelBufferBytesGlobalMax
             ) {
                 check(&limits, kind, 1)?;
             }
@@ -332,6 +344,18 @@ impl ConsumerPropertyReadPolicy {
             check(&self.limits, K::PendingClientCallsPerBindingMax, 1)?;
             check(&self.limits, K::PendingClientCallsPerThingMax, 1)?;
             self.check_binding_storage(true, self.call_bytes()?)?;
+        }
+        for kind in [
+            K::BindingPollTemporaryBytesPerCallMax,
+            K::BindingPollTemporaryBytesGlobalMax,
+        ] {
+            check(&self.limits, kind, resources.transient().peak_bytes())?;
+        }
+        for kind in [
+            K::BindingCancelBufferBytesPerCallMax,
+            K::BindingCancelBufferBytesGlobalMax,
+        ] {
+            check(&self.limits, kind, self.call_bytes()?)?;
         }
         let release = if host {
             self.work[5]
@@ -414,11 +438,15 @@ impl ConsumerPropertyReadPolicy {
         )
     }
     fn call_temporary(&self, resources: BindingResourceDeclarations) -> CoreResult<u64> {
-        let n = add(
-            add(self.call.retained_bytes(), self.core_backing())?,
-            resources.transient().peak_bytes(),
+        // Callback scratch is already paired in the durable registration
+        // owner, including for terminal destructors after the final call.
+        // Reserve only constructor overlap here; check the whole operation.
+        let n = add(self.call.retained_bytes(), self.core_backing())?;
+        check(
+            &self.limits,
+            K::AdmissionTemporaryBytesPerOperationMax,
+            add(n, resources.transient().peak_bytes())?,
         )?;
-        check(&self.limits, K::AdmissionTemporaryBytesPerOperationMax, n)?;
         Ok(n)
     }
     fn core_backing(&self) -> u64 {

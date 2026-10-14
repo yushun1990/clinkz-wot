@@ -227,6 +227,7 @@ impl State {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return Ok(StartStatus::Pending);
         }
+        self.stats.hook();
         self.stats.cancels.fetch_add(1, Ordering::SeqCst);
         self.prepare();
         match self.mode {
@@ -298,6 +299,7 @@ impl State {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return Poll::Pending;
         }
+        self.stats.hook();
         self.stats.cancels.fetch_add(1, Ordering::SeqCst);
         self.prepare();
         if self.mode == Mode::Pending || self.mode == Mode::Transfer && self.static_fabricated {

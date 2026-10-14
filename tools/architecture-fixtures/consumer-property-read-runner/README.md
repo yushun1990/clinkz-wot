@@ -33,6 +33,21 @@ Static reserves its complete resident slot, including bounded indirect backing,
 at startup and retains that capacity while the runtime owns even a vacant slot.
 The independent report also has to fit the cleanup per-item limit at startup.
 
+The captured Binding callback scratch declaration must fit both per-call and
+global poll-temporary limits. Startup pairs its local and shared-parent capacity
+with the registration owner before allocation. That reservation covers invoke,
+result/cancellation callbacks and destruction, survives vacant-slot reuse, and
+releases after registration retirement. Constructor overlap is reserved
+separately; cancellation needs no later scratch admission. The whole-call buffer
+also fits both cancellation-buffer limits and stays charged until call release.
+
+Host additionally checks the complete named transfer destination, including its
+typed envelope, call lease/accounts/status and bounded indirect backing. Before
+invocation it reserves one transfer slot and those destination bytes in local
+and parent accounts. Transfer authority and destination acceptance require that
+held capacity. Acceptance, refusal, unread results and residual disposal retain
+the same reservation until destruction. Static needs no Host transfer capacity.
+
 Each progress/shutdown operation shares one configured cleanup work quantum
 across cancellation, release and reclamation. Excess caller credit remains
 unused. Startup rejects a quantum below an indivisible declared terminal

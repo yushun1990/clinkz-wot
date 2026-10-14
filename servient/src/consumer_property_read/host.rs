@@ -73,6 +73,21 @@ struct CallOwner {
     generation: Generation,
     transfer: Option<CleanupTransferRequest>,
 }
+fn transfer_bytes(policy: &ConsumerPropertyReadPolicy) -> CoreResult<u64> {
+    // Complete physical destination plus its indirect call/request/result
+    // allowance. Inline account/lease/phase and durable status are included.
+    add(
+        size_of::<(CleanupTransferEnvelope<CallOwner>, CleanupRecord)>() as u64,
+        policy.call_bytes()?,
+    )
+}
+impl CallOwner {
+    fn transfer_backed(&self, bytes: u64) -> bool {
+        self.charge.as_ref().is_some_and(|c| {
+            c.held[TRANSFER_SLOTS] == 1 && c.held[TRANSFER_BYTES] >= bytes && c.is_held()
+        })
+    }
+}
 impl Drop for CallOwner {
     fn drop(&mut self) {
         drop(self.result.take());
@@ -214,8 +229,17 @@ impl ConsumerPropertyReadRuntime {
             Arc<Mutex<[ResourceAccount; N]>>,
         )>,
     > {
-        if let Err(e) = policy.qualify(&registration, registration.registration().resources(), true)
-        {
+        let supported = (|| {
+            policy.qualify(&registration, registration.registration().resources(), true)?;
+            check(&policy.limits, K::CleanupTransferSlotsGlobalMax, 1)?;
+            check(
+                &policy.limits,
+                K::CleanupTransferBytesGlobalMax,
+                transfer_bytes(&policy)?,
+            )?;
+            Ok(())
+        })();
+        if let Err(e) = supported {
             return Err(reject((registration, policy, clock, parent), e));
         }
         let report_bytes = Shared::<Report>::allocation_layout().size() as u64;
@@ -228,6 +252,11 @@ impl ConsumerPropertyReadRuntime {
             Err(error) => return Err(reject((registration, policy, clock, parent), error)),
         };
         let parent = HostParent(parent);
+        let scratch = registration
+            .registration()
+            .resources()
+            .transient()
+            .peak_bytes();
         let provision = (|| {
             check(
                 &policy.limits,
@@ -236,7 +265,10 @@ impl ConsumerPropertyReadRuntime {
             )?;
             let upstream = add(
                 add(root_bytes, size_of::<Driver>() as u64)?,
-                add(policy.registration.retained_bytes(), report_bytes)?,
+                add(
+                    add(policy.registration.retained_bytes(), report_bytes)?,
+                    scratch,
+                )?,
             )?;
             check(
                 &policy.limits,
@@ -259,6 +291,18 @@ impl ConsumerPropertyReadRuntime {
                 .try_reserve(report_bytes)
                 .expect("paired report")
                 .commit();
+            let mut provision = Charge::new(parent.clone(), &policy)?;
+            // The parked root and one complete checked-out Driver can overlap.
+            let bytes = add(
+                add(root_bytes, size_of::<Driver>() as u64)?,
+                add(policy.registration.retained_bytes(), scratch)?,
+            )?;
+            provision.grow(amounts(&[
+                (ENGINE, bytes),
+                (BINDINGS, 1),
+                (TEMP, scratch),
+                (POLL_TEMP, scratch),
+            ]))?;
             let report = Shared::try_new(Report {
                 value: Mutex::new((None, [0; 4])),
                 charge: Some(report),
@@ -267,13 +311,6 @@ impl ConsumerPropertyReadRuntime {
                 drop(r);
                 busy()
             })?;
-            let mut provision = Charge::new(parent.clone(), &policy)?;
-            // The parked root and one complete checked-out Driver can overlap.
-            let bytes = add(
-                add(root_bytes, size_of::<Driver>() as u64)?,
-                policy.registration.retained_bytes(),
-            )?;
-            provision.grow(amounts(&[(ENGINE, bytes), (BINDINGS, 1)]))?;
             Ok((report, provision))
         })();
         let (report, provision) = match provision {
@@ -535,10 +572,13 @@ impl ConsumerPropertyReadRuntime {
             }
             let driver = checkout.driver.as_mut().unwrap();
             if driver.registration.is_some() {
+                let scratch = driver.provision.as_ref().unwrap().held[POLL_TEMP];
                 drop(driver.registration.take());
                 driver.provision.as_mut().unwrap().release(amounts(&[
-                    (ENGINE, policy.registration.retained_bytes()),
+                    (ENGINE, policy.registration.retained_bytes() + scratch),
                     (BINDINGS, 1),
+                    (TEMP, scratch),
+                    (POLL_TEMP, scratch),
                 ]));
             }
             drop(checkout);
@@ -881,6 +921,12 @@ impl ConsumerPropertyReadHandle {
             (PINS, 1),
             (CALLS, 1),
             (HOST_BYTES, call_bytes),
+            (CANCEL_BYTES, call_bytes),
+            (TRANSFER_SLOTS, 1),
+            (
+                TRANSFER_BYTES,
+                transfer_bytes(policy).expect("qualified destination"),
+            ),
         ])) {
             lock(&self.root.get().cell).kernel.acknowledge();
             return Err(reject((options, None), e));
@@ -1087,13 +1133,17 @@ struct ManualDestination<'a> {
     destination: &'a mut Option<CleanupTransferEnvelope<CallOwner>>,
     allow: bool,
     record: CleanupRecord,
+    bytes: u64,
 }
 impl CleanupTransferTarget<CallOwner> for ManualDestination<'_> {
     fn try_accept(
         &mut self,
         e: CleanupTransferEnvelope<CallOwner>,
     ) -> CleanupTransferAcceptance<CallOwner> {
-        if !self.allow || self.destination.is_some() {
+        let (request, call) = e.into_parts();
+        let backed = call.transfer_backed(self.bytes);
+        let e = CleanupTransferEnvelope::new(request, call);
+        if !self.allow || self.destination.is_some() || !backed {
             return CleanupTransferAcceptance::Rejected(e);
         }
         *self.destination = Some(e);
@@ -1116,8 +1166,14 @@ fn settle(
             ..
         }) => {
             let c = lock(&root.get().cell);
-            let expected = c.kernel.cleanup_phase(root.get().policy(), true);
-            let valid = request.phase() == &expected
+            let bytes = transfer_bytes(root.get().policy()).expect("qualified destination");
+            let backed = driver
+                .call
+                .as_ref()
+                .is_some_and(|call| call.transfer_backed(bytes));
+            let expected = c.kernel.cleanup_phase(root.get().policy(), backed);
+            let valid = backed
+                && request.phase() == &expected
                 && Some(request.requested_owner()) == expected.transfer_owner();
             let record = c.kernel.record(470);
             drop(c);
@@ -1137,6 +1193,7 @@ fn settle(
                 destination: &mut driver.manual,
                 allow,
                 record,
+                bytes,
             };
             let accepted = destination.try_accept(envelope);
             match accepted {
@@ -1244,7 +1301,10 @@ fn progress(
                 if pay(work, &[(W::CleanupItems, 1), (W::BindingPolls, cost)]) {
                     let mut callback = WorkBudget::new().with_remaining(W::BindingPolls, cost);
                     if phase == CallPhase::Running {
-                        let cleanup = c.kernel.cleanup_phase(policy, true);
+                        let backed = call.transfer_backed(
+                            transfer_bytes(policy).expect("qualified destination"),
+                        );
+                        let cleanup = c.kernel.cleanup_phase(policy, backed);
                         c.kernel.call_phase = CallPhase::Cancelling;
                         drop(c);
                         let result = call.raw.as_mut().unwrap().as_pin_mut().start_cancel(

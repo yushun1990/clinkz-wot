@@ -306,6 +306,184 @@ fn static_binding_storage_all_scopes_disable_and_boundary_before_invocation() {
 }
 
 #[test]
+fn static_callback_capacity_disable_and_exact_boundaries() {
+    for kind in [
+        ResourceKind::BindingPollTemporaryBytesPerCallMax,
+        ResourceKind::BindingPollTemporaryBytesGlobalMax,
+        ResourceKind::BindingCancelBufferBytesPerCallMax,
+        ResourceKind::BindingCancelBufferBytesGlobalMax,
+    ] {
+        let required = rejected_static_startup(kind, 0);
+        assert_eq!(rejected_static_startup(kind, required - 1), required);
+        for limit in [required, required + 1] {
+            for cancel in [false, true] {
+                let stats = Arc::new(Stats::default());
+                let mut limits = GatewayDefaultV1::LIMITS.clone();
+                assert!(limits.set(kind, Some(limit)));
+                // A static associated slot has no Host transfer destination.
+                assert!(limits.set(ResourceKind::CleanupTransferSlotsGlobalMax, Some(0)));
+                assert!(limits.set(ResourceKind::CleanupTransferBytesGlobalMax, Some(0)));
+                let policy = policy_with(limits);
+                let parent = RefCell::new(policy.parent_accounts());
+                let clock = Clock::default();
+                let mut report = report_storage();
+                let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
+                    binding::static_registration(StaticClient::new(stats.clone(), outputs())),
+                    policy,
+                    &clock,
+                    &parent,
+                    &mut report,
+                )
+                .unwrap_or_else(|_| panic!("exact callback bound rejected"));
+                publish_static(&mut runtime);
+                let generation = runtime
+                    .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                    .unwrap();
+                if cancel {
+                    runtime.cancel(generation).unwrap();
+                }
+                runtime.step(&mut cx(), &mut work(100000));
+                runtime.step(&mut cx(), &mut work(100000));
+                assert_eq!(
+                    category(
+                        runtime
+                            .try_take(generation, &mut work(100000))
+                            .unwrap()
+                            .unwrap()
+                    ),
+                    "ok"
+                );
+                assert_eq!(stats.starts.load(Ordering::SeqCst), 1);
+                if cancel {
+                    assert!(stats.cancels.load(Ordering::SeqCst) > 0);
+                }
+                drop(runtime);
+                drop(observer);
+                assert!(parent.borrow().iter().all(|a| a.used() == 0));
+            }
+        }
+        println!("Static {kind:?} complete allowance={required}");
+    }
+}
+
+#[test]
+fn static_callback_scratch_shared_parent_survives_slot_reuse_until_retirement() {
+    let kind = ResourceKind::BindingPollTemporaryBytesGlobalMax;
+    let required = rejected_static_startup(kind, 0);
+    let policy_a = policy();
+    let mut accounts = policy_a.parent_accounts();
+    let index = ConsumerPropertyReadPolicy::PARENT_KINDS
+        .iter()
+        .position(|&k| k == kind)
+        .unwrap();
+    accounts[index] = ResourceAccount::new(SlotIndex::new(93), Generation::INITIAL, kind, required);
+    let parent = RefCell::new(accounts);
+    let clock = Clock::default();
+    let mut storage_a = report_storage();
+    let mut storage_b = report_storage();
+    let stats_a = Arc::new(Stats::default());
+    let (mut runtime_a, observer_a) = StaticConsumerPropertyReadRuntime::try_new(
+        binding::static_registration(StaticClient::new(stats_a.clone(), outputs())),
+        policy_a,
+        &clock,
+        &parent,
+        &mut storage_a,
+    )
+    .unwrap_or_else(|_| panic!());
+    assert_eq!(parent.borrow()[index].used(), required);
+    let stats_b = Arc::new(Stats::default());
+    let registration_b =
+        binding::static_registration(StaticClient::new(stats_b.clone(), outputs()));
+    let policy_b = policy();
+    observe(0);
+    let rejection = match StaticConsumerPropertyReadRuntime::try_new(
+        registration_b,
+        policy_b,
+        &clock,
+        &parent,
+        &mut storage_b,
+    ) {
+        Err(rejection) => rejection,
+        Ok(_) => panic!("independent global callback scratch bypassed"),
+    };
+    assert_eq!(trace().requests, 0);
+    disarm();
+    assert!(matches!(
+        rejection.error().error(),
+        CoreError::Backpressure(_)
+    ));
+    let (registration_b, policy_b) = rejection.into_input();
+    assert_eq!(stats_b.starts.load(Ordering::SeqCst), 0);
+    publish_static(&mut runtime_a);
+    for cancel in [true, false] {
+        let generation = runtime_a
+            .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+            .unwrap();
+        assert_eq!(parent.borrow()[index].used(), required);
+        if cancel {
+            runtime_a.cancel(generation).unwrap();
+        }
+        runtime_a.step(&mut cx(), &mut work(100000));
+        assert_eq!(parent.borrow()[index].used(), required);
+        runtime_a.step(&mut cx(), &mut work(100000));
+        assert_eq!(parent.borrow()[index].used(), required);
+        assert_eq!(
+            category(
+                runtime_a
+                    .try_take(generation, &mut work(100000))
+                    .unwrap()
+                    .unwrap()
+            ),
+            "ok"
+        );
+        assert_eq!(parent.borrow()[index].used(), required);
+    }
+    assert_eq!(stats_a.starts.load(Ordering::SeqCst), 2);
+    assert_eq!(stats_a.polls.load(Ordering::SeqCst), 1);
+    assert_eq!(stats_a.cancels.load(Ordering::SeqCst), 2);
+    for _ in 0..10000 {
+        if matches!(
+            runtime_a.shutdown(&mut cx(), &mut work(4096)),
+            StartStatus::Ready(_)
+        ) {
+            break;
+        }
+        assert_eq!(parent.borrow()[index].used(), required);
+    }
+    assert_eq!(runtime_a.state(), CompiledPlanSetState::Reclaimed);
+    assert_eq!(stats_a.clients_destroyed.load(Ordering::SeqCst), 1);
+    assert_eq!(parent.borrow()[index].used(), 0);
+    // The complete facade/slot remains live; retired registration scratch does not.
+    let (mut runtime_b, observer_b) = StaticConsumerPropertyReadRuntime::try_new(
+        registration_b,
+        policy_b,
+        &clock,
+        &parent,
+        &mut storage_b,
+    )
+    .unwrap_or_else(|_| panic!("retired scratch capacity unavailable"));
+    publish_static(&mut runtime_b);
+    let generation = runtime_b
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .unwrap();
+    runtime_b.step(&mut cx(), &mut work(100000));
+    assert_eq!(
+        category(
+            runtime_b
+                .try_take(generation, &mut work(100000))
+                .unwrap()
+                .unwrap()
+        ),
+        "ok"
+    );
+    drop(runtime_b);
+    drop(observer_b);
+    drop(runtime_a);
+    drop(observer_a);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
+}
+
+#[test]
 fn static_binding_storage_shared_parent_is_held_for_the_resident_complete_slot() {
     let required = rejected_static_startup(ResourceKind::BindingSlotStateBytesGlobalMax, 0);
     let policy_a = policy();
@@ -1147,6 +1325,7 @@ fn static_two_roots_exhaust_the_same_real_build_output_and_call_parent() {
         ResourceKind::AdmissionTemporaryBytesGlobalMax,
         ResourceKind::CompiledRuntimeBytesGlobalMax,
         ResourceKind::PlanPinsGlobalMax,
+        ResourceKind::BindingCancelBufferBytesGlobalMax,
     ] {
         let policy_a = policy();
         let policy_b = policy();
@@ -1158,6 +1337,7 @@ fn static_two_roots_exhaust_the_same_real_build_output_and_call_parent() {
         let cap = match resource {
             ResourceKind::AdmissionTemporaryBytesGlobalMax => 69000,
             ResourceKind::CompiledRuntimeBytesGlobalMax => 6000,
+            ResourceKind::BindingCancelBufferBytesGlobalMax => rejected_static_startup(resource, 0),
             _ => 1,
         };
         accounts[index] =

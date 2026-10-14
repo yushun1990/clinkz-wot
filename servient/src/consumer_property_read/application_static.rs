@@ -128,11 +128,16 @@ where
             return Err(reject((registration, policy), unsupported()));
         }
         let parent = StaticParent(parent);
+        let scratch = registration
+            .registration()
+            .resources()
+            .transient()
+            .peak_bytes();
         let provisioning = (|| {
             let mut provision = Charge::new(parent, &policy)?;
             let root_bytes = add(
                 size_of::<Self>() as u64,
-                policy.registration.retained_bytes(),
+                add(policy.registration.retained_bytes(), scratch)?,
             )?;
             check(
                 &policy.limits,
@@ -149,6 +154,8 @@ where
                 (ENGINE, root_bytes),
                 (BINDINGS, 1),
                 (SLOT_BYTES, slot_bytes),
+                (TEMP, scratch),
+                (POLL_TEMP, scratch),
             ]))?;
             let held = parent.edit(|a| {
                 let wanted =
@@ -424,6 +431,10 @@ where
             (PEAK, temporary),
             (PINS, 1),
             (CALLS, calls),
+            (
+                CANCEL_BYTES,
+                self.policy.call_bytes().expect("checked policy"),
+            ),
         ])) {
             self.kernel.acknowledge();
             return Err(reject((options, None), e));
@@ -730,10 +741,13 @@ where
             if !pay(work, &[(W::CleanupItems, cost)]) {
                 return StartStatus::Pending;
             }
+            let scratch = self.provision.as_ref().unwrap().held[POLL_TEMP];
             drop(self.registration.take());
             self.provision.as_mut().unwrap().release(amounts(&[
-                (ENGINE, self.policy.registration.retained_bytes()),
+                (ENGINE, self.policy.registration.retained_bytes() + scratch),
                 (BINDINGS, 1),
+                (TEMP, scratch),
+                (POLL_TEMP, scratch),
             ]));
         }
         self.kernel.shutdown = true;
