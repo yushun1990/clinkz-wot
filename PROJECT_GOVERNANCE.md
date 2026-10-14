@@ -296,6 +296,19 @@ When a decision stabilizes, migrate it to the artifact that actually owns the
 truth: architecture/specification/ADR, work package, code, test, or roadmap.
 Do not create a current-state document merely to repeat the result.
 
+## Pre-Release API Compatibility
+
+ClinkZ-WoT has never been publicly released and has no external
+backward-compatibility obligations. During this pre-release phase, historical
+API stability is not a requirement. Prefer direct replacement and removal of
+obsolete APIs and execution paths over deprecated wrappers, compatibility
+adapters, or parallel legacy implementations. Migrate internal callers and
+tests when necessary.
+
+API and execution-path replacement must preserve accepted semantic, ownership,
+lifecycle, resource, and correctness contracts and follow the existing
+architecture change-control and implementation-admission rules.
+
 ## Risk-Proportional Implementation Admission
 
 Maintain strict controls where semantic risk is real, but avoid multiplying
