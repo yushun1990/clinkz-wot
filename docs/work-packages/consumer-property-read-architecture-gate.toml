@@ -1,0 +1,146 @@
+schema_version = 3
+design_revision = "5.1"
+id = "CONSUMER-PROPERTY-READ-ARCHITECTURE"
+status = "ready"
+document = "docs/work-packages/CONSUMER-PROPERTY-READ-ARCHITECTURE.md"
+fixture_roots = [
+    "tools/architecture-fixtures/consumer-property-read-binding",
+    "tools/architecture-fixtures/consumer-property-read-runner",
+]
+evidence = [
+    "servient/src/consumer_property_read.rs",
+    "servient/src/consumer_property_read/application_static.rs",
+    "servient/src/consumer_property_read/host.rs",
+    "servient/src/consumer_property_read/shared.rs",
+    "tools/architecture-fixtures/consumer-property-read-binding/src/lib.rs",
+    "tools/architecture-fixtures/consumer-property-read-runner/src/lib.rs",
+    "tools/architecture-fixtures/consumer-property-read-runner/tests/application.rs",
+    "servient/tests/consumer_property_read/mod.rs",
+    "servient/tests/consumer_property_read/host.rs",
+    "tools/architecture-fixtures/consumer-aggregate-admission/tests/aggregate.rs",
+    "tools/architecture-fixtures/consumer-aggregate-admission/tests/composition.rs",
+    "docs/evidence/WP-400-consumer-property-read-runtime.toml",
+]
+evidence_cases = [
+    "downstream_application_destroys_input_then_uses_two_real_compiled_coordinates",
+    "downstream_host_application_destroys_input_then_uses_two_real_compiled_coordinates",
+    "static_distinct_compiled_coordinates_repeated_reads_and_generation_reuse",
+    "host_quiescent_driver_moves_threads_and_generations_are_not_registration_generations",
+    "static_common_case_table_and_exact_acknowledgement",
+    "host_common_case_table_and_result_saturation",
+    "static_normal_immediate_and_polled_late_results_share_core_validation",
+    "host_late_validation_deadline_overrun_and_preacceptance_recovery",
+    "static_final_credit_rejection_input_capacity_and_partial_rollback",
+    "host_publication_zero_short_exact_and_both_real_cancel_orders",
+    "every_mutable_final_check_rejects_without_replacing_the_original_graph_or_accounts",
+    "static_missing_id_and_later_bounds_reject_before_any_client_start",
+    "host_missing_id_and_later_bounds_cannot_start_any_compiler_or_binding",
+    "later_actual_bounds_failure_prevents_every_start",
+    "all_bounds_barrier_and_compiler_remainders_use_the_checked_production_source",
+    "static_materialization_allocation_failures_have_zero_starts",
+    "host_materialization_allocation_failures_have_zero_starts",
+    "static_abandon_and_cancel_at_every_build_step_keep_a_bounded_cleanup_owner",
+    "host_abandon_every_unpublished_step_keeps_original_graph_and_account",
+    "static_every_build_allocation_failure_recovers_and_releases_original_accounts",
+    "host_every_runtime_build_and_call_allocation_failure_returns_complete_owners",
+    "static_two_roots_exhaust_the_same_real_build_output_and_call_parent",
+    "host_two_roots_exhaust_real_parent_at_build_output_and_call_peaks",
+    "host_callbacks_reenter_without_structural_lock_and_drop_interest_during_checkout",
+    "host_root_and_handle_drop_while_exclusive_driver_is_outside_lock",
+    "host_unwind_reparks_the_original_owner_and_explicit_shutdown_can_finish",
+    "host_completed_tickets_hold_no_root_and_live_ticket_survives_facade_drop",
+    "host_transfer_acknowledges_whole_call_or_retains_identical_manual_owner",
+    "static_deadline_first_cause_fabricated_transfer_and_unread_result_cleanup",
+    "static_late_manual_cancel_gets_fresh_drain_time_without_refill_extension",
+    "host_late_manual_cancel_gets_fresh_drain_time_without_refill_extension",
+    "static_final_root_drop_is_finite_source_free_and_reported_before_destruction",
+    "host_residual_precedes_every_controlled_local_deallocation",
+    "static_whole_provisioning_request_call_and_global_live_measurements",
+    "host_actual_provisioning_build_call_and_final_root_measurements",
+    "static_callback_capacity_disable_and_exact_boundaries",
+    "host_callback_and_destination_capacity_disable_and_exact_boundaries",
+    "static_cleanup_quantum_caps_the_whole_shutdown_and_retains_pending_work",
+    "host_cleanup_quantum_caps_the_whole_shutdown_and_retains_pending_work",
+    "host_manual_cleanup_commits_terminal_report_before_delivery_or_discard_destruction",
+]
+test_commands = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_admission --test validated_lending",
+    "cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-planning --lib",
+    "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --lib",
+    "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features async --lib",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async",
+    "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test consumer_property_read -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test consumer_property_read -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner",
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features",
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async",
+    "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async --target thumbv7em-none-eabihf",
+]
+
+[[dependency]]
+id = "WP-100-CONSUMER-CALL-VALUES-VALIDATOR"
+owner_package = "WP-100"
+status = "covered"
+evidence = ["docs/evidence/WP-100-consumer-call-values-response-validation.toml"]
+
+[[dependency]]
+id = "WP-100-CONSUMER-VALIDATED-THING"
+owner_package = "WP-100"
+status = "covered"
+evidence = ["docs/evidence/WP-100-consumer-borrowed-td-admission.toml"]
+
+[[dependency]]
+id = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"
+owner_package = "WP-200"
+status = "covered"
+evidence = ["docs/evidence/WP-200-consumer-property-read-planning-selection.toml"]
+
+[[dependency]]
+id = "WP-200-CONSUMER-COMPILER-SUPPORT"
+owner_package = "WP-200"
+status = "covered"
+evidence = ["docs/evidence/WP-200-consumer-compiler-support.toml"]
+
+[[dependency]]
+id = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
+owner_package = "WP-200"
+status = "covered"
+evidence = ["docs/evidence/WP-200-consumer-property-read-aggregate.toml"]
+
+[[dependency]]
+id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
+owner_package = "WP-300"
+status = "covered"
+evidence = ["docs/evidence/WP-300-consumer-property-read-binding-execution.toml"]
+
+[[dependency]]
+id = "WP-300-CONSUMER-ONLY-REGISTRATION"
+owner_package = "WP-300"
+status = "covered"
+evidence = ["docs/evidence/WP-300-consumer-only-registration.toml"]
+
+[[dependency]]
+id = "WP-200-CONSUMER-OUTPUT-OWNERSHIP"
+owner_package = "WP-200"
+status = "covered"
+evidence = ["docs/evidence/WP-200-consumer-output-ownership.toml"]
+
+[[dependency]]
+id = "WP-300-CONSUMER-HOST-CALL-CONSTRUCTION"
+owner_package = "WP-300"
+status = "covered"
+evidence = ["docs/evidence/WP-300-consumer-host-call-construction.toml"]
+
+[[dependency]]
+id = "WP-400-CONSUMER-PROPERTY-READ-RUNTIME"
+owner_package = "WP-400"
+status = "covered"
+evidence = ["docs/evidence/WP-400-consumer-property-read-runtime.toml"]

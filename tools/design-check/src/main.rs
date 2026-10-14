@@ -378,6 +378,182 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
     if ids.is_empty() {
         return Err("Property Read gate has no current technical dependencies".to_owned());
     }
+    let consumer_gate_path =
+        root_string(&document, "consumer_integration_gate_manifest", relative)?;
+    require_file(
+        root,
+        &consumer_gate_path,
+        "Consumer Property Read gate manifest",
+    )?;
+    let consumer_gate = parse_toml(root, &consumer_gate_path)?;
+    check_consumer_architecture_gate(root, &document, &consumer_gate, &consumer_gate_path)
+}
+
+fn check_consumer_architecture_gate(
+    root: &Path,
+    packages: &DocumentMut,
+    gate: &DocumentMut,
+    gate_path: &str,
+) -> Result<(), String> {
+    if root_integer(gate, "schema_version", gate_path)? != 3 {
+        return Err(format!(
+            "{gate_path} is not aggregate gate schema version 3"
+        ));
+    }
+    require_root_string(gate, "design_revision", "5.1", gate_path)?;
+    require_root_string(gate, "id", "CONSUMER-PROPERTY-READ-ARCHITECTURE", gate_path)?;
+    let status = root_string(gate, "status", gate_path)?;
+    if !matches!(status.as_str(), "ready" | "passed") {
+        return Err(format!("{gate_path} has invalid status {status:?}"));
+    }
+    require_file(
+        root,
+        &root_string(gate, "document", gate_path)?,
+        "Consumer gate document",
+    )?;
+    let strings = |field: &str| {
+        item_strings(
+            gate.get(field)
+                .ok_or_else(|| format!("{gate_path} has no {field}"))?,
+            &format!("{gate_path}.{field}"),
+        )
+    };
+    let roots: BTreeSet<_> = strings("fixture_roots")?.into_iter().collect();
+    let expected_roots = BTreeSet::from([
+        "tools/architecture-fixtures/consumer-property-read-binding".to_owned(),
+        "tools/architecture-fixtures/consumer-property-read-runner".to_owned(),
+    ]);
+    if roots != expected_roots {
+        return Err(set_difference(
+            "Consumer fixture roots",
+            &expected_roots,
+            "registered roots",
+            &roots,
+        ));
+    }
+    for fixture in &roots {
+        require_file(
+            root,
+            &format!("{fixture}/Cargo.toml"),
+            "Consumer fixture root",
+        )?;
+    }
+    let evidence = strings("evidence")?;
+    if evidence.is_empty() {
+        return Err(format!("{gate_path} has no aggregate evidence"));
+    }
+    let mut source = String::new();
+    for path in &evidence {
+        require_file(root, path, "Consumer aggregate evidence")?;
+        if path.ends_with(".rs") {
+            source.push_str(
+                &fs::read_to_string(root.join(path)).map_err(|e| format!("{path}: {e}"))?,
+            );
+            source.push('\n');
+        }
+    }
+    for fixture in &roots {
+        if !evidence.contains(&format!("{fixture}/src/lib.rs")) {
+            return Err(format!(
+                "{gate_path} omits aggregate fixture source {fixture}"
+            ));
+        }
+    }
+    let cases = strings("evidence_cases")?;
+    let mut seen = BTreeSet::new();
+    for case in &cases {
+        if !seen.insert(case) || !source.contains(&format!("fn {case}(")) {
+            return Err(format!(
+                "{gate_path} has duplicate or unresolved evidence case {case}"
+            ));
+        }
+    }
+    if cases.is_empty() {
+        return Err(format!("{gate_path} has no executable evidence cases"));
+    }
+    let commands = strings("test_commands")?;
+    for required in [
+        "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1",
+        "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test consumer_property_read -- --test-threads=1",
+        "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test consumer_property_read -- --test-threads=1",
+        "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner",
+        "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features",
+        "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async",
+        "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --target thumbv7em-none-eabihf",
+        "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async --target thumbv7em-none-eabihf",
+    ] {
+        if !commands.iter().any(|command| command == required) {
+            return Err(format!(
+                "{gate_path} omits required aggregate command {required:?}"
+            ));
+        }
+    }
+
+    let tranches: BTreeMap<_, _> = packages
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no tranches".to_owned())?
+        .iter()
+        .map(|t| Ok((table_string(t, "id", "tranche")?, t)))
+        .collect::<Result<_, String>>()?;
+    let mut closure = BTreeSet::new();
+    let mut pending = vec!["WP-400-CONSUMER-PROPERTY-READ-RUNTIME".to_owned()];
+    while let Some(id) = pending.pop() {
+        if !closure.insert(id.clone()) {
+            continue;
+        }
+        let tranche = tranches
+            .get(&id)
+            .ok_or_else(|| format!("unknown Consumer prerequisite {id}"))?;
+        pending.extend(table_strings(tranche, "depends_on", &id)?);
+    }
+    let dependencies = gate
+        .get("dependency")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{gate_path} has no dependency records"))?;
+    let mut ids = BTreeSet::new();
+    for dependency in dependencies {
+        let id = table_string(dependency, "id", "Consumer dependency")?;
+        if !ids.insert(id.clone()) {
+            return Err(format!("duplicate Consumer dependency {id}"));
+        }
+        let tranche = tranches
+            .get(&id)
+            .ok_or_else(|| format!("unknown Consumer prerequisite {id}"))?;
+        if table_string(dependency, "status", &id)? != "covered"
+            || table_string(dependency, "owner_package", &id)?
+                != table_string(tranche, "work_package", &id)?
+            || table_string(tranche, "status", &id)? != "complete"
+            || table_string(tranche, "admission_status", &id)? != "admitted"
+            || table_string(tranche, "impact_status", &id)? != "current"
+        {
+            return Err(format!(
+                "Consumer prerequisite {id} is not covered/complete/admitted/current at its registered owner"
+            ));
+        }
+        let evidence_path = table_string(tranche, "completion_evidence_path", &id)?;
+        let paths = table_strings(dependency, "evidence", &id)?;
+        if !paths.contains(&evidence_path) {
+            return Err(format!(
+                "Consumer prerequisite {id} omits its registered completion evidence"
+            ));
+        }
+        for path in paths {
+            require_file(root, &path, "Consumer prerequisite evidence")?;
+        }
+        let completion = parse_toml(root, &evidence_path)?;
+        require_root_string(&completion, "tranche", &id, &evidence_path)?;
+        require_root_string(&completion, "status", "passed", &evidence_path)?;
+    }
+    if ids != closure {
+        return Err(set_difference(
+            "Consumer Runtime prerequisite closure",
+            &closure,
+            "registered dependencies",
+            &ids,
+        ));
+    }
+    // Structural consistency is not executable success or independent acceptance.
     Ok(())
 }
 
@@ -872,7 +1048,115 @@ fn set_difference(
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{check_tranche_dependency_graph, valid_tranche_impact_state};
+    use super::{
+        check_consumer_architecture_gate, check_tranche_dependency_graph, parse_toml,
+        repository_root, valid_tranche_impact_state,
+    };
+
+    const CONSUMER_GATE: &str = "docs/work-packages/consumer-property-read-architecture-gate.toml";
+
+    #[test]
+    fn consumer_gate_rejects_incomplete_or_non_current_prerequisites() {
+        let root = repository_root().unwrap();
+        let packages = parse_toml(&root, "docs/work-packages/index.toml").unwrap();
+        let gate = parse_toml(&root, CONSUMER_GATE).unwrap();
+        check_consumer_architecture_gate(&root, &packages, &gate, CONSUMER_GATE).unwrap();
+
+        for (field, state) in [
+            ("status", "planned"),
+            ("admission_status", "candidate"),
+            ("impact_status", "review-required"),
+        ] {
+            let mut changed = packages.clone();
+            // A transitive input must be current too, not only the Runtime row.
+            let tranche = changed["tranche"]
+                .as_array_of_tables_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|t| t["id"].as_str() == Some("WP-100-CONSUMER-CALL-VALUES-VALIDATOR"))
+                .unwrap();
+            tranche[field] = toml_edit::value(state);
+            let error = check_consumer_architecture_gate(&root, &changed, &gate, CONSUMER_GATE)
+                .expect_err("a non-current prerequisite cannot be covered by a ready gate");
+            assert!(error.contains("WP-100-CONSUMER-CALL-VALUES-VALIDATOR"));
+        }
+    }
+
+    #[test]
+    fn consumer_gate_requires_exact_dependency_closure_owner_and_evidence() {
+        let root = repository_root().unwrap();
+        let packages = parse_toml(&root, "docs/work-packages/index.toml").unwrap();
+        let gate = parse_toml(&root, CONSUMER_GATE).unwrap();
+        let mut missing = gate.clone();
+        missing["dependency"]
+            .as_array_of_tables_mut()
+            .unwrap()
+            .remove(0);
+        assert!(
+            check_consumer_architecture_gate(&root, &packages, &missing, CONSUMER_GATE)
+                .unwrap_err()
+                .contains("prerequisite closure")
+        );
+        for field in ["id", "owner_package", "status", "evidence"] {
+            let mut changed = gate.clone();
+            let dependency = changed["dependency"]
+                .as_array_of_tables_mut()
+                .unwrap()
+                .iter_mut()
+                .next()
+                .unwrap();
+            dependency[field] = if field == "evidence" {
+                toml_edit::value(toml_edit::Array::new())
+            } else {
+                toml_edit::value("wrong")
+            };
+            assert!(
+                check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
+                    .is_err(),
+                "invalid dependency {field} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn consumer_gate_rejects_missing_aggregate_cells_and_unresolved_cases() {
+        let root = repository_root().unwrap();
+        let packages = parse_toml(&root, "docs/work-packages/index.toml").unwrap();
+        let gate = parse_toml(&root, CONSUMER_GATE).unwrap();
+        for field in [
+            "fixture_roots",
+            "evidence",
+            "evidence_cases",
+            "test_commands",
+        ] {
+            let mut changed = gate.clone();
+            changed[field] = toml_edit::value(toml_edit::Array::new());
+            assert!(
+                check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
+                    .is_err(),
+                "empty aggregate {field} was accepted"
+            );
+        }
+        let mut changed = gate.clone();
+        changed["evidence_cases"]
+            .as_array_mut()
+            .unwrap()
+            .push("unimplemented_gate_case");
+        assert!(
+            check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
+                .unwrap_err()
+                .contains("unresolved evidence case")
+        );
+        // A successful Host/static test list alone cannot omit the ARM projection.
+        let mut changed = gate.clone();
+        let commands = changed["test_commands"].as_array_mut().unwrap();
+        commands.remove(commands.len() - 1);
+        assert!(
+            check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
+                .unwrap_err()
+                .contains("required aggregate command")
+        );
+    }
 
     #[test]
     fn tranche_impact_states_distinguish_current_review_and_reopening() {

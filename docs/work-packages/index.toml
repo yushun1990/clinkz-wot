@@ -2,6 +2,7 @@ schema_version = 6
 design_revision = "5.1"
 status = "in-progress"
 integration_gate_manifest = "docs/work-packages/property-read-architecture-gate.toml"
+consumer_integration_gate_manifest = "docs/work-packages/consumer-property-read-architecture-gate.toml"
 
 [[package]]
 id = "WP-000"
