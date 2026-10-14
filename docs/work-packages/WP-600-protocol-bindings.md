@@ -36,9 +36,9 @@ query/session ownership and resource qualification gap is investigated in
 [topic 0083](../../workspace/0083-host-zenoh-consumer-query-ownership.md).
 That topic retains the scoped observation and reasoning history. The
 [Host protocol-owner decision](WP-600-host-zenoh-owner-decision.md) owns the
-selected bounded concrete-owner qualification direction, explicit release
-boundary and remaining final-owner/SDK-backing blocker. It compares the
-intersecting capability/runtime alternatives from topic 0076 and preserves
+SDK resource/retirement prerequisite, explicit release boundary and subsequent
+complete-owner qualification. It compares worker, per-read/epoch, dependency
+and process-isolation alternatives, considers topic 0076 and preserves
 ADR-0013's pre-code contract versus post-code production evidence boundary.
 Neither record grants production admission, a new shared lifecycle API or a
 gate transition; the completed matching predecessors remain accepted.

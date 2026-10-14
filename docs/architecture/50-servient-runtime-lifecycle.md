@@ -188,8 +188,9 @@ SDK session/task/callback retirement. The
 [Binding SPI](../spec/binding-spi.md#shared-protocol-infrastructure-lifetime)
 owns the original-account and final-owner contract; the
 [Host Zenoh decision](../work-packages/WP-600-host-zenoh-owner-decision.md)
-selects a bounded concrete-owner qualification direction while leaving final
-worker loss and SDK backing unresolved. It grants no Runtime lifecycle extension.
+records an SDK resource/retirement prerequisite before complete-owner
+qualification. It grants no Runtime lifecycle extension; the SDK failures alone
+do not establish a shared Runtime defect.
 The admitted finite mock Runtime remains accepted; installing raw blocking SDK
 destruction or unaccounted detached cleanup would exceed its author boundary.
 

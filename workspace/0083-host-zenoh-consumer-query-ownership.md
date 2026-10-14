@@ -4,10 +4,10 @@ Status: DISCUSSING
 
 ## Protocol-owner subquestion migrated; qualification remains open
 
-The next decision was reconstructed independently from fetched master
-`0dbf0bbc0e144b5dc2695ecf6e66ace77bbb67fd`, current Runtime/registration code,
-the pinned SDK and fresh executable probes. Its selected owner topology,
-alternative dispositions and precise remaining blocker now belong to
+The scoped prerequisite decision was reconstructed independently from fetched
+master including PR #175, current Runtime/registration code, the pinned SDK and
+fresh executable probes. The topology alternatives, stopping evidence and
+precise dependency prerequisite now belong to
 [the WP-600 decision](../docs/work-packages/WP-600-host-zenoh-owner-decision.md).
 The necessary shared accounting/destructor interpretation is projected into
 [Binding SPI](../docs/spec/binding-spi.md#shared-protocol-infrastructure-lifetime).
@@ -15,10 +15,11 @@ These are review candidates, not independent acceptance or production admission.
 
 The [public-SDK final-owner fixture](../tools/architecture-fixtures/host-zenoh-owner/README.md)
 distinguishes a last Session's blocking/allocating Drop, original-close
-abandonment, get-job callback quiescence and a separately retained original
-Foundation account. A scoped worker is constructible; its final-owner loss and
-complete SDK resource/recoverability envelope are not proved. The broader
-qualification investigation therefore remains DISCUSSING. The historical
+abandonment/timeout, get-job callback quiescence, worker allocation failure,
+TCP receive-limit semantics and a separately retained original Foundation
+account. A scoped worker is constructible; full-owner qualification follows
+the dependency prerequisite rather than another worker-model experiment. The
+broader qualification investigation therefore remains DISCUSSING. The historical
 timer/epoch observations below retain their original claims and limits.
 
 Topic 0076 intersects this decision through independently composable capability

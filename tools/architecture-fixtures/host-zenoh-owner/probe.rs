@@ -58,6 +58,13 @@ fn config() -> zenoh::Config {
 // A held local Query prevents a prompt final. Its timer's error callback then
 // blocks on our explicit release, rather than on timing or a real remote peer.
 fn blocked_timer(session: &zenoh::Session) -> (mpsc::Sender<()>, mpsc::Receiver<()>) {
+    blocked_timer_with_limit(session, WAIT)
+}
+
+fn blocked_timer_with_limit(
+    session: &zenoh::Session,
+    limit: Duration,
+) -> (mpsc::Sender<()>, mpsc::Receiver<()>) {
     let held = Arc::new(Mutex::new(None));
     let queryable = session
         .declare_queryable("wp600/owner")
@@ -78,7 +85,7 @@ fn blocked_timer(session: &zenoh::Session) -> (mpsc::Sender<()>, mpsc::Receiver<
         .callback(move |reply| {
             assert!(reply.result().is_err());
             entered_tx.send(()).unwrap();
-            released.lock().unwrap().recv_timeout(WAIT).unwrap();
+            released.lock().unwrap().recv_timeout(limit).unwrap();
             done_tx.send(()).unwrap();
         })
         .wait()
@@ -267,6 +274,132 @@ fn closed_session_drop(fail: bool) {
     println!("closed-session-drop: calling-thread allocation requests during Drop={requests}");
 }
 
+fn original_close_timeout() {
+    let session = zenoh::open(config()).wait().unwrap();
+    let (release, done) = blocked_timer_with_limit(&session, Duration::from_secs(20));
+    // Drive the SDK's unmodified ten-second timeout on a separate clock driver.
+    // The SDK Net worker is deliberately held inside our callback.
+    let driver = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let original = driver.block_on(session.close().into_future());
+    assert!(original.is_err(), "original close must time out");
+    assert!(session.is_closed());
+    assert!(matches!(done.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    driver.block_on(session.close().into_future()).unwrap();
+    drop(session);
+    assert!(matches!(done.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    release.send(()).unwrap();
+    done.recv_timeout(WAIT).unwrap();
+    println!("original-close-timeout: Err, retry Ok and final Drop precede callback completion");
+}
+
+fn query_start(fail: bool) {
+    let session = zenoh::open(config()).wait().unwrap();
+    // All worker setup and builder construction precede the thread-local fault.
+    // An outer fallible engine envelope cannot intercept SDK infallible backing.
+    let worker = std::thread::spawn(move || {
+        let callback: zenoh::handlers::Callback<zenoh::query::Reply> =
+            (|_: zenoh::query::Reply| {}).into();
+        session
+            .get("wp600/query-allocation")
+            .consolidation(ConsolidationMode::None)
+            .with(callback.clone())
+            .wait()
+            .unwrap(); // Warm the worker's SDK path before arming allocation failure.
+        let query = session
+            .get("wp600/query-allocation")
+            .consolidation(ConsolidationMode::None)
+            .with(callback);
+        let before = COUNT.with(Cell::get);
+        if fail {
+            FAIL_NEXT.with(|flag| flag.set(true));
+        }
+        query.wait().unwrap();
+        let requests = COUNT.with(Cell::get) - before;
+        assert!(requests > 0);
+        session.close().wait().unwrap();
+        drop(session);
+        requests
+    });
+    let requests = worker.join().unwrap();
+    println!("query-start: protocol-worker allocation requests during SDK submission={requests}");
+}
+
+fn rx_limits() {
+    const REPLIES: usize = 16;
+    const BODY: usize = 8192;
+    const RX: usize = 65535;
+    const MESSAGE: usize = 1024;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("tcp/127.0.0.1:{}", listener.local_addr().unwrap().port());
+    drop(listener);
+    let mut producer_config = config();
+    producer_config
+        .insert_json5("listen/endpoints", &format!("[\"{endpoint}\"]"))
+        .unwrap();
+    producer_config
+        .insert_json5("transport/link/tx/batch_size", "65535")
+        .unwrap();
+    let producer = zenoh::open(producer_config).wait().unwrap();
+    let queryable = producer
+        .declare_queryable("wp600/rx-limits")
+        .callback(|query| {
+            for _ in 0..REPLIES {
+                query
+                    .reply("wp600/rx-limits", vec![42u8; BODY])
+                    .wait()
+                    .unwrap();
+            }
+        })
+        .wait()
+        .unwrap();
+    let mut consumer_config = config();
+    for (key, value) in [
+        ("mode", "\"client\""),
+        ("transport/unicast/max_sessions", "1"),
+        ("transport/unicast/max_links", "1"),
+        ("transport/link/tx/batch_size", "65535"),
+        ("transport/link/rx/buffer_size", "65535"),
+        ("transport/link/rx/max_message_size", "1024"),
+    ] {
+        consumer_config.insert_json5(key, value).unwrap();
+    }
+    consumer_config
+        .insert_json5("connect/endpoints", &format!("[\"{endpoint}\"]"))
+        .unwrap();
+    let consumer = zenoh::open(consumer_config).wait().unwrap();
+    let replies = consumer
+        .get("wp600/rx-limits")
+        .consolidation(ConsolidationMode::None)
+        .with(zenoh::handlers::FifoChannel::new(REPLIES))
+        .wait()
+        .unwrap();
+    // Retain received Samples so their actual SDK payload backing overlaps.
+    // This is a finite public-SDK experiment, not a proposed binding callback.
+    let mut retained = Vec::with_capacity(REPLIES);
+    for _ in 0..REPLIES {
+        retained.push(replies.recv_timeout(WAIT).unwrap().unwrap());
+    }
+    let bytes: usize = retained
+        .iter()
+        .map(|reply| reply.result().unwrap().payload().len())
+        .sum();
+    assert_eq!(bytes, REPLIES * BODY);
+    assert!(BODY > MESSAGE && bytes > RX);
+    drop(retained);
+    drop(replies);
+    consumer.close().wait().unwrap();
+    drop(consumer);
+    drop(queryable);
+    producer.close().wait().unwrap();
+    drop(producer);
+    println!(
+        "rx-limits: max_message_size={MESSAGE}, buffer_size={RX}, accepted body={BODY}, retained payload bytes={bytes}"
+    );
+}
+
 fn main() {
     match std::env::args().nth(1).as_deref() {
         Some("last-drop") => last_session_drop(),
@@ -275,8 +408,10 @@ fn main() {
         Some("separate-owner") => separate_owner(),
         Some("closed-drop") => closed_session_drop(false),
         Some("closed-drop-oom") => closed_session_drop(true),
-        _ => panic!(
-            "expected last-drop, abandoned-close, get-callback, separate-owner, closed-drop or closed-drop-oom"
-        ),
+        Some("original-close-timeout") => original_close_timeout(),
+        Some("query-start") => query_start(false),
+        Some("query-start-oom") => query_start(true),
+        Some("rx-limits") => rx_limits(),
+        _ => panic!("expected a case listed in README.md"),
     }
 }

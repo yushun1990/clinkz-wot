@@ -11,13 +11,14 @@ concrete SDK infrastructure can have different lifetimes. The current Runtime
 still destroys the captured registration during shutdown; a last Zenoh Session
 Drop is not its finite local destructor.
 
-The selected narrow direction and rejected alternatives are migrated to
+The scoped prerequisite decision and alternative dispositions are migrated to
 [the WP-600 owner decision](../docs/work-packages/WP-600-host-zenoh-owner-decision.md)
 and [Binding SPI](../docs/spec/binding-spi.md#shared-protocol-infrastructure-lifetime).
 The [new public-SDK fixture](../tools/architecture-fixtures/host-zenoh-owner/README.md)
 demonstrates a scoped separate owner and original account retention, not complete
-Runtime capture or final worker loss. Those qualification questions still block
-production admission. This does not select Contracts extraction, generated
+Runtime capture or final worker loss. Its additional SDK discriminators supply
+the stopping evidence recorded there; they do not establish a shared Runtime
+incompatibility. This does not select Contracts extraction, generated
 images, shared sessions across roles or new Host/embedded packages. No obsolete
 API or compatibility layer is required by the historical sketches below.
 
