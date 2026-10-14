@@ -182,6 +182,17 @@ capacity last. Supported local destructors must be audited and finite. This is
 local resource disposition, not successful external cleanup. Leaking the advanced
 manual Planning root is not an implementation of that Runtime obligation.
 
+This obligation must also be checked against the concrete protocol infrastructure
+behind a registration. Semantic call/generation reclamation does not certify
+SDK session/task/callback retirement. The
+[Binding SPI](../spec/binding-spi.md#shared-protocol-infrastructure-lifetime)
+owns the original-account and final-owner contract; the
+[Host Zenoh decision](../work-packages/WP-600-host-zenoh-owner-decision.md)
+selects a bounded concrete-owner qualification direction while leaving final
+worker loss and SDK backing unresolved. It grants no Runtime lifecycle extension.
+The admitted finite mock Runtime remains accepted; installing raw blocking SDK
+destruction or unaccounted detached cleanup would exceed its author boundary.
+
 ## Scheduling and fairness
 
 Servient schedules ready work through maintained queues/cursors. A work step

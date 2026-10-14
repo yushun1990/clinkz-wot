@@ -34,10 +34,14 @@ repeated as the only new production proof.
 The Consumer architecture gate is passed. The existing Host backend's SDK
 query/session ownership and resource qualification gap is investigated in
 [topic 0083](../../workspace/0083-host-zenoh-consumer-query-ownership.md).
-That topic owns the scoped observation, bounded-session-epoch and finer-grained
-alternatives, and necessary concrete decision. It records no production tranche
-admission or shared-contract change; the completed matching predecessors remain
-accepted.
+That topic retains the scoped observation and reasoning history. The
+[Host protocol-owner decision](WP-600-host-zenoh-owner-decision.md) owns the
+selected bounded concrete-owner qualification direction, explicit release
+boundary and remaining final-owner/SDK-backing blocker. It compares the
+intersecting capability/runtime alternatives from topic 0076 and preserves
+ADR-0013's pre-code contract versus post-code production evidence boundary.
+Neither record grants production admission, a new shared lifecycle API or a
+gate transition; the completed matching predecessors remain accepted.
 
 A bounded real-target Zenoh Producer Property Read feedback probe already ran
 after the narrow WP-300 slice and before the aggregate mock gate. It exercises
