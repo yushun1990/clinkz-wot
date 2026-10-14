@@ -1,7 +1,7 @@
 schema_version = 3
 design_revision = "5.1"
 id = "CONSUMER-PROPERTY-READ-ARCHITECTURE"
-status = "ready"
+status = "passed"
 document = "docs/work-packages/CONSUMER-PROPERTY-READ-ARCHITECTURE.md"
 fixture_roots = [
     "tools/architecture-fixtures/consumer-property-read-binding",
