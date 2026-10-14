@@ -399,4 +399,3 @@ and migrated into its applicable owners may a docs-only production candidate
 receive its own exact-revision admission review and separate admission
 transition. This investigation neither self-approves that decision nor changes
 any admitted predecessor.
-
