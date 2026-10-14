@@ -31,12 +31,13 @@ selection. Producer Property Read remains required regression evidence and joins
 that Consumer path in the first bidirectional Zenoh Property Read loop; it is not
 repeated as the only new production proof.
 
-The Consumer architecture gate is passed. A concrete SDK query/session ownership
-and resource blocker for Host entry is under investigation in
+The Consumer architecture gate is passed. The existing Host backend's SDK
+query/session ownership and resource qualification gap is investigated in
 [topic 0083](../../workspace/0083-host-zenoh-consumer-query-ownership.md).
-That topic owns the reproduction, narrower alternatives and necessary concrete
-decision. It records no production tranche admission or shared-contract change;
-the completed matching predecessors remain accepted.
+That topic owns the scoped observation, bounded-session-epoch and finer-grained
+alternatives, and necessary concrete decision. It records no production tranche
+admission or shared-contract change; the completed matching predecessors remain
+accepted.
 
 A bounded real-target Zenoh Producer Property Read feedback probe already ran
 after the narrow WP-300 slice and before the aggregate mock gate. It exercises

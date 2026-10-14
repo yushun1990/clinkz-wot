@@ -12,13 +12,18 @@ addition to its legacy API, the locked SDK retains query work beyond reply
 completion in a session owner whose lifetime and capacity are not represented
 by the call limit.
 
-This is a concrete session/query ownership and resource qualification blocker,
-not evidence that the accepted Consumer SPI is impossible. A different concrete
-session/reactor implementation may satisfy it without changing any shared
-contract. That implementation boundary must be selected and demonstrated before
-a closed ADR-0013 production admission candidate can be offered. No WP-600
-tranche, implementation permission, acceptance, gate reopening or production
-completion is recorded here.
+The current backend's session/query owner and resource accounting require
+qualification. Accepted shared-registration accounting permits session
+infrastructure to outlive a successful read when its complete ownership and
+immutable maximum remain charged. A fixed-budget reusable session epoch is a
+credible candidate within that contract; neither one session per read nor an
+individual SDK retirement hook per query is required.
+
+ADR-0013 admission requires the chosen ownership/resource contract, closed
+projections and passing checks that can run before production exists. Actual
+target implementation measurements remain completion evidence. This DISCUSSING
+investigation grants no WP-600 admission, implementation permission, acceptance,
+gate reopening or production completion.
 
 ## Reconstructed authority and predecessors
 
@@ -115,10 +120,17 @@ physical accounting, including payload/media growth, before a new client is
 eligible. The probe below disables consolidation and drains every reply, so
 neither mechanism explains away its retained task tail.
 
-`Session::close` clears query state and awaits session task termination.
-Its close builder has an owned boxed future and a timeout/error path; `Drop`
-or `is_closed()` alone cannot establish that barrier. A session clone inside
-a call does not grant authority to close other users' Consumer or Producer work.
+The first fully driven `Session::close` clears query state and awaits session
+task termination. It defaults to no callback wait; callback/get/reactor jobs
+also need their own quiescence proof. The close implementation takes the
+session primitives before its await. If that original future is abandoned or
+times out, a later close can return without repeating its join. Retain the
+original close owner and its capacity until actual retirement or truthful
+residual; `Ok(())` from a retry, `Drop` or `is_closed()` cannot replace that
+evidence. The close timeout and the admitted cancellation-drain policy must
+also agree. A session clone inside a call does not grant authority to close
+other users' Consumer or Producer work. These are qualification cases for
+every session-based alternative, including an epoch owner.
 
 ## Minimal reproduction and limits
 
@@ -145,8 +157,9 @@ footprint. TCP close also retires transport storage while the server remains
 live. Source inspection identifies the retained timeout tasks; the experiment
 falsifies the claim that sequential terminal query receivers imply bounded
 one-call physical retention. The tasks may eventually expire normally. That
-does not supply an observable per-call cleanup barrier or a reusable capacity
-reservation in the current binding.
+does not supply a reusable capacity reservation in the current binding. A
+separate, bounded epoch reservation can cover these tasks until whole-epoch
+retirement without observing each task individually.
 
 ### Probe source
 
@@ -307,6 +320,31 @@ with tempfile.TemporaryDirectory(prefix="wp600-query-tail-") as folder:
 PY
 ```
 
+## Bounded reusable-session discriminator
+
+[The independent review's disposable reproducer](https://github.com/yushun1990/clinkz-wot/pull/174#pullrequestreview-5515584302)
+uses the probe's allocator, drain function, configuration and locked SDK. A
+local reproduction at `bb723a6fd88d401d4f10a8b3655e0df5e5609a27` completed 1,024
+reads in each local/TCP mode across 32 Consumer epochs, all before the first
+30-second timeout. Each epoch starts with K=32 submission credits. A credit is
+consumed before SDK get and never restored on a receiver result or deadline.
+Ten attempts at saturation return the identical test input without another get.
+The next epoch opens only after successful close and destruction of the previous
+session. The separate Producer queryable remains usable after all TCP epochs.
+
+| Mode | Closed live bytes at epoch 15 | At epoch 31 |
+| --- | ---: | ---: |
+| Local | 48,512 | 48,512 |
+| TCP | 145,070 | 145,070 |
+
+At most K queries are submitted per epoch, so the inspected path can create at
+most K timeout tasks even if none expire. Whole-epoch retirement can therefore
+acknowledge those tasks together; per-query SDK joins or an SDK correction are
+optional alternatives. The measurements are process-wide requested live bytes,
+not a production byte ceiling. This discriminator supplies no callback/job
+quiescence, hostile-input bound, recoverable backing, registration shutdown or
+final-root residual proof. Those obligations remain open for production.
+
 ## Necessary decision and narrower alternatives
 
 Decide the concrete **query plus session-work owner**, its supported deployment
@@ -318,18 +356,26 @@ adapter. Preserve the accepted request/seal/first-cause/lease/cleanup contracts.
 | Wrap the legacy transport in HostBindingCall | Rejected: retains TD/Form re-entry, blocking execution, infallible variable backing and no full query-work owner. |
 | Use SDK get/open `await` and drop the future/receiver on cancellation | Rejected: eager synchronous resolution and retained session tasks remain. |
 | Limit active calls to one, cap FIFO items, shorten timeout, or add a grace sleep | Rejected as the ownership proof: repeated terminal calls retain overlapping timer work; elapsed time is not acknowledged destruction. Shorter timeout alone supplies no declared maximum outstanding work or admission enforcement. |
-| Own an exclusive session epoch with each call; use a declared bounded protocol reactor for synchronous SDK work and await complete session retirement | Narrow candidate to test first. Session close is a real barrier and avoids cancelling an unrelated Producer. Opening/reopening, close failure, callbacks, SDK buffers/tasks and final-root residual accounting must all be proved; per-read connection cost must be measured. No production implementation is authorized. |
-| Retain a reusable session with explicit bounded query/task permits and observable per-query retirement, possibly via a pinned SDK correction | Credible alternative if it supplies real task ownership and enforceable input/byte bounds. A fabricated side table or polling a deadline is insufficient. Its exact SDK/dependency and registration lifetime changes need scoped review. |
+| Retain one reusable Consumer session epoch with K submission credits; debit before each SDK get, backpressure at K and replenish only after complete epoch retirement | Credible narrower candidate, supported by the discriminator above. SDK tail credits remain consumed across successful reads and deadlines. Retain actual registration/epoch ownership and original accounts through session-task, callback and reactor-job quiescence. Physical byte/input bounds, opening/rotation, failed or abandoned close and finite registration shutdown/Drop still require qualification. No per-query retirement hook or SDK change is inherently needed. |
+| Own an exclusive session with each call; use a declared bounded protocol reactor for synchronous SDK work and await complete retirement | Alternative equivalent to an epoch with K=1. It also needs callback/job quiescence, truthful close failure/residual and physical bounds; measure per-read connection cost. The evidence does not establish that every read needs its own session. |
+| Retain a reusable session with bounded permits returned on individually acknowledged query/task retirement, possibly via a pinned SDK correction | Optional finer-grained alternative if it supplies actual retirement and enforceable input/byte bounds. A fabricated side table or polling a deadline is insufficient. Compare its SDK/dependency cost against whole-epoch retirement; it is not a requirement for all reusable owners. |
 | Relax boundedness or treat SDK memory/tasks as outside binding accounting | Rejected under current authority. That would require an explicit architecture decision and affected evidence review. |
 
 A bounded reactor may advance protocol I/O and wake the engine; it receives no
 TD, selector, handler dispatch or publication authority. Naming a worker does
 not establish complete ownership, recoverable construction, a join barrier or
-reserved capacity. Test this candidate before choosing it. The concrete
+reserved capacity. Compare these candidates before choosing one. The concrete
 decision must identify which state is call-owned, registration-owned, shared
 SDK infrastructure or residual, who charges each physical allocation, and what
 acknowledges its final release. A shared-session close must never serve as a
-per-call cancellation mechanism affecting a sibling role.
+per-call cancellation mechanism affecting a sibling role. Epoch submission
+credits and their SDK backing are distinct from the Runtime's reusable semantic
+call opportunity: terminal call acknowledgement may free that opportunity while
+the original registration/epoch charge stays held. A candidate must bind both
+lifetimes to actual owners and prevent new epoch admission until full retirement.
+The current Runtime retires its registration through bounded destruction; an
+epoch design must demonstrate registration shutdown and root-abandonment within
+that boundary or return an explicit decision before changing the shared SPI.
 
 ## Smallest production envelope after resolution
 
@@ -367,7 +413,7 @@ passing state exist for them:
 | Key | Falsifiable completion evidence |
 | --- | --- |
 | `zenoh-host-consumer-public-path` | Real complete production client, production compiler/artifacts and public Runtime; source destruction, two exact selected targets/original coordinates, Core-sealed body/media/status, repeated reads and production Producer TCP loop. Negative identities reject before effects; inspect zero target-to-legacy edges. |
-| `zenoh-host-query-owner-retirement` | Observe every query, callback, timeout task, receiver, reactor job, session and result owner. Run at least 1,000 sequential reads within one SDK timeout window, including prompt finals and absent/late peers. Enforce the admitted maximum with unchanged-input backpressure; no growth beyond that maximum and no capacity reuse before observed retirement. Explicit shutdown releases controlled children before original parent accounts. |
+| `zenoh-host-query-owner-retirement` | Account for every query, callback, timeout task, receiver, reactor job, session and result owner. Retirement may be acknowledged per query or for a complete bounded epoch. Run at least 1,000 sequential reads within one SDK timeout window, including prompt finals and absent/late peers. For an epoch, consume K credits before SDK submission, never refund on reply/deadline, return unchanged input at K with zero additional starts, and replenish only after observed full epoch retirement including callback/job quiescence. Bound physical growth and retain original registration/epoch accounts independently of terminal call acknowledgement. Explicit shutdown and root abandonment preserve truthful residual/account ownership and child-before-parent release. |
 | `zenoh-host-call-cancel-cleanup` | Before-first-poll, pending, completion race, caller/call/handle/root drop, immediate/polled late completion, drain expiry, shutdown failure and residual. First cause is immutable; normal/late success uses the installed Core seal; settlement and destruction occur once. Any transfer moves the whole decorated call and preserves the unused seal; refusal returns the identical owner. |
 | `zenoh-host-sdk-resource-qualification` | Concrete constructor/failed-construction/result/cancel/destructor audit, recoverable backing, finite supported input capacities and SDK configuration. Record actual simultaneous live/peak/largest allocations, queue/task/callback bytes and scratch separately from maxima. Disabled/minus-one/exact/plus-one limits, oversized reply and saturation reject or reach truthful cleanup without hidden memory or blocking engine polls. Test shared-parent exhaustion with two otherwise separate roots. |
 | `zenoh-host-producer-regression` | Production Host route carrier survives prepare/active/committed stages, exact permit gates acceptance, correlation survives response, and drain/readiness failure/prepublication cancellation reach truthful complete or residual cleanup. Reproduce the existing seven-case probe unchanged; report its static scope only as historical regression. |
@@ -378,24 +424,28 @@ Existing workload identities `PERF-GW-009`, `PERF-GW-028`,
 cancellation, generation retention and registration dimensions. Preserve their
 fixture/budget identities and run the existing manifest verifier before
 admission. The SDK-tail discriminator is additional ownership evidence, not
-completion of those broad workload matrices. Measure per-read session/reactor
-costs separately; no latency or allocation budget is invented or relaxed here.
+completion of those broad workload matrices. Measure session reuse/rotation and
+reactor costs separately; no latency or allocation budget is invented or relaxed
+here.
 
 ## Checks and independent review boundary
 
 Applicable existing prechecks are the nineteen unchanged Consumer-gate commands,
 the seven-case real Producer feedback test, Zenoh no-default/async-no-std compile
-cells, the probe above and Git diff hygiene. Authority checking already covers
-API/ADR/state/resource/legacy projections and the 66 existing performance
+cells, the original probe, the bounded-epoch discriminator and Git diff hygiene.
+Authority checking already covers API/ADR/state/resource/legacy projections
+and the 66 existing performance
 manifest cases. No gated legacy smoke test reported as skipped is real-protocol
 acceptance.
 
 The PR must report exact revisions, commands and actual outcomes. These checks
 can reaffirm predecessors and reproduce the blocker; they cannot pass the
 unimplemented production keys. Independent review should challenge the task-tail
-interpretation, the exclusive-session/reactor alternative and every missing
-resource/release mechanism. Only after a concrete resolution is demonstrated
-and migrated into its applicable owners may a docs-only production candidate
-receive its own exact-revision admission review and separate admission
-transition. This investigation neither self-approves that decision nor changes
-any admitted predecessor.
+interpretation, the bounded-epoch, per-read and per-query alternatives, and every
+missing resource/release mechanism. A concrete ownership contract and its
+pre-code checks must be defined and migrated into applicable owners before a
+docs-only production candidate receives exact-revision admission review and a
+separate admission transition. Actual production measurements and the six keys
+above remain post-implementation completion evidence under ADR-0013. This
+investigation neither self-approves that decision nor changes any admitted
+predecessor.
