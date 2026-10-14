@@ -147,7 +147,8 @@ The [Runtime admission record](WP-400-consumer-property-read-runtime-admission.m
 owns the exact implementation envelope, owner graph, selected alternatives,
 callback authoring contract, resource/work admission, publication/cancellation,
 manual cleanup, final-root residual discard and falsifiable completion criteria.
-`index.toml` records admission and its accepted exact-head independent review.
+`index.toml` owns admission and completion state; the admission and evidence
+records cite their respective exact-head independent reviews.
 
 Its seven completed/current predecessors cover borrowed TD admission, closed
 compiler support, the complete unpublished aggregate, installed Consumer binding
@@ -162,20 +163,23 @@ driver and bounded generation/interest handles; static has a caller-owned typed
 root and actual associated-state request slot. No worker, executor or call pool
 is needed. Neither path uses the legacy TD-bearing Consumer or implicit Directory.
 
-The admission adds no production implementation or completion claim. Its three
-downstream discriminators use actual public output/root/reclaim and real
-accounts, with explicitly modeled publication/header logic. Exact source and
-limits are documented in the existing
+The admission's three downstream discriminators use actual public
+output/root/reclaim and real accounts, with explicitly modeled
+publication/header logic. Exact source and limits are documented in the existing
 [runtime-entry fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md#runtime-admission-discriminators).
-The separate early multi-owner scheduler checkpoint remains outside this scope.
-
-Completion evidence key `consumer-property-read-runtime` is reserved at
-`docs/evidence/WP-400-consumer-property-read-runtime.toml`.
-The tranche requires actual Host/static runtime fixtures, real registry races,
-complete call/lease/manual-fallback retention, paired simultaneous parent peaks,
-finite last-root local discard with residual report and zero controlled retained
-bytes/charges after reclaim. The lower-layer manual-root limitation is not a
-Runtime Drop implementation. Real Host Zenoh remains WP-600 production evidence.
+The production [Consumer application fixture](../../tools/architecture-fixtures/consumer-property-read-runner/README.md)
+and [completion evidence](../evidence/WP-400-consumer-property-read-runtime.toml)
+with key `consumer-property-read-runtime` are independently accepted by the
+production review cited in the admission record. They cover all six admitted
+obligations: actual Host/static execution, unpublished failure and paired parent
+capacity, real publication/checkout races, complete call/seal/lease/manual-cleanup
+retention, finite final-root residual discard, and measured zero controlled
+retained bytes/charges after reclaim. The executable source, author bounds and
+measurements remain those of the accepted implementation.
+The separate early multi-owner scheduler checkpoint, broad WP-400/milestone
+closure, full performance matrices and real Host Zenoh production evidence remain
+outside this tranche. Topics 0081/0082 remain OPEN; no fleet-sharing or long-lived
+subscription claim follows from this completion.
 
 Only after this tranche and every component predecessor are
 `complete/current`, all completion evidence is `passed`, and the exact fixture

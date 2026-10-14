@@ -15,10 +15,35 @@ and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/run
 passed; these checks cover diff hygiene only. The review records exact-head
 prechecks separately from the broader checks at the initial candidate revision.
 
-This separate docs-only transition records admission following that acceptance.
-It permits only the implementation envelope below. Runtime completion, Consumer
-architecture-gate acceptance, milestones, broad WP-400 completion and protocol
-production remain separate evidence and acceptance boundaries.
+The separate docs-only admission transition followed that acceptance and permits
+only the implementation envelope below. Production completion is recorded
+separately.
+
+[Independent production re-review of PR #168](https://github.com/yushun1990/clinkz-wot/pull/168#pullrequestreview-5513459509)
+accepted exact head `b5517e8d9721084ba005d03c64f3cf32c7a1a79f` with no blocking
+findings across all six completion obligations below. It verifies all six earlier
+findings fixed and supersedes their changes-required conclusions. The reviewed
+head and merged master commit `4324abdd6733e7080d3928f027c02341fd773a76` have the
+same tree `eb4c42e8c7fdbb65de027d7b9d35955077b06c52`. Production and tests match
+`cf2e0dec522f0854bcc898e1d437cab6e5fca57b`; the final reviewed commit changes
+only the evidence file.
+Required [exact-head validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38508811697)
+and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38517353767)
+passed; both cover diff hygiene only. The review independently reproduced all
+47 recorded verification entries, including both native toolchains, actual
+Host/static applications, ARM library compilation, predecessor/Producer
+regressions and focused Memcheck, and passed its six downstream regression
+probes. The [registered completion evidence](../evidence/WP-400-consumer-property-read-runtime.toml)
+retains the exact executable revisions, six obligation mappings, normalized
+outcomes, physical measurements, author bounds and scope exclusions.
+
+This separate docs-only transition records completion of the bounded Runtime
+tranche only: one startup registration, one generation and one manual call/result
+opportunity in Host and application-static representations. Consumer
+architecture-gate registration/acceptance, real Consumer protocol qualification,
+broad WP-400/milestone closure and full performance matrices retain their
+independent boundaries. Topics 0081 and 0082 remain OPEN and non-blocking for
+this one-shot tranche; no sharing or long-lived subscription decision is made.
 
 ## Result and reconstruction
 
@@ -401,6 +426,6 @@ future compatible separation of reusable immutable execution data from per-Thing
 context and lifecycle ownership open; this admission selects no sharing
 representation or fleet-scalability claim.
 
-Implementation acceptance and any Consumer architecture-gate registration remain
-subsequent independent boundaries; do not add product code merely to register
-the gate.
+The production acceptance recorded above supports this tranche's completion.
+Consumer architecture-gate registration and acceptance remain separate subsequent
+boundaries; do not add product code merely to register the gate.
