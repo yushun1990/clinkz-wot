@@ -33,6 +33,7 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
+- [[file:0083-host-zenoh-consumer-query-ownership.md][0083 Host Zenoh Consumer Query Ownership Admission Blocker]]
 - [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 Composable Capabilities and Runtime Boundaries]]
 
 ** DECIDED
