@@ -7,11 +7,13 @@ Plan revision: active v5 bounded-core roadmap
 Active design revision: v5.1 Consumer one-shot authority
 
 Release target: ClinkZ-WoT v1, with protocol-independent Core, Planning, and
-Servient ownership; a client-only Directory/Discovery boundary; and optional
-Zenoh plus zenoh-pico bindings. Release material may claim empirical
-protocol-shape neutrality only if a materially contrasting protocol fixture has
-passed. Otherwise it must state the narrower evidence-backed claim:
-protocol-independent engine ownership plus Zenoh-family operation.
+Servient ownership; a client-only Directory/Discovery boundary; and a production
+Host HTTP/1.1 binding with HTTPS/security qualification. Concrete bindings remain
+optional Cargo dependencies. Zenoh and zenoh-pico are deferred future bindings;
+their SDK repair, parity and hardware qualification are not v1 dependencies.
+Portable Core/Planning/Servient support remains required. Embedded production
+and empirical protocol-shape neutrality are claimed only from their own executed
+evidence, separately from Host HTTP operation.
 
 This file owns only the durable roadmap: milestones, dependencies, coarse
 status, objectives, and exit goals. It does not own the current engineering
@@ -42,8 +44,8 @@ validation/semantic lending, owned Planning output and Servient transaction
 publication. Strict bounded JSON ingestion is a separate future capability,
 with its literal-value and field-decoding authority preserved. It is no longer
 a prerequisite of the first Consumer Property Read integration.
-The Consumer architecture gate is not registered until its
-source prerequisites are assembled. All six
+The Consumer Property Read architecture gate has passed independent acceptance.
+All six
 narrow Producer Property Read tranches and D48's
 generic transition-validation convergence are integrated. The aggregate
 `PROPERTY-READ-ARCHITECTURE` implementation and registered external mock
@@ -65,13 +67,13 @@ executable cross-package composition proof. The real-target probe remains
 architecture feedback, not WP-600 product progress or protocol-shape-neutrality
 evidence.
 
-The first proof no longer releases an undifferentiated broad expansion. The
-next required cross-package proof is a narrow Consumer Property Read one-shot
-after its exact domain-entry authority review. A separate minimal
-`ObserveProperty` proof is required before broad subscription/emission
-expansion. The existing WP-400 multi-owner/multi-route checkpoint proceeds as
-package evidence in parallel with Consumer domain-entry preparation and is not
-a third global architecture gate.
+The passed Producer and Consumer proofs do not release undifferentiated broad
+expansion. [ADR-0022](docs/ADRs/0022-first-production-binding-and-runtime-environments.org)
+selects real Host HTTP Consumer evidence as the production frontier, preserving
+the Zenoh findings while correcting universal SDK allocation-recovery assumptions.
+A separate minimal `ObserveProperty` proof remains required before broad
+subscription/emission expansion. The existing WP-400 multi-owner/multi-route
+checkpoint is package evidence and is not another global architecture gate.
 
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
@@ -79,12 +81,12 @@ advance the frontier safely.
 
 ## Critical Path
 
-1. In parallel, execute the existing WP-400 early multi-owner/scheduler
-   checkpoint and admit/complete the exact WP-100 -> WP-200 -> WP-300 -> WP-400
-   Consumer Property Read slices under ADR-0013.
-2. Complete the narrow Consumer Property Read cross-package architecture gate,
-   then immediately exercise the matching public target path through real Host
-   Zenoh production evidence before unrelated broad binding work accumulates.
+1. Admit and complete the narrow Host HTTP Consumer Property Read target under
+   ADR-0013, using the passed Consumer gate and matching completed predecessors.
+   The existing WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
+2. Add the production HTTP Producer route/permit/response path and public
+   bidirectional loop, then HTTPS/trust/security evidence before production
+   release. Keep this real integration ahead of unrelated broad binding work.
 3. Broaden one-shot Core, Planning, Binding, and Servient capabilities only
    through exact admitted tranches. Before broad subscription/emission work,
    complete the corresponding domain-entry review and one minimal
@@ -93,7 +95,8 @@ advance the frontier safely.
    a WP-100 package dependency and enters only through exact Core/TD predecessor
    tranches; WP-600 retains its WP-300 package dependency while real protocol
    evidence proceeds capability-by-capability as matching shared/runtime
-   tranches become stable.
+   tranches become stable. Real embedded protocol/hardware qualification and
+   optional Zenoh/pico migration are independent future work, not Host blockers.
 5. Join completed WP-400, WP-500, and WP-600 through WP-700 for final
    aggregation, absence, feature/conformance, and release evidence, then perform
    the v1 technical release review.
@@ -109,7 +112,7 @@ advance the frontier safely.
 | M4 — Protocol Binding SPI and Lifecycle | IN_PROGRESS | M3 tranche dependencies |
 | M5A — Servient Runtime and Application Lifecycle | IN_PROGRESS | M4 tranche dependencies |
 | M5B — Directory and Discovery Client Runtime | OPEN | M2 package dependency; exact Core/TD tranche entry |
-| M5C — Zenoh and zenoh-pico Binding Migration | OPEN | M4 package dependency; matching capability tranche entry |
+| M5C — Host HTTP Production Binding | OPEN | M4 package dependency; matching capability tranche entry |
 | M6 — Umbrella Integration and Final Conformance | OPEN | M5A, M5B, M5C |
 | M7 — v1 Release Review | OPEN | M6 |
 
@@ -135,7 +138,7 @@ architecture gates from same-revision evidence.
 Exit goals:
 
 - every accepted ADR has one non-conflicting authoritative projection;
-- the 62 active v5 requirements retain one registered owner and all inactive
+- the 65 active v5.1 requirements retain one registered owner and all inactive
   identities retain one checked disposition;
 - every architecture/refactor gate required by the active v5 roadmap has
   current same-revision evidence and its applicable acceptance state; and
@@ -166,9 +169,9 @@ Objective: produce immutable bounded plan sets and binding artifacts without
 runtime Thing Description rescanning or protocol execution ownership.
 
 Current status: the narrow Property Read plan, Producer-route, and
-route-reservation projections and the unpublished Consumer Property Read
-aggregate are complete within their admitted boundaries. Consumer Servient
-integration remains unadmitted. Broad selection, fallback, caching, lazy
+route-reservation projections and the Consumer Property Read aggregate/output
+ownership are complete within their admitted boundaries. The narrow Consumer
+Servient integration and aggregate gate are accepted. Broad selection, fallback, caching, lazy
 compilation, bounds, and generation evidence remains.
 
 Exit goals: deterministic admitted plans; complete ownership, rollback,
@@ -231,24 +234,20 @@ Exit goals: bounded lazy progress, admission, cancellation, overflow, and
 result handling; no Directory service scope; and independently reviewed
 WP-500 completion.
 
-## M5C — Zenoh and zenoh-pico Binding Migration
+## M5C — Host HTTP Production Binding
 
 Authoritative package scope: WP-600. Package dependency: WP-300.
 
-Objective: migrate Zenoh and zenoh-pico to the admitted planning and binding
-contracts as one production protocol family.
+Objective: deliver a useful production Host HTTP/1.1/HTTPS binding through the
+admitted Planning, Binding and Servient contracts. The first Consumer tranche
+is followed by a production Producer loop and HTTPS/security qualification.
 
-The earlier real-target Property Read probe supplies architecture feedback but
-does not satisfy production evidence. Real Host Zenoh product evidence should
-follow each stable matching capability boundary instead of waiting for broad
-WP-300 completion. Real zenoh-pico associated-state/backend evidence is required
-before the corresponding constrained parity or WP-600 completion claim; a
-compile-only feature cell cannot stand in for constrained runtime evidence.
-
-Exit goals: real Zenoh-family plan, route, request/response, subscription,
-emission, activation, cancellation, cleanup, and bounds evidence; valid host
-and constrained feature cells; and realistic end-to-end interaction without
-legacy selection or dispatch.
+Exit goals: real selected-request and permit-gated Producer interaction;
+bounded protocol input/state and truthful cancellation/cleanup; explicit
+supported capabilities and deployment requirements; matching admitted
+capability/workload evidence; and no legacy selection or dispatch. Zenoh probes
+remain architecture feedback and deferred SDK evidence. Neither portable
+compilation nor Host HTTP completion is embedded production or protocol parity.
 
 ## M6 — Umbrella Integration and Final Conformance
 
@@ -261,9 +260,10 @@ collection, emission, or protocol production ownership.
 
 Exit goals: intentional v1 public surface; final absence of target-to-legacy
 backflow after staged capability migration; passing workspace, feature,
-constrained, compatibility, resource, workload, and performance evidence;
+portable/constrained-core, compatibility, resource, workload, and performance evidence;
 current requirement coverage; passed aggregate gates; and release claims no
-broader than executed evidence.
+broader than executed evidence. Deferred legacy Zenoh execution is excluded or
+retired from the release surface; its replacement is not a release dependency.
 
 ## M7 — v1 Release Review
 

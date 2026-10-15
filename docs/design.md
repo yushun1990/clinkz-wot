@@ -143,10 +143,14 @@ WP-400 package evidence and may proceed in parallel with Consumer domain-entry
 preparation; it is not another global gate.
 
 Real concrete-protocol pressure follows a stable matching capability boundary.
-Host Zenoh product evidence may proceed after the required WP-200/WP-300 and
-WP-400 tranches plus applicable architecture proof are stable, without waiting
-for unrelated broad WP-300 work. Real zenoh-pico runtime evidence remains
-required before constrained parity or corresponding WP-600 completion claims.
+ADR-0022 selects Host HTTP/1.1/HTTPS as the first production binding, using the
+passed Consumer gate and matching completed predecessors before unrelated broad
+WP-300 work. Zenoh/pico qualification is deferred optional work. Foundation owns
+the explicit Host allocation/environment-failure scope; Binding SPI preserves
+bounded protocol storage, final ownership and truthful retirement. Portable
+static evidence remains required without making a real embedded backend a Host
+release dependency. No package graph, API, state, resource-row/default or gate
+status changes through this decision.
 None of this activates an inactive requirement: each Consumer, runtime,
 streaming/emission, Directory, codec/validation/security, or advanced-planning
 identity still requires its own domain-entry disposition before it can authorize

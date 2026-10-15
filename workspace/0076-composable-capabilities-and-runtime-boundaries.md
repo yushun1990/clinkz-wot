@@ -2,6 +2,26 @@
 
 Status: DISCUSSING
 
+## First production binding and environment decision migrated
+
+The bounded reassessment of first-binding priority, Host allocation failure and
+Host/embedded deployment responsibilities is migrated to
+[ADR-0022](../docs/ADRs/0022-first-production-binding-and-runtime-environments.org),
+Foundation, Binding SPI, the runtime backbone and WP-600/WP-700. It selects Host
+HTTP/1.1/HTTPS and defers Zenoh/pico qualification. The broader Contracts,
+generated-image and package-split proposals below remain historical hypotheses,
+not required successors or blockers. Existing role-only construction, terminal
+output transfer and recoverable Core/raw call backing already have accepted
+implementations. Their evidence is preserved within its actual scope.
+
+The comparison found no demonstrated need to extract packages before this
+integration. Keep independent capabilities and different physical mechanisms
+without duplicating TD/Planning/settlement algorithms. Real embedded protocol and
+hardware suitability needs a concrete deployment and evidence. The earlier timing
+suggestions below no longer make Zenoh Consumer success the reevaluation trigger;
+the production HTTP tranches now provide that practical pressure. No indefinite
+runtime redesign or additional gate is selected.
+
 ## Real Host protocol-owner intersection
 
 Preparation for the first real Consumer integration now supplies an earlier
@@ -11,8 +31,8 @@ concrete SDK infrastructure can have different lifetimes. The current Runtime
 still destroys the captured registration during shutdown; a last Zenoh Session
 Drop is not its finite local destructor.
 
-The scoped prerequisite decision and alternative dispositions are migrated to
-[the WP-600 owner decision](../docs/work-packages/WP-600-host-zenoh-owner-decision.md)
+The former scoped prerequisite decision and alternative dispositions are retained in
+[the deferred WP-600 owner history](../docs/work-packages/WP-600-host-zenoh-owner-decision.md)
 and [Binding SPI](../docs/spec/binding-spi.md#shared-protocol-infrastructure-lifetime).
 The [new public-SDK fixture](../tools/architecture-fixtures/host-zenoh-owner/README.md)
 demonstrates a scoped separate owner and original account retention, not complete

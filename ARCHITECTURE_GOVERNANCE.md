@@ -167,12 +167,15 @@ accounting remain maturity and correction points; the paired probe does not
 freeze those broader containers or justify merging the Host and static
 lifecycle APIs.
 
-That bounded probe precedes the aggregate mock Property Read candidate. It is
-architecture feedback rather than WP-600 product admission. Zenoh and
-zenoh-pico supply two runtime profiles for one protocol family, not general
-protocol-shape neutrality. A broader empirical claim requires a materially
-contrasting protocol shape; otherwise release language remains limited to
-protocol-independent engine ownership plus Zenoh-family operation.
+That bounded probe is architecture feedback rather than WP-600 product admission.
+[ADR-0022](docs/ADRs/0022-first-production-binding-and-runtime-environments.org)
+selects Host HTTP/1.1/HTTPS for first production and defers Zenoh/pico without
+discarding their evidence. It distinguishes shared correctness and resource
+ownership from environment failure, SDK allocation and hardware qualification.
+The package graph, accepted gates and controlled-owner guarantees remain.
+A production protocol claim names its actual capability/profile evidence;
+neither two Zenoh backends nor HTTP alone proves general protocol-shape
+neutrality. Embedded production requires separate real backend/target evidence.
 
 ## Architectural Decision Lifecycle
 

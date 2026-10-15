@@ -50,6 +50,9 @@ depends_on = ["WP-100"]
 id = "WP-600"
 status = "planned"
 document = "docs/work-packages/WP-600-protocol-bindings.md"
+# Existing crate inventory. ADR-0022 selects prospective protocols/http creation
+# for the next exact admission; add its owner when that admitted manifest exists.
+# The retained Zenoh owner is deferred optional work, not a release dependency.
 owner_crates = ["planning", "protocol-bindings/protocols/zenoh"]
 depends_on = ["WP-300"]
 

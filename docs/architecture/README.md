@@ -100,9 +100,16 @@ machine gate registration until their own domain-entry authority is reviewed.
 The existing WP-400 multi-owner/multi-route scheduler checkpoint remains
 package evidence, not a third architecture gate. Native collections,
 multi-target emission, Directory client progress, additional one-shot
-operations, and Zenoh-family production/parity remain package or integration
+operations, and concrete protocol production/parity remain package or integration
 evidence unless new executable counterexamples demonstrate another distinct
 cross-package ownership boundary.
+
+[ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org)
+selects Host HTTP/1.1/HTTPS production before deferred Zenoh/pico qualification.
+Shared ownership and settlement remain portable; allocation/runtime mechanisms
+and process/reset recovery belong to their declared environments. HTTP
+production, portable mock parity and real embedded protocol/hardware maturity
+are separately evidenced claims. No package split or new global gate is selected.
 
 ## Consumer TD admission refinement
 

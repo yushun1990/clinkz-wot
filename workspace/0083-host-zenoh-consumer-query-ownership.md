@@ -2,6 +2,15 @@
 
 Status: DISCUSSING
 
+Disposition: deferred optional Zenoh investigation under
+[ADR-0022](../docs/ADRs/0022-first-production-binding-and-runtime-environments.org).
+Its probes, scoped findings and reviews remain valid. Zenoh qualification is no
+longer a v1 or first-binding blocker; Host HTTP production now owns that frontier.
+The original universal SDK allocation-recovery prerequisite below is historical;
+current Foundation/Binding SPI govern eligibility. Input bounds, blocking Drop
+and original-operation retirement remain real unresolved Zenoh questions. No
+production admission or qualified successor is inferred from the priority change.
+
 ## Protocol-owner subquestion migrated; qualification remains open
 
 The scoped prerequisite decision was reconstructed independently from fetched

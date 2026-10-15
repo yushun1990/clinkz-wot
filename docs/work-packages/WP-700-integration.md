@@ -14,7 +14,7 @@ Snapshot fixtures and compile-only target results cannot substitute for the
 replacement transaction, runtime resource and capability proofs.
 
 Integrate the completed foundation, TD, core, planning, complete binding SPI, Servient, Discovery
-client, zenoh/zenoh-pico, and codec migrations into the application-facing `clinkz-wot` crate.
+client, production HTTP/HTTPS, and codec migrations into the application-facing `clinkz-wot` crate.
 Freeze the intentional re-export surface, remove obsolete compatibility APIs, run the complete
 feature and requirement evidence matrix, establish implementation baselines, and make the final
 conformance decision.
@@ -35,6 +35,15 @@ be the first executable proof of their ownership topology.
 Target-to-legacy backflow is removed capability-by-capability by the package that completes each
 target path. WP-700 owns final public/source/umbrella absence and may remove only compatibility
 surfaces whose last legitimate migration user disappears at final composition.
+
+ADR-0022 defers Zenoh/pico production and real embedded networking. Neither is a
+WP-700 entry or completion dependency. Retire or exclude legacy Zenoh execution
+from the v1 releasable surface while preserving optional experimental source and
+its historical evidence. A future Zenoh binding must enter through current
+target contracts; adding HTTP cannot justify shipping a target-to-legacy bypass.
+All final absence claims below cover the releasable public surface and its source
+paths; excluded experimental paths must be named explicitly, not hidden behind
+an apparently supported v1 feature. Portable static/ARM evidence remains required.
 
 The broad success/error and cross-binding metadata projection retained in
 `docs/amendments/WP-100-interaction-output-api-v1.md` is v5-inactive historical
@@ -82,8 +91,8 @@ focused package-level result with one broad integration test.
 | `clinkz-wot` | `--no-default-features` | Useful constrained re-exports for foundation, TD, core, planning, Discovery client values/poll traits, codecs selected by feature, and `StaticServient` |
 | `clinkz-wot` | `async`, no `std` | Native async adapters without an executor, host runtime, or concrete Rust zenoh dependency |
 | `clinkz-wot` | `std` | Feature-composed `Servient`, host handles, Discovery client adapters, and host conveniences |
-| `clinkz-wot` | `zenoh` | Optional Rust zenoh backend; implies its documented host requirements only |
-| `clinkz-wot` | `zenoh-pico` | Optional constrained zenoh-pico backend without enabling `std` |
+| `clinkz-wot` | prospective `http` | Optional Host HTTP/1.1/HTTPS composition; exact feature/dependencies enter with admitted binding work |
+| `clinkz-wot` | `zenoh`, `zenoh-pico` | Deferred experimental cells; no v1 production claim or completion dependency; legacy execution excluded or retired before release |
 | `clinkz-wot` | `cbor` | Optional `clinkz-wot-codec-cbor` re-exports in every supported codec cell |
 | `clinkz-wot` | `td2-preview` | Additive experimental TD 2.0 surface with unchanged TD 1.1 behavior when preview fields are absent |
 
@@ -92,7 +101,8 @@ The workspace compile matrix covers the actual Cargo packages
 `clinkz-wot-planning`, `clinkz-wot-discovery`, `clinkz-wot-servient`,
 `clinkz-wot-protocol-bindings-zenoh`, `clinkz-wot-codec-cbor`, and `clinkz-wot`.
 Zenoh-pico is a feature of `clinkz-wot-protocol-bindings-zenoh`, not a separate package in this
-revision.
+revision. The prospective HTTP package joins this matrix only through admitted
+creation; no placeholder package/feature is created by the strategy decision.
 
 ## Public API and Data Migration
 
@@ -123,8 +133,9 @@ revision.
   `request_thing_description` with the Scripting-compatible result shapes. Keep source-aware and
   Directory-native extensions under explicitly named methods rather than changing the
   Scripting-compatible method contract.
-- Add the umbrella `zenoh-pico` feature and forward it to the concrete package without `std`.
-  Keep `zenoh` and `zenoh-pico` mutually exclusive and keep both off the default umbrella build.
+- Compose the admitted HTTP binding deliberately. Keep concrete bindings off the
+  default umbrella build. Preserve deferred Zenoh/pico as optional experimental
+  work without making their implementation or qualification a release prerequisite.
 - Forward `std`, `async`, `cbor`, and `td2-preview` only along dependency-safe edges. Feature
   unification must not make a lower crate depend on a higher crate or executor.
 - Update examples, crate-level documentation, rustdoc links, and compile fixtures to use only the
@@ -256,10 +267,11 @@ no-default, async, or optional binding cell restores it.
   separately.
 - `protocol-shape-authoring-conformance`: one independently authored fixture
   whose route, correlation, response, or cancellation shape differs
-  materially from the Zenoh family. If that evidence is not admitted, release
-  documentation limits the empirical claim to protocol-independent engine
-  ownership plus Zenoh-family operation and does not claim general
-  protocol-shape neutrality.
+  materially from the production HTTP family. The historical Zenoh Producer
+  probe remains narrower contrasting evidence, not a full production Consumer
+  or constrained proof. If broader evidence is not admitted, release language
+  claims protocol-independent engine ownership plus the executed HTTP
+  capabilities; general protocol-shape neutrality is not a release dependency.
 - `serving-activation-integration`: composed host and constrained evidence that all required route
   commits precede one atomic serving publication and that each accept poll receives one fresh,
   exact-route, non-retained borrowed permit produced only by consuming the exclusive claim over
@@ -315,12 +327,15 @@ reference gate. The Gateway `PERF-GW-030` and constrained `PERF-CS-022` results 
 - The ownership matrix matches the implemented defining and umbrella paths, contains no temporary
   owner or obsolete migration disposition, and the Cargo graph follows `CRATE-DEPS-001` in every
   feature cell.
-- Every positive and negative public-surface fixture passes, including useful no-default and async
-  no-std umbrella builds, optional `zenoh`, optional `zenoh-pico`, `cbor`, and additive
-  `td2-preview`.
+- Every applicable positive and negative public-surface fixture passes, including
+  useful no-default and async no-std umbrella builds, admitted HTTP/HTTPS, `cbor`
+  and additive `td2-preview`. Deferred Zenoh/pico cells have explicit experimental
+  dispositions; they are not production protocol acceptance requirements.
 - Constrained runtime maturity is claimed only for executed common runtime
   capabilities; compile-only async/no-std and profile-only capabilities are
   listed separately and cannot inherit runtime parity from type availability.
+  Real embedded protocol/firmware production is a separate target qualification,
+  not inferred from Host HTTP or required to close this Host production release.
 - `legacy-handler-surface-removal` proves that no old handler, slot, raw lookup, push facade, or
   migration adapter survives in any releasable cell and that every target operation/flavor and
   host registration path resolves to its single defining type or method.

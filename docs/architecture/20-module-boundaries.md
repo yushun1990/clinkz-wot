@@ -145,6 +145,17 @@ Directory service.
 
 ## Feature boundary
 
+Host and embedded are deployment environments, not mandatory complete products.
+TD tooling, Consumer-only and Producer-only applications may construct only
+their admitted capabilities. The accepted Consumer-only registration and manual
+runtime already do this without a dummy server or Directory. Dynamic typed TD
+admission, static typed execution and any future generated-image installation
+are different capabilities; the last requires its own trust/validation evidence.
+ADR-0022 keeps this graph and shared semantic owners. Contracts extraction, a
+Host/embedded crate split and a universal allocator/reactor are not prerequisites
+of the first HTTP binding. Runtime, HAL/RTOS, network and reset mechanisms remain
+environment-specific dependencies with explicit lifetime and qualification.
+
 TD, planning values, core semantics, constrained binding contracts, and static
 Servient abstractions support `no_std + alloc`. Filesystem, sockets, threads,
 processes, dynamic libraries, and executor ownership remain in concrete host

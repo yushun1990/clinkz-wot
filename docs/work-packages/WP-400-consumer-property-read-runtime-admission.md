@@ -264,6 +264,15 @@ over-capacity owned inputs return unchanged; rejection cannot perform an unpaid
 variable destructor. Name/option copying uses paid fallible backing. This tranche
 does not certify arbitrary third-party callbacks or real protocol libraries.
 
+ADR-0022 preserves this completed tranche and its finite, recoverable mock author
+unchanged. A future real Host protocol author additionally uses Foundation's
+[Host allocation/failure scope](../spec/foundation.md#host-allocation-and-environment-failure-scope):
+raw/Core construction recovery remains required, while SDK allocation during
+owned I/O may use the declared process-failure policy. Its input/storage envelope,
+runtime lifetime and final destruction require new concrete evidence; this
+tranche's mock measurements cannot qualify them. No Runtime API or destructor
+contract changes here.
+
 ## Read, cancellation and terminal release
 
 Only Published admits a generation-bearing lease. Under the fixed opportunity's

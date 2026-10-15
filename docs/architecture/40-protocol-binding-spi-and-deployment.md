@@ -10,6 +10,13 @@ Official umbrella features are convenience composition only. A third-party
 binding can depend directly on the public engine crates and does not need to be
 added to this workspace or umbrella crate.
 
+The first production direction is Host HTTP/1.1 with HTTPS before release,
+selected by [ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org).
+Zenoh/pico remain deferred optional bindings. A binding need not implement every
+role or run on every platform; capabilities and evidence must name their actual
+intersection. [WP-600](../work-packages/WP-600-protocol-bindings.md) owns the
+production sequence without adding a global gate.
+
 `build.rs` is not a binding discovery or dependency mechanism. Cargo resolves
 Rust dependencies before build scripts run; recursively invoking Cargo would
 create incompatible type identities, features, targets, profiles, and lock
@@ -153,6 +160,14 @@ Every long-lived binding-owned object declares an immutable worst-case exclusive
 retained footprint for its entire lifetime, including cancellation. Poll-time
 temporary allocations and transport-library buffers are separately bounded and
 charged. A footprint cannot shrink merely because an initial poll completed.
+
+Foundation's [Host allocation/failure scope](../spec/foundation.md#host-allocation-and-environment-failure-scope)
+distinguishes admitted attributable costs from deployment baseline and process
+failure. Binding SPI owns the physical retirement barrier and original accounts.
+An OS memory limit does not implement protocol byte admission. A Host SDK need
+not provide universal recoverable allocation, but its variable state still needs
+enforced limits and a supported finite envelope. Embedded allocation/storage and
+real backend qualification are independent of the first Host production binding.
 
 External-input growth is covered by explicit per-route/per-binding/global item
 and byte limits. A binding cannot hide an unbounded pre-dispatch queue behind

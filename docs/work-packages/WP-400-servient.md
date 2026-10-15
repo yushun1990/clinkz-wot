@@ -177,7 +177,7 @@ retention, finite final-root residual discard, and measured zero controlled
 retained bytes/charges after reclaim. The executable source, author bounds and
 measurements remain those of the accepted implementation.
 The separate early multi-owner scheduler checkpoint, broad WP-400/milestone
-closure, full performance matrices and real Host Zenoh production evidence remain
+closure, full performance matrices and real Host HTTP production evidence remain
 outside this tranche. Topics 0081/0082 remain OPEN; no fleet-sharing or long-lived
 subscription claim follows from this completion.
 
@@ -191,7 +191,7 @@ manifest, generalize the non-normative checker with manifest-specific exact
 dependency/evidence assertions for both gates, and register only the new gate
 document/manifest in the artifact/spec indexes. It adds no product or fixture
 source and admits no tranche. Independent acceptance then uses a separate
-status-only `ready -> passed` change; real Host Zenoh remains later WP-600
+status-only `ready -> passed` change; real Host HTTP remains later WP-600
 production evidence.
 
 ## Requirements

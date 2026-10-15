@@ -1,5 +1,16 @@
 # Host Zenoh protocol-owner decision
 
+**Deferred qualification history.** ADR-0022 and the
+[current WP-600](WP-600-protocol-bindings.md) supersede this record's Zenoh-first
+priority and mandatory SDK-correction prerequisite. Its observations and reviews
+remain evidence; its original conclusion below is historical under the stricter
+SDK recovery contract. Foundation now permits ordinary Host SDK allocation in
+an admitted finite envelope with OOM a process/environment failure. That removes
+allocation abort alone as a disqualifier; it does not qualify current Zenoh
+input bounds, blocking final Drop, original-close retirement or final-owner loss.
+Any resumed Zenoh work must select a proportionate remedy under current authority.
+Neither SDK repair nor process isolation is a v1 prerequisite.
+
 Decision candidate for independent review, reconstructed from master
 `0e3cafd52207e55327ef978cebf46e8d10092a34`, including the unresolved qualification
 boundaries of [PR #175](https://github.com/yushun1990/clinkz-wot/pull/175).
