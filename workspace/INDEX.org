@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0084-http-consumer-local-disposal.md][0084 HTTP Consumer Local Disposal Feasibility]]
+
 - [[file:0079-consumer-runtime-entry-constructibility.md][0079 Consumer Runtime Entry Constructibility]]
 
 - [[file:0078-consumer-aggregate-capacity-handoff.md][0078 Consumer Aggregate Capacity Handoff]]

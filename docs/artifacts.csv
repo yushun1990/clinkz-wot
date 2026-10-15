@@ -29,6 +29,7 @@ docs/work-packages/WP-400-servient.md,servient-work-package,normative-migration-
 docs/work-packages/WP-500-discovery.md,discovery-work-package,normative-migration-plan,5.0,1,docs/design.md
 docs/work-packages/WP-600-protocol-bindings.md,protocol-binding-work-package,normative-migration-plan,5.1,1,docs/design.md
 docs/work-packages/WP-600-http-property-read-target.md,http-property-read-admission-target,normative-migration-plan,5.1,1,docs/spec/binding-spi.md
+docs/work-packages/WP-600-http-local-disposal-admission.md,http-local-disposal-admission-candidate,normative-migration-plan,5.1,1,docs/spec/binding-spi.md
 docs/work-packages/WP-600-host-zenoh-owner-decision.md,host-zenoh-qualification-history,non-normative-evidence,5.1,1,docs/spec/binding-spi.md
 docs/work-packages/WP-700-integration.md,integration-work-package,normative-migration-plan,5.0,1,docs/design.md
 tools/design-check/Cargo.toml,current-structure-checker,non-normative-checker,5.1,1,docs/design.md

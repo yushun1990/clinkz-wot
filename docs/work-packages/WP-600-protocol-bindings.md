@@ -18,6 +18,10 @@ tranches may enter under ADR-0013 after their matching WP-200/WP-300/WP-400
 predecessors and required architecture proof are complete. The Consumer gate is
 passed. The [smallest HTTP admission target](WP-600-http-property-read-target.md)
 defines the first vertical slice; it is not an admitted tranche.
+The registered [local-disposal predecessor candidate](WP-600-http-local-disposal-admission.md)
+owns the smallest dependency correction revealed by executable admission
+prechecks. It preserves the Runtime's existing final-owner guarantee; it neither
+implements the adapter nor adds another architecture gate.
 
 Consumer execution uses the admitted source-independent consumed plan, selected
 `OutboundRequest`, recoverable call construction, Core result seal, generation

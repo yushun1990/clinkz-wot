@@ -853,3 +853,81 @@ pre_implementation_checks = [
 admission_review = "github-pr:165#pullrequestreview-5505656673"
 completion_evidence_keys = ["consumer-property-read-runtime"]
 completion_evidence_path = "docs/evidence/WP-400-consumer-property-read-runtime.toml"
+
+[[tranche]]
+id = "WP-600-HTTP-LOCAL-DISPOSAL"
+work_package = "WP-600"
+sequence = 600
+status = "planned"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = ["WP-400-CONSUMER-PROPERTY-READ-RUNTIME"]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "IMPL-CONFORM-001",
+    "CRATE-DEPS-001",
+    "RES-LIMIT-001",
+    "RES-LIMIT-002",
+    "ADMIT-MEM-001",
+    "BIND-MEM-001",
+    "BIND-STORAGE-001",
+    "BIND-CALL-CANCEL-001",
+    "BIND-HOST-CANCEL-001",
+    "HANDLE-DROP-001",
+    "CLEANUP-RECORD-001",
+]
+# Prospective vendored third-party source; not an installed engine registration.
+owner_packages = ["hyper"]
+feature_cells = ["std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0022-first-production-binding-and-runtime-environments.org",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/spec/foundation.md",
+    "docs/spec/binding-spi.md",
+    "docs/spec/runtime-safety.md",
+    "docs/api-ownership.csv",
+    "docs/requirements.csv",
+    "docs/resource-limits.csv",
+    "docs/state-machines.toml",
+    "docs/work-packages/WP-600-protocol-bindings.md",
+    "docs/work-packages/WP-600-http-property-read-target.md",
+    "docs/work-packages/WP-600-http-local-disposal-admission.md",
+    "docs/work-packages/index.toml",
+]
+api_items = []
+state_machines = []
+resource_changes = [
+    "Remove unobservable SDK error allocation after closed response/body interest. No new storage, resource row, WorkClass, default, owner, ledger or Runtime budget. Adapter input/poll/byte envelopes remain a separate admission obligation.",
+]
+old_api_removals = []
+performance_workloads = []
+implementation_paths = [
+    "protocol-bindings/dependencies/hyper-1.12.0",
+    "protocol-bindings/dependencies/README.md",
+    "tools/architecture-fixtures/http-consumer-admission",
+    "Cargo.toml",
+    "docs/work-packages/index.toml",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "python3 tools/architecture-fixtures/http-consumer-admission/run.py",
+    "cargo fmt --manifest-path tools/architecture-fixtures/http-consumer-admission/Cargo.toml -- --check",
+    "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_admission --test validated_lending",
+    "cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-planning --lib",
+    "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features",
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async",
+    "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async --target thumbv7em-none-eabihf",
+    "git diff --check",
+]
+admission_review = "pending-independent-review"
+completion_evidence_keys = [
+    "http-local-disposal-source",
+    "http-local-disposal-observers",
+    "http-local-disposal-regression",
+]
+completion_evidence_path = "docs/evidence/WP-600-http-local-disposal.toml"

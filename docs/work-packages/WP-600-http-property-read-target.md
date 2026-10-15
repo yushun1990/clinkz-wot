@@ -7,6 +7,14 @@ change. The candidate must supply its exact declarations, dependency lock,
 prechecks and independent admission review before implementation.
 The prospective tranche identity is `WP-600-HTTP-CONSUMER-PROPERTY-READ`.
 
+The [dependency local-disposal candidate](WP-600-http-local-disposal-admission.md)
+addresses a reproduced pre-admission blocker: unchanged Hyper 1.12.0 allocates
+while destroying suspended requests/bodies, even after response interest is
+gone. Its disposable repair preserves live error observers and the existing
+Runtime contract. Complete that exact dependency predecessor before adapter
+admission; its success alone supplies neither the
+compiler projection nor HTTP resource qualification.
+
 ## Scope and predecessors
 
 One complete Host Consumer-only registration, one eager consumed generation and
