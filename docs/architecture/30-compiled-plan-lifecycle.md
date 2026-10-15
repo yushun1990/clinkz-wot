@@ -175,6 +175,10 @@ undocumented planning system.
 
 ## Resource and evidence requirements
 
+The pending [Consumer resource migration](../spec/consumer-resource-ownership.md)
+keeps compiler artifacts/cursors and owned output within engine admission.
+It supplies no successor composition acceptance or changed Planning lifecycle.
+
 Admission accounts for logical bytes, binding-artifact lifetime bytes, lazy
 slot metadata, negative results, candidate counts, and compilation work.
 Reclamation is incremental under `WorkBudget` for constrained profiles.

@@ -1,0 +1,142 @@
+schema_revision = 2
+design_revision = "5.1"
+status = "candidate"
+operation = "consumer-property-read"
+typed_input_interpretation_revision = 2
+policy_identity_encoding = "complete-policy-v1"
+numeric_schema = "docs/resource-limits.csv"
+numeric_schema_sha256 = "4e163c08878efee9f64a3ea392695a2da93b9891c278932f4a68bcbb9568ce3a"
+field_count = 196
+contract = "docs/spec/consumer-resource-ownership.md"
+capability_roles = ["consumer-only"]
+execution_models = ["manual-poll"]
+compilation_cells = ["std", "no-default", "async-no-std"]
+disposal_policies = ["strict-local", "host-process-failure"]
+default_disposition = "unchanged"
+default_owner = "existing registered owner"
+default_diagnostic = "existing field/scope/phase diagnostic"
+default_applicability = "unchanged; unused is not NA or evidence of enforcement"
+
+# This overlay versions meaning, not the generated numeric table. Fields absent
+# below retain their entire old contract. No V1 profile becomes an owned policy.
+[[group]]
+id = "engine-storage"
+disposition = "reinterpreted"
+owner = "Servient admission coordinator; Foundation local and original parent accounts"
+reservation_point = "before controlled allocation/publication; retain until physical release"
+diagnostic = "engine-capacity; actual field/scope/phase and contract identity"
+meaning = "controlled backing/allowances only; protocol-private backing has its own binding owner"
+fields = [
+    "admission_temporary_bytes_per_operation_max", "admission_temporary_bytes_global_max",
+    "peak_live_bytes_per_admission_max", "admission_peak_live_bytes_global_max",
+    "engine_live_bytes_global_max", "largest_contiguous_allocation_bytes_max",
+    "compiled_runtime_bytes_per_thing_max", "compiled_runtime_bytes_global_max",
+]
+
+[[group]]
+id = "call-carrier"
+disposition = "reinterpreted"
+owner = "Core complete call/static slot; Servient call/result owner"
+reservation_point = "before raw construction; retain through unread/late result and cleanup"
+diagnostic = "engine-capacity; preacceptance rejection or accepted-owner violation"
+meaning = "complete concrete carrier, Core envelope, request and promised result backing; no transitive SDK maximum"
+fields = [
+    "host_binding_call_bytes_per_item_max", "host_binding_call_bytes_per_binding_max",
+    "host_binding_call_bytes_per_thing_max", "host_binding_call_bytes_global_max",
+    "binding_slot_state_bytes_per_item_max", "binding_slot_state_bytes_per_thing_max",
+    "binding_slot_state_bytes_global_max",
+]
+
+[[group]]
+id = "callback-scratch"
+disposition = "reinterpreted"
+owner = "Core/Servient mediation; binding owns protocol callback scratch separately"
+reservation_point = "controlled scratch remains startup-funded through registration disposal"
+diagnostic = "engine-capacity; callback-scratch field/scope/phase and contract identity"
+meaning = "controlled mediation scratch only; preserve conservative lifetime reservation, do not add a scratch pool"
+fields = ["binding_poll_temporary_bytes_per_call_max", "binding_poll_temporary_bytes_global_max"]
+
+[[group]]
+id = "cancellation"
+disposition = "reinterpreted"
+owner = "original Servient call and cancellation destination"
+reservation_point = "before first side effect; keep complete cancelled owner funded until settlement"
+diagnostic = "engine-capacity; cancellation field/scope/phase and contract identity"
+meaning = "retain conservative complete engine-call allowance; overlaps other policy caps, not additive physical bytes"
+fields = ["binding_cancel_buffer_bytes_per_call_max", "binding_cancel_buffer_bytes_global_max"]
+
+[[group]]
+id = "cleanup-transfer"
+disposition = "reinterpreted"
+owner = "original account and acknowledged complete-call destination"
+reservation_point = "before side effect; retain on failed transfer and until terminal physical release"
+diagnostic = "engine-capacity; cleanup-transfer field/scope/phase and contract identity"
+meaning = "complete engine-call allowance plus actual destination/context/status backing; private resources move with their owner"
+fields = ["cleanup_transfer_bytes_global_max"]
+
+# Canonical encoding vectors, not qualification of these profiles for schema 2.
+[[value_identity_vector]]
+column = "gateway_default_v1"
+sha256 = "bf3c9908fcc5fa72d63663b840edd2210c7224b84b90ecadada187e175498bd5"
+
+[[value_identity_vector]]
+column = "directory_client_default_v1"
+sha256 = "33080a029e9dcfc4c594066211cc5c9e57b408639dabbfb56d62fa127f0a44eb"
+
+[[value_identity_vector]]
+column = "benchmark_static_reference_v1"
+sha256 = "0894a40c8b30e28b035ae9ab6e6a88f9268fbea9c6f6792e6d9ef53f93a698e9"
+
+[policy_identity_fixture]
+registration = [4, 4096]
+call = [8, 1280]
+input = [1, 64, 64, 64]
+result = [64, 32]
+work = [2, 2, 1, 1, 1, 1, 1]
+timeouts = [50, 5]
+scratch_bytes = 65536
+
+[[policy_identity_vector]]
+id = "std-strict"
+compilation_cell = "std"
+disposal_policy = "strict-local"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = {}
+sha256 = "860ee2e2dddefee91fdd88e355dcc2ca45a0b29f542c0ce4b215246a25f00b73"
+
+[[policy_identity_vector]]
+id = "std-host"
+compilation_cell = "std"
+disposal_policy = "host-process-failure"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = {}
+sha256 = "c51a34a8c9945d4c551e31a484ea208021d463b03fef34ab411a23b1724614ef"
+
+[[policy_identity_vector]]
+id = "scratch-only"
+compilation_cell = "std"
+disposal_policy = "strict-local"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = { scratch_bytes = 131072 }
+sha256 = "7a1a9c27659dea7959de5f6e5875b3f9fe526af37e18afa13f1c4dba85c1401e"
+
+[[policy_identity_vector]]
+id = "result-only"
+compilation_cell = "std"
+disposal_policy = "strict-local"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = { result = [65, 32] }
+sha256 = "08f43279aee42671cb9685c7e807ecf81302cc8b9d3c8f743808f9ff6d522cf4"
+
+[[policy_identity_vector]]
+id = "timeout-only"
+compilation_cell = "std"
+disposal_policy = "strict-local"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = { timeouts = [51, 5] }
+sha256 = "de7c632500393402199644abf0de865c823626c55c2da123b643ebf2ea4fa682"

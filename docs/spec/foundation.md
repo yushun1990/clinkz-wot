@@ -109,6 +109,11 @@ reservations retain their strict meaning until its explicit contract/schema
 migration. No existing byte field or footprint may yet exclude previously
 charged SDK state. The ADR owns the target and evidence dispositions.
 
+The proposed exact Consumer-only successor, configuration/diagnostic identity
+and schema-2 overlay are owned by [the resource migration candidate](consumer-resource-ownership.md).
+It is pending independent acceptance; this section and the V1 numeric profiles
+retain their strict interpretation.
+
 ADR-0022 distinguishes admission capacity from allocator availability. A ledger
 reservation authorizes bounded retained work; it does not commit OS pages or
 guarantee that an arbitrary library allocation succeeds. The following scope

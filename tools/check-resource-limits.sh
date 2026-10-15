@@ -279,4 +279,125 @@ for profile in GatewayDefaultV1 DirectoryClientDefaultV1 BenchmarkStaticReferenc
     fi
 done
 
+python3 -I - "$root" <<'PY'
+import csv
+import copy
+import hashlib
+import json
+from pathlib import Path
+import sys
+import tomllib
+
+root = Path(sys.argv[1])
+overlay = tomllib.loads((root / "docs/resource-contracts/consumer-ownership-v2.toml").read_text())
+assert overlay["schema_revision"] == 2
+assert overlay["status"] in {"candidate", "accepted"}
+assert overlay["operation"] == "consumer-property-read"
+assert overlay["typed_input_interpretation_revision"] == 2
+assert overlay["policy_identity_encoding"] == "complete-policy-v1"
+assert overlay["numeric_schema"] == "docs/resource-limits.csv"
+source = (root / overlay["numeric_schema"]).read_bytes()
+assert hashlib.sha256(source).hexdigest() == overlay["numeric_schema_sha256"], "unversioned numeric schema change"
+rows = list(csv.DictReader(source.decode().splitlines()))
+assert len(rows) == overlay["field_count"] == 196
+assert overlay["default_disposition"] == "unchanged"
+assert overlay["capability_roles"] == ["consumer-only"]
+assert overlay["execution_models"] == ["manual-poll"]
+assert set(overlay["compilation_cells"]) == {"std", "no-default", "async-no-std"}
+assert set(overlay["disposal_policies"]) == {"strict-local", "host-process-failure"}
+assert (root / overlay["contract"]).is_file()
+known = {row["field"]: row for row in rows}
+seen = set()
+groups = {group["id"] for group in overlay["group"]}
+assert len(overlay["group"]) == len(groups) == 5
+assert groups == {"engine-storage", "call-carrier", "callback-scratch", "cancellation", "cleanup-transfer"}
+for group in overlay["group"]:
+    assert group["disposition"] == "reinterpreted"
+    for key in ("owner", "reservation_point", "diagnostic", "meaning"):
+        assert group[key].strip(), f"missing {key} for {group['id']}"
+    assert group["fields"]
+    for field in group["fields"]:
+        assert field in known, f"unknown resource row {field}"
+        assert field not in seen, f"duplicate disposition for {field}"
+        assert known[field]["unit"] == "bytes", f"non-byte reinterpretation {field}"
+        seen.add(field)
+assert len(seen) == 20 and len(set(known) - seen) == 176
+vectors = overlay["value_identity_vector"]
+assert len(vectors) == 3
+assert {v["column"] for v in vectors} == {
+    "gateway_default_v1", "directory_client_default_v1", "benchmark_static_reference_v1"
+}
+for vector in vectors:
+    encoded = bytearray(b"clinkz-resource-values-v1\0")
+    for row in rows:
+        value = row[vector["column"]]
+        encoded.extend(b"\0" if value == "NA" else b"\1" + int(value).to_bytes(8, "little"))
+    assert hashlib.sha256(encoded).hexdigest() == vector["sha256"], "configuration digest encoding drift"
+policy_lengths = {"registration": 2, "call": 2, "input": 4, "result": 2, "work": 7, "timeouts": 2}
+fixture = overlay["policy_identity_fixture"]
+assert set(fixture) == set(policy_lengths) | {"scratch_bytes"}
+
+def policy_key(vector, settings):
+    assert set(settings) == set(fixture), "incomplete policy constructor settings"
+    assert vector["compilation_cell"] in overlay["compilation_cells"]
+    assert vector["disposal_policy"] in overlay["disposal_policies"]
+    assert vector["disposal_policy"] != "host-process-failure" or vector["compilation_cell"] == "std"
+    coordinates = [str(overlay["schema_revision"]), str(overlay["typed_input_interpretation_revision"]),
+                   overlay["operation"], "consumer-only", "manual-poll", vector["compilation_cell"],
+                   vector["disposal_policy"], str(vector["profile_origin"])]
+    encoded = bytearray(b"clinkz-consumer-policy-identity-v1\0")
+    for coordinate in coordinates:
+        raw = coordinate.encode()
+        encoded.extend(len(raw).to_bytes(2, "little") + raw)
+    value = next(v["sha256"] for v in vectors if v["column"] == vector["value_column"])
+    encoded.extend(bytes.fromhex(value))
+    for operand, length in policy_lengths.items():
+        assert len(settings[operand]) == length, f"wrong {operand} operand shape"
+        for index, amount in enumerate(settings[operand]):
+            width = 4 if operand in {"registration", "call"} and index == 0 else 8
+            assert type(amount) is int and 0 <= amount < 1 << (width * 8)
+            encoded.extend(amount.to_bytes(width, "little"))
+    scratch = settings["scratch_bytes"]
+    assert type(scratch) is int and 0 <= scratch < 1 << 64
+    encoded.extend(scratch.to_bytes(8, "little"))
+    return hashlib.sha256(encoded).hexdigest()
+
+policy_keys = set()
+policy_vectors = {v["id"]: v for v in overlay["policy_identity_vector"]}
+assert len(overlay["policy_identity_vector"]) == len(policy_vectors) == 5
+assert set(policy_vectors) == {"std-strict", "std-host", "scratch-only", "result-only", "timeout-only"}
+for vector in policy_vectors.values():
+    assert set(vector["overrides"]) <= set(fixture), "unknown policy operand"
+    key = policy_key(vector, fixture | vector["overrides"])
+    assert key == vector["sha256"] and key not in policy_keys, "policy identity alias/encoding drift"
+    policy_keys.add(key)
+baseline = policy_vectors["std-strict"]
+assert baseline["overrides"] == {}
+for case, operand in [("scratch-only", "scratch_bytes"), ("result-only", "result"), ("timeout-only", "timeouts")]:
+    vector = policy_vectors[case]
+    for coordinate in ["compilation_cell", "disposal_policy", "profile_origin", "value_column"]:
+        assert vector[coordinate] == baseline[coordinate], "negative vector changed table/coordinates"
+    assert set(vector["overrides"]) == {operand}
+    assert vector["overrides"][operand] != fixture[operand]
+
+# Independently perturb every scalar so a dropped constructor setting cannot
+# retain the complete key even when all 196 numeric schema values are unchanged.
+mutations = 0
+for operand, length in policy_lengths.items():
+    for index in range(length):
+        changed = copy.deepcopy(fixture)
+        changed[operand][index] += -1 if operand == "input" and index == 1 else 1
+        assert policy_key(baseline, changed) != baseline["sha256"], f"policy key omits {operand}[{index}]"
+        mutations += 1
+changed = fixture | {"scratch_bytes": fixture["scratch_bytes"] + 1}
+assert policy_key(baseline, changed) != baseline["sha256"], "policy key omits scratch"
+assert mutations + 1 == 20
+# Freeze the interpreted schema as well as the numeric table. Lifecycle status
+# is not accounting meaning; changing metadata requires an explicit migration.
+metadata = {key: value for key, value in overlay.items() if key != "status"}
+metadata_digest = hashlib.sha256(json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+assert metadata_digest == "7c8ff04055af506d8b588ad1dc4658570db7a028e9870a9258b6d12a96410ce5", "schema-2 metadata changed without an explicit migration"
+print("resource ownership candidate: 20 versioned byte rows; 176 unchanged; 3 value and 5 complete-policy vectors; 20 operand mutations")
+PY
+
 echo "resource limit check: $(($(wc -l <"$schema") - 1)) fields and 3 profiles"

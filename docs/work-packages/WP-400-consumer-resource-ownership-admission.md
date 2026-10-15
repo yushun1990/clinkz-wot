@@ -1,0 +1,162 @@
+# Consumer resource ownership readmission candidate
+
+`index.toml` owns the state of `WP-400-CONSUMER-RESOURCE-OWNERSHIP`. This is a
+planned ADR-0013 candidate, with no independent acceptance or implementation
+permission. It proposes the smallest cross-package successor to the accepted
+strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
+and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
+semantics and row/API/diagnostic changes. Production code and existing evidence
+records are unchanged.
+
+Independent acceptance must cover the exact candidate diff, executable prechecks
+and all intersecting findings. A separate recorded admission transition then
+freezes this boundary before any production change. Completion review is another
+independent decision after the new source/evidence exists. This candidate grants
+no HTTP admission and supplies no successor accounting measurements.
+
+## Reconstructed baseline and impact
+
+Reconstruction baseline: master `7d3dfb84a2b9b5385027acbc58684dead01721d7`.
+Foundation reservations change checked counters; they do not allocate SDK memory.
+Core's immutable footprint checks, complete preallocated Host envelope and static
+slot preserve accepted owners and both result seals. Planning composes actual
+artifact/cursor/erasure/rollback Layouts. Runtime holds original paired accounts,
+registration scratch until retirement, conservative complete-call cancellation
+and transfer allowances, and residual status before finite final-root disposal.
+The current captured registration has synchronous local destruction and no async
+retirement hook. These implementation facts motivated an explicit owned scope,
+not a replacement allocator or a new retirement framework.
+
+The existing Runtime completion was independently accepted at
+`b5517e8d9721084ba005d03c64f3cf32c7a1a79f`
+([PR #168 review](https://github.com/yushun1990/clinkz-wot/pull/168#pullrequestreview-5513459509)).
+Its registered code/test revision is `cf2e0dec522f0854bcc898e1d437cab6e5fca57b`.
+The Consumer gate was independently accepted at
+`a22d97e4932c5126f93d7a6fe52cd13d5dc95630`
+([PR #171 review](https://github.com/yushun1990/clinkz-wot/pull/171#pullrequestreview-5514507904)).
+Use the original evidence files for their exact measurements and exclusions.
+Their states remain complete/admitted/current and passed for the strict path.
+The successor is separately registered; it cannot borrow their admission to edit
+strict source, or substitute controlled prototypes for production completion.
+
+| Existing evidence / owner | Disposition now and on successor implementation |
+| --- | --- |
+| WP-100 call values and borrowed TD | Reaffirm semantic inspection/Basic, paid lending, resource interpretation 2, source lifetime and constructor recovery. No TD source/API change. Rerun native admission/lending and portable dependents. |
+| WP-200 planning-selection, compiler-support, aggregate and output-ownership | Reaffirm source-independent output, all-bounds-before-start, payload/cursor accounting, exact root/account transfer and bounded rollback. Compiler/artifact storage stays engine-held. Reproduce checks; remeasure concrete wrappers if Core metadata changes Layout. |
+| WP-300 Consumer binding, Consumer-only registration, Host call construction | Preserve selected artifact identity, complete startup composition, both semantic seals, exact input recovery, complete Core-first backing and accepted-overrun retention. New contract capture, backing validation and disposal eligibility require new evidence; old declarations/measurements prove only strict code. |
+| WP-400 Consumer Runtime | Preserve atomic install, first cause, generations, normal/late/unread retention, complete transfer, real parent provenance and residual-before-destruction. New reservation scope, scratch declarations and disposal policy need exact source readmission and all affected fault/pressure/layout measurements. |
+| Passed Consumer and Producer gates | Preserve original scoped verdicts. Reproduce semantic cases after implementation. Neither verdict certifies schema 2. Before successor composition is claimed accepted, independent completion review must map every affected gate obligation to new exact-revision evidence. Reopen any old gate/tranche only if its original strict contract/source is actually invalidated. |
+| Strict schema/profile and old resource traces | Historical quantitative truth remains. Schema 2 resource deltas, identity and live/peak/largest/callback/terminal allocation results are new evidence. Compare semantic owners/leases, not equal SDK bytes. |
+| PR #178 and retained Zenoh owner probes | Keep version/configuration observations. Allocating Host disposal alone would no longer disqualify; blocking destruction, lost original tasks, surviving callbacks and uncontrolled ingress still do. No SDK is qualified here. |
+
+The pending scope intersects no unresolved decision in topics 0076/0081/0082:
+package extraction, reusable execution-data/Thing identity and subscription
+ownership remain outside this one-shot change. Topic 0083's retirement findings
+are retained exclusions; this tranche supplies no Zenoh repair. Topic 0047's
+broad authoring projection remains deferred. A new intersecting counterexample
+stops source work under ADR-0013 rather than expanding this candidate implicitly.
+
+## Exact source/readmission boundary
+
+When implementation changes shared Core declarations, error/seal/carrier Layouts
+or Runtime accounting, apply ADR-0013 impact review to the affected completed
+tranches and their transitive evidence before treating them as current for that
+new revision. Mark intersecting records `review-required` until independent
+reaffirmation with new measurements, or reopen them if their original contract
+is falsified. The unchanged strict baseline is not reopened by this candidate.
+The pending successor may not leave old measurements labelled current for new
+Layouts, nor overwrite them as if their schema interpretation had changed.
+
+One successor tranche spans the necessary Core and Servient edits; splitting a
+new footprint interpretation from its matching policy, backing checks and funded
+cleanup would leave an unusable or unsafe intermediate contract. Keep strict
+constructors available for unaffected Consumer/Producer evidence. No compatibility
+shim that guesses a contract from equal numbers is permitted.
+
+Allowed production edits after admission: Core's resource declarations/complete
+Consumer registration, captured normal/late result bounds and fixed diagnostics;
+Servient's checked policy, existing Host/static reservation/disposal paths and
+their fixed reports. Update only their direct exports and necessary registered
+API rows. Foundation generation, numeric CSV, TD and Planning algorithms, shared
+route/permit semantics, legacy cleanup and protocol implementations are excluded.
+If an actual implementation needs any excluded source or public semantic change,
+amend and independently review the scope first. Actual Layout changes in shared
+Core types require Producer regression/measurement evidence even though Producer
+semantics remain strict.
+
+The controlled prototype in the existing `consumer-runtime-entry` fixture uses
+real Foundation accounts and the real Payload representation with two mock
+binding owners. It tests a proposed boundary, not an alternate seal, actual
+Servient implementation, production boundedness or measured elasticity benefit.
+It needs no new fixture crate, SDK, allocator framework, global gate or process.
+
+## Prechecks and completion evidence
+
+Run the registered prechecks against the candidate. Schema checks pin all 196
+old rows and their values; verify the exact 20-row overlay, known/disjoint row
+membership, supported cells and unchanged complement. Controlled cases must
+distinguish complete policy identities when only a non-schema constructor
+operand changes; equal ResourceLimits cannot substitute for that complete key.
+Pre-admission vectors cover scratch/result/timeout changes, and the checker
+separately perturbs all footprint/input/result/work/timeout/scratch scalars.
+Controlled cases must also demonstrate private pressure/refusal and reuse,
+protected engine cleanup funding, complete backing rejection, single physical
+pool ownership/last-user retirement,
+and residual-before-allocating-disposal with strict-policy exclusion.
+
+Completion evidence has the stable keys below in
+`docs/evidence/WP-400-consumer-resource-ownership.toml`. No result is predeclared
+passed and no workload budget is edited to turn a failure into success.
+
+| Key | Required new production evidence |
+| --- | --- |
+| `consumer-owned-identity` | Strict/owned, cell/disposal, complete-policy identity and registration/artifact mismatch fail before effects. Changing only registration/call footprint, input, result, work, timeouts or scratch under equal ResourceLimits must change the complete key. Missing applicable/zero/exact/one-over/overflow cases retain the original input and parent totals. Freeze API projection and complete-policy encoding vectors; a table-only digest is not a checked-policy cache/configuration/evidence identity. |
+| `consumer-owned-handoff` | Actual Core/Servient normal and late results reject excessive retained backing (including spare String capacity) while preserving first cause, accepted call, original leases/accounts and prebacked cleanup. Both preacceptance allocation failures return the same request; postacceptance seal installation allocates zero. |
+| `consumer-owned-accounting` | Actual Host/static provisioning, constructor/build/output/call/overlap and final disposal measured by allocation site and owner. Re-run fault injection at every changed allocation path. Enforce every affected local/parent scope, zero/exact/one-over; no parent release before physical children. Compiler/artifact payloads remain fully counted. |
+| `consumer-owned-pressure` | Two independently authored controlled registrations/roots use the same real engine bank and a deliberately small private growth budget. Refusal preserves a live call, unread/late result and cleanup destination; release permits reuse. Optional shared private backing is charged once at its actual owner; cancelling one user preserves another and final retirement waits for all users/jobs. No required shared manager or fleet claim. |
+| `consumer-owned-disposal` | Separate engine allocations from finite SDK-local allocations in a controlled Host destructor. Commit residual first; retain all applicable funding through disposal; no progress/join/replacement/detach; report complete only after required local retirement. Test supported allocation errors and strict-policy rejection. A process-termination probe, if used, proves only that boundary. |
+| `consumer-owned-regression` | Reproduce the existing Consumer gate's 19 commands and applicable Producer/Foundation/portable regressions. Map unchanged semantic case IDs and new resource deltas to exact revisions, then obtain independent acceptance of successor composition. ARM compile cells remain layout/surface evidence only. |
+
+## State, workload and result projection
+
+No state or transition is added to `compiled-plan-set` or `in-flight`. Existing
+publication, first-cause, late-result, complete transfer and terminal-ack traces
+keep their semantic oracle. New resource traces carry the explicit contract key
+and map every reserve/release to its real engine/private owner. Changed byte
+deltas are not parity failures; a lost owner, premature parent release or new
+Drop-to-success transition is. No private SDK pool becomes an engine state machine.
+
+| Existing performance contract | Exact disposition |
+| --- | --- |
+| `PERF-GW-009/010` v2 | Preserve metadata fixture identity and engine allocation budgets. Use matching operations as regressions; remeasure changed complete envelopes. SDK-private allocation counts are reported separately, not subtracted from an old all-allocation result. |
+| `PERF-GW-028` v1 | Preserve cancellation matrix, owner-loss/late-value/transfer/lock budgets and strict fixtures. Consumer invoke cases apply here; this tranche cannot claim its subscribe/response/emission matrix complete. |
+| `PERF-GW-029`, `PERF-CS-021` v1 | Preserve plan lifecycle, generation and zero-retained-owner oracles. Re-run eager one-shot cases and affected physical Layouts; lazy/whole-matrix evidence remains separate. |
+| `PERF-CS-020` v1 | Preserve typed slot/alignment/acknowledgement and allocation budgets. Consumer request/cleanup cases apply; no subscription/server/emission qualification follows. |
+
+All six keep their current manifests, fixture identities and budgets for their
+original scope. The 66-case verifier checks contracts, not production measurements.
+`result.schema.json` v2 has no ownership-contract identity and is **not** a schema-2
+result carrier: do not emit an owned measurement as a passed strict-profile result
+or hide its identity in free-form notes. No release workload is reinterpreted here.
+
+New scoped observations live in the successor completion TOML under the six keys
+above, with exact source/test refs, schema revision 2, typed-input revision 2,
+operation/cell/disposal/profile/value identity, all independent policy constructor
+settings and their complete key, fixture source digest and actual
+command. Separate measured engine/private/deployment storage and allocation
+counts; record current/peak/largest/overlap and terminal release against the
+configured field/owner budgets and zero-loss/zero-postacceptance-engine-allocation
+oracles above. Those finite observations do not claim a full release-performance
+matrix. Promoting owned measurements into release performance requires its own
+versioned manifest/fixture/result-schema projection before that claim.
+No latency, hard RAM, allocator-metadata or whole-device claim follows here.
+
+## Remaining blocks
+
+Production migration is blocked on independent acceptance and its recorded
+admission. Successor completion is blocked on new production evidence above.
+HTTP Consumer admission then consumes that accepted shared boundary and matching
+predecessors; HTTP method/response metadata eligibility, SDK selection/pinning,
+real peers and input/overload/cancellation/disposal qualification remain in its
+own tranche. Producer HTTP, HTTPS/security, embedded production, broad WP-100/
+200/300/400/600 closure and ObserveProperty remain outside this candidate.

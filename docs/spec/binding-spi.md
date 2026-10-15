@@ -27,6 +27,10 @@ original-account and final-root disposal meaning until migration/readmission.
 This is not permission to omit SDK storage or allow allocating destructors in
 an existing admitted envelope.
 
+The [Consumer resource migration candidate](consumer-resource-ownership.md)
+defines the pending contract capture, complete-backing checks and disposal-policy
+delta. It grants no eligibility to an existing registration or concrete SDK.
+
 `BIND-REG-001`: A Protocol Binding MUST enter one Servient through one complete,
 generation-bearing registration bundle that atomically associates its identity,
 configuration digest, capabilities, compiler extension, execution components,
