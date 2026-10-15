@@ -1,8 +1,8 @@
 # Protocol Binding SPI and Deployment
 
-ADR-0023's pending [Consumer resource migration](../spec/consumer-resource-ownership.md)
-specifies the proposed registration/resource/disposal delta. Current strict
-contracts remain active until its independently accepted admission boundary.
+ADR-0023's accepted [Consumer resource migration](../spec/consumer-resource-ownership.md)
+specifies the registration/resource/disposal delta for the admitted successor.
+Existing strict registrations retain their current contracts.
 
 ## V1 integration model
 

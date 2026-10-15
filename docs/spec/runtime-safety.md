@@ -51,10 +51,10 @@ exclusively on the blocked producer.
 
 ## Admission and lifecycle
 
-The [Consumer resource migration candidate](consumer-resource-ownership.md)
-owns the proposed scoped accounting/disposal refinement under ADR-0023. It is
-pending independent acceptance; the lifecycle and implementation authority below
-remain unchanged.
+The accepted [Consumer resource migration contract](consumer-resource-ownership.md)
+owns the scoped accounting/disposal refinement under ADR-0023 for the admitted
+successor. The lifecycle below remains unchanged; existing strict registrations
+retain their original accounting/disposal contract.
 
 `ADMIT-TXN-001`: Parsing, validation, effective-view construction, planning,
 and registry publication form a reserve-build-publish transaction. Work and

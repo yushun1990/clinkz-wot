@@ -23,13 +23,14 @@ a later binding-domain entry review re-adopts or replaces it.
 [ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) selects a
 successor resource/disposal target with an explicit activation boundary. The
 requirements and detailed contracts here retain their current strict footprint,
-original-account and final-root disposal meaning until migration/readmission.
+original-account and final-root disposal meaning for `StrictV1` registrations.
 This is not permission to omit SDK storage or allow allocating destructors in
 an existing admitted envelope.
 
-The [Consumer resource migration candidate](consumer-resource-ownership.md)
-defines the pending contract capture, complete-backing checks and disposal-policy
-delta. It grants no eligibility to an existing registration or concrete SDK.
+The accepted [Consumer resource migration contract](consumer-resource-ownership.md)
+defines contract capture, complete-backing checks and the disposal-policy delta
+only for the admitted successor scope. It grants no eligibility to an existing
+registration or concrete SDK.
 
 `BIND-REG-001`: A Protocol Binding MUST enter one Servient through one complete,
 generation-bearing registration bundle that atomically associates its identity,

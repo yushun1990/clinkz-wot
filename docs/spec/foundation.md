@@ -105,14 +105,15 @@ slot/layout/code-size costs are separately bounded physical evidence.
 
 [ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) selects a
 successor ownership boundary. This section, the current schema and existing
-reservations retain their strict meaning until its explicit contract/schema
-migration. No existing byte field or footprint may yet exclude previously
-charged SDK state. The ADR owns the target and evidence dispositions.
+reservations retain their strict meaning for `StrictV1`. No existing byte field
+or footprint may implicitly exclude previously charged SDK state. The ADR owns
+the target and evidence dispositions.
 
-The proposed exact Consumer-only successor, configuration/diagnostic identity
-and schema-2 overlay are owned by [the resource migration candidate](consumer-resource-ownership.md).
-It is pending independent acceptance; this section and the V1 numeric profiles
-retain their strict interpretation.
+The accepted Consumer-only successor, configuration/diagnostic identity and
+schema-2 overlay are owned by [the resource migration contract](consumer-resource-ownership.md).
+Its [admission record](../work-packages/WP-400-consumer-resource-ownership-admission.md)
+limits that refinement to the registered successor scope. The V1 numeric
+profiles retain their strict interpretation.
 
 ADR-0022 distinguishes admission capacity from allocator availability. A ledger
 reservation authorizes bounded retained work; it does not commit OS pages or

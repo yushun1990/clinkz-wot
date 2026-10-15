@@ -175,7 +175,7 @@ undocumented planning system.
 
 ## Resource and evidence requirements
 
-The pending [Consumer resource migration](../spec/consumer-resource-ownership.md)
+The accepted [Consumer resource migration](../spec/consumer-resource-ownership.md)
 keeps compiler artifacts/cursors and owned output within engine admission.
 It supplies no successor composition acceptance or changed Planning lifecycle.
 

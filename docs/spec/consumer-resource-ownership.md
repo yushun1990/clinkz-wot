@@ -1,13 +1,13 @@
-# Consumer resource ownership migration candidate
+# Consumer resource ownership migration
 
-Status: candidate under ADR-0023 and ADR-0013. This is the proposed successor
-contract, not active implementation authority. The registered Foundation,
-Binding, Planning and Runtime contracts remain strict until independent
-acceptance and a separate recorded admission transition. No existing footprint
-may omit SDK state by citing this file. The active 65/31/121 dispositions and TD
-typed-input interpretation revision 2 do not change.
+Status: accepted successor contract under ADR-0023 and ADR-0013 for
+`WP-400-CONSUMER-RESOURCE-OWNERSHIP`. Implementation authority is limited to
+that tranche's recorded scope. Existing `StrictV1` registrations retain their
+contract and evidence scope; no existing footprint is implicitly converted.
+The active 65/31/121 dispositions and TD typed-input interpretation revision 2
+do not change.
 
-This file owns the proposed detailed contract and API delta. The
+This file owns the accepted detailed contract and API delta. The
 [schema overlay](../resource-contracts/consumer-ownership-v2.toml) owns its exact
 row dispositions. The [readmission record](../work-packages/WP-400-consumer-resource-ownership-admission.md)
 owns implementation scope, evidence obligations and impact disposition.
@@ -31,19 +31,19 @@ protocol maxima can succeed simultaneously.
 
 ## Specification and authority projection
 
-At admission, these clauses refine only the scoped Consumer operation. Other
-operations and every `StrictV1` registration keep their old meaning. Linked owner
+Within the admitted tranche, these clauses refine only the scoped Consumer
+operation. Other operations and every `StrictV1` registration keep their old meaning. Linked owner
 sections below select this scoped interpretation; they do not create duplicate
 requirement owners.
 
-| Existing owner | Proposed scoped delta |
+| Existing owner | Admitted scoped delta |
 | --- | --- |
 | Foundation `API-RESOURCE-001`, `RES-LIMIT-001..003`, `ADMIT-MEM-001` | Engine admission covers controlled backing and promised handoff capacity. Binding policy covers protocol-private state; deployment composes aggregate availability/fit. Apply revision 2 of the ownership schema explicitly. Preserve local/parent provenance, actual Layout/overlap, linear work and recoverable construction. |
 | Binding `BIND-REG-001`, `BIND-MEM-001`, `BIND-STORAGE-001` | Capture the resource contract in the complete registration. Declare full concrete engine-held carrier/slot backing separately from protocol-private policy. Constrained inline state is never pointer-sized fiction. |
 | Binding `BIND-DELIVERY-001`, `BIND-IO-001`, `BIND-CALL-CANCEL-001`, `BIND-HOST-CANCEL-001` | Check complete retained request/result backing at the engine handoff. Keep selected artifacts, both seals, preacceptance input recovery, accepted-error ownership, first cause and complete-object transfer. Protocol ingress is bounded before callback by its actual binding owner. |
 | Planning `PLAN-BOUND-001`, `PLAN-ARTIFACT-001`; architecture 30 | Compiler cursor, artifact and output remain fully charged engine storage, including binding-defined concrete payloads, erasure, rollback and overlap. No compiler or TD algorithm/API change. Runtime transport caches are not compiler artifacts. |
 | Runtime `ADMIT-TXN-001`, `HANDLE-DROP-001`, `HOST-ASYNC-001`; architecture 40/50 | Keep prebacked status/manual destination, original accounts, atomic install, funded complete calls, source-free reclamation and child-before-parent release. Split the SDK disposal failure policy below. No asynchronous registration retirement is introduced. |
-| ADR-0006/0011/0015/0022 | Pending scoped supersession of transitive SDK maxima and universally nonallocating SDK disposal only. Keep pending/late values, whole-object cleanup, borrowed profiles, nonduplicated work and allocation-free engine fallback. Their rationale remains historical evidence. |
+| ADR-0006/0011/0015/0022 | Scoped supersession for the admitted Consumer operation of transitive SDK maxima and universally nonallocating SDK disposal only. Keep pending/late values, whole-object cleanup, borrowed profiles, nonduplicated work and allocation-free engine fallback. Their rationale remains historical evidence. |
 
 ## Schema, applicability and identity
 
@@ -110,8 +110,8 @@ same ResourceLimits. Its validator also perturbs every scalar operand separately
 Only this complete key may identify checked policies in caches, configuration,
 diagnostics and evidence. The value digest alone addresses the numeric table;
 the earlier candidate's table/coordinate-only policy keys are withdrawn. This
-corrects the pending schema-2 candidate before admission without reinterpreting
-any active profile or accepting a legacy conversion. Checked policy retains
+corrected the schema-2 candidate before independent acceptance without
+reinterpreting any active profile or accepting a legacy conversion. Checked policy retains
 all coordinates, values and constructor settings and exposes the complete key
 through the existing `BindingConfigurationDigest` representation. This key
 identifies engine policy, not protocol configuration or held parent capacity.
@@ -218,13 +218,14 @@ required local retirement. Supported returned allocation errors preserve owners;
 abort/OOM termination supplies no cleanup/report guarantee. Strict embedded fit
 and continued-operation claims require separate complete-target evidence.
 
-## Pending API projection
+## Admitted API projection
 
-These are the exact intended changes for the registered successor. Existing
-frozen API rows continue to describe `StrictV1` until admission records this
-projection. No generic binding-policy trait or central manager is introduced.
+These are the exact admitted changes for the registered successor. Existing
+frozen API rows continue to describe `StrictV1`; the matching implementation
+must update only the necessary registered rows under this projection.
+No generic binding-policy trait or central manager is introduced.
 
-| Package / API | Proposed change |
+| Package / API | Admitted change |
 | --- | --- |
 | Foundation `ResourceLimits`, `ResourceKind`, `ResourceProfileId`, account/reservation APIs | No signature, generated ordering or value changes. Raw assembly remains unqualified. The checked Consumer policy binds schema identity and retains its full immutable values; exported cache/config records carry the explicit identity above. |
 | Core `BindingResourceContract` | Add `StrictV1`, `ConsumerOwnedV2`, `ConsumerOwnedHostV2`. The latter two select schema 2 with strict-local and host-process-failure disposal respectively. |

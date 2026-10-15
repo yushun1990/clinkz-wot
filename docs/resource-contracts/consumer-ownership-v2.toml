@@ -1,6 +1,6 @@
 schema_revision = 2
 design_revision = "5.1"
-status = "candidate"
+status = "accepted"
 operation = "consumer-property-read"
 typed_input_interpretation_revision = 2
 policy_identity_encoding = "complete-policy-v1"
