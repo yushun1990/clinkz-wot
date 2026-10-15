@@ -41,7 +41,7 @@ requirement owners.
 | Foundation `API-RESOURCE-001`, `RES-LIMIT-001..003`, `ADMIT-MEM-001` | Engine admission covers controlled backing and promised handoff capacity. Binding policy covers protocol-private state; deployment composes aggregate availability/fit. Apply revision 2 of the ownership schema explicitly. Preserve local/parent provenance, actual Layout/overlap, linear work and recoverable construction. |
 | Binding `BIND-REG-001`, `BIND-MEM-001`, `BIND-STORAGE-001` | Capture the resource contract in the complete registration. Declare full concrete engine-held carrier/slot backing separately from protocol-private policy. Constrained inline state is never pointer-sized fiction. |
 | Binding `BIND-DELIVERY-001`, `BIND-IO-001`, `BIND-CALL-CANCEL-001`, `BIND-HOST-CANCEL-001` | Check complete retained request/result backing at the engine handoff. Keep selected artifacts, both seals, preacceptance input recovery, accepted-error ownership, first cause and complete-object transfer. Protocol ingress is bounded before callback by its actual binding owner. |
-| Planning `PLAN-BOUND-001`, `PLAN-ARTIFACT-001`; architecture 30 | Compiler cursor, artifact and output remain fully charged engine storage, including binding-defined concrete payloads, erasure, rollback and overlap. No compiler or TD algorithm/API change. Runtime transport caches are not compiler artifacts. |
+| Planning `PLAN-BOUND-001`, `PLAN-ARTIFACT-001`, `PLAN-COST-003`; architecture 30 | Extend only the closed Consumer compiler's immutable configuration and complete-owner support capture as specified below. Preserve target-copy lowering, input/output types, all-bounds and paid progress. Cursor, artifact and output remain fully charged engine storage, including erasure, rollback and overlap. No TD/Planning algorithm or public API change. Runtime transport caches are not compiler artifacts. |
 | Runtime `ADMIT-TXN-001`, `HANDLE-DROP-001`, `HOST-ASYNC-001`; architecture 40/50 | Keep prebacked status/manual destination, original accounts, atomic install, funded complete calls, source-free reclamation and child-before-parent release. Split the SDK disposal failure policy below. No asynchronous registration retirement is introduced. |
 | ADR-0006/0011/0015/0022 | Scoped supersession for the admitted Consumer operation of transitive SDK maxima and universally nonallocating SDK disposal only. Keep pending/late values, whole-object cleanup, borrowed profiles, nonduplicated work and allocation-free engine fallback. Their rationale remains historical evidence. |
 
@@ -127,6 +127,107 @@ the domain (`engine-capacity`, `binding-policy`, or `deployment-failure`) and fi
 cause without allocating. Binding-private rejection names its private policy
 key and configuration; it must not masquerade as a schema byte-row refusal.
 Termination has no guaranteed in-memory diagnostic.
+
+## Closed Consumer binding configuration
+
+This is the narrow correction to workspace finding 0086. Extend the existing
+source-reviewed `ResolvedTargetCompiler`, rather than projecting two different
+configuration identities through every Planning candidate and compiler call.
+The latter would change compiler input, continuation, envelope and selection
+contracts without changing the target-copy algorithm. Accepting an arbitrary
+replacement digest or relaxing support capture alone cannot establish the
+required complete-owner correspondence. A shared-program layer is unnecessary
+to resolve this configuration conflict.
+
+Introduce one fixed immutable value, `ConsumerBindingConfiguration`, with private
+fields and these checked operands: resource contract, target capacity, concrete
+private-policy key, maximum result body bytes and maximum result media String
+capacity. It captures the **current compilation cell**, with precedence `std`,
+then `async-no-std`, then `no-default`. Its supported cell is that singleton;
+this tranche adds no multi-cell mask or runtime cell override. Static and Host
+representations in the same cell use the same semantic configuration. The
+contract distinguishes strict-local from Host process-failure disposal.
+
+`try_new` accepts only `ConsumerOwnedV2` or `ConsumerOwnedHostV2`, capacity
+`1..=64`, positive result bounds representable by the supported full Payload/
+String backing with checked arithmetic, and a private-policy key. The Host
+contract is illegal outside `std`; `std` alone does not qualify its owner.
+Construction is fixed, allocation-free metadata work with no client callback,
+clock, parent-account access or protocol effect. It derives and retains the key;
+there is no constructor accepting a final binding key or mutable configuration.
+
+Binding-key encoding `closed-consumer-binding-v1` is SHA-256 of ASCII
+`clinkz-consumer-binding-configuration-v1\0`, followed, in order, by:
+
+1. One byte resource-contract tag: `1` for `ConsumerOwnedV2`, `2` for
+   `ConsumerOwnedHostV2` (including their disposal interpretation).
+2. One byte cell tag: `0` for `no-default`, `1` for `async-no-std`, `2` for `std`.
+3. One byte target capacity.
+4. The 16 raw bytes of `clinkz-target-v1`, the unchanged artifact format.
+5. The 32 raw private-policy-key bytes.
+6. Result body bytes, then media capacity, each as eight little-endian bytes.
+
+Reject a derived key equal to **any** legacy strict capacity key. This explicit
+namespace exclusion preserves strict/owned rejection independently of a hash
+collision with that finite namespace. The schema overlay owns fixed vectors,
+one-operand mutations and this exclusion's controls. Rust memory, enum
+discriminants, host endianness and display strings are not the encoding.
+
+`ResolvedTargetCompiler::try_new(capacity)` remains strict and returns exactly
+`[0x63, 0x74, 1, capacity]` followed by zeros for all 64 capacities. Add
+`new_owned(configuration: ConsumerBindingConfiguration) -> Self`; it consumes
+the checked value without allocation. `configuration()` returns the actual
+immutable strict or owned key. Native bounds/start/paid continuation checks,
+the private supported Host adapter and its support descriptor must all use
+that same key. Support must retain the actual configuration, never reconstruct
+an owned key from capacity alone. Keep compatibility `clinkz-target-v1`: the
+payload remains the same owned target, and compatibility never waives the
+separate exact configuration/registration/generation checks.
+
+Add the passive `consumer_configuration` getter to `PollClientBinding` and
+Host `ClientBinding`, defaulting to `None` for existing strict clients. An owned
+client returns `Some` of its actual immutable configuration. Its private-policy
+key must derive from **all behavior-affecting settings of the captured client**,
+including input/concurrency/queue/growth/retirement and disposal policy. The
+binding owns that encoding and its source/configuration-specific evidence;
+an application-supplied label cannot substitute. Shared infrastructure may
+have a separate owner; its policy/compatibility dependencies participate, its
+address and live counters do not. The getter is a bounded, allocation-free,
+side-effect-free metadata read; it grants no callback/destructor attestation.
+Interior policy mutation after capture is prohibited. Runtime occupancy may
+change under the captured policy without changing its identity.
+
+Complete Consumer-only registration construction checks the actual client's
+metadata against the declared resource contract and explicit result pair, the
+current cell, and `identity.configuration()`. Strict registration requires
+`None`; owned registration requires matching `Some`. Check passive metadata
+before operational callbacks, input/clock observation, allocation or parent
+mutation. Consuming support capture additionally checks the actual closed
+compiler's configuration/metadata against that same client and declarations;
+the existing concrete static type and private Host adapter checks remain.
+Dual-role and Producer bundles reject owned contracts. Every rejection returns
+the original complete input/owner, including the original Host client allocation;
+no request callback or replacement owner is introduced. Eligibility requires
+source-specific evidence of actual policy correspondence and bounded behavior,
+not equality of caller digests alone.
+
+Planning forwards the complete registration identity unchanged into every
+candidate and immutable generation-qualified artifact envelope. There is no
+configuration translation around bounds/start/step. Core request acceptance
+retains full binding id/generation/configuration/format, plan id and plan-set
+generation matching; normal and late result sealing and exact recovery remain.
+
+This key identifies **registration eligibility**, not reusable program content.
+It includes no engine-policy key/quota, parent account, endpoint, Thing/plan
+identity, generation, registration ordinal or process nonce. One compatible
+registration may compile/execute multiple plans and target values. Equal keys
+do not imply equal payloads, semantic equivalence, shared storage or authority.
+Different eligibility keys do not require physically different immutable bytes.
+No per-Thing compiler, policy copy or new owner is required by this correction.
+Payloads may later reference separately owned immutable data under a separately
+reviewed ownership contract; current envelopes, leases and physical funding
+remain binding. Topic 0081's content/operand/persistence investigation remains
+outside this tranche and non-blocking under these constraints.
 
 ## Backing and ownership rules
 
@@ -223,16 +324,21 @@ and continued-operation claims require separate complete-target evidence.
 These are the exact admitted changes for the registered successor. Existing
 frozen API rows continue to describe `StrictV1`; the matching implementation
 must update only the necessary registered rows under this projection.
+The API matrix also records the successor additions as `absent/add` contract
+targets; those rows do not assert that the APIs exist before readmission.
 No generic binding-policy trait or central manager is introduced.
 
 | Package / API | Admitted change |
 | --- | --- |
 | Foundation `ResourceLimits`, `ResourceKind`, `ResourceProfileId`, account/reservation APIs | No signature, generated ordering or value changes. Raw assembly remains unqualified. The checked Consumer policy binds schema identity and retains its full immutable values; exported cache/config records carry the explicit identity above. |
 | Core `BindingResourceContract` | Add `StrictV1`, `ConsumerOwnedV2`, `ConsumerOwnedHostV2`. The latter two select schema 2 with strict-local and host-process-failure disposal respectively. |
-| Core `BindingResourceDeclarations` | Add captured contract and `with_resource_contract(self, BindingResourceContract) -> Self`, plus `resource_contract(&self) -> BindingResourceContract`. Existing constructors select `StrictV1`. Add `with_consumer_result_limits(self, body_bytes: u64, media_capacity: u64) -> Self` and a getter returning that optional pair. An owned complete registration requires explicit supported result limits and rejects unsupported role/cell or inconsistent metadata. Concrete private policy is part of its existing binding configuration, not an engine allocator interface. |
+| Core `BindingResourceDeclarations` | Add captured contract and `with_resource_contract(self, BindingResourceContract) -> Self`, plus `resource_contract(&self) -> BindingResourceContract`. Existing constructors select `StrictV1`. Add `with_consumer_result_limits(self, body_bytes: u64, media_capacity: u64) -> Self` and `consumer_result_limits(&self) -> Option<(u64, u64)>`. An owned complete registration requires explicit supported result limits and rejects unsupported role/cell or inconsistent metadata. Concrete private policy is part of its existing binding configuration, not an engine allocator interface. |
+| Core `ConsumerBindingConfiguration` | Add the checked immutable `Clone + Copy + Debug + Eq + PartialEq` value above. `try_new(contract: BindingResourceContract, target_capacity: usize, private_policy: BindingConfigurationDigest, body_bytes: u64, media_capacity: u64) -> CoreResult<Self>`; getters `resource_contract(&self)`, `target_capacity(&self)`, `private_policy(&self)`, `result_limits(&self)` return those operands, and `configuration(&self) -> BindingConfigurationDigest` returns the derived key. No public fields or unchecked/default constructor. |
+| Core `ResolvedTargetCompiler`, `ConsumerCompilerSupport`, supported Host adapter | Add `ResolvedTargetCompiler::new_owned(ConsumerBindingConfiguration) -> Self`. Preserve strict constructor/key, compatibility, cursor/artifact types, target-copy algorithm and paid work. Capture and forward the actual immutable configuration through support. Remeasure the compiler/support/adapter, cursor/output/temporary and aggregate owners; strict source compatibility does not promise unchanged Layout. |
+| Core `PollClientBinding`, Host `ClientBinding`, complete Consumer-only constructors/capture | Add `consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>` with default `None`. Validate the actual owner's immutable metadata as specified above, without new execution or mutable-client escape. Existing complete signatures and exact recovery stay. Generic compiler/Host erasure remains ineligible for closed support. |
 | Core `BindingLifetimeFootprint`, `BindingTransientFootprint`, `BindingStateLayout` | Keep constructors/getters. Their interpreted scope is fixed by the captured contract, not by an untagged footprint alone. Owned retained items count engine-held owners; retained bytes include full concrete backing above. Static size/alignment/drop checks stay. |
 | Core installed Consumer constructor/normal and late seals | Capture the admitted result-backing bound with the existing selected seal; check full backing as well as existing semantic validity before retention. Preserve recoverable raw construction, accepted-overrun owner and allocation-free seal installation. No raw installed-client escape or replacement envelope. |
-| Core `ResourceFailureDomain`, `ErrorContext` | Add the fixed enum `EngineCapacity`, `BindingPolicy`, `DeploymentFailure`; extend context with an optional resource-identity key/domain and effective local/parent `(SlotIndex, Generation)` coordinates. Add `with_resource_failure(identity, domain, local, parent) -> Self` and a getter returning the same optional fixed tuple. Existing contexts default to absent. Keep error categories/retry/first-cause rules and bounded private-policy cause keys; account the larger complete error/accepted-overrun envelope. |
+| Core `ResourceFailureDomain`, `ErrorContext` | Add the fixed enum `EngineCapacity`, `BindingPolicy`, `DeploymentFailure`; extend context with an optional resource-identity key/domain and effective local/parent `(SlotIndex, Generation)` coordinates. Add `with_resource_failure(identity, domain, local, parent) -> Self` and `resource_failure(&self)` returning the same optional fixed tuple. Existing contexts default to absent. Keep error categories/retry/first-cause rules and bounded private-policy cause keys; account the larger complete error/accepted-overrun envelope. |
 | Servient `ConsumerPropertyReadPolicy` | Existing `try_new` remains strict. Add `try_new_owned(contract, profile_origin: ResourceProfileId, ...existing try_new operands...) -> CoreResult<Self>`; reject `StrictV1` here. Expose `resource_contract`, `resource_identity`, `profile_origin` and borrowed `resource_limits`. Compute `resource_identity` from all independent constructor operands under the complete-policy encoding above, including controlled registration/call/input/result/work/timeout/scratch settings. Provisioning verifies the matching registration contract/cell and that its result limits fit the policy before effects. Servient stamps fixed resource-failure context with this complete policy key. |
 | Servient Host/static roots, reads, calls, cleanup | Keep signatures, manual ownership, real parent bank and complete-object transfer. Interpret only an explicitly owned policy through the new rules. No async retirement API. |
 | TD / Planning public API | Unchanged; regenerate affected layout evidence if captured Core metadata changes size. Neither compiler support nor typed proof grants binding/runtime eligibility. |

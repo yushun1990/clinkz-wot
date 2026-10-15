@@ -196,6 +196,14 @@ This is the contract of the completed ADR-0013 precursor. Its
 [registered evidence](../evidence/WP-200-consumer-compiler-support.toml) owns the
 accepted production boundary and its exclusions.
 
+The scoped [Consumer ownership successor](consumer-resource-ownership.md#closed-consumer-binding-configuration)
+extends this compiler with checked immutable owned configuration and a passive
+actual-client configuration projection. That section owns its exact API,
+encoding, equality checks and StrictV1 preservation. It is subject to the
+successor's independent readmission; the completed precursor proves only the
+existing strict implementation. The portable compiler SPI, target-copy payload
+format, closed static type and private supported Host adapter remain unchanged.
+
 The first dynamic Consumer aggregate uses a closed compiler support path. An
 open `BindingCompilerExtension`, its compatibility value, or a complete bundle
 cannot attest arbitrary native callback behavior. Core therefore supplies one
@@ -316,6 +324,13 @@ execution compatibility. No public API independently installs a compiler,
 client half, server half, form contributor, or runtime trait object. Component
 values may remain public for downstream construction and testing, but only the
 complete bundle is accepted by `ServientBuilder`.
+
+For the scoped ownership successor, complete Consumer-only bundles additionally
+compare the captured client's passive immutable configuration with declarations,
+identity and the actual supported compiler, as specified by the
+[configuration owner](consumer-resource-ownership.md#closed-consumer-binding-configuration).
+Neither generic compiler validity nor an application-supplied digest establishes
+this correspondence. Producer and dual-role bundles remain StrictV1.
 
 For the admitted v5.1 Consumer Property Read capability, installation also
 closes the result-validation boundary. Raw client traits and their raw static

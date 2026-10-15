@@ -3,7 +3,7 @@
 //! These tests characterize the unchanged strict compiler. They do not model
 //! owned registration, supply a binding-key encoding, or prove schema-2 support.
 use clinkz_wot_core::*;
-use clinkz_wot_foundation::{Generation, SlotIndex};
+use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
 use consumer_runtime_entry_probe::production::{self, Client, Stats};
 use std::sync::{Arc, atomic::Ordering};
 
@@ -73,7 +73,105 @@ fn native_configuration_has_only_capacity_and_rejects_a_distinguishing_binding_k
         );
         assert!(matches!(c.bounds(&distinct), Err(CoreError::Validation(_))));
         assert!(matches!(c.start(&distinct), Err(CoreError::Validation(_))));
+        let cursor = c.start(&strict).unwrap();
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 2);
+        let BindingCompilerStep::Failed(failure) = c.step(&distinct, cursor, &mut budget) else {
+            panic!("configuration cannot change during a paid continuation");
+        };
+        let (_, cursor) = failure.into_parts();
+        c.abort(cursor);
     }
+}
+
+#[test]
+fn configuration_eligibility_does_not_identify_content_or_generation_authority() {
+    let registration = production::static_registration(
+        ResolvedTargetCompiler::try_new(64).unwrap(),
+        Arc::new(Stats::default()),
+    );
+    let compiler = registration.registration().compiler().compiler();
+    let id = registration.registration().identity();
+    let mut outputs = Vec::new();
+    for (slot, thing, target) in [
+        (11, "urn:meter:a", "https://peer/a"),
+        (12, "urn:meter:b", "https://peer/b"),
+        (13, "urn:meter:c", "https://peer/a"),
+    ] {
+        let plan = LogicalInteractionPlan::try_property_read(
+            PlanId::new(SlotIndex::new(slot), Generation::INITIAL),
+            ThingId::from(thing),
+            "x".into(),
+            0,
+            target.into(),
+            None,
+            None,
+        )
+        .unwrap();
+        let input = BindingCompilerInput::new(
+            &plan,
+            BindingCandidate::new(
+                id.binding_id(),
+                id.binding_generation(),
+                id.configuration(),
+                id.artifact_compatibility(),
+                id.diagnostic_ordinal(),
+                0,
+            ),
+            BindingArtifactRole::ConsumerCall,
+        );
+        let bounds = compiler.bounds(&input).unwrap();
+        let admitted = bounds.artifact();
+        let mut budget = bounds.into_work();
+        let cursor = compiler.start(&input).unwrap();
+        let BindingCompilerStep::Pending(cursor) = compiler.step(&input, cursor, &mut budget)
+        else {
+            panic!("first paid step is pending");
+        };
+        let BindingCompilerStep::Complete(output) = compiler.step(&input, cursor, &mut budget)
+        else {
+            panic!("second paid step completes");
+        };
+        let identity = BindingArtifactIdentity::new(
+            PlanSetGeneration::new(Generation::INITIAL),
+            plan.plan_id(),
+            id.binding_id(),
+            id.binding_generation(),
+            id.configuration(),
+            id.artifact_compatibility(),
+            BindingArtifactRole::ConsumerCall,
+        );
+        outputs.push(
+            BindingArtifactEnvelope::try_new(identity, admitted, output.into_artifact()).unwrap(),
+        );
+    }
+    // One actual complete owner compiles three values. Equality of the key and
+    // format neither identifies content nor merges distinct admitted uses.
+    assert_eq!(
+        outputs[0].identity().configuration(),
+        outputs[1].identity().configuration()
+    );
+    assert_ne!(
+        outputs[0].artifact().payload(),
+        outputs[1].artifact().payload()
+    );
+    assert_eq!(
+        outputs[0].artifact().payload(),
+        outputs[2].artifact().payload()
+    );
+    assert_ne!(outputs[0].identity(), outputs[2].identity());
+    let original = outputs[0].identity();
+    let fresh_generation = BindingArtifactIdentity::new(
+        PlanSetGeneration::new(Generation::INITIAL.checked_next().unwrap()),
+        original.plan_id(),
+        original.binding_id(),
+        original.binding_generation(),
+        original.configuration(),
+        original.compatibility(),
+        original.role(),
+    );
+    assert_ne!(original, fresh_generation);
+    // This proves distinct identity values, not live leases, cross-root
+    // physical sharing, reusable-program support or owned compiler admission.
 }
 
 #[test]

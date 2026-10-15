@@ -4,6 +4,7 @@ status = "accepted"
 operation = "consumer-property-read"
 typed_input_interpretation_revision = 2
 policy_identity_encoding = "complete-policy-v1"
+binding_configuration_encoding = "closed-consumer-binding-v1"
 numeric_schema = "docs/resource-limits.csv"
 numeric_schema_sha256 = "4e163c08878efee9f64a3ea392695a2da93b9891c278932f4a68bcbb9568ce3a"
 field_count = 196
@@ -140,3 +141,52 @@ profile_origin = 1
 value_column = "gateway_default_v1"
 overrides = { timeouts = [51, 5] }
 sha256 = "de7c632500393402199644abf0de865c823626c55c2da123b643ebf2ea4fa682"
+
+# Binding eligibility, separate from the complete engine-policy key above.
+[binding_configuration_fixture]
+contract = "ConsumerOwnedV2"
+compilation_cell = "std"
+target_capacity = 64
+private_policy = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+body_bytes = 64
+media_capacity = 32
+
+[[binding_configuration_vector]]
+id = "baseline"
+overrides = {}
+sha256 = "c10c25e570a3783d6a2f5e71c4fc417de20e74bc3896c207de2786f91952ed18"
+
+[[binding_configuration_vector]]
+id = "capacity-only"
+overrides = { target_capacity = 63 }
+sha256 = "7e981eaec45be7edc00741e3ee8ec48e3ac2756034e015caa1db8502e24c243d"
+
+[[binding_configuration_vector]]
+id = "contract-only"
+overrides = { contract = "ConsumerOwnedHostV2" }
+sha256 = "4c6928e0daa0a9488f8ee0290fac269d1f1b6b85206e163b208b819ac5b27c86"
+
+[[binding_configuration_vector]]
+id = "cell-no-default"
+overrides = { compilation_cell = "no-default" }
+sha256 = "e1fa9be77c1b672e0967a5f1ef0303fab9d44d76780393f4ce62c751bcd3e5e8"
+
+[[binding_configuration_vector]]
+id = "cell-async"
+overrides = { compilation_cell = "async-no-std" }
+sha256 = "e758e21849b61173aeffc37746f45127efeb3c8c760b9b6eb9e92c98d692471c"
+
+[[binding_configuration_vector]]
+id = "private-policy-only"
+overrides = { private_policy = "010102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" }
+sha256 = "62dba0284ec41b0a31774222833f25da7348d2bb61f409fdcedf93c8331d7aed"
+
+[[binding_configuration_vector]]
+id = "body-only"
+overrides = { body_bytes = 65 }
+sha256 = "80846971ab34df8fedcdf56593356b91f5f1b173e24aaf2117f9a009ecdece77"
+
+[[binding_configuration_vector]]
+id = "media-only"
+overrides = { media_capacity = 33 }
+sha256 = "408b35c59f09274ccb16a817b4c1bb1fcb456e5d94a71ce9d61fd9e8816353a6"

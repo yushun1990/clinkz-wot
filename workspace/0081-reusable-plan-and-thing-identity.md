@@ -347,6 +347,13 @@ copy algorithm. Future program reuse can retain exact admission envelopes and
 introduce a distinct content/dependency identity when justified. It must not
 reinterpret this repaired binding digest as that identity.
 
+The narrow configuration projection is now specified in the
+[successor contract](../docs/spec/consumer-resource-ownership.md#closed-consumer-binding-configuration);
+its [admission record](../docs/work-packages/WP-400-consumer-resource-ownership-admission.md#reconstructed-baseline-and-impact)
+owns the explicit non-blocking reconciliation of this topic. It remains a
+candidate pending independent review. This investigation stays DISCUSSING;
+no shared-program, physical-storage or persistence contract is adopted.
+
 ### Sequence and falsification boundary
 
 1. Prepare and independently review 0086's concrete contract/API/scope amendment,

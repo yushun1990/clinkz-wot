@@ -392,12 +392,77 @@ for operand, length in policy_lengths.items():
 changed = fixture | {"scratch_bytes": fixture["scratch_bytes"] + 1}
 assert policy_key(baseline, changed) != baseline["sha256"], "policy key omits scratch"
 assert mutations + 1 == 20
+
+# 0086's closed-compiler correction adds binding eligibility vectors. It does
+# not reinterpret numeric rows or the independently versioned engine policy.
+assert overlay["binding_configuration_encoding"] == "closed-consumer-binding-v1"
+binding_fixture = overlay["binding_configuration_fixture"]
+assert set(binding_fixture) == {"contract", "compilation_cell", "target_capacity", "private_policy", "body_bytes", "media_capacity"}
+
+def strict_binding_key(key):
+    return (len(key) == 32 and key[:3] == b"ct\1" and 1 <= key[3] <= 64
+            and key[4:] == bytes(28))
+
+def binding_key(settings):
+    assert set(settings) == set(binding_fixture)
+    contract = {"ConsumerOwnedV2": 1, "ConsumerOwnedHostV2": 2}[settings["contract"]]
+    cell = {"no-default": 0, "async-no-std": 1, "std": 2}[settings["compilation_cell"]]
+    assert contract != 2 or cell == 2, "Host disposal outside std"
+    capacity = settings["target_capacity"]
+    assert type(capacity) is int and 1 <= capacity <= 64
+    private = bytes.fromhex(settings["private_policy"])
+    assert len(private) == 32
+    encoded = bytearray(b"clinkz-consumer-binding-configuration-v1\0")
+    encoded.extend(bytes([contract, cell, capacity]) + b"clinkz-target-v1" + private)
+    for operand in ("body_bytes", "media_capacity"):
+        value = settings[operand]
+        assert type(value) is int and 0 < value < 1 << 64
+        encoded.extend(value.to_bytes(8, "little"))
+    key = hashlib.sha256(encoded).digest()
+    assert not strict_binding_key(key), "owned key aliases legacy strict namespace"
+    return key.hex()
+
+binding_vectors = {v["id"]: v for v in overlay["binding_configuration_vector"]}
+expected = {"baseline": None, "capacity-only": "target_capacity", "contract-only": "contract",
+            "cell-no-default": "compilation_cell", "cell-async": "compilation_cell",
+            "private-policy-only": "private_policy", "body-only": "body_bytes", "media-only": "media_capacity"}
+assert len(overlay["binding_configuration_vector"]) == len(binding_vectors) == len(expected)
+assert set(binding_vectors) == set(expected)
+binding_keys = set()
+for name, operand in expected.items():
+    vector = binding_vectors[name]
+    overrides = vector["overrides"]
+    assert set(overrides) == (set() if operand is None else {operand})
+    if operand is not None:
+        assert overrides[operand] != binding_fixture[operand]
+    key = binding_key(binding_fixture | overrides)
+    assert key == vector["sha256"] and key not in binding_keys, "binding configuration alias/encoding drift"
+    binding_keys.add(key)
+assert binding_keys.isdisjoint(policy_keys), "binding key conflated with engine policy"
+for capacity in range(1, 65):
+    assert strict_binding_key(b"ct\1" + bytes([capacity]) + bytes(28))
+for key in (bytes(32), b"ct\1\0" + bytes(28), b"ct\1\x41" + bytes(28), b"ct\2\x40" + bytes(28),
+            b"ct\1\x40" + bytes(27) + b"\1"):
+    assert not strict_binding_key(key), "strict namespace exclusion is too broad"
+for overrides in ({"target_capacity": 0}, {"target_capacity": 65}, {"body_bytes": 0},
+                  {"media_capacity": 0}, {"body_bytes": 1 << 64},
+                  {"contract": "ConsumerOwnedHostV2", "compilation_cell": "no-default"},
+                  {"contract": "ConsumerOwnedHostV2", "compilation_cell": "async-no-std"}):
+    try:
+        binding_key(binding_fixture | overrides)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError(f"unsupported binding configuration accepted: {overrides}")
 # Freeze the interpreted schema as well as the numeric table. Lifecycle status
 # is not accounting meaning; changing metadata requires an explicit migration.
+# The 0086 amendment adds the binding encoding/vectors only; all row and
+# complete-policy projections remain byte-for-byte unchanged.
 metadata = {key: value for key, value in overlay.items() if key != "status"}
 metadata_digest = hashlib.sha256(json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-assert metadata_digest == "7c8ff04055af506d8b588ad1dc4658570db7a028e9870a9258b6d12a96410ce5", "schema-2 metadata changed without an explicit migration"
+assert metadata_digest == "255d45b38440415d32a9dfa9c6ff008ad39d175900f9153ba415b7518590869a", "schema-2 metadata changed without an explicit migration"
 print("resource ownership candidate: 20 versioned byte rows; 176 unchanged; 3 value and 5 complete-policy vectors; 20 operand mutations")
+print("Consumer binding configuration: 8 canonical vectors; strict namespace and unsupported-cell/operand controls")
 PY
 
 echo "resource limit check: $(($(wc -l <"$schema") - 1)) fields and 3 profiles"

@@ -869,7 +869,7 @@ requirements = [
     "CONSTRAINED-STORAGE-002", "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001",
     "CONSTRAINED-OWN-001", "BIND-REG-001", "BIND-MEM-001", "BIND-STORAGE-001",
     "BIND-DELIVERY-001", "BIND-IO-001", "BIND-OUT-001", "BIND-CALL-CANCEL-001",
-    "BIND-HOST-CANCEL-001", "PLAN-BOUND-001", "PLAN-ARTIFACT-001", "PLAN-SET-001",
+    "BIND-HOST-CANCEL-001", "PLAN-BOUND-001", "PLAN-ARTIFACT-001", "PLAN-COST-003", "PLAN-SET-001",
     "API-PAYLOAD-001", "STATE-INFLIGHT-001", "CLEANUP-RECORD-001",
     "HANDLE-DROP-001", "HOST-ASYNC-001", "ERR-TAXONOMY-001", "ERR-RETRY-001",
     "CONCUR-LOCK-001", "CONCUR-USER-001", "CONCUR-CRIT-001", "CONCUR-LIN-001",
@@ -894,10 +894,14 @@ authoritative_artifacts = [
 api_items = [
     "BindingResourceContract", "BindingResourceDeclarations", "BindingLifetimeFootprint",
     "BindingTransientFootprint", "BindingStateLayout", "ConsumerPropertyReadPolicy",
-    "ResourceFailureDomain", "ErrorContext",
+    "ResourceFailureDomain", "ErrorContext", "ConsumerBindingConfiguration",
+    "ResolvedTargetCompiler", "ConsumerCompilerSupport", "ConsumerCompilerRegistration",
+    "PollClientBinding", "ClientBinding", "resolved_target_compiler_new_owned",
+    "poll_client_binding_consumer_configuration", "client_binding_consumer_configuration",
 ]
 state_machines = ["compiled-plan-set", "in-flight"]
 resource_changes = [
+    "Closed Consumer compiler configuration amendment: strict capacity keys and payload format unchanged; owned keys derive from actual capacity/format/contract/cell/private policy/result bounds and match the captured complete client. Binding eligibility, engine policy, content and generation remain separate identities.",
     "Admitted ownership schema 2 over the pinned unchanged 196-row numeric table; typed-input interpretation remains 2. Exactly 20 Consumer byte rows change scope; no V1 profile or old footprint is implicitly converted.",
     "Engine carriers, full handoff backing, compiler artifacts/cursors, original accounts and prebacked cleanup stay funded. Private growth/refusal belongs to a concrete binding policy. Preserve conservative controlled scratch/cancellation/transfer reservations; shared private backing has one physical owner.",
     "Explicit strict-local versus Host process-failure disposal. Only finite SDK-local allocation may be added; engine status/fallback and postacceptance seal installation remain allocation-free. New accounting/backing/disposal paths require exact revision evidence.",
@@ -905,18 +909,25 @@ resource_changes = [
 old_api_removals = []
 performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-CS-020", "PERF-CS-021"]
 implementation_paths = [
-    "core/src/binding.rs", "core/src/response.rs", "core/src/error.rs", "core/src/lib.rs",
+    "core/src/binding.rs", "core/src/binding_compiler.rs", "core/src/response.rs",
+    "core/src/error.rs", "core/src/lib.rs", "core/Cargo.toml",
+    "core/tests/consumer_compiler_support.rs", "core/tests/consumer_property_read_request.rs",
     "core/tests/consumer_property_read_binding.rs", "core/tests/consumer_property_read_binding",
     "servient/src/consumer_property_read.rs", "servient/src/consumer_property_read",
     "servient/src/lib.rs", "servient/tests/consumer_property_read.rs",
     "servient/tests/consumer_property_read", "servient/Cargo.toml", "Cargo.lock",
     "tools/architecture-fixtures/consumer-runtime-entry",
+    "tools/architecture-fixtures/consumer-compiler-support",
+    "tools/architecture-fixtures/consumer-aggregate-admission",
     "tools/architecture-fixtures/consumer-property-read-binding",
     "tools/architecture-fixtures/consumer-property-read-runner",
     "docs/api-ownership.csv",
 ]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test resource_ownership_configuration",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --test resource_ownership_configuration",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --test resource_ownership_configuration",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test resource_ownership_candidate",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --test resource_ownership_candidate",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --test resource_ownership_candidate",
@@ -930,7 +941,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test property_read",
     "git diff --check",
 ]
-admission_review = "github-pr:180#pullrequestreview-5530769829"
+admission_review = "pending-independent-review: revised 0086 configuration boundary; prior acceptance github-pr:180#pullrequestreview-5530769829 does not cover this amendment"
 completion_evidence_keys = [
     "consumer-owned-identity", "consumer-owned-handoff", "consumer-owned-accounting",
     "consumer-owned-pressure", "consumer-owned-disposal", "consumer-owned-regression",
