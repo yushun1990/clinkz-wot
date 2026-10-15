@@ -1615,6 +1615,11 @@ owner that references them is terminal.
 
 ## Resource and work contract
 
+The pending [Consumer resource migration](consumer-resource-ownership.md)
+reaffirms full compiler/cursor/artifact/output admission. It changes no Planning
+API, all-bounds barrier or source-independent ownership contract; shared Core
+metadata Layout changes still require fresh affected measurements.
+
 All profiles enforce the exact resource fields registered in
 `docs/resource-limits.csv`. For planning, the following existing fields are
 mandatory controls rather than advisory telemetry:

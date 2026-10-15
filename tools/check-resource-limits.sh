@@ -279,4 +279,82 @@ for profile in GatewayDefaultV1 DirectoryClientDefaultV1 BenchmarkStaticReferenc
     fi
 done
 
+python3 -I - "$root" <<'PY'
+import csv
+import hashlib
+import json
+from pathlib import Path
+import sys
+import tomllib
+
+root = Path(sys.argv[1])
+overlay = tomllib.loads((root / "docs/resource-contracts/consumer-ownership-v2.toml").read_text())
+assert overlay["schema_revision"] == 2
+assert overlay["status"] in {"candidate", "accepted"}
+assert overlay["operation"] == "consumer-property-read"
+assert overlay["typed_input_interpretation_revision"] == 2
+assert overlay["numeric_schema"] == "docs/resource-limits.csv"
+source = (root / overlay["numeric_schema"]).read_bytes()
+assert hashlib.sha256(source).hexdigest() == overlay["numeric_schema_sha256"], "unversioned numeric schema change"
+rows = list(csv.DictReader(source.decode().splitlines()))
+assert len(rows) == overlay["field_count"] == 196
+assert overlay["default_disposition"] == "unchanged"
+assert overlay["capability_roles"] == ["consumer-only"]
+assert overlay["execution_models"] == ["manual-poll"]
+assert set(overlay["compilation_cells"]) == {"std", "no-default", "async-no-std"}
+assert set(overlay["disposal_policies"]) == {"strict-local", "host-process-failure"}
+assert (root / overlay["contract"]).is_file()
+known = {row["field"]: row for row in rows}
+seen = set()
+groups = {group["id"] for group in overlay["group"]}
+assert len(overlay["group"]) == len(groups) == 5
+assert groups == {"engine-storage", "call-carrier", "callback-scratch", "cancellation", "cleanup-transfer"}
+for group in overlay["group"]:
+    assert group["disposition"] == "reinterpreted"
+    for key in ("owner", "reservation_point", "diagnostic", "meaning"):
+        assert group[key].strip(), f"missing {key} for {group['id']}"
+    assert group["fields"]
+    for field in group["fields"]:
+        assert field in known, f"unknown resource row {field}"
+        assert field not in seen, f"duplicate disposition for {field}"
+        assert known[field]["unit"] == "bytes", f"non-byte reinterpretation {field}"
+        seen.add(field)
+assert len(seen) == 20 and len(set(known) - seen) == 176
+vectors = overlay["value_identity_vector"]
+assert len(vectors) == 3
+assert {v["column"] for v in vectors} == {
+    "gateway_default_v1", "directory_client_default_v1", "benchmark_static_reference_v1"
+}
+for vector in vectors:
+    encoded = bytearray(b"clinkz-resource-values-v1\0")
+    for row in rows:
+        value = row[vector["column"]]
+        encoded.extend(b"\0" if value == "NA" else b"\1" + int(value).to_bytes(8, "little"))
+    assert hashlib.sha256(encoded).hexdigest() == vector["sha256"], "configuration digest encoding drift"
+policy_keys = set()
+for vector in overlay["policy_identity_vector"]:
+    assert vector["compilation_cell"] in overlay["compilation_cells"]
+    assert vector["disposal_policy"] in overlay["disposal_policies"]
+    assert vector["disposal_policy"] != "host-process-failure" or vector["compilation_cell"] == "std"
+    coordinates = [str(overlay["schema_revision"]), str(overlay["typed_input_interpretation_revision"]),
+                   overlay["operation"], "consumer-only", "manual-poll", vector["compilation_cell"],
+                   vector["disposal_policy"], str(vector["profile_origin"])]
+    encoded = bytearray(b"clinkz-consumer-resource-identity-v2\0")
+    for coordinate in coordinates:
+        raw = coordinate.encode()
+        encoded.extend(len(raw).to_bytes(2, "little") + raw)
+    value = next(v["sha256"] for v in vectors if v["column"] == vector["value_column"])
+    encoded.extend(bytes.fromhex(value))
+    key = hashlib.sha256(encoded).hexdigest()
+    assert key == vector["sha256"] and key not in policy_keys, "policy identity alias/encoding drift"
+    policy_keys.add(key)
+assert len(policy_keys) == 2
+# Freeze the interpreted schema as well as the numeric table. Lifecycle status
+# is not accounting meaning; changing metadata requires an explicit migration.
+metadata = {key: value for key, value in overlay.items() if key != "status"}
+metadata_digest = hashlib.sha256(json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+assert metadata_digest == "93915db60a09c10f90661f65de765c1e026e246da161977d4a8017a816c3331d", "schema-2 metadata changed without an explicit migration"
+print("resource ownership candidate: 20 versioned byte rows; 176 unchanged; 3 value and 2 policy identity vectors")
+PY
+
 echo "resource limit check: $(($(wc -l <"$schema") - 1)) fields and 3 profiles"

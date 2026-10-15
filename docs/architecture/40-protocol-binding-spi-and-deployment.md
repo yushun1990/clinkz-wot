@@ -1,5 +1,9 @@
 # Protocol Binding SPI and Deployment
 
+ADR-0023's pending [Consumer resource migration](../spec/consumer-resource-ownership.md)
+specifies the proposed registration/resource/disposal delta. Current strict
+contracts remain active until its independently accepted admission boundary.
+
 ## V1 integration model
 
 A Protocol Binding is an ordinary Rust crate compiled into the application or
