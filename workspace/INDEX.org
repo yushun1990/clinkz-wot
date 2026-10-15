@@ -28,11 +28,11 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0081-reusable-plan-and-thing-identity.md][0081 Reusable Plan Semantics Versus Thing-Generation Ownership]]
 - [[file:0082-logical-physical-subscription-decoupling.md][0082 Logical Subscriptions Versus Physical Broker Subscriptions]]
 
 ** DISCUSSING
 
+- [[file:0081-reusable-plan-and-thing-identity.md][0081 Reusable Plan Semantics Versus Thing-Generation Ownership]]
 - [[file:0086-consumer-owned-artifact-configuration.md][0086 Consumer Owned Artifact Configuration]]
 - [[file:0083-host-zenoh-consumer-query-ownership.md][0083 Host Zenoh Consumer Query Ownership — deferred optional binding]]
 - [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 Composable Capabilities and Runtime Boundaries]]
