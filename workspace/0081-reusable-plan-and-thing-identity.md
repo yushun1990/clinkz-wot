@@ -81,7 +81,8 @@ the existing architecture and the sharing hypothesis using production source,
 the registered strict evidence, ADR-0008/0021/0023 and
 [topic 0086](0086-consumer-owned-artifact-configuration.md). A **compiled
 program** below means potentially reusable immutable execution data, not Rust
-machine code, a current public type, a persisted image or a transport session.
+machine code, a current public type or a transport session. Persistence would
+be an optional representation of that data, evaluated separately below.
 
 **Sequencing decision: prepare the narrow 0086 contract/admission repair first;
 do not require a foundational program-sharing correction before it.** The
@@ -154,6 +155,141 @@ No existing fleet measurement establishes the reusable fraction, a dominant
 compiler cost or the instance/transport cardinality. A generic program layer
 could cost more than this closed target-copy primitive saves.
 
+### Explicit target model: hypothesis and counterexamples
+
+The proposed target is **one compatible Protocol Binding executing multiple
+Compiled Programs; one immutable program serving many compatible Thing
+instances; an Instance Context supplying per-Thing identity, endpoint
+parameters, authorization and routing; and a Plan Set retaining independent
+lifecycle, generation, admission and cleanup authority**. Its purpose is to
+reuse compilation work, especially at service cold start, rather than merely
+deduplicate outputs after compiling every Thing. These names describe a
+hypothesis, not accepted types or a required implementation.
+
+| Proposed relation | Assessment against current evidence | What could falsify or limit it |
+| --- | --- | --- |
+| One Binding executes many programs | Coherent and structurally aligned with the SPI. `PollClientBinding::start_request` and `ClientBinding::invoke` receive the selected artifact per invocation; an associated compiler/artifact **type** does not imply a single program **value**. The accepted aggregate already compiles three coordinates through one registration. | Each program must fit the actual binding's supported format, role, configuration and operation envelope. A binding must not retain a global mutable "current program" that changes another call's interpretation. Existing single-call Runtime evidence proves neither concurrent multi-program scheduling nor multi-Thing deployment. |
+| One immutable program serves many Things | Plausible for a checked execution definition whose remaining variability is expressed as typed operands. Reusing a definition does not require reusing Thing, plan or binding generations. | Same model name or schema shape does not establish equivalence. Endpoint scheme/template shape, protocol extensions, media/codec, schema or security-expression differences can require a distinct definition. If a compiler specializes on every concrete endpoint or source identity, there may be no useful shared program, or it needs an explicit parameter boundary first. |
+| Instance Context supplies identity, endpoint parameters, authorization and routing | Coherent as the instance/runtime side of that boundary. Values and any runtime references must be bound and checked for this Thing and selected program before effects; necessary per-call state remains per-call. | Moving a value into a context does not prove the program is independent of it. URI encoding/template constraints, target restrictions, authority/tenant isolation and route mapping must still be enforced. Static security expressions may be shared only when semantically equivalent; current credentials, applicability and committed authorization remain runtime checks. Context identity alone cannot grant authorization, and this hypothesis does not put credentials/providers into `OutboundRequest` or compiler data. |
+| Plan Sets retain independent authority | Retain this invariant in any future model. A Plan Set would admit its context, generation-qualified envelope and bounded program reference; a separate physical owner would fund shared immutable storage. Closing one generation ends its rights without closing another's. | A context or program reference that bypasses the live record lease, spends another generation's capacity, or frees the physical program before the last user contradicts the model. Session/SDK owners and their retirement remain Binding/runtime concerns. Producer route reservation and atomic activation would still need fresh instance-specific checks. |
+
+Thus the model is a credible evolution hypothesis, **not falsified by the
+present one-Plan-Set-per-generation rule**, and **not established by today's
+implementation**. Compatibility must mean both a valid semantic/operand
+contract and an eligible current execution registration, not equality of one
+format marker. A reusable program may combine shared logical data with a
+binding-specific lowering; this implies no universal artifact executable by
+every binding. The current generation-qualified envelope can remain the
+execution authority even if a future payload references a reusable definition.
+
+### Cold-start objective: compilation by definition, binding by instance
+
+Let `N` be the number of Thing instances and `K` the number of distinct
+compatible execution definitions actually required by their operations,
+binding/compiler dependencies and parameter contracts. `K` is not the number
+of model names; one Thing can require several definitions, and specialization
+can make `K` grow with `N`. The desired cost decomposition is:
+
+```text
+startup work = sum over K definitions of definition compilation
+             + sum over N instances of context checking/binding/admission
+             + supplied-input validation + reuse lookup/verification
+```
+
+This is a target decomposition, not a measured complexity claim. Count any
+repeated logical/schema/template compilation as definition work too; moving it
+out of the binding compiler must not hide that it still runs once per Thing.
+If each instance supplies an independent TD, the current borrowed-input
+contract still requires paid validation/semantic processing of that input.
+Recognizing a shared definition has its own cost. A future trusted common
+definition plus checked instance parameters might avoid repeated work, but
+cannot obtain validated-TD authority by trusting a supplied type name or hash.
+Identity, endpoint validation, authorization, capacity reservation and
+publication remain necessary for every instance. Total startup is not O(`K`)
+when it must at least inspect and admit `N` distinct contexts.
+
+Post-compilation interning alone does not meet this compilation objective.
+Neither lazy compilation that eventually repeats per instance nor many Things
+sharing one transport session establishes it. A future solution must locate
+reusable work **before** repeating definition compilation. If concurrent
+materialization is supported, avoid duplicate definition work with bounded
+waiting/refusal and cancellation that preserves other users. This does not
+reactivate today's inactive lazy/cache requirements or require a cache service.
+Explicit startup grouping, a supplied immutable definition, or a build-produced
+definition are alternatives to evaluate alongside runtime lookup.
+
+The falsifiable experiment is to hold `K` and definition sizes fixed while
+increasing `N`, then vary `K` independently. Count logical and binding compiler
+invocations/work separately from input processing, context instantiation,
+admission and retained physical bytes. Parameter-only changes should reuse
+the definition; changes to a real dependency must produce another definition
+or reject before effects. Check identical behavior against independent builds,
+including endpoint escaping and cross-tenant authorization negatives. Measure
+both elapsed cold-start time and work: a smaller payload or equal final bytes
+does not establish reduced compilation. If most startup cost is unavoidable
+per-input work, definitions specialize per endpoint, or operand checks cost as
+much as the removed compilation, the expected cold-start benefit is limited.
+The current small target-copy primitive cannot establish or refute savings
+for a future substantial schema/template/protocol program.
+
+### Optional persistence across process restarts
+
+Persisting a pure definition without runtime ownership is plausible, separately
+from in-process sharing. A service could load and verify `K` stored programs,
+then bind/admit `N` fresh contexts and Plan Sets. Disk reuse can survive the
+last in-memory user; the disk artifact is not a surviving Plan Set lease or
+proof that the new process owns funded memory. A program could support sharing
+without supporting serialization, and persistence without sharing one loaded
+copy. Neither feature is a prerequisite for the other.
+
+Today's types provide no such contract: artifact references contain local
+generations/slots, and Host artifacts use erased native storage. Snapshotting
+a Plan Set, `Box<dyn Any>`, native pointers or an ownership root cannot create
+a reusable file format. Topic 0076's
+[generated-data candidate](0076-composable-capabilities-and-runtime-boundaries.md#sharing-and-generated-image-boundary)
+already distinguishes pure image data from fresh installation authority; its
+Cargo-linked subset does not admit loading arbitrary persisted files.
+
+A future persistence proposal must settle these boundaries:
+
+- **Stable data and dependencies.** Use an explicit versioned encoding of
+  immutable definition/parameter contracts and a complete compiler/format/
+  binding semantic dependency manifest, including applicable schema/codec/
+  security interpretation and configuration projections. Runtime `BindingId`, Plan/Thing generations,
+  registration order, addresses and parent-account identities cannot be its
+  durable identity. A new process must match current registration semantics to
+  those dependencies, then mint fresh envelopes; it never treats old numeric
+  identity equality as compatibility. Target/ABI/features/endian dependence
+  must be explicit if the encoding uses native representations.
+- **No serialized authority.** Do not persist credentials or authorization
+  grants, provider/SDK handles, active route/permit owners, sockets, calls, pins,
+  reservations, leases, runtime counters, compiler continuations or cleanup
+  obligations as program data. Bind current identity, endpoint parameters,
+  authorization and routing afresh. Recompute actual installed footprint and admit current target
+  capacity; a saved footprint or successful prior run grants no allocation,
+  publication, route-activation or validated-result authority.
+- **Trust and failure.** A content digest alone does not authenticate a
+  compiler or restore semantic validation authority. Specify the trusted
+  producer/provenance or required revalidation, bounded structural decoding,
+  dependency/version checks and integrity handling. Corrupt, truncated or
+  incompatible data must fail before effects, or trigger fresh compilation
+  from an available trusted source within current admission. If neither usable
+  cached data nor a trusted source exists, refuse rather than coerce an old
+  artifact. An accepted trusted-program installation path might avoid loading
+  the original TD; it cannot serialize today's `ValidatedThing` proof. Current
+  credential and result checks remain active even for trusted program data.
+- **Actual benefit.** Measure load/verification/decoding/relocation separately
+  from compilation and context admission, across same-version restarts and
+  dependency/configuration upgrades. If necessary verification reconstructs
+  the expensive program, persistence may not improve cold start. The loader
+  must preserve the same semantics as fresh compilation without inventing a
+  second TD/security interpretation or preserving old runtime ownership.
+
+This is a bounded architectural feasibility assessment, not selection of a
+serialized IR, executable-code loader, persistence API or cache lifecycle.
+The active startup-only registration and generation-isolation rules remain
+binding until a future projection reconciles this new admission path.
+
 ### Alternatives and disposition
 
 | Alternative | Disposition and reason |
@@ -161,9 +297,9 @@ could cost more than this closed target-copy primitive saves.
 | Preserve independent materialized Plan Sets, repair 0086 configuration | Selected near-term sequence. Keeps the accepted lifetime and source-free transaction; corrects a demonstrated inability to represent required binding operands. Does not claim fleet scalability or program reuse. |
 | Share today's complete Plan Set/output or reuse artifact references across Things | Reject. It conflates source identities, generation seals, mutable record/reclaim authority and original capacity. It also fails to parameterize the endpoint payload. |
 | Introduce shared immutable programs, separate instance bindings and generation records before 0086 | Credible future architecture, not a prerequisite now. It changes compiler inputs, output ownership, artifact resolution, resources and Host/static evidence together, without a measured shareable program or production binding to justify that cost. The required configuration distinction is independent of this split. |
-| Define compiler reuse equivalence first and intern only proven immutable subobjects later | Preferred investigation when real repeated data/cost is demonstrated. Keep fresh per-generation envelopes and exact registration seals. Choose whole-content equivalence or explicit parameters according to actual compiler dependencies; no generic cross-Thing cache is assumed. |
+| Factor definition compilation from instance binding, with reuse before compilation | Preferred hypothesis to test for cold-start savings. Define dependency/operand equivalence and keep fresh contexts, generation envelopes and exact registration seals. Compare explicit startup grouping/supplied definitions with bounded runtime lookup; interning after independent builds is only a memory optimization. |
 | Use one virtual fleet Thing or binding session multiplexing | Valid application/protocol choices when they preserve externally required identity, authorization and source attribution. Neither solves separately meaningful Things' immutable-data duplication. Transport sharing and compiled-data sharing have separate owners. |
-| Add lazy compilation/eviction or generated images now | Defer. Laziness does not establish equivalence or fix 0086, and image installation adds a separate trust/target-capacity boundary. Inactive PLAN-LAZY/CACHE requirements are not reactivated. Topic 0076 owns the broader image/package investigation. |
+| Add lazy compilation/eviction or persisted/generated programs now | Defer implementation. Persistence could reduce repeated compilation across restarts, subject to the data/trust/reinstallation assessment above; it cannot restore runtime authority. Laziness alone does not establish equivalence or fix 0086. Inactive PLAN-LAZY/CACHE requirements are not reactivated. Topic 0076 owns the broader image/package investigation. |
 
 ### Constraints on the narrow repair
 
@@ -189,6 +325,14 @@ source work resumes it must settle:
   Endpoints remain compiler inputs; the checked engine policy still captures
   all of its own constructor operands. Strict/owned artifact substitution must
   fail even when target bytes and numerical limits are equal.
+- Preserve the ability for one compatible registration to execute multiple
+  definitions and for later instance binding to use a shared immutable
+  definition. Do not make a program's reusable identity depend on runtime
+  generations or a process nonce, or require recompilation on a restart merely
+  because runtime ownership is fresh. This is an evolution constraint, not a
+  requirement to add program identities, parameterization or persistence to
+  the narrow repair. Its complete registration digest is still an admission
+  identity, not a future durable content key.
 - Proportional impact review and new layout/work/failure measurements for the
   changed compiler/support/Host adapter/cursor and affected aggregate/runtime
   carriers. Preserve source-free output, full engine charging of artifacts,
@@ -212,10 +356,12 @@ reinterpret this repaired binding digest as that identity.
 2. Implement and independently accept the scoped resource-ownership successor
    with its six existing evidence obligations and affected strict/Producer
    regressions. Continue the production HTTP frontier under its own admission.
-3. Revisit reusable content with real binding/program and multi-Thing evidence
-   before broad scalability claims or a frozen shared representation. Measure
-   compilation CPU and retained physical bytes separately, including the
-   irreducible instance/envelope/reference costs and Host/static differences.
+3. Test the explicit target with real binding/program and multi-Thing evidence
+   before broad scalability claims or a frozen shared representation. Vary
+   `N` and `K` independently and measure definition compilation separately from
+   instance/input/admission work and physical bytes. If persistence is proposed,
+   compare fresh compile with load/verify plus fresh installation across
+   restarts/upgrades. Host/static costs and irreducible instance costs remain.
 
 Reopen this sequence **before** implementing the narrow repair if its concrete
 API requires per-Thing compiler registration/policy duplication, equates a
