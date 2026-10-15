@@ -1,5 +1,12 @@
 # Consumer runtime entry evidence
 
+`tests/resource_ownership_configuration.rs` directly exercises the unchanged
+production compiler and complete Consumer-only capture in the three compilation
+cells. It reproduces the
+[owned artifact configuration blocker](../../../workspace/0086-consumer-owned-artifact-configuration.md).
+Its positive strict controls and distinguishing-key rejection are boundary
+evidence, not schema-2 implementation or completion evidence.
+
 ## Runtime admission discriminators
 
 `probes/runtime_candidate.rs`, included by the std production integration test,
