@@ -4,6 +4,12 @@ Machine-readable status and package dependencies are owned by
 [`index.toml`](index.toml). [ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org)
 owns the first-binding decision, alternatives and evidence impact.
 
+[ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) revises
+resource ownership and removes the architectural SDK choice. Its shared
+contract/schema migration and Consumer readmission boundary precedes HTTP
+implementation admission. Current strict contracts remain active until then;
+this package selects no SDK repair/qualification predecessor.
+
 ## Required production scope
 
 Deliver an optional **Host HTTP/1.1 binding**, with HTTPS and explicit security
@@ -26,10 +32,11 @@ committed-closed guards, Servient publication, borrowed accept permits and owned
 response opportunities. Neither side re-enters legacy selection or dispatch.
 Bindings own protocol syntax/I/O/correlation and cannot call handlers directly.
 
-Use Hyper's explicit HTTP/1 connection APIs with application-provided Tokio I/O;
-prefer rustls for the separately scoped HTTPS integration. Exact dependency
-versions, features and source-backed limits belong to admission and completion
-evidence. Do not infer bounded receive allocations from a body-size adapter,
+Select and qualify concrete HTTP/TLS SDKs and the application-provided runtime
+inside the HTTP Binding implementation tranche. Hyper/Tokio/rustls remain
+candidates, not architectural requirements. Exact versions, features, supported
+limits, progress and disposal evidence belong to that implementation's declared
+envelope. Do not infer bounded receive allocations from a body-size adapter,
 Content-Length, queue item count or process memory limit.
 
 The first Consumer slice uses independent HTTP peers. The next tranche adds the

@@ -81,8 +81,11 @@ advance the frontier safely.
 
 ## Critical Path
 
-1. Admit and complete the narrow Host HTTP Consumer Property Read target under
+1. Close [ADR-0023's resource ownership migration/readmission boundary](docs/ADRs/0023-resource-ownership-and-policy-boundaries.org)
+   for the narrow Consumer path, preserving engine admission and cleanup funding.
+   Then admit and complete the Host HTTP Consumer Property Read target under
    ADR-0013, using the passed Consumer gate and matching completed predecessors.
+   Choose and qualify concrete HTTP SDKs during Binding implementation.
    The existing WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
 2. Add the production HTTP Producer route/permit/response path and public
    bidirectional loop, then HTTPS/trust/security evidence before production

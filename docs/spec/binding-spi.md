@@ -20,6 +20,13 @@ a later binding-domain entry review re-adopts or replaces it.
 
 ## Active requirements
 
+[ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) selects a
+successor resource/disposal target with an explicit activation boundary. The
+requirements and detailed contracts here retain their current strict footprint,
+original-account and final-root disposal meaning until migration/readmission.
+This is not permission to omit SDK storage or allow allocating destructors in
+an existing admitted envelope.
+
 `BIND-REG-001`: A Protocol Binding MUST enter one Servient through one complete,
 generation-bearing registration bundle that atomically associates its identity,
 configuration digest, capabilities, compiler extension, execution components,

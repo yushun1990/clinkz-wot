@@ -177,6 +177,13 @@ A production protocol claim names its actual capability/profile evidence;
 neither two Zenoh backends nor HTTP alone proves general protocol-shape
 neutrality. Embedded production requires separate real backend/target evidence.
 
+[ADR-0023](docs/ADRs/0023-resource-ownership-and-policy-boundaries.org) selects an
+ownership-scoped resource target and its explicit migration boundary. Existing
+strict resource/destructor contracts remain implementation authority pending
+schema/contract migration and independent readmission. HTTP remains the first
+production protocol; SDK selection/qualification belongs to its implementation
+tranche. Neither a shared manager nor removal of engine admission is selected.
+
 ## Architectural Decision Lifecycle
 
 Architecture questions normally progress through:

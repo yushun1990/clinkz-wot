@@ -1,0 +1,274 @@
+#+title: ADR-0023: Resource Ownership and Policy Boundaries
+#+date: 2026-10-15
+#+status: Accepted
+
+* Decision and activation boundary
+
+Select ownership-scoped resource admission as the architecture target. The
+protocol-neutral engine must bound and account its controlled state and the
+capacity it promises at a handoff. It need not authorize or pre-reserve every
+allocation reachable inside a concrete Protocol Binding. Bindings own protocol
+resource policy; the application/deployment composes aggregate resource policy.
+An optional shared allocator, quota bank or isolation boundary may implement a
+deployment policy. None becomes a required engine component.
+
+This is a *staged architecture correction*, not activation of new accounting
+semantics. Current Foundation, Binding SPI and Runtime contracts, the resource
+schema, admitted tranches and executable behavior retain their strict meaning
+until the migration below is independently reviewed. Existing
+=BindingLifetimeFootprint= values cannot now omit SDK storage; existing resource
+identities/defaults cannot silently acquire a narrower meaning. The 65/31/121
+requirement dispositions and typed-input interpretation revision 2 are unchanged.
+This ADR permits preparing that migration, not production source edits.
+
+Retain ADR-0022's Host HTTP/1.1 first-protocol direction, HTTPS/security release
+dependency, optional Zenoh/pico disposition and separate embedded qualification.
+Supersede its architectural selection of Hyper/Tokio/rustls: concrete SDK and
+runtime selection, dependency qualification and any demonstrated dependency
+repair belong inside the HTTP Binding implementation tranche. Hyper remains a
+candidate. No SDK qualification predecessor is selected by this decision.
+
+* Reconstructed rationale and evidence boundary
+
+The original resource design addressed concrete failures: counts alone do not
+bound variable-size input; independent owners can overcommit aggregate capacity;
+publication must not expose a partially funded object; cancellation cannot lose
+its work object when a cleanup queue is full; and cleanup needs capacity even
+when ordinary work is saturated. These remain valid requirements.
+
+The history is recoverable at =6020c79= and =f8af287= in =docs/design.md= and
+=docs/resource-limits.csv=. The =f8af287= design text distinguishes physical
+engine storage from logical quota and says ceilings do not instruct eager
+allocation of every maximum. ADR-0006/0011 close pending/late-result and complete-object cleanup
+ownership. ADR-0009 makes bindings Cargo-linked, startup-registered protocol
+owners. ADR-0015 prevents duplicated work allowances and implicit large profile
+copies; it does not establish an SDK allocator. Topics 0037/0047 distinguish
+private declarations, field applicability and unproved authoring maturity.
+Topic 0045 separates semantic ownership from profile-specific physical costs.
+Review 07 and topic 0076 question capability/platform coupling without proving a
+replacement resource mechanism. These are evidence, not premises settling this
+decision.
+
+The inspected implementation on master =47f209575b830b3a86046f712a3deddfc80edf0e=
+is narrower than a process memory governor:
+
+- =foundation/src/resource.rs= uses checked counters and linear reservation
+  receipts. Reserving capacity does not allocate SDK storage or commit OS pages.
+- =core/src/binding.rs= validates declared versus admitted footprints and owns
+  carriers/seals. It cannot observe every allocation made by a binding's SDK.
+- =ConsumerPropertyReadPolicy= combines author call/registration maxima with
+  Core/request/result backing. Host provisioning reserves registration scratch
+  until retirement. Call admission reserves conservative complete-call,
+  cancellation and transfer capacity in the shared parent bank. These overlapping
+  policy accounts are not additive physical RAM measurements.
+- =servient/src/consumer_property_read/host.rs= retains original accounts,
+  commits residual status before unresolved destruction, then drops call,
+  generation, registration and provisioning in order. It has no asynchronous
+  registration-retirement hook. Static execution retains typed resident slots.
+
+The completed Consumer Runtime evidence and passed Consumer/Producer gates prove
+their controlled/mock author envelopes, real parent-account provenance, selected
+artifacts, seals, cancellation and finite destruction. They do not establish
+arbitrary SDK memory bounds, production multi-binding elasticity or board fit.
+The schema's 196 rows include provisional/deferred policy; a checked row is not
+evidence of a concrete enforcing owner.
+
+The exact evidence owners are
+[[file:../evidence/WP-400-consumer-property-read-runtime.toml][Consumer Runtime completion]],
+[[file:../work-packages/consumer-property-read-architecture-gate.toml][Consumer gate]],
+[[file:../work-packages/property-read-architecture-gate.toml][Producer gate]],
+[[file:../work-packages/WP-600-host-zenoh-owner-decision.md][retained Zenoh qualification]],
+and [[https://github.com/yushun1990/clinkz-wot/pull/178][PR #178's unmerged discriminators]].
+The [[https://github.com/yushun1990/clinkz-wot/pull/177][independent ADR-0022 reviews]]
+accepted its limited Host OOM exception while expressly retaining complete SDK
+attribution and nonallocating final-root destruction. Those reviews are valid
+evidence of what was accepted. Their acceptance does not establish that these
+surviving mechanisms are minimum requirements; this decision challenges them.
+
+ADR-0022 rejects universal recovery from Host SDK OOM but preserves central
+attribution of SDK growth and allocation-free final-root disposal.
+PR #178's exact-head =c0c9baec3ae20752ab0d1dc32caf46226c79944d=
+discriminators report small Hyper allocations during disposal and a disposable
+correction. Those observations are retained as version/configuration-specific
+evidence, not independently rerun or accepted here. They demonstrate a conflict
+with the current contract, not that SDK repair is the right architecture.
+The retained Zenoh probes additionally show why semantic completion, a closed
+flag or a retry cannot certify task/callback retirement. Removing a central
+memory quota does not remove those lifecycle counterexamples.
+
+* Minimum guarantees and their owners
+
+| Responsibility | Necessary guarantee | Authority |
+|----------------+---------------------+-----------|
+| Engine-controlled storage | Bound TD/build scratch, owned plans/artifacts, registry/slot/lease state, Core call backing, accepted payload backing, queues, diagnostics and cleanup destinations before their allocation/publication. Keep local/parent provenance, actual Layout/overlap accounting and child-before-parent release for those owners. | Foundation resource semantics; TD/Planning/Core/Servient allocation and lifecycle contracts. |
+| Binding-controlled storage | Own socket/session state, parsers, framing/reassembly, TLS, retries, pools, protocol queues, callbacks and tasks. Enforce supported input, concurrency, queued-byte/item and growth policies at the actual protocol boundary; report saturation/failure without losing accepted owners. | Binding implementation and its qualified profile/configuration; SPI specifies observable obligations. |
+| Cross-boundary handoff | Validate identity/generation, capability, selected artifact, supported values and retained item/byte capacity. Reject before engine retention/publication or preserve the complete accepted owner. Back cleanup/status/handoff capacity before side effects. | Core/Binding SPI and Servient. |
+| Deployment resources | Choose process/firmware memory, CPU/FD/thread/stack budgets, runtime lifetime, allocator, fairness, tenant isolation, monitoring/restart and remote reconciliation. Compose shared physical services with explicit owners. | Application/platform assembly, not WoT selection or protocol-neutral semantics. |
+
+Owning a movable binding call is authority to progress/cancel/release the whole
+object; it does not make the engine the allocator or policy owner of everything
+that object references. Conversely, labeling storage private cannot hide an
+engine queue, a full backing allocation behind a small zero-copy view, or work
+outliving its original owner. Every live physical resource still has one
+accountable owner, even where no engine byte quota applies.
+
+Cargo-linked bindings and SDKs execute in the same address space and are trusted
+dependencies. Quotas cannot provide memory protection against faulty/malicious
+native code. A deployment requiring continued engine operation after binding
+abort, memory corruption or hostile behavior needs an actual isolation boundary.
+
+Compiler cursors/artifacts and concrete call/guard carrier layouts need special
+care: binding-defined values stored in engine-controlled output/slots still
+consume engine-admitted capacity. They cannot become zero-cost merely because
+their Rust type comes from a binding. Shared backing is counted once at its real
+owner; retained leases and engine wrapper/storage are counted at their own owners.
+No generation, registration or per-Thing multiplier invents physical copies.
+
+Before accepting inbound work or a result, the engine must have a bounded
+destination and validate the complete retained backing/ownership contract.
+Protocol parsing can happen earlier in the binding, under binding limits. An
+engine payload limit therefore proves neither pre-callback receive allocation
+nor TLS/framing/reassembly bounds. An SDK with uncontrolled externally driven
+retained growth is not qualified by calling its allocations private or imposing
+an OS kill threshold. A source-derived hard maximum for every opaque SDK
+temporary is, however, a stronger physical-memory claim than ordinary Host
+engine correctness. Qualification must state which bounds are enforced, which
+costs are measurements/estimates, and which risks remain deployment assumptions.
+
+Selection, atomic publication, immutable artifacts, permit-gated dispatch,
+first-cause cancellation, late-result retention/sealing, complete transfer and
+finite truthful cleanup are unchanged. While an operation is live, its required
+lease, cleanup destination, physical owner and applicable account stay live.
+A durable residual describes uncertain external effects; it is not permission
+to free capacity for surviving local work or detach it without an owner.
+Cancellation of one role must not close infrastructure used by another role.
+Shared sessions require last-user retirement; a short-lived semantic call and
+longer-lived transport infrastructure need not retire together.
+
+* Reservations, elasticity and alternatives
+
+The current design does not physically allocate every configured maximum at
+startup, and shared parent accounts already return capacity on terminal release.
+It also permits exclusive-phase reuse and shared-owner accounting. The defect
+is not the existence of centralized counters or that all sharing is impossible.
+It is making every binding's future SDK maximum part of mandatory engine
+admission, independent of who controls that memory and what was promised.
+
+For example, two live calls declaring 64 MiB each cannot both obtain capacity
+from a 96 MiB parent, even if each currently uses 1 MiB. This is a deduction about
+maxima, not a measured repository workload. It is appropriate when admission
+promises both maxima without a later resource refusal. It is unnecessary when
+owned protocol progress may reject growth safely. Startup-held callback scratch
+can similarly exclude another idle binding's work without reflecting physical use.
+
+Elastic sharing must acquire capacity before growth, retain funded existing
+owners on refusal, and return structured failure or apply documented bounded
+backpressure. It may introduce failures after operation acceptance, contention
+and fairness/starvation risks. It cannot promise simultaneous worst-case success
+when total maxima exceed available backing. Cleanup/status capacity needed to
+settle failures stays reserved; an exhausted ordinary pool cannot consume it.
+Pool sharing needs one physical owner and last-user release, not repeated charges
+of one pool to every call.
+
+| Alternative | Judgment |
+|-------------+----------|
+| Preserve mandatory engine SDK maxima | Useful optional strict-profile policy, especially for embedded fit or guaranteed capacity. Insufficient as physical backing and unnecessarily couples portable correctness/admission to SDK internals when imposed universally. |
+| Remove all resource admission | Rejected. Loses bounded engine state, publication safety, overload behavior and guaranteed cleanup destinations. |
+| Require a shared resource manager | Not selected. A numeric bank cannot constrain an SDK that does not participate; a general allocator/scheduler adds API, fairness and lifecycle costs without demonstrated need. A deployment may choose one, with evidence. |
+| Ownership-scoped admission and explicit deployment policy | Selected. Keeps safety mechanisms where their owners enforce them, allows independent bindings to share physical capacity, and makes weaker aggregate availability/fit claims explicit. |
+
+Independent bindings here means separately authored/linked registrations. V1
+remains startup-composed; this adds neither runtime code loading nor hot unload.
+
+* Host allocation failure and embedded requirements
+
+Retain ADR-0022's distinction between structured capacity/allocation rejection
+and process failure. Engine-controlled recoverable constructors, Core's
+preallocated post-acceptance seal/envelope, allocation-free failure/status
+commitment and prebacked cleanup handoff remain required. Removing SDK quotas
+does not turn numeric reservations into physical backing or make OOM recoverable.
+
+The target Host policy applies consistently to SDK progress *and local disposal*.
+A finite, nonblocking SDK destructor may allocate under its declared Host failure
+policy after the engine commits any required residual status. This alone does
+not justify a dependency fork. It still must not wait for network progress,
+join a worker, start replacement work, hide unbounded destruction, or lose live
+local jobs. Allocation count and local work need implementation evidence.
+Explicit cleanup remains the protocol; Drop cannot certify remote cleanup.
+Complete shutdown may be reported only after required local retirement; a
+precommitted residual is no substitute for releasing surviving physical owners.
+
+If allocation diverges, no post-termination cleanup/report guarantee exists.
+If the configured allocator/API returns a supported error while the process is
+live, ownership and structured failure obligations remain. Rust documents
+=handle_alloc_error= as diverging, with binary-configuration-dependent behavior;
+the default std behavior aborts. =no_std= uses its configured panic handler. See
+[[https://doc.rust-lang.org/std/alloc/fn.handle_alloc_error.html][Rust allocation-error documentation]]
+(inspected 2026-10-15). Catching a panic is not general OOM recovery. In-process
+isolation of an aborting SDK is supplied by neither a Servient nor a worker.
+
+Embedded firmware with hard RAM/latency or continued-operation requirements
+needs backed typed slots/arenas, bounded protocol buffers, supported allocation
+failure, nonblocking disposal and target-specific stack/heap/runtime/interrupt
+evidence across all owners. Firmware integration composes the whole-device
+bound, whether statically partitioned or shared through a qualified allocator.
+The portable engine need not allocate protocol-private memory to make that proof
+possible. Host's process-failure scope cannot waive a stronger embedded
+requirement; =std=/=no_std= alone selects neither policy nor hardware fit.
+
+* Contract migration and next eligible work
+
+The next eligible work is one focused *resource ownership contract migration and
+Consumer readmission candidate*, before HTTP dependency qualification. Reuse the
+existing ADR-0013 review boundary; add no global gate or universal manager. It is
+not admitted by this ADR and need not wait for broad package completion.
+
+| Affected authority | Required migration/disposition |
+|--------------------+--------------------------------|
+| Foundation: =API-RESOURCE-001=, =RES-LIMIT-001..003=, =ADMIT-MEM-001= | Define engine policy scope and separate binding/deployment declarations. Classify affected byte rows/applicability; version every semantic reinterpretation and its diagnostics/configuration identity. Preserve linear work and controlled construction. |
+| Binding: =BIND-REG-001=, =BIND-MEM-001=, =BIND-STORAGE-001=, =BIND-DELIVERY-001=, =BIND-IO-001=, =BIND-CALL-CANCEL-001=, =BIND-HOST-CANCEL-001= | Separate carrier/handoff capacity from protocol-private storage; retain complete ownership, normal/late seals, bounded ingress, accepted-input recovery and actual retirement. Precisely scope Host disposal allocation. |
+| Planning/Runtime: =PLAN-BOUND-001=, =PLAN-ARTIFACT-001=, =ADMIT-TXN-001=, =HANDLE-DROP-001=, =HOST-ASYNC-001=; architecture 30/40/50 | Retain paid owned artifacts/all-bounds/publication and original accounts. Resolve startup scratch, complete-call/transfer/cancel accounting and final-root disposal without losing cleanup funding or attributing released protocol state to a surviving owner. |
+| Resource/API/state/performance projections and WP-100/200/300/400 | Give affected rows/APIs/traces/workloads an unchanged, reinterpreted, superseded or new-evidence disposition. Do not change frozen metadata under the old schema identity or silently delete a failing assertion. Existing tranches remain original-scope evidence; successor changed source needs exact readmission. |
+| ADR-0006/0011/0015/0022 | Preserve linear work, complete cleanup transfer and allocation-free engine fallback. Migrate the transitive SDK footprint/disposal interpretation explicitly; retain the superseded rationale. |
+| WP-600 / HTTP target | Consume the migrated shared boundary. Choose/qualify the SDK during implementation with real peers, input/overload/cancellation/disposal tests and honest physical measurements; no advance SDK fork/qualification package. |
+
+The candidate must close the affected owner/row/diagnostic map and exact
+specification/schema/API/evidence changes before admitting changed source. It
+must establish a falsifiable path for two independent owners: pressure rejects
+growth without losing a live call, result or cleanup destination; release makes
+capacity reusable; sharing does not double-charge a physical pool; and one
+binding's cancellation cannot retire another's infrastructure. Use small
+controlled bindings/allocators to settle shared contracts. Production SDK
+selection and exact-version qualification are not predecessor evidence.
+No broad framework or additional process machinery is implied by those cases.
+
+* Existing proof disposition and remaining risks
+
+Keep gate/tranche/evidence states and production code unchanged in this decision.
+Nothing here falsifies the completed controlled implementations.
+
+- Reaffirm unchanged: TD Basic/semantic lending, source-free Planning and
+  all-bounds barrier; Core backing/seals and constructor recovery; generation,
+  permit, first-cause, late-result and complete transfer semantics; real local/
+  parent retention and finite controlled mock/static disposal.
+- Reinterpret only after migration: footprint maxima, original-account physical
+  scope, per-profile trace resource deltas, callback scratch and whole-call/
+  transfer/cancel quotas. Old measurements still describe old code; they do not
+  prove successor accounting or elastic availability. Common semantic owner/
+  lease outcomes remain comparable; SDK physical bytes need not match.
+- New evidence: every changed reservation/constructor/handoff/final-drop path,
+  cross-owner pressure/reuse and shared infrastructure lifetime; protocol input
+  before engine handoff; finite allocating Host disposal if used; strict-profile
+  allocation failure and whole-device fit where claimed. Run applicable existing
+  Consumer/Producer and portable regressions after implementation changes.
+- Preserve historical SDK findings: PR #178's allocations remain observations;
+  allocation alone would cease to be a target-policy disqualifier. Blocking
+  destruction, lost original joins, surviving callbacks or uncontrolled input
+  remain unresolved under either accounting model. No library is qualified here.
+
+Main risks are incomplete schema migration, hidden large backing at handoffs,
+unbudgeted cleanup growth, starvation between elastic owners, and mistaking Host
+containment for embedded availability or hard RAM safety. No measured repository
+workload yet proves elasticity's benefit, and production multi-binding/HTTP
+evidence is absent. This decision supports no faster, smaller, fully elastic
+or production-safe implementation claim.
