@@ -1,11 +1,19 @@
 # Consumer resource ownership readmission
 
 `index.toml` owns the state of `WP-400-CONSUMER-RESOURCE-OWNERSHIP`. This is a
-separate ADR-0013 admission of the smallest cross-package successor to the
+record of the ADR-0013 admission of the smallest cross-package successor to the
 accepted strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
 and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
 semantics and row/API/diagnostic changes. Production code and existing evidence
 records are unchanged.
+
+Production implementation is stopped at the
+[binding/compiler configuration conflict](../../workspace/0086-consumer-owned-artifact-configuration.md).
+The original admission below remains historical review evidence; its scope
+cannot express the required binding/artifact configuration through the closed
+compiler. Admission returns to `candidate` under ADR-0013. The accepted successor
+contract and all six completion obligations remain unchanged. No schema-2
+production result or completion is claimed.
 
 The [accepted PR #180 review](https://github.com/yushun1990/clinkz-wot/pull/180#pullrequestreview-5530769829)
 covers candidate `a7d4692fa1bdb4227213ed1940c5ba3976107867` against base
@@ -158,7 +166,9 @@ No latency, hard RAM, allocator-metadata or whole-device claim follows here.
 
 ## Remaining blocks
 
-Production migration is admitted only within the registered scope above.
+Production migration is stopped at the configuration conflict linked above.
+The recorded source boundary must be reconciled and independently reviewed
+before implementation resumes. This requires no new precursor tranche.
 Successor completion is blocked on new production evidence above.
 HTTP Consumer admission then consumes that accepted shared boundary and matching
 predecessors; HTTP method/response metadata eligibility, SDK selection/pinning,
