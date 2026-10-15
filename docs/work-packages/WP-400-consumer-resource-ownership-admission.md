@@ -95,8 +95,13 @@ It needs no new fixture crate, SDK, allocator framework, global gate or process.
 Run the registered prechecks against the candidate. Schema checks pin all 196
 old rows and their values; verify the exact 20-row overlay, known/disjoint row
 membership, supported cells and unchanged complement. Controlled cases must
-demonstrate private pressure/refusal and reuse, protected engine cleanup funding,
-complete backing rejection, single physical pool ownership/last-user retirement,
+distinguish complete policy identities when only a non-schema constructor
+operand changes; equal ResourceLimits cannot substitute for that complete key.
+Pre-admission vectors cover scratch/result/timeout changes, and the checker
+separately perturbs all footprint/input/result/work/timeout/scratch scalars.
+Controlled cases must also demonstrate private pressure/refusal and reuse,
+protected engine cleanup funding, complete backing rejection, single physical
+pool ownership/last-user retirement,
 and residual-before-allocating-disposal with strict-policy exclusion.
 
 Completion evidence has the stable keys below in
@@ -105,7 +110,7 @@ passed and no workload budget is edited to turn a failure into success.
 
 | Key | Required new production evidence |
 | --- | --- |
-| `consumer-owned-identity` | Strict/owned, cell/disposal, value-digest and registration/artifact mismatch fail before effects. Missing applicable/zero/exact/one-over/overflow cases retain the original input and parent totals. Freeze API projection and canonical identity vectors. |
+| `consumer-owned-identity` | Strict/owned, cell/disposal, complete-policy identity and registration/artifact mismatch fail before effects. Changing only registration/call footprint, input, result, work, timeouts or scratch under equal ResourceLimits must change the complete key. Missing applicable/zero/exact/one-over/overflow cases retain the original input and parent totals. Freeze API projection and complete-policy encoding vectors; a table-only digest is not a checked-policy cache/configuration/evidence identity. |
 | `consumer-owned-handoff` | Actual Core/Servient normal and late results reject excessive retained backing (including spare String capacity) while preserving first cause, accepted call, original leases/accounts and prebacked cleanup. Both preacceptance allocation failures return the same request; postacceptance seal installation allocates zero. |
 | `consumer-owned-accounting` | Actual Host/static provisioning, constructor/build/output/call/overlap and final disposal measured by allocation site and owner. Re-run fault injection at every changed allocation path. Enforce every affected local/parent scope, zero/exact/one-over; no parent release before physical children. Compiler/artifact payloads remain fully counted. |
 | `consumer-owned-pressure` | Two independently authored controlled registrations/roots use the same real engine bank and a deliberately small private growth budget. Refusal preserves a live call, unread/late result and cleanup destination; release permits reuse. Optional shared private backing is charged once at its actual owner; cancelling one user preserves another and final retirement waits for all users/jobs. No required shared manager or fleet claim. |
@@ -136,7 +141,8 @@ or hide its identity in free-form notes. No release workload is reinterpreted he
 
 New scoped observations live in the successor completion TOML under the six keys
 above, with exact source/test refs, schema revision 2, typed-input revision 2,
-operation/cell/disposal/profile/value identity, fixture source digest and actual
+operation/cell/disposal/profile/value identity, all independent policy constructor
+settings and their complete key, fixture source digest and actual
 command. Separate measured engine/private/deployment storage and allocation
 counts; record current/peak/largest/overlap and terminal release against the
 configured field/owner budgets and zero-loss/zero-postacceptance-engine-allocation

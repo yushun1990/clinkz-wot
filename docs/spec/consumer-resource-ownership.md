@@ -67,11 +67,13 @@ resource authoring or resolve the deferred schema-authoring work in topic 0047.
 
 Configuration identity is `(ownership schema revision, typed-input revision,
 operation, role, execution model, compilation cell, disposal policy, profile
-origin, value digest)`. Checked policy captures it. A binding's configuration/
-artifact compatibility captures its resource-contract variant, concrete private
-policy, result bounds and supported cells. An owned policy cannot reuse a strict
+origin, value digest, registration, call, input, result, work, timeouts,
+scratch_bytes)`. Checked policy captures all these constructor settings
+immutably. A binding's configuration and artifact compatibility capture its
+resource-contract variant, concrete private policy, result bounds and supported
+cells. An owned policy cannot reuse a strict
 registration/artifact even if numeric limits are equal; checked-policy caches
-also distinguish the full value identity. `APPLICATION_DEFINED` alone is
+also distinguish the complete policy identity. `APPLICATION_DEFINED` alone is
 insufficient identity. Changing an engine quota need not invalidate a protocol
 artifact whose complete admitted bounds still fit the new transaction.
 
@@ -83,15 +85,37 @@ Named V1 tables may supply numeric input to an explicitly constructed owned
 policy; their old names never silently select it. No implicit legacy conversion
 or external cache migration is allowed.
 
-The fixed resource-identity key is SHA-256 of ASCII
-`clinkz-consumer-resource-identity-v2\0`, then each identity coordinate in the
-order above except value digest, as UTF-8 prefixed by its two-byte little-endian
-length, then the 32 raw value-digest bytes. Revisions/profile origin use decimal
-integers without leading zeros. Role is `consumer-only`, operation is
-`consumer-property-read` and model is `manual-poll`. Checked policy retains the
-coordinates/full values and exposes that fixed key using the existing
-`BindingConfigurationDigest` representation. This key identifies engine policy,
-not protocol configuration. The complete registration's separate binding digest
+The fixed resource-identity key uses complete-policy encoding revision 1:
+SHA-256 of ASCII `clinkz-consumer-policy-identity-v1\0`, followed by:
+
+1. The first eight coordinates above, through profile origin, each as UTF-8
+   prefixed by its two-byte little-endian length. Revisions/profile origin use
+   decimal integers without leading zeros. Role is `consumer-only`, operation
+   is `consumer-property-read` and model is `manual-poll`.
+2. The 32 raw value-digest bytes.
+3. `registration`, then `call`: for each footprint, `retained_items` as four
+   little-endian bytes, then `retained_bytes` as eight little-endian bytes.
+4. Every element of `input[4]`, `result[2]`, `work[7]` and `timeouts[2]`, in that
+   operand and element order, as eight little-endian bytes per element.
+5. `scratch_bytes` as eight little-endian bytes.
+
+Every independently supplied constructor operand participates. Derived TD/
+Planning scratch projections and computed backing totals are not encoded again;
+their original operands are. Arrays use the exact meanings/order documented by
+`ConsumerPropertyReadPolicy::try_new`. This is a byte encoding, not Rust struct
+memory or host-endian integers. The schema overlay fixes complete fixtures and
+one-operand negative vectors, including scratch 65,536 versus 131,072 under the
+same ResourceLimits. Its validator also perturbs every scalar operand separately.
+
+Only this complete key may identify checked policies in caches, configuration,
+diagnostics and evidence. The value digest alone addresses the numeric table;
+the earlier candidate's table/coordinate-only policy keys are withdrawn. This
+corrects the pending schema-2 candidate before admission without reinterpreting
+any active profile or accepting a legacy conversion. Checked policy retains
+all coordinates, values and constructor settings and exposes the complete key
+through the existing `BindingConfigurationDigest` representation. This key
+identifies engine policy, not protocol configuration or held parent capacity.
+The complete registration's separate binding digest
 incorporates its contract variant, private policy and result bounds; compiler/
 artifact compatibility uses that configuration. Provisioning checks the variant
 and bounds against policy without requiring identical unrelated engine quotas.
@@ -208,7 +232,7 @@ projection. No generic binding-policy trait or central manager is introduced.
 | Core `BindingLifetimeFootprint`, `BindingTransientFootprint`, `BindingStateLayout` | Keep constructors/getters. Their interpreted scope is fixed by the captured contract, not by an untagged footprint alone. Owned retained items count engine-held owners; retained bytes include full concrete backing above. Static size/alignment/drop checks stay. |
 | Core installed Consumer constructor/normal and late seals | Capture the admitted result-backing bound with the existing selected seal; check full backing as well as existing semantic validity before retention. Preserve recoverable raw construction, accepted-overrun owner and allocation-free seal installation. No raw installed-client escape or replacement envelope. |
 | Core `ResourceFailureDomain`, `ErrorContext` | Add the fixed enum `EngineCapacity`, `BindingPolicy`, `DeploymentFailure`; extend context with an optional resource-identity key/domain and effective local/parent `(SlotIndex, Generation)` coordinates. Add `with_resource_failure(identity, domain, local, parent) -> Self` and a getter returning the same optional fixed tuple. Existing contexts default to absent. Keep error categories/retry/first-cause rules and bounded private-policy cause keys; account the larger complete error/accepted-overrun envelope. |
-| Servient `ConsumerPropertyReadPolicy` | Existing `try_new` remains strict. Add `try_new_owned(contract, profile_origin: ResourceProfileId, ...existing try_new operands...) -> CoreResult<Self>`; reject `StrictV1` here. Expose `resource_contract`, `resource_identity`, `profile_origin` and borrowed `resource_limits`. Bind operation/cell/disposal/value identity, controlled registration/call/scratch bounds and complete result bounds. Provisioning verifies the matching registration contract/cell and that its result limits fit the policy before effects. Servient stamps fixed resource-failure context with this policy key. |
+| Servient `ConsumerPropertyReadPolicy` | Existing `try_new` remains strict. Add `try_new_owned(contract, profile_origin: ResourceProfileId, ...existing try_new operands...) -> CoreResult<Self>`; reject `StrictV1` here. Expose `resource_contract`, `resource_identity`, `profile_origin` and borrowed `resource_limits`. Compute `resource_identity` from all independent constructor operands under the complete-policy encoding above, including controlled registration/call/input/result/work/timeout/scratch settings. Provisioning verifies the matching registration contract/cell and that its result limits fit the policy before effects. Servient stamps fixed resource-failure context with this complete policy key. |
 | Servient Host/static roots, reads, calls, cleanup | Keep signatures, manual ownership, real parent bank and complete-object transfer. Interpret only an explicitly owned policy through the new rules. No async retirement API. |
 | TD / Planning public API | Unchanged; regenerate affected layout evidence if captured Core metadata changes size. Neither compiler support nor typed proof grants binding/runtime eligibility. |
 

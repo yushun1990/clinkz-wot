@@ -3,6 +3,7 @@ design_revision = "5.1"
 status = "candidate"
 operation = "consumer-property-read"
 typed_input_interpretation_revision = 2
+policy_identity_encoding = "complete-policy-v1"
 numeric_schema = "docs/resource-limits.csv"
 numeric_schema_sha256 = "4e163c08878efee9f64a3ea392695a2da93b9891c278932f4a68bcbb9568ce3a"
 field_count = 196
@@ -86,16 +87,56 @@ sha256 = "33080a029e9dcfc4c594066211cc5c9e57b408639dabbfb56d62fa127f0a44eb"
 column = "benchmark_static_reference_v1"
 sha256 = "0894a40c8b30e28b035ae9ab6e6a88f9268fbea9c6f6792e6d9ef53f93a698e9"
 
+[policy_identity_fixture]
+registration = [4, 4096]
+call = [8, 1280]
+input = [1, 64, 64, 64]
+result = [64, 32]
+work = [2, 2, 1, 1, 1, 1, 1]
+timeouts = [50, 5]
+scratch_bytes = 65536
+
 [[policy_identity_vector]]
+id = "std-strict"
 compilation_cell = "std"
 disposal_policy = "strict-local"
 profile_origin = 1
 value_column = "gateway_default_v1"
-sha256 = "37c1d68d3a3caefd5715ff4b91653327c51b484cb4ffa40db622db786e28a767"
+overrides = {}
+sha256 = "860ee2e2dddefee91fdd88e355dcc2ca45a0b29f542c0ce4b215246a25f00b73"
 
 [[policy_identity_vector]]
+id = "std-host"
 compilation_cell = "std"
 disposal_policy = "host-process-failure"
 profile_origin = 1
 value_column = "gateway_default_v1"
-sha256 = "d4df7f040e75338a24945624ab0543043fd41ff05f80925371a6d9b6caf8903e"
+overrides = {}
+sha256 = "c51a34a8c9945d4c551e31a484ea208021d463b03fef34ab411a23b1724614ef"
+
+[[policy_identity_vector]]
+id = "scratch-only"
+compilation_cell = "std"
+disposal_policy = "strict-local"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = { scratch_bytes = 131072 }
+sha256 = "7a1a9c27659dea7959de5f6e5875b3f9fe526af37e18afa13f1c4dba85c1401e"
+
+[[policy_identity_vector]]
+id = "result-only"
+compilation_cell = "std"
+disposal_policy = "strict-local"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = { result = [65, 32] }
+sha256 = "08f43279aee42671cb9685c7e807ecf81302cc8b9d3c8f743808f9ff6d522cf4"
+
+[[policy_identity_vector]]
+id = "timeout-only"
+compilation_cell = "std"
+disposal_policy = "strict-local"
+profile_origin = 1
+value_column = "gateway_default_v1"
+overrides = { timeouts = [51, 5] }
+sha256 = "de7c632500393402199644abf0de865c823626c55c2da123b643ebf2ea4fa682"
