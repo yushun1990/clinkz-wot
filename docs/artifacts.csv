@@ -8,8 +8,8 @@ docs/spec/interaction-core.md,interaction-core-specification,normative-specifica
 docs/spec/runtime-safety.md,runtime-safety-specification,normative-specification,5.1,1,docs/spec/runtime-safety.md
 docs/spec/planning.md,planning-specification,normative-specification,5.1,1,docs/spec/planning.md
 docs/spec/binding-spi.md,binding-spi-specification,normative-specification,5.1,1,docs/spec/binding-spi.md
-docs/spec/consumer-resource-ownership.md,consumer-resource-migration-candidate,normative-migration-plan,5.1,1,docs/spec/foundation.md
-docs/resource-contracts/consumer-ownership-v2.toml,consumer-resource-schema-candidate,normative-migration-plan,5.1,2,docs/spec/consumer-resource-ownership.md
+docs/spec/consumer-resource-ownership.md,consumer-resource-migration,normative-migration-plan,5.1,1,docs/spec/foundation.md
+docs/resource-contracts/consumer-ownership-v2.toml,consumer-resource-schema,normative-migration-plan,5.1,2,docs/spec/consumer-resource-ownership.md
 docs/spec/v5-authority-reset.toml,current-authority-map,normative-migration-plan,5.1,1,docs/design.md
 docs/ADRs,accepted-decision-set,normative-decision,5.1,1,docs/design.md
 docs/amendments,active-normative-amendments,normative-amendment,5.1,1,docs/design.md
@@ -47,4 +47,4 @@ docs/work-packages/WP-300-consumer-only-registration-admission.md,consumer-only-
 docs/work-packages/WP-200-consumer-output-ownership-admission.md,consumer-output-ownership-admission-candidate,normative-migration-plan,5.1,1,docs/design.md
 docs/work-packages/WP-300-consumer-host-call-construction-admission.md,consumer-host-call-construction-admission-candidate,normative-migration-plan,5.1,1,docs/design.md
 docs/work-packages/WP-400-consumer-property-read-runtime-admission.md,consumer-property-read-runtime-admission-candidate,normative-migration-plan,5.1,1,docs/design.md
-docs/work-packages/WP-400-consumer-resource-ownership-admission.md,consumer-resource-readmission-candidate,normative-migration-plan,5.1,1,docs/spec/consumer-resource-ownership.md
+docs/work-packages/WP-400-consumer-resource-ownership-admission.md,consumer-resource-readmission,normative-migration-plan,5.1,1,docs/spec/consumer-resource-ownership.md

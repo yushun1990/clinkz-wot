@@ -176,12 +176,13 @@ remains independent.
 
 [ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) selects a
 successor resource/disposal target. The current contract below remains active
-until explicit migration/readmission; existing finite mock evidence is preserved.
+for strict registrations; existing finite mock evidence is preserved.
 
-The pending [Consumer resource migration](../spec/consumer-resource-ownership.md)
+The accepted [Consumer resource migration](../spec/consumer-resource-ownership.md)
 and [successor readmission](../work-packages/WP-400-consumer-resource-ownership-admission.md)
-define that bounded candidate. They preserve original-account lifetime and funded
-engine fallback; they do not yet change this active final-root contract.
+define that admitted boundary. They preserve original-account lifetime and funded
+engine fallback; the scoped SDK-local disposal refinement applies only to the
+explicitly owned successor.
 
 The tranche requires final-root abandonment to commit residual/incomplete
 shutdown to a caller-retained fixed report before bounded local destruction.

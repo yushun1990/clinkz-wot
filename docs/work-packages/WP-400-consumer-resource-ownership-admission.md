@@ -1,18 +1,20 @@
-# Consumer resource ownership readmission candidate
+# Consumer resource ownership readmission
 
 `index.toml` owns the state of `WP-400-CONSUMER-RESOURCE-OWNERSHIP`. This is a
-planned ADR-0013 candidate, with no independent acceptance or implementation
-permission. It proposes the smallest cross-package successor to the accepted
-strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
+separate ADR-0013 admission of the smallest cross-package successor to the
+accepted strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
 and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
 semantics and row/API/diagnostic changes. Production code and existing evidence
 records are unchanged.
 
-Independent acceptance must cover the exact candidate diff, executable prechecks
-and all intersecting findings. A separate recorded admission transition then
-freezes this boundary before any production change. Completion review is another
-independent decision after the new source/evidence exists. This candidate grants
-no HTTP admission and supplies no successor accounting measurements.
+The [accepted PR #180 review](https://github.com/yushun1990/clinkz-wot/pull/180#pullrequestreview-5530769829)
+covers candidate `a7d4692fa1bdb4227213ed1940c5ba3976107867` against base
+`7d3dfb84a2b9b5385027acbc58684dead01721d7`, with no remaining blocking findings.
+Merged master `c145cb94ab65ea43725569675877ba836d5d9b70` has the same tree as
+that reviewed candidate. This documentation-only transition records admission
+of that boundary before production changes; implementation remains `planned`.
+Completion review is another independent decision after the new source/evidence
+exists. HTTP admission and successor accounting measurements remain separate.
 
 ## Reconstructed baseline and impact
 
@@ -36,8 +38,11 @@ The Consumer gate was independently accepted at
 ([PR #171 review](https://github.com/yushun1990/clinkz-wot/pull/171#pullrequestreview-5514507904)).
 Use the original evidence files for their exact measurements and exclusions.
 Their states remain complete/admitted/current and passed for the strict path.
-The successor is separately registered; it cannot borrow their admission to edit
-strict source, or substitute controlled prototypes for production completion.
+Admission verification confirms all ten predecessor tranches in the transitive
+closure are complete/admitted/current with passed registered evidence, and
+WP-000 is complete. The successor uses its own admission to edit only the
+registered scope; controlled prototypes cannot substitute for production
+completion.
 
 | Existing evidence / owner | Disposition now and on successor implementation |
 | --- | --- |
@@ -49,12 +54,12 @@ strict source, or substitute controlled prototypes for production completion.
 | Strict schema/profile and old resource traces | Historical quantitative truth remains. Schema 2 resource deltas, identity and live/peak/largest/callback/terminal allocation results are new evidence. Compare semantic owners/leases, not equal SDK bytes. |
 | PR #178 and retained Zenoh owner probes | Keep version/configuration observations. Allocating Host disposal alone would no longer disqualify; blocking destruction, lost original tasks, surviving callbacks and uncontrolled ingress still do. No SDK is qualified here. |
 
-The pending scope intersects no unresolved decision in topics 0076/0081/0082:
+The admitted scope intersects no unresolved decision in topics 0076/0081/0082:
 package extraction, reusable execution-data/Thing identity and subscription
 ownership remain outside this one-shot change. Topic 0083's retirement findings
 are retained exclusions; this tranche supplies no Zenoh repair. Topic 0047's
 broad authoring projection remains deferred. A new intersecting counterexample
-stops source work under ADR-0013 rather than expanding this candidate implicitly.
+stops source work under ADR-0013 rather than expanding this scope implicitly.
 
 ## Exact source/readmission boundary
 
@@ -63,8 +68,8 @@ or Runtime accounting, apply ADR-0013 impact review to the affected completed
 tranches and their transitive evidence before treating them as current for that
 new revision. Mark intersecting records `review-required` until independent
 reaffirmation with new measurements, or reopen them if their original contract
-is falsified. The unchanged strict baseline is not reopened by this candidate.
-The pending successor may not leave old measurements labelled current for new
+is falsified. The unchanged strict baseline is not reopened by this admission.
+The admitted successor may not leave old measurements labelled current for new
 Layouts, nor overwrite them as if their schema interpretation had changed.
 
 One successor tranche spans the necessary Core and Servient edits; splitting a
@@ -92,8 +97,8 @@ It needs no new fixture crate, SDK, allocator framework, global gate or process.
 
 ## Prechecks and completion evidence
 
-Run the registered prechecks against the candidate. Schema checks pin all 196
-old rows and their values; verify the exact 20-row overlay, known/disjoint row
+Run the registered prechecks at admission and for affected changes. Schema
+checks pin all 196 old rows and their values; verify the exact 20-row overlay, known/disjoint row
 membership, supported cells and unchanged complement. Controlled cases must
 distinguish complete policy identities when only a non-schema constructor
 operand changes; equal ResourceLimits cannot substitute for that complete key.
@@ -153,10 +158,10 @@ No latency, hard RAM, allocator-metadata or whole-device claim follows here.
 
 ## Remaining blocks
 
-Production migration is blocked on independent acceptance and its recorded
-admission. Successor completion is blocked on new production evidence above.
+Production migration is admitted only within the registered scope above.
+Successor completion is blocked on new production evidence above.
 HTTP Consumer admission then consumes that accepted shared boundary and matching
 predecessors; HTTP method/response metadata eligibility, SDK selection/pinning,
 real peers and input/overload/cancellation/disposal qualification remain in its
 own tranche. Producer HTTP, HTTPS/security, embedded production, broad WP-100/
-200/300/400/600 closure and ObserveProperty remain outside this candidate.
+200/300/400/600 closure and ObserveProperty remain outside this admission.
