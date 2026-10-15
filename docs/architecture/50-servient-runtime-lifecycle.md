@@ -186,11 +186,14 @@ This obligation must also be checked against the concrete protocol infrastructur
 behind a registration. Semantic call/generation reclamation does not certify
 SDK session/task/callback retirement. The
 [Binding SPI](../spec/binding-spi.md#shared-protocol-infrastructure-lifetime)
-owns the original-account and final-owner contract; the
-[Host Zenoh decision](../work-packages/WP-600-host-zenoh-owner-decision.md)
-records an SDK resource/retirement prerequisite before complete-owner
-qualification. It grants no Runtime lifecycle extension; the SDK failures alone
-do not establish a shared Runtime defect.
+owns the original-account and final-owner contract. Foundation owns the
+[Host failure scope](../spec/foundation.md#host-allocation-and-environment-failure-scope)
+under ADR-0022. The application-provided reactor remains live through dependent
+owner cleanup; stopping it is not a shutdown acknowledgement. A complete HTTP
+connection owner is qualified in its WP-600 tranche. Deferred Zenoh findings
+remain evidence for that future backend, not a shared Runtime prerequisite.
+No asynchronous registration-retirement API is added; a concrete capture defect
+must be demonstrated before correcting that boundary.
 The admitted finite mock Runtime remains accepted; installing raw blocking SDK
 destruction or unaccounted detached cleanup would exceed its author boundary.
 

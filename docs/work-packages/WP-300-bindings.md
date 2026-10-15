@@ -17,7 +17,7 @@ binding-owned subscription progress, binding-local publication slots, and bounde
 progress without adding a concrete protocol or a Servient scheduler.
 
 This package defines and tests the execution SPI consumed by Servient and protocol packages.
-WP-400 owns expose/destroy orchestration and registries; WP-600 owns zenoh and zenoh-pico
+WP-400 owns expose/destroy orchestration and registries; WP-600 owns production HTTP and deferred Zenoh/pico
 implementations. No protocol-specific route, transport, or authentication semantics enter core.
 
 The narrow Property Read binding surface uses the exact mock-binding boundary
@@ -598,12 +598,13 @@ contributor metadata; a bare trait object is never the configuration contract.
   publish without `ProducerEmission`, bounded subscriber/binding results, and explicit overflow
   accounting. Retain only the named migration adapters needed by existing WP-400 and WP-600
   callers. WP-400 removes `PushFn` and the `SubscriptionSender` handler path after host activation;
-  WP-600 removes `PublisherSink` after both concrete backends migrate; WP-700 verifies that none
-  is public or referenced.
+  WP-600 removes `PublisherSink` from admitted production protocol paths;
+  deferred legacy Zenoh users must be excluded or retired from the v1 release
+  surface under ADR-0022. WP-700 verifies final releasable absence.
 - Remove the core-owned queue `Subscription`, `SubscriptionGuard`, `SubscriptionSender`,
   `EventStream`, `Subscription::merge`, `EventBroker`, and `EventName` routing key. The staged
-  concrete `PublisherSink` call sites must migrate through WP-600 and are absent from the final
-  target surface.
+  concrete `PublisherSink` call sites migrate through WP-600 or are explicitly
+  excluded with deferred experimental code. They are absent from the final target surface.
 - Remove binding vectors embedded in consumed Things and bare trait objects as the stored
 - Remove independently installable `ServerBindingRegistration`, `ClientBindingRegistration`,
   `StaticServerBindingRegistration`, `StaticClientBindingRegistration`,

@@ -101,6 +101,50 @@ allocation category. Semantic owner counts and reservations remain comparable
 across profiles; Host allocation/queue costs and constrained
 slot/layout/code-size costs are separately bounded physical evidence.
 
+### Host allocation and environment failure scope
+
+ADR-0022 distinguishes admission capacity from allocator availability. A ledger
+reservation authorizes bounded retained work; it does not commit OS pages or
+guarantee that an arbitrary library allocation succeeds. The following scope
+refines `RES-LIMIT-001`/`RES-LIMIT-002` and `ADMIT-MEM-001` without changing byte
+units, resource rows, defaults or the typed-input interpretation revision 2.
+
+Engine-controlled admission, publication and cleanup retain their existing
+recoverable/prebacked construction obligations, including Core's complete call
+envelope and the raw call constructor. Ordinary capacity exhaustion rejects with
+the defined structured outcome and preserves accepted owners. The Host protocol
+implementation may use an SDK's ordinary infallible allocator during owned I/O
+progress, provided its supported input/concurrency/configuration envelope has
+source-backed finite storage bounds, admitted attributable lifetime/transient
+capacity and executable limit tests. Universal recovery from SDK allocator OOM
+is no longer an eligibility requirement. Numeric declarations alone are still
+neither physical backing nor evidence of those bounds.
+
+Attributable SDK buffers, connection/task/queue storage and growth remain in the
+binding's charged envelope, including state allocated before application callbacks.
+An SDK byte estimate must name its source/configuration assumptions, actual
+capacities, transient overlap and evidence; observed peaks alone do not prove a
+maximum. Application-provided runtime/thread stacks, allocator overhead and OS
+socket buffers are separately declared deployment baseline costs with explicit
+configuration/limits where applicable. They cannot conceal per-call or
+externally driven retained growth. A process memory cap is containment, not a
+substitute for admission, byte limits or original-owner accounting.
+
+Process-wide OOM, abort, OS kill and loss of the supplied runtime are environment
+failures. No structured return, retained in-memory report, cleanup completion or
+remote-effect recovery is promised after process termination. While the process
+and required runtime remain live, network/protocol errors, cancellation, supported
+allocation failure and saturation must follow the existing ownership, first-cause,
+cleanup/residual and child-before-parent release contracts. Environment failure
+must never be relabeled successful shutdown or used to release a surviving
+infrastructure owner's capacity. Deployment supervision, restart and external
+reconciliation are outside Foundation.
+
+This Host policy does not relax caller-owned constrained storage, admitted
+allocation-sensitive paths or a stronger supported allocator claim. Embedded
+network/allocator/reset behavior needs its own target evidence; neither `std`
+nor `no_std` selects a failure-isolation or whole-device fit guarantee.
+
 `RES-LIMIT-001`: Every public ingestion and runtime-construction surface MUST
 accept or inherit a resource policy before processing externally influenced
 variable-size state. `docs/resource-limits.csv` is the single exhaustive field

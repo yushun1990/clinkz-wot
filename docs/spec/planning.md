@@ -106,6 +106,17 @@ policy MUST remain visible in immutable diagnostics.
 
 ## Scope and invariants
 
+For a concrete binding, omitted protocol-significant form facts must never be
+interpreted as defaults merely because the current compiler input lacks them.
+TD lends bounded immutable facts; Planning preserves the facts or their paid
+eligibility proof needed for the registration's declared support envelope.
+The binding compiler interprets protocol vocabulary without raw TD access or
+execution-time rescan. ADR-0022's first HTTP entry rejects form extensions and
+response overrides through the minimum support projection; it does not silently
+ignore an explicit method/header/response instruction. Exact API and source
+changes require that tranche's ADR-0013 admission. Existing mock evidence has
+no HTTP-vocabulary interpretation claim and remains accepted within its scope.
+
 Planning starts from a TD-owned validated semantic view or produced-Thing draft
 plus immutable policy and registration snapshots. For the first Consumer
 aggregate, TD supplies paid short semantic loans from its opaque validated

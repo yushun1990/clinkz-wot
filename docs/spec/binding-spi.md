@@ -57,7 +57,10 @@ active, or committed route guard, readiness token, subscription driver, constrai
 response/cancellation buffer, protocol-reactor queue, and ingress buffer MUST
 declare an immutable maximum lifetime footprint before admission. Temporary
 poll memory and external-input item/byte growth MUST be separately bounded at
-per-route, per-binding, per-Thing where applicable, and global scopes.
+per-route, per-binding, per-Thing where applicable, and global scopes. Host SDK
+allocation eligibility and deployment baseline costs follow Foundation's
+[Host failure scope](foundation.md#host-allocation-and-environment-failure-scope);
+SDK storage is not excluded from these bounds.
 
 `BIND-DELIVERY-001`: Response and emission delivery MUST preserve the complete
 owned input and its response or publication opportunity on every failure before
@@ -353,18 +356,19 @@ The public maturity ladder is explicit:
 3. the real-target Zenoh probe supplies authoring and network-lifecycle
    feedback against one protocol family without claiming WP-600 progress;
 4. the Property Read architecture gate proves mock cross-package composition;
-5. WP-600 proves production execution for the Zenoh family; and
+5. WP-600 proves the selected Host HTTP production capabilities under ADR-0022; and
 6. WP-700 release review may claim stable cross-profile or protocol-neutral
    maturity only for the capability and protocol-shape evidence actually
    registered.
 
-Zenoh and zenoh-pico exercise different runtime representations of one
-protocol family. They are strong cross-profile evidence but do not by
-themselves prove protocol-shape neutrality. Before a release claim uses
+Zenoh and zenoh-pico are different runtime representations of one protocol
+family; real backend parity remains unproved and deferred. HTTP production
+likewise cannot by itself prove protocol-shape neutrality. Before a release claim uses
 “protocol-neutral” as an empirical compatibility claim, one independently
 authored conformance fixture with materially different route, correlation,
 response, or cancellation shape must pass, or the claim remains limited to
-protocol-independent source ownership plus Zenoh-family operation.
+protocol-independent source ownership plus the actual executed HTTP capabilities.
+The historical Zenoh Producer probe remains narrower contrasting evidence.
 
 Both complete registration representations expose the same keyed capability
 operations:
@@ -1963,12 +1967,28 @@ including loss of that worker's final owner. Thread detachment or a Session clon
 does not establish this. The current Consumer Runtime has no asynchronous
 registration-retirement hook; support for any delegated owner must be qualified
 against its actual captured registration and account lifecycle, or require a
-scoped contract correction before implementation admission. The
-[WP-600 decision](../work-packages/WP-600-host-zenoh-owner-decision.md)
-owns the concrete SDK prerequisite and subsequent complete-owner qualification,
-not a new shared API. Moving infallible SDK allocation to a worker does not
-provide recoverable or prebacked storage, and a configured receive pool or
-fragment-size limit is not by itself a complete physical input/byte contract.
+scoped contract correction before implementation admission.
+
+Host SDK allocation eligibility is defined by Foundation's
+[failure scope](foundation.md#host-allocation-and-environment-failure-scope).
+Moving an allocation to a worker supplies neither backing nor isolation; a
+configured receive pool or fragment-size setting supplies no all-input byte
+proof. Ordinary infallible SDK allocation during owned progress is permitted
+within the admitted finite envelope, with process OOM explicitly a deployment
+failure. This does not permit blocking/allocating final-root destruction, hidden
+jobs, unbounded input, or premature retirement/account release. The retained
+[Zenoh findings](../work-packages/WP-600-host-zenoh-owner-decision.md) are deferred
+backend evidence; they impose no SDK-repair prerequisite on other bindings.
+
+The application-provided I/O runtime is a distinct physical owner. Construction
+must declare its required services and lifetime. Keep it live through explicit
+drain/shutdown and disposal of dependent calls/routes. Dropping an async delivery
+view or stopping an executor is not terminal protocol acknowledgement. Runtime
+loss is an environment failure; unresolved work dependent on that runtime must
+remain incomplete/residual in any still-observable shutdown report. A binding
+that needs independent surviving work must qualify the complete owner and original
+charges under the same rules above.
+No universal thread, worker, session or registration-retirement API is implied.
 
 Zero never means unbounded. A disabled capability cannot be started. A
 declaration or actual footprint overrun is a binding contract violation and is

@@ -94,8 +94,15 @@ the engine SPI and its bounded records.
 
 - A Rust crate is the compile-time extension unit.
 - A complete binding registration is the startup composition unit.
-- A Servient instance is the runtime ownership and failure-isolation unit.
+- A Servient instance is the runtime ownership and ordinary error-containment unit.
 - A process, container, or firmware image is the v1 rollout unit.
+
+A Servient is not a memory-protection or process-crash boundary. Host process
+OOM/abort/kill, runtime availability, OS limits and restart belong to deployment;
+in-process admission and protocol retirement retain their explicit guarantees.
+[ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org)
+selects Host HTTP/1.1 plus HTTPS as the first production direction, and separates
+portable semantic support from real embedded protocol/hardware qualification.
 
 Binding registration is distinct from dynamic code loading. Multiple binding
 instances may be linked into one binary, but one Servient's registration set is

@@ -24,6 +24,17 @@ resource_interpretation_revision = 2
 typed_document_byte_oracle = "typed-content-v1"
 wire_document_byte_oracle = "consumed-UTF8-JSON-bytes"
 
+# Host binding eligibility refinement; no requirement activation, API, resource
+# schema/default, typed-byte interpretation or implementation admission change.
+[host_binding_environment]
+decision = "docs/ADRs/0022-first-production-binding-and-runtime-environments.org"
+allocation_contract = "docs/spec/foundation.md#host-allocation-and-environment-failure-scope"
+protocol_ownership_contract = "docs/spec/binding-spi.md#shared-protocol-infrastructure-lifetime"
+failure_scope_revision = 1
+sdk_allocator_oom = "process-environment-failure"
+controlled_constructor_recovery = "preserved"
+attributable_sdk_storage_bounds = "required"
+
 [classification.indispensable]
 authority_status = "active"
 expected_count = 41

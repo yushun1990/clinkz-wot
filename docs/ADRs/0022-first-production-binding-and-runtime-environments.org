@@ -1,0 +1,200 @@
+#+title: ADR-0022: First Production Binding and Runtime Environments
+#+date: 2026-10-15
+#+status: Accepted
+
+* Decision and review boundary
+
+Select *Host HTTP/1.1* as the first production Protocol Binding, using Hyper's
+explicit connection API and application-provided Tokio I/O. HTTPS is required
+for the production release envelope; the first admitted vertical slice may use
+explicitly configured local cleartext TCP. Keep Zenoh and zenoh-pico as deferred
+optional bindings. Their SDK qualification is no longer a v1 dependency.
+
+This ADR and its projections are one proposed architecture change for independent
+review. It grants no implementation admission, gate acceptance or production
+qualification. ADR-0013 remains the implementation boundary.
+
+Keep one protocol-independent semantic program and the existing package graph.
+Host and embedded deployments may use different storage, progress, protocol
+backends and failure mechanisms. A portable API or matching mock trace does not
+qualify an embedded network stack, firmware image or hardware deployment.
+
+Correct the Host failure contract: recoverable engine admission and bounded
+protocol ownership do not promise recovery from every allocation failure inside
+a third-party SDK, process abort or OS termination. Foundation owns the exact
+allocation/failure scope; Binding SPI owns attributable protocol bounds and
+retirement. This is an explicit relaxation of universal SDK allocation recovery,
+not permission for unbounded SDK state or detached cleanup.
+
+* Reconstructed evidence
+
+The decision starts from fetched master
+=6b3e478359e59ce21af233e38cc8337679d2d9a1=. The Producer and Consumer Property
+Read gates have passed independent acceptance; all ten Consumer predecessors
+are complete/current. Their mocks prove the shared publication, selection,
+sealing, generation and cleanup topology. They do not qualify any network SDK.
+
+The existing Zenoh client still uses legacy TD/Form execution and synchronous
+transport calls. The target Producer probe authors its binding in a test and
+uses raw SDK Consumer queries. Pico has platform hooks and fake-hook tests,
+not real C-backend or firmware qualification. These are useful evidence with
+different boundaries, not three interchangeable production implementations.
+
+The findings and independent reviews of
+[[https://github.com/yushun1990/clinkz-wot/pull/174][PR #174]],
+[[https://github.com/yushun1990/clinkz-wot/pull/175][PR #175]] and
+[[https://github.com/yushun1990/clinkz-wot/pull/176][PR #176]] remain valid:
+
+- Reply completion does not retire Zenoh 1.9.0's query timer. K submission
+  credits retained until whole-session retirement can bound this tail; an
+  individually observable query join is not universally necessary.
+- Worker submission and even closed-session final destruction can allocate
+  infallibly. Controlled allocation failure aborts the process. A worker or
+  numeric reservation does not create recoverable allocator backing.
+- The tested receive settings are a fragmentation limit and recycling pool,
+  not the assumed all-message or retained-byte limit.
+- An abandoned or timed-out original close can leave callbacks alive after a
+  successful retry and final Session Drop. Flags and retry success are not
+  physical retirement barriers.
+
+The measurements are scoped discriminators, not universal heap ceilings or a
+proof that all Zenoh configurations grow without bound. Under the corrected
+Host failure contract the allocator abort alone no longer disqualifies an SDK.
+The input-bound, blocking-destructor, final-owner and retirement findings still
+prevent installing the current backend. Nothing here qualifies Zenoh by fiat.
+
+Topic 0076 correctly distinguishes independently useful TD tooling, Consumer,
+Producer, gateway and firmware capabilities. Its original mandatory-server
+construction obstacle has already been corrected by complete Consumer-only
+registrations; its output/call ownership findings have completed successors.
+Core still depends on TD, and the legacy umbrella still couples capabilities.
+Those facts justify later measured removal/feature work, not an immediate
+Contracts crate, generated image format or second planner.
+
+* Alternative comparison
+
+The product needs interoperable TD-directed reads from previously unknown
+Things, a useful Producer service, and observable lifecycle/failure behavior.
+No repository evidence establishes a mandatory broker, constrained radio,
+industrial fieldbus or Zenoh deployment. The Owner has lowered Zenoh priority.
+The following judgments compare implementation shape and integration value;
+they are not comparative throughput or whole-device memory measurements.
+
+| Candidate | Implementations and useful fit | Cost and disposition |
+|-----------+--------------------------------+----------------------|
+| HTTP/1.1 and HTTPS | Hyper supplies explicit client/server connection futures; Tokio supplies I/O; rustls is the preferred TLS implementation family. TD 1.1 defines HTTP usage and the binding vocabulary maps Property Read to GET. Independent HTTP peers and ordinary service tooling can exercise both roles without a broker. | Selected. Direct one-shot ownership is the smallest contrasting production path. Header/body/connection limits, TLS, malformed framing, cancellation and local destruction still need exact-version evidence. HTTP/2, pooling, redirects, decompression and automatic retries are unnecessary for entry. |
+| CoAP | =coap-lite= supplies portable message handling; =coap-rs= supplies a Tokio client/server; embedded =coap-handler=/=coap-message= implementations are credible alternatives. Observe and constrained datagrams fit firmware products. | Strong future embedded candidate. Message parsing is not a complete stack: retransmissions, duplicate detection, blockwise state, observation and DTLS/OSCORE ownership remain integration work. No current hardware product or qualified backend makes that cost preferable for the first Host read. Do not select it merely because =no_std= is available. |
+| MQTT 5 | =rumqttc= supplies a client/event-loop split with bounded request channels and protocol inflight controls. Useful for brokered telemetry and subscriptions. | Deferred. Property Read needs a declared request/reply or retained-state convention, response topics/correlation, broker deployment, reconnect/session and stale-message policy. A broker acknowledgement is not a WoT read result. These are useful costs when the product requires broker topology, not the smallest present integration. |
+| Zenoh / pico | Existing Rust backend, real Producer probe and a promising query/pubsub model. | Preserve optional future work and all negative/positive evidence. Existing code is migration cost evidence, not sufficient eligibility. SDK repair or process isolation should serve an actual Zenoh deployment rather than hold up v1. |
+| WebSocket, custom TCP, Modbus, OPC UA or another specialized binding | Can offer useful persistent streams or industrial integration when a deployment requires them. | No evidenced first-product requirement outweighs additional message/correlation conventions or ecosystem adaptation. A custom wire protocol would weaken the interoperability demonstration and add maintenance. |
+
+Using a high-level reqwest client would be reasonable for a conventional HTTP
+application. Here its connector, pool and background lifetime would add owners
+to qualify before the one-call proof. Select Hyper's low-level connection API
+for this boundary. Do not write an HTTP parser, custom TLS, universal reactor
+or compatibility facade. Exact dependency versions/features are chosen and
+locked by the HTTP admission candidate; inspected upstream APIs are evidence
+of a practical route, not an already qualified dependency lock.
+
+* Runtime and deployment allocation
+
+The semantic guarantees remain selection before execution, immutable artifacts,
+private Core result seals, generation-safe leases, first-cause cancellation,
+retained late results, permit-gated Producer dispatch, bounded admission and
+complete-object cleanup or truthful residual. They apply in a live supported
+environment. They do not provide remote rollback, exactly-once remote effects,
+crash persistence, hard real-time preemption or process isolation.
+
+Host uses explicit dynamically bounded engine owners and a declared concrete
+transport/runtime envelope. Normal saturation, supported allocation rejection,
+network failure and cancellation retain their structured outcomes. Process OOM,
+abort, runtime destruction or OS kill cannot be reported as an in-process
+cleanup completion. The deployment owns process memory/CPU/FD limits, monitoring,
+restart, credential provisioning and reconciliation after uncertain remote
+effects. OS limits contain failure; they neither prove a binding byte bound nor
+restore lost engine reports. Use process isolation only when an actual deployment
+requires survival of a library failure; it is not the default binding topology.
+
+Embedded uses caller-owned typed slots, explicit platform progress and a
+separately qualified network/security backend. Preserve static admission,
+generation and resource semantics. HAL/RTOS scheduling, networking, watchdog,
+allocator policy and reset recovery belong to the firmware integration. Existing
+portable/ARM compile and mock runtime evidence remains required; real embedded
+production and cross-profile protocol parity require their own executed backend
+and hardware evidence, independently of Host HTTP delivery.
+
+Do not make every application construct every role, Directory or an engine
+executor. Dynamic typed-TD admission remains useful on Host. Fixed firmware may
+use the existing static construction boundary; prepared images are a separate
+trust/validation design if later justified. Native protocol firmware plus a
+correct generated/hosted TD remains a valid product alternative. No extraction,
+runtime crate split or broad public facade rewrite is selected here.
+
+* Production sequence and falsifiable boundary
+
+The smallest implementation-admission target is
+[[file:../work-packages/WP-600-http-property-read-target.md][one Host HTTP Consumer Property Read tranche]]:
+one complete Consumer registration, one eager consumed generation, one call/result
+opportunity, two distinguishable selected property targets and repeated reads
+after terminal release. It uses the existing public Runtime and Core seal.
+Real independent HTTP peers test failure and over-limit input; raw peer tests
+are completion evidence for this Consumer tranche, not a production Producer.
+
+One concrete predecessor gap is already visible: =ValidatedPropertyReadForm=
+and =LogicalInteractionPlan=/=BindingCompilerInput= expose target/media/subprotocol
+facts but do not expose =Form::_extra_fields= or response overrides to a binding
+compiler. Silently executing GET despite =htv:methodName= would be incorrect.
+Select conservative rejection of nonempty form extensions and response overrides
+for entry. The HTTP admission must include the minimum paid TD eligibility fact
+and protocol-neutral support projection needed to enforce that restriction before
+compilation/execution. Do not scan raw TD from a binding, create an HTTP branch
+in shared semantics, or introduce a general extension object model merely for this
+slice. Explicit HTTP vocabulary support is a later additive capability.
+
+Next add the production HTTP Producer route/permit/response loop and connect
+both public roles. Qualify HTTPS and its explicit trust/security configuration
+before production release. Keep connection ownership simple initially: no pool,
+no detached connection driver and no implicit retry. A call owns its connection
+future and socket until local release; registration destruction must remain
+finite local disposal. A demonstrated inability to compose that owner warrants
+only the smallest affected SPI correction through ADR-0013, not a speculative
+shutdown API first.
+
+One-shot expansion follows exact shared capability tranches. The existing
+minimal ObserveProperty domain-entry/proof obligation remains before broad
+subscription/emission expansion; HTTP SSE is a credible later mapping, not
+authority to implement streaming now. Unsupported operation/security/profile
+cells must reject explicitly. HTTP alone is not general protocol neutrality;
+contrasting Zenoh Producer evidence remains narrower historical evidence.
+
+* Authority and existing evidence impact
+
+| Owner/work package | Disposition |
+|--------------------+-------------|
+| Foundation / WP-000, WP-100 | Add the explicit Host failure scope without changing resource units, 196 rows/defaults, linear budgets, typed admission interpretation revision 2 or controlled-allocation recovery. HTTP admission must add the narrow paid TD metadata-eligibility fact. Completed evidence remains current for its original owners. |
+| Planning / WP-200 | Preserve borrowed TD semantics, all-bounds barrier, compiler/output ownership and exact admitted artifacts. HTTP admission closes the narrow form-metadata eligibility projection; no second selector or TD replay. Revalidate affected lending/compiler carriers when implemented. |
+| Binding / WP-300 | Preserve call construction recovery, Core preallocated envelopes, seals, guards, permits and complete-object settlement. Refine SDK allocation eligibility and require the minimum compiler support input for HTTP's restricted form envelope; do not extend mock evidence to real libraries. |
+| Servient / WP-400 | Preserve finite manual Runtime, original accounts, child-before-parent release and final residual report. An external runtime is an explicit deployment dependency. No async registration-retirement API is added. |
+| Discovery / WP-500 | Client-only boundary and Core/TD dependency unchanged; HTTP binding does not silently implement Directory APIs or bounded JSON ingestion. |
+| Protocol production / WP-600 | Required production envelope becomes Host HTTP, with HTTPS/security before release. Zenoh/pico scope and qualification history are deferred optional input. No existing production tranche is invalidated: none was admitted. |
+| Aggregation / WP-700 and PLAN | Remove Zenoh/pico qualification from release dependencies. Retire or exclude their legacy public execution paths from the v1 release surface; deferral cannot preserve a target-to-legacy bypass. Keep optional source and historical fixtures as explicitly experimental evidence. Report Host, portable and hardware maturity separately. |
+| Passed gates, evidence TOML, performance/state/API projections | Reaffirm unchanged within their exact mock/controlled-owner/feature scopes. No gate/tranche status, trace, API, schema/default, workload identity or production code changes. Future HTTP evidence must name this failure scope and actual dependency/configuration envelope. |
+
+The rejected assumption is that protocol-independent correctness requires every
+third-party Host allocation and every environment failure to be recoverable by
+the engine. The useful guarantee is bounded, honest ownership with defined
+failure boundaries. The Zenoh probes warrant that correction without erasing
+their lifecycle or physical-input counterexamples.
+
+* Primary implementation and protocol references
+
+Inspected 2026-10-15; development binding notes supplement rather than replace
+the project's TD 1.1 baseline. No performance or production-readiness claim is
+inferred from a library's documentation.
+
+- [[https://www.w3.org/TR/2023/NOTE-wot-binding-templates-20230928/][W3C Binding Templates, 2023 Note]] and [[https://w3c.github.io/wot-binding-templates/bindings/protocols/http/][HTTP binding development note]].
+- [[https://www.w3.org/TR/wot-thing-description11/#http-binding-assertions][TD 1.1 HTTP binding assertions]], [[https://github.com/rustls/rustls][rustls upstream]] and [[https://docs.rs/coap-handler/latest/coap_handler/][coap-handler API]].
+- [[https://docs.rs/hyper/latest/hyper/client/conn/http1/index.html][Hyper HTTP/1 client connection API]] and [[https://docs.rs/hyper/latest/hyper/server/conn/http1/struct.Builder.html][server connection limits]] (inspected documentation identifies Hyper 1.12.0).
+- [[https://docs.rs/http-body-util/latest/http_body_util/struct.Limited.html][http-body-util Limited]]: limits yielded body bytes; it does not certify underlying read, TLS or decoder allocation peaks.
+- [[https://docs.rs/rumqttc/0.25.1/rumqttc/v5/struct.EventLoop.html][rumqttc 0.25.1 MQTT 5 EventLoop]], [[https://docs.rs/coap-lite/0.13.3/coap_lite/][coap-lite 0.13.3]] and [[https://github.com/Covertness/coap-rs][coap-rs upstream]].
+- [[https://doc.rust-lang.org/std/alloc/fn.handle_alloc_error.html][Rust allocation-error behavior]] and the pinned Zenoh source/reproductions linked by the retained WP-600 qualification history.

@@ -140,6 +140,14 @@ reusable operation slots that avoid per-interaction allocation. Every claimed
 allocation-sensitive path is measured separately. Generation-safe pools apply
 backpressure on exhaustion and MUST NOT fall back to unbounded allocation.
 
+Host correctness assumes the declared I/O runtime remains live through dependent
+owner disposal. Foundation's [Host allocation/failure scope](foundation.md#host-allocation-and-environment-failure-scope)
+distinguishes recoverable engine admission from process/environment failure;
+Binding SPI owns retained protocol work and final destruction. This does not
+change `HANDLE-DROP-001`, Core call backing, static slots or the accepted finite
+mock Runtime. No host environment failure becomes successful cleanup, and no
+portable compile cell supplies hardware or allocator-recovery evidence.
+
 `STATE-EXPOSE-001`: Exposure progresses through private preparation, readiness,
 activation, committed-closed, publication, serving, draining, and terminal
 cleanup states. Publication and cancellation share one linearization boundary.
