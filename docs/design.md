@@ -151,6 +151,14 @@ bounded protocol storage, final ownership and truthful retirement. Portable
 static evidence remains required without making a real embedded backend a Host
 release dependency. No package graph, API, state, resource-row/default or gate
 status changes through this decision.
+
+[ADR-0023](ADRs/0023-resource-ownership-and-policy-boundaries.org) subsequently
+selects ownership-scoped resource admission as a staged target. Current strict
+byte/destructor contracts and the schema keep their existing meaning until
+explicit migration/readmission; no source or gate status changes here. Concrete
+HTTP SDK selection/qualification moves to Binding implementation after that
+shared contract boundary is settled.
+
 None of this activates an inactive requirement: each Consumer, runtime,
 streaming/emission, Directory, codec/validation/security, or advanced-planning
 identity still requires its own domain-entry disposition before it can authorize

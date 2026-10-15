@@ -30,6 +30,7 @@ they do not claim that the current implementation already conforms.
 - [[file:0020-strict-json-value-decoding.org][ADR-0020: Strict JSON Value Decoding]]
 - [[file:0021-borrowed-consumer-td-admission.org][ADR-0021: Borrowed Consumer TD Admission]]
 - [[file:0022-first-production-binding-and-runtime-environments.org][ADR-0022: First Production Binding and Runtime Environments]]
+- [[file:0023-resource-ownership-and-policy-boundaries.org][ADR-0023: Resource Ownership and Policy Boundaries]]
 
 * Review record
 

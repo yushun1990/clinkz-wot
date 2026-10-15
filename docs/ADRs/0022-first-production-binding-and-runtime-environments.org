@@ -2,6 +2,17 @@
 #+date: 2026-10-15
 #+status: Accepted
 
+* Subsequent ownership reassessment
+
+[[file:0023-resource-ownership-and-policy-boundaries.org][ADR-0023]] retains this
+decision's first HTTP protocol and separate embedded/release scope, but
+supersedes its architectural choice of Hyper/Tokio/rustls. Concrete SDK
+selection/qualification belongs to HTTP Binding implementation. It also selects
+a staged correction to SDK accounting and Host disposal policy. The strict
+Foundation/Binding/Runtime contracts below remain implementation authority until
+explicit schema/contract migration and readmission; they are not silently relaxed.
+The original rationale below is retained for that review.
+
 * Decision and review boundary
 
 Select *Host HTTP/1.1* as the first production Protocol Binding, using Hyper's

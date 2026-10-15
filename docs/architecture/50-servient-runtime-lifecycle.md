@@ -174,6 +174,10 @@ typed root and associated-state slot directly. This projection adds no worker,
 executor, call pool or lower-layer contract change; implementation acceptance
 remains independent.
 
+[ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) selects a
+successor resource/disposal target. The current contract below remains active
+until explicit migration/readmission; existing finite mock evidence is preserved.
+
 The tranche requires final-root abandonment to commit residual/incomplete
 shutdown to a caller-retained fixed report before bounded local destruction.
 It then uses the original Planning reclaimer and a single prepaid finite terminal

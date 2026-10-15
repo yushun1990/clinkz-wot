@@ -103,6 +103,12 @@ slot/layout/code-size costs are separately bounded physical evidence.
 
 ### Host allocation and environment failure scope
 
+[ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) selects a
+successor ownership boundary. This section, the current schema and existing
+reservations retain their strict meaning until its explicit contract/schema
+migration. No existing byte field or footprint may yet exclude previously
+charged SDK state. The ADR owns the target and evidence dispositions.
+
 ADR-0022 distinguishes admission capacity from allocator availability. A ledger
 reservation authorizes bounded retained work; it does not commit OS pages or
 guarantee that an arbitrary library allocation succeeds. The following scope

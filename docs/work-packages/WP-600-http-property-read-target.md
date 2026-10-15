@@ -1,13 +1,23 @@
 # Host HTTP Consumer Property Read: implementation-admission target
 
-This record identifies the smallest next ADR-0013 candidate under
-[ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org).
+This record identifies the prospective HTTP ADR-0013 candidate under
+[ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org)
+and [ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org).
 It is **not registered or admitted** in `index.toml`; it permits no production
-change. The candidate must supply its exact declarations, dependency lock,
-prechecks and independent admission review before implementation.
+change. The candidate must supply its shared contract, exact source/dependency
+edit scope, prechecks and independent admission review before implementation.
+Concrete HTTP SDK selection, dependency lock and qualification are implementation
+evidence, not a predecessor SDK qualification package.
 The prospective tranche identity is `WP-600-HTTP-CONSUMER-PROPERTY-READ`.
 
 ## Scope and predecessors
+
+First close ADR-0023's resource ownership contract/schema migration and the
+applicable Consumer readmission boundary. Current strict footprint/destructor
+contracts remain binding until that explicit migration; this target cannot
+waive them. Use controlled owners to settle the shared boundary. Do not require
+Hyper qualification or its proposed dependency disposal repair as the shared
+architecture's predecessor. SDK evidence is collected during HTTP implementation.
 
 One complete Host Consumer-only registration, one eager consumed generation and
 one active call/result opportunity through `ConsumerPropertyReadRuntime`.
@@ -41,44 +51,47 @@ when admitted creation supplies its manifest. No placeholder crate is needed now
   TD/Core/Planning source paths must be named in admission, including unchanged
   compiler/all-bounds/rollback regressions. No raw-TD callback, hidden validation
   promise from the application or binding-specific branch in shared Planning.
-- Hyper low-level client connection plus Tokio socket/timer readiness. The
-  application supplies the running reactor and drives the manual Runtime.
-  No engine-owned executor, `tokio::spawn` connection driver, pool, redirect,
-  compression, HTTP/2, retry or reconnect loop. A fresh connection per read is
-  deliberately acceptable for this first bounded envelope; optimize only from
-  later measured need.
+- Choose the concrete client and readiness runtime during implementation. The
+  application supplies required runtime services and drives the manual Runtime.
+  A direct call-owned connection is the smallest entry topology. No engine-owned
+  executor, detached driver, pool, redirect, compression, HTTP/2, retry or
+  reconnect loop is required. A fresh connection per read is acceptable; any
+  additional owner needs bounded lifetime/retirement evidence.
 - The returned call owns the request, socket/connection and response progress.
   Constructor rejection returns the unchanged request; network work begins only
   after accepted ownership, on poll. Core and raw call construction keep their
   recoverable backing. No allocation after raw acceptance is introduced into
   Core's envelope/seal installation.
-- Pin and audit the actual client/parser versions. Set explicit header count,
-  header/read-buffer, body/trailer and connection limits; charge actual buffer
-  capacities and old/new overlap. Bound pre-body receive state and per-poll work
-  as well as delivered bytes. A single `Limited` wrapper is insufficient proof.
-  Keep complete protocol futures inside the call; do not build a detached owner
-  to compensate for missing evidence.
+- During implementation, pin/audit the selected client/parser and configure
+  header count, header/read-buffer, body/trailer and connection limits. Distinguish
+  engine-admitted carrier/handoff capacity, binding-controlled buffers and
+  deployment costs under the migrated contract. Bound pre-body receive state
+  and per-poll work as well as delivered bytes. A body-size wrapper alone proves
+  no physical receive maximum. Keep complete protocol futures owned; a detached
+  owner is not evidence of retirement.
 - Network error, deadline, cancellation and invalid/oversized output retain the
   original call/lease until local socket/future release, then report the exact
   settlement. Socket closure certifies local resource release, not whether a
   remote read executed. Retain first cause and late-result sealing. Registration
-  and last-root destruction must fit the Runtime's finite local disposal contract.
+  and last-root destruction must fit the explicitly migrated finite local
+  disposal contract; allocation-free engine status/handoff remains required.
 
-The candidate may use minimal disposable public-Hyper discriminators for poll,
-buffer and Drop feasibility. These are pre-code checks, not another qualification
-work package or architecture gate. If the selected API demonstrably cannot satisfy
-one boundary, record the smallest reproducer and correct only that boundary.
+Concrete SDK poll/buffer/Drop discriminators belong to Binding implementation.
+Preserve existing observations without promoting them into universal SDK
+eligibility rules. If implementation demonstrates a conflict with the migrated
+boundary, retain the smallest reproducer and reopen only that boundary.
 
 ## Admission and completion distinction
 
-Before admission, close the exact supported compiler/registration/input envelope,
-source-backed limits and work/destructor declarations, dependency/features and
-engine/deployment accounting split. Name the existing public APIs used and any
-minimum TD/compiler support projection; do not invent a generic lifecycle family.
+Before admission, close the migrated shared compiler/registration/input and
+resource/ownership envelope, source/dependency edit scope and applicable
+work/destructor guarantees. Name existing public APIs and the minimum TD/compiler
+support projection; do not invent a generic lifecycle family. Selection and
+qualification of the SDK/configuration/lock follow during implementation.
 Specify exact test commands and requirement/evidence mappings in the registered
-candidate. Run authority checks, relevant Core/compiler/Runtime and portable
-regressions, plus any small dependency feasibility probes that can run before
-production exists. Do not demand a completed production adapter as a precheck.
+candidate. Run authority checks and relevant Core/compiler/Runtime and portable
+regressions. Prechecks require neither a completed production adapter nor
+advance concrete SDK qualification.
 
 Production completion must then demonstrate:
 
@@ -93,12 +106,15 @@ Production completion must then demonstrate:
    the new paid eligibility fact survives all-bounds checks and cannot be bypassed.
 3. Caller cancel/drop, deadline/result races, invalid normal/late success and
    accepted errors through Core seals, drain/root loss and repeated final reuse.
-   Check actual connection/future destruction, finite local Drop and truthful
-   residual reporting without allocation, blocking joins or replacement work.
-4. Actual retained/transient/peak/largest allocations, configured SDK envelope,
-   baseline reactor/OS costs and original-account release. Fault injection covers
-   supported engine/raw-constructor recovery. An intentionally terminated SDK OOM
-   child, if used, establishes only the declared process-failure boundary.
+   Check actual connection/future destruction, finite nonblocking local Drop,
+   truthful residual reporting and allocation-free engine status/handoff.
+   Any SDK disposal allocation follows the migrated Host policy and measured
+   finite local work; no blocking joins or replacement work.
+4. Actual retained/transient/peak/largest allocations with ownership scope,
+   configured SDK limits, declared uncertainty, baseline reactor/OS costs and
+   original-account release. Measurements are not universal physical maxima.
+   Fault injection covers supported engine/raw-constructor recovery. A terminated
+   SDK OOM child, if used, establishes only the declared process-failure boundary.
 5. Relevant unchanged Consumer/Producer public regressions, portable Core/Planning/
    Servient cells, dependency neutrality and applicable performance identities.
 

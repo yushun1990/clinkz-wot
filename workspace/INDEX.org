@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0085-resource-ownership-and-policy-question.md][0085 Resource Ownership and Policy Question]]
+
 - [[file:0079-consumer-runtime-entry-constructibility.md][0079 Consumer Runtime Entry Constructibility]]
 
 - [[file:0078-consumer-aggregate-capacity-handoff.md][0078 Consumer Aggregate Capacity Handoff]]
