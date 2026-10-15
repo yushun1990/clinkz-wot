@@ -7,8 +7,13 @@ Status: DISCUSSING
 The admitted `WP-400-CONSUMER-RESOURCE-OWNERSHIP` contract cannot currently carry
 its required binding configuration through the closed Consumer compiler without
 crossing its explicit implementation boundary. Production changes stop here
-under ADR-0013. This is a bounded configuration conflict, not evidence against
-ADR-0023's ownership model or a reason to add a precursor tranche.
+under ADR-0013. The
+[Plan/program reassessment](0081-reusable-plan-and-thing-identity.md#reassessment-against-the-owned-configuration-finding)
+compares this conflict with the broader compiler-input, artifact-identity and
+physical-ownership couplings. It selects a narrow contract/admission repair
+before any shared-program redesign, subject to its explicit evolution
+constraints. This is a sequencing proposal, not approval of a configuration
+API/encoding or permission to resume production work.
 
 The reconstruction baseline is
 `959f27b93a9a880740fe6851563471096b24c10b`. The
