@@ -537,4 +537,3 @@ exit_code = 0
 source_ref = "d4bde22f9276ad2d94bbd9d455277a6d99223e94"
 command = "git diff --check"
 exit_code = 0
-
