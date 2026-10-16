@@ -114,7 +114,12 @@ impl OwnedPolicy {
         let mut key = [0; 32];
         key[..16].copy_from_slice(b"fixture-owned-v1");
         key[16] = mode as u8;
-        key[17] = allocating_disposal as u8;
+        let disposal = match contract {
+            BindingResourceContract::StrictV1 => 0,
+            BindingResourceContract::ConsumerOwnedV2 => 1,
+            BindingResourceContract::ConsumerOwnedHostV2 => 2,
+        };
+        key[17] = (disposal << 1) | allocating_disposal as u8;
         key[18..26].copy_from_slice(&pool.limit().to_le_bytes());
         key[26..].copy_from_slice(&[64, 8, 1, 8, 0, 1]);
         let configuration = ConsumerBindingConfiguration::try_new(
