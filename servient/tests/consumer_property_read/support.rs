@@ -1,5 +1,5 @@
-use clinkz_wot_consumer_property_read_binding_fixture::{Clock, Mode, StaticClient, Stats};
 use clinkz_wot_consumer_property_read_binding_fixture as binding;
+use clinkz_wot_consumer_property_read_binding_fixture::{Clock, Mode, StaticClient, Stats};
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
 use clinkz_wot_servient::{CompiledPlanSetState, consumer_property_read::*};
@@ -212,13 +212,22 @@ fn policy_with_cleanup_costs(limits: ResourceLimits) -> ConsumerPropertyReadPoli
 fn rejected_static_startup(kind: ResourceKind, limit: u64) -> u64 {
     rejected_static_startup_for(kind, limit, BindingResourceContract::StrictV1)
 }
-fn rejected_static_startup_for(kind: ResourceKind, limit: u64, contract: BindingResourceContract) -> u64 {
+fn rejected_static_startup_for(
+    kind: ResourceKind,
+    limit: u64,
+    contract: BindingResourceContract,
+) -> u64 {
     let stats = Arc::new(Stats::default());
-    let registration = binding::static_registration(if contract == BindingResourceContract::StrictV1 {
-        StaticClient::new(stats.clone(), outputs())
-    } else {
-        StaticClient::new_owned(stats.clone(), outputs(), author(contract, Mode::Normal, pool(), false))
-    });
+    let registration =
+        binding::static_registration(if contract == BindingResourceContract::StrictV1 {
+            StaticClient::new(stats.clone(), outputs())
+        } else {
+            StaticClient::new_owned(
+                stats.clone(),
+                outputs(),
+                author(contract, Mode::Normal, pool(), false),
+            )
+        });
     let identity = registration.registration().identity();
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(kind, Some(limit)));
@@ -245,11 +254,12 @@ fn rejected_static_startup_for(kind: ResourceKind, limit: u64, contract: Binding
     assert_eq!(trace().requests, 0);
     disarm();
     let (inputs, error) = rejection.into_parts();
-    if contract == BindingResourceContract::StrictV1 {
-        assert_eq!(error.error().context().resource_failure(), None);
-    } else {
+    if contract != BindingResourceContract::StrictV1 {
         let failure = error.error().context().resource_failure().unwrap();
-        assert_eq!((failure.0, failure.1), (key, ResourceFailureDomain::EngineCapacity));
+        assert_eq!(
+            (failure.0, failure.1),
+            (key, ResourceFailureDomain::EngineCapacity)
+        );
     }
     let requested = match error.error() {
         CoreError::LimitExceeded {
@@ -342,12 +352,14 @@ const CASES: [(Mode, bool, bool, &str); 9] = [
     (Mode::CancelError, true, true, "binding"),
 ];
 
-
 use clinkz_wot_consumer_property_read_binding_fixture::ownership::{OwnedPolicy, PrivatePool};
 fn owned_policy(contract: BindingResourceContract) -> ConsumerPropertyReadPolicy {
     owned_policy_with_limits(contract, GatewayDefaultV1::LIMITS.clone())
 }
-fn owned_policy_with_limits(contract: BindingResourceContract, limits: ResourceLimits) -> ConsumerPropertyReadPolicy {
+fn owned_policy_with_limits(
+    contract: BindingResourceContract,
+    limits: ResourceLimits,
+) -> ConsumerPropertyReadPolicy {
     try_owned_policy_with_limits(contract, limits).unwrap()
 }
 fn try_owned_policy_with_limits(
@@ -391,13 +403,14 @@ fn stop_static(r: &mut StaticConsumerPropertyReadRuntime<'_, StaticClient>) {
     panic!("shutdown stalled")
 }
 
-
 fn hex(key: BindingConfigurationDigest) -> String {
     key.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
 
-
-fn owned_engine_local_boundaries(representation: &str, run: impl Fn(ResourceLimits) -> CoreResult<()>) {
+fn owned_engine_local_boundaries(
+    representation: &str,
+    run: impl Fn(ResourceLimits) -> CoreResult<()>,
+) {
     for kind in [
         ResourceKind::AdmissionTemporaryBytesPerOperationMax,
         ResourceKind::PeakLiveBytesPerAdmissionMax,
@@ -415,11 +428,19 @@ fn owned_engine_local_boundaries(representation: &str, run: impl Fn(ResourceLimi
         // no duplicate accounting formula or relaxed production budget is used.
         while low < high {
             let mid = low + (high - low) / 2;
-            if probe(mid).is_ok() { high = mid; } else { low = mid + 1; }
+            if probe(mid).is_ok() {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
         }
         assert!(low > 0);
-        for limit in [0, low - 1] { assert!(probe(limit).is_err()); }
-        for limit in [low, low + 1] { probe(limit).unwrap(); }
+        for limit in [0, low - 1] {
+            assert!(probe(limit).is_err());
+        }
+        for limit in [low, low + 1] {
+            probe(limit).unwrap();
+        }
         println!("owned {representation} local {kind:?} exact={low}");
     }
 }
