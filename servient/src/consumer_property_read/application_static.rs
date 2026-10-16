@@ -546,7 +546,10 @@ where
             return Ok(None);
         }
         self.acknowledge()?;
-        let result = self.result.take();
+        let result = self
+            .result
+            .take()
+            .map(|result| result.map_err(|error| self.policy.result_error(error)));
         drop(self.call_charge.take());
         self.kernel.acknowledge();
         Ok(result)

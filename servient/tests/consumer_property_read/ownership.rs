@@ -994,7 +994,8 @@ mod host_owned {
         for mode in [Mode::Normal, Mode::LateStart, Mode::LatePoll] {
             for kind in 0..3 {
                 let (r, o, parent, _, stats) = setup(mode, false, excessive(kind));
-                let key = owned_policy(BindingResourceContract::ConsumerOwnedV2).resource_identity();
+                let key =
+                    owned_policy(BindingResourceContract::ConsumerOwnedV2).resource_identity();
                 let h = build(&r);
                 let mut c = h
                     .read_property("a-read", InteractionOptions::new(), &mut work(100000))

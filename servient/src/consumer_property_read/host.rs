@@ -1095,7 +1095,10 @@ impl ConsumerPropertyReadCall {
         let driver = checkout.driver.as_mut().unwrap();
         let mut call = take_call(driver).expect("terminal whole call");
         root.get().finish_transfer(&call);
-        let result = call.result.take();
+        let result = call
+            .result
+            .take()
+            .map(|result| result.map_err(|error| root.get().policy().result_error(error)));
         drop(call); // No structural lock around raw destruction or release.
         let mut c = lock(&root.get().cell);
         c.kernel.acknowledge();

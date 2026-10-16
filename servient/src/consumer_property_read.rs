@@ -590,6 +590,18 @@ impl ConsumerPropertyReadPolicy {
     fn resource_error(&self, error: CoreError, domain: ResourceFailureDomain) -> CoreError {
         stamp_resource(error, self.identity, domain, None, None)
     }
+    fn result_error(&self, error: CoreError) -> CoreError {
+        // Core's owned result seal knows the backing bound and selected call,
+        // while this Runtime owns the complete engine policy. Enrich only that
+        // refusal; preserve strict errors and any binding-private context.
+        if self.contract != BindingResourceContract::StrictV1
+            && matches!(&error, CoreError::Validation(c) if c.cause_code() == Some(327))
+        {
+            self.resource_error(error, ResourceFailureDomain::EngineCapacity)
+        } else {
+            error
+        }
+    }
     fn build_error(&self, error: CoreError) -> CoreError {
         if self.contract == BindingResourceContract::StrictV1 {
             return error;
