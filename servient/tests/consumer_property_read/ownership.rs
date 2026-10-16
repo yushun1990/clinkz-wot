@@ -657,6 +657,7 @@ fn owned_static_normal_and_both_late_seals_reject_full_result_backing() {
             let contract = BindingResourceContract::ConsumerOwnedV2;
             let stats = Arc::new(Stats::default());
             let policy = owned_policy(contract);
+            let key = policy.resource_identity();
             let parent = RefCell::new(policy.parent_accounts());
             let mut report = report_storage();
             let clock = Clock::default();
@@ -683,12 +684,24 @@ fn owned_static_normal_and_both_late_seals_reject_full_result_backing() {
             for _ in 0..4 {
                 r.step(&mut cx(), &mut work(100000));
             }
+            observe(usize::MAX);
             let error = r
                 .try_take(g, &mut work(100000))
                 .unwrap()
                 .unwrap()
                 .unwrap_err();
+            let delivery = trace();
+            disarm();
+            assert_eq!(delivery.requests, 0, "{mode:?}/{kind}");
+            assert!(matches!(error, CoreError::Validation(_)), "{mode:?}/{kind}");
             assert_eq!(error.context().cause_code(), Some(327), "{mode:?}/{kind}");
+            assert_eq!(error.context().phase(), ErrorPhase::Validate);
+            assert_eq!(error.context().retry_class(), RetryClass::Never);
+            assert_eq!(
+                error.context().resource_failure(),
+                Some((key, ResourceFailureDomain::EngineCapacity, None, None)),
+                "{mode:?}/{kind}"
+            );
             assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
             stop_static(&mut r);
             drop(r);
@@ -981,6 +994,7 @@ mod host_owned {
         for mode in [Mode::Normal, Mode::LateStart, Mode::LatePoll] {
             for kind in 0..3 {
                 let (r, o, parent, _, stats) = setup(mode, false, excessive(kind));
+                let key = owned_policy(BindingResourceContract::ConsumerOwnedV2).resource_identity();
                 let h = build(&r);
                 let mut c = h
                     .read_property("a-read", InteractionOptions::new(), &mut work(100000))
@@ -991,8 +1005,20 @@ mod host_owned {
                 for _ in 0..4 {
                     r.step(&mut cx(), &mut work(100000));
                 }
+                observe(usize::MAX);
                 let error = c.try_take(&mut work(100000)).unwrap().unwrap().unwrap_err();
+                let delivery = trace();
+                disarm();
+                assert_eq!(delivery.requests, 0, "{mode:?}/{kind}");
+                assert!(matches!(error, CoreError::Validation(_)), "{mode:?}/{kind}");
                 assert_eq!(error.context().cause_code(), Some(327));
+                assert_eq!(error.context().phase(), ErrorPhase::Validate);
+                assert_eq!(error.context().retry_class(), RetryClass::Never);
+                assert_eq!(
+                    error.context().resource_failure(),
+                    Some((key, ResourceFailureDomain::EngineCapacity, None, None)),
+                    "{mode:?}/{kind}"
+                );
                 assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
                 drop(c);
                 drop(h);
