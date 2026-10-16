@@ -4,8 +4,13 @@
 record of the separate ADR-0013 readmission of the cross-package
 successor to the accepted strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
 and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
-semantics and row/API/diagnostic changes. Production code and existing evidence
-records are unchanged.
+semantics and row/API/diagnostic changes. At readmission, production code and
+existing evidence records were unchanged.
+
+The implementation's production cell-matching counterexample and impact review
+are recorded in the [successor evidence](../evidence/WP-400-consumer-resource-ownership.toml).
+The historical readmission below does not authorize the additional public cell
+projection identified there; `index.toml` owns the resulting admission disposition.
 
 [Independent acceptance on PR #184](https://github.com/yushun1990/clinkz-wot/pull/184#pullrequestreview-5535199041)
 accepts the bounded configuration/API/scope amendment for readmission, with no
