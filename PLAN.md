@@ -81,10 +81,11 @@ advance the frontier safely.
 
 ## Critical Path
 
-1. Close [ADR-0023's resource ownership migration/readmission boundary](docs/ADRs/0023-resource-ownership-and-policy-boundaries.org)
-   for the narrow Consumer path, preserving engine admission and cleanup funding.
-   Then admit and complete the Host HTTP Consumer Property Read target under
-   ADR-0013, using the passed Consumer gate and matching completed predecessors.
+1. Complete [ADR-0023's admitted resource-ownership migration](docs/ADRs/0023-resource-ownership-and-policy-boundaries.org)
+   for the narrow Consumer path, preserving engine admission, cleanup funding,
+   and the successor's independent production-completion evidence. Then admit
+   and complete the Host HTTP Consumer Property Read target under ADR-0013,
+   using the passed Consumer gate and matching completed predecessors.
    Choose and qualify concrete HTTP SDKs during Binding implementation.
    The existing WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
 2. Add the production HTTP Producer route/permit/response path and public
@@ -103,6 +104,45 @@ advance the frontier safely.
 5. Join completed WP-400, WP-500, and WP-600 through WP-700 for final
    aggregation, absence, feature/conformance, and release evidence, then perform
    the v1 technical release review.
+
+## Architecture Evolution Checkpoints
+
+These checkpoints refine the critical path without adding admission gates,
+independent implementation tracks, or a second source of task/PR status.
+They are triggered by concrete integration or deployment evidence, not by
+calendar deadlines. Existing architecture authority and ADR-0013 change control
+still govern any ensuing source or contract changes. Reuse the evidence and
+open questions in [Review 07](docs/reviews/review-07-product-runtime-architecture.md)
+rather than restarting the same general review.
+
+- **After the admitted Consumer resource-ownership implementation completes:**
+  audit the existing architecture fixtures for independent falsification value,
+  direct production-contract coverage, and redundant parallel implementations.
+  Prefer a bounded review and focused retirement/consolidation only when proof
+  obligations remain covered. Preserve unique negative probes and regressions;
+  raw fixture LOC is not a sufficient reason for deletion. This audit may
+  proceed alongside HTTP admission and is not an extra HTTP predecessor unless
+  it finds a concrete intersecting defect.
+- **After a usable target Host HTTP Consumer Property Read path exists:**
+  examine the legacy/public facade versus the target call path, map old public
+  capabilities to tested replacements, and stage removal of superseded
+  selection, binding, and lifecycle paths. Do not claim migrated capabilities
+  based on test-local adapters or delete unmatched behavior without an explicit
+  disposition. Avoid a simultaneous workspace-wide crate rewrite.
+- **Before implementing a second one-shot operation family:** challenge the
+  risk of duplicating Property Read's carrier, generation, lease, settlement,
+  cancellation, and cleanup mechanisms. Use contrasting operation semantics
+  and actual production evidence to identify reusable lifecycle invariants
+  versus operation-specific effects. Preserve the distinct Host and embedded
+  storage/progress representations; do not preselect a universal OneShot
+  runtime based on one operation slice alone.
+- **When a concrete embedded firmware/device target is selected:** qualify
+  actual stack/SRAM/flash, atomics, allocator and protocol-backend behavior
+  against its application workload. Investigate a compact projection from the
+  single authoritative resource schema instead of mandating all policy fields
+  in every fixed firmware representation. Portable/no-std compilation is not
+  hardware-fit evidence, and this qualification is not a prerequisite for
+  the Host HTTP path.
 
 ## Milestone Overview
 
