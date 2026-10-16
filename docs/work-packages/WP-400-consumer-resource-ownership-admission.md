@@ -52,6 +52,31 @@ those records to current without independent reaffirmation, suppressing its P1
 negatives, or changing the authority checker would not resolve the obligation.
 This baseline admission does none of those things.
 
+### Candidate verification
+
+At exact candidate `72101391641ecfedbc9ed8e233e8b418ab2f874a`, all 16 commands in the successor's unchanged
+`pre_implementation_checks` pass, including the authority checker; the direct
+API/resource/ADR validators also pass (19 commands total). This uses Rust/Cargo
+1.99.0, locked/offline Cargo, disabled debug information/incremental compilation
+and the existing `/dev/shm/clinkz-wp400-owned-target` cache. Code/test/dependency
+blobs are identical to master; later evidence-only prose does not change those
+inputs. These are strict-baseline admission results, not #187 owned completion:
+
+| Existing check | Result |
+| --- | --- |
+| Configuration discriminator, std/no-default/async-no-std | 4/3/3 tests pass |
+| Controlled ownership candidate, same cells | 7/7/7 tests pass |
+| Foundation | 18 unit + 1 integration pass |
+| Core compiler support / Consumer binding | 14/28 pass |
+| Consumer Runtime, std | 47 integration + 1 library pass |
+| Consumer Runtime, portable cells | 22/22 pass |
+| Producer Runtime, std/portable cells | 11/4/4 pass |
+| Authority, API/resource/ADR and diff hygiene | Pass |
+
+The original P1 negatives and accepted P2 production regressions remain in #187
+at its separately reviewed revisions; none is removed, skipped or recast as a
+passing result by this baseline verification. Gate verdicts remain unchanged.
+
 ### Changed-source completion impact
 
 The existing impact table below remains binding for #187. Nine affected
