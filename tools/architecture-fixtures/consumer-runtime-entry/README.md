@@ -4,8 +4,13 @@
 production compiler and complete Consumer-only capture in the three compilation
 cells. It reproduces the
 [owned artifact configuration blocker](../../../workspace/0086-consumer-owned-artifact-configuration.md).
-Its positive strict controls and distinguishing-key rejection are boundary
-evidence, not schema-2 implementation or completion evidence.
+Its positive strict controls, distinguishing-key/paid-continuation rejection
+and one-owner/multiple-target content/identity counterexamples are boundary
+evidence, not schema-2 implementation or completion evidence. The
+[configuration amendment](../../../docs/spec/consumer-resource-ownership.md#closed-consumer-binding-configuration)
+and canonical vectors checked by `tools/check-resource-limits.sh` define the
+proposed owned path. These tests intentionally exercise current production;
+passing them grants no owned support or independent readmission.
 
 ## Runtime admission discriminators
 

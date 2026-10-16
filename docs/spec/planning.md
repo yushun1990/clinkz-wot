@@ -642,6 +642,13 @@ and `into_work`. `BindingArtifactIdentity` provides `const new` plus one
 accessor per field. `PlanSetGeneration` is a non-wrapping semantic wrapper over
 Foundation `Generation`; it is not interchangeable with a binding generation.
 
+The [scoped Consumer ownership configuration](consumer-resource-ownership.md#closed-consumer-binding-configuration)
+uses the same complete registration digest in native/Host compiler checks,
+candidates and artifact envelopes. Planning forwards it unchanged; no engine-
+policy key or translated capacity key substitutes. This eligibility identity is
+not a content-equivalence or storage-sharing key. The extension changes no
+Planning algorithm, public input, generation or all-bounds-before-start rule.
+
 The compiler input and ownership-bearing outcomes are exactly:
 
 ```rust

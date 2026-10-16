@@ -1,19 +1,32 @@
 # 0086 Consumer Owned Artifact Configuration
 
-Status: DISCUSSING
+Status: MIGRATED
 
-## Finding and boundary
+## Resolution and independent-review boundary
 
-The admitted `WP-400-CONSUMER-RESOURCE-OWNERSHIP` contract cannot currently carry
-its required binding configuration through the closed Consumer compiler without
-crossing its explicit implementation boundary. Production changes stop here
-under ADR-0013. The
-[Plan/program reassessment](0081-reusable-plan-and-thing-identity.md#reassessment-against-the-owned-configuration-finding)
-compares this conflict with the broader compiler-input, artifact-identity and
-physical-ownership couplings. It selects a narrow contract/admission repair
-before any shared-program redesign, subject to its explicit evolution
-constraints. This is a sequencing proposal, not approval of a configuration
-API/encoding or permission to resume production work.
+The narrow correction is projected into the
+[configuration/API owner](../docs/spec/consumer-resource-ownership.md#closed-consumer-binding-configuration),
+[canonical vectors](../docs/resource-contracts/consumer-ownership-v2.toml),
+[API ownership matrix](../docs/api-ownership.csv), and
+[revised admission/impact record](../docs/work-packages/WP-400-consumer-resource-ownership-admission.md).
+The existing resource validator checks the encoding; the production discriminator
+retains the strict rejection witness and adds continuation/content counterexamples.
+No production implementation changes in this amendment. Migration closes the
+missing-contract/scope finding, not the production obligation: the successor
+remains a readmission candidate until independent review of the exact amendment.
+
+The [0081 evolution constraints](0081-reusable-plan-and-thing-identity.md#constraints-on-the-narrow-repair)
+are explicitly reconciled in the admission record. That investigation remains
+DISCUSSING; shared programs, instance operands and persistence are not selected
+here. Binding eligibility is distinct from content and engine-policy identity,
+without requiring per-Thing compiler ownership or changing generation authority.
+
+## Original finding and boundary
+
+The following reconstructs why the original admission could not proceed. Its
+production evidence still describes the unchanged strict implementation; the
+previous exclusion of compiler configuration is corrected by the linked revised
+scope. Production remains stopped pending independent readmission.
 
 The reconstruction baseline is
 `959f27b93a9a880740fe6851563471096b24c10b`. The
@@ -82,7 +95,7 @@ contract checks alone cannot make the latter meet the accepted contract.
 | Choose another target capacity or binding ID/generation | Does not encode the required configuration. Target capacity is an actual compiler bound; binding ID/generation identify another owner, not the missing configuration operands. |
 | Use a custom compiler or ordinary Host erasure | Outside the closed supported compiler contract. Static capture requires the exact source-owned type; generic Host erasure deliberately supplies no Consumer support. See the existing compiler-support rejection cases. |
 | Translate configuration around each compiler call | Changes the compiler/artifact identity contract. Planning invokes the typed compiler directly, the cursor retains its candidate, and the public compiled output is immutable. This needs a reviewed projection, not a hidden Core/Servient workaround. |
-| Extend the closed compiler to capture the required immutable binding configuration | A plausible bounded repair in the same successor tranche, but it changes excluded source/API semantics. Define the exact constructor/configuration/support/artifact projection and revise admission before implementing it. No remedy is accepted by this investigation. |
+| Extend the closed compiler to capture the required immutable binding configuration | A plausible bounded repair in the same successor tranche, but it changes excluded source/API semantics. Define the exact constructor/configuration/support/artifact projection and revise admission before implementing it. The linked configuration contract now selects this extension for independent readmission review. |
 
 The falsifiable resolution boundary is one reviewed configuration projection
 that preserves StrictV1, distinguishes the required owned binding operands,
@@ -110,8 +123,8 @@ evidence is not relabelled as an owned measurement.
 | WP-400 Consumer runtime | Existing strict parent provenance, funded calls/cleanup and residual-first disposal remain valid. New schema-2 accounting/disposal remains unimplemented. |
 | Consumer/Producer gates and Foundation/portable dependents | Original verdicts remain scoped to strict source; there is no changed production layout requiring new measurements in this PR. A future shared layout change must put the affected completed records into impact review and reproduce transitive Consumer and applicable Producer evidence. ARM checks establish surface/layout only. |
 
-Only the successor's implementation admission returns to `candidate`; its
-implementation remains `planned`. No completed predecessor's original claim is
+At the finding revision, only the successor's implementation admission returned
+to `candidate`; its implementation remains `planned`. No completed predecessor's original claim is
 invalidated, so none is reopened or self-reaffirmed for a hypothetical changed
 layout. Neither architecture gate verdict nor milestone status changes.
 
@@ -119,7 +132,7 @@ layout. Neither architecture gate verdict nor milestone status changes.
 
 | Registered key | Outstanding production obligation |
 | --- | --- |
-| `consumer-owned-identity` | Blocked at binding/artifact configuration. This reproduction establishes that boundary; it does not pass the policy-key, contract/cell/role, limit, parent or exact-input matrix. |
+| `consumer-owned-identity` | The revised binding/artifact configuration is specified but unimplemented. This reproduction establishes the strict baseline; it does not pass the policy-key, contract/cell/role, limit, parent or exact-input matrix. |
 | `consumer-owned-handoff` | Owned normal/late complete backing checks and accepted-overrun retention are unimplemented; no owned result is measured. |
 | `consumer-owned-accounting` | No owned production provisioning/build/call/disposal exists to measure or fault-inject. Existing strict measurements remain strict. |
 | `consumer-owned-pressure` | Existing admission prototype is not production evidence for independent roots, private pressure, reuse or last-user retirement. |
@@ -128,4 +141,5 @@ layout. Neither architecture gate verdict nor milestone status changes.
 
 No successor completion TOML is manufactured from the prechecks or this
 discriminator. Verification results and exact tested revisions are reported at
-the GitHub review boundary; this topic owns the unresolved technical finding.
+the GitHub review boundary; the linked authorities own the correction and its independent readmission
+boundary.
