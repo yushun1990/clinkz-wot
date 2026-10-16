@@ -12,8 +12,8 @@ The narrow correction is projected into the
 The existing resource validator checks the encoding; the production discriminator
 retains the strict rejection witness and adds continuation/content counterexamples.
 No production implementation changes in this amendment. Migration closes the
-missing-contract/scope finding, not the production obligation: the successor
-remains a readmission candidate until independent review of the exact amendment.
+missing-contract/scope finding, not the production obligation. The linked
+admission record and index own independent acceptance and implementation permission.
 
 The [0081 evolution constraints](0081-reusable-plan-and-thing-identity.md#constraints-on-the-narrow-repair)
 are explicitly reconciled in the admission record. That investigation remains
@@ -26,7 +26,7 @@ without requiring per-Thing compiler ownership or changing generation authority.
 The following reconstructs why the original admission could not proceed. Its
 production evidence still describes the unchanged strict implementation; the
 previous exclusion of compiler configuration is corrected by the linked revised
-scope. Production remains stopped pending independent readmission.
+scope. The linked admission record owns the separate readmission transition.
 
 The reconstruction baseline is
 `959f27b93a9a880740fe6851563471096b24c10b`. The
