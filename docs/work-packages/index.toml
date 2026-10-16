@@ -859,7 +859,7 @@ id = "WP-400-CONSUMER-RESOURCE-OWNERSHIP"
 work_package = "WP-400"
 sequence = 420
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-400-CONSUMER-PROPERTY-READ-RUNTIME"]
 depends_on_packages = ["WP-000"]
@@ -903,7 +903,7 @@ api_items = [
 ]
 state_machines = ["compiled-plan-set", "in-flight"]
 resource_changes = [
-    "Accepted passive cell/support contract/API/source scope: captured singleton cell plus actual immutable support projection, compared with Servient before effects. Exact scope is accepted in PR #187 review 5544009375; this readmission candidate retains the unchanged strict predecessor baseline and separate changed-source completion impact review.",
+    "Accepted passive cell/support contract/API/source scope: captured singleton cell plus actual immutable support projection, compared with Servient before effects. Exact scope is accepted in PR #187 review 5544009375; this readmission retains the unchanged strict predecessor baseline and separate changed-source completion impact review.",
     "Closed Consumer compiler configuration amendment: strict capacity keys and payload format unchanged; owned keys derive from actual capacity/format/contract/cell/private policy/result bounds and match the captured complete client. Binding eligibility, engine policy, content and generation remain separate identities.",
     "Admitted ownership schema 2 over the pinned unchanged 196-row numeric table; typed-input interpretation remains 2. Exactly 20 Consumer byte rows change scope; no V1 profile or old footprint is implicitly converted.",
     "Engine carriers, full handoff backing, compiler artifacts/cursors, original accounts and prebacked cleanup stay funded. Private growth/refusal belongs to a concrete binding policy. Preserve conservative controlled scratch/cancellation/transfer reservations; shared private backing has one physical owner.",
@@ -944,7 +944,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test property_read",
     "git diff --check",
 ]
-admission_review = "github-pr:184#pullrequestreview-5535199041"
+admission_review = "github-pr:188#pullrequestreview-5544553359"
 completion_evidence_keys = [
     "consumer-owned-identity", "consumer-owned-handoff", "consumer-owned-accounting",
     "consumer-owned-pressure", "consumer-owned-disposal", "consumer-owned-regression",

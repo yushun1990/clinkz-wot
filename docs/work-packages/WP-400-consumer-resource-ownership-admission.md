@@ -7,9 +7,9 @@ and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
 semantics and row/API/diagnostic changes. Production code and existing evidence
 records are unchanged.
 
-## Compilation-cell readmission candidate
+## Compilation-cell readmission
 
-This documentation-only candidate records the already accepted
+This documentation-only readmission records the already accepted
 [cell/support contract and API scope](../spec/consumer-resource-ownership.md#compilation-cell-projection-amendment)
 on unchanged master `d4bde22f9276ad2d94bbd9d455277a6d99223e94`.
 [Review 5544009375](https://github.com/yushun1990/clinkz-wot/pull/187#pullrequestreview-5544009375)
@@ -21,25 +21,25 @@ The accepted signatures, early comparison, encodings, implementation paths,
 completion keys and budgets are unchanged. Only the two missing API targets and
 their existing specification/scope projections are added to this baseline.
 
-The remaining independent decision is **ADR-0013 readmission of that accepted
-scope against the unchanged strict predecessor baseline**. The successor remains
-`planned/candidate/current` until that decision is recorded. Its existing
-`admission_review` still names the historical PR #184 admission; it does not
-stand for acceptance of this candidate. Independent readmission acceptance must
-record its own exact revision/review and the admitted disposition before the
-expanded source work resumes. No implementation, predecessor or gate acceptance
-is claimed here.
+[Independent acceptance on PR #188](https://github.com/yushun1990/clinkz-wot/pull/188#pullrequestreview-5544553359)
+admits that expanded scope against the unchanged strict predecessor baseline at
+exact head `7ff29d56602a9de8be27b0eb74c576778044f562`, against base
+`d4bde22f9276ad2d94bbd9d455277a6d99223e94`, with no blocking findings.
+The successor is `planned/admitted/current`; its indexed `admission_review`
+records that independent decision. This grants bounded implementation authority,
+not acceptance of #187's implementation, changed-source predecessor
+reaffirmation, successor completion or any gate.
 
 ### Baseline and evidence reuse
 
 All ten transitive Consumer predecessors are still `complete/admitted/current`
 on the reconstruction baseline; WP-000 is complete. Their records, completion
-files and accepted verdicts are unchanged by this candidate. Production, test,
+files and accepted verdicts are unchanged by this readmission. Production, test,
 fixture and dependency files match both that master and PR #184's independently
 reviewed `1545d3b2329462d2620e73fe5bb00be66b9ebdae` byte for byte. Reuse those
 accepted strict contracts and source-specific evidence; do not reopen unchanged
 predecessors or reinterpret their quantitative results as owned measurements.
-The registered prechecks below are unchanged. Validation of this candidate is
+The registered prechecks below are unchanged. Validation of this readmission is
 recorded at the exact Git/GitHub review boundary; automatic CI is diff hygiene
 only.
 
@@ -52,7 +52,12 @@ those records to current without independent reaffirmation, suppressing its P1
 negatives, or changing the authority checker would not resolve the obligation.
 This baseline admission does none of those things.
 
-### Candidate verification
+### Admission verification
+
+The independent readmission review reran all 16 registered admission prechecks,
+the direct API/resource/ADR validators and diff hygiene at the exact reviewed
+head (20 commands total); all passed. The earlier author verification below is
+retained as strict-baseline evidence.
 
 At exact candidate `72101391641ecfedbc9ed8e233e8b418ab2f874a`, all 16 commands in the successor's unchanged
 `pre_implementation_checks` pass, including the authority checker; the direct
@@ -83,7 +88,7 @@ The existing impact table below remains binding for #187. Nine affected
 predecessors require their renewed exact-source semantic/layout/work/failure
 results and independent evidence reaffirmation with successor completion;
 borrowed TD and WP-000 stay unchanged. No original strict contract has been
-falsified, so no predecessor is reopened by this admission candidate. Keep the
+falsified, so no predecessor is reopened by this readmission. Keep the
 original completion files and gate verdicts intact. Use the existing successor
 six-category evidence owner for new measurements, not parallel predecessor
 reports or nine new admission/review cycles. Accepted API/P2 decisions remain
