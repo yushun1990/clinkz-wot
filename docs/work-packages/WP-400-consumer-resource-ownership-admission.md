@@ -1,20 +1,31 @@
 # Consumer resource ownership readmission
 
 `index.toml` owns the state of `WP-400-CONSUMER-RESOURCE-OWNERSHIP`. This is a
-record of the revised ADR-0013 readmission candidate for the cross-package
+record of the separate ADR-0013 readmission of the cross-package
 successor to the accepted strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
 and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
 semantics and row/API/diagnostic changes. Production code and existing evidence
 records are unchanged.
 
-Production implementation remains stopped pending independent acceptance of the
-correction to the [binding/compiler configuration conflict](../../workspace/0086-consumer-owned-artifact-configuration.md).
-The [configuration amendment](../spec/consumer-resource-ownership.md#closed-consumer-binding-configuration)
-now specifies the missing closed-compiler/API projection, actual-client
-correspondence and exact source/evidence scope. `planned/candidate/current`
-remains the disposition until independent review of this exact revised boundary.
-The original admission is historical evidence, not acceptance of the amendment.
-All six completion keys remain outstanding; no schema-2 production result is claimed.
+[Independent acceptance on PR #184](https://github.com/yushun1990/clinkz-wot/pull/184#pullrequestreview-5535199041)
+accepts the bounded configuration/API/scope amendment for readmission, with no
+blocking findings, at exact head `1545d3b2329462d2620e73fe5bb00be66b9ebdae`
+against base `2593392c00013d6f5d32a9c2205fa4a65ec75479`. That head and merged
+master commit `230144824537e53f982214042109d6e907e390cc` have the same tree
+`316260041d6237d92fd01918903b0e2a6005920a`.
+Required [exact-head validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38751610253)
+and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/runs/38837048086)
+passed; these CI checks cover diff hygiene only. The independent review records
+all 16 registered admission prechecks passing at the exact reviewed head.
+
+This documentation-only transition records admission of that accepted boundary;
+implementation remains `planned`. The
+[configuration amendment](../spec/consumer-resource-ownership.md#closed-consumer-binding-configuration)
+resolves the [binding/compiler configuration conflict](../../workspace/0086-consumer-owned-artifact-configuration.md)
+at the contract and source-scope boundary. It specifies the missing closed-compiler/API
+projection and actual-client correspondence; their production implementation and
+evidence remain required. All six completion keys remain outstanding; no schema-2
+production result is claimed.
 
 The [accepted PR #180 review](https://github.com/yushun1990/clinkz-wot/pull/180#pullrequestreview-5530769829)
 covers candidate `a7d4692fa1bdb4227213ed1940c5ba3976107867` against base
@@ -69,7 +80,8 @@ completion.
 
 Topic 0086's finding is migrated into the configuration owner, API matrix, scope
 and prechecks in this amendment. Its production reproduction stays as strict
-baseline evidence; migration is not implementation or admission acceptance.
+baseline evidence; readmission rests on the independent PR #184 acceptance above,
+not on migration or a production completion claim.
 Topic 0081 remains DISCUSSING and intersects the identity boundary. Its specific
 constraints are reconciled explicitly: the new key is registration eligibility,
 contains no engine quota, Thing/generation/endpoint/account/process identity,
@@ -102,7 +114,7 @@ cleanup would leave an unusable or unsafe intermediate contract. Keep strict
 constructors available for unaffected Consumer/Producer evidence. No compatibility
 shim that guesses a contract from equal numbers is permitted.
 
-Allowed production edits after revised admission: Core's closed Consumer compiler
+Permitted production edits: Core's closed Consumer compiler
 configuration, support descriptor/private Host adapter, passive client metadata,
 resource declarations/complete Consumer registration, captured normal/late result
 bounds and fixed diagnostics; Servient's checked policy, existing Host/static reservation/disposal paths and
@@ -206,14 +218,10 @@ No latency, hard RAM, allocator-metadata or whole-device claim follows here.
 
 ## Remaining blocks
 
-Recommendation: accept the revised bounded configuration/API/scope amendment
-for readmission after independent review of its exact revision. This resolves
+Production migration is admitted only within the registered scope above, following
+the exact-head independent acceptance on PR #184. The accepted amendment resolves
 0086 at the contract boundary and reconciles 0081 without requiring shared
-programs. The reviewer must reconstruct the contracts, exact diff and executable
-evidence independently and post findings as **GitHub PR review comments**.
-Only that independent acceptance may authorize the candidate's admission
-transition; the author does not resume production from passing prechecks.
-No new precursor tranche or global gate is required.
+programs. No new precursor tranche or global gate is required.
 Successor completion is blocked on new production evidence above.
 HTTP Consumer admission then consumes that accepted shared boundary and matching
 predecessors; HTTP method/response metadata eligibility, SDK selection/pinning,

@@ -859,7 +859,7 @@ id = "WP-400-CONSUMER-RESOURCE-OWNERSHIP"
 work_package = "WP-400"
 sequence = 420
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-400-CONSUMER-PROPERTY-READ-RUNTIME"]
 depends_on_packages = ["WP-000"]
@@ -941,7 +941,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test property_read",
     "git diff --check",
 ]
-admission_review = "pending-independent-review: revised 0086 configuration boundary; prior acceptance github-pr:180#pullrequestreview-5530769829 does not cover this amendment"
+admission_review = "github-pr:184#pullrequestreview-5535199041"
 completion_evidence_keys = [
     "consumer-owned-identity", "consumer-owned-handoff", "consumer-owned-accounting",
     "consumer-owned-pressure", "consumer-owned-disposal", "consumer-owned-regression",
