@@ -32,6 +32,7 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
+- [[file:0087-consumer-owned-compilation-cell-projection.md][0087 Consumer Owned Compilation Cell Projection]]
 - [[file:0081-reusable-plan-and-thing-identity.md][0081 Reusable Plan Semantics Versus Thing-Generation Ownership]]
 - [[file:0083-host-zenoh-consumer-query-ownership.md][0083 Host Zenoh Consumer Query Ownership — deferred optional binding]]
 - [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 Composable Capabilities and Runtime Boundaries]]
