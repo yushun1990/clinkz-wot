@@ -10,8 +10,9 @@ use std::any::Any;
 use clinkz_wot_foundation::{SlotIndex, WorkBudget, WorkClass};
 
 use crate::{
-    BindingCandidate, BindingConfigurationDigest, BindingGeneration, BindingId, CoreError,
-    CoreResult, LogicalInteractionPlan, PlanId, PlanSetGeneration, RouteReservationIdentity,
+    BindingCandidate, BindingConfigurationDigest, BindingGeneration, BindingId,
+    BindingResourceContract, CoreError, CoreResult, LogicalInteractionPlan, PlanId,
+    PlanSetGeneration, RouteReservationIdentity,
 };
 use crate::{ErrorContext, ErrorPhase, RetryClass};
 
@@ -447,6 +448,107 @@ pub(crate) const fn resolved_target_compatibility() -> BindingArtifactCompatibil
     RESOLVED_TARGET_COMPATIBILITY
 }
 
+/// Checked immutable eligibility of the closed Consumer compiler and client.
+///
+/// This metadata identifies configuration, not program content or a live lease.
+/// The private-policy key must describe the captured client's actual policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ConsumerBindingConfiguration {
+    contract: BindingResourceContract,
+    capacity: u8,
+    private_policy: BindingConfigurationDigest,
+    result: (u64, u64),
+    key: BindingConfigurationDigest,
+}
+
+impl ConsumerBindingConfiguration {
+    /// Checks the current compilation cell, capacity, and complete result backing.
+    /// Derivation performs fixed, allocation-free work without client callbacks.
+    pub fn try_new(
+        contract: BindingResourceContract,
+        target_capacity: usize,
+        private_policy: BindingConfigurationDigest,
+        body_bytes: u64,
+        media_capacity: u64,
+    ) -> CoreResult<Self> {
+        let error = || {
+            CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+                    .with_redacted_cause(326, "unsupported Consumer binding configuration"),
+            )
+        };
+        if contract == BindingResourceContract::StrictV1
+            || (contract == BindingResourceContract::ConsumerOwnedHostV2 && !cfg!(feature = "std"))
+            || !(1..=RESOLVED_TARGET_CAPACITY).contains(&target_capacity)
+            || crate::response::consumer_result_backing(body_bytes, media_capacity).is_none()
+        {
+            return Err(error());
+        }
+        let cell = if cfg!(feature = "std") {
+            2
+        } else if cfg!(feature = "async") {
+            1
+        } else {
+            0
+        };
+        let tag = match contract {
+            BindingResourceContract::ConsumerOwnedV2 => 1,
+            BindingResourceContract::ConsumerOwnedHostV2 => 2,
+            BindingResourceContract::StrictV1 => unreachable!(),
+        };
+        let key = BindingConfigurationDigest::new(
+            sha2_const_stable::Sha256::new()
+                .update(b"clinkz-consumer-binding-configuration-v1\0")
+                .update(&[tag, cell, target_capacity as u8])
+                .update(RESOLVED_TARGET_COMPATIBILITY.as_bytes())
+                .update(private_policy.as_bytes())
+                .update(&body_bytes.to_le_bytes())
+                .update(&media_capacity.to_le_bytes())
+                .finalize(),
+        );
+        // Exclude the entire strict namespace even in the event of collision.
+        if (1..=64).any(|capacity| key == strict_configuration(capacity)) {
+            return Err(error());
+        }
+        Ok(Self {
+            contract,
+            capacity: target_capacity as u8,
+            private_policy,
+            result: (body_bytes, media_capacity),
+            key,
+        })
+    }
+    /// Returns the explicitly selected resource and disposal contract.
+    pub const fn resource_contract(&self) -> BindingResourceContract {
+        self.contract
+    }
+    /// Returns the supported target capacity.
+    pub const fn target_capacity(&self) -> usize {
+        self.capacity as usize
+    }
+    /// Returns the actual client's private-policy identity.
+    pub const fn private_policy(&self) -> BindingConfigurationDigest {
+        self.private_policy
+    }
+    /// Returns maximum body bytes and capacity of each media String.
+    pub const fn result_limits(&self) -> (u64, u64) {
+        self.result
+    }
+    /// Returns the derived eligibility key, shared by compiler and artifacts.
+    pub const fn configuration(&self) -> BindingConfigurationDigest {
+        self.key
+    }
+}
+
+const fn strict_configuration(capacity: u8) -> BindingConfigurationDigest {
+    let mut bytes = [0; 32];
+    bytes[0] = 0x63;
+    bytes[1] = 0x74;
+    bytes[2] = 1;
+    bytes[3] = capacity;
+    BindingConfigurationDigest::new(bytes)
+}
+
 /// Closed, allocation-free copy of an already resolved Consumer target.
 ///
 /// The capacity is immutable and participates in the configuration digest.
@@ -454,6 +556,7 @@ pub(crate) const fn resolved_target_compatibility() -> BindingArtifactCompatibil
 #[derive(Debug)]
 pub struct ResolvedTargetCompiler {
     capacity: u8,
+    owned: Option<ConsumerBindingConfiguration>,
 }
 
 impl ResolvedTargetCompiler {
@@ -467,19 +570,24 @@ impl ResolvedTargetCompiler {
         }
         Ok(Self {
             capacity: capacity as u8,
+            owned: None,
         })
+    }
+
+    /// Constructs the same target-copy compiler from checked owned metadata.
+    pub const fn new_owned(configuration: ConsumerBindingConfiguration) -> Self {
+        Self {
+            capacity: configuration.capacity,
+            owned: Some(configuration),
+        }
     }
 
     /// Returns the digest of the actual private configuration and format version.
     pub const fn configuration(&self) -> BindingConfigurationDigest {
-        let mut bytes = [0; 32];
-        // This is an injective encoding of the closed configuration, not a hash
-        // of a caller-supplied assertion or protocol input.
-        bytes[0] = 0x63;
-        bytes[1] = 0x74;
-        bytes[2] = 1;
-        bytes[3] = self.capacity;
-        BindingConfigurationDigest::new(bytes)
+        match self.owned {
+            Some(configuration) => configuration.configuration(),
+            None => strict_configuration(self.capacity),
+        }
     }
 
     fn check(&self, input: &BindingCompilerInput<'_>) -> CoreResult<()> {
@@ -497,6 +605,7 @@ impl ResolvedTargetCompiler {
         ConsumerCompilerSupport {
             capacity: self.capacity,
             host_erased,
+            owned: self.owned,
         }
     }
 }
@@ -646,15 +755,18 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
 pub struct ConsumerCompilerSupport {
     capacity: u8,
     host_erased: bool,
+    owned: Option<ConsumerBindingConfiguration>,
 }
 
 impl ConsumerCompilerSupport {
-    #[cfg(feature = "std")]
     pub(crate) const fn configuration(&self) -> BindingConfigurationDigest {
-        ResolvedTargetCompiler {
-            capacity: self.capacity,
+        match self.owned {
+            Some(configuration) => configuration.configuration(),
+            None => strict_configuration(self.capacity),
         }
-        .configuration()
+    }
+    pub(crate) const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        self.owned
     }
     /// Returns the actual checked target capacity in bytes.
     pub const fn target_capacity(&self) -> usize {

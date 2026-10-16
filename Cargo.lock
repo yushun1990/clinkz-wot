@@ -341,6 +341,7 @@ dependencies = [
  "critical-section",
  "futures-core",
  "futures-util",
+ "sha2-const-stable",
  "tokio",
 ]
 

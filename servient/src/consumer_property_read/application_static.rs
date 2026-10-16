@@ -86,6 +86,7 @@ where
             false,
         );
         if let Err(e) = supported {
+            let e = policy.resource_error(e, ResourceFailureDomain::EngineCapacity);
             return Err(reject((registration, policy), e));
         }
         // The complete Core slot is resident even while vacant. Add only the
@@ -100,11 +101,7 @@ where
                 policy.call.retained_bytes() - state,
             )?;
             policy.check_binding_storage(false, bytes)?;
-            check(
-                &policy.limits,
-                K::CleanupItemBytesMax,
-                size_of::<ReportStorage>() as u64,
-            )?;
+            policy.check(K::CleanupItemBytesMax, size_of::<ReportStorage>() as u64)?;
             Ok(bytes)
         })();
         let slot_bytes = match slot_bytes {
@@ -139,8 +136,7 @@ where
                 size_of::<Self>() as u64,
                 add(policy.registration.retained_bytes(), scratch)?,
             )?;
-            check(
-                &policy.limits,
+            policy.check(
                 K::PeakLiveBytesPerAdmissionMax,
                 add(
                     add(root_bytes, bytes)?,
@@ -418,7 +414,7 @@ where
                 return Err(reject((options, None), error));
             }
         };
-        if let Err(error) = check(&self.policy.limits, K::PeakLiveBytesPerAdmissionMax, peak) {
+        if let Err(error) = self.policy.check(K::PeakLiveBytesPerAdmissionMax, peak) {
             self.kernel.acknowledge();
             return Err(reject((options, None), error));
         }

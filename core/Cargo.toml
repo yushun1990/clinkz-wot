@@ -13,6 +13,7 @@ clinkz-wot-td = { path = "../td", default-features = false }
 async-trait = { workspace = true, optional = true }
 async-channel = { version = "2", optional = true, default-features = false }
 critical-section = { version = "1", default-features = false }
+sha2-const-stable = "0.1.0"
 futures-core = { workspace = true, optional = true }
 
 [dev-dependencies]

@@ -1843,3 +1843,5 @@ fn static_late_manual_cancel_gets_fresh_drain_time_without_refill_extension() {
     drop(observer);
     assert!(parent.borrow().iter().all(|a| a.used() == 0));
 }
+
+mod ownership;

@@ -281,9 +281,10 @@ const fn layout<T>() -> [usize; 2] {
 }
 // Kept in normal-library IR so each ARM compile cell reports its own layouts.
 // Rows: complete registration, checked registration, complete request slot,
-// raw state, client, Planning cleanup root, Planning draft, native artifact.
+// raw state, client, Planning cleanup root, Planning draft, native artifact,
+// compiler, support, owned configuration and fixed diagnostic context.
 #[used]
-pub static CONSUMER_ONLY_STATIC_LAYOUTS: [[usize; 2]; 8] = [
+pub static CONSUMER_ONLY_STATIC_LAYOUTS: [[usize; 2]; 12] = [
     layout::<StaticConsumerBindingRegistration<Client>>(),
     layout::<ConsumerCompilerRegistration<StaticConsumerBindingRegistration<Client>>>(),
     layout::<StaticConsumerPropertyReadSlot<State>>(),
@@ -292,4 +293,8 @@ pub static CONSUMER_ONLY_STATIC_LAYOUTS: [[usize; 2]; 8] = [
     layout::<clinkz_wot_planning::ConsumerPropertyReadCleanupSlot<ResolvedTargetArtifact>>(),
     layout::<clinkz_wot_planning::ConsumerPropertyReadDraft<ResolvedTargetArtifact>>(),
     layout::<ResolvedTargetArtifact>(),
+    layout::<ResolvedTargetCompiler>(),
+    layout::<ConsumerCompilerSupport>(),
+    layout::<ConsumerBindingConfiguration>(),
+    layout::<ErrorContext>(),
 ];

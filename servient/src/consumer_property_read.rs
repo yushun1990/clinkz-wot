@@ -16,7 +16,7 @@ use crate::CompiledPlanSetState;
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{
     AdmissionLedger, Generation, MonotonicInstant, ResourceAccount, ResourceKind as K,
-    ResourceLimits, RuntimeClock, SlotIndex, WorkBudget, WorkClass as W,
+    ResourceLimits, ResourceProfileId, RuntimeClock, SlotIndex, WorkBudget, WorkClass as W,
 };
 use clinkz_wot_planning::{
     ConsumerPropertyReadBuild as PlanningBuild, ConsumerPropertyReadBuildConfig,
@@ -38,6 +38,7 @@ use core::{
 
 #[cfg(feature = "std")]
 mod host;
+mod identity;
 #[cfg(feature = "std")]
 mod shared;
 #[cfg(feature = "std")]
@@ -132,6 +133,38 @@ fn check(limits: &ResourceLimits, kind: K, n: u64) -> CoreResult<()> {
         Ok(())
     }
 }
+fn stamp_resource(
+    mut error: CoreError,
+    identity: BindingConfigurationDigest,
+    domain: ResourceFailureDomain,
+    local: Option<(SlotIndex, Generation)>,
+    parent: Option<(SlotIndex, Generation)>,
+) -> CoreError {
+    let context = match &mut error {
+        CoreError::InvalidDocument(c)
+        | CoreError::Validation(c)
+        | CoreError::NotFound(c)
+        | CoreError::UnsupportedOperation(c)
+        | CoreError::Application(c)
+        | CoreError::Binding(c)
+        | CoreError::Payload(c)
+        | CoreError::Backpressure(c)
+        | CoreError::Cancelled(c)
+        | CoreError::TimedOut(c)
+        | CoreError::StaleHandle(c)
+        | CoreError::Lifecycle(c)
+        | CoreError::Cleanup(c)
+        | CoreError::InternalInvariant(c)
+        | CoreError::LimitExceeded { context: c, .. }
+        | CoreError::Selection { context: c, .. }
+        | CoreError::Security { context: c, .. } => c,
+        _ => return error,
+    };
+    if context.resource_failure().is_none() {
+        *context = context.with_resource_failure(identity, domain, local, parent);
+    }
+    error
+}
 fn pay(b: &mut WorkBudget, costs: &[(W, u64)]) -> bool {
     if costs.iter().any(|&(w, n)| b.remaining(w) < n) {
         return false;
@@ -207,6 +240,9 @@ fn td_error(cause: ValidatedThingCause) -> CoreError {
 /// `call` includes the complete raw state and all request/result backing.
 /// Core's envelope and Runtime records are accounted in addition to these.
 pub struct ConsumerPropertyReadPolicy {
+    contract: BindingResourceContract,
+    origin: ResourceProfileId,
+    identity: BindingConfigurationDigest,
     limits: ResourceLimits,
     td: ValidatedThingAdmissionConfig,
     planning: ConsumerPropertyReadBuildConfig,
@@ -284,7 +320,10 @@ impl ConsumerPropertyReadPolicy {
         let td = ValidatedThingAdmissionConfig::try_from_limits(&projection)
             .map_err(|_| unsupported())?;
         let planning = ConsumerPropertyReadBuildConfig::try_from_limits(&projection)?;
-        let policy = Self {
+        let mut policy = Self {
+            contract: BindingResourceContract::StrictV1,
+            origin: ResourceProfileId::APPLICATION_DEFINED,
+            identity: BindingConfigurationDigest::new([0; 32]),
             limits,
             td,
             planning,
@@ -311,7 +350,70 @@ impl ConsumerPropertyReadPolicy {
                 u64::from(registration.retained_items()),
             )?,
         )?;
+        policy.identity = identity::policy_key(&policy);
         Ok(policy)
+    }
+
+    /// Checks an explicit Consumer ownership interpretation of the full policy.
+    /// The profile supplies values only; it never implicitly selects a contract.
+    #[allow(clippy::too_many_arguments)]
+    pub fn try_new_owned(
+        contract: BindingResourceContract,
+        profile_origin: ResourceProfileId,
+        limits: ResourceLimits,
+        registration: BindingLifetimeFootprint,
+        call: BindingLifetimeFootprint,
+        input: [u64; 4],
+        result: [u64; 2],
+        work: [u64; 7],
+        timeouts: [u64; 2],
+        scratch_bytes: u64,
+    ) -> CoreResult<Self> {
+        if contract == BindingResourceContract::StrictV1
+            || (contract == BindingResourceContract::ConsumerOwnedHostV2 && !cfg!(feature = "std"))
+        {
+            return Err(unsupported());
+        }
+        // The closed configuration performs the same full Payload/String Layout
+        // representability check. It is fixed metadata work, with no callbacks.
+        ConsumerBindingConfiguration::try_new(
+            contract,
+            1,
+            BindingConfigurationDigest::new([0; 32]),
+            result[0],
+            result[1],
+        )?;
+        let mut policy = Self::try_new(
+            limits,
+            registration,
+            call,
+            input,
+            result,
+            work,
+            timeouts,
+            scratch_bytes,
+        )?;
+        policy.contract = contract;
+        policy.origin = profile_origin;
+        policy.identity = identity::policy_key(&policy);
+        policy.call_bytes()?;
+        Ok(policy)
+    }
+    /// Returns the explicitly checked resource/disposal contract.
+    pub const fn resource_contract(&self) -> BindingResourceContract {
+        self.contract
+    }
+    /// Returns the complete key of every independent policy operand.
+    pub const fn resource_identity(&self) -> BindingConfigurationDigest {
+        self.identity
+    }
+    /// Returns the supplied origin of the numeric values.
+    pub const fn profile_origin(&self) -> ResourceProfileId {
+        self.origin
+    }
+    /// Borrows the full immutable numeric table.
+    pub const fn resource_limits(&self) -> &ResourceLimits {
+        &self.limits
     }
     /// Creates real initially empty parent accounts. Share these *same accounts*
     /// between roots; making another array creates another capacity authority.
@@ -333,6 +435,19 @@ impl ConsumerPropertyReadPolicy {
         resources: BindingResourceDeclarations,
         host: bool,
     ) -> CoreResult<()> {
+        if resources.resource_contract() != self.contract {
+            return Err(self.resource_error(unsupported(), ResourceFailureDomain::EngineCapacity));
+        }
+        if self.contract != BindingResourceContract::StrictV1 {
+            let Some((body, media)) = resources.consumer_result_limits() else {
+                return Err(unsupported());
+            };
+            if body > self.result[0] || media > self.result[1] {
+                return Err(
+                    self.resource_error(unsupported(), ResourceFailureDomain::EngineCapacity)
+                );
+            }
+        }
         if !resources.declared().fits_within(self.registration)
             || !self.call.fits_within(resources.admitted())
             || r.support().target_capacity() as u64 > self.input[3].max(self.input[1])
@@ -341,21 +456,21 @@ impl ConsumerPropertyReadPolicy {
             return Err(unsupported());
         }
         if host {
-            check(&self.limits, K::PendingClientCallsPerBindingMax, 1)?;
-            check(&self.limits, K::PendingClientCallsPerThingMax, 1)?;
+            self.check(K::PendingClientCallsPerBindingMax, 1)?;
+            self.check(K::PendingClientCallsPerThingMax, 1)?;
             self.check_binding_storage(true, self.call_bytes()?)?;
         }
         for kind in [
             K::BindingPollTemporaryBytesPerCallMax,
             K::BindingPollTemporaryBytesGlobalMax,
         ] {
-            check(&self.limits, kind, resources.transient().peak_bytes())?;
+            self.check(kind, resources.transient().peak_bytes())?;
         }
         for kind in [
             K::BindingCancelBufferBytesPerCallMax,
             K::BindingCancelBufferBytesGlobalMax,
         ] {
-            check(&self.limits, kind, self.call_bytes()?)?;
+            self.check(kind, self.call_bytes()?)?;
         }
         let release = if host {
             self.work[5]
@@ -364,24 +479,20 @@ impl ConsumerPropertyReadPolicy {
         };
         // Complete registration destruction and Core's associated-state
         // acknowledgement/destruction are indivisible existing operations.
-        check(
-            &self.limits,
+        self.check(
             K::CleanupWorkItemsPerStepMax,
             release.max(self.registration_cleanup_work()?),
         )?;
-        check(
-            &self.limits,
+        self.check(
             K::BindingArtifactBytesPerItemMax,
             r.support().artifact_layout().size() as u64,
         )?;
-        check(
-            &self.limits,
+        self.check(
             K::BindingCompilerCursorBytesPerItemMax,
             r.support().cursor_layout().size() as u64,
         )?;
         add(self.call_temporary(resources)?, self.call_bytes()?)?;
-        check(
-            &self.limits,
+        self.check(
             K::LargestContiguousAllocationBytesMax,
             self.call.retained_bytes().max(self.core_backing()),
         )?;
@@ -403,7 +514,7 @@ impl ConsumerPropertyReadPolicy {
             ]
         };
         for &kind in kinds {
-            check(&self.limits, kind, bytes)?;
+            self.check(kind, bytes)?;
         }
         Ok(())
     }
@@ -442,8 +553,7 @@ impl ConsumerPropertyReadPolicy {
         // owner, including for terminal destructors after the final call.
         // Reserve only constructor overlap here; check the whole operation.
         let n = add(self.call.retained_bytes(), self.core_backing())?;
-        check(
-            &self.limits,
+        self.check(
             K::AdmissionTemporaryBytesPerOperationMax,
             add(n, resources.transient().peak_bytes())?,
         )?;
@@ -461,13 +571,28 @@ impl ConsumerPropertyReadPolicy {
         )>() as u64
     }
     fn call_bytes(&self) -> CoreResult<u64> {
+        let result = if self.contract == BindingResourceContract::StrictV1 {
+            add(self.result[0], mul(2, self.result[1])?)?
+        } else {
+            let body = usize::try_from(self.result[0]).map_err(|_| unsupported())?;
+            let arc = core::alloc::Layout::new::<[usize; 2]>()
+                .extend(core::alloc::Layout::array::<u8>(body).map_err(|_| unsupported())?)
+                .map_err(|_| unsupported())?
+                .0
+                .pad_to_align();
+            add(arc.size() as u64, mul(2, self.result[1])?)?
+        };
         add(
             add(self.call.retained_bytes(), self.core_backing())?,
-            add(
-                self.request_bound()?,
-                add(self.result[0], mul(2, self.result[1])?)?,
-            )?,
+            add(self.request_bound()?, result)?,
         )
+    }
+    fn resource_error(&self, error: CoreError, domain: ResourceFailureDomain) -> CoreError {
+        stamp_resource(error, self.identity, domain, None, None)
+    }
+    fn check(&self, kind: K, n: u64) -> CoreResult<()> {
+        check(&self.limits, kind, n)
+            .map_err(|e| self.resource_error(e, ResourceFailureDomain::EngineCapacity))
     }
     fn ledger(&self, generation: Generation, runtime: u64) -> AdmissionLedger {
         AdmissionLedger::new(
@@ -585,6 +710,8 @@ struct Charge<P: Parent> {
     parent: P,
     local: [ResourceAccount; N],
     held: [u64; N],
+    identity: BindingConfigurationDigest,
+    owned: bool,
 }
 impl<P: Parent> Charge<P> {
     fn is_held(&self) -> bool {
@@ -604,6 +731,8 @@ impl<P: Parent> Charge<P> {
             parent,
             local: policy.parent_accounts(),
             held: [0; N],
+            identity: policy.identity,
+            owned: policy.contract != BindingResourceContract::StrictV1,
         })
     }
     fn grow(&mut self, amount: [u64; N]) -> CoreResult<()> {
@@ -612,10 +741,10 @@ impl<P: Parent> Charge<P> {
                 .checked_add(n)
                 .is_none_or(|v| v > self.local[i].limit())
             {
-                return Err(busy());
+                return Err(self.capacity_error(i, n, None));
             }
         }
-        let accepted = self.parent.edit(|a| {
+        let rejected = self.parent.edit(|a| {
             let mut acquired = 0;
             for i in 0..N {
                 if let Some(r) = a[i].try_reserve(amount[i]) {
@@ -625,13 +754,17 @@ impl<P: Parent> Charge<P> {
                     for j in 0..acquired {
                         assert!(a[j].release_committed(amount[j]));
                     }
-                    return false;
+                    let owner = a[i]
+                        .try_reserve(0)
+                        .expect("zero receipt retains account totals")
+                        .owner();
+                    return Some((i, owner.0, owner.1, a[i].limit(), a[i].used()));
                 }
             }
-            true
+            None
         });
-        if !accepted {
-            return Err(busy());
+        if let Some((i, slot, generation, limit, used)) = rejected {
+            return Err(self.capacity_error(i, amount[i], Some((slot, generation, limit, used))));
         }
         for (i, n) in amount.into_iter().enumerate() {
             self.held[i] += n;
@@ -644,6 +777,35 @@ impl<P: Parent> Charge<P> {
             }
         }
         Ok(())
+    }
+    fn capacity_error(
+        &self,
+        i: usize,
+        n: u64,
+        parent: Option<(SlotIndex, Generation, u64, u64)>,
+    ) -> CoreError {
+        if !self.owned {
+            return busy();
+        }
+        // These are the exact local coordinates minted by parent_accounts.
+        let local = Some((SlotIndex::new(i as u32), Generation::INITIAL));
+        let (limit, used) = parent
+            .map(|(_, _, l, u)| (l, u))
+            .unwrap_or((self.local[i].limit(), self.held[i]));
+        let error = CoreError::LimitExceeded {
+            resource: KINDS[i],
+            limit,
+            requested: used.checked_add(n),
+            observed: Some(used),
+            context: context(),
+        };
+        stamp_resource(
+            error,
+            self.identity,
+            ResourceFailureDomain::EngineCapacity,
+            local,
+            parent.map(|(s, g, _, _)| (s, g)),
+        )
     }
     fn release(&mut self, amount: [u64; N]) {
         for (i, n) in amount.iter().copied().enumerate() {
