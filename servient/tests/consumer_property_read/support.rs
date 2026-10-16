@@ -139,6 +139,19 @@ fn disarm() {
         t.set(s);
     });
 }
+// Start another allocation window without losing already live physical owners.
+fn resume_observing() {
+    TRACE.with(|t| {
+        let mut s = t.get();
+        s.armed = true;
+        s.requests = 0;
+        s.releases = 0;
+        s.layouts = [(0, 0); 256];
+        s.largest = 0;
+        s.peak = s.live;
+        t.set(s);
+    });
+}
 fn work(n: u64) -> WorkBudget {
     WorkClass::ALL
         .into_iter()
@@ -197,12 +210,24 @@ fn policy_with_cleanup_costs(limits: ResourceLimits) -> ConsumerPropertyReadPoli
     .unwrap()
 }
 fn rejected_static_startup(kind: ResourceKind, limit: u64) -> u64 {
+    rejected_static_startup_for(kind, limit, BindingResourceContract::StrictV1)
+}
+fn rejected_static_startup_for(kind: ResourceKind, limit: u64, contract: BindingResourceContract) -> u64 {
     let stats = Arc::new(Stats::default());
-    let registration = binding::static_registration(StaticClient::new(stats.clone(), outputs()));
+    let registration = binding::static_registration(if contract == BindingResourceContract::StrictV1 {
+        StaticClient::new(stats.clone(), outputs())
+    } else {
+        StaticClient::new_owned(stats.clone(), outputs(), author(contract, Mode::Normal, pool(), false))
+    });
     let identity = registration.registration().identity();
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(kind, Some(limit)));
-    let policy = policy_with(limits);
+    let policy = if contract == BindingResourceContract::StrictV1 {
+        policy_with(limits)
+    } else {
+        owned_policy_with_limits(contract, limits)
+    };
+    let key = policy.resource_identity();
     let parent = RefCell::new(policy.parent_accounts());
     let clock = Clock::default();
     let mut report = report_storage();
@@ -220,6 +245,12 @@ fn rejected_static_startup(kind: ResourceKind, limit: u64) -> u64 {
     assert_eq!(trace().requests, 0);
     disarm();
     let (inputs, error) = rejection.into_parts();
+    if contract == BindingResourceContract::StrictV1 {
+        assert_eq!(error.error().context().resource_failure(), None);
+    } else {
+        let failure = error.error().context().resource_failure().unwrap();
+        assert_eq!((failure.0, failure.1), (key, ResourceFailureDomain::EngineCapacity));
+    }
     let requested = match error.error() {
         CoreError::LimitExceeded {
             resource,
@@ -316,10 +347,13 @@ use clinkz_wot_consumer_property_read_binding_fixture::ownership::{OwnedPolicy, 
 fn owned_policy(contract: BindingResourceContract) -> ConsumerPropertyReadPolicy {
     owned_policy_with_limits(contract, GatewayDefaultV1::LIMITS.clone())
 }
-fn owned_policy_with_limits(
+fn owned_policy_with_limits(contract: BindingResourceContract, limits: ResourceLimits) -> ConsumerPropertyReadPolicy {
+    try_owned_policy_with_limits(contract, limits).unwrap()
+}
+fn try_owned_policy_with_limits(
     contract: BindingResourceContract,
     limits: ResourceLimits,
-) -> ConsumerPropertyReadPolicy {
+) -> CoreResult<ConsumerPropertyReadPolicy> {
     ConsumerPropertyReadPolicy::try_new_owned(
         contract,
         ResourceProfileId::GATEWAY_DEFAULT_V1,
@@ -332,7 +366,6 @@ fn owned_policy_with_limits(
         [50, 5],
         65536,
     )
-    .unwrap()
 }
 fn pool() -> Arc<PrivatePool> {
     PrivatePool::new(16, Arc::new(core::sync::atomic::AtomicUsize::new(0)))
@@ -363,3 +396,30 @@ fn hex(key: BindingConfigurationDigest) -> String {
     key.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
 
+
+fn owned_engine_local_boundaries(representation: &str, run: impl Fn(ResourceLimits) -> CoreResult<()>) {
+    for kind in [
+        ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+        ResourceKind::PeakLiveBytesPerAdmissionMax,
+        ResourceKind::LargestContiguousAllocationBytesMax,
+        ResourceKind::CompiledRuntimeBytesPerThingMax,
+    ] {
+        let probe = |limit| {
+            let mut limits = GatewayDefaultV1::LIMITS.clone();
+            assert!(limits.set(kind, Some(limit)));
+            run(limits)
+        };
+        let (mut low, mut high) = (0, GatewayDefaultV1::LIMITS.get(kind).unwrap());
+        probe(high).unwrap();
+        // Find the boundary from actual constructors, build and call execution;
+        // no duplicate accounting formula or relaxed production budget is used.
+        while low < high {
+            let mid = low + (high - low) / 2;
+            if probe(mid).is_ok() { high = mid; } else { low = mid + 1; }
+        }
+        assert!(low > 0);
+        for limit in [0, low - 1] { assert!(probe(limit).is_err()); }
+        for limit in [low, low + 1] { probe(limit).unwrap(); }
+        println!("owned {representation} local {kind:?} exact={low}");
+    }
+}

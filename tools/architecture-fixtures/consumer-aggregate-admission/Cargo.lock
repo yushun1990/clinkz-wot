@@ -102,6 +102,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-consumer-property-read-binding-fixture"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+]
+
+[[package]]
 name = "clinkz-wot-core"
 version = "0.1.0"
 dependencies = [
@@ -152,6 +160,7 @@ dependencies = [
 name = "consumer-aggregate-admission-probe"
 version = "0.0.0"
 dependencies = [
+ "clinkz-wot-consumer-property-read-binding-fixture",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
  "clinkz-wot-planning",

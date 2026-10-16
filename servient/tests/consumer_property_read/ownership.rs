@@ -2,6 +2,158 @@
 use super::*;
 
 #[test]
+fn owned_static_storage_and_callback_rows_keep_exact_boundaries() {
+    let contract = BindingResourceContract::ConsumerOwnedV2;
+    for kind in [
+        ResourceKind::BindingSlotStateBytesPerItemMax,
+        ResourceKind::BindingSlotStateBytesPerThingMax,
+        ResourceKind::BindingSlotStateBytesGlobalMax,
+        ResourceKind::BindingPollTemporaryBytesPerCallMax,
+        ResourceKind::BindingPollTemporaryBytesGlobalMax,
+        ResourceKind::BindingCancelBufferBytesPerCallMax,
+        ResourceKind::BindingCancelBufferBytesGlobalMax,
+    ] {
+        let required = rejected_static_startup_for(kind, 0, contract);
+        assert_eq!(
+            rejected_static_startup_for(kind, required - 1, contract),
+            required
+        );
+        for limit in [required, required + 1] {
+            let mut limits = GatewayDefaultV1::LIMITS.clone();
+            assert!(limits.set(kind, Some(limit)));
+            let policy = owned_policy_with_limits(contract, limits);
+            let parent = RefCell::new(policy.parent_accounts());
+            let mut report = report_storage();
+            let clock = Clock::default();
+            let stats = Arc::new(Stats::default());
+            let registration = binding::static_registration(StaticClient::new_owned(
+                stats.clone(),
+                outputs(),
+                author(contract, Mode::LatePoll, pool(), false),
+            ));
+            let (mut r, o) = StaticConsumerPropertyReadRuntime::try_new(
+                registration,
+                policy,
+                &clock,
+                &parent,
+                &mut report,
+            )
+            .unwrap_or_else(|_| panic!("exact {kind:?} rejected"));
+            publish_static(&mut r);
+            let g = r
+                .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+                .unwrap();
+            r.cancel(g).unwrap();
+            for _ in 0..4 {
+                r.step(&mut cx(), &mut work(100000));
+            }
+            assert!(r.try_take(g, &mut work(100000)).unwrap().unwrap().is_ok());
+            stop_static(&mut r);
+            drop(r);
+            drop(o);
+            assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 1);
+            assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+            assert!(parent.borrow().iter().all(|a| a.used() == 0));
+        }
+        println!("owned static {kind:?} exact={required}");
+    }
+}
+
+fn static_parent_probe(
+    limits: ResourceLimits,
+    parent: &RefCell<[ResourceAccount; ConsumerPropertyReadPolicy::PARENT_KINDS.len()]>,
+) -> CoreResult<()> {
+    let contract = BindingResourceContract::ConsumerOwnedV2;
+    let policy = try_owned_policy_with_limits(contract, limits)?;
+    let mut report = report_storage();
+    let clock = Clock::default();
+    let registration = binding::static_registration(StaticClient::new_owned(
+        Arc::new(Stats::default()),
+        outputs(),
+        author(contract, Mode::Normal, pool(), false),
+    ));
+    let (mut r, o) = StaticConsumerPropertyReadRuntime::try_new(
+        registration,
+        policy,
+        &clock,
+        parent,
+        &mut report,
+    )
+    .map_err(|e| e.error().error().clone())?;
+    let thing = source();
+    r.consume(&thing, &mut work(100000), |b| {
+        for _ in 0..100000 {
+            b.step(&mut work(4096));
+            if b.is_finished() {
+                return;
+            }
+        }
+        panic!("bounded build stalled");
+    })?;
+    drop(thing);
+    let g = r
+        .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+        .map_err(|e| e.error().error().clone())?;
+    for _ in 0..4 {
+        r.step(&mut cx(), &mut work(100000));
+    }
+    r.try_take(g, &mut work(100000))?.unwrap()?;
+    stop_static(&mut r);
+    drop(r);
+    drop(o);
+    Ok(())
+}
+
+#[test]
+fn owned_static_every_used_original_parent_has_zero_short_exact_and_over_controls() {
+    let policy = owned_policy(BindingResourceContract::ConsumerOwnedV2);
+    let baseline = RefCell::new(policy.parent_accounts());
+    static_parent_probe(GatewayDefaultV1::LIMITS.clone(), &baseline).unwrap();
+    let peaks: [u64; ConsumerPropertyReadPolicy::PARENT_KINDS.len()] =
+        core::array::from_fn(|i| baseline.borrow()[i].peak());
+    for (i, required) in peaks.into_iter().enumerate().filter(|(_, n)| *n != 0) {
+        let kind = ConsumerPropertyReadPolicy::PARENT_KINDS[i];
+        let slot = SlotIndex::new(2000 + i as u32);
+        let generation = Generation::INITIAL.checked_next().unwrap();
+        for limit in [0, required - 1, required, required + 1] {
+            let mut bank = policy.parent_accounts();
+            bank[i] = ResourceAccount::new(slot, generation, kind, limit);
+            let bank = RefCell::new(bank);
+            let result = static_parent_probe(GatewayDefaultV1::LIMITS.clone(), &bank);
+            if limit < required {
+                let error = result.unwrap_err();
+                assert_eq!(error.limit_details().unwrap().0, kind);
+                let (key, domain, _, parent) = error.context().resource_failure().unwrap();
+                assert_eq!(
+                    (key, domain),
+                    (
+                        policy.resource_identity(),
+                        ResourceFailureDomain::EngineCapacity
+                    )
+                );
+                assert_eq!(parent, Some((slot, generation)));
+            } else {
+                result.unwrap();
+            }
+            assert!(bank.borrow().iter().all(|a| a.used() == 0));
+            assert!(bank.borrow()[i].peak() <= limit);
+        }
+    }
+    println!("owned static original parent peaks={peaks:?}");
+}
+
+#[test]
+fn owned_static_engine_local_rows_are_enforced_through_complete_production_calls() {
+    let policy = owned_policy(BindingResourceContract::ConsumerOwnedV2);
+    owned_engine_local_boundaries("static", |limits| {
+        let parent = RefCell::new(policy.parent_accounts());
+        let result = static_parent_probe(limits, &parent);
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+        result
+    });
+}
+
+#[test]
 fn owned_provisioning_contract_and_result_mismatch_precede_clock_allocation_and_parent_effects() {
     struct NoClock;
     impl RuntimeClock for NoClock {
@@ -341,6 +493,8 @@ fn owned_complete_policy_vectors_and_every_independent_operand_are_frozen() {
     assert_eq!(trace().requests, 0);
     disarm();
     let key = p.resource_identity();
+    let binding = author(contract, Mode::Normal, pool(), false);
+    let binding_key = binding.configuration().configuration();
     if cfg!(feature = "std") {
         assert_eq!(
             hex(key),
@@ -403,6 +557,38 @@ fn owned_complete_policy_vectors_and_every_independent_operand_are_frozen() {
                 "de7c632500393402199644abf0de865c823626c55c2da123b643ebf2ea4fa682"
             );
         }
+        // Engine-policy changes still qualify the same complete binding owner;
+        // eligibility is not a translation of the engine-policy digest.
+        let registration = binding::static_registration(StaticClient::new_owned(
+            Arc::new(Stats::default()),
+            outputs(),
+            binding.clone(),
+        ));
+        assert_eq!(
+            registration.registration().identity().configuration(),
+            binding_key
+        );
+        assert_eq!(
+            registration.support().consumer_configuration(),
+            Some(binding.configuration())
+        );
+        let parents = RefCell::new(next.parent_accounts());
+        let mut report = report_storage();
+        let clock = Clock::default();
+        let (mut r, o) = StaticConsumerPropertyReadRuntime::try_new(
+            registration,
+            next,
+            &clock,
+            &parents,
+            &mut report,
+        )
+        .unwrap_or_else(|_| {
+            panic!("independent engine operand {operand} changed binding eligibility")
+        });
+        stop_static(&mut r);
+        drop(r);
+        drop(o);
+        assert!(parents.borrow().iter().all(|a| a.used() == 0));
     }
     if cfg!(feature = "std") {
         assert_eq!(
@@ -416,21 +602,24 @@ fn owned_complete_policy_vectors_and_every_independent_operand_are_frozen() {
 fn owned_static_real_planning_multiple_targets_source_destruction_and_zero_engine_progress_allocation()
  {
     let contract = BindingResourceContract::ConsumerOwnedV2;
+    observe(usize::MAX);
     let pool = pool();
     let stats = Arc::new(Stats::default());
     let author = author(contract, Mode::Normal, pool.clone(), false);
     let key = author.configuration().configuration();
-    let registration = binding::static_registration(StaticClient::new_owned(
-        stats.clone(),
-        outputs(),
-        author.clone(),
-    ));
+    let client = StaticClient::new_owned(stats.clone(), outputs(), author.clone());
+    let private_provision = trace();
+    resume_observing();
+    let registration = binding::static_registration(client);
+    let capture = trace();
+    assert_eq!(capture.requests, 0);
+    disarm();
     assert_eq!(registration.registration().identity().configuration(), key);
     let policy = owned_policy(contract);
     let parent = RefCell::new(policy.parent_accounts());
     let mut report = report_storage();
     let clock = Clock::default();
-    observe(usize::MAX);
+    resume_observing();
     let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
         registration,
         policy,
@@ -442,7 +631,7 @@ fn owned_static_real_planning_multiple_targets_source_destruction_and_zero_engin
     let provision = trace();
     disarm();
     let thing = source();
-    observe(usize::MAX);
+    resume_observing();
     runtime
         .consume(&thing, &mut work(100000), |b| {
             for _ in 0..100000 {
@@ -458,15 +647,7 @@ fn owned_static_real_planning_multiple_targets_source_destruction_and_zero_engin
     disarm();
     drop(thing);
     for (name, form) in [("a-read", 2), ("c-温度", 1)] {
-        TRACE.with(|t| {
-            let mut s = t.get();
-            s.armed = true;
-            s.requests = 0;
-            s.layouts = [(0, 0); 256];
-            s.largest = 0;
-            s.peak = s.live;
-            t.set(s);
-        });
+        resume_observing();
         let g = runtime
             .read_property(
                 name,
@@ -496,9 +677,20 @@ fn owned_static_real_planning_multiple_targets_source_destruction_and_zero_engin
     stop_static(&mut runtime);
     drop(runtime);
     drop(observer);
+    assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+    drop(author);
+    drop(pool);
+    drop(stats);
     assert!(parent.borrow().iter().all(|a| a.used() == 0));
     println!(
-        "owned static provision: requests={} live={} peak={} largest={}; build: requests={} live={} peak={} largest={}; private growth=8; terminal={}",
+        "owned static author: requests={} live={} peak={} largest={} layouts={:?}; capture: requests={} live={}; runtime: requests={} live={} peak={} largest={}; build: requests={} live={} peak={} largest={}; private growth=8; terminal={}",
+        private_provision.requests,
+        private_provision.live,
+        private_provision.peak,
+        private_provision.largest,
+        &private_provision.layouts[..private_provision.requests],
+        capture.requests,
+        capture.live,
         provision.requests,
         provision.live,
         provision.peak,
@@ -687,69 +879,200 @@ mod host_owned {
     use super::*;
     use std::sync::Mutex;
     #[test]
+    fn owned_host_engine_local_rows_are_enforced_through_complete_production_calls() {
+        let policy = owned_policy(BindingResourceContract::ConsumerOwnedV2);
+        owned_engine_local_boundaries("Host", |limits| {
+            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let result = host_parent_probe(limits, &parent);
+            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            result
+        });
+    }
+    fn host_parent_probe(
+        limits: ResourceLimits,
+        parent: &Arc<Mutex<[ResourceAccount; ConsumerPropertyReadPolicy::PARENT_KINDS.len()]>>,
+    ) -> CoreResult<()> {
+        let contract = BindingResourceContract::ConsumerOwnedV2;
+        let policy = try_owned_policy_with_limits(contract, limits)?;
+        let registration = binding::host_registration(binding::HostClient::new_owned(
+            Arc::new(Stats::default()),
+            outputs(),
+            author(contract, Mode::Normal, pool(), false),
+        ));
+        let (r, o) = ConsumerPropertyReadRuntime::try_new(
+            registration,
+            policy,
+            Arc::new(Clock::default()),
+            parent.clone(),
+        )
+        .map_err(|e| e.error().error().clone())?;
+        let thing = source();
+        let StartStatus::Ready(h) = r.consume(&thing, &mut work(100000), |b| {
+            for _ in 0..100000 {
+                b.step(&mut work(4096));
+                if b.is_finished() {
+                    return;
+                }
+            }
+            panic!("bounded build stalled");
+        })?
+        else {
+            panic!("publication pending");
+        };
+        drop(thing);
+        let mut c = h
+            .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+            .map_err(|e| e.error().error().clone())?;
+        for _ in 0..4 {
+            r.step(&mut cx(), &mut work(100000));
+        }
+        c.try_take(&mut work(100000))?.unwrap()?;
+        drop(c);
+        drop(h);
+        shutdown(&r);
+        drop(r);
+        drop(o);
+        Ok(())
+    }
+
+    #[test]
+    fn owned_host_every_used_original_parent_has_zero_short_exact_and_over_controls() {
+        let policy = owned_policy(BindingResourceContract::ConsumerOwnedV2);
+        let baseline = Arc::new(Mutex::new(policy.parent_accounts()));
+        host_parent_probe(GatewayDefaultV1::LIMITS.clone(), &baseline).unwrap();
+        let peaks: [u64; ConsumerPropertyReadPolicy::PARENT_KINDS.len()] =
+            core::array::from_fn(|i| baseline.lock().unwrap()[i].peak());
+        for (i, required) in peaks.into_iter().enumerate().filter(|(_, n)| *n != 0) {
+            let kind = ConsumerPropertyReadPolicy::PARENT_KINDS[i];
+            let slot = SlotIndex::new(3000 + i as u32);
+            let generation = Generation::INITIAL.checked_next().unwrap();
+            for limit in [0, required - 1, required, required + 1] {
+                let mut bank = policy.parent_accounts();
+                bank[i] = ResourceAccount::new(slot, generation, kind, limit);
+                let bank = Arc::new(Mutex::new(bank));
+                let result = host_parent_probe(GatewayDefaultV1::LIMITS.clone(), &bank);
+                if limit < required {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.limit_details().unwrap().0, kind);
+                    let (key, domain, _, parent) = error.context().resource_failure().unwrap();
+                    assert_eq!(
+                        (key, domain),
+                        (
+                            policy.resource_identity(),
+                            ResourceFailureDomain::EngineCapacity
+                        )
+                    );
+                    assert_eq!(parent, Some((slot, generation)));
+                } else {
+                    result.unwrap();
+                }
+                assert!(bank.lock().unwrap().iter().all(|a| a.used() == 0));
+                assert!(bank.lock().unwrap()[i].peak() <= limit);
+            }
+        }
+        println!("owned Host original parent peaks={peaks:?}");
+    }
+    #[test]
     fn owned_host_complete_backing_measurements_and_exact_admission_boundaries() {
         let contract = BindingResourceContract::ConsumerOwnedV2;
-        let mut required = 0;
-        for limit in [0, 1, 2, 3] {
-            let ceiling = match limit {
-                0 => 0,
-                1 => required - 1,
-                2 => required,
-                _ => required + 1,
-            };
-            let mut limits = GatewayDefaultV1::LIMITS.clone();
-            assert!(limits.set(ResourceKind::HostBindingCallBytesPerItemMax, Some(ceiling)));
-            let policy = ConsumerPropertyReadPolicy::try_new_owned(
-                contract,
-                ResourceProfileId::GATEWAY_DEFAULT_V1,
-                limits,
-                BindingLifetimeFootprint::new(4, 4096),
-                BindingLifetimeFootprint::new(8, 1280),
-                [1, 64, 64, 64],
-                [64, 32],
-                [2, 2, 1, 1, 1, 1, 1],
-                [50, 5],
-                65536,
-            )
-            .unwrap();
-            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
-            let pool = pool();
-            let registration = binding::host_registration(binding::HostClient::new_owned(
-                Arc::new(Stats::default()),
-                outputs(),
-                author(contract, Mode::Normal, pool, false),
-            ));
-            let clock = Arc::new(Clock::default());
-            observe(usize::MAX);
-            let result =
-                ConsumerPropertyReadRuntime::try_new(registration, policy, clock, parent.clone());
-            if limit < 2 {
-                let error = result.err().expect("zero or one short");
-                assert_eq!(trace().requests, 0);
-                let (_, _, requested, _) = error.error().error().limit_details().unwrap();
-                required = requested.unwrap();
-                disarm();
-                drop(error);
-            } else {
-                let (r, o) = result.unwrap_or_else(|_| panic!("exact owned bound"));
-                let provision = trace();
-                disarm();
-                let h = build(&r);
-                drop(h);
-                shutdown(&r);
-                drop(r);
-                drop(o);
-                assert_eq!(trace().live, 0);
-                println!(
-                    "owned Host call bound={required}; provisioning requests={} live={} peak={} largest={} layouts={:?}",
-                    provision.requests,
-                    provision.live,
-                    provision.peak,
-                    provision.largest,
-                    &provision.layouts[..provision.requests]
+        for kind in [
+            ResourceKind::HostBindingCallBytesPerItemMax,
+            ResourceKind::HostBindingCallBytesPerBindingMax,
+            ResourceKind::HostBindingCallBytesPerThingMax,
+            ResourceKind::HostBindingCallBytesGlobalMax,
+            ResourceKind::BindingPollTemporaryBytesPerCallMax,
+            ResourceKind::BindingPollTemporaryBytesGlobalMax,
+            ResourceKind::BindingCancelBufferBytesPerCallMax,
+            ResourceKind::BindingCancelBufferBytesGlobalMax,
+            ResourceKind::CleanupTransferBytesGlobalMax,
+        ] {
+            let mut required = 0;
+            for limit in [0, 1, 2, 3] {
+                let ceiling = match limit {
+                    0 => 0,
+                    1 => required - 1,
+                    2 => required,
+                    _ => required + 1,
+                };
+                let mut limits = GatewayDefaultV1::LIMITS.clone();
+                assert!(limits.set(kind, Some(ceiling)));
+                let policy = ConsumerPropertyReadPolicy::try_new_owned(
+                    contract,
+                    ResourceProfileId::GATEWAY_DEFAULT_V1,
+                    limits,
+                    BindingLifetimeFootprint::new(4, 4096),
+                    BindingLifetimeFootprint::new(8, 1280),
+                    [1, 64, 64, 64],
+                    [64, 32],
+                    [2, 2, 1, 1, 1, 1, 1],
+                    [50, 5],
+                    65536,
+                )
+                .unwrap();
+                let key = policy.resource_identity();
+                let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+                observe(usize::MAX);
+                let pool = pool();
+                let client = binding::HostClient::new_owned(
+                    Arc::new(Stats::default()),
+                    outputs(),
+                    author(contract, Mode::Normal, pool, false),
                 );
+                let private_provision = trace();
+                resume_observing();
+                let registration = binding::host_registration(client);
+                let capture = trace();
+                disarm();
+                let clock = Arc::new(Clock::default());
+                resume_observing();
+                let result = ConsumerPropertyReadRuntime::try_new(
+                    registration,
+                    policy,
+                    clock,
+                    parent.clone(),
+                );
+                if limit < 2 {
+                    let error = result.err().expect("zero or one short");
+                    assert_eq!(trace().requests, 0);
+                    let failure = error.error().error().context().resource_failure().unwrap();
+                    assert_eq!(
+                        (failure.0, failure.1),
+                        (key, ResourceFailureDomain::EngineCapacity)
+                    );
+                    let (_, _, requested, _) = error.error().error().limit_details().unwrap();
+                    required = requested.unwrap();
+                    disarm();
+                    drop(error);
+                } else {
+                    let (r, o) = result.unwrap_or_else(|_| panic!("exact owned bound"));
+                    let provision = trace();
+                    disarm();
+                    let h = build(&r);
+                    drop(h);
+                    shutdown(&r);
+                    drop(r);
+                    drop(o);
+                    assert_eq!(trace().live, 0);
+                    println!(
+                        "owned Host {kind:?} bound={required}; author requests={} live={} peak={} largest={} layouts={:?}; capture requests={} live={} layouts={:?}; runtime requests={} live={} peak={} largest={} layouts={:?}",
+                        private_provision.requests,
+                        private_provision.live,
+                        private_provision.peak,
+                        private_provision.largest,
+                        &private_provision.layouts[..private_provision.requests],
+                        capture.requests,
+                        capture.live,
+                        &capture.layouts[..capture.requests],
+                        provision.requests,
+                        provision.live,
+                        provision.peak,
+                        provision.largest,
+                        &provision.layouts[..provision.requests]
+                    );
+                }
+                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+                assert_eq!(trace().live, 0);
             }
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
         }
     }
     #[test]
