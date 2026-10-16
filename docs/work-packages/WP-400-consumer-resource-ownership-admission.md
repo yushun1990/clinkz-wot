@@ -314,10 +314,12 @@ No latency, hard RAM, allocator-metadata or whole-device claim follows here.
 ## Remaining blocks
 
 Production migration is admitted only within the registered scope above, following
-the exact-head independent acceptance on PR #184. The accepted amendment resolves
+the recorded compilation-cell readmission on PR #188. The accepted amendment resolves
 0086 at the contract boundary and reconciles 0081 without requiring shared
 programs. No new precursor tranche or global gate is required.
-Successor completion is blocked on new production evidence above.
+Successor completion requires the production evidence above and independent
+changed-source predecessor reaffirmation and completion acceptance in the
+existing successor evidence owner.
 HTTP Consumer admission then consumes that accepted shared boundary and matching
 predecessors; HTTP method/response metadata eligibility, SDK selection/pinning,
 real peers and input/overload/cancellation/disposal qualification remain in its
