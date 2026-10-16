@@ -249,7 +249,7 @@ source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 
 [[evidence]]
 key = "consumer-owned-regression"
-execution_status = "passed"
+execution_status = "production-passed-authority-pending"
 observations = [
     "At verification_ref all19 registered Consumer gate commands ran;18 passed and the authority command retains the independent-impact dependency blocker. Every one of the40 registered semantic cases is reproduced at that exact ref and mapped below. No P1/runtime failure remains. Std runtime67 integration+3library; portable23 each including original P1 negatives; matching portable runner1application+12same ownership cases each; std runner2applications.",
     "Rust1.95 and1.99 run all three Core/runtime/downstream feature cells; both also compile the normal runner ARM cells. Foundation18unit+1integration, TD9admission+8lending, all Core default tests/rustdocs, Planning full default and portable libs, isolated actual compiler support/entry/aggregate tests and Producer Runtime11/4/4 pass at their recorded refs. Nine applicable Producer gate commands pass; the unrelated Zenoh SDK/network command is outside this tranche and not claimed rerun. No passed Producer/Consumer gate verdict is changed.",
@@ -1794,3 +1794,104 @@ source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 command = "rustfmt --edition 2024 --check servient/tests/consumer_property_read/support.rs"
 exit_code = 0
 test_summaries = []
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "cargo run --locked --offline --manifest-path tools/design-check/Cargo.toml -- check-authority"
+exit_code = 0
+observations = ["design check: current v5 authority valid"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "cargo run --locked --offline --manifest-path tools/design-check/Cargo.toml -- check-state"
+exit_code = 0
+observations = ["design check: state-machine graphs valid"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "tools/check-design-artifacts.sh"
+exit_code = 1
+observations = ["design check: tranche WP-400-CONSUMER-RESOURCE-OWNERSHIP (in-progress, impact current) cannot depend on tranche WP-400-CONSUMER-PROPERTY-READ-RUNTIME (complete, impact review-required)"]
+disposition = "Unchanged pending predecessor-impact dependency blocker; independent reaffirmation required. Direct authority/state and all validators pass; no bypass or impact reset."
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "tools/check-api-ownership.sh"
+exit_code = 0
+observations = ["api ownership check: schema, ownership paths, and requirement references valid"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "tools/check-resource-limits.sh"
+exit_code = 0
+observations = ["resource ownership candidate: 20 versioned byte rows; 176 unchanged; 3 value and 5 complete-policy vectors; 20 operand mutations", "Consumer binding configuration: 8 canonical vectors; strict namespace and unsupported-cell/operand controls", "resource limit check: 196 fields and 3 profiles"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "tools/check-architecture-adrs.sh"
+exit_code = 0
+observations = ["architecture ADR check: accepted decisions and current projections valid"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "tools/check-directory-client-scope.sh"
+exit_code = 0
+observations = ["directory scope check: active contract is client-only"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "tools/check-legacy-api-absence.sh"
+exit_code = 0
+observations = ["legacy API absence check: removed public error APIs remain absent"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "cargo run --locked --offline --manifest-path tools/performance-harness/Cargo.toml -- verify"
+exit_code = 0
+observations = ["performance harness: 66 fixtures and 66 cases verified"]
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "cargo fmt -p clinkz-wot-core -p clinkz-wot-servient -p clinkz-wot-consumer-property-read-runtime-runner -- --check"
+exit_code = 0
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "cargo fmt --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml -- --check"
+exit_code = 0
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "rustfmt --edition 2024 --check servient/tests/consumer_property_read/support.rs"
+exit_code = 0
+
+[[verification]]
+group = "final-governance"
+toolchain = "1.99.0"
+source_ref = "21c91178d41e8b8c89cbe0b1a9a50ff51be57503"
+command = "git diff --check 5a0f3b4d7e130079e7f0d702ed3f55539b127b96 HEAD"
+exit_code = 0
