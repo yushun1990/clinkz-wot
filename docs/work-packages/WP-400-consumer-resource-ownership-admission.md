@@ -7,6 +7,96 @@ and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
 semantics and row/API/diagnostic changes. Production code and existing evidence
 records are unchanged.
 
+## Compilation-cell readmission candidate
+
+This documentation-only candidate records the already accepted
+[cell/support contract and API scope](../spec/consumer-resource-ownership.md#compilation-cell-projection-amendment)
+on unchanged master `d4bde22f9276ad2d94bbd9d455277a6d99223e94`.
+[Review 5544009375](https://github.com/yushun1990/clinkz-wot/pull/187#pullrequestreview-5544009375)
+accepted the exact two-getter delta at `1afa7d335afee37d635f7269e31106174fb1c797`;
+[review 5544192235](https://github.com/yushun1990/clinkz-wot/pull/187#pullrequestreview-5544192235)
+accepted all reported P2 repairs at `92530aca7e9be0867f841e6a68b3a04ecbd3ec78`.
+Those decisions are reused, not reopened. Neither review granted readmission.
+The accepted signatures, early comparison, encodings, implementation paths,
+completion keys and budgets are unchanged. Only the two missing API targets and
+their existing specification/scope projections are added to this baseline.
+
+The remaining independent decision is **ADR-0013 readmission of that accepted
+scope against the unchanged strict predecessor baseline**. The successor remains
+`planned/candidate/current` until that decision is recorded. Its existing
+`admission_review` still names the historical PR #184 admission; it does not
+stand for acceptance of this candidate. Independent readmission acceptance must
+record its own exact revision/review and the admitted disposition before the
+expanded source work resumes. No implementation, predecessor or gate acceptance
+is claimed here.
+
+### Baseline and evidence reuse
+
+All ten transitive Consumer predecessors are still `complete/admitted/current`
+on the reconstruction baseline; WP-000 is complete. Their records, completion
+files and accepted verdicts are unchanged by this candidate. Production, test,
+fixture and dependency files match both that master and PR #184's independently
+reviewed `1545d3b2329462d2620e73fe5bb00be66b9ebdae` byte for byte. Reuse those
+accepted strict contracts and source-specific evidence; do not reopen unchanged
+predecessors or reinterpret their quantitative results as owned measurements.
+The registered prechecks below are unchanged. Validation of this candidate is
+recorded at the exact Git/GitHub review boundary; automatic CI is diff hygiene
+only.
+
+The different source/evidence boundary is why readmission is isolated from
+[implementation PR #187](https://github.com/yushun1990/clinkz-wot/pull/187).
+That candidate has nine affected predecessor records marked `review-required`
+for changed Core metadata/error/seal/compiler layouts and Runtime accounting.
+Its current source cannot serve as an unchanged admission baseline. Restoring
+those records to current without independent reaffirmation, suppressing its P1
+negatives, or changing the authority checker would not resolve the obligation.
+This baseline admission does none of those things.
+
+### Candidate verification
+
+At exact candidate `72101391641ecfedbc9ed8e233e8b418ab2f874a`, all 16 commands in the successor's unchanged
+`pre_implementation_checks` pass, including the authority checker; the direct
+API/resource/ADR validators also pass (19 commands total). This uses Rust/Cargo
+1.99.0, locked/offline Cargo, disabled debug information/incremental compilation
+and the existing `/dev/shm/clinkz-wp400-owned-target` cache. Code/test/dependency
+blobs are identical to master; later evidence-only prose does not change those
+inputs. These are strict-baseline admission results, not #187 owned completion:
+
+| Existing check | Result |
+| --- | --- |
+| Configuration discriminator, std/no-default/async-no-std | 4/3/3 tests pass |
+| Controlled ownership candidate, same cells | 7/7/7 tests pass |
+| Foundation | 18 unit + 1 integration pass |
+| Core compiler support / Consumer binding | 14/28 pass |
+| Consumer Runtime, std | 47 integration + 1 library pass |
+| Consumer Runtime, portable cells | 22/22 pass |
+| Producer Runtime, std/portable cells | 11/4/4 pass |
+| Authority, API/resource/ADR and diff hygiene | Pass |
+
+The original P1 negatives and accepted P2 production regressions remain in #187
+at its separately reviewed revisions; none is removed, skipped or recast as a
+passing result by this baseline verification. Gate verdicts remain unchanged.
+
+### Changed-source completion impact
+
+The existing impact table below remains binding for #187. Nine affected
+predecessors require their renewed exact-source semantic/layout/work/failure
+results and independent evidence reaffirmation with successor completion;
+borrowed TD and WP-000 stay unchanged. No original strict contract has been
+falsified, so no predecessor is reopened by this admission candidate. Keep the
+original completion files and gate verdicts intact. Use the existing successor
+six-category evidence owner for new measurements, not parallel predecessor
+reports or nine new admission/review cycles. Accepted API/P2 decisions remain
+closed unless subsequent changed source actually invalidates their evidence.
+
+All six successor obligations, including executable cell qualification and full
+production accounting/pressure/handoff/disposal/regression evidence, remain
+completion work. This readmission decision grants neither changed-source
+reaffirmation nor successor completion; target measurements must follow the
+implementation rather than be a prerequisite for writing it.
+
+## Historical closed-compiler readmission
+
 [Independent acceptance on PR #184](https://github.com/yushun1990/clinkz-wot/pull/184#pullrequestreview-5535199041)
 accepts the bounded configuration/API/scope amendment for readmission, with no
 blocking findings, at exact head `1545d3b2329462d2620e73fe5bb00be66b9ebdae`
@@ -18,8 +108,8 @@ and [merge-push validation](https://github.com/yushun1990/clinkz-wot/actions/run
 passed; these CI checks cover diff hygiene only. The independent review records
 all 16 registered admission prechecks passing at the exact reviewed head.
 
-This documentation-only transition records admission of that accepted boundary;
-implementation remains `planned`. The
+That documentation-only transition recorded admission of that accepted boundary;
+implementation was `planned`. The
 [configuration amendment](../spec/consumer-resource-ownership.md#closed-consumer-binding-configuration)
 resolves the [binding/compiler configuration conflict](../../workspace/0086-consumer-owned-artifact-configuration.md)
 at the contract and source-scope boundary. It specifies the missing closed-compiler/API

@@ -229,6 +229,63 @@ reviewed ownership contract; current envelopes, leases and physical funding
 remain binding. Topic 0081's content/operand/persistence investigation remains
 outside this tranche and non-blocking under these constraints.
 
+## Compilation-cell projection amendment
+
+This bounded amendment addresses the independently confirmed mixed-cell finding
+in [PR #187](https://github.com/yushun1990/clinkz-wot/pull/187#discussion_r4290942708).
+The exact contract/API/source-scope delta below was independently accepted in
+[review 5544009375](https://github.com/yushun1990/clinkz-wot/pull/187#pullrequestreview-5544009375)
+at `1afa7d335afee37d635f7269e31106174fb1c797` against base
+`d4bde22f9276ad2d94bbd9d455277a6d99223e94`, with no blocking design finding.
+Tranche readmission, changed implementation, predecessor evidence reaffirmation
+and successor completion retain their separate ADR-0013 obligations. The
+successor remains `candidate`; this scope acceptance does not itself admit
+production implementation or accept a gate. Previously accepted encodings,
+cells, owner checks and exclusions remain fixed.
+
+Add `ConsumerBindingConfiguration::compilation_cell(&self) -> &'static str`
+as a public `const` getter. It returns exactly `"std"`, `"async-no-std"` or
+`"no-default"`, using the existing complete-policy coordinate spellings. Capture
+the cell once in private checked configuration metadata at construction, with
+the existing Core precedence: std, then async, then no-default. Read the captured
+coordinate without deriving it from the digest or constructing another value.
+No caller-supplied cell, new public cell type, mutable configuration, default/
+unchecked constructor, override or multi-cell support mask is introduced.
+
+Make `ConsumerCompilerSupport::consumer_configuration(&self) ->
+Option<ConsumerBindingConfiguration>` a public `const` getter. It returns `None`
+for strict support and the actual immutable `Some` retained after existing
+complete-owner/client/closed-compiler capture checks for owned support. The
+descriptor remains privately constructible and is borrowed through the existing
+`ConsumerCompilerRegistration::support`. Reading/copying metadata grants no
+client, callback, compiler, lease or destructor attestation authority. Both
+getters perform bounded, allocation-free metadata work without clock, parent
+access or operational callbacks.
+
+At the start of owned `ConsumerPropertyReadPolicy::qualify`, obtain the captured
+configuration through that support projection and compare its cell with
+Servient's **own** feature-selected cell. Use the same private Servient cell
+projection for this comparison and complete-policy encoding. Missing or
+different owned metadata rejects with the original complete input and fixed
+policy context before clock/input observation, allocation, parent mutation or
+operational callbacks. Reconstructing a configuration would run Core's feature
+selection again and cannot establish Servient's cell. Strict eligibility is
+unchanged; no policy-key or binding-key translation is permitted.
+
+Keep the existing mixed-cell production negatives. Completion requires zero
+clock/allocation/callback observations, unchanged parent totals/peaks and exact
+input/client recovery on rejection. Core native and supported Host capture must
+project the actual configuration; strict support must return `None`. Matching
+portable positives use the existing normal-library downstream runner's matching
+dependency graph, while Servient's mixed dev graph remains the negative control.
+Relocate affected positives within the admitted fixtures if necessary; do not
+ignore the negative or add a substitute runtime/compiler. Run all three Consumer
+cells and both existing ARM compile cells, and renew the affected layouts and
+failure measurements required by the admission impact table. ARM remains
+compilation/layout evidence only. Independent readmission and completion review
+are separate; neither the accepted scope nor passing tests reaffirms predecessors
+or changes gate verdicts.
+
 ## Backing and ownership rules
 
 Use three distinct declarations; summing them is not an engine measurement:
@@ -321,19 +378,22 @@ and continued-operation claims require separate complete-target evidence.
 
 ## Admitted API projection
 
-These are the exact admitted changes for the registered successor. Existing
+These are the exact registered changes for the successor; implementation follows
+its indexed admission disposition. Existing
 frozen API rows continue to describe `StrictV1`; the matching implementation
 must update only the necessary registered rows under this projection.
 The API matrix also records the successor additions as `absent/add` contract
 targets; those rows do not assert that the APIs exist before readmission.
 No generic binding-policy trait or central manager is introduced.
 
-| Package / API | Admitted change |
+| Package / API | Registered change |
 | --- | --- |
 | Foundation `ResourceLimits`, `ResourceKind`, `ResourceProfileId`, account/reservation APIs | No signature, generated ordering or value changes. Raw assembly remains unqualified. The checked Consumer policy binds schema identity and retains its full immutable values; exported cache/config records carry the explicit identity above. |
 | Core `BindingResourceContract` | Add `StrictV1`, `ConsumerOwnedV2`, `ConsumerOwnedHostV2`. The latter two select schema 2 with strict-local and host-process-failure disposal respectively. |
 | Core `BindingResourceDeclarations` | Add captured contract and `with_resource_contract(self, BindingResourceContract) -> Self`, plus `resource_contract(&self) -> BindingResourceContract`. Existing constructors select `StrictV1`. Add `with_consumer_result_limits(self, body_bytes: u64, media_capacity: u64) -> Self` and `consumer_result_limits(&self) -> Option<(u64, u64)>`. An owned complete registration requires explicit supported result limits and rejects unsupported role/cell or inconsistent metadata. Concrete private policy is part of its existing binding configuration, not an engine allocator interface. |
 | Core `ConsumerBindingConfiguration` | Add the checked immutable `Clone + Copy + Debug + Eq + PartialEq` value above. `try_new(contract: BindingResourceContract, target_capacity: usize, private_policy: BindingConfigurationDigest, body_bytes: u64, media_capacity: u64) -> CoreResult<Self>`; getters `resource_contract(&self)`, `target_capacity(&self)`, `private_policy(&self)`, `result_limits(&self)` return those operands, and `configuration(&self) -> BindingConfigurationDigest` returns the derived key. No public fields or unchecked/default constructor. |
+| Core `ConsumerBindingConfiguration::compilation_cell` — cell amendment | Public `const fn compilation_cell(&self) -> &'static str`; exactly the three captured singleton-cell spellings specified above. Accepted contract; production implementation awaits tranche readmission. |
+| Core `ConsumerCompilerSupport::consumer_configuration` — cell amendment | Public `const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>`; passive projection of actual closed support, `None` for strict. Accepted contract; the same readmission boundary applies. |
 | Core `ResolvedTargetCompiler`, `ConsumerCompilerSupport`, supported Host adapter | Add `ResolvedTargetCompiler::new_owned(ConsumerBindingConfiguration) -> Self`. Preserve strict constructor/key, compatibility, cursor/artifact types, target-copy algorithm and paid work. Capture and forward the actual immutable configuration through support. Remeasure the compiler/support/adapter, cursor/output/temporary and aggregate owners; strict source compatibility does not promise unchanged Layout. |
 | Core `PollClientBinding`, Host `ClientBinding`, complete Consumer-only constructors/capture | Add `consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>` with default `None`. Validate the actual owner's immutable metadata as specified above, without new execution or mutable-client escape. Existing complete signatures and exact recovery stay. Generic compiler/Host erasure remains ineligible for closed support. |
 | Core `BindingLifetimeFootprint`, `BindingTransientFootprint`, `BindingStateLayout` | Keep constructors/getters. Their interpreted scope is fixed by the captured contract, not by an untagged footprint alone. Owned retained items count engine-held owners; retained bytes include full concrete backing above. Static size/alignment/drop checks stay. |
