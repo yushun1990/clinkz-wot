@@ -3,16 +3,19 @@ design_revision = "5.1"
 work_package = "WP-400"
 tranche = "WP-400-CONSUMER-RESOURCE-OWNERSHIP"
 base_ref = "d4bde22f9276ad2d94bbd9d455277a6d99223e94"
-implementation_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+implementation_ref = "039280dbe67138369c2b512737f0795ccd95dc7d"
+verification_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
+fixture_source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
+preceding_fixture_source_sha256 = "167f2e15e4dc3b4a971e5b7dde2dcc72c89526d3c2f6b71b7658614e7a5b1c36"
 preceding_test_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
 recorded_on = "2026-10-16"
 status = "blocked"
 execution_status = "partial-with-reproduced-admitted-api-counterexample"
 acceptance = "none"
 admission_review = "github-pr:184#pullrequestreview-5535199041"
-assessment = "Unaccepted implementation candidate. All six registered categories have observations below, but completion is blocked by a production mixed-cell counterexample and the missing admitted cell-metadata projection. The two new portable negative tests intentionally fail; they are neither ignored nor reinterpreted as acceptance."
+assessment = "Unaccepted implementation candidate. The independent PR #187 review corroborates the mixed-cell finding; its exact passive cell/support API amendment is now proposed in the existing spec/API/scope owners, pending independent scoped review. The P2 diagnostic omissions are repaired and tested. All six category observations remain candidate/partial; the two retained portable negatives still fail and completion remains blocked."
 evidence_keys = ["consumer-owned-identity", "consumer-owned-handoff", "consumer-owned-accounting", "consumer-owned-pressure", "consumer-owned-disposal", "consumer-owned-regression"]
-fixture_source_sha256 = "167f2e15e4dc3b4a971e5b7dde2dcc72c89526d3c2f6b71b7658614e7a5b1c36"
+fixture_source_sha256 = "cb3f371122b2525ee2ac0a1cb6853fd75bd84117f312a4654b87802474534559"
 fixture_source_digest_encoding = "For lexically sorted fixture_sources: UTF-8 path, NUL, byte length as u64 LE, then exact Git blob bytes; SHA-256 of their concatenation."
 fixture_sources = ["core/tests/consumer_compiler_support.rs", "servient/tests/consumer_property_read/host.rs", "servient/tests/consumer_property_read/mod.rs", "servient/tests/consumer_property_read/ownership.rs", "tools/architecture-fixtures/consumer-aggregate-admission/Cargo.lock", "tools/architecture-fixtures/consumer-compiler-support/Cargo.lock", "tools/architecture-fixtures/consumer-property-read-binding/src/lib.rs", "tools/architecture-fixtures/consumer-property-read-binding/src/ownership.rs", "tools/architecture-fixtures/consumer-property-read-runner/src/lib.rs", "tools/architecture-fixtures/consumer-property-read-runner/tests/application.rs", "tools/architecture-fixtures/consumer-runtime-entry/Cargo.lock", "tools/architecture-fixtures/consumer-runtime-entry/src/production.rs"]
 
@@ -26,7 +29,7 @@ compilation_cells = ["std", "no-default", "async-no-std"]
 disposal_policies = ["strict-local", "host-process-failure"]
 implementation = "Core checked configuration/closed compiler/support/capture, explicit declarations, both full-backing seals and fixed error context; Servient checked owned policy, complete policy key, engine backing/accounting and fixed resource diagnostics. Reuses existing Planning and runtime algorithms and the existing Consumer author, runner, configuration and aggregate evidence infrastructure."
 stop = "No new public cell getter, support projection, policy constructor operand, Foundation/TD/Planning API, cell-identity translation, SDK, allocator manager or retirement framework was introduced to bypass the counterexample."
-source_revision_rule = "Each verification below records the exact revision actually run. The only implementation/test change after preceding_test_ref is the concrete fixture private-policy disposal tag; affected runtime/downstream/ARM and measurement commands were rerun at implementation_ref. Final evidence/admission-link edits do not change those source/test blobs."
+source_revision_rule = "Code/test repair is implementation_ref; the 30-command rerun is verification_ref, with identical production/test blobs. Later changes project the pending cell API amendment and record evidence only. Each verification keeps the exact revision actually executed. Unchanged earlier Core/ARM IR and supplementary observations retain their original refs; historical predecessor evidence is untouched."
 
 [environment]
 rustc = "1.99.0 (b940084d7 2026-09-28)"
@@ -65,8 +68,20 @@ trigger = "Cargo unifies dependency features per package. Servient's existing te
 control = "The real Core constructor returns canonical std binding vector c10c25e570a3783d6a2f5e71c4fc417de20e74bc3896c207de2786f91952ed18 while the real Servient policy has the portable complete key above. Both actual complete registration and runtime constructors are used; no replacement compiler or runtime participates."
 observed = "StaticConsumerPropertyReadRuntime::try_new accepts the mixed-cell registration and samples the clock once. Both no-default and async-no-std negative tests fail with: owned provisioning accepted Core std metadata under a portable Servient policy; clock observations=1."
 missing_projection = "The exact admitted ConsumerBindingConfiguration getters expose contract, target capacity, private-policy key, result pair and final binding key, but no cell. Complete registration hides its client; closed support does not publicly project cell metadata. Servient's checked policy is constructed before registration provisioning. A digest is not an inspectable cell coordinate."
-required_decision = "A scoped independent contract/API amendment must expose the captured cell through the supported complete owner, or explicitly revise which cell defines composition/policy identity. A narrow passive cell getter plus support projection would allow the existing matching rule to be checked; that extra public API is not in the exact admitted projection and was not implemented."
+required_decision = "Independently review the proposed compilation_cell and supported consumer_configuration getters in docs/spec/consumer-resource-ownership.md (Proposed compilation-cell projection amendment), docs/api-ownership.csv and the existing admission scope. They preserve existing keys and observe the captured Core cell for comparison with Servient itself. Both public additions remain unimplemented and the successor stays candidate until the exact amended scope is independently reviewed."
 falsifiable_completion = "The mixed-cell production tests reject before clock/allocation/callback/parent effects; matching std/no-default/async-no-std owned downstream cases remain passing; strict 64 keys, owned canonical vectors, exact complete-owner recovery and separate engine/binding identities remain intact."
+
+[review_response]
+independent_review = "github-pr:187#pullrequestreview-5543094684"
+reviewed_ref = "230477221f0489db8867304745408df74fbf73fd"
+diagnostic_repair_ref = "039280dbe67138369c2b512737f0795ccd95dc7d"
+diagnostic_verification_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
+cell_amendment_ref = "8fd7cece878d7464280e6323eaf176fe03f3db85"
+p1 = "Exact proposed passive getter/support projection registered for independent scope review; no excluded public source/API implementation or readmission. The original production negatives and canonical keys are retained."
+p2 = "The two reported omissions were reproduced as resource_failure=None against the reviewed production source with the strengthened tests. The repair stamps Core cause 314 as DeploymentFailure with the complete engine-policy key, preserving category/phase/retry/first cause/request. The direct static report reservation now records CleanupItemsMax, ceiling 0, requested 1, observed 0 and actual parent slot 912/next generation; no fictitious local owner is supplied."
+additional_diagnostics = "Owned checked build rows retain the complete engine policy key. All 34 static and 37 Host allocator-failure sites assert DeploymentFailure and the exact policy key; existing owners, rollback and terminal account release remain intact. The source-owned binding fixture supplies its actual private-policy key/domain for private pressure and its call allocation failure. The Host production path preserves that context and returned artifact configuration rather than replacing it with an engine row."
+diagnostic_cases = ["owned_parent_pressure_reports_actual_limiting_coordinates_without_losing_inputs", "owned_static_build_quota_failure_keeps_the_policy_key_and_actual_row", "owned_host_both_preacceptance_failures_return_exact_request_and_no_postacceptance_engine_allocation", "owned_host_binding_private_rejection_keeps_its_key_and_request", "owned_every_static_build_allocation_failure_reclaims_original_output_and_accounts", "owned_host_every_provision_and_build_allocation_failure_retains_exact_owner"]
+verification = "At diagnostic_verification_ref: all 19 Consumer commands rerun (16 pass, expected pending-impact authority failure, both retained cell negatives fail); default 61 integration + 3 library pass; portable cells each 30 pass/1 fail. Nine additional scoped regression/validator commands and two native allocation/layout commands pass. After the documentation-only API amendment: API validation and exact-base diff hygiene pass; authority still reports only the pending predecessor impact. No completion or independent acceptance follows."
 
 [impact_review]
 status = "review-required"
@@ -86,13 +101,13 @@ tests = ["owned_configuration_canonical_vectors_namespace_and_constructor_bounda
 key = "consumer-owned-handoff"
 execution_status = "scoped-cases-passed"
 observations = ["Actual static and Host normal, immediate late and polled late seals reject a 65-byte body against 64 and spare content-type/content-coding String capacity 33 against 32, with cause 327. Each complete raw owner reaches one terminal destruction and real parent totals return to zero.", "Both real Host preacceptance allocation failures return the same request map String address with zero raw starts. Normal accepted construction has two engine allocations; subsequent progress has one separately identified 8-byte private allocation and zero engine allocations. Existing strict first-cause, accepted overrun, transfer, unread result and original-account regressions pass.", "The new private growth owner remains binding-owned. Full Arc body/control-block/alignment and both media capacities are included in the owned engine call allowance; no leased-payload API or replacement seal exists."]
-tests = ["owned_static_normal_and_both_late_seals_reject_full_result_backing", "owned_host_normal_and_late_backing_faults_keep_the_original_raw_owner", "owned_host_both_preacceptance_failures_return_exact_request_and_no_postacceptance_engine_allocation"]
+tests = ["owned_static_normal_and_both_late_seals_reject_full_result_backing", "owned_host_normal_and_late_backing_faults_keep_the_original_raw_owner", "owned_host_both_preacceptance_failures_return_exact_request_and_no_postacceptance_engine_allocation", "owned_host_binding_private_rejection_keeps_its_key_and_request"]
 
 [[evidence]]
 key = "consumer-owned-accounting"
 execution_status = "partial"
-observations = ["Host zero/one-short/exact/one-over complete call allowance is 3104 bytes. Controlled runtime provisioning is two allocations, 12456 bytes live/peak, largest 11280: report 1176 and root 11280. These measurements exclude preconstructed author/clock/parent/private-pool objects, whose owners are separate; they are not whole-process RAM.", "Actual owned static provisioning allocates zero, with resident typed root/slot charged separately. Static aggregate build: 34 requests, retained 4283, peak 11867, largest 7552. Fault injection covers all 34 static and 37 Host build acquisition requests, both Host runtime requests and both call acquisition requests; no binding starts occur on failed builds and all tracked physical bytes/parent charges release.", "Core private Host adapter and retained slot fault injection, same-slot continuation, work exhaustion, abort/output release and exact input recovery run on actual code. Native compiler/support/cursor/output/temporary plus Host adapter/slot/outer layouts and aggregate/build/rollback/bridge/transfer carriers are remeasured below. Original historical measurements are preserved for independent impact review.", "Policy-key/domain diagnostics are observed on contract/result qualification, actual local/parent pressure and Host provisioning failure. Parent pressure reports the caller-supplied parent slot 911/next generation and the real local coordinate without changing totals/peaks on refusal.", "Exhaustive owned all-scope diagnostics, per-site complete author provisioning census and independent reaffirmation remain incomplete at the API stop. Numeric reservations are not physical allocations; conservative call/cancel/transfer and checkout overlap allowances are not added as independent physical copies."]
-tests = ["resource_ownership_native_layouts_cover_complete_aggregate_and_transfer_owners", "owned_host_complete_backing_measurements_and_exact_admission_boundaries", "owned_every_static_build_allocation_failure_reclaims_original_output_and_accounts", "owned_host_every_provision_and_build_allocation_failure_retains_exact_owner", "owned_parent_pressure_reports_actual_limiting_coordinates_without_losing_inputs"]
+observations = ["Host zero/one-short/exact/one-over complete call allowance is 3104 bytes. Controlled runtime provisioning is two allocations, 12456 bytes live/peak, largest 11280: report 1176 and root 11280. These measurements exclude preconstructed author/clock/parent/private-pool objects, whose owners are separate; they are not whole-process RAM.", "Actual owned static provisioning allocates zero, with resident typed root/slot charged separately. Static aggregate build: 34 requests, retained 4283, peak 11867, largest 7552. Fault injection covers all 34 static and 37 Host build acquisition requests, both Host runtime requests and both call acquisition requests; no binding starts occur on failed builds and all tracked physical bytes/parent charges release.", "Core private Host adapter and retained slot fault injection, same-slot continuation, work exhaustion, abort/output release and exact input recovery run on actual code. Native compiler/support/cursor/output/temporary plus Host adapter/slot/outer layouts and aggregate/build/rollback/bridge/transfer carriers are remeasured below. Original historical measurements are preserved for independent impact review.", "Policy-key/domain diagnostics cover contract/result qualification, actual local/parent pressure, owned build quotas, all 34 static/37 Host build allocator refusals and both Host provisioning/call allocation failures. Parent pressure reports actual slot 911/local coordinates; the direct report loan reports CleanupItemsMax at parent slot 912/next generation, limit 0/requested 1/observed 0, with no invented local coordinate. Limiting-account peak/totals are unchanged; all provisional charges roll back. Binding-private context and original request/artifact identity are preserved.", "Exhaustive owned all-scope diagnostics, per-site complete author provisioning census and independent reaffirmation remain incomplete at the API stop. Numeric reservations are not physical allocations; conservative call/cancel/transfer and checkout overlap allowances are not added as independent physical copies."]
+tests = ["resource_ownership_native_layouts_cover_complete_aggregate_and_transfer_owners", "owned_host_complete_backing_measurements_and_exact_admission_boundaries", "owned_every_static_build_allocation_failure_reclaims_original_output_and_accounts", "owned_host_every_provision_and_build_allocation_failure_retains_exact_owner", "owned_parent_pressure_reports_actual_limiting_coordinates_without_losing_inputs", "owned_static_build_quota_failure_keeps_the_policy_key_and_actual_row", "owned_host_binding_private_rejection_keeps_its_key_and_request"]
 
 [[evidence]]
 key = "consumer-owned-pressure"
@@ -109,10 +124,11 @@ tests = ["owned_host_residual_and_engine_funding_precede_finite_allocating_dispo
 [[evidence]]
 key = "consumer-owned-regression"
 execution_status = "failed"
-observations = ["All 19 registered Consumer gate commands were attempted: 16 pass; design authority fails on pending impact review; portable runtime commands each fail the new mixed-cell test with 29 other tests passing. Default runtime has 59 passing integration and 3 passing library tests.", "All 15 additional scoped verification commands pass: Foundation 18+1; Core Producer response/guard 2+7; Core rustdoc 35/26/26 plus existing portable docs; Producer Servient 11/4/4; real configuration/candidate/production entry tests in three cells; direct API/resource/ADR validation and exact-base diff hygiene.", "True downstream no-default/async-no-std normal-library owned execution and ARM compile/IR cases pass; mixed dependency-feature assembly is still rejected by the contract counterexample. Existing gate manifests/verdicts and workload identities/budgets are unchanged. No full Producer gate, full workspace CI, SDK/network, release performance or independent successor composition acceptance is claimed."]
+observations = ["All 19 registered Consumer gate commands were attempted: 16 pass; design authority fails on pending impact review; portable runtime commands each fail the new mixed-cell test with 30 other tests passing. Default runtime has 61 passing integration and 3 passing library tests.", "Earlier additional checks retain their exact original refs below. After the diagnostic repair, Producer Servient 11/4/4, real configuration/candidate/production entry cases in three cells, API/resource/ADR validation and two native allocation/layout commands were rerun and pass. The proposed API amendment subsequently passes API and exact-base diff validation; its authority check retains the disclosed pending-impact failure.", "True downstream no-default/async-no-std normal-library owned execution and ARM compile/IR cases pass; mixed dependency-feature assembly is still rejected by the contract counterexample. Existing gate manifests/verdicts and workload identities/budgets are unchanged. No full Producer gate, full workspace CI, SDK/network, release performance or independent successor composition acceptance is claimed."]
 tests = ["docs/work-packages/consumer-property-read-architecture-gate.toml:test_commands"]
 
 [native_layouts]
+runtime_measurement_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 format = "[size, alignment], x86_64 Rust 1.99.0; fixed Rust owners/overlap, not machine-stack or allocator-overhead measurements"
 compiler = [96, 8]
 support = [96, 8]
@@ -166,7 +182,7 @@ physical_scope = "Allocation observations identify controlled sites/owners and p
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "8fd7cece878d7464280e6323eaf176fe03f3db85"
 command = "tools/check-design-artifacts.sh"
 exit_code = 1
 test_summaries = ["test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"]
@@ -174,129 +190,131 @@ disposition = "Known pending impact-review authority failure"
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_admission --test validated_lending"
 exit_code = 0
-test_summaries = ["test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s", "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"]
+test_summaries = ["test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s", "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support"
 exit_code = 0
 test_summaries = ["test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --test consumer_property_read_binding --test consumer_compiler_support"
 exit_code = 0
 test_summaries = ["test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async --test consumer_property_read_binding --test consumer_compiler_support"
 exit_code = 0
 test_summaries = ["test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-planning --lib"
 exit_code = 0
 test_summaries = ["test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --lib"
 exit_code = 0
 test_summaries = ["test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features async --lib"
 exit_code = 0
 test_summaries = ["test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml"
 exit_code = 0
-test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.65s", "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s"]
+test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.66s", "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features"
 exit_code = 0
-test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.65s", "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s"]
+test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.87s", "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async"
 exit_code = 0
 test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.63s", "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1"
 exit_code = 0
-test_summaries = ["test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.01s", "test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.09s"]
+test_summaries = ["test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.01s", "test result: ok. 61 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.14s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test consumer_property_read -- --test-threads=1"
 exit_code = 101
-test_summaries = ["test result: FAILED. 29 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.79s"]
-disposition = "Blocking production mixed-cell counterexample; retained as failing test"
+test_summaries = ["test result: FAILED. 30 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.82s"]
+disposition = "Blocking mixed compilation-cell regression; scoped API amendment awaits independent review"
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test consumer_property_read -- --test-threads=1"
 exit_code = 101
-test_summaries = ["test result: FAILED. 29 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.83s"]
-disposition = "Blocking production mixed-cell counterexample; retained as failing test"
+test_summaries = ["test result: FAILED. 30 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.83s"]
+disposition = "Blocking mixed compilation-cell regression; scoped API amendment awaits independent review"
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner"
 exit_code = 0
-test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s", "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
+test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features"
 exit_code = 0
 test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async"
 exit_code = 0
-test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s", "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
+test_summaries = ["test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --target thumbv7em-none-eabihf"
 exit_code = 0
+test_summaries = []
 
 [[verification]]
 group = "consumer-gate"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async --target thumbv7em-none-eabihf"
 exit_code = 0
+test_summaries = []
 
 [[verification]]
 group = "scoped-regression"
@@ -335,67 +353,69 @@ test_summaries = ["test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --test property_read"
 exit_code = 0
 test_summaries = ["test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test resource_ownership_configuration --test resource_ownership_candidate --test production"
 exit_code = 0
 test_summaries = ["test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s", "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test property_read"
 exit_code = 0
 test_summaries = ["test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --test resource_ownership_configuration --test resource_ownership_candidate --test production"
 exit_code = 0
 test_summaries = ["test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s", "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test property_read"
 exit_code = 0
 test_summaries = ["test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --test resource_ownership_configuration --test resource_ownership_candidate --test production"
 exit_code = 0
 test_summaries = ["test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s", "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "8fd7cece878d7464280e6323eaf176fe03f3db85"
 command = "tools/check-api-ownership.sh"
 exit_code = 0
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "tools/check-resource-limits.sh"
 exit_code = 0
+test_summaries = []
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "tools/check-architecture-adrs.sh"
 exit_code = 0
+test_summaries = []
 
 [[verification]]
 group = "scoped-regression"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "8fd7cece878d7464280e6323eaf176fe03f3db85"
 command = "git diff --check d4bde22f9276ad2d94bbd9d455277a6d99223e94 HEAD"
 exit_code = 0
 
@@ -422,17 +442,17 @@ test_summaries = ["test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0
 
 [[verification]]
 group = "layout-and-allocation-observation"
-source_ref = "cef50b5a6dbf8eca93565d03a795b91a4c8af265"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --lib resource_ownership_native_layouts -- --nocapture"
 exit_code = 0
 test_summaries = ["test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s"]
 
 [[verification]]
 group = "layout-and-allocation-observation"
-source_ref = "5c905a7f465786e6fd8aafccb0f3bd04bda4cb8c"
+source_ref = "b1f2fc6dba1f16db726132922bfc8798d61053e8"
 command = "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read ownership -- --test-threads=1 --nocapture"
 exit_code = 0
-test_summaries = ["test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.33s"]
+test_summaries = ["test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.35s"]
 
 [[verification]]
 group = "layout-and-allocation-observation"
