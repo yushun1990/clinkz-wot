@@ -182,6 +182,97 @@ fn owned_parent_pressure_reports_actual_limiting_coordinates_without_losing_inpu
 }
 
 #[test]
+fn checked_row_rejections_keep_owned_context_and_strict_behavior_before_effects() {
+    struct NoClock;
+    impl RuntimeClock for NoClock {
+        fn now(&self) -> MonotonicInstant {
+            panic!("row rejection sampled the clock")
+        }
+        fn ticks_per_second(&self) -> core::num::NonZeroU64 {
+            panic!("row rejection observed clock configuration")
+        }
+    }
+    for kind in [
+        ResourceKind::BindingSlotStateBytesPerItemMax,
+        ResourceKind::BindingSlotStateBytesPerThingMax,
+        ResourceKind::BindingSlotStateBytesGlobalMax,
+    ] {
+        for limit in [None, Some(0)] {
+            for owned in [false, true] {
+                let mut limits = GatewayDefaultV1::LIMITS.clone();
+                assert!(limits.set(kind, limit));
+                let policy = if owned {
+                    owned_policy_with_limits(BindingResourceContract::ConsumerOwnedV2, limits)
+                } else {
+                    policy_with(limits)
+                };
+                let key = policy.resource_identity();
+                let parent = RefCell::new(policy.parent_accounts());
+                let mut report = report_storage();
+                let stats = Arc::new(Stats::default());
+                let client = if owned {
+                    StaticClient::new_owned(
+                        stats.clone(),
+                        outputs(),
+                        author(
+                            BindingResourceContract::ConsumerOwnedV2,
+                            Mode::Normal,
+                            pool(),
+                            false,
+                        ),
+                    )
+                } else {
+                    StaticClient::new(stats.clone(), outputs())
+                };
+                let registration = binding::static_registration(client);
+                let identity = registration.registration().identity();
+                observe(usize::MAX);
+                let rejected = StaticConsumerPropertyReadRuntime::try_new(
+                    registration,
+                    policy,
+                    &NoClock,
+                    &parent,
+                    &mut report,
+                )
+                .err()
+                .expect("missing or zero applicable row must reject");
+                assert_eq!(trace().requests, 0);
+                disarm();
+                let error = rejected.error().error();
+                if limit.is_none() {
+                    assert!(matches!(error, CoreError::UnsupportedOperation(_)));
+                } else {
+                    let (actual, ceiling, requested, observed) = error.limit_details().unwrap();
+                    assert_eq!((actual, ceiling, observed), (kind, 0, None));
+                    assert!(requested.unwrap() > 0);
+                }
+                assert_eq!(
+                    error.context().resource_failure(),
+                    owned.then_some((key, ResourceFailureDomain::EngineCapacity, None, None)),
+                    "{kind:?} {limit:?} owned={owned}"
+                );
+                assert_eq!(error.context().phase(), ErrorPhase::Admission);
+                assert_eq!(error.context().retry_class(), RetryClass::Never);
+                assert_eq!(rejected.input().0.registration().identity(), identity);
+                assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+                assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 0);
+                assert!(
+                    parent
+                        .borrow()
+                        .iter()
+                        .all(|a| a.used() == 0 && a.peak() == 0)
+                );
+                assert!(report.0.get().0.is_none());
+                assert_eq!(report.1.get(), 0);
+                assert_eq!(report.2.borrow().used(), 0);
+                drop(rejected);
+                assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
+            }
+        }
+    }
+}
+
+#[test]
 fn owned_static_build_quota_failure_keeps_the_policy_key_and_actual_row() {
     let contract = BindingResourceContract::ConsumerOwnedV2;
     let required = clinkz_wot_planning::ConsumerPropertyReadCleanupSlot::<ResolvedTargetArtifact>::required_capacity();

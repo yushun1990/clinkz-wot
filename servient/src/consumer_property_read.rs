@@ -612,7 +612,15 @@ impl ConsumerPropertyReadPolicy {
         self.resource_error(error, domain)
     }
     fn check(&self, kind: K, n: u64) -> CoreResult<()> {
-        check(&self.limits, kind, n).map_err(|e| self.build_error(e))
+        check(&self.limits, kind, n).map_err(|error| {
+            // This boundary knows the row's owner even when its value is
+            // missing. TD/Planning allocation classification is separate.
+            if self.contract == BindingResourceContract::StrictV1 {
+                error
+            } else {
+                self.resource_error(error, ResourceFailureDomain::EngineCapacity)
+            }
+        })
     }
     fn ledger(&self, generation: Generation, runtime: u64) -> AdmissionLedger {
         AdmissionLedger::new(
