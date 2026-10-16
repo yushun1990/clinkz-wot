@@ -1,15 +1,13 @@
 # 0087 Consumer Owned Compilation Cell Projection
 
-Status: DISCUSSING
+Status: MIGRATED
 
-This is the bounded API amendment proposed for
-[PR #187 P1](https://github.com/yushun1990/clinkz-wot/pull/187#discussion_r4290942708).
-The [independent review](https://github.com/yushun1990/clinkz-wot/pull/187#pullrequestreview-5543094684)
-accepts the finding at `230477221f0489db8867304745408df74fbf73fd`, but expressly
-leaves the exact API and successor implementation acceptance open. The proposed
-delta is projected into the existing owners below for independent scope review;
-it does not grant source admission. ADR-0013 requires that review before the new
-public API is implemented.
+The exact passive cell/support contract/API/source-scope amendment was
+[independently accepted](https://github.com/yushun1990/clinkz-wot/pull/187#pullrequestreview-5544009375)
+at `1afa7d335afee37d635f7269e31106174fb1c797`. Its detailed contract and separate
+readmission/implementation boundary live in the linked owners below. This
+migration closes the API/scope decision; it grants no tranche readmission,
+predecessor reaffirmation or successor completion.
 
 ## Evidence and selected repair
 
@@ -24,13 +22,13 @@ Both registered portable runtime commands fail. The
 [successor evidence](../docs/evidence/WP-400-consumer-resource-ownership.toml)
 owns the exact keys, commands and observations.
 
-The exact proposed correction now lives in the
-[specification amendment](../docs/spec/consumer-resource-ownership.md#proposed-compilation-cell-projection-amendment),
+The accepted scoped correction lives in the
+[specification amendment](../docs/spec/consumer-resource-ownership.md#compilation-cell-projection-amendment),
 [two API targets](../docs/api-ownership.csv) and
 [admission scope](../docs/work-packages/WP-400-consumer-resource-ownership-admission.md).
 Those owners define the passive getters, captured singleton-cell semantics,
 comparison before effects, exact source boundary and completion obligations.
-Their migration into a reviewable proposed delta does not grant admission.
+Their independent scope acceptance does not grant tranche readmission.
 
 ## Rejected alternatives
 
@@ -46,10 +44,10 @@ Their migration into a reviewable proposed delta does not grant admission.
 ## Review boundary
 
 The original PR #184 configuration amendment did not admit either new public
-projection. This bounded proposal changes neither the canonical encodings nor
+projection. The accepted correction changes neither the canonical encodings nor
 which crate determines each captured cell. It selects passive observation of the
 existing complete owner, preserving the original rule rather than weakening it.
-The amendment's exact API/scope still needs independent review before source
-implementation; successor completion and predecessor reaffirmation remain
-separate decisions. The successor stays `candidate`, the mixed-cell production
+The exact API/scope decision is closed; source readmission, implementation,
+predecessor reaffirmation and successor completion remain separate ADR-0013
+obligations. The successor remains `candidate` in its index, the production cell
 negatives remain active, and gate verdicts do not change.
