@@ -35,6 +35,16 @@ fn owned_configuration_canonical_vectors_namespace_and_constructor_boundaries() 
         32,
     )
     .unwrap();
+    assert_eq!(
+        base.compilation_cell(),
+        if cfg!(feature = "std") {
+            "std"
+        } else if cfg!(feature = "async") {
+            "async-no-std"
+        } else {
+            "no-default"
+        }
+    );
     let expected = if cfg!(feature = "std") {
         "c10c25e570a3783d6a2f5e71c4fc417de20e74bc3896c207de2786f91952ed18"
     } else if cfg!(feature = "async") {
@@ -876,6 +886,7 @@ fn host(
     .unwrap_or_else(|_| panic!("complete Host construction"))
 }
 fn check_descriptor(support: &ConsumerCompilerSupport, capacity: usize, host: bool) {
+    assert_eq!(support.consumer_configuration(), None);
     assert_eq!(support.target_capacity(), capacity);
     assert_eq!(
         support.cursor_layout(),
@@ -2350,6 +2361,9 @@ mod consumer_only_support {
         let (owner, requests) = observe(false, || owner.try_into_consumer_compiler());
         no_requests(requests);
         let owner = owner.unwrap_or_else(|_| panic!("owned capture"));
+        let (projection, requests) = observe(false, || owner.support().consumer_configuration());
+        no_requests(requests);
+        assert_eq!(projection, Some(actual));
         let plan = plan("mock://s/a");
         let input =
             BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);
@@ -2424,6 +2438,10 @@ mod consumer_only_support {
                 .unwrap_or_else(|_| panic!())
                 .try_into_consumer_compiler()
                 .unwrap_or_else(|_| panic!());
+            let (projection, requests) =
+                observe(false, || owner.support().consumer_configuration());
+            no_requests(requests);
+            assert_eq!(projection, Some(actual));
             let plan = plan("mock://s/a");
             let input =
                 BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);

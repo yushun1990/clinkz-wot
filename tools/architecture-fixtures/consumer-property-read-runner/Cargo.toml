@@ -12,6 +12,7 @@ clinkz-wot-td = { path = "../../../td", default-features = false }
 clinkz-wot-consumer-property-read-binding-fixture = { path = "../consumer-property-read-binding", default-features = false }
 
 [dev-dependencies]
+clinkz-wot-planning = { path = "../../../planning", default-features = false }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [features]

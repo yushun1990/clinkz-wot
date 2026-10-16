@@ -165,6 +165,15 @@ fn stamp_resource(
     }
     error
 }
+const fn compilation_cell() -> &'static str {
+    if cfg!(feature = "std") {
+        "std"
+    } else if cfg!(feature = "async") {
+        "async-no-std"
+    } else {
+        "no-default"
+    }
+}
 fn pay(b: &mut WorkBudget, costs: &[(W, u64)]) -> bool {
     if costs.iter().any(|&(w, n)| b.remaining(w) < n) {
         return false;
@@ -439,6 +448,14 @@ impl ConsumerPropertyReadPolicy {
             return Err(self.resource_error(unsupported(), ResourceFailureDomain::EngineCapacity));
         }
         if self.contract != BindingResourceContract::StrictV1 {
+            if r.support()
+                .consumer_configuration()
+                .is_none_or(|c| c.compilation_cell() != compilation_cell())
+            {
+                return Err(
+                    self.resource_error(unsupported(), ResourceFailureDomain::EngineCapacity)
+                );
+            }
             let Some((body, media)) = resources.consumer_result_limits() else {
                 return Err(unsupported());
             };

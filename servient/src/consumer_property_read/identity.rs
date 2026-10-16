@@ -126,13 +126,7 @@ pub(super) fn policy_key(p: &ConsumerPropertyReadPolicy) -> BindingConfiguration
         b"consumer-property-read",
         b"consumer-only",
         b"manual-poll",
-        if cfg!(feature = "std") {
-            b"std"
-        } else if cfg!(feature = "async") {
-            b"async-no-std"
-        } else {
-            b"no-default"
-        },
+        super::compilation_cell().as_bytes(),
         if p.contract == BindingResourceContract::ConsumerOwnedHostV2 {
             b"host-process-failure"
         } else {

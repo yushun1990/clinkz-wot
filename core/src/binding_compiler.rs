@@ -456,6 +456,7 @@ pub(crate) const fn resolved_target_compatibility() -> BindingArtifactCompatibil
 pub struct ConsumerBindingConfiguration {
     contract: BindingResourceContract,
     capacity: u8,
+    cell: u8,
     private_policy: BindingConfigurationDigest,
     result: (u64, u64),
     key: BindingConfigurationDigest,
@@ -513,6 +514,7 @@ impl ConsumerBindingConfiguration {
         Ok(Self {
             contract,
             capacity: target_capacity as u8,
+            cell,
             private_policy,
             result: (body_bytes, media_capacity),
             key,
@@ -525,6 +527,14 @@ impl ConsumerBindingConfiguration {
     /// Returns the supported target capacity.
     pub const fn target_capacity(&self) -> usize {
         self.capacity as usize
+    }
+    /// Returns the singleton compilation cell captured by this configuration.
+    pub const fn compilation_cell(&self) -> &'static str {
+        match self.cell {
+            2 => "std",
+            1 => "async-no-std",
+            _ => "no-default",
+        }
     }
     /// Returns the actual client's private-policy identity.
     pub const fn private_policy(&self) -> BindingConfigurationDigest {
@@ -765,7 +775,8 @@ impl ConsumerCompilerSupport {
             None => strict_configuration(self.capacity),
         }
     }
-    pub(crate) const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+    /// Projects the actual immutable owned configuration; strict support has none.
+    pub const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
         self.owned
     }
     /// Returns the actual checked target capacity in bytes.
