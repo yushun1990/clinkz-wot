@@ -11,9 +11,20 @@ The implementation's production cell-matching counterexample and impact review
 are recorded in the [successor evidence](../evidence/WP-400-consumer-resource-ownership.toml).
 The historical readmission below does not authorize the additional public cell
 projection identified there; `index.toml` owns the resulting admission disposition.
-The [bounded cell/support projection proposal](../../workspace/0087-consumer-owned-compilation-cell-projection.md)
-is review material for that missing API. It remains outside accepted source
-authority until migration and independent scoped review under ADR-0013.
+The [proposed cell/support amendment](../spec/consumer-resource-ownership.md#proposed-compilation-cell-projection-amendment)
+and its two registered API targets are review material for that missing API.
+They remain outside accepted source authority pending independent scoped review
+under ADR-0013. The [finding and alternatives](../../workspace/0087-consumer-owned-compilation-cell-projection.md)
+explain the bounded correction.
+
+The proposed delta is exactly the passive public `const` getters
+`ConsumerBindingConfiguration::compilation_cell(&self) -> &'static str` and
+`ConsumerCompilerSupport::consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>`,
+with the matching rule and completion negatives owned by the specification.
+The existing implementation paths suffice; no additional production package,
+public cell type or schema encoding is proposed. The nine predecessor impact
+reviews and all six successor evidence obligations remain open. Approval of this
+contract amendment would not accept the implementation or reaffirm evidence.
 
 [Independent acceptance on PR #184](https://github.com/yushun1990/clinkz-wot/pull/184#pullrequestreview-5535199041)
 accepts the bounded configuration/API/scope amendment for readmission, with no

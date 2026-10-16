@@ -916,10 +916,13 @@ api_items = [
     "ResolvedTargetCompiler", "ConsumerCompilerSupport", "ConsumerCompilerRegistration",
     "PollClientBinding", "ClientBinding", "resolved_target_compiler_new_owned",
     "poll_client_binding_consumer_configuration", "client_binding_consumer_configuration",
+    "consumer_binding_configuration_compilation_cell",
+    "consumer_compiler_support_consumer_configuration",
 ]
 state_machines = ["compiled-plan-set", "in-flight"]
 resource_changes = [
     "Closed Consumer compiler configuration amendment: strict capacity keys and payload format unchanged; owned keys derive from actual capacity/format/contract/cell/private policy/result bounds and match the captured complete client. Binding eligibility, engine policy, content and generation remain separate identities.",
+    "Proposed passive cell/support projection: expose the actual captured singleton cell and immutable supported configuration for Servient comparison before effects. Candidate scope only; exact API amendment awaits independent review and grants no source readmission.",
     "Admitted ownership schema 2 over the pinned unchanged 196-row numeric table; typed-input interpretation remains 2. Exactly 20 Consumer byte rows change scope; no V1 profile or old footprint is implicitly converted.",
     "Engine carriers, full handoff backing, compiler artifacts/cursors, original accounts and prebacked cleanup stay funded. Private growth/refusal belongs to a concrete binding policy. Preserve conservative controlled scratch/cancellation/transfer reservations; shared private backing has one physical owner.",
     "Explicit strict-local versus Host process-failure disposal. Only finite SDK-local allocation may be added; engine status/fallback and postacceptance seal installation remain allocation-free. New accounting/backing/disposal paths require exact revision evidence.",
