@@ -388,7 +388,7 @@ No generic binding-policy trait or central manager is introduced.
 The two cell-amendment rows below record the accepted scoped delta above;
 tranche readmission remains separate.
 
-| Package / API | Admitted change |
+| Package / API | Registered change |
 | --- | --- |
 | Foundation `ResourceLimits`, `ResourceKind`, `ResourceProfileId`, account/reservation APIs | No signature, generated ordering or value changes. Raw assembly remains unqualified. The checked Consumer policy binds schema identity and retains its full immutable values; exported cache/config records carry the explicit identity above. |
 | Core `BindingResourceContract` | Add `StrictV1`, `ConsumerOwnedV2`, `ConsumerOwnedHostV2`. The latter two select schema 2 with strict-local and host-process-failure disposal respectively. |
