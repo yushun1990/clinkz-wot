@@ -22,6 +22,9 @@ use core::{
     task::{Context, Poll},
 };
 
+pub mod ownership;
+use ownership::{OwnedCall, OwnedPolicy};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Mode {
@@ -145,13 +148,21 @@ fn error() -> CoreError {
             .with_redacted_cause(451, "finite client error"),
     )
 }
-fn rejection(request: OutboundRequest) -> BindingInputRejection<OutboundRequest> {
+fn rejection(
+    request: OutboundRequest,
+    policy: Option<&OwnedPolicy>,
+    domain: ResourceFailureDomain,
+) -> BindingInputRejection<OutboundRequest> {
+    let mut context = ErrorContext::new(ErrorPhase::Binding, RetryClass::Never);
+    if let Some(policy) = policy {
+        context = context
+            .with_plan(request.plan_id())
+            .with_binding(request.binding_id(), request.binding_generation())
+            .with_resource_failure(policy.configuration().private_policy(), domain, None, None);
+    }
     BindingInputRejection::new(
         request,
-        BindingOperationalError::new(CoreError::Backpressure(ErrorContext::new(
-            ErrorPhase::Binding,
-            RetryClass::Never,
-        ))),
+        BindingOperationalError::new(CoreError::Backpressure(context)),
     )
 }
 fn prepare_output(
@@ -193,6 +204,7 @@ pub struct State {
     static_fabricated: bool,
     prepared: bool,
     validation: Mode,
+    owned: Option<OwnedCall>,
 }
 impl State {
     fn prepare(&mut self) {
@@ -212,6 +224,9 @@ impl State {
         }
         self.stats.hook();
         self.stats.polls.fetch_add(1, Ordering::SeqCst);
+        if self.owned.as_mut().is_some_and(|p| !p.progress()) {
+            return Poll::Pending;
+        }
         self.prepare();
         if self.mode == Mode::Pending {
             return Poll::Pending;
@@ -319,13 +334,25 @@ pub struct StaticClient {
     pub stats: Arc<Stats>,
     outputs: [Option<InteractionOutput>; 8],
     next: usize,
+    owned: Option<OwnedPolicy>,
 }
 impl StaticClient {
+    pub fn new_owned(
+        stats: Arc<Stats>,
+        outputs: [Option<InteractionOutput>; 8],
+        policy: OwnedPolicy,
+    ) -> Self {
+        let mut client = Self::new(stats, outputs);
+        client.owned = Some(policy);
+        client
+    }
+
     pub fn new(stats: Arc<Stats>, outputs: [Option<InteractionOutput>; 8]) -> Self {
         Self {
             stats,
             outputs,
             next: 0,
+            owned: None,
         }
     }
 }
@@ -337,6 +364,9 @@ impl Drop for StaticClient {
 impl PollClientBinding for StaticClient {
     type Compiler = ResolvedTargetCompiler;
     type RequestState = State;
+    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        self.owned.as_ref().map(|p| p.configuration())
+    }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         ResolvedTargetCompiler::try_new(64).unwrap().compatibility()
     }
@@ -352,18 +382,29 @@ impl PollClientBinding for StaticClient {
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
     {
-        let mode = self.stats.mode();
+        let mode = self
+            .owned
+            .as_ref()
+            .map_or_else(|| self.stats.mode(), |p| p.mode);
         if mode == Mode::Reject
             || self.next == self.outputs.len()
             || budget.consume(WorkClass::BindingPolls, 1).is_err()
         {
-            return Err(rejection(request));
+            return Err(rejection(
+                request,
+                self.owned.as_ref(),
+                ResourceFailureDomain::BindingPolicy,
+            ));
         }
         self.stats.selected(artifact.artifact().payload().target());
         let output = prepare_output(
             &request,
             self.outputs[self.next].take().unwrap(),
-            self.stats.validation(mode),
+            if self.owned.is_some() {
+                mode
+            } else {
+                self.stats.validation(mode)
+            },
         );
         self.next += 1;
         self.stats.starts.fetch_add(1, Ordering::SeqCst);
@@ -376,7 +417,12 @@ impl PollClientBinding for StaticClient {
                 mode,
                 static_fabricated: false,
                 prepared: true,
-                validation: self.stats.validation(mode),
+                validation: if self.owned.is_some() {
+                    mode
+                } else {
+                    self.stats.validation(mode)
+                },
+                owned: self.owned.as_ref().map(|p| p.call()),
             },
         );
         Ok(StartStatus::Pending)
@@ -438,13 +484,22 @@ fn identity(c: &ResolvedTargetCompiler) -> BindingRegistrationIdentity {
 pub fn static_registration(
     client: StaticClient,
 ) -> ConsumerCompilerRegistration<StaticConsumerBindingRegistration<StaticClient>> {
-    let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
+    let owned = client.owned.as_ref().map(|p| p.configuration());
+    let compiler = owned.map_or_else(
+        || ResolvedTargetCompiler::try_new(64).unwrap(),
+        ResolvedTargetCompiler::new_owned,
+    );
+    let resources = owned.map_or_else(resources, |c| {
+        resources()
+            .with_resource_contract(c.resource_contract())
+            .with_consumer_result_limits(c.result_limits().0, c.result_limits().1)
+    });
     StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
         identity(&compiler),
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(compiler),
         client,
-        resources(),
+        resources,
         BindingStatusPolicy::new(2, 17),
     ))
     .unwrap_or_else(|_| panic!("static complete registration"))
@@ -456,13 +511,25 @@ pub fn static_registration(
 pub struct HostClient {
     pub stats: Arc<Stats>,
     inbox: std::sync::Mutex<([Option<InteractionOutput>; 8], usize)>,
+    owned: Option<OwnedPolicy>,
 }
 #[cfg(feature = "std")]
 impl HostClient {
+    pub fn new_owned(
+        stats: Arc<Stats>,
+        outputs: [Option<InteractionOutput>; 8],
+        policy: OwnedPolicy,
+    ) -> Self {
+        let mut client = Self::new(stats, outputs);
+        client.owned = Some(policy);
+        client
+    }
+
     pub fn new(stats: Arc<Stats>, outputs: [Option<InteractionOutput>; 8]) -> Self {
         Self {
             stats,
             inbox: std::sync::Mutex::new((outputs, 0)),
+            owned: None,
         }
     }
 }
@@ -474,6 +541,9 @@ impl Drop for HostClient {
 }
 #[cfg(feature = "std")]
 impl binding::ClientBinding for HostClient {
+    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        self.owned.as_ref().map(|p| p.configuration())
+    }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         ResolvedTargetCompiler::try_new(64).unwrap().compatibility()
     }
@@ -485,17 +555,34 @@ impl binding::ClientBinding for HostClient {
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
     > {
-        let mode = self.stats.mode();
+        let mode = self
+            .owned
+            .as_ref()
+            .map_or_else(|| self.stats.mode(), |p| p.mode);
         if mode == Mode::Reject {
-            return Err(rejection(request));
+            return Err(rejection(
+                request,
+                self.owned.as_ref(),
+                ResourceFailureDomain::BindingPolicy,
+            ));
         }
         let mut inbox = match self.inbox.try_lock() {
             Ok(i) => i,
-            Err(_) => return Err(rejection(request)),
+            Err(_) => {
+                return Err(rejection(
+                    request,
+                    self.owned.as_ref(),
+                    ResourceFailureDomain::BindingPolicy,
+                ));
+            }
         };
         let index = inbox.1;
         if index == inbox.0.len() {
-            return Err(rejection(request));
+            return Err(rejection(
+                request,
+                self.owned.as_ref(),
+                ResourceFailureDomain::BindingPolicy,
+            ));
         }
         self.stats.selected(
             artifact
@@ -511,13 +598,22 @@ impl binding::ClientBinding for HostClient {
             mode,
             static_fabricated: false,
             prepared: false,
-            validation: self.stats.validation(mode),
+            validation: if self.owned.is_some() {
+                mode
+            } else {
+                self.stats.validation(mode)
+            },
+            owned: self.owned.as_ref().map(|p| p.call()),
         };
         let call = match HostBindingCallBox::try_new(state) {
             Ok(call) => call,
             Err(mut state) => {
                 inbox.0[index] = Some(state.output.take().unwrap().unwrap());
-                return Err(rejection(state.request.take().unwrap()));
+                return Err(rejection(
+                    state.request.take().unwrap(),
+                    self.owned.as_ref(),
+                    ResourceFailureDomain::DeploymentFailure,
+                ));
             }
         };
         inbox.1 += 1;
@@ -564,13 +660,22 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for State {
 pub fn host_registration(
     client: HostClient,
 ) -> ConsumerCompilerRegistration<HostConsumerBindingRegistration> {
-    let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
+    let owned = client.owned.as_ref().map(|p| p.configuration());
+    let compiler = owned.map_or_else(
+        || ResolvedTargetCompiler::try_new(64).unwrap(),
+        ResolvedTargetCompiler::new_owned,
+    );
+    let resources = owned.map_or_else(resources, |c| {
+        resources()
+            .with_resource_contract(c.resource_contract())
+            .with_consumer_result_limits(c.result_limits().0, c.result_limits().1)
+    });
     HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
         identity(&compiler),
         BindingExecutionSupport::host_erased(),
         HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),
         alloc::boxed::Box::new(client),
-        resources(),
+        resources,
         BindingStatusPolicy::new(2, 17),
     ))
     .unwrap_or_else(|_| panic!("Host complete registration"))

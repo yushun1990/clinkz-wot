@@ -32,12 +32,35 @@ pub fn validate_untrusted_binding_output(
 /// binding author or runtime caller.
 pub(crate) struct ConsumerResultSeal {
     artifact: BindingArtifactRef,
+    result_limits: Option<(u64, u64)>,
+}
+
+// Arc<[u8]> owns two atomic counters followed by the complete byte slice.
+// Layout::extend/pad_to_align includes the tail padding and rejects lengths
+// exceeding isize::MAX. Media Strings retain their full capacities.
+pub(crate) fn consumer_result_backing(body: u64, media: u64) -> Option<u64> {
+    use core::alloc::Layout;
+    if body == 0 || media == 0 {
+        return None;
+    }
+    let tail = Layout::array::<u8>(usize::try_from(body).ok()?).ok()?;
+    let arc = Layout::new::<[usize; 2]>()
+        .extend(tail)
+        .ok()?
+        .0
+        .pad_to_align();
+    Layout::array::<u8>(usize::try_from(media).ok()?).ok()?;
+    (arc.size() as u64).checked_add(media.checked_mul(2)?)
 }
 
 impl ConsumerResultSeal {
-    pub(crate) const fn from_request(request: &OutboundRequest) -> Self {
+    pub(crate) const fn from_request(
+        request: &OutboundRequest,
+        result_limits: Option<(u64, u64)>,
+    ) -> Self {
         Self {
             artifact: request.artifact(),
+            result_limits,
         }
     }
 
@@ -46,6 +69,21 @@ impl ConsumerResultSeal {
     }
 
     pub(crate) fn validate(self, output: InteractionOutput) -> CoreResult<InteractionOutput> {
+        if let Some((body, media)) = self.result_limits {
+            let fits = output.data().is_some_and(|payload| {
+                payload.body.len() as u64 <= body
+                    && payload.content_type.capacity() as u64 <= media
+                    && payload
+                        .content_coding
+                        .as_ref()
+                        .is_none_or(|s| s.capacity() as u64 <= media)
+            });
+            if !fits {
+                return Err(
+                    self.validation_error(327, "Consumer result exceeds complete backing bound")
+                );
+            }
+        }
         let identity = self.artifact.identity();
         validate_property_read_binding_output(
             identity.binding_id(),
@@ -61,7 +99,7 @@ impl ConsumerResultSeal {
         output: InteractionOutput,
     ) -> CoreResult<InteractionOutput> {
         if self.matches_request(request) {
-            validate_untrusted_binding_output(request, output)
+            self.validate(output)
         } else {
             Err(self.validation_error(320, "accepted request identity changed"))
         }

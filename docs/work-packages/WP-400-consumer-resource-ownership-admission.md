@@ -4,8 +4,8 @@
 record of the separate ADR-0013 readmission of the cross-package
 successor to the accepted strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
 and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
-semantics and row/API/diagnostic changes. Production code and existing evidence
-records are unchanged.
+semantics and row/API/diagnostic changes. At the readmission baseline, production
+code and existing predecessor evidence records were unchanged.
 
 ## Compilation-cell readmission
 
@@ -25,8 +25,8 @@ their existing specification/scope projections are added to this baseline.
 admits that expanded scope against the unchanged strict predecessor baseline at
 exact head `7ff29d56602a9de8be27b0eb74c576778044f562`, against base
 `d4bde22f9276ad2d94bbd9d455277a6d99223e94`, with no blocking findings.
-The successor is `planned/admitted/current`; its indexed `admission_review`
-records that independent decision. This grants bounded implementation authority,
+The accepted baseline was `planned/admitted/current`; the index owns subsequent
+implementation status and records that independent `admission_review`. This grants bounded implementation authority,
 not acceptance of #187's implementation, changed-source predecessor
 reaffirmation, successor completion or any gate.
 
@@ -314,10 +314,12 @@ No latency, hard RAM, allocator-metadata or whole-device claim follows here.
 ## Remaining blocks
 
 Production migration is admitted only within the registered scope above, following
-the exact-head independent acceptance on PR #184. The accepted amendment resolves
+the recorded compilation-cell readmission on PR #188. The accepted amendment resolves
 0086 at the contract boundary and reconciles 0081 without requiring shared
 programs. No new precursor tranche or global gate is required.
-Successor completion is blocked on new production evidence above.
+Successor completion requires the production evidence above and independent
+changed-source predecessor reaffirmation and completion acceptance in the
+existing successor evidence owner.
 HTTP Consumer admission then consumes that accepted shared boundary and matching
 predecessors; HTTP method/response metadata eligibility, SDK selection/pinning,
 real peers and input/overload/cancellation/disposal qualification remain in its

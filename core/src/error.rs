@@ -1,13 +1,31 @@
 use core::fmt;
 use core::time::Duration;
 
-use clinkz_wot_foundation::ResourceKind;
+use clinkz_wot_foundation::{Generation, ResourceKind, SlotIndex};
 use clinkz_wot_td::data_type::Operation;
 
 use crate::identity::{
     AffordanceSlotId, BindingGeneration, BindingId, CorrelationId, PlanId, ThingSlotId,
 };
 const REDACTED_CAUSE_CAPACITY: usize = 96;
+
+/// Physical owner responsible for a resource failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResourceFailureDomain {
+    /// Engine-controlled capacity or handoff backing.
+    EngineCapacity,
+    /// The binding's captured private protocol policy.
+    BindingPolicy,
+    /// The application's allocator, process or runtime policy.
+    DeploymentFailure,
+}
+
+type ResourceFailure = (
+    crate::BindingConfigurationDigest,
+    ResourceFailureDomain,
+    Option<(SlotIndex, Generation)>,
+    Option<(SlotIndex, Generation)>,
+);
 
 /// Caller-visible retry classification for a structured core error.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -99,6 +117,7 @@ pub enum SecurityFailureReason {
 /// UTF-8 boundary and never retains provider errors, payloads, or credentials.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ErrorContext {
+    resource_failure: Option<ResourceFailure>,
     thing: Option<ThingSlotId>,
     target: Option<AffordanceSlotId>,
     operation: Option<Operation>,
@@ -119,6 +138,7 @@ impl ErrorContext {
     /// Creates an empty context with explicit phase and retry advice.
     pub const fn new(phase: ErrorPhase, retry_class: RetryClass) -> Self {
         Self {
+            resource_failure: None,
             thing: None,
             target: None,
             operation: None,
@@ -134,6 +154,24 @@ impl ErrorContext {
             cause_len: 0,
             cause_truncated: false,
         }
+    }
+
+    /// Records the complete resource-policy key and effective limiting owners.
+    #[must_use]
+    pub const fn with_resource_failure(
+        mut self,
+        identity: crate::BindingConfigurationDigest,
+        domain: ResourceFailureDomain,
+        local: Option<(SlotIndex, Generation)>,
+        parent: Option<(SlotIndex, Generation)>,
+    ) -> Self {
+        self.resource_failure = Some((identity, domain, local, parent));
+        self
+    }
+
+    /// Returns the fixed resource-policy identity, domain and owner coordinates.
+    pub const fn resource_failure(&self) -> Option<ResourceFailure> {
+        self.resource_failure
     }
 
     /// Adds a generation-bearing Thing identity.
@@ -284,6 +322,7 @@ impl fmt::Debug for ErrorContext {
             .field("binding", &self.binding)
             .field("correlation", &self.correlation)
             .field("phase", &self.phase)
+            .field("resource_failure", &self.resource_failure)
             .field("cause_code", &self.cause_code)
             .field("redacted_cause", &self.redacted_cause())
             .finish()

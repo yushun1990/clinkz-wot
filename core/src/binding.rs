@@ -27,8 +27,8 @@ use crate::{
     PlanSetGeneration, ResponsePayloadRole, RetryClass, StartStatus, ThingId,
 };
 use crate::{
-    BindingCompilerExtension, ConsumerCompilerSupport, ResolvedTargetCompiler,
-    StaticBindingCompilerRegistration,
+    BindingCompilerExtension, ConsumerBindingConfiguration, ConsumerCompilerSupport,
+    ResolvedTargetCompiler, StaticBindingCompilerRegistration,
 };
 #[cfg(feature = "std")]
 use crate::{HostBindingArtifact, HostBindingCompilerRegistration};
@@ -334,9 +334,23 @@ impl BindingExecutionSupport {
     }
 }
 
+/// Explicit interpretation of a complete binding's resource declarations.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum BindingResourceContract {
+    /// Original transitive maxima and nonallocating local disposal.
+    #[default]
+    StrictV1,
+    /// Consumer engine-held backing, binding-private policy, strict disposal.
+    ConsumerOwnedV2,
+    /// Consumer ownership with finite SDK-local Host disposal allocations.
+    ConsumerOwnedHostV2,
+}
+
 /// Registration-level declared and admitted retained-resource bounds.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct BindingResourceDeclarations {
+    contract: BindingResourceContract,
+    consumer_result: Option<(u64, u64)>,
     declared: BindingLifetimeFootprint,
     admitted: BindingLifetimeFootprint,
     route_state: BindingLifetimeFootprint,
@@ -352,6 +366,8 @@ impl BindingResourceDeclarations {
         admitted: BindingLifetimeFootprint,
     ) -> Self {
         Self {
+            contract: BindingResourceContract::StrictV1,
+            consumer_result: None,
             declared,
             admitted,
             route_state: admitted,
@@ -359,6 +375,31 @@ impl BindingResourceDeclarations {
             response_state: admitted,
             transient: BindingTransientFootprint::new(0),
         }
+    }
+
+    /// Selects an explicit resource/disposal contract; numbers imply no conversion.
+    #[must_use]
+    pub const fn with_resource_contract(mut self, contract: BindingResourceContract) -> Self {
+        self.contract = contract;
+        self
+    }
+    /// Returns the captured resource contract.
+    pub const fn resource_contract(&self) -> BindingResourceContract {
+        self.contract
+    }
+    /// Declares supported maximum body bytes and capacity of each media String.
+    #[must_use]
+    pub const fn with_consumer_result_limits(
+        mut self,
+        body_bytes: u64,
+        media_capacity: u64,
+    ) -> Self {
+        self.consumer_result = Some((body_bytes, media_capacity));
+        self
+    }
+    /// Returns the explicit complete result-backing limits, when declared.
+    pub const fn consumer_result_limits(&self) -> Option<(u64, u64)> {
+        self.consumer_result
     }
 
     /// Sets the three constrained-state retained ceilings.
@@ -1804,6 +1845,13 @@ pub trait PollClientBinding {
     /// Binding-private state for one accepted request.
     type RequestState;
 
+    /// Passive, bounded, allocation-free metadata of the actual immutable policy.
+    /// Occupancy changes must not change this identity. No execution authority
+    /// or callback/destructor certification follows from returning a value.
+    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        None
+    }
+
     /// Returns the compatibility identity consumed by registration validation.
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
     /// Declares the retained associated-state layout for one request.
@@ -2464,6 +2512,8 @@ where
             self.execution(),
             self.capabilities(),
             &self.input.compiler,
+            self.input.resources,
+            None,
         ) {
             return Ok(ConsumerCompilerRegistration {
                 registration: self,
@@ -2484,6 +2534,12 @@ where
         input: StaticBindingRegistrationInput<B>,
     ) -> Result<Self, BindingInputRejection<StaticBindingRegistrationInput<B>>> {
         let identity = input.identity;
+        if input.resources.resource_contract() != BindingResourceContract::StrictV1 {
+            return Err(BindingInputRejection::new(
+                input,
+                registration_error(identity, 300),
+            ));
+        }
         let expected = identity.artifact_compatibility();
         let compiler_compatibility = input.compiler.compiler().compatibility();
         let server_compatibility = input.server.artifact_compatibility();
@@ -2630,6 +2686,14 @@ where
         BindingInputRejection<StaticBindingRegistrationInput<StaticBindingComponents<S, C>>>,
     > {
         let identity = input.identity;
+        if input.resources.resource_contract() != BindingResourceContract::StrictV1
+            || input.server.client.consumer_configuration().is_some()
+        {
+            return Err(BindingInputRejection::new(
+                input,
+                registration_error(identity, 302),
+            ));
+        }
         let expected = identity.artifact_compatibility();
         let compiler_compatibility = input.compiler.compiler().compatibility();
         let server_compatibility = input.server.server.artifact_compatibility();
@@ -2684,6 +2748,7 @@ where
         start_static_consumer_property_read(
             self.input.identity,
             self.input.capabilities,
+            self.input.resources,
             &mut self.input.server.client,
             request,
             artifact,
@@ -2741,6 +2806,7 @@ where
 fn start_static_consumer_property_read<C: PollClientBinding>(
     identity: BindingRegistrationIdentity,
     capabilities: BindingRegistrationCapabilities,
+    resources: BindingResourceDeclarations,
     client: &mut C,
     request: OutboundRequest,
     artifact: &BindingArtifactEnvelope<<C::Compiler as BindingCompilerExtension>::Artifact>,
@@ -2763,7 +2829,7 @@ fn start_static_consumer_property_read<C: PollClientBinding>(
         304,
         "accepted static Consumer request did not retain its exact slot identity",
     );
-    let seal = ConsumerResultSeal::from_request(&request);
+    let seal = ConsumerResultSeal::from_request(&request, resources.consumer_result_limits());
     let started = client.start_request(request, artifact, &mut slot.raw, budget)?;
 
     slot.seal = Some(seal);
@@ -3572,6 +3638,11 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for RejectedAcceptedHostCons
 /// returns an owned `'static` call before its first protocol side effect; a
 /// rejected invocation returns the exact request unchanged.
 pub trait ClientBinding: Send + Sync {
+    /// Passive metadata of the actual captured immutable Consumer policy.
+    /// This bounded, allocation-free read must have no operational effects.
+    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        None
+    }
     /// Returns the compatibility identity consumed at registration and call acceptance.
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
 
@@ -3818,6 +3889,8 @@ impl HostBindingRegistration {
             self.execution(),
             self.capabilities(),
             &self.input.compiler,
+            self.input.resources,
+            None,
         ) {
             return Ok(ConsumerCompilerRegistration {
                 registration: self,
@@ -3833,6 +3906,17 @@ impl HostBindingRegistration {
         input: HostBindingRegistrationInput,
     ) -> Result<Self, BindingInputRejection<HostBindingRegistrationInput>> {
         let identity = input.identity;
+        if input.resources.resource_contract() != BindingResourceContract::StrictV1
+            || input
+                .client
+                .as_deref()
+                .is_some_and(|c| c.consumer_configuration().is_some())
+        {
+            return Err(BindingInputRejection::new(
+                input,
+                registration_error(identity, 301),
+            ));
+        }
         let expected = identity.artifact_compatibility();
         let client_valid = match (
             input.capabilities.supports_consumer_property_read(),
@@ -3946,7 +4030,7 @@ fn start_host_consumer_property_read(
         313,
         "accepted Host Consumer call exceeds its admitted retained footprint",
     );
-    let seal = ConsumerResultSeal::from_request(&request);
+    let seal = ConsumerResultSeal::from_request(&request, resources.consumer_result_limits());
     let mut envelope =
         match crate::binding_compiler::try_box(HostConsumerCallEnvelope { disposition: None }) {
             Ok(envelope) => envelope,
@@ -3993,11 +4077,29 @@ fn start_host_consumer_property_read(
     Ok(HostBindingCallBox(Box::into_pin(envelope)))
 }
 
+fn consumer_metadata_matches(
+    identity: BindingRegistrationIdentity,
+    resources: BindingResourceDeclarations,
+    client: Option<ConsumerBindingConfiguration>,
+) -> bool {
+    match (resources.resource_contract(), client) {
+        (BindingResourceContract::StrictV1, None) => true,
+        (BindingResourceContract::StrictV1, Some(_)) | (_, None) => false,
+        (contract, Some(actual)) => {
+            actual.resource_contract() == contract
+                && actual.configuration() == identity.configuration()
+                && resources.consumer_result_limits() == Some(actual.result_limits())
+        }
+    }
+}
+
 fn static_consumer_support<C: BindingCompilerExtension + 'static>(
     identity: BindingRegistrationIdentity,
     execution: BindingExecutionSupport,
     capabilities: BindingRegistrationCapabilities,
     compiler: &StaticBindingCompilerRegistration<C>,
+    resources: BindingResourceDeclarations,
+    client: Option<ConsumerBindingConfiguration>,
 ) -> Option<ConsumerCompilerSupport> {
     let actual =
         (compiler.compiler() as &dyn core::any::Any).downcast_ref::<ResolvedTargetCompiler>();
@@ -4005,6 +4107,8 @@ fn static_consumer_support<C: BindingCompilerExtension + 'static>(
         && execution.supports_application_static()
         && let Some(actual) = actual
         && identity.configuration() == actual.configuration()
+        && consumer_metadata_matches(identity, resources, client)
+        && actual.support(false).consumer_configuration() == client
         && identity.artifact_compatibility()
             == crate::binding_compiler::resolved_target_compatibility()
     {
@@ -4020,11 +4124,15 @@ fn host_consumer_support(
     execution: BindingExecutionSupport,
     capabilities: BindingRegistrationCapabilities,
     compiler: &HostBindingCompilerRegistration,
+    resources: BindingResourceDeclarations,
+    client: Option<ConsumerBindingConfiguration>,
 ) -> Option<ConsumerCompilerSupport> {
     if capabilities.supports_consumer_property_read()
         && execution.supports_host_erased()
         && let Some(support) = compiler.consumer_support()
         && identity.configuration() == support.configuration()
+        && consumer_metadata_matches(identity, resources, client)
+        && support.consumer_configuration() == client
         && identity.artifact_compatibility()
             == crate::binding_compiler::resolved_target_compatibility()
     {
@@ -4100,6 +4208,16 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
         input: StaticConsumerBindingRegistrationInput<C>,
     ) -> Result<Self, BindingInputRejection<StaticConsumerBindingRegistrationInput<C>>> {
         let identity = input.identity;
+        if !consumer_metadata_matches(
+            identity,
+            input.resources,
+            input.client.consumer_configuration(),
+        ) {
+            return Err(BindingInputRejection::new(
+                input,
+                registration_error(identity, 324),
+            ));
+        }
         let expected = identity.artifact_compatibility();
         let compiler_compatibility = input.compiler.compiler().compatibility();
         let client_compatibility = input.client.artifact_compatibility();
@@ -4161,6 +4279,7 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
         start_static_consumer_property_read(
             self.input.identity,
             self.capabilities(),
+            self.input.resources,
             &mut self.input.client,
             request,
             artifact,
@@ -4228,6 +4347,8 @@ where
             self.execution(),
             self.capabilities(),
             &self.input.compiler,
+            self.input.resources,
+            self.input.client.consumer_configuration(),
         ) {
             return Ok(ConsumerCompilerRegistration {
                 registration: self,
@@ -4308,6 +4429,16 @@ impl HostConsumerBindingRegistration {
         input: HostConsumerBindingRegistrationInput,
     ) -> Result<Self, BindingInputRejection<HostConsumerBindingRegistrationInput>> {
         let identity = input.identity;
+        if !consumer_metadata_matches(
+            identity,
+            input.resources,
+            input.client.consumer_configuration(),
+        ) {
+            return Err(BindingInputRejection::new(
+                input,
+                registration_error(identity, 325),
+            ));
+        }
         let expected = identity.artifact_compatibility();
         let compiler_compatibility = input.compiler.compatibility();
         let client_compatibility = input.client.artifact_compatibility();
@@ -4360,6 +4491,8 @@ impl HostConsumerBindingRegistration {
             self.execution(),
             self.capabilities(),
             &self.input.compiler,
+            self.input.resources,
+            self.input.client.consumer_configuration(),
         ) {
             return Ok(ConsumerCompilerRegistration {
                 registration: self,

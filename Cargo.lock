@@ -325,6 +325,7 @@ dependencies = [
  "clinkz-wot-consumer-property-read-binding-fixture",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
+ "clinkz-wot-planning",
  "clinkz-wot-servient",
  "clinkz-wot-td",
  "serde_json",
@@ -341,6 +342,7 @@ dependencies = [
  "critical-section",
  "futures-core",
  "futures-util",
+ "sha2-const-stable",
  "tokio",
 ]
 

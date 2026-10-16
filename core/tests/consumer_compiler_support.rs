@@ -21,6 +21,162 @@ fn test_error() -> CoreError {
     CoreError::UnsupportedOperation(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
 }
 
+#[test]
+fn owned_configuration_canonical_vectors_namespace_and_constructor_boundaries() {
+    let private = BindingConfigurationDigest::new(core::array::from_fn(|i| i as u8));
+    let make = |contract, capacity, private, body, media| {
+        ConsumerBindingConfiguration::try_new(contract, capacity, private, body, media)
+    };
+    let base = make(
+        BindingResourceContract::ConsumerOwnedV2,
+        64,
+        private,
+        64,
+        32,
+    )
+    .unwrap();
+    assert_eq!(
+        base.compilation_cell(),
+        if cfg!(feature = "std") {
+            "std"
+        } else if cfg!(feature = "async") {
+            "async-no-std"
+        } else {
+            "no-default"
+        }
+    );
+    let expected = if cfg!(feature = "std") {
+        "c10c25e570a3783d6a2f5e71c4fc417de20e74bc3896c207de2786f91952ed18"
+    } else if cfg!(feature = "async") {
+        "e758e21849b61173aeffc37746f45127efeb3c8c760b9b6eb9e92c98d692471c"
+    } else {
+        "e1fa9be77c1b672e0967a5f1ef0303fab9d44d76780393f4ce62c751bcd3e5e8"
+    };
+    let hex = |c: ConsumerBindingConfiguration| {
+        c.configuration()
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    };
+    assert_eq!(hex(base), expected);
+    if cfg!(feature = "std") {
+        for (c, expected) in [
+            (
+                make(
+                    BindingResourceContract::ConsumerOwnedV2,
+                    63,
+                    private,
+                    64,
+                    32,
+                )
+                .unwrap(),
+                "7e981eaec45be7edc00741e3ee8ec48e3ac2756034e015caa1db8502e24c243d",
+            ),
+            (
+                make(
+                    BindingResourceContract::ConsumerOwnedHostV2,
+                    64,
+                    private,
+                    64,
+                    32,
+                )
+                .unwrap(),
+                "4c6928e0daa0a9488f8ee0290fac269d1f1b6b85206e163b208b819ac5b27c86",
+            ),
+            (
+                make(
+                    BindingResourceContract::ConsumerOwnedV2,
+                    64,
+                    BindingConfigurationDigest::new(core::array::from_fn(|i| {
+                        if i == 0 { 1 } else { i as u8 }
+                    })),
+                    64,
+                    32,
+                )
+                .unwrap(),
+                "62dba0284ec41b0a31774222833f25da7348d2bb61f409fdcedf93c8331d7aed",
+            ),
+            (
+                make(
+                    BindingResourceContract::ConsumerOwnedV2,
+                    64,
+                    private,
+                    65,
+                    32,
+                )
+                .unwrap(),
+                "80846971ab34df8fedcdf56593356b91f5f1b173e24aaf2117f9a009ecdece77",
+            ),
+            (
+                make(
+                    BindingResourceContract::ConsumerOwnedV2,
+                    64,
+                    private,
+                    64,
+                    33,
+                )
+                .unwrap(),
+                "408b35c59f09274ccb16a817b4c1bb1fcb456e5d94a71ce9d61fd9e8816353a6",
+            ),
+        ] {
+            assert_eq!(hex(c), expected);
+        }
+    } else {
+        assert!(
+            make(
+                BindingResourceContract::ConsumerOwnedHostV2,
+                64,
+                private,
+                64,
+                32
+            )
+            .is_err()
+        );
+    }
+    for capacity in 1..=64 {
+        let strict = ResolvedTargetCompiler::try_new(capacity).unwrap();
+        let mut expected = [0; 32];
+        expected[..4].copy_from_slice(&[0x63, 0x74, 1, capacity as u8]);
+        assert_eq!(
+            strict.configuration(),
+            BindingConfigurationDigest::new(expected)
+        );
+        let (owned, requests) = observe(false, || {
+            make(
+                BindingResourceContract::ConsumerOwnedV2,
+                capacity,
+                private,
+                64,
+                32,
+            )
+        });
+        no_requests(requests);
+        assert_ne!(owned.unwrap().configuration(), strict.configuration());
+    }
+    for (capacity, body, media) in [
+        (0, 64, 32),
+        (65, 64, 32),
+        (64, 0, 32),
+        (64, 64, 0),
+        (64, u64::MAX, 32),
+        (64, 64, u64::MAX),
+    ] {
+        let (r, requests) = observe(false, || {
+            make(
+                BindingResourceContract::ConsumerOwnedV2,
+                capacity,
+                private,
+                body,
+                media,
+            )
+        });
+        no_requests(requests);
+        assert!(r.is_err());
+    }
+    assert!(make(BindingResourceContract::StrictV1, 64, private, 64, 32).is_err());
+}
+
 struct Endpoint<C> {
     marker: PhantomData<C>,
     compatibility: BindingArtifactCompatibility,
@@ -730,6 +886,7 @@ fn host(
     .unwrap_or_else(|_| panic!("complete Host construction"))
 }
 fn check_descriptor(support: &ConsumerCompilerSupport, capacity: usize, host: bool) {
+    assert_eq!(support.consumer_configuration(), None);
     assert_eq!(support.target_capacity(), capacity);
     assert_eq!(
         support.cursor_layout(),
@@ -1625,6 +1782,7 @@ mod consumer_only_support {
     struct CaptureClient<C> {
         marker: PhantomData<C>,
         compatibility: BindingArtifactCompatibility,
+        owned: Option<ConsumerBindingConfiguration>,
         drops: Arc<AtomicUsize>,
     }
     impl<C> Drop for CaptureClient<C> {
@@ -1637,6 +1795,7 @@ mod consumer_only_support {
             Self {
                 marker: PhantomData,
                 compatibility,
+                owned: None,
                 drops: drops.clone(),
             }
         }
@@ -1644,6 +1803,9 @@ mod consumer_only_support {
     impl<C: BindingCompilerExtension> PollClientBinding for CaptureClient<C> {
         type Compiler = C;
         type RequestState = ();
+        fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+            self.owned
+        }
         fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
             self.compatibility
         }
@@ -1702,6 +1864,9 @@ mod consumer_only_support {
 
     #[cfg(feature = "std")]
     impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for CaptureClient<C> {
+        fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+            self.owned
+        }
         fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
             self.compatibility
         }
@@ -2122,5 +2287,182 @@ mod consumer_only_support {
             assert_eq!(drops.load(Ordering::SeqCst), before + 1);
         }
         assert_eq!(callbacks.load(Ordering::SeqCst), 1);
+    }
+    fn owned_configuration(
+        capacity: usize,
+        private: u8,
+        body: u64,
+        media: u64,
+    ) -> ConsumerBindingConfiguration {
+        ConsumerBindingConfiguration::try_new(
+            BindingResourceContract::ConsumerOwnedV2,
+            capacity,
+            BindingConfigurationDigest::new([private; 32]),
+            body,
+            media,
+        )
+        .unwrap()
+    }
+    fn owned_resources(c: ConsumerBindingConfiguration) -> BindingResourceDeclarations {
+        resources()
+            .with_resource_contract(c.resource_contract())
+            .with_consumer_result_limits(c.result_limits().0, c.result_limits().1)
+    }
+    #[test]
+    fn owned_capture_checks_every_client_operand_and_preserves_exact_complete_owner() {
+        let actual = owned_configuration(64, 1, 64, 32);
+        let drops = Arc::new(AtomicUsize::new(0));
+        for client_config in [
+            None,
+            Some(owned_configuration(63, 1, 64, 32)),
+            Some(owned_configuration(64, 2, 64, 32)),
+            Some(owned_configuration(64, 1, 65, 32)),
+            Some(owned_configuration(64, 1, 64, 33)),
+        ] {
+            let compiler = ResolvedTargetCompiler::new_owned(actual);
+            let id = identity(&compiler, 7);
+            let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
+            client.owned = client_config;
+            let input = StaticConsumerBindingRegistrationInput::new(
+                id,
+                BindingExecutionSupport::application_static(),
+                StaticBindingCompilerRegistration::new(compiler),
+                client,
+                owned_resources(actual),
+                BindingStatusPolicy::new(3, 5),
+            );
+            let (result, requests) =
+                observe(false, || StaticConsumerBindingRegistration::new(input));
+            no_requests(requests);
+            let returned = result
+                .err()
+                .expect("actual client metadata must match before callbacks")
+                .into_input();
+            assert_eq!(returned.identity(), id);
+            assert!(Arc::ptr_eq(&returned.client().drops, &drops));
+            drop(returned);
+        }
+        let compiler = ResolvedTargetCompiler::new_owned(actual);
+        let id = identity(&compiler, 7);
+        let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
+        client.owned = Some(actual);
+        let (owner, requests) = observe(false, || {
+            StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+                id,
+                BindingExecutionSupport::application_static(),
+                StaticBindingCompilerRegistration::new(compiler),
+                client,
+                owned_resources(actual),
+                BindingStatusPolicy::new(3, 5),
+            ))
+        });
+        no_requests(requests);
+        let owner = owner.unwrap_or_else(|_| panic!("owned construction"));
+        let (owner, requests) = observe(false, || owner.try_into_consumer_compiler());
+        no_requests(requests);
+        let owner = owner.unwrap_or_else(|_| panic!("owned capture"));
+        let (projection, requests) = observe(false, || owner.support().consumer_configuration());
+        no_requests(requests);
+        assert_eq!(projection, Some(actual));
+        let plan = plan("mock://s/a");
+        let input =
+            BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);
+        let c = owner.registration().compiler().compiler();
+        let bounds = c.bounds(&input).unwrap();
+        let cursor = c.start(&input).unwrap();
+        let BindingCompilerStep::Pending(cursor) = c.step(&input, cursor, &mut work(0)) else {
+            panic!()
+        };
+        let changed = ResolvedTargetCompiler::new_owned(owned_configuration(63, 1, 64, 32));
+        let BindingCompilerStep::Failed(f) = changed.step(&input, cursor, &mut work(2)) else {
+            panic!("paid continuation cannot change configuration")
+        };
+        c.abort(f.into_parts().1);
+        assert!(bounds.artifact().retained_bytes() > 0);
+        println!(
+            "owned compiler/support/cursor/output/temporary layouts: {:?} {:?} {:?} {:?} {:?}",
+            Layout::new::<ResolvedTargetCompiler>(),
+            Layout::new::<ConsumerCompilerSupport>(),
+            owner.support().cursor_layout(),
+            owner.support().output_layout(),
+            owner.support().temporary_layout()
+        );
+    }
+    #[cfg(feature = "std")]
+    #[test]
+    fn owned_host_capture_recovers_client_address_and_prestart_slot_failure() {
+        let actual = owned_configuration(64, 1, 64, 32);
+        let drops = Arc::new(AtomicUsize::new(0));
+        let compiler = ResolvedTargetCompiler::new_owned(actual);
+        let (returned, requests) = observe(true, || {
+            HostBindingCompilerRegistration::try_new_consumer(compiler)
+        });
+        acquired(requests, Layout::new::<ResolvedTargetCompiler>(), false);
+        assert_eq!(
+            returned.unwrap_err().input().configuration(),
+            actual.configuration()
+        );
+        for match_client in [false, true] {
+            let c = ResolvedTargetCompiler::new_owned(actual);
+            let id = identity(&c, 7);
+            let adapter = HostBindingCompilerRegistration::try_new_consumer(c).unwrap();
+            let mut client =
+                CaptureClient::<ResolvedTargetCompiler>::new(id.artifact_compatibility(), &drops);
+            client.owned = Some(if match_client {
+                actual
+            } else {
+                owned_configuration(63, 1, 64, 32)
+            });
+            let client: Box<dyn ClientBinding> = Box::new(client);
+            let pointer = &*client as *const dyn ClientBinding as *const ();
+            let input = HostConsumerBindingRegistrationInput::new(
+                id,
+                BindingExecutionSupport::host_erased(),
+                adapter,
+                client,
+                owned_resources(actual),
+                BindingStatusPolicy::new(3, 5),
+            );
+            let (owner, requests) = observe(false, || HostConsumerBindingRegistration::new(input));
+            no_requests(requests);
+            if !match_client {
+                let input = owner.err().expect("mismatch").into_input();
+                assert_eq!(
+                    input.client() as *const dyn ClientBinding as *const (),
+                    pointer
+                );
+                drop(input);
+                continue;
+            }
+            let owner = owner
+                .unwrap_or_else(|_| panic!())
+                .try_into_consumer_compiler()
+                .unwrap_or_else(|_| panic!());
+            let (projection, requests) =
+                observe(false, || owner.support().consumer_configuration());
+            no_requests(requests);
+            assert_eq!(projection, Some(actual));
+            let plan = plan("mock://s/a");
+            let input =
+                BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);
+            let (failure, requests) =
+                observe(true, || owner.registration().compiler().start(&input));
+            acquired(requests, owner.support().host_slot_layout().unwrap(), false);
+            assert!(failure.is_err());
+            let (cursor, requests) =
+                observe(false, || owner.registration().compiler().start(&input));
+            acquired(requests, owner.support().host_slot_layout().unwrap(), true);
+            owner
+                .registration()
+                .compiler()
+                .abort(cursor.unwrap())
+                .unwrap();
+            let input = owner.into_registration().into_input();
+            assert_eq!(
+                input.client() as *const dyn ClientBinding as *const (),
+                pointer
+            );
+        }
+        assert_eq!(drops.load(Ordering::SeqCst), 2);
     }
 }

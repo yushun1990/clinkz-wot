@@ -231,20 +231,17 @@ impl ConsumerPropertyReadRuntime {
     > {
         let supported = (|| {
             policy.qualify(&registration, registration.registration().resources(), true)?;
-            check(&policy.limits, K::CleanupTransferSlotsGlobalMax, 1)?;
-            check(
-                &policy.limits,
-                K::CleanupTransferBytesGlobalMax,
-                transfer_bytes(&policy)?,
-            )?;
+            policy.check(K::CleanupTransferSlotsGlobalMax, 1)?;
+            policy.check(K::CleanupTransferBytesGlobalMax, transfer_bytes(&policy)?)?;
             Ok(())
         })();
         if let Err(e) = supported {
+            let e = policy.resource_error(e, ResourceFailureDomain::EngineCapacity);
             return Err(reject((registration, policy, clock, parent), e));
         }
         let report_bytes = Shared::<Report>::allocation_layout().size() as u64;
         let root_bytes = Shared::<Root>::allocation_layout().size() as u64;
-        if let Err(error) = check(&policy.limits, K::CleanupItemBytesMax, report_bytes) {
+        if let Err(error) = policy.check(K::CleanupItemBytesMax, report_bytes) {
             return Err(reject((registration, policy, clock, parent), error));
         }
         let now = match policy.startup_time(&*clock, true) {
@@ -258,8 +255,7 @@ impl ConsumerPropertyReadRuntime {
             .transient()
             .peak_bytes();
         let provision = (|| {
-            check(
-                &policy.limits,
+            policy.check(
                 K::LargestContiguousAllocationBytesMax,
                 report_bytes.max(root_bytes),
             )?;
@@ -270,8 +266,7 @@ impl ConsumerPropertyReadRuntime {
                     scratch,
                 )?,
             )?;
-            check(
-                &policy.limits,
+            policy.check(
                 K::PeakLiveBytesPerAdmissionMax,
                 add(
                     upstream,
@@ -309,7 +304,7 @@ impl ConsumerPropertyReadRuntime {
             })
             .map_err(|r| {
                 drop(r);
-                busy()
+                policy.resource_error(busy(), ResourceFailureDomain::DeploymentFailure)
             })?;
             Ok((report, provision))
         })();
@@ -350,7 +345,8 @@ impl ConsumerPropertyReadRuntime {
                 let parent = Arc::clone(&root.parent.0);
                 drop(root);
                 drop(observer);
-                return Err(reject((registration, policy, clock, parent), busy()));
+                let error = policy.resource_error(busy(), ResourceFailureDomain::DeploymentFailure);
+                return Err(reject((registration, policy, clock, parent), error));
             }
         };
         Ok((Self { root }, move || *lock(&observer.get().value)))
@@ -910,7 +906,7 @@ impl ConsumerPropertyReadHandle {
                 return Err(reject((options, None), error));
             }
         };
-        if let Err(error) = check(&policy.limits, K::PeakLiveBytesPerAdmissionMax, peak) {
+        if let Err(error) = policy.check(K::PeakLiveBytesPerAdmissionMax, peak) {
             lock(&self.root.get().cell).kernel.acknowledge();
             return Err(reject((options, None), error));
         }
@@ -964,6 +960,22 @@ impl ConsumerPropertyReadHandle {
         match started {
             Err(rejection) => {
                 let (request, error) = rejection.into_parts();
+                let error = if policy.contract != BindingResourceContract::StrictV1
+                    && matches!(error.error(), CoreError::Backpressure(_))
+                    && error.error().context().cause_code() == Some(314)
+                {
+                    // Core's preacceptance envelope allocation failed. Binding
+                    // rejections keep their own policy/domain and route context.
+                    let (route, error) = error.into_parts();
+                    let error =
+                        policy.resource_error(error, ResourceFailureDomain::DeploymentFailure);
+                    match route {
+                        Some(route) => BindingOperationalError::for_route(route, error),
+                        None => BindingOperationalError::new(error),
+                    }
+                } else {
+                    error
+                };
                 lock(&self.root.get().cell).kernel.acknowledge();
                 Err(BindingInputRejection::new((options, Some(request)), error))
             }
@@ -1083,7 +1095,10 @@ impl ConsumerPropertyReadCall {
         let driver = checkout.driver.as_mut().unwrap();
         let mut call = take_call(driver).expect("terminal whole call");
         root.get().finish_transfer(&call);
-        let result = call.result.take();
+        let result = call
+            .result
+            .take()
+            .map(|result| result.map_err(|error| root.get().policy().result_error(error)));
         drop(call); // No structural lock around raw destruction or release.
         let mut c = lock(&root.get().cell);
         c.kernel.acknowledge();
@@ -1487,6 +1502,44 @@ mod tests {
     use super::*;
     use clinkz_wot_consumer_property_read_binding_fixture as binding;
     use clinkz_wot_foundation::{GatewayDefaultV1, StaticResourceProfile};
+
+    #[test]
+    fn resource_ownership_native_layouts_cover_complete_aggregate_and_transfer_owners() {
+        use binding::{State, StaticClient};
+        use core::alloc::Layout;
+        use std::println;
+        println!(
+            "ownership Host Layouts: root={:?}, report={:?}, driver={:?}, call={:?}, charge={:?}, build={:?}, draft={:?}, rollback={:?}, cleanup-root={}, terminal={:?}, transfer={:?}",
+            Shared::<Root>::allocation_layout(),
+            Shared::<Report>::allocation_layout(),
+            Layout::new::<Driver>(),
+            Layout::new::<CallOwner>(),
+            Layout::new::<Charge<HostParent>>(),
+            Layout::new::<BuildStorage<HostBindingArtifact, HostParent>>(),
+            Layout::new::<Draft<HostBindingArtifact>>(),
+            Layout::new::<Rollback<HostBindingArtifact>>(),
+            PlanRoot::<HostBindingArtifact>::required_capacity(),
+            Layout::new::<Terminal>(),
+            Layout::new::<(CleanupTransferEnvelope<CallOwner>, CleanupRecord)>()
+        );
+        println!(
+            "ownership static Layouts: runtime={:?}, build={:?}, slot={:?}, raw={:?}, registration={:?}, draft={:?}, rollback={:?}, cleanup-root={}, policy={:?}, context={:?}, error={:?}, payload={:?}",
+            Layout::new::<StaticConsumerPropertyReadRuntime<'static, StaticClient>>(),
+            Layout::new::<BuildStorage<ResolvedTargetArtifact, StaticParent<'static>>>(),
+            Layout::new::<StaticConsumerPropertyReadSlot<State>>(),
+            Layout::new::<State>(),
+            Layout::new::<
+                ConsumerCompilerRegistration<StaticConsumerBindingRegistration<StaticClient>>,
+            >(),
+            Layout::new::<Draft<ResolvedTargetArtifact>>(),
+            Layout::new::<Rollback<ResolvedTargetArtifact>>(),
+            PlanRoot::<ResolvedTargetArtifact>::required_capacity(),
+            Layout::new::<ConsumerPropertyReadPolicy>(),
+            Layout::new::<ErrorContext>(),
+            Layout::new::<CoreError>(),
+            Layout::new::<Payload>()
+        );
+    }
 
     fn work(n: u64) -> WorkBudget {
         W::ALL

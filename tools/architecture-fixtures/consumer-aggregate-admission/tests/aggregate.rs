@@ -711,6 +711,73 @@ fn all_bounds_barrier_and_compiler_remainders_use_the_checked_production_source(
     }
 }
 
+#[test]
+fn owned_complete_registrations_preserve_all_bounds_and_paid_continuations() {
+    use clinkz_wot_consumer_property_read_binding_fixture as binding;
+    use std::sync::Arc;
+    let source = source();
+    let policy = || {
+        binding::ownership::OwnedPolicy::try_new(
+            BindingResourceContract::ConsumerOwnedV2,
+            binding::Mode::Normal,
+            binding::ownership::PrivatePool::new(
+                16,
+                Arc::new(core::sync::atomic::AtomicUsize::new(0)),
+            ),
+            false,
+            64,
+            64,
+            32,
+        )
+        .unwrap()
+    };
+    let outputs = || {
+        core::array::from_fn(|_| {
+            Some(InteractionOutput::with_data(Payload::new(
+                &b"17"[..],
+                "application/json",
+            )))
+        })
+    };
+    fn check<R: checked_program::ConsumerPropertyReadRegistration>(
+        source: &Thing,
+        factory: impl Fn() -> R,
+    ) {
+        for spare in [0, 1] {
+            checked_program::test_support::ready_retries(proof(source), factory(), spare);
+        }
+        for bad in [None, Some(1), Some(3)] {
+            let counts =
+                checked_program::test_support::traced(proof(source), factory(), bad, false);
+            if let Some(bad) = bad {
+                assert!(counts.failed);
+                assert_eq!((counts.bounds, counts.starts), (bad, 0));
+            } else {
+                assert!(!counts.failed);
+                assert_eq!(
+                    (counts.bounds, counts.starts, counts.steps, counts.aborts),
+                    (3, 3, 6, 0)
+                );
+            }
+        }
+    }
+    check(&source, || {
+        binding::static_registration(binding::StaticClient::new_owned(
+            Arc::new(binding::Stats::default()),
+            outputs(),
+            policy(),
+        ))
+    });
+    #[cfg(feature = "std")]
+    check(&source, || {
+        binding::host_registration(binding::HostClient::new_owned(
+            Arc::new(binding::Stats::default()),
+            outputs(),
+            policy(),
+        ))
+    });
+}
+
 fn invalid_inputs<R: ConsumerPropertyReadRegistration>(r: R) {
     let cfg = config();
     for case in 0..4 {

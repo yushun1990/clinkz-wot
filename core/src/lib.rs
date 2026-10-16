@@ -28,9 +28,9 @@ pub use binding::{
     BindingCallSettlement, BindingCancellationDisposition, BindingDeliveryOutcome,
     BindingExecutionSupport, BindingIngressLimits, BindingIngressPolicy, BindingInputRejection,
     BindingLifetimeFootprint, BindingOperationalError, BindingRegistrationCapabilities,
-    BindingRegistrationIdentity, BindingResourceDeclarations, BindingStateLayout,
-    BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext, CleanupReservation,
-    CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
+    BindingRegistrationIdentity, BindingResourceContract, BindingResourceDeclarations,
+    BindingStateLayout, BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext,
+    CleanupReservation, CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
     CleanupTransferTarget, ClientRequestSlot, CollisionDomainId, ConsumerCompilerRegistration,
     EndpointReservationKey, NoCleanupSuccessor, PollClientBinding, PollServerBinding, PrepareInput,
     RouteAcceptClaim, RouteAcceptClaimError, RouteAcceptEvent, RouteAcceptLease,
@@ -54,8 +54,9 @@ pub use binding_compiler::{
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,
     BindingArtifactRejection, BindingArtifactRejectionReason, BindingArtifactRole,
     BindingCompilerBounds, BindingCompilerExtension, BindingCompilerFailure, BindingCompilerInput,
-    BindingCompilerOutput, BindingCompilerStep, ConsumerCompilerSupport, ResolvedTargetArtifact,
-    ResolvedTargetCompiler, ResolvedTargetCompilerCursor, StaticBindingCompilerRegistration,
+    BindingCompilerOutput, BindingCompilerStep, ConsumerBindingConfiguration,
+    ConsumerCompilerSupport, ResolvedTargetArtifact, ResolvedTargetCompiler,
+    ResolvedTargetCompilerCursor, StaticBindingCompilerRegistration,
 };
 #[cfg(feature = "std")]
 pub use binding_compiler::{
@@ -63,8 +64,8 @@ pub use binding_compiler::{
 };
 pub use deadline::Deadline;
 pub use error::{
-    CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason,
-    SelectionFailureReason,
+    CoreError, CoreResult, ErrorContext, ErrorPhase, ResourceFailureDomain, RetryClass,
+    SecurityFailureReason, SelectionFailureReason,
 };
 #[cfg(feature = "async")]
 pub use event::EventStream;

@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::Mutex;
 
-fn build(runtime: &ConsumerPropertyReadRuntime) -> ConsumerPropertyReadHandle {
+pub(super) fn build(runtime: &ConsumerPropertyReadRuntime) -> ConsumerPropertyReadHandle {
     let source = source();
     match runtime
         .consume(&source, &mut work(100000), |b| {
@@ -19,7 +19,7 @@ fn build(runtime: &ConsumerPropertyReadRuntime) -> ConsumerPropertyReadHandle {
         _ => panic!("publication pending"),
     }
 }
-fn shutdown(runtime: &ConsumerPropertyReadRuntime) {
+pub(super) fn shutdown(runtime: &ConsumerPropertyReadRuntime) {
     for _ in 0..10000 {
         if matches!(
             runtime.shutdown(&mut cx(), &mut work(4096)),

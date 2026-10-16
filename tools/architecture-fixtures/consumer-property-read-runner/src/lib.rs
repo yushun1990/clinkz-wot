@@ -19,16 +19,39 @@ pub fn work(n: u64) -> WorkBudget {
         .fold(WorkBudget::new(), |b, w| b.with_remaining(w, n))
 }
 pub fn policy(limits: ResourceLimits) -> ConsumerPropertyReadPolicy {
-    ConsumerPropertyReadPolicy::try_new(
-        limits,
-        BindingLifetimeFootprint::new(4, 4096),
-        BindingLifetimeFootprint::new(8, 1280),
-        [1, 64, 64, 64],
-        [64, 32],
-        [2, 2, 1, 1, 1, 1, 1],
-        [50, 5],
-        65536,
-    )
+    checked_policy(BindingResourceContract::StrictV1, limits)
+}
+fn checked_policy(
+    contract: BindingResourceContract,
+    limits: ResourceLimits,
+) -> ConsumerPropertyReadPolicy {
+    let registration = BindingLifetimeFootprint::new(4, 4096);
+    let call = BindingLifetimeFootprint::new(8, 1280);
+    if contract == BindingResourceContract::StrictV1 {
+        ConsumerPropertyReadPolicy::try_new(
+            limits,
+            registration,
+            call,
+            [1, 64, 64, 64],
+            [64, 32],
+            [2, 2, 1, 1, 1, 1, 1],
+            [50, 5],
+            65536,
+        )
+    } else {
+        ConsumerPropertyReadPolicy::try_new_owned(
+            contract,
+            ResourceProfileId::GATEWAY_DEFAULT_V1,
+            limits,
+            registration,
+            call,
+            [1, 64, 64, 64],
+            [64, 32],
+            [2, 2, 1, 1, 1, 1, 1],
+            [50, 5],
+            65536,
+        )
+    }
     .unwrap()
 }
 /// Own the Thing, consume it, destroy it, read distinct non-first coordinates,
@@ -38,7 +61,9 @@ pub fn application(
     client: StaticClient,
     clock: &dyn RuntimeClock,
 ) -> CoreResult<[u16; 2]> {
-    let policy = policy(GatewayDefaultV1::LIMITS.clone());
+    let contract = PollClientBinding::consumer_configuration(&client)
+        .map_or(BindingResourceContract::StrictV1, |c| c.resource_contract());
+    let policy = checked_policy(contract, GatewayDefaultV1::LIMITS.clone());
     let parent = RefCell::new(policy.parent_accounts());
     let mut report = (
         Cell::new((None, [0; 4])),
@@ -110,7 +135,9 @@ pub fn host_application(
     client: clinkz_wot_consumer_property_read_binding_fixture::HostClient,
     clock: alloc::sync::Arc<dyn RuntimeClock + Send + Sync>,
 ) -> CoreResult<[u16; 2]> {
-    let policy = policy(GatewayDefaultV1::LIMITS.clone());
+    let contract = binding::ClientBinding::consumer_configuration(&client)
+        .map_or(BindingResourceContract::StrictV1, |c| c.resource_contract());
+    let policy = checked_policy(contract, GatewayDefaultV1::LIMITS.clone());
     let parent = alloc::sync::Arc::new(std::sync::Mutex::new(policy.parent_accounts()));
     let registration = clinkz_wot_consumer_property_read_binding_fixture::host_registration(client);
     let (runtime, report) =

@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0087-consumer-owned-compilation-cell-projection.md][0087 Consumer Owned Compilation Cell Projection]]
+
 - [[file:0086-consumer-owned-artifact-configuration.md][0086 Consumer Owned Artifact Configuration]]
 
 - [[file:0085-resource-ownership-and-policy-question.md][0085 Resource Ownership and Policy Question]]

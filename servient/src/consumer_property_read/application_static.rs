@@ -86,6 +86,7 @@ where
             false,
         );
         if let Err(e) = supported {
+            let e = policy.resource_error(e, ResourceFailureDomain::EngineCapacity);
             return Err(reject((registration, policy), e));
         }
         // The complete Core slot is resident even while vacant. Add only the
@@ -100,11 +101,7 @@ where
                 policy.call.retained_bytes() - state,
             )?;
             policy.check_binding_storage(false, bytes)?;
-            check(
-                &policy.limits,
-                K::CleanupItemBytesMax,
-                size_of::<ReportStorage>() as u64,
-            )?;
+            policy.check(K::CleanupItemBytesMax, size_of::<ReportStorage>() as u64)?;
             Ok(bytes)
         })();
         let slot_bytes = match slot_bytes {
@@ -139,8 +136,7 @@ where
                 size_of::<Self>() as u64,
                 add(policy.registration.retained_bytes(), scratch)?,
             )?;
-            check(
-                &policy.limits,
+            policy.check(
                 K::PeakLiveBytesPerAdmissionMax,
                 add(
                     add(root_bytes, bytes)?,
@@ -167,14 +163,33 @@ where
                         for j in 0..i {
                             assert!(a[j].release_committed(wanted[j]));
                         }
-                        return false;
+                        let owner = a[i]
+                            .try_reserve(0)
+                            .expect("zero receipt retains account totals")
+                            .owner();
+                        let error = if policy.contract == BindingResourceContract::StrictV1 {
+                            busy()
+                        } else {
+                            stamp_resource(
+                                CoreError::LimitExceeded {
+                                    resource: KINDS[i],
+                                    limit: a[i].limit(),
+                                    requested: a[i].used().checked_add(wanted[i]),
+                                    observed: Some(a[i].used()),
+                                    context: context(),
+                                },
+                                policy.identity,
+                                ResourceFailureDomain::EngineCapacity,
+                                None, // This report loan has no paired local account for every row.
+                                Some(owner),
+                            )
+                        };
+                        return Err(error);
                     }
                 }
-                true
+                Ok(())
             });
-            if !held {
-                return Err(busy());
-            }
+            held?;
             report_storage
                 .2
                 .borrow_mut()
@@ -418,7 +433,7 @@ where
                 return Err(reject((options, None), error));
             }
         };
-        if let Err(error) = check(&self.policy.limits, K::PeakLiveBytesPerAdmissionMax, peak) {
+        if let Err(error) = self.policy.check(K::PeakLiveBytesPerAdmissionMax, peak) {
             self.kernel.acknowledge();
             return Err(reject((options, None), error));
         }
@@ -531,7 +546,10 @@ where
             return Ok(None);
         }
         self.acknowledge()?;
-        let result = self.result.take();
+        let result = self
+            .result
+            .take()
+            .map(|result| result.map_err(|error| self.policy.result_error(error)));
         drop(self.call_charge.take());
         self.kernel.acknowledge();
         Ok(result)
