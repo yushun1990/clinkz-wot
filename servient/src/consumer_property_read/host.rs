@@ -960,6 +960,22 @@ impl ConsumerPropertyReadHandle {
         match started {
             Err(rejection) => {
                 let (request, error) = rejection.into_parts();
+                let error = if policy.contract != BindingResourceContract::StrictV1
+                    && matches!(error.error(), CoreError::Backpressure(_))
+                    && error.error().context().cause_code() == Some(314)
+                {
+                    // Core's preacceptance envelope allocation failed. Binding
+                    // rejections keep their own policy/domain and route context.
+                    let (route, error) = error.into_parts();
+                    let error =
+                        policy.resource_error(error, ResourceFailureDomain::DeploymentFailure);
+                    match route {
+                        Some(route) => BindingOperationalError::for_route(route, error),
+                        None => BindingOperationalError::new(error),
+                    }
+                } else {
+                    error
+                };
                 lock(&self.root.get().cell).kernel.acknowledge();
                 Err(BindingInputRejection::new((options, Some(request)), error))
             }

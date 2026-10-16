@@ -148,13 +148,21 @@ fn error() -> CoreError {
             .with_redacted_cause(451, "finite client error"),
     )
 }
-fn rejection(request: OutboundRequest) -> BindingInputRejection<OutboundRequest> {
+fn rejection(
+    request: OutboundRequest,
+    policy: Option<&OwnedPolicy>,
+    domain: ResourceFailureDomain,
+) -> BindingInputRejection<OutboundRequest> {
+    let mut context = ErrorContext::new(ErrorPhase::Binding, RetryClass::Never);
+    if let Some(policy) = policy {
+        context = context
+            .with_plan(request.plan_id())
+            .with_binding(request.binding_id(), request.binding_generation())
+            .with_resource_failure(policy.configuration().private_policy(), domain, None, None);
+    }
     BindingInputRejection::new(
         request,
-        BindingOperationalError::new(CoreError::Backpressure(ErrorContext::new(
-            ErrorPhase::Binding,
-            RetryClass::Never,
-        ))),
+        BindingOperationalError::new(CoreError::Backpressure(context)),
     )
 }
 fn prepare_output(
@@ -382,7 +390,11 @@ impl PollClientBinding for StaticClient {
             || self.next == self.outputs.len()
             || budget.consume(WorkClass::BindingPolls, 1).is_err()
         {
-            return Err(rejection(request));
+            return Err(rejection(
+                request,
+                self.owned.as_ref(),
+                ResourceFailureDomain::BindingPolicy,
+            ));
         }
         self.stats.selected(artifact.artifact().payload().target());
         let output = prepare_output(
@@ -548,15 +560,29 @@ impl binding::ClientBinding for HostClient {
             .as_ref()
             .map_or_else(|| self.stats.mode(), |p| p.mode);
         if mode == Mode::Reject {
-            return Err(rejection(request));
+            return Err(rejection(
+                request,
+                self.owned.as_ref(),
+                ResourceFailureDomain::BindingPolicy,
+            ));
         }
         let mut inbox = match self.inbox.try_lock() {
             Ok(i) => i,
-            Err(_) => return Err(rejection(request)),
+            Err(_) => {
+                return Err(rejection(
+                    request,
+                    self.owned.as_ref(),
+                    ResourceFailureDomain::BindingPolicy,
+                ));
+            }
         };
         let index = inbox.1;
         if index == inbox.0.len() {
-            return Err(rejection(request));
+            return Err(rejection(
+                request,
+                self.owned.as_ref(),
+                ResourceFailureDomain::BindingPolicy,
+            ));
         }
         self.stats.selected(
             artifact
@@ -583,7 +609,11 @@ impl binding::ClientBinding for HostClient {
             Ok(call) => call,
             Err(mut state) => {
                 inbox.0[index] = Some(state.output.take().unwrap().unwrap());
-                return Err(rejection(state.request.take().unwrap()));
+                return Err(rejection(
+                    state.request.take().unwrap(),
+                    self.owned.as_ref(),
+                    ResourceFailureDomain::DeploymentFailure,
+                ));
             }
         };
         inbox.1 += 1;

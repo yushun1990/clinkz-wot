@@ -590,9 +590,29 @@ impl ConsumerPropertyReadPolicy {
     fn resource_error(&self, error: CoreError, domain: ResourceFailureDomain) -> CoreError {
         stamp_resource(error, self.identity, domain, None, None)
     }
+    fn build_error(&self, error: CoreError) -> CoreError {
+        if self.contract == BindingResourceContract::StrictV1 {
+            return error;
+        }
+        // The closed TD/Planning path reports allocator refusal as unqualified
+        // Backpressure; the supported Host compiler uses cause 322. Capped
+        // ledger refusal has a distinct cause (331). Keep those distinctions
+        // and any original binding-private context without guessing a byte row.
+        let domain = match &error {
+            CoreError::Backpressure(c)
+                if c.cause_code().is_none() || c.cause_code() == Some(322) =>
+            {
+                ResourceFailureDomain::DeploymentFailure
+            }
+            CoreError::Backpressure(_) | CoreError::LimitExceeded { .. } => {
+                ResourceFailureDomain::EngineCapacity
+            }
+            _ => return error,
+        };
+        self.resource_error(error, domain)
+    }
     fn check(&self, kind: K, n: u64) -> CoreResult<()> {
-        check(&self.limits, kind, n)
-            .map_err(|e| self.resource_error(e, ResourceFailureDomain::EngineCapacity))
+        check(&self.limits, kind, n).map_err(|e| self.build_error(e))
     }
     fn ledger(&self, generation: Generation, runtime: u64) -> AdmissionLedger {
         AdmissionLedger::new(
@@ -635,7 +655,11 @@ impl ConsumerPropertyReadPolicy {
                 (W::BindingPolls, add(self.work[0], self.work[1])?),
             ],
         ) {
-            return Err(busy());
+            return Err(if self.contract == BindingResourceContract::StrictV1 {
+                busy()
+            } else {
+                self.resource_error(busy(), ResourceFailureDomain::EngineCapacity)
+            });
         }
         for (key, value) in &options.uri_variables {
             if [key, value]
@@ -683,13 +707,13 @@ impl ConsumerPropertyReadPolicy {
             if u128::from(self.timeouts[1]) * 1000
                 > u128::from(maximum) * u128::from(clock.ticks_per_second().get())
             {
-                return Err(CoreError::LimitExceeded {
+                return Err(self.build_error(CoreError::LimitExceeded {
                     resource: K::HostBindingCancelDrainTimeoutMillisMax,
                     limit: maximum,
                     requested: None,
                     observed: None,
                     context: context(),
-                });
+                }));
             }
         }
         Ok(now)
@@ -1171,19 +1195,11 @@ impl<A: 'static, P: Parent> BuildStorage<A, P> {
     fn new(parent: P, policy: &ConsumerPropertyReadPolicy, upstream: u64) -> CoreResult<Self> {
         let mut charge = Charge::new(parent, policy)?;
         let root_bytes = PlanRoot::<A>::required_capacity();
-        check(&policy.limits, K::CleanupItemBytesMax, root_bytes)?;
+        policy.check(K::CleanupItemBytesMax, root_bytes)?;
         let build = add(policy.scratch, size_of::<Self>() as u64)?;
-        check(
-            &policy.limits,
-            K::AdmissionTemporaryBytesPerOperationMax,
-            build,
-        )?;
+        policy.check(K::AdmissionTemporaryBytesPerOperationMax, build)?;
         let build_amount = amounts(&[(ENGINE, build), (TEMP, build), (PEAK, build)]);
-        check(
-            &policy.limits,
-            K::PeakLiveBytesPerAdmissionMax,
-            add(build, upstream)?,
-        )?;
+        policy.check(K::PeakLiveBytesPerAdmissionMax, add(build, upstream)?)?;
         let mut initial = build_amount;
         initial[PEAK] = add(initial[PEAK], upstream)?;
         initial[CLEANUP_BYTES] = root_bytes;
@@ -1195,7 +1211,7 @@ impl<A: 'static, P: Parent> BuildStorage<A, P> {
                 .try_reserve(root_bytes)
                 .expect("held parent and local capacity"),
         )
-        .map_err(|(_, e)| e)?;
+        .map_err(|(_, e)| policy.build_error(e))?;
         Ok(Self {
             root: Some(root),
             draft: None,
@@ -1266,7 +1282,7 @@ impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env,
                 ValidatedThingProgress::Pending(cursor) => self.state = Building::Td(cursor, root),
                 ValidatedThingProgress::Failed(e) => {
                     *self.td_cause = Some(e);
-                    *self.cause = Some(td_error(e));
+                    *self.cause = Some(self.policy.build_error(td_error(e)));
                 }
                 ValidatedThingProgress::Complete(proof) => {
                     match build_consumer_property_read_aggregate(
@@ -1278,7 +1294,7 @@ impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env,
                         root,
                     ) {
                         Ok(build) => self.state = Building::Planning(build),
-                        Err(e) => *self.cause = Some(e),
+                        Err(e) => *self.cause = Some(self.policy.build_error(e)),
                     }
                 }
             },
@@ -1301,17 +1317,14 @@ impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env,
                             size_of::<(CoreError, Preflight, Terminal)>() as u64,
                             self.policy.call_bytes()?,
                         )?;
-                        check(&self.policy.limits, K::CleanupItemBytesMax, cleanup)?;
-                        check(
-                            &self.policy.limits,
-                            K::CompiledRuntimeBytesPerThingMax,
-                            output,
-                        )?;
+                        self.policy.check(K::CleanupItemBytesMax, cleanup)?;
+                        self.policy
+                            .check(K::CompiledRuntimeBytesPerThingMax, output)?;
                         let peak = add(
                             self.upstream,
                             add(self.charge.held[ENGINE], add(output, cleanup)?)?,
                         )?;
-                        check(&self.policy.limits, K::PeakLiveBytesPerAdmissionMax, peak)?;
+                        self.policy.check(K::PeakLiveBytesPerAdmissionMax, peak)?;
                         #[cfg(feature = "std")]
                         let artifact = self
                             .registration
@@ -1321,8 +1334,7 @@ impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env,
                             .size() as u64;
                         #[cfg(not(feature = "std"))]
                         let artifact = self.registration.support().artifact_layout().size() as u64;
-                        check(
-                            &self.policy.limits,
+                        self.policy.check(
                             K::BindingArtifactBytesPerThingMax,
                             mul(p.coordinate_count, artifact)?,
                         )?;
@@ -1355,18 +1367,18 @@ impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env,
                             Err((build, ledger, e)) => {
                                 drop(build);
                                 let _ = ledger;
-                                *self.cause = Some(e);
+                                *self.cause = Some(self.policy.build_error(e));
                             }
                         },
                         Err(e) => {
                             drop(build);
-                            *self.cause = Some(e);
+                            *self.cause = Some(self.policy.build_error(e));
                         }
                     }
                 }
                 PlanningStep::Complete(draft) => *self.draft = Some(draft),
                 PlanningStep::Failed { cause, cleanup } => {
-                    *self.cause = Some(cause);
+                    *self.cause = Some(self.policy.build_error(cause));
                     *self.rollback = cleanup;
                 }
             },

@@ -3,10 +3,16 @@ use super::*;
 use binding::ownership::{OwnedPolicy, PrivatePool};
 
 fn owned_policy(contract: BindingResourceContract) -> ConsumerPropertyReadPolicy {
+    owned_policy_with_limits(contract, GatewayDefaultV1::LIMITS.clone())
+}
+fn owned_policy_with_limits(
+    contract: BindingResourceContract,
+    limits: ResourceLimits,
+) -> ConsumerPropertyReadPolicy {
     ConsumerPropertyReadPolicy::try_new_owned(
         contract,
         ResourceProfileId::GATEWAY_DEFAULT_V1,
-        GatewayDefaultV1::LIMITS.clone(),
+        limits,
         BindingLifetimeFootprint::new(4, 4096),
         BindingLifetimeFootprint::new(8, 1280),
         [1, 64, 64, 64],
@@ -117,52 +123,114 @@ fn owned_provisioning_contract_and_result_mismatch_precede_clock_allocation_and_
 
 #[test]
 fn owned_parent_pressure_reports_actual_limiting_coordinates_without_losing_inputs() {
+    for (index, kind, slot) in [
+        (0, ResourceKind::EngineLiveBytesGlobalMax, 911),
+        (10, ResourceKind::CleanupItemsMax, 912),
+    ] {
+        let contract = BindingResourceContract::ConsumerOwnedV2;
+        let policy = owned_policy(contract);
+        let key = policy.resource_identity();
+        let mut bank = policy.parent_accounts();
+        let generation = Generation::INITIAL.checked_next().unwrap();
+        bank[index] = ResourceAccount::new(SlotIndex::new(slot), generation, kind, 0);
+        let bank = RefCell::new(bank);
+        let mut report = report_storage();
+        let clock = Clock::default();
+        let registration = binding::static_registration(StaticClient::new_owned(
+            Arc::new(Stats::default()),
+            outputs(),
+            author(contract, Mode::Normal, pool(), false),
+        ));
+        let identity = registration.registration().identity();
+        observe(0);
+        let rejected = StaticConsumerPropertyReadRuntime::try_new(
+            registration,
+            policy,
+            &clock,
+            &bank,
+            &mut report,
+        )
+        .err()
+        .expect("actual parent exhausted");
+        assert_eq!(trace().requests, 0);
+        disarm();
+        let error = rejected.error().error();
+        assert_eq!(rejected.input().0.registration().identity(), identity);
+        assert_eq!(
+            error.context().resource_failure(),
+            Some((
+                key,
+                ResourceFailureDomain::EngineCapacity,
+                (index == 0).then_some((SlotIndex::new(0), Generation::INITIAL)),
+                Some((SlotIndex::new(slot), generation))
+            ))
+        );
+        assert_eq!(error.limit_details().unwrap().0, kind);
+        assert_eq!(error.limit_details().unwrap().1, 0);
+        if index == 10 {
+            assert_eq!(error.limit_details().unwrap().2, Some(1));
+        } else {
+            assert!(error.limit_details().unwrap().2.unwrap() > 0);
+        }
+        assert_eq!(error.limit_details().unwrap().3, Some(0));
+        assert!(bank.borrow().iter().all(|a| a.used() == 0));
+        assert_eq!(bank.borrow()[index].peak(), 0);
+        assert!(report.0.get().0.is_none());
+        assert_eq!(report.1.get(), 0);
+        assert_eq!(report.2.borrow().used(), 0);
+    }
+}
+
+#[test]
+fn owned_static_build_quota_failure_keeps_the_policy_key_and_actual_row() {
     let contract = BindingResourceContract::ConsumerOwnedV2;
-    let policy = owned_policy(contract);
+    let required = clinkz_wot_planning::ConsumerPropertyReadCleanupSlot::<ResolvedTargetArtifact>::required_capacity();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::CleanupItemBytesMax, Some(required - 1)));
+    let policy = owned_policy_with_limits(contract, limits);
     let key = policy.resource_identity();
-    let mut bank = policy.parent_accounts();
-    let generation = Generation::INITIAL.checked_next().unwrap();
-    bank[0] = ResourceAccount::new(
-        SlotIndex::new(911),
-        generation,
-        ResourceKind::EngineLiveBytesGlobalMax,
-        0,
-    );
-    let bank = RefCell::new(bank);
+    let parent = RefCell::new(policy.parent_accounts());
     let mut report = report_storage();
     let clock = Clock::default();
+    let stats = Arc::new(Stats::default());
     let registration = binding::static_registration(StaticClient::new_owned(
-        Arc::new(Stats::default()),
+        stats.clone(),
         outputs(),
         author(contract, Mode::Normal, pool(), false),
     ));
-    observe(0);
-    let rejected = StaticConsumerPropertyReadRuntime::try_new(
+    let (mut r, o) = StaticConsumerPropertyReadRuntime::try_new(
         registration,
         policy,
         &clock,
-        &bank,
+        &parent,
         &mut report,
     )
-    .err()
-    .expect("actual parent exhausted");
+    .unwrap_or_else(|_| panic!("report fits; build root does not"));
+    let source = source();
+    observe(usize::MAX);
+    let error = r
+        .consume(&source, &mut work(100000), |_| panic!("rejected before TD"))
+        .unwrap_err();
     assert_eq!(trace().requests, 0);
     disarm();
-    let error = rejected.error().error();
     assert_eq!(
-        error.context().resource_failure(),
+        error.limit_details(),
         Some((
-            key,
-            ResourceFailureDomain::EngineCapacity,
-            Some((SlotIndex::new(0), Generation::INITIAL)),
-            Some((SlotIndex::new(911), generation))
+            ResourceKind::CleanupItemBytesMax,
+            required - 1,
+            Some(required),
+            None
         ))
     );
     assert_eq!(
-        error.limit_details().unwrap().0,
-        ResourceKind::EngineLiveBytesGlobalMax
+        error.context().resource_failure(),
+        Some((key, ResourceFailureDomain::EngineCapacity, None, None))
     );
-    assert!(bank.borrow().iter().all(|a| a.used() == 0 && a.peak() == 0));
+    assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+    stop_static(&mut r);
+    drop(r);
+    drop(o);
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
 }
 
 #[test]
@@ -171,6 +239,7 @@ fn owned_every_static_build_allocation_failure_reclaims_original_output_and_acco
     for fail in 0..256 {
         let contract = BindingResourceContract::ConsumerOwnedV2;
         let policy = owned_policy(contract);
+        let key = policy.resource_identity();
         let parent = RefCell::new(policy.parent_accounts());
         let mut report = report_storage();
         let clock = Clock::default();
@@ -198,6 +267,11 @@ fn owned_every_static_build_allocation_failure_reclaims_original_output_and_acco
         disarm();
         if fail < requests {
             assert!(result.is_err(), "allocation {fail}");
+            assert_eq!(
+                result.as_ref().err().unwrap().context().resource_failure(),
+                Some((key, ResourceFailureDomain::DeploymentFailure, None, None)),
+                "allocation {fail}"
+            );
             sites += 1;
         }
         drop(result);
@@ -740,6 +814,7 @@ mod host_owned {
         let mut sites = 0;
         for fail in 0..256 {
             let (r, o, parent, _, stats) = setup(Mode::Normal, false, outputs());
+            let key = owned_policy(contract).resource_identity();
             let source = source();
             observe(fail);
             let result = r.consume(&source, &mut work(100000), |b| {
@@ -755,6 +830,11 @@ mod host_owned {
             disarm();
             if fail < requests {
                 assert!(result.is_err(), "allocation {fail}");
+                assert_eq!(
+                    result.as_ref().err().unwrap().context().resource_failure(),
+                    Some((key, ResourceFailureDomain::DeploymentFailure, None, None)),
+                    "allocation {fail}"
+                );
                 sites += 1;
             }
             drop(result);
@@ -837,6 +917,15 @@ mod host_owned {
      {
         for fail in 0..=2 {
             let (r, o, parent, pool, stats) = setup(Mode::Normal, false, outputs());
+            let binding = author(
+                BindingResourceContract::ConsumerOwnedV2,
+                Mode::Normal,
+                pool.clone(),
+                false,
+            )
+            .configuration();
+            let policy_key =
+                owned_policy(BindingResourceContract::ConsumerOwnedV2).resource_identity();
             let h = build(&r);
             let mut options = InteractionOptions::new();
             options.uri_variables.insert("key".into(), "value".into());
@@ -845,6 +934,31 @@ mod host_owned {
             let result = h.read_property("a-read", options, &mut work(100000));
             if fail < 2 {
                 let rejection = result.err().expect("both recoverable call allocations");
+                assert_eq!(
+                    rejection.error().error().context().resource_failure(),
+                    Some((
+                        if fail == 0 {
+                            policy_key
+                        } else {
+                            binding.private_policy()
+                        },
+                        ResourceFailureDomain::DeploymentFailure,
+                        None,
+                        None,
+                    ))
+                );
+                assert_eq!(
+                    rejection.error().error().context().cause_code(),
+                    (fail == 0).then_some(314)
+                );
+                assert_eq!(
+                    rejection.error().error().context().phase(),
+                    ErrorPhase::Binding
+                );
+                assert_eq!(
+                    rejection.error().error().context().retry_class(),
+                    RetryClass::Never
+                );
                 let ((options, request), _) = rejection.into_parts();
                 let request = request.unwrap();
                 assert!(options.uri_variables.is_empty());
@@ -877,6 +991,55 @@ mod host_owned {
             assert_eq!(trace().live, 0);
             assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
         }
+    }
+    #[test]
+    fn owned_host_binding_private_rejection_keeps_its_key_and_request() {
+        let (r, o, parent, pool, stats) = setup(Mode::Reject, false, outputs());
+        let configuration = author(
+            BindingResourceContract::ConsumerOwnedV2,
+            Mode::Reject,
+            pool,
+            false,
+        )
+        .configuration();
+        let h = build(&r);
+        observe(usize::MAX);
+        let rejected = h
+            .read_property("a-read", InteractionOptions::new(), &mut work(100000))
+            .err()
+            .expect("actual binding policy refusal");
+        assert_eq!(trace().requests, 1); // The Core envelope is released on rejection.
+        assert_eq!(trace().live, 0);
+        disarm();
+        let context = rejected.error().error().context();
+        assert_eq!(
+            context.resource_failure(),
+            Some((
+                configuration.private_policy(),
+                ResourceFailureDomain::BindingPolicy,
+                None,
+                None
+            ))
+        );
+        let request = rejected.input().1.as_ref().unwrap();
+        assert_eq!(
+            request.artifact().identity().configuration(),
+            configuration.configuration()
+        );
+        assert_eq!(
+            context.binding(),
+            Some((request.binding_id(), request.binding_generation()))
+        );
+        assert_eq!(context.plan(), Some(request.plan_id()));
+        assert_eq!(context.phase(), ErrorPhase::Binding);
+        assert_eq!(context.retry_class(), RetryClass::Never);
+        assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+        drop(rejected);
+        drop(h);
+        shutdown(&r);
+        drop(r);
+        drop(o);
+        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
     }
     #[test]
     fn owned_host_residual_and_engine_funding_precede_finite_allocating_disposal_and_supported_error()

@@ -202,7 +202,11 @@ impl PollClientBinding for SecondClient {
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
     {
         if self.output.is_none() || budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Err(rejection(request));
+            return Err(rejection(
+                request,
+                Some(&self.policy),
+                ResourceFailureDomain::BindingPolicy,
+            ));
         }
         self.stats.selected(artifact.artifact().payload().target());
         self.stats.starts.fetch_add(1, Ordering::SeqCst);

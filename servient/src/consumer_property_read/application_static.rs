@@ -163,14 +163,33 @@ where
                         for j in 0..i {
                             assert!(a[j].release_committed(wanted[j]));
                         }
-                        return false;
+                        let owner = a[i]
+                            .try_reserve(0)
+                            .expect("zero receipt retains account totals")
+                            .owner();
+                        let error = if policy.contract == BindingResourceContract::StrictV1 {
+                            busy()
+                        } else {
+                            stamp_resource(
+                                CoreError::LimitExceeded {
+                                    resource: KINDS[i],
+                                    limit: a[i].limit(),
+                                    requested: a[i].used().checked_add(wanted[i]),
+                                    observed: Some(a[i].used()),
+                                    context: context(),
+                                },
+                                policy.identity,
+                                ResourceFailureDomain::EngineCapacity,
+                                None, // This report loan has no paired local account for every row.
+                                Some(owner),
+                            )
+                        };
+                        return Err(error);
                     }
                 }
-                true
+                Ok(())
             });
-            if !held {
-                return Err(busy());
-            }
+            held?;
             report_storage
                 .2
                 .borrow_mut()
