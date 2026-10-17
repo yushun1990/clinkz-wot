@@ -225,10 +225,10 @@ Physically live engine-owned arena, pool, heap, or exclusively reserved
 caller-provided capacity is charged. Verification records which representation
 is measured. Rollback metadata MUST NOT duplicate the resources it protects.
 
-[The HTTP admission candidate](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
+[The HTTP admission](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
 defines a scoped additive paid Form-metadata fact on this lending boundary.
-Its exact scalar semantics/API/work are owned there; production remains unchanged
-until independent ADR-0013 admission. It adds no resource-schema or TD Basic rule.
+Its exact scalar semantics/API/work and ADR-0013 source scope are owned there.
+It adds no resource-schema or TD Basic rule.
 
 For the first Consumer Property Read transaction, source input is an immutable
 caller loan. Physical source and persistent-document accounts have zero **new**

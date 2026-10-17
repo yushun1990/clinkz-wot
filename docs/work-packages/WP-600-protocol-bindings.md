@@ -24,8 +24,8 @@ WP-600 retains its WP-300 package-completion dependency. Exact capability
 tranches may enter under ADR-0013 after their matching WP-200/WP-300/WP-400
 predecessors and required architecture proof are complete. The Consumer gate is
 passed. The [smallest HTTP admission target](WP-600-http-property-read-target.md)
-now registers the first vertical slice as a planned admission candidate; it is
-not admitted and grants no production implementation authority.
+records admission of the first vertical slice; the index owns its exact state
+and bounded production implementation scope.
 
 Consumer execution uses the admitted source-independent consumed plan, selected
 `OutboundRequest`, recoverable call construction, Core result seal, generation
