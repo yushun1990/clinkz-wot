@@ -1,125 +1,256 @@
-# Host HTTP Consumer Property Read: implementation-admission target
+# Host HTTP Consumer Property Read: admission candidate
 
-This record identifies the prospective HTTP ADR-0013 candidate under
+`WP-600-HTTP-CONSUMER-PROPERTY-READ` is a **planned, unadmitted** ADR-0013
+candidate for design revision 5.1. [The index](index.toml) owns its state,
+dependencies, source scope, executable prechecks and completion keys. Independent
+review of the exact candidate revision must precede a separate admission
+transition and production edits. This document owns the scoped entry amendment
+and completion contract; passing prechecks do not grant admission.
+
+## Tranche and predecessor boundary
+
+Deliver one optional Host HTTP/1.1 Consumer through public
+`ConsumerPropertyReadRuntime`: one complete Consumer-only registration, one
+eager consumed generation, one active call/result opportunity, two distinct
+property targets in the same TD, and repeated reads after terminal release.
+HTTP execution is std-only; portable cells verify the shared amendment and
+regressions, not an embedded HTTP backend.
+The TD/Core/Planning eligibility amendment below and the HTTP adapter belong to
+this one tranche. Implement the shared amendment first inside the admitted
+tranche, then the binding. This admission PR contains no production edits.
+
+The direct predecessor is completed/current
+`WP-400-CONSUMER-RESOURCE-OWNERSHIP`. Its transitive closure contains all ten
+completed/current Consumer predecessors: borrowed TD, call values, selection,
+closed compiler, aggregate/output ownership, Consumer-only registration, binding,
+Host construction and manual Runtime. WP-000 is complete. Reuse their accepted
+evidence and the passed Consumer/Producer gates at their recorded revisions.
+The successor's accepted schema-2 boundary governs HTTP; neither SDK qualification
+nor broad WP-300/WP-400 completion is an extra tranche predecessor. WP-600's
+package-level WP-300 completion dependency remains unchanged.
+
 [ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org)
-and [ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org).
-It is **not registered or admitted** in `index.toml`; it permits no production
-change. The candidate must supply its shared contract, exact source/dependency
-edit scope, prechecks and independent admission review before implementation.
-Concrete HTTP SDK selection, dependency lock and qualification are implementation
-evidence, not a predecessor SDK qualification package.
-The prospective tranche identity is `WP-600-HTTP-CONSUMER-PROPERTY-READ`.
+selects HTTP and preserves HTTPS/security as a release dependency.
+[ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) supersedes
+its SDK choice: choose, pin and qualify the client/parser and application
+readiness runtime during implementation. No advance SDK fork/qualification
+package, engine executor or generic retirement interface is selected.
 
-## Scope and predecessors
+PLAN's architecture-fixture audit checkpoint remains parallel work, becoming
+an HTTP dependency only for a demonstrated intersecting defect. Preserve unique
+negative probes and accepted evidence. Topics 0076/0081's broader facade/image/
+reuse questions are outside this first-operation scope; migrated 0085–0087 supply
+the accepted ownership/configuration boundary. No audit or fixture retirement
+is added to this tranche's acceptance criteria.
 
-First close ADR-0023's resource ownership contract/schema migration and the
-applicable Consumer readmission boundary. Current strict footprint/destructor
-contracts remain binding until that explicit migration; this target cannot
-waive them. Use controlled owners to settle the shared boundary. Do not require
-Hyper qualification or its proposed dependency disposal repair as the shared
-architecture's predecessor. SDK evidence is collected during HTTP implementation.
+## Owners, source and dependency edits after admission
 
-One complete Host Consumer-only registration, one eager consumed generation and
-one active call/result opportunity through `ConsumerPropertyReadRuntime`.
-Two distinct property targets in one TD prevent an adapter that ignores selected
-artifacts from passing. Repeated reads reuse capacity only after terminal release.
-Use the passed Consumer gate and its ten completed/current predecessors, including
-borrowed TD, complete aggregate/output ownership, compiler support, Consumer-only
-registration, Core call backing/seal and manual Runtime. The passed Producer gate
-remains regression evidence, not a new HTTP Producer implementation.
+| Owner | Exact change |
+| --- | --- |
+| TD / WP-100 | `td/src/validated.rs`: one paid scalar on existing semantic lending. Necessary exports only in `td/src/lib.rs`. Preserve ordinary Form construction, round trips and Basic validation. |
+| Core compiler/plan / WP-200 | `core/src/plan.rs`, `core/src/binding_compiler.rs`, necessary `core/src/lib.rs` exports: scalar carrier and opt-in closed restriction below. No open compiler attestation or new artifact/callback family. |
+| Planning / WP-200 | `planning/src/consumer_property_read.rs`: carry the scalar through existing preflight/materialization. Preserve all-bounds-before-start, source-free output and rollback. No protocol branch or raw TD access. |
+| HTTP / WP-600 | Create `protocol-bindings/protocols/http/{Cargo.toml,src/,tests/,examples/}` as `clinkz-wot-binding-http`. Core/Foundation are normal shared dependencies; TD/Planning/Servient are test/example dependencies. SDK/runtime dependencies remain private to this crate. |
+| Runtime / WP-400 | Use existing public Host provision/consume/read/cancel/drain/cleanup. No production Servient or Foundation changes. A demonstrated insufficiency requires a reproducer and scoped readmission. |
 
-The prospective production owner is `protocol-bindings/protocols/http`, depending
-on public Foundation/Core/Planning/TD contracts and Host transport dependencies;
-Servient is a dev dependency only. Add the actual crate to WP-600 owner metadata
-when admitted creation supplies its manifest. No placeholder crate is needed now.
+Root Cargo membership/lock may change only for the real optional binding member
+and dependencies. Add its WP-600 crate inventory when its manifest exists;
+no placeholder crate is created for admission. No umbrella facade/feature,
+Directory, Producer, Zenoh, codec, workflow or generated-resource edit. Necessary
+API-row updates and focused tests at indexed paths are included; no second
+planner/runtime or per-task checker is authorized.
 
-## Selected entry envelope
+The new HTTP public surface is checked immutable `HttpConsumerConfig`,
+`HttpConsumerConfig::for_cleartext_ip() -> CoreResult<Self>` selecting the fixed
+entry limits below, and
+`try_consumer_registration(config: HttpConsumerConfig, binding_id: BindingId,
+binding_generation: BindingGeneration, diagnostic_ordinal: u32)
+-> CoreResult<ConsumerCompilerRegistration<HostConsumerBindingRegistration>>`.
+The explicit cleartext constructor is the permission boundary. Capture actual
+configuration in the complete client/compiler bundle using Core's supported
+Host adapter and restricted closed compiler. Its private-policy identity covers
+actual wire/read/parser limits, URI/status/media restrictions and selected SDK
+configuration; it is neither a caller-supplied final binding key nor an assertion
+that qualifies an SDK. No mutable/raw installed-client
+escape. Registration construction performs no network I/O. The application
+supplies and keeps alive the chosen runtime and any required entered context;
+missing services reject before request acceptance. The SDK-specific deployment
+recipe is implementation completion evidence, not a new shared runtime API.
 
-- HTTP/1.1 Property Read GET, bounded `application/json` response bytes, explicit
-  local cleartext permission and `nosec` only. Use IP-literal endpoints initially
-  to avoid a hidden blocking resolver. This is integration entry, not the full
-  production networking/security claim. Other schemes, methods, encodings,
-  security and operation cells reject before execution; required HTTP defaults
-  are compiled once, with effective URI/security meaning still owned by TD.
-- Close the demonstrated form-metadata projection gap in the same admission
-  candidate: current `ValidatedPropertyReadForm` and compiler input do not expose
-  form extensions/response overrides. Entry accepts default GET forms with empty
-  form extensions and absent response overrides; reject other forms as unsupported
-  before execution through a paid TD fact and a protocol-neutral support check.
-  Reject even an explicit `htv:methodName=GET` until vocabulary support is admitted.
-  Preserve extensions in ordinary TD round trips. Exact carrier/API changes and
-  TD/Core/Planning source paths must be named in admission, including unchanged
-  compiler/all-bounds/rollback regressions. No raw-TD callback, hidden validation
-  promise from the application or binding-specific branch in shared Planning.
-- Choose the concrete client and readiness runtime during implementation. The
-  application supplies required runtime services and drives the manual Runtime.
-  A direct call-owned connection is the smallest entry topology. No engine-owned
-  executor, detached driver, pool, redirect, compression, HTTP/2, retry or
-  reconnect loop is required. A fresh connection per read is acceptable; any
-  additional owner needs bounded lifetime/retirement evidence.
-- The returned call owns the request, socket/connection and response progress.
-  Constructor rejection returns the unchanged request; network work begins only
-  after accepted ownership, on poll. Core and raw call construction keep their
-  recoverable backing. No allocation after raw acceptance is introduced into
-  Core's envelope/seal installation.
-- During implementation, pin/audit the selected client/parser and configure
-  header count, header/read-buffer, body/trailer and connection limits. Distinguish
-  engine-admitted carrier/handoff capacity, binding-controlled buffers and
-  deployment costs under the migrated contract. Bound pre-body receive state
-  and per-poll work as well as delivered bytes. A body-size wrapper alone proves
-  no physical receive maximum. Keep complete protocol futures owned; a detached
-  owner is not evidence of retirement.
-- Network error, deadline, cancellation and invalid/oversized output retain the
-  original call/lease until local socket/future release, then report the exact
-  settlement. Socket closure certifies local resource release, not whether a
-  remote read executed. Retain first cause and late-result sealing. Registration
-  and last-root destruction must fit the explicitly migrated finite local
-  disposal contract; allocation-free engine status/handoff remains required.
+## Paid metadata and protocol-neutral compiler amendment
 
-Concrete SDK poll/buffer/Drop discriminators belong to Binding implementation.
-Preserve existing observations without promoting them into universal SDK
-eligibility rules. If implementation demonstrates a conflict with the migrated
-boundary, retain the smallest reproducer and reopen only that boundary.
+The current lending projection loses Form extensions/response overrides; the
+closed compiler only copies targets. Keep its existing source-reviewed support
+boundary. These are the complete shared API/semantic changes:
 
-## Admission and completion distinction
+1. TD adds `ValidatedPropertyReadForm::has_additional_form_metadata(&self)
+   -> bool`, true exactly for nonempty `_extra_fields` or presence of `response`,
+   `additional_responses`, `content_coding`, `subprotocol` or `scopes`. Presence
+   is conservative: explicit GET/identity coding, empty scopes and
+   `additionalResponses: []` also reject. No extension key/value interpretation.
+   Existing inspection still pays complete validation. Compute/store the fact
+   under a paid `DocumentNodes` semantic transition before Form Ready. The new Ready
+   getter/retries inspect no source and refill no allowance. Preserve first
+   cause, cancellation, rewind and source lifetime.
+2. Core adds private `Option<bool>` to `LogicalInteractionPlan`.
+   Existing `try_property_read` initializes `None` (unknown). Add
+   `with_additional_form_metadata(self, present: bool) -> Self` and
+   `has_additional_form_metadata(&self) -> Option<bool>`. Planning always sets
+   `Some(actual_paid_fact)` during materialization, for every registration.
+   The scalar owns no TD reference/map/allocation. Existing
+   `BindingCompilerInput::logical_plan()` carries it. Unknown never means empty;
+   an application validation promise cannot replace the paid Planning path.
+3. Add `ConsumerBindingConfiguration::with_default_json_forms(self)
+   -> CoreResult<Self>` and `requires_default_json_forms(&self) -> bool`.
+   Original `try_new` retains unrestricted behavior and exact v1 key. The new
+   method is idempotent and captures one immutable restriction. Let `K` be that
+   configuration's original 32-byte v1 key. The restricted key is SHA-256 of
+   `b"clinkz-consumer-default-json-forms-v1\0" || K`; reject equality with `K`
+   or any of the 64 strict keys. All original contract/cell/capacity/private-policy/
+   result-bound operands remain included through `K`. This additive binding
+   encoding is `closed-consumer-default-json-forms-v1`; resource schema 2,
+   complete-policy encoding and existing identity vectors are unchanged.
+4. Client, complete registration, native compiler and private Host adapter capture
+   the same actual restricted configuration. Existing support's
+   `consumer_configuration()` projects it; add no support issuer. In restricted
+   mode accept only metadata `Some(false)` and effective media
+   `Some("application/json")`. Otherwise return `UnsupportedOperation` with fixed
+   operation/form/plan/binding context from bounds, start and paid step, preserving
+   identity/capacity checks. All coordinate bounds precede every start/I/O/
+   publication. One bad coordinate fails the transaction with funded rollback;
+   never skip it or silently execute default GET. Renew fixed callback/work costs.
+5. Keep the 64-byte target-copy artifact, compatibility and payload format.
+   Restricted/unrestricted configurations have distinct identities. A restricted
+   `mock://` target is valid compiler input: URI/protocol eligibility stays with
+   the actual binding. No HTTP/security branch enters Core or Planning.
 
-Before admission, close the migrated shared compiler/registration/input and
-resource/ownership envelope, source/dependency edit scope and applicable
-work/destructor guarantees. Name existing public APIs and the minimum TD/compiler
-support projection; do not invent a generic lifecycle family. Selection and
-qualification of the SDK/configuration/lock follow during implementation.
-Specify exact test commands and requirement/evidence mappings in the registered
-candidate. Run authority checks and relevant Core/compiler/Runtime and portable
-regressions. Prechecks require neither a completed production adapter nor
-advance concrete SDK qualification.
+This adds five API rows in existing portable cells and changes the two existing
+types' private layouts. No new WorkClass/resource row/schema, extension object
+model or lowering callback. Retaining unrestricted support preserves its accepted
+copy primitive; globally restricting it or attesting arbitrary compilers would
+change more authority. Raw TD in HTTP and treating unknown as false are rejected.
 
-Production completion must then demonstrate:
+## HTTP execution and resource obligations
 
-1. Actual immutable consume/read paths to two selected targets and repeated reads
-   against a separately implemented HTTP peer, with no legacy selectors, TD
-   retention, raw installed-client bypass or unowned connection task.
-2. Exact limits and one over for headers/body/trailers, chunked and missing-length
-   responses, malformed framing, slow/truncated/disconnected peers, and saturation
-   with unchanged input. Neither Content-Length nor a count-only channel certifies
-   physical input capacity. Explicitly reject unsupported upgrade/encoding behavior.
-   Include form method/header/response overrides as unsupported-input cases, proving
-   the new paid eligibility fact survives all-bounds checks and cannot be bypassed.
-3. Caller cancel/drop, deadline/result races, invalid normal/late success and
-   accepted errors through Core seals, drain/root loss and repeated final reuse.
-   Check actual connection/future destruction, finite nonblocking local Drop,
-   truthful residual reporting and allocation-free engine status/handoff.
-   Any SDK disposal allocation follows the migrated Host policy and measured
-   finite local work; no blocking joins or replacement work.
-4. Actual retained/transient/peak/largest allocations with ownership scope,
-   configured SDK limits, declared uncertainty, baseline reactor/OS costs and
-   original-account release. Measurements are not universal physical maxima.
-   Fault injection covers supported engine/raw-constructor recovery. A terminated
-   SDK OOM child, if used, establishes only the declared process-failure boundary.
-5. Relevant unchanged Consumer/Producer public regressions, portable Core/Planning/
-   Servient cells, dependency neutrality and applicable performance identities.
+Only default GET, NoSec, effective `application/json`, HTTP/1.1 and IP-literal
+cleartext endpoints enter. TD owns effective URI/security meaning; Planning
+already requires one NoSec definition. Before raw acceptance, validate selected
+artifact/configuration and URI. Reject other schemes/HTTPS, DNS, userinfo,
+fragments, templates, nonempty URI variables and unsupported endpoint syntax.
+Parse the owned target into call state once, without TD rescan/Form selection.
+The existing target capacity remains at most 64 UTF-8 bytes.
 
-This completes only `http-consumer-property-read`. Production HTTP Producer,
-its bidirectional loop, DNS, HTTPS/trust/security, streaming, embedded networking,
-fleet concurrency and broad package closure remain separately scoped successors.
-HTTPS qualification is a production-release dependency, so a local GET demo cannot
-close WP-600 or be presented as v1 production readiness.
+Use a fresh call-owned connection per read. No pool, detached driver, redirect,
+decompression, HTTP/2, upgrade, retry or reconnect. Only HTTP 200 with
+`application/json` body bytes yields success through existing Core validation
+and seals. Other statuses/encodings reject explicitly; no new JSON/TD ingestion
+or schema decoder. Error causes remain fixed/bounded and omit peer bodies.
+
+Fixed policy maxima: 32 response headers / 8192 header bytes, 4096 decoded body
+bytes, 16 trailers / 2048 trailer bytes, and 32768 cumulative response wire bytes
+including interim/chunk framing. Read at most 4096 bytes per socket read and
+per progress call. Header bytes include status line, field lines and terminating CRLF; trailer
+bytes include field lines and terminating CRLF. Body bytes exclude chunk
+framing. No phase/chunk/decoder reset refills totals. Reject unsupported
+informational responses; no implicit draining after rejection. Qualify SDK parser,
+continuation and disposal work separately. Test fixed-length, chunked and
+close-delimited bodies, exact/one-over limits and fragmented/truncated framing.
+
+These are observable policy bounds, not an exact SDK heap claim. Select enforced
+parser/read-buffer ceilings compatible with them, bound retained ingress before
+body delivery, and report bounded read-ahead/temporary overlap. A body limiter,
+Content-Length, count-only queue or OS limit alone does not qualify ingress.
+If the selected SDK cannot enforce this envelope, change SDK/configuration or
+return to scoped review; do not write an HTTP parser.
+
+| Resource owner | Required funding and release |
+| --- | --- |
+| TD/Planning/Core | Pay scalar work before Ready; renew actual cursor/plan/config/support/Host-slot Layouts, build peaks and rollback. Charge controlled allocations before construction; retain original local/parent provenance. Scalar adds no backing allocation. |
+| Registration/call | Use `ConsumerOwnedHostV2`, matching immutable configuration, 4096-byte result bound and declared full capacities of both media Strings. Measure actual carrier/envelope and constructor overlap. Preserve fallible raw construction and unchanged rejected request; Core post-acceptance seal installation stays allocation-free. |
+| Normal/late result | Fund full `Arc<[u8]>` allocation/control/alignment, String capacities and overlap. Retain call/lease/result and accounts until release. Backing violations use existing accepted-error seals. |
+| Cancellation/cleanup | Preserve complete engine-call cancellation cap, transfer cap plus destination/status/context and prebacked manual fallback before effects. Ordinary pressure cannot consume cleanup funding; first cause/late result survive refusal, transfer, drain and root loss. |
+| Binding | Own socket, buffers, parser, readiness and connection futures. Enforce ingress/concurrency/growth refusal, retain funded accepted owners on pressure, and perform no blocking I/O or detached work. |
+| Deployment | Supply live runtime, clock driving, allocator and OS/FD/process policy. Report reactor/socket baseline separately from engine charges and SDK measurements. Process OOM/abort/runtime destruction has no in-process reporting guarantee. |
+
+No network effect before raw acceptance and first poll. Actual local socket/
+future retirement precedes complete local settlement; it cannot certify whether
+the remote read ran. Finite nonblocking SDK-local disposal may allocate under
+accepted Host policy after required residual commitment; original funding stays
+live through destruction. Engine status/fallback/handoff stays allocation-free.
+No network wait, blocking join, replacement work or unowned tail. Drop alone is
+not a remote cleanup certificate.
+
+## Prechecks, impact and performance
+
+Run every indexed precheck before independent admission. The focused test added
+to the existing aggregate fixture uses real typed TD/paid lending/current compiler
+to reproduce lost metadata and a small scalar/restriction discriminator. Its
+proposed scalar is a pre-code model, not production paid-fact evidence. There is
+no HTTP SDK, alternate aggregate or runtime. Existing public compiler/aggregate/
+Runtime tests establish the reusable baseline; authority validation executes
+current resource/state/performance contracts. No precheck qualifies a future SDK.
+Replace the small model assertions with actual public getter/configuration/compiler
+checks at production completion, retaining their unique negative cases.
+
+All existing completion files and gate states stay unchanged in admission.
+When source changes, mark affected predecessor impact review-required and renew
+once in the successor completion file: borrowed TD lending/work; closed compiler
+configuration/Layout/callbacks; aggregate/output plan/preflight/rollback; complete
+registrations and Runtime/ownership captured metadata/carrier costs. Preserve
+semantic case identities, old results and strict/owned keys. Independent successor
+completion may reaffirm these impacts together; ten new admission cycles are not
+required. The exact impact map is:
+
+| Existing tranche(s) | Successor disposition when source changes |
+| --- | --- |
+| WP-100-CONSUMER-VALIDATED-THING | Renew paid lending/cursor/layout/Ready/rewind/cancel evidence. |
+| WP-200-CONSUMER-PROPERTY-READ-PLANNING | Renew owned logical-plan Layout/cost and identity/selection regressions. |
+| WP-200-CONSUMER-COMPILER-SUPPORT | Renew restricted configuration, actual support/adapter/cursor/output Layouts, fixed callback work, refusal/recovery and substitution negatives. |
+| WP-200-CONSUMER-PROPERTY-READ-AGGREGATE; WP-200-CONSUMER-OUTPUT-OWNERSHIP | Renew source-free scalar, all-bounds barrier, whole-build work/peaks and original-account rollback/reclaim. |
+| WP-300-CONSUMER-ONLY-REGISTRATION | Renew complete-owner capture/equality, changed configuration/support layouts and rejection recovery. |
+| WP-400-CONSUMER-PROPERTY-READ-RUNTIME; WP-400-CONSUMER-RESOURCE-OWNERSHIP | Renew metadata/cell/policy correspondence, dependent carrier measurements and normal/late handoff/cleanup funding; no new Runtime implementation. |
+| WP-100-CONSUMER-CALL-VALUES-VALIDATOR; WP-300-CONSUMER-PROPERTY-READ-BINDING; WP-300-CONSUMER-HOST-CALL-CONSTRUCTION; WP-000 | Reuse unchanged contracts/evidence. Run shared regressions at completion; a demonstrated intersecting layout/behavior change extends impact review rather than silently inheriting measurements. |
+
+State topology, selection/seal semantics, schema-2 row meanings and
+all 196 numeric defaults remain binding.
+
+Applicable performance identities are PERF-GW-009/010/028/029 and PERF-CS-020/021.
+Reuse fixed fixtures/budgets/accounting/oracles for shared regressions. Their
+harness excludes transport I/O and is executable via the authority precheck;
+it supplies no HTTP latency claim. Changed-engine allocation/work and actual
+network resource/lifecycle observations are completion evidence. No new throughput
+budget, benchmark runner or generic workload family is introduced.
+
+## Completion evidence
+
+Write `docs/evidence/WP-600-http-consumer-property-read.toml` with exact source/
+fixture revisions, commands/results, dependency versions/features/lock,
+configuration/runtime/deployment and independent acceptance references.
+
+| Stable key | Required executable evidence |
+| --- | --- |
+| `http-form-eligibility` | Production paid scalar/source-free plan in all three cells; default/explicit GET/POST/header/unknown extension/response/additional-response/coding/subprotocol/scopes, including present-empty. Zero/short credit, Ready replay, rewind/cancel and round trips. Native/public Host restricted positives; unknown/present/media negatives; later bad coordinate causes zero starts/I/O/publication and funded rollback/retry. Actual allocation refusals, unchanged strict keys and restricted/unrestricted client/compiler/artifact substitution negatives. |
+| `http-consumer-property-read` | Public Host registration, consume/select/read of two targets, then at least 100 alternating reads after terminal release. Independently implemented loopback peer asserts GET/path and distinct results. Destroy TD/build inputs after consume. No raw-client/legacy bypass or retained source; saturation returns unchanged input. |
+| `http-resource-lifecycle` | Pinned SDK/source and independent raw peer: exact/one-over headers/body/trailers/wire, fragmented/chunked/no-length, malformed/slow/truncated/disconnected peer, statuses/upgrades/encodings, no retry. Caller cancel/drop, deadline/result races, invalid normal/late success, accepted error, drain/root loss preserve seals/first cause and show FD/future retirement. Retained/transient/peak/largest allocations, supported fault injection, finite disposal work/allocations, allocation-free engine status/handoff and original-account release. Separate enforced bounds, measurements/estimates and assumptions. |
+| `http-authoring-feature-conformance` | External real Consumer-only construction and runtime/permission recipe. Renew affected predecessor cases/layouts/failures; execute registered Consumer/Producer regressions, portable Core/Planning/Servient cells, authority/workload checks, locked workspace tests and dependency inspection. No neutral-library HTTP/runtime/TLS dependency or inferred embedded claim. |
+
+Requirement mapping for those keys (IDs are the registered requirement owners,
+not new HTTP requirements):
+
+- `http-form-eligibility`: DOC-RUNTIME-001/002/003, ADMIT-MEM-001,
+  ADMIT-TXN-001, CONSTRAINED-WORK-001, CONSTRAINED-PROGRESS-001,
+  CONSTRAINED-OWN-001, PLAN-BOUND-001, PLAN-ARTIFACT-001, PLAN-COST-003.
+- `http-consumer-property-read`: PLAN-REQUEST-001, PLAN-SET-001, BIND-REG-001,
+  BIND-IO-001, BIND-OUT-001, API-OPTIONS-001, API-PAYLOAD-001.
+- `http-resource-lifecycle`: API-RESOURCE-001, RES-LIMIT-001/002/003,
+  BIND-MEM-001, BIND-DELIVERY-001, BIND-CALL-CANCEL-001,
+  BIND-HOST-CANCEL-001, STATE-INFLIGHT-001, CLEANUP-RECORD-001,
+  HANDLE-DROP-001, HOST-ASYNC-001, ERR-TAXONOMY-001, ERR-RETRY-001, TIME-001.
+- `http-authoring-feature-conformance`: CRATE-DEPS-001, FEATURE-MATRIX-001,
+  plus renewed shared/predecessor evidence for the preceding groups.
+
+Independent completion acceptance must cover changed shared contracts and
+predecessor impact. HTTP Producer/bidirectional loop, explicit HTTP vocabulary
+(including explicit GET), DNS, HTTPS/trust/security, streaming and embedded
+networking remain successors. HTTPS/security remains a release prerequisite.
+This tranche alone cannot close WP-600 or qualify v1 release/protocol parity.

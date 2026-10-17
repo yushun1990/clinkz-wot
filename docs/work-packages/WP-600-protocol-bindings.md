@@ -5,10 +5,11 @@ Machine-readable status and package dependencies are owned by
 owns the first-binding decision, alternatives and evidence impact.
 
 [ADR-0023](../ADRs/0023-resource-ownership-and-policy-boundaries.org) revises
-resource ownership and removes the architectural SDK choice. Its shared
-contract/schema migration and Consumer readmission boundary precedes HTTP
-implementation admission. Current strict contracts remain active until then;
-this package selects no SDK repair/qualification predecessor.
+resource ownership and removes the architectural SDK choice. The completed
+[Consumer ownership successor](../spec/consumer-resource-ownership.md) supplies
+the shared schema-2 contract/readmission boundary consumed by HTTP entry. Reuse
+its accepted completion at its recorded revision; this package selects no SDK
+repair/qualification predecessor.
 
 ## Required production scope
 
@@ -23,7 +24,8 @@ WP-600 retains its WP-300 package-completion dependency. Exact capability
 tranches may enter under ADR-0013 after their matching WP-200/WP-300/WP-400
 predecessors and required architecture proof are complete. The Consumer gate is
 passed. The [smallest HTTP admission target](WP-600-http-property-read-target.md)
-defines the first vertical slice; it is not an admitted tranche.
+now registers the first vertical slice as a planned admission candidate; it is
+not admitted and grants no production implementation authority.
 
 Consumer execution uses the admitted source-independent consumed plan, selected
 `OutboundRequest`, recoverable call construction, Core result seal, generation
@@ -63,9 +65,11 @@ complete HTTP interoperability or security claim.
 ## Resource and environment contract
 
 The binding declares enforceable item/byte/connection/header/body/work limits
-and an attributable lifetime/transient transport envelope. Reserve its original
-local/parent capacity before side effects and retain it until actual release.
-Shared infrastructure and references are counted separately, once each.
+and a declared lifetime/transient transport envelope. Fund engine-controlled
+carrier/handoff capacity in its original local/parent accounts before effects
+and retain it until actual release. Binding-private growth uses the concrete
+binding policy rather than mandatory transitive SDK engine quotas. Shared
+infrastructure and references have separate physical owners, counted once each.
 [Foundation](../spec/foundation.md#host-allocation-and-environment-failure-scope)
 owns Host allocation-failure scope; [Binding SPI](../spec/binding-spi.md#shared-protocol-infrastructure-lifetime)
 owns complete retirement and final-owner obligations.

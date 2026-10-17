@@ -68,3 +68,13 @@ no dev dependencies. Check it in std, no-default and async cells to prove TD's
 `validated-thing` is requested by Planning itself. The ARM checks for that crate
 compile the actual public Planning aggregate; the historical fixture's ARM
 checks still compile only its narrower library.
+
+`tests/form_metadata.rs` is the focused WP-600 pre-code admission discriminator.
+It reproduces identical current owned logical/compiler inputs for default GET,
+explicit method/header/unknown extensions and response overrides using actual
+TD validation/lending. A small test-side paid presence fact and fail-closed
+restriction distinguish them without changing any production source. It also
+preserves typed round trips and unknown-versus-empty semantics. It does not
+prove the proposed production scalar/work/configuration implementation, HTTP
+execution, SDK qualification or independent admission. Run `--test form_metadata`
+in the same three feature cells above; no new fixture crate/dependency is added.

@@ -968,3 +968,94 @@ completion_evidence_keys = [
     "consumer-owned-pressure", "consumer-owned-disposal", "consumer-owned-regression",
 ]
 completion_evidence_path = "docs/evidence/WP-400-consumer-resource-ownership.toml"
+
+[[tranche]]
+id = "WP-600-HTTP-CONSUMER-PROPERTY-READ"
+work_package = "WP-600"
+sequence = 600
+status = "planned"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = ["WP-400-CONSUMER-RESOURCE-OWNERSHIP"]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "DOC-RUNTIME-001", "DOC-RUNTIME-002", "DOC-RUNTIME-003",
+    "ADMIT-MEM-001", "ADMIT-TXN-001", "API-RESOURCE-001",
+    "RES-LIMIT-001", "RES-LIMIT-002", "RES-LIMIT-003",
+    "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001",
+    "PLAN-REQUEST-001", "PLAN-BOUND-001", "PLAN-ARTIFACT-001", "PLAN-COST-003", "PLAN-SET-001",
+    "BIND-REG-001", "BIND-MEM-001", "BIND-IO-001", "BIND-OUT-001", "BIND-DELIVERY-001",
+    "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001", "API-PAYLOAD-001", "API-OPTIONS-001",
+    "STATE-INFLIGHT-001", "CLEANUP-RECORD-001", "HANDLE-DROP-001", "HOST-ASYNC-001",
+    "ERR-TAXONOMY-001", "ERR-RETRY-001", "TIME-001", "CRATE-DEPS-001", "FEATURE-MATRIX-001",
+]
+# The HTTP package is prospective; add its real manifest to WP-600's crate
+# inventory during admitted implementation. No placeholder is required here.
+owner_packages = ["clinkz-wot-td", "clinkz-wot-core", "clinkz-wot-planning", "clinkz-wot-binding-http"]
+feature_cells = ["std", "no-default", "async-no-std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0022-first-production-binding-and-runtime-environments.org",
+    "docs/ADRs/0023-resource-ownership-and-policy-boundaries.org",
+    "docs/spec/foundation.md", "docs/spec/planning.md", "docs/spec/binding-spi.md",
+    "docs/spec/consumer-resource-ownership.md", "docs/spec/interaction-core.md",
+    "docs/spec/runtime-safety.md", "docs/resource-contracts/consumer-ownership-v2.toml",
+    "docs/api-ownership.csv", "docs/requirements.csv", "docs/resource-limits.csv",
+    "docs/state-machines.toml", "docs/performance/gateway.toml", "docs/performance/constrained.toml",
+    "docs/architecture/30-compiled-plan-lifecycle.md",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/work-packages/WP-600-http-property-read-target.md",
+    "docs/work-packages/WP-600-protocol-bindings.md", "docs/work-packages/index.toml",
+]
+api_items = [
+    "ValidatedPropertyReadForm", "validated_property_read_form_has_additional_form_metadata",
+    "LogicalInteractionPlan", "logical_interaction_plan_with_additional_form_metadata",
+    "logical_interaction_plan_has_additional_form_metadata", "BindingCompilerInput",
+    "ConsumerBindingConfiguration", "consumer_binding_configuration_with_default_json_forms",
+    "consumer_binding_configuration_requires_default_json_forms",
+    "ResolvedTargetCompiler", "ConsumerCompilerSupport", "ConsumerCompilerRegistration",
+]
+state_machines = ["consumer-td-semantic-lending", "compiled-plan-set", "in-flight"]
+resource_changes = [
+    "One paid TD DocumentNodes scalar before Ready, no source work on replay; owned optional scalar in logical plan, no added backing allocation or WorkClass.",
+    "Opt-in closed-consumer-default-json-forms-v1 binding key derived from original v1 key; unrestricted and strict vectors, resource schema 2, complete-policy encoding and all 196 numeric defaults preserved.",
+    "Renew concrete TD/plan/config/compiler/support/Host-slot and aggregate Layout/work/rollback measurements; no old byte result silently inherited by changed carriers.",
+    "HTTP ConsumerOwnedHostV2: one call-owned connection, 32/8192 header items/bytes, 4096 body bytes, 16/2048 trailers, 32768 cumulative response wire bytes, 4096 input bytes per read/progress. Actual parser/read-buffer limits and SDK allocation/disposal envelope qualified during implementation.",
+    "Full engine carrier/request/result Arc and String capacities, constructor overlap, original local/parent retention, conservative cancellation/transfer and allocation-free status/seal/handoff remain funded before effects; SDK-private and deployment costs stay separately owned.",
+]
+old_api_removals = []
+performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-CS-020", "PERF-CS-021"]
+implementation_paths = [
+    "td/src/validated.rs", "td/src/lib.rs", "td/tests/validated_admission.rs",
+    "td/tests/validated_lending.rs", "td/tests/builder_extension_fields_test.rs",
+    "core/src/plan.rs", "core/src/binding_compiler.rs", "core/src/lib.rs",
+    "core/tests/consumer_compiler_support.rs", "core/tests/consumer_property_read_request.rs",
+    "core/tests/consumer_property_read_binding.rs", "core/tests/consumer_property_read_binding",
+    "servient/tests/consumer_property_read.rs", "servient/tests/consumer_property_read",
+    "planning/src/consumer_property_read.rs", "planning/tests/support/consumer_property_read.rs",
+    "protocol-bindings/protocols/http", "Cargo.toml", "Cargo.lock",
+    "tools/architecture-fixtures/consumer-compiler-support",
+    "tools/architecture-fixtures/consumer-aggregate-admission",
+    "tools/architecture-fixtures/consumer-property-read-binding",
+    "tools/architecture-fixtures/consumer-property-read-runner",
+    "docs/api-ownership.csv",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --test form_metadata --test aggregate",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --test form_metadata --test aggregate",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async --test form_metadata --test aggregate",
+    "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_lending --test builder_extension_fields_test",
+    "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features --features async",
+    "git diff --check",
+]
+admission_review = "pending: independent exact-revision ADR-0013 review of docs/work-packages/WP-600-http-property-read-target.md"
+completion_evidence_keys = [
+    "http-form-eligibility", "http-consumer-property-read", "http-resource-lifecycle",
+    "http-authoring-feature-conformance",
+]
+completion_evidence_path = "docs/evidence/WP-600-http-consumer-property-read.toml"

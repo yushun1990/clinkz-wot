@@ -229,6 +229,16 @@ reviewed ownership contract; current envelopes, leases and physical funding
 remain binding. Topic 0081's content/operand/persistence investigation remains
 outside this tranche and non-blocking under these constraints.
 
+## Default JSON form restriction candidate
+
+[The HTTP admission amendment](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
+owns an additive opt-in binding-configuration encoding derived from the exact
+unrestricted v1 key above. It preserves those original keys, the resource schema
+and complete-policy identity. The same actual restricted configuration must be
+captured through existing client/compiler/support equality checks. This is a
+planned source change, subject to independent admission and renewed carrier/work
+evidence; accepted ownership completion is reused for its original source.
+
 ## Compilation-cell projection amendment
 
 This bounded amendment addresses the independently confirmed mixed-cell finding
