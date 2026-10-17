@@ -577,8 +577,57 @@ parameters = "PACKAGE is each of clinkz-wot-core, clinkz-wot-planning, clinkz-wo
 result = "passed"
 
 [impact_projection_validation]
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
 status = "awaiting-independent-reaffirmation"
 command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
 result = "blocked-by-required-predecessor-impact-review"
 observed = "The unchanged package-DAG checker rejects a current WP-300-CONSUMER-HOST-CALL-CONSTRUCTION dependency on review-required WP-300-CONSUMER-ONLY-REGISTRATION. Other current dependents likewise await the eight scoped renewals. This expected administrative boundary must not be removed by the implementation author or confused with a runtime/contract test failure."
 acceptance_boundary = "A fresh independent reviewer can accept this shared implementation and scoped renewals without claiming HTTP/tranche completion. A non-author status-only projection can then restore the accepted predecessor impacts. No new admission, gate transition or author self-acceptance is requested."
+
+[[verification]]
+name = "impact-projection-authority"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "blocked-by-required-predecessor-impact-review"
+
+[[verification]]
+name = "impact-projection-api"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-api-ownership.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-adrs"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-architecture-adrs.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-directory"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-directory-client-scope.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-resources"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-resource-limits.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-legacy"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-legacy-api-absence.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-performance"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true cargo run --locked --offline --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-diff"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true git diff --check 7e7ff219d0cd54d4fd031e56992f6f38812f8c4b...HEAD"
+result = "passed"
