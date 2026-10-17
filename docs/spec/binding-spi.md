@@ -192,6 +192,13 @@ authoring compile-testable without waiting for the WP-300 execution API.
 
 ### Closed Consumer compiler support
 
+The [HTTP admission amendment](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
+proposes one opt-in default-JSON restriction on this same closed primitive, with
+a paid source-free metadata scalar and distinct configuration encoding. It owns
+that exact additive contract/API; no arbitrary compiler gains support. Existing
+unrestricted support, artifact format and generic-adapter exclusions stay intact.
+Production changes require independent ADR-0013 admission.
+
 This is the contract of the completed ADR-0013 precursor. Its
 [registered evidence](../evidence/WP-200-consumer-compiler-support.toml) owns the
 accepted production boundary and its exclusions.
