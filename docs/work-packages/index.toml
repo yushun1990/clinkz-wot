@@ -974,7 +974,7 @@ id = "WP-600-HTTP-CONSUMER-PROPERTY-READ"
 work_package = "WP-600"
 sequence = 600
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-400-CONSUMER-RESOURCE-OWNERSHIP"]
 depends_on_packages = ["WP-000"]
@@ -1053,7 +1053,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features --features async",
     "git diff --check",
 ]
-admission_review = "pending: independent exact-revision ADR-0013 review of docs/work-packages/WP-600-http-property-read-target.md"
+admission_review = "github-pr:191#issuecomment-6230142316"
 completion_evidence_keys = [
     "http-form-eligibility", "http-consumer-property-read", "http-resource-lifecycle",
     "http-authoring-feature-conformance",

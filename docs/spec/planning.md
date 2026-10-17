@@ -1223,14 +1223,14 @@ representation fails eligibility before callbacks; representation-specific
 capacity exhaustion need not occur at the same byte ceiling. No Host allocation
 or destructor proof is inherited by a static implementation, or vice versa.
 
-#### HTTP entry amendment candidate
+#### HTTP entry amendment
 
 [WP-600 HTTP admission](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
-owns the proposed paid-metadata scalar and restricted closed-compiler projection.
+owns the admitted paid-metadata scalar and restricted closed-compiler projection.
 Carry that scalar in the existing owned logical plan; retain whole-transaction
 all-bounds-before-start and rollback. This permits no raw TD/protocol branch and
-grants no source admission. Existing unrestricted support/evidence remains valid
-for its original scope; changed carrier costs require successor completion.
+limits source scope to that admission. Existing unrestricted support/evidence
+remains valid for its original scope; changed carrier costs require successor completion.
 
 #### Aggregate construction
 

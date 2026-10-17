@@ -1,11 +1,18 @@
-# Host HTTP Consumer Property Read: admission candidate
+# Host HTTP Consumer Property Read: admission
 
-`WP-600-HTTP-CONSUMER-PROPERTY-READ` is a **planned, unadmitted** ADR-0013
-candidate for design revision 5.1. [The index](index.toml) owns its state,
-dependencies, source scope, executable prechecks and completion keys. Independent
-review of the exact candidate revision must precede a separate admission
-transition and production edits. This document owns the scoped entry amendment
-and completion contract; passing prechecks do not grant admission.
+This records the separate ADR-0013 admission of
+`WP-600-HTTP-CONSUMER-PROPERTY-READ` for design revision 5.1.
+[The index](index.toml) owns its state, dependencies, source scope, executable
+prechecks and completion keys. This document owns the scoped entry amendment
+and completion contract.
+
+[Independent scoped acceptance on PR #191](https://github.com/yushun1990/clinkz-wot/pull/191#issuecomment-6230142316)
+accepted exact head `ca71f7ca356a483e76b3a2b989de180e6f2d3d31` against base
+`78a7a7c99861fa48ac22fda2ae13c6d02aaca89f`, with no blocking findings and an
+independent rerun of all ten indexed prechecks. The merged admission basis
+`f26c686ea99c6aa5e4954d23c7499790da21e7f9` has the same tree as that reviewed
+head. This transition grants bounded implementation admission; production
+completion still requires the evidence and independent acceptance below.
 
 ## Tranche and predecessor boundary
 
