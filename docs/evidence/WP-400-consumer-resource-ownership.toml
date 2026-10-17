@@ -9,11 +9,12 @@ fixture_source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 preceding_fixture_source_sha256 = "f04be73502f5ce8a7ed7e672c0bc119982b7c5e83ffa90acf1b1f07b9b8adc94"
 preceding_test_ref = "07e95dfc769fc134bc3ef6c0e6f88d9dde1c5d52"
 recorded_on = "2026-10-16"
-status = "ready-for-independent-review"
-execution_status = "production-evidence-passed-pending-independent-impact-and-completion-acceptance"
-acceptance = "none"
+status = "passed"
+execution_status = "passed"
+acceptance = "github-pr:187#pullrequestreview-5548928495"
+accepted_ref = "64d38eb9f9a00044254aa0dd5b23ccc655fbc161"
 admission_review = "github-pr:188#pullrequestreview-5544553359"
-assessment = "Implementation/evidence candidate for final independent review. Master after #189 is integrated. The admitted two passive getters and pre-effect Servient cell qualification resolve the retained P1 witnesses. All six registered production evidence categories pass their executable cases. Accepted API/scope, readmission and P2 decisions are reused. Nine predecessor renewals are supplied here for independent reaffirmation with successor completion; their review-required flags and historical gate verdicts are preserved. No independent acceptance or tranche completion is asserted."
+assessment = "Review 5548928495 independently accepts the scoped implementation and all six completion evidence categories at accepted_ref against base_ref, with no new blocking findings, and reaffirms exactly the nine changed-source predecessor renewals below. The compilation-cell P1 is accepted as repaired; accepted API/scope, readmission and P2 decisions remain closed. This administrative projection records complete/admitted/current successor status and restores only those nine predecessor impact dispositions. Historical completion files, measurements and gate verdicts remain unchanged; no broader package, milestone, SDK or architecture-checkpoint acceptance is granted."
 evidence_keys = [
     "consumer-owned-identity",
     "consumer-owned-handoff",
@@ -85,7 +86,7 @@ complete_key_std_strict_local = "860ee2e2dddefee91fdd88e355dcc2ca45a0b29f542c0ce
 complete_key_std_host_process_failure = "c51a34a8c9945d4c551e31a484ea208021d463b03fef34ab411a23b1724614ef"
 complete_key_no_default = "1b3a4467ee1bfe27859126d6d8ac382b84fdbde818729a7636ff186248b3b0ca"
 complete_key_async_no_std = "f97184e05ec45c06f7e99240b60a4e751bb57f4d688fa084cf8d1a01cb1c9cfd"
-identity_implementation = "Core uses allocation-free sha2-const-stable. The admitted dependency allowance names Core only; Servient uses a private fixed SHA-256 encoder, checked against the registered complete-policy vectors and standard padding/fragmentation vectors. This is candidate implementation, not acceptance of a new public hash service or SDK cryptographic qualification."
+identity_implementation = "Core uses allocation-free sha2-const-stable. The admitted dependency allowance names Core only; Servient uses a private fixed SHA-256 encoder, checked against the registered complete-policy vectors and standard padding/fragmentation vectors. Acceptance covers this scoped implementation; no new public hash service or SDK cryptographic qualification is claimed."
 
 [blocking_finding]
 id = "consumer-owned-compilation-cell-observation"
@@ -97,9 +98,9 @@ trigger = "Cargo unifies dependency features per package. Servient's existing te
 control = "The real Core constructor returns canonical std binding vector c10c25e570a3783d6a2f5e71c4fc417de20e74bc3896c207de2786f91952ed18 while the real Servient policy has the portable complete key above. Both actual complete registration and runtime constructors are used; no replacement compiler or runtime participates."
 observed = "Both retained portable negatives pass at verification_ref: same original complete registration/configuration is returned with the complete engine-policy key and EngineCapacity; zero allocations, zero observations of either clock method, zero start/poll/cancel/ack callbacks, unchanged report and parent peaks/totals, and exactly one client destruction only after the returned rejection is dropped."
 missing_projection = "Implemented: ConsumerBindingConfiguration::compilation_cell returns its captured singleton and ConsumerCompilerSupport::consumer_configuration returns the actual stored immutable Option (strict None). Servient compares that projection with its own cell at the start of owned qualification before any operational effect. No key/cursor/payload format is changed."
-required_decision = "API/scope review 5544009375 and readmission review 5544553359 are closed and reused; #189 records admission. The remaining independent decision is final implementation/completion acceptance together with the nine supplied changed-source predecessor renewals. No further admission/design cycle is required by this change."
+required_decision = "Closed by review 5548928495 at accepted_ref: the P1 implementation repair, six-category successor completion and nine changed-source predecessor renewals are independently accepted. API/scope review 5544009375 and readmission review 5544553359 remain closed and reused; #189 records admission. No further admission/design cycle is required by this change."
 falsifiable_completion = "The mixed-cell production tests reject before clock/allocation/callback/parent effects; matching std/no-default/async-no-std owned downstream cases remain passing; strict 64 keys, owned canonical vectors, exact complete-owner recovery and separate engine/binding identities remain intact."
-status = "resolved-in-implementation-pending-independent-acceptance"
+status = "resolved-and-independently-accepted"
 matching_positive = "The same twelve portable owned Runtime test bodies run unchanged through the existing normal-library runner dependency graph, alongside its actual downstream application. The original Servient mixed-cell graph retains its active negative. This tests both real feature compositions without changing dependencies to hide the mismatch or adding an alternate compiler/runtime."
 
 [review_response]
@@ -140,8 +141,8 @@ readmission_accepted_ref = "7ff29d56602a9de8be27b0eb74c576778044f562"
 helper_correction = "The first broad run at 4cb0637 found four original strict quota cases failing only a new blanket test-helper assertion that every strict error lacked resource context. Some accepted strict paths already retain context. Commit 65d4302d680caf2ca9d9b953ade1870a53e6bddc removes only that newly introduced assumption, preserving original checks and all new owned identity/domain assertions. The six affected runtime commands on both toolchains were rerun and pass. Earlier failures remain recorded as superseded attempts."
 
 [impact_review]
-status = "review-required"
-original_evidence = "All original completion files, exact source refs, quantitative measurements and accepted gate verdicts remain unchanged. They describe their historical strict scope. New shared error/declaration/seal/compiler/support Layouts are not labelled independently current for changed source."
+status = "reaffirmed"
+original_evidence = "All original completion files, exact source refs, quantitative measurements and accepted gate verdicts remain unchanged. They describe their historical strict scope. Review 5548928495 reaffirms the nine bounded predecessor contracts for changed source using the renewed layouts, allocation/failure measurements and semantic-case mapping in this successor owner; historical observations are not relabelled as new measurements."
 affected_completed = [
     "WP-100-CONSUMER-CALL-VALUES-VALIDATOR",
     "WP-200-CONSUMER-PROPERTY-READ-PLANNING",
@@ -154,10 +155,10 @@ affected_completed = [
     "WP-400-CONSUMER-PROPERTY-READ-RUNTIME",
 ]
 unaffected = "WP-100-CONSUMER-VALIDATED-THING and WP-000 source/contracts remain unchanged; applicable TD/Foundation checks pass. Producer semantics remain strict; affected Core layout/protocol regressions were exercised without claiming a complete Producer gate."
-tranche_disposition = "in-progress/admitted/current successor under independently accepted #188/#189 scope. Changed-source predecessor evidence remains review-required until independent reaffirmation; no predecessor is reopened and no completion/gate state is changed."
-authority_check = "The existing checker rejects only the current successor dependency on review-required Runtime evidence. Production P1 negatives now pass. Renewals below cover all nine affected records for the same final independent implementation/completion review; do not clear flags or bypass the checker before that decision."
-renewal_execution = "All affected predecessor semantic cases, work/owner/failure controls and changed native/ARM layouts are reproduced at the exact refs below. Each renewal is a candidate for independent reaffirmation, not self-approval. No original strict contract was falsified."
-independent_decision = "Reaffirm the nine affected predecessor evidence records for this changed source and accept or reject the six-category successor completion at the final exact PR head. Accepted admission/API/P2 decisions and unchanged borrowed TD/WP-000 need no additional review cycle."
+tranche_disposition = "complete/admitted/current successor under independently accepted #188/#189 scope and completion review 5548928495. Exactly the nine affected predecessor impact states return to current with reaffirmed evidence; no predecessor is reopened and no gate or broader package state is changed."
+authority_check = "The historical authority failures below predate independent reaffirmation and retain their exact refs/results. Review 5548928495 authorizes restoring the nine impact dispositions; the authority checker and its dependency rules are unchanged. Administrative closure validation is recorded at the exact closure PR revision."
+renewal_execution = "All affected predecessor semantic cases, work/owner/failure controls and changed native/ARM layouts are reproduced at the exact refs below. Review 5548928495 independently reaffirms all nine renewals at accepted_ref. No original strict contract was falsified."
+independent_decision = "Review 5548928495 accepts all six successor completion categories and independently reaffirms exactly affected_completed at accepted_ref against base_ref. Accepted admission/API/P2 decisions and unchanged borrowed TD/WP-000 need no additional review cycle."
 
 [[evidence]]
 key = "consumer-owned-identity"
@@ -178,7 +179,7 @@ tests = [
     "owned_mixed_core_and_servient_cells_must_reject_before_clock_and_parent_mutation",
     "owned_complete_registrations_preserve_all_bounds_and_paid_continuations",
 ]
-independent_acceptance = "pending"
+independent_acceptance = "github-pr:187#pullrequestreview-5548928495"
 source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 
 [[evidence]]
@@ -190,7 +191,7 @@ observations = [
     "The new private growth owner remains binding-owned. Full Arc body/control-block/alignment and both media capacities are included in the owned engine call allowance; no leased-payload API or replacement seal exists.",
 ]
 tests = ["owned_static_normal_and_both_late_seals_reject_full_result_backing", "owned_host_normal_and_late_backing_faults_keep_the_original_raw_owner", "owned_host_both_preacceptance_failures_return_exact_request_and_no_postacceptance_engine_allocation", "owned_host_binding_private_rejection_keeps_its_key_and_request"]
-independent_acceptance = "pending"
+independent_acceptance = "github-pr:187#pullrequestreview-5548928495"
 source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 
 [[evidence]]
@@ -220,7 +221,7 @@ tests = [
     "owned_host_engine_local_rows_are_enforced_through_complete_production_calls",
     "owned_host_every_used_original_parent_has_zero_short_exact_and_over_controls",
 ]
-independent_acceptance = "pending"
+independent_acceptance = "github-pr:187#pullrequestreview-5548928495"
 source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 
 [[evidence]]
@@ -232,7 +233,7 @@ observations = [
     "The pool has no tasks, async callbacks or network jobs. Its finite source-specific allocation refusal/last-owner proof supplies no general shared-service, SDK, fairness, elasticity-benefit or fleet qualification.",
 ]
 tests = ["owned_static_two_roots_private_pressure_preserves_unread_and_late_owners_then_reuses"]
-independent_acceptance = "pending"
+independent_acceptance = "github-pr:187#pullrequestreview-5548928495"
 source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 
 [[evidence]]
@@ -244,20 +245,20 @@ observations = [
     "This is a finite controlled author with synchronous retirement, not SDK qualification. There is no abort/OOM-termination experiment, asynchronous retirement hook, firmware continued-operation or hard-latency claim.",
 ]
 tests = ["owned_host_residual_and_engine_funding_precede_finite_allocating_disposal_and_supported_error"]
-independent_acceptance = "pending"
+independent_acceptance = "github-pr:187#pullrequestreview-5548928495"
 source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 
 [[evidence]]
 key = "consumer-owned-regression"
-execution_status = "production-passed-authority-pending"
+execution_status = "passed"
 observations = [
     "At verification_ref all19 registered Consumer gate commands ran;18 passed and the authority command retains the independent-impact dependency blocker. Every one of the40 registered semantic cases is reproduced at that exact ref and mapped below. No P1/runtime failure remains. Std runtime67 integration+3library; portable23 each including original P1 negatives; matching portable runner1application+12same ownership cases each; std runner2applications.",
     "Rust1.95 and1.99 run all three Core/runtime/downstream feature cells; both also compile the normal runner ARM cells. Foundation18unit+1integration, TD9admission+8lending, all Core default tests/rustdocs, Planning full default and portable libs, isolated actual compiler support/entry/aggregate tests and Producer Runtime11/4/4 pass at their recorded refs. Nine applicable Producer gate commands pass; the unrelated Zenoh SDK/network command is outside this tranche and not claimed rerun. No passed Producer/Consumer gate verdict is changed.",
-    "API/resource/ADR/directory/legacy validators,66-case/66-fixture performance contract verification, scoped formatting and exact-base diff hygiene pass. The full design checker intentionally remains blocked by pending predecessor reaffirmation; its authority/state components are checked separately without suppressing that failure. Broad workspace formatting/testing, full release performance, SDK/network, device/runtime/latency or independent acceptance are not claimed.",
-    "Accepted scope/API review5544009375, readmission5544553359 and all accepted P2 repairs are reused. Production evidence is ready for one final independent changed-source predecessor/completion decision, with no extra admission/design review cycle. Nine legitimate impact flags and historical predecessor files remain intact.",
+    "API/resource/ADR/directory/legacy validators,66-case/66-fixture performance contract verification, scoped formatting and exact-base diff hygiene pass. At the recorded pre-acceptance refs, the full design checker retained the pending predecessor-impact dependency blocker; its authority/state components passed separately without suppressing that failure. Those historical results remain unchanged. Broad workspace formatting/testing, full release performance, SDK/network and device/runtime/latency acceptance are not claimed.",
+    "Review5548928495 independently accepts successor completion and all nine changed-source predecessor renewals at accepted_ref. Accepted scope/API review5544009375, readmission5544553359 and all accepted P2 repairs are reused. Only the nine reaffirmed impact dispositions are restored; historical predecessor files and gate verdicts remain intact.",
 ]
 tests = ["docs/work-packages/consumer-property-read-architecture-gate.toml:test_commands", "checked_row_rejections_keep_owned_context_and_strict_behavior_before_effects"]
-independent_acceptance = "pending"
+independent_acceptance = "github-pr:187#pullrequestreview-5548928495"
 source_ref = "65d4302d680caf2ca9d9b953ade1870a53e6bddc"
 
 [native_layouts]
@@ -341,7 +342,7 @@ source_ref = "4cb063742cea51ba7839ea91220f1f799358a0a5"
 extraction = "Normal fixture libraries emitted LLVM IR in each portable cell. Decode CONSUMER_ONLY_STATIC_LAYOUTS (12 size/alignment pairs) and STATIC_RUNTIME_LAYOUTS (8 pairs) from exact target constants. Both freshly built cells agree on each row; commands are recorded below. No test-host target Layout is substituted."
 
 [limitations]
-completion = "Executable production evidence is supplied for all six keys and all nine affected predecessors. Independent impact reaffirmation and final successor acceptance remain pending; the full authority checker is blocked by that legitimate state. No implementation-context acceptance or tranche/gate transition is asserted."
+completion = "Review 5548928495 accepts the scoped implementation, all six completion keys and the nine affected predecessor renewals at accepted_ref. Only this successor tranche is completed and those nine impact dispositions restored. No broad package, milestone, gate, HTTP/Zenoh SDK/network, release-performance, latency, device-fit or deferred architecture-checkpoint closure follows."
 unchanged = "Foundation generation/numeric schema, TD/Planning algorithms/public API, compiler cursor/artifact format and target-copy algorithm, serving routes/permits, legacy cleanup/protocol implementations, workload budgets, PLAN and the four later architecture checkpoints are unchanged."
 physical_scope = "Author/client/private-pool and prebacked results are included in the explicitly measured construction intervals, with private8-byte growth/disposal separate. External Thing parsing, observer/test harness setup, allocator metadata, stacks and deployment costs remain outside those intervals. All observed terminal tracked bytes and original parent charges return to0. No latency, whole-process RAM, fleet elasticity, SDK qualification or board-fit claim."
 
@@ -987,9 +988,9 @@ controls = "Every nonzero peak has0,peak-1,peak,peak+1 production probes:17stati
 [[predecessor_renewal]]
 tranche = "WP-100-CONSUMER-CALL-VALUES-VALIDATOR"
 historical_evidence = "docs/evidence/WP-100-consumer-call-values-response-validation.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Complete response kernel, name-free input, exact selected metadata and strict/owned backing failures; fixed error/result layouts renewed."
 commands = ["cargo test --locked -p clinkz-wot-core", "cargo test --locked --offline -p clinkz-wot-core --no-default-features --test property_read_response_sealing", "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async --test property_read_response_sealing"]
 source_refs = ["4cb063742cea51ba7839ea91220f1f799358a0a5", "4cb063742cea51ba7839ea91220f1f799358a0a5", "4cb063742cea51ba7839ea91220f1f799358a0a5"]
@@ -998,9 +999,9 @@ quantitative_impact = "native_layouts core_error280/context232; Core Host seal10
 [[predecessor_renewal]]
 tranche = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"
 historical_evidence = "docs/evidence/WP-200-consumer-property-read-planning-selection.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Exact artifact/reference/configuration/role/coordinate forwarding, deterministic selection and source destruction; strict plus owned capture/substitution controls."
 commands = ["cargo test --locked -p clinkz-wot-planning", "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml"]
 source_refs = ["4cb063742cea51ba7839ea91220f1f799358a0a5", "65d4302d680caf2ca9d9b953ade1870a53e6bddc"]
@@ -1009,9 +1010,9 @@ quantitative_impact = "Planning production source unchanged; current compiler/ag
 [[predecessor_renewal]]
 tranche = "WP-200-CONSUMER-COMPILER-SUPPORT"
 historical_evidence = "docs/evidence/WP-200-consumer-compiler-support.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Closed native/Host issuers only, all64 strict capacities and owned vectors, exact complete owner, fixed paid work, original slot through retries/abort/output/destruction; real null adapter/slot injection."
 commands = ["cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support", "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml"]
 source_refs = ["65d4302d680caf2ca9d9b953ade1870a53e6bddc", "4cb063742cea51ba7839ea91220f1f799358a0a5"]
@@ -1020,9 +1021,9 @@ quantitative_impact = "native_layouts compiler96/support96/cursor76/output152/te
 [[predecessor_renewal]]
 tranche = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
 historical_evidence = "docs/evidence/WP-200-consumer-property-read-aggregate.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Single all-bounds barrier, exact paid continuation and no starts on later/materialization failure, deterministic complete output and bounded rollback; actual owned Static/Host registrations use existing production-source observer."
 commands = ["cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml"]
 source_refs = ["65d4302d680caf2ca9d9b953ade1870a53e6bddc"]
@@ -1031,9 +1032,9 @@ quantitative_impact = "production_measurements.aggregate renews node/data/cleanu
 [[predecessor_renewal]]
 tranche = "WP-300-CONSUMER-ONLY-REGISTRATION"
 historical_evidence = "docs/evidence/WP-300-consumer-only-registration.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Actual client-only complete native/Host registration, all-bounds and original coordinate identity after source destruction, constructor and materialization recovery; matching portable cells and ARM compile layouts."
 commands = ["cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test production"]
 source_refs = ["4cb063742cea51ba7839ea91220f1f799358a0a5"]
@@ -1042,9 +1043,9 @@ quantitative_impact = "production_measurements.entry replaces old static192/chec
 [[predecessor_renewal]]
 tranche = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 historical_evidence = "docs/evidence/WP-300-consumer-property-read-binding-execution.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Name-free selected request, no raw installed bypass, both normal/late seals, first cause, accepted overrun retention, slot acknowledgement/generation and complete transfer; all original dual-role/Consumer-only tests."
 commands = ["cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support"]
 source_refs = ["65d4302d680caf2ca9d9b953ade1870a53e6bddc"]
@@ -1053,9 +1054,9 @@ quantitative_impact = "native_layouts + production_measurements.entry renew comp
 [[predecessor_renewal]]
 tranche = "WP-200-CONSUMER-OUTPUT-OWNERSHIP"
 historical_evidence = "docs/evidence/WP-200-consumer-output-ownership.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Public output and partially paid rollback move the unique original root/account across threads; rejected conversions return unchanged original owners with no progress/allocation."
 commands = ["cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test production"]
 source_refs = ["4cb063742cea51ba7839ea91220f1f799358a0a5"]
@@ -1064,9 +1065,9 @@ quantitative_impact = "production_measurements.bridge records local664/rollback1
 [[predecessor_renewal]]
 tranche = "WP-300-CONSUMER-HOST-CALL-CONSTRUCTION"
 historical_evidence = "docs/evidence/WP-300-consumer-host-call-construction.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "Actual Core-first vacant envelope and raw backing fail independently before native acceptance; exact URI/request recovery; pinned/overaligned/ZST transport, accepted-overrun owner, no allocation at seal installation."
 commands = ["cargo test --locked -p clinkz-wot-core"]
 source_refs = ["4cb063742cea51ba7839ea91220f1f799358a0a5"]
@@ -1075,9 +1076,9 @@ quantitative_impact = "native_layouts core envelope/disposition/backing-attempt/
 [[predecessor_renewal]]
 tranche = "WP-400-CONSUMER-PROPERTY-READ-RUNTIME"
 historical_evidence = "docs/evidence/WP-400-consumer-property-read-runtime.toml"
-disposition = "review-required"
+disposition = "reaffirmed"
 execution_status = "passed"
-independent_reaffirmation = "pending-final-implementation-completion-review"
+independent_reaffirmation = "github-pr:187#pullrequestreview-5548928495"
 semantic_oracle = "All40 Consumer registered semantic cases reproduce; strict and owned publication/parent provenance/generations/first cause/late-unread owners/transfer/final-root/report ordering retained. Full changed allocation, scope-boundary, two-root pressure and finite allocating disposal evidence."
 commands = ["cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1", "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner"]
 source_refs = ["65d4302d680caf2ca9d9b953ade1870a53e6bddc", "65d4302d680caf2ca9d9b953ade1870a53e6bddc"]
