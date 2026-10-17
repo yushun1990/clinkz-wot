@@ -1029,6 +1029,7 @@ performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-0
 implementation_paths = [
     "td/src/validated.rs", "td/src/lib.rs", "td/tests/validated_admission.rs",
     "td/tests/validated_lending.rs", "td/tests/builder_extension_fields_test.rs",
+    "td/tests/runtime/src/scenarios.rs", "td/tests/runtime/README.md",
     "core/src/plan.rs", "core/src/binding_compiler.rs", "core/src/lib.rs",
     "core/tests/consumer_compiler_support.rs", "core/tests/consumer_property_read_request.rs",
     "core/tests/consumer_property_read_binding.rs", "core/tests/consumer_property_read_binding",

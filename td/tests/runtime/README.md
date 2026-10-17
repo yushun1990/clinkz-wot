@@ -130,13 +130,19 @@ copy actions; all positions still get the independent zero-output probe. A
 change to the action schedule requires updating this fixed-fixture oracle.
 Positive UriBytes shortages now use complete literal action schedules for both
 fixed targets, anchored only to their public Form Ready events. The first has
-71 actions from Resolve through Ready: setup/allocation, configure/prefix,
+72 actions from Resolve through Ready: setup/allocation, configure/prefix,
 root/a/parent/parent/empty/value segments, span advances, repair, tail and UTF-8
-completion. The second has 181 actions: setup/allocation, merge/classification,
+completion, Finish and paid Form metadata. The second has 182 actions:
+setup/allocation, merge/classification,
 configure/prefix, root/a/b, span advance, parent/pop, 128-byte stream, fix and
-tail/UTF-8 completion. Classification requires 16 units; fix/padding/insertion
-requires two; other URI actions require one; allocation and Finish require zero
-UriBytes. These schedules independently reproduce the table totals and verify
+tail/UTF-8 completion, Finish and paid Form metadata. Classification requires
+16 units; fix/padding/insertion requires two; other URI actions require one;
+allocation, Finish and metadata require zero UriBytes. Metadata adds one
+DocumentNodes transition before Ready; URI charges,
+the 162/255-unit totals and the two-byte repair obligations are unchanged. The
+Ready-relative repair positions include that extra transition. The cached
+metadata getter is also exercised during the protected zero-credit Ready retry.
+These schedules independently reproduce the table totals and verify
 every reported position before the shortage sweep. Each positive shortage
 must preserve all budgets, allocator trace and continuation, then reproduce
 the complete run. They are fixed corpus evidence, not an exhaustive URI grammar

@@ -215,6 +215,7 @@ fn fact(event: Event<'_>) -> Facts {
             }
             assert_eq!((f.property_ordinal(), f.property_name()), (1, "zeta"));
             assert!(matches!(f.original_index(), 1 | 2));
+            assert_eq!(f.has_additional_form_metadata(), f.original_index() == 1);
             assert_eq!(f.content_type(), "application/json");
             let mut h = hash(f.original_index() as u64, f.resolved_href());
             h = hash(h, f.href());
@@ -298,6 +299,11 @@ fn record_poll(
                     let Step::Ready(event) = c.step(&mut WorkBudget::new(), false)? else {
                         panic!("Ready must persist until acknowledgement");
                     };
+                    if let Event::Form(form) = &event {
+                        // The newly paid scalar remains available while the
+                        // URI/source byte regions are inaccessible too.
+                        core::hint::black_box(form.has_additional_form_metadata());
+                    }
                     event
                 };
                 assert_eq!(fact(event), expected);
@@ -492,12 +498,12 @@ fn physical_boundaries(t: &Thing, limits: &ResourceLimits, source: usize, baseli
 fn two_byte_copy_positions(costs: &[Cost]) -> [(usize, &'static str); 2] {
     // Anchor to the public first Form event, never to an output/URI debit.
     // Its fixed suffix is: insertion; four tail bytes and four span advances;
-    // UTF-8 completion; Finish (which returns Ready). Before insertion there
-    // are seven shifted "//value" bytes and one shift-end transition. Padding
+    // UTF-8 completion; Finish; paid metadata (which returns Ready). Before
+    // insertion there are seven shifted "//value" bytes and one shift-end transition. Padding
     // precedes those eight actions. See the independent fixture arithmetic in
     // the README. A changed action schedule must update this fixture oracle.
     let ready = costs.iter().position(|cost| cost.form_ready).unwrap();
-    let insertion = ready.checked_sub("?x#f".len() + 4 + 1 + 1).unwrap();
+    let insertion = ready.checked_sub("?x#f".len() + 4 + 1 + 1 + 1).unwrap();
     let padding = insertion.checked_sub("//value".len() + 1 + 1).unwrap();
     [(padding, "padding"), (insertion, "insertion")]
 }
@@ -531,7 +537,7 @@ fn uri_credit_oracle(costs: &[Cost]) -> [u64; SEMANTIC_STEPS] {
         (1, 8),
         (2, 1), // fix, padding, shift/end, insertion
         (1, 9),
-        (0, 1), // tail/UTF-8 completion, Finish/Ready
+        (0, 2), // tail/UTF-8 completion, Finish, metadata/Ready
     ];
     const SECOND: &[(u64, usize)] = &[
         (1, 1),
@@ -555,7 +561,7 @@ fn uri_credit_oracle(costs: &[Cost]) -> [u64; SEMANTIC_STEPS] {
         (1, 138), // seven scans, switch, 128 writes, end, path-span advance
         (2, 1),
         (1, 5),
-        (0, 1), // fix, empty tail/UTF-8, Finish/Ready
+        (0, 2), // fix, empty tail/UTF-8, Finish, metadata/Ready
     ];
     let mut expected = [0; SEMANTIC_STEPS];
     let mut events = costs.iter().enumerate().filter(|(_, c)| c.form_ready);
