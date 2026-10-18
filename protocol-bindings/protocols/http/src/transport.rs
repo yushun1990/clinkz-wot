@@ -201,9 +201,16 @@ impl AsyncWrite for Ingress {
 }
 
 pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> CoreResult<Vec<u8>> {
-    let socket = TcpStream::connect(target.address)
-        .await
-        .map_err(|_| error(604, "HTTP connect failed"))?;
+    let socket = TcpStream::connect(target.address).await.map_err(|_| {
+        // Socket/process/network availability is not a captured ingress or
+        // concurrency limit. Keep returned I/O failure structured even when
+        // FD pressure starts after raw acceptance and its runtime probe.
+        resource_error(
+            604,
+            "HTTP connect failed",
+            ResourceFailureDomain::DeploymentFailure,
+        )
+    })?;
     let io = TokioIo::new(Ingress {
         socket,
         head: [0; 8192],
@@ -243,15 +250,10 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
         result.try_reserve_exact(BODY as usize).map_err(|_| {
             // The captured protocol ceiling permits this reservation;
             // refusal belongs to the application's allocator/deployment.
-            CoreError::Binding(
-                ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
-                    .with_resource_failure(
-                        BindingConfigurationDigest::new(PRIVATE),
-                        ResourceFailureDomain::DeploymentFailure,
-                        None,
-                        None,
-                    )
-                    .with_redacted_cause(607, "HTTP body backing unavailable"),
+            resource_error(
+                607,
+                "HTTP body backing unavailable",
+                ResourceFailureDomain::DeploymentFailure,
             )
         })?;
         while let Some(frame) = body.frame().await {

@@ -94,7 +94,7 @@ fn digest(hex: &str) -> [u8; 32] {
 }
 
 #[test]
-fn v4_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
+fn v5_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
     let current = HttpConsumerConfig::for_cleartext_ip().unwrap();
     let captured = registration(current, BindingGeneration::INITIAL);
     assert_eq!(
@@ -119,7 +119,7 @@ fn v4_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
         artifact.identity().configuration(),
         current.configuration.configuration()
     );
-    // No runtime is entered. Reaching the actual client rejects with the v4
+    // No runtime is entered. Reaching the actual client rejects with the v5
     // diagnostic before raw acceptance, never opening a connection.
     let rejection = owner
         .start_consumer_property_read(request(&artifact), &artifact)
@@ -140,7 +140,7 @@ fn v4_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
         BindingConfigurationDigest::new(PRIVATE)
     );
     println!(
-        "v4 private={:02x?} configuration={:02x?}",
+        "v5 private={:02x?} configuration={:02x?}",
         PRIVATE,
         current.configuration.configuration().as_bytes()
     );
@@ -149,7 +149,7 @@ fn v4_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
 #[test]
 fn historical_and_unrestricted_configuration_and_artifact_substitution_reject_before_io() {
     let current = HttpConsumerConfig::for_cleartext_ip().unwrap();
-    // Exact master v1 and rejected fork v3 encodings, independently hashed.
+    // Exact historical v1, rejected fork v3 and accepted stock v4 encodings, independently hashed.
     // These owners are identity fixtures only; they do not run old transports.
     let historical = [
         config(
@@ -158,6 +158,10 @@ fn historical_and_unrestricted_configuration_and_artifact_substitution_reject_be
         ),
         config(
             digest("6f61140140fd464a2a331fec03f3fe236823b9591d32a5f8b05bf8a9b90800dd"),
+            true,
+        ),
+        config(
+            digest("ea559362386b3f8682d4fade93ea0e3099e9682cc32783034b0504df03cf52c2"),
             true,
         ),
         config(PRIVATE, false),

@@ -61,16 +61,19 @@ a particular framing shape. There is no drain or reconnect after rejection.
 
 ## Identity, buffering and ownership
 
-The actual private encoding is `clinkz-http-ip-v4\0` followed by the exact ASCII
+The actual private encoding is `clinkz-http-ip-v5\0` followed by the exact ASCII
 policy in `src/lib.rs::PRIVATE_POLICY`. It captures pinned SDK versions/features,
 parser comparisons, extension and wire/read limits, declaration/discard/override
 behavior, advertisement, concurrency/growth, retirement/disposal and endpoint
-restrictions. The existing checked restricted configuration derives from its
+restrictions. V5 additionally captures connect I/O failure as
+`DeploymentFailure`: socket/process/network availability is distinct from a
+captured protocol limit. Parser policy and SDK settings retain accepted v4
+behavior. The existing checked restricted configuration derives from its
 SHA-256, preserving shared encodings, schema 2 and result limits. Support, client,
 compiler, complete registration, selected artifact and diagnostics agree.
-Historical v1/v3 and unrestricted configurations cannot substitute in either
+Historical v1/v3/v4 and unrestricted configurations cannot substitute in either
 direction; the tests recover original owners/requests and verify no connection.
-A captured registration or old artifact is never relabeled to enable v4.
+A captured registration or old artifact is never relabeled to enable v5.
 
 The wire counter and per-callback credit never refill by parser phase. The fixed
 8192-byte raw head, 4096-byte read scratch and fallibly reserved 4096-byte body
@@ -153,9 +156,27 @@ each peer observes retirement. Supported body-reservation refusal preserves
 a successful read on the same Runtime. Old `tests/sdk_limits.rs` probes retain
 their historical incompatibility scope; they are not successor failures.
 
-Independent acceptance and comprehensive native-stack/continuation, allocator
-failure/disposal, broader late-result/deadline races and process/FD exhaustion
-qualification remain completion obligations. The evidence records exactly which
+`tests/lifecycle_races.rs` controls the clock and final peer byte/EOF across
+fixed, chunked, close-delimited and invalid-trailer responses. All 16 orders
+exercise zero/short progress, exhausted parent capacity, retained unread results,
+first-cause cancellation/expiry, retirement and reuse. This transport destroys
+its future on cancellation and returns no late SDK value; buffered valid or
+invalid input cannot enter a second callback after retirement. Shared Core
+late-result seal tests retain their separate scope.
+
+On Linux, `tests/fd_pressure.rs` runs a disposable child with `RLIMIT_NOFILE=128`.
+It exercises preacceptance input recovery, postacceptance socket creation failure
+(604/DeploymentFailure), silent-peer cancellation while descriptors are exhausted,
+connection refusal and successful reuse. It changes no parent process limit.
+The allocation fixture also measures and refuses the fallible raw-call box
+and verifies request recovery, occupancy release and retry. SDK infallible
+OOM remains a Host process-failure assumption.
+
+PR #200 independently accepted the v4 production slice as partial progress.
+Further completion evidence includes representative native-stack and disposal
+costs and remaining supported runtime/fault and retirement paths; universal SDK
+heap/stack bounds are not a Host requirement. Independent review of this change
+and tranche completion remain open. The evidence records exactly which
 workspace, feature, portable, predecessor and authority checks ran. Passing tests
 or the required GitHub diff-hygiene check do not complete this tranche or change a
 gate. HTTPS/trust/security, Producer and embedded/hardware qualification retain
