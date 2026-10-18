@@ -688,7 +688,7 @@ measurements = [
 limits_and_remaining = [
     "Successful chunked/trailer decoding and exact/one-over 16/2048 trailer/framing qualification are unimplemented. Rejecting all Transfer-Encoding is a deliberately narrower first PR, not completion or a change to admitted maxima.",
     "32768 cumulative wire and 4096/read/callback gates are implemented/source-inspected; the fixed/close integration cases reject body overflow earlier. A real exact/one-over wire/framing suite and direct per-poll ingress observations remain unexecuted. No claim of successful 32768-byte response or trailer ingress qualification.",
-    "16384 callback allowance is configured conservatively; maximum native stack/continuation work/transient overlap and all SDK heap paths have not been bounded experimentally. max_buf_size is a strategy, not exact retained/capacity proof. All-network/private allocation envelope, supported raw-box/body allocation fault injection and disposal failure-path coverage remain completion obligations.",
+    "16384 callback allowance is configured conservatively; maximum native stack/continuation work/transient overlap and all SDK heap paths have not been bounded experimentally. max_buf_size is a strategy, not exact retained/capacity proof. All-network/private allocation envelope, raw-box and remaining SDK allocation fault injection and disposal failure-path coverage remain completion obligations. review_correction below qualifies the actual fallible body-reservation refusal only.",
     "Broader real-transport deadline/result races, invalid normal/late success and accepted-error sealing, pressure/refusal/transfer/manual-fallback renewal and systematic FD/account observations remain. Accepted predecessor executable proofs are reused at their recorded revisions, not attributed to this HTTP peer suite.",
     "Whole-workspace default validation did not finish: disk filled while linking existing Zenoh tests, linker terminated with signal 7. Scoped tests passed; no whole-workspace acceptance is claimed. Strict transitive Clippy finds existing TD warnings; HTTP-only no-deps Clippy passes.",
     "No independent acceptance, package/tranche/milestone/gate closure, HTTPS/security, Producer HTTP, hardware/embedded operation or empirical protocol neutrality. Remaining completion obligations stay inside the existing admitted tranche; no administrative or admission successor PR is requested.",
@@ -757,3 +757,33 @@ name = "transitive-clippy-attempt"
 command = "cargo clippy --locked --offline -p clinkz-wot-binding-http --all-targets -- -D warnings"
 result = "blocked-by-existing-neutral-lints"
 observation = "Nine existing TD errors under -D warnings, including len_without_is_empty and unnecessary_unwrap. No unrelated TD refactor; scoped no-deps check passes."
+
+[production_slice.review_correction]
+source_ref = "6f850cf0fc3c43ef784b9c353374761af4cb63ec"
+reviewed_ref = "fb1881de32a4801d71f792bf1f90b8b1df9f5328"
+finding = "github-pr:195#discussion_r4305606816"
+review = "github-pr:195#pullrequestreview-5561307534"
+acceptance_status = "pending-independent-review"
+change = "Assign DeploymentFailure to the supported fallible body reservation error at creation (cause 607). Protocol-policy errors capture BindingPolicy at creation. Adding selected plan/binding context preserves the original resource-failure identity/domain/owner tuple instead of replacing it unconditionally. Error category, redacted cause, retry class, limits and configuration identity are unchanged."
+regression = "body_allocator_refusal_preserves_deployment_domain_and_allows_retry uses public ConsumerPropertyReadRuntime and an independent raw TCP peer. After raw acceptance, one thread-local null return for a 4096-byte align-1 allocation reaches the real Vec::try_reserve_exact body reservation. It asserts exactly one refusal, Binding category, DeploymentFailure, cause 607/text, selected binding/plan, Never retry and unchanged absent owner coordinates. A 4097-byte close-delimited response independently exercises actual body-policy refusal, retaining BindingPolicy and cause 608/text with the same policy/plan. Peer observes EOF for both, a subsequent read on the same runtime succeeds and all original parent accounts reclaim."
+negative_control = "Before the production fix, the new public-path regression fails with cause 607 intact but actual domain BindingPolicy versus expected DeploymentFailure, reproducing the independent review. The same fixture passes after the fix."
+measurements = "All 13 HTTP tests pass at source_ref, including prior 100-read, header/body limit, lifecycle and allocation controls. Native Layouts remain Call=288/8, Client=96/8, Target=120/8, exchange=9648/8. Prior normal allocation observation remains startup=17014, accepted=18050, terminal=21430, requests=142, peak=56971, largest=11280, final tracked live=0. SDK cancellation still observes 4 allocations/113-byte peak/33-byte largest/32 runtime-owned bytes until reactor turn; engine cancel/status and result-taking remain allocation-free in that case."
+limits = "This adds one supported allocator-refusal qualification; it is not arbitrary SDK OOM injection or comprehensive fault/disposal/stack qualification. Existing chunked/trailer, exact wire, race, platform and whole-workspace limitations remain. No predecessor implementation/impact, resource default, gate or acceptance verdict changes."
+
+[[production_slice.review_correction.verification]]
+command = "CARGO_INCREMENTAL=0 cargo test --locked --offline -p clinkz-wot-binding-http --all-targets -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 13
+
+[[production_slice.review_correction.verification]]
+command = "CARGO_INCREMENTAL=0 cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings"
+result = "passed"
+
+[[production_slice.review_correction.verification]]
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "passed"
+observation = "Authority/DAG, API/ADR/Directory/resource/legacy checks and all 66 performance fixtures/cases. Source/fixtures exactly source_ref; following evidence-only commit records these results."
+
+[[production_slice.review_correction.verification]]
+command = "git diff --check origin/master...HEAD; rustfmt --edition 2024 --check protocol-bindings/protocols/http/src/lib.rs protocol-bindings/protocols/http/src/transport.rs protocol-bindings/protocols/http/tests/allocation_trace.rs"
+result = "passed"
