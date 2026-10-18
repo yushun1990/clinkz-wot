@@ -10,6 +10,10 @@ execution results and source identities.
 Run from the repository root. This extracts the two code blocks below into a
 temporary standalone crate, resolves its pinned upstream dependencies offline,
 then tests the resulting lock. No repository file is generated or modified.
+The tranche's registered `pre_implementation_checks` entry 11 (one-based) extracts
+and executes this first shell block with `bash -euc`, so extraction, offline
+resolution or locked-test failure fails admission validation. This recipe is the
+single executable owner; no additional runner or checked-in crate is needed.
 
 ```sh
 WP600_POLICY_PROBE_DIR=$(mktemp -d /tmp/wp600-stock-hyper.XXXXXX)

@@ -1056,6 +1056,13 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features --features async",
     "cargo test --locked --offline -p clinkz-wot-binding-http --test sdk_limits -- --test-threads=1 --nocapture",
+    '''python3 - <<'PY'
+from pathlib import Path
+import re, subprocess
+source = Path("docs/evidence/WP-600-stock-hyper-policy-probe.md").read_text()
+recipe = re.findall(r"^```sh\n(.*?)^```$", source, re.M | re.S)[0]
+subprocess.run(["bash", "-euc", recipe], check=True)
+PY''',
     "git diff --check",
 ]
 admission_review = "pending-independent-scoped-review:docs/evidence/WP-600-http-consumer-property-read.toml#parser_policy_amendment"
