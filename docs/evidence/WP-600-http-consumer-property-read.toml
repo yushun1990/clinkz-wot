@@ -11,8 +11,8 @@ status = "partial"
 acceptance = "github-pr:193#pullrequestreview-5561188464"
 accepted_ref = "41619afee864cb6962920cca24ad57ab058bcc51"
 admission_review = "github-pr:191#issuecomment-6230142316"
-assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. framing_slice extends it with successful chunked responses without trailers, exact cumulative wire boundaries and targeted lifecycle evidence, and preserves concrete SDK incompatibility reproducers. Full tranche completion remains open; no gate status changes."
-source_revision_rule = "The shared amendment production and primary regression changes are committed at implementation_ref; production_slice and framing_slice each name their separate HTTP source and fixture revision. Observations in earlier sections retain their historical scope; framing_slice owns the later framing qualification. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Later evidence and impact-state edits do not change production or fixtures. Each verification row names the exact revision tested; historical predecessor evidence retains its original observations and acceptance references."
+assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and its review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. PR #196 review 5561667209 accepts the SDK incompatibility diagnosis but finds the attempted chunked enablement nonconforming. framing_slice retains that rejected candidate's observations; framing_slice.review_correction owns the restored raw-head refusal, active unfinished-trailer regressions, direct ingress gate and supported fixed/close lifecycle evidence. Successful chunked/trailer and cumulative HTTP framing qualification remain open; no gate status changes."
+source_revision_rule = "The shared amendment production and primary regression changes are committed at implementation_ref. production_slice, framing_slice and their review_correction tables each name exact source revisions. Earlier observations retain historical scope; framing_slice's rejected candidate is not active production authority or an accepted guarantee. Its review_correction records the subsequent safe scope. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Evidence-only edits do not change production or fixtures. Each verification row retains its actual revision and provenance."
 
 [scope]
 implementation = [
@@ -59,12 +59,12 @@ tests = [
 [[evidence]]
 key = "http-consumer-property-read"
 execution_status = "partial"
-limitation = "The first public HTTP registration and 100 alternating source-free network reads retain PR #195's partial acceptance. framing_slice adds successful chunked responses without trailers. Trailer support and the complete admitted SDK framing envelope remain open; this extension awaits independent review."
+limitation = "The first public HTTP registration and 100 alternating source-free fixed/close reads retain PR #195's partial acceptance. The attempted chunked extension was rejected by review 5561667209 and withdrawn in framing_slice.review_correction. The active binding rejects all Transfer-Encoding at the raw head pending corrected SDK ingress controls. Successful chunked/trailer and full framing completion remain open."
 
 [[evidence]]
 key = "http-resource-lifecycle"
 execution_status = "partial"
-limitation = "production_slice supplies the accepted initial header/body and lifetime evidence. framing_slice adds exact cumulative wire limits, direct ingress-credit observations, chunked failures, incomplete-frame cancellation/deadlines/drop, two buffered-completion orders and supported allocation refusal. Independent trailer enforcement conflicts with the pinned SDK. Complete private/transient/stack envelopes, remaining supported fault paths, exhaustive real late/result races and pressure/FD qualification remain open. SDK disposal allocates; shared proof is not an SDK qualification substitute."
+limitation = "production_slice supplies the accepted initial header/body and lifetime evidence. framing_slice.review_correction adds early rejection of over-limit unfinished chunked trailers, direct socket ingress-credit/wire observations, supported incomplete-header/fixed/close cancellation/drop/deadlines and two fixed-body completion orders. These qualify the wrapper and supported paths, not successful cumulative chunked HTTP framing. Independent trailer enforcement conflicts with the pinned SDK. Complete private/transient/stack envelopes, remaining supported fault paths, broad real late/result races and pressure/FD qualification remain open. SDK disposal allocates; shared proof is not an SDK qualification substitute."
 
 [[evidence]]
 key = "http-authoring-feature-conformance"
@@ -798,8 +798,11 @@ base_ref = "5261f0f12e21b4b705f512da6960412b1c02d235"
 source_ref = "b94eb50e625094c63fcf9c3f1de08fbcbaf33463"
 fixture_ref = "b94eb50e625094c63fcf9c3f1de08fbcbaf33463"
 status = "partial"
-acceptance_status = "pending-independent-review"
-revision_rule = "Production, README and executable fixtures are exactly source_ref. Following evidence-only edits record these results and prior external acceptance, without changing executable content. This is a continuation of the existing WP-600 admission; no predecessor, admission, gate or roadmap state is changed."
+acceptance_status = "not-accepted"
+review = "github-pr:196#pullrequestreview-5561667209"
+reviewed_ref = "04420b2c724ebb53935abc87ccace5c1eed300b3"
+disposition = "Independent review accepts the SDK incompatibility diagnosis and retained public/call-owned architecture, but blocks the production chunked enablement. Partial-progress wording and eventual trailer-frame rejection do not satisfy admitted ingress bounds. review_correction below withdraws enablement and owns current executable scope; no acceptance of a future SDK correction is inferred."
+revision_rule = "All observations in this table and its verification rows describe the rejected source_ref/reviewed_ref, not current supported production behavior. The subsequent review_correction names the restored raw-head refusal and new active fixtures. Historical source and negative controls remain recoverable from these Git revisions. This remains inside the existing WP-600 admission; no predecessor, admission, gate or roadmap state is changed."
 reused_acceptance = "PR #195 review 5561334710 accepts exact head 4f996c46b6e16b44f08b1a3050fbbe30dc6cc659, whose tree equals base_ref. Later independent comment 6245920807 also records no new findings. That accepted review is reused, not repeated here. The fetched merge's required validation check 117583184807 succeeds and establishes diff hygiene only. Shared amendment/predecessor/three-cell/Producer results retain their existing revisions and scope; no neutral production source or manifest/lock changes in this extension."
 scope = "Accept one Transfer-Encoding: chunked, case-insensitively, through the existing public Host registration/consume/select/read path. Reject other/duplicate transfer codings, TE plus Content-Length, Trailer declarations and actual trailer frames. Hyper alone decodes chunks, extensions and termination. Fixed/close behavior, body limit, input/wire gates and complete call-owned retirement remain. No custom HTTP parser, alternate binding/runtime path, pool, spawn, fork or dependency change."
 policy_identity = "SHA-256(clinkz-http-ip-v2 encoding in src/lib.rs) = 22f3ba29aa1eaf8c1ba077d868c1a18fe6c942e4ab1eef73998849bd7c083e13. Records chunked-only TE, TE/CL refusal, reject-all trailers and the SDK's actual 16383 cumulative extension-byte ceiling, alongside existing limits/versions. Captured equally by the checked client/compiler/support bundle; shared restricted-key derivation is unchanged. This describes a partial supported subset, not an amendment of admitted maxima."
@@ -872,3 +875,49 @@ name = "authority-and-performance"
 command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
 result = "passed"
 observation = "Authority/DAG/API/ADR/Directory/legacy, all 196 resource fields/3 profiles, configuration/policy vectors and 66 performance fixtures/cases pass. Initial attempt reused a compiled current_authority test embedding a removed /tmp/clinkz-wot-review-195 root. cargo clean --offline -p clinkz-wot-design-check -p clinkz-wot-performance-harness rebuilt only checker artifacts for this checkout; the full command then passed without source changes. No network latency or whole-workspace claim."
+
+[framing_slice.review_correction]
+source_ref = "7d240722dfb5ddc0c2e94ccbf5ab941cb5c8c531"
+fixture_ref = "7d240722dfb5ddc0c2e94ccbf5ab941cb5c8c531"
+reviewed_ref = "04420b2c724ebb53935abc87ccace5c1eed300b3"
+review = "github-pr:196#pullrequestreview-5561667209"
+finding = "github-pr:196#discussion_r4305937632"
+status = "partial"
+acceptance_status = "pending-independent-review"
+revision_rule = "All corrected production, README and executable fixture content is exactly source_ref. Following evidence-only edits record the correction and checks. The rejected candidate above retains its original source/measurement provenance; its chunked-success and SDK disposal observations are not active guarantees."
+change = "Restore PR #195's Transfer-Encoding refusal in the raw-head guard before delivering a complete chunked head to Hyper. Unannounced trailers therefore cannot activate the incompatible SDK decoder. Restore the exact accepted clinkz-http-ip-v1 policy encoding and lib.rs; result limits, main-head 32/8192, wire/read gates and SDK pins are unchanged. No custom parser, fork, shared API or contract amendment. Runtime production behavior matches the accepted base; the only remaining transport source additions relative to base are a guard rationale comment and cfg(test) ingress coverage."
+regressions = [
+    "unfinished_chunked_trailers_over_field_limit_reject_without_caller_cancellation sends a valid 200 JSON/chunked head, zero chunk and 17 complete X: y field lines, withholding the final empty line and keeping the peer open.",
+    "unfinished_chunked_trailers_over_byte_limit_reject_without_caller_cancellation sends the same head/zero chunk and one unfinished X: field padded to 4096 bytes, with no final terminator or peer EOF.",
+    "Both public ConsumerPropertyReadRuntime tests require automatic Binding/606/BindingPolicy rejection during a 250 ms wake-driven guard, preserve selected plan/binding context, observe local EOF or connection reset, execute a subsequent fixed-length read on the same runtime, then reclaim all original parent accounts. Caller cancellation occurs only as failure-path cleanup if the guard expires; that timeout fails the test.",
+    "Valid chunked responses with 0/1/4095/4096/4097 body bytes, complete trailer count/byte/extension cases, malformed/ambiguous transfer fields and a slowly fragmented mixed-case chunked head all assert raw-head refusal. None supplies successful chunked-body or independent trailer-decoder qualification.",
+    "The real-socket Ingress test retains direct zero-credit, 4096/read/callback and 32768 lifetime-wire observations; byte 32769 remains in the OS. Successful exact-total HTTP chunked framing is withdrawn and remains an obligation. Its earlier construction remains recoverable at the rejected source_ref above.",
+    "Cancellation/drop/deadline and occupancy/input-recovery cases now run across supported partial-head, truncated fixed-body and unfinished close-delimited responses, with retirement/reuse/reclamation. Two buffered-completion orders use a supported two-byte fixed body. These are focused supported-path qualifications, not comprehensive race/pressure evidence.",
+]
+negative_control = "Before restoring refusal, both new unfinished-trailer regressions fail against reviewed_ref's production content: each stays pending until the 250 ms guard, needs explicit cancellation for failure-only cleanup, then retires/reuses/reclaims. Both exit 101 with the expected remained-pending assertion. After the fix both pass without that cancellation. No test-only enablement switch, skipped test or alternate runtime path is introduced."
+reused_evidence = "Review 5561667209 accepts the SDK incompatibility diagnosis and retained public/call-owned architecture only. The unchanged tests/sdk_limits.rs counterexamples still pass; no corrected SDK is implemented or qualified. PR #195/shared/predecessor acceptance remains at its original revisions, with no repeated admission or gate transition."
+measurements = "Restored fixed/close tests observe Call=288/8, Client=96/8, Target=120/8 and exchange=9648/8. Accepted fixed-path allocation/refusal tests are unchanged from base and pass: startup=17014, accepted=18050, terminal=21430, requests=142, peak=56971, largest=11280, final tracked live=0; SDK cancellation 4 requests/113-byte peak/33-byte largest/32 runtime-owned bytes before reactor turn, zero engine cancel/status/result-taking requests in that case. These renew those path measurements only; rejected chunked measurements above do not qualify current production."
+completion_boundary = "Keep all Transfer-Encoding disabled until a corrected pinned SDK enforces independent inclusive 16/2048 trailer ingress, including unfinished over-limit input, while preserving 32/8192 main headers and compatible cumulative extension/wire controls. Then qualify successful chunked/trailer bodies and exact HTTP wire totals through the same public Runtime. Broader SDK backing/continuation/stack/fault/disposal and real transport race/pressure/FD obligations remain open. No tranche/package/gate/milestone or release closure."
+
+[[framing_slice.review_correction.verification]]
+name = "http-public-network-resource-and-sdk-tests"
+command = "CARGO_INCREMENTAL=0 cargo test --locked --offline -p clinkz-wot-binding-http --all-targets -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 24
+observation = "2 native/ingress unit tests, 3 unchanged allocation/refusal/disposal tests, 17 public real-peer tests including the two unfinished-trailer regressions, and 2 unchanged direct SDK counterexamples; zero skipped tests. Example compilation passes."
+
+[[framing_slice.review_correction.verification]]
+name = "http-clippy"
+command = "CARGO_INCREMENTAL=0 cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings"
+result = "passed"
+
+[[framing_slice.review_correction.verification]]
+name = "format-and-diff"
+command = "git diff --check origin/master...HEAD; rustfmt --edition 2024 --check protocol-bindings/protocols/http/src/lib.rs protocol-bindings/protocols/http/src/transport.rs protocol-bindings/protocols/http/tests/real_peer.rs protocol-bindings/protocols/http/tests/sdk_limits.rs protocol-bindings/protocols/http/tests/allocation_trace.rs"
+result = "passed"
+
+[[framing_slice.review_correction.verification]]
+name = "authority-and-performance"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "passed"
+observation = "Authority/DAG/API/ADR/Directory/legacy, 196 resource fields/3 profiles, existing configuration/policy vectors and all 66 performance fixtures/cases pass with the correction and updated evidence. No neutral source, dependency, admitted limit, predecessor disposition or gate status changes. Whole-workspace/shared/portable/Producer checks are not repeated; their existing results retain their recorded scope."
