@@ -28,6 +28,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
+- [[file:0090-protocol-neutral-engine-spi-falsification.md][0090 Protocol-Neutral Engine/SPI Extensibility Falsification]]
 - [[file:0082-logical-physical-subscription-decoupling.md][0082 Logical Subscriptions Versus Physical Broker Subscriptions]]
 
 ** DISCUSSING
