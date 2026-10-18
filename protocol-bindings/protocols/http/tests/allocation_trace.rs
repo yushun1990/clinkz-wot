@@ -78,191 +78,226 @@ include!("support/application.rs");
 
 #[test]
 fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let peer = std::thread::spawn(move || {
-        for attempt in 0..3 {
-            let (mut socket, _) = listener.accept().unwrap();
-            assert!(request(&mut socket).starts_with("GET /a?x=1 HTTP/1.1\r\n"));
-            if attempt == 1 {
-                // No Content-Length: reach the actual decoded-body policy limit.
-                socket
-                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
-                    .unwrap();
-                socket.write_all(&[b'1'; 4097]).unwrap();
-                socket.shutdown(std::net::Shutdown::Write).unwrap();
-            } else {
-                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n1").unwrap();
+    for chunked in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let peer = std::thread::spawn(move || {
+            for attempt in 0..3 {
+                let (mut socket, _) = listener.accept().unwrap();
+                assert!(request(&mut socket).starts_with("GET /a?x=1 HTTP/1.1\r\n"));
+                if attempt == 1 {
+                    // No Content-Length: reach the actual decoded-body policy limit.
+                    if chunked {
+                        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1001\r\n").unwrap();
+                    } else {
+                        socket
+                            .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                            .unwrap();
+                    }
+                    socket.write_all(&[b'1'; 4097]).unwrap();
+                    socket.shutdown(std::net::Shutdown::Write).unwrap();
+                } else {
+                    if chunked {
+                        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1\r\n1\r\n0\r\nX: y\r\n\r\n").unwrap();
+                    } else {
+                        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n1").unwrap();
+                    }
+                }
+                let mut byte = [0];
+                assert_eq!(
+                    socket.read(&mut byte).unwrap(),
+                    0,
+                    "socket survived settlement"
+                );
             }
-            let mut byte = [0];
+        });
+        recipe().block_on(async {
+            let (runtime, handle, observer, parent) = engine(port);
+            let mut failures = Vec::new();
+            BODY_REFUSALS.with(|count| count.set(0));
+            for domain in [
+                ResourceFailureDomain::DeploymentFailure,
+                ResourceFailureDomain::BindingPolicy,
+            ] {
+                let mut call = handle
+                    .read_property("a", InteractionOptions::new(), &mut work())
+                    .unwrap();
+                DENY_NEXT_BODY
+                    .with(|deny| deny.set(domain == ResourceFailureDomain::DeploymentFailure));
+                let result = take(&mut call).await;
+                let still_armed = DENY_NEXT_BODY.with(|deny| deny.replace(false));
+                assert!(!still_armed, "body reservation was not reached");
+                let error = result.unwrap_err();
+                assert!(matches!(error, CoreError::Binding(_)), "{error:?}");
+                let (key, actual_domain, local, parent_owner) =
+                    error.context().resource_failure().unwrap();
+                assert_eq!(actual_domain, domain, "{error:?}");
+                assert_eq!((local, parent_owner), (None, None));
+                assert_eq!(
+                    error.context().binding(),
+                    Some((BindingId::new(600), BindingGeneration::INITIAL))
+                );
+                assert!(error.context().plan().is_some());
+                assert_eq!(error.context().phase(), ErrorPhase::Binding);
+                assert_eq!(error.retry_class(), RetryClass::Never);
+                assert_eq!(
+                    error.context().cause_code(),
+                    Some(if domain == ResourceFailureDomain::DeploymentFailure {
+                        607
+                    } else {
+                        608
+                    })
+                );
+                assert_eq!(
+                    error.context().redacted_cause(),
+                    Some(if domain == ResourceFailureDomain::DeploymentFailure {
+                        "HTTP body backing unavailable"
+                    } else {
+                        "HTTP body limit exceeded"
+                    })
+                );
+                failures.push((key, error.context().plan()));
+                drop(call);
+            }
+            assert_eq!(BODY_REFUSALS.with(Cell::get), 1);
             assert_eq!(
-                socket.read(&mut byte).unwrap(),
-                0,
-                "socket survived settlement"
+                failures[0], failures[1],
+                "policy identity or selected plan changed"
             );
-        }
-    });
-    recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
-        let mut failures = Vec::new();
-        BODY_REFUSALS.with(|count| count.set(0));
-        for domain in [
-            ResourceFailureDomain::DeploymentFailure,
-            ResourceFailureDomain::BindingPolicy,
-        ] {
-            let mut call = handle
+            let mut retry = handle
                 .read_property("a", InteractionOptions::new(), &mut work())
                 .unwrap();
-            DENY_NEXT_BODY
-                .with(|deny| deny.set(domain == ResourceFailureDomain::DeploymentFailure));
-            let result = take(&mut call).await;
-            let still_armed = DENY_NEXT_BODY.with(|deny| deny.replace(false));
-            assert!(!still_armed, "body reservation was not reached");
-            let error = result.unwrap_err();
-            assert!(matches!(error, CoreError::Binding(_)), "{error:?}");
-            let (key, actual_domain, local, parent_owner) =
-                error.context().resource_failure().unwrap();
-            assert_eq!(actual_domain, domain, "{error:?}");
-            assert_eq!((local, parent_owner), (None, None));
+            let output = take(&mut retry).await.unwrap();
+            assert_eq!(&*output.data().unwrap().body, b"1");
             assert_eq!(
-                error.context().binding(),
-                Some((BindingId::new(600), BindingGeneration::INITIAL))
+                Some(output.metadata().binding_response().unwrap().plan_id()),
+                failures[0].1
             );
-            assert!(error.context().plan().is_some());
-            assert_eq!(error.context().phase(), ErrorPhase::Binding);
-            assert_eq!(error.retry_class(), RetryClass::Never);
-            assert_eq!(
-                error.context().cause_code(),
-                Some(if domain == ResourceFailureDomain::DeploymentFailure {
-                    607
-                } else {
-                    608
-                })
-            );
-            assert_eq!(
-                error.context().redacted_cause(),
-                Some(if domain == ResourceFailureDomain::DeploymentFailure {
-                    "HTTP body backing unavailable"
-                } else {
-                    "HTTP body limit exceeded"
-                })
-            );
-            failures.push((key, error.context().plan()));
-            drop(call);
-        }
-        assert_eq!(BODY_REFUSALS.with(Cell::get), 1);
-        assert_eq!(
-            failures[0], failures[1],
-            "policy identity or selected plan changed"
-        );
-        let mut retry = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
-            .unwrap();
-        let output = take(&mut retry).await.unwrap();
-        assert_eq!(&*output.data().unwrap().body, b"1");
-        assert_eq!(
-            Some(output.metadata().binding_response().unwrap().plan_id()),
-            failures[0].1
-        );
-        drop(output);
-        drop(retry);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
-    });
-    peer.join().unwrap();
+            drop(output);
+            drop(retry);
+            drop(handle);
+            shutdown(&runtime);
+            drop(runtime);
+            drop(observer);
+            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        });
+        peer.join().unwrap();
+    }
 }
 
 #[test]
 fn public_path_allocation_observation_and_complete_release() {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let peer = std::thread::spawn(move || {
-        let (mut socket, _) = listener.accept().unwrap();
-        request(&mut socket);
-        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n").unwrap();
-        socket.write_all(&[b'1'; 4096]).unwrap();
-        let mut byte = [0];
-        assert_eq!(socket.read(&mut byte).unwrap(), 0);
-    });
-    let io_runtime = recipe();
-    let _ = std::thread::current();
-    io_runtime.block_on(async {});
-    // Runtime creation is outside the measurement. First-use reactor growth on
-    // this thread is still included and reported, not assigned to engine rows.
-    let (startup, accepted, terminal, parent_peak, accepted_layouts) = io_runtime.block_on(async {
-        TRACE.with(|t| t.borrow_mut().armed = true);
-        let (runtime, handle, observer, parent) = engine(port);
-        let startup_snapshot = TRACE.with(|t| *t.borrow());
-        let startup = startup_snapshot.live;
-        let mut call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
-            .unwrap();
-        let accepted_snapshot = TRACE.with(|t| *t.borrow());
-        let accepted = accepted_snapshot.live;
-        let accepted_layouts: [usize; 512] = std::array::from_fn(|i| {
-            let block = accepted_snapshot.blocks[i];
-            if block.0 != 0 && !startup_snapshot.blocks.iter().any(|old| old.0 == block.0) {
-                block.1
+    for chunked in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let peer = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            request(&mut socket);
+            if chunked {
+                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1000;note=measured\r\n").unwrap();
             } else {
-                0
+                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n").unwrap();
             }
+            socket.write_all(&[b'1'; 4096]).unwrap();
+            if chunked {
+                socket.write_all(b"\r\n0\r\n").unwrap();
+                let mut trailers = "X: y\r\n".repeat(15).into_bytes();
+                trailers.extend_from_slice(b"X: y");
+                trailers.resize(2048 - 4, b' ');
+                trailers.extend_from_slice(b"\r\n\r\n");
+                socket.write_all(&trailers).unwrap();
+            }
+            let mut byte = [0];
+            assert_eq!(socket.read(&mut byte).unwrap(), 0);
         });
-        let output = take(&mut call).await.unwrap();
-        assert_eq!(output.data().unwrap().content_type.capacity(), 16);
-        let terminal = TRACE.with(|t| t.borrow().live);
-        let parent_peak: u64 = parent.lock().unwrap().iter().map(|a| a.peak()).sum();
-        drop(output);
-        drop(call);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
-        (startup, accepted, terminal, parent_peak, accepted_layouts)
-    });
-    // Shared-runtime shutdown may initialize its thread-local parker; that
-    // deployment allocation is outside this binding-path observation.
-    TRACE.with(|t| t.borrow_mut().armed = false);
-    drop(io_runtime);
-    let measured = TRACE.with(|t| {
-        let mut t = t.borrow_mut();
-        t.armed = false;
-        *t
-    });
-    assert_eq!(
-        measured.live, 0,
-        "tracked backing survived root and I/O runtime destruction"
-    );
-    println!(
-        "startup={startup} accepted={accepted} terminal={terminal} requests={} peak={} largest={} parent_peak_sum={parent_peak} remaining={}",
-        measured.count, measured.peak, measured.largest, measured.live
-    );
-    println!(
-        "accepted live allocation sizes: {:?}",
-        accepted_layouts
-            .into_iter()
-            .filter(|n| *n != 0)
-            .collect::<Vec<_>>()
-    );
-    peer.join().unwrap();
+        let io_runtime = recipe();
+        let _ = std::thread::current();
+        io_runtime.block_on(async {});
+        TRACE.with(|t| {
+            assert_eq!(t.borrow().live, 0);
+            *t.borrow_mut() = EMPTY;
+        });
+        // Runtime creation is outside the measurement. First-use reactor growth on
+        // this thread is still included and reported, not assigned to engine rows.
+        let (startup, accepted, terminal, parent_peak, accepted_layouts) =
+            io_runtime.block_on(async {
+                TRACE.with(|t| t.borrow_mut().armed = true);
+                let (runtime, handle, observer, parent) = engine(port);
+                let startup_snapshot = TRACE.with(|t| *t.borrow());
+                let startup = startup_snapshot.live;
+                let mut call = handle
+                    .read_property("a", InteractionOptions::new(), &mut work())
+                    .unwrap();
+                let accepted_snapshot = TRACE.with(|t| *t.borrow());
+                let accepted = accepted_snapshot.live;
+                let accepted_layouts: [usize; 512] = std::array::from_fn(|i| {
+                    let block = accepted_snapshot.blocks[i];
+                    if block.0 != 0 && !startup_snapshot.blocks.iter().any(|old| old.0 == block.0) {
+                        block.1
+                    } else {
+                        0
+                    }
+                });
+                let output = take(&mut call).await.unwrap();
+                assert_eq!(output.data().unwrap().content_type.capacity(), 16);
+                let terminal = TRACE.with(|t| t.borrow().live);
+                let parent_peak: u64 = parent.lock().unwrap().iter().map(|a| a.peak()).sum();
+                drop(output);
+                drop(call);
+                drop(handle);
+                shutdown(&runtime);
+                drop(runtime);
+                drop(observer);
+                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+                (startup, accepted, terminal, parent_peak, accepted_layouts)
+            });
+        // Shared-runtime shutdown may initialize its thread-local parker; that
+        // deployment allocation is outside this binding-path observation.
+        TRACE.with(|t| t.borrow_mut().armed = false);
+        drop(io_runtime);
+        let measured = TRACE.with(|t| {
+            let mut t = t.borrow_mut();
+            t.armed = false;
+            *t
+        });
+        assert_eq!(
+            measured.live, 0,
+            "tracked backing survived root and I/O runtime destruction"
+        );
+        println!(
+            "chunked={chunked} startup={startup} accepted={accepted} terminal={terminal} requests={} peak={} largest={} parent_peak_sum={parent_peak} remaining={}",
+            measured.count, measured.peak, measured.largest, measured.live
+        );
+        println!(
+            "accepted live allocation sizes: {:?}",
+            accepted_layouts
+                .into_iter()
+                .filter(|n| *n != 0)
+                .collect::<Vec<_>>()
+        );
+        peer.join().unwrap();
+    }
 }
 
 #[test]
 fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff() {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let (sent, received) = std::sync::mpsc::channel();
-    let peer = std::thread::spawn(move || {
-        let (mut socket, _) = listener.accept().unwrap();
-        request(&mut socket);
-        sent.send(()).unwrap();
-        let mut byte = [0];
-        assert_eq!(socket.read(&mut byte).unwrap(), 0);
-    });
-    recipe().block_on(async {
+    for partial in [
+        "",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n1",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: partial",
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (sent, received) = std::sync::mpsc::channel();
+        let peer = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            request(&mut socket);
+            socket.write_all(partial.as_bytes()).unwrap();
+            sent.send(()).unwrap();
+            let mut byte = [0];
+            assert_eq!(socket.read(&mut byte).unwrap(), 0);
+        });
+        recipe().block_on(async {
         let (runtime, handle, observer, parent) = engine(port);
         let mut call = handle
             .read_property("a", InteractionOptions::new(), &mut work())
@@ -275,6 +310,13 @@ fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff(
             }
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        // Complete readiness-driven processing into the selected unfinished
+        // decoder phase before observing cancellation alone.
+        for _ in 0..3 {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+            assert!(call.try_take(&mut work()).unwrap().is_none());
         }
         TRACE.with(|t| {
             let mut t = t.borrow_mut();
@@ -292,7 +334,7 @@ fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff(
             t.count
         });
         assert_eq!(requests, disposal.count, "engine result-taking allocated");
-        println!("SDK cancellation: requests={} peak={} largest={} retained_before_reactor_turn={}; engine cancel/status and result-taking=0", disposal.count,disposal.peak,disposal.largest,disposal.live);
+        println!("SDK cancellation partial_bytes={}: requests={} peak={} largest={} retained_before_reactor_turn={}; engine cancel/status and result-taking=0", partial.len(),disposal.count,disposal.peak,disposal.largest,disposal.live);
         assert!(matches!(result, Err(CoreError::Cancelled(_))));
         drop(call);
         drop(handle);
@@ -301,5 +343,7 @@ fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff(
         drop(observer);
         assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
     });
-    peer.join().unwrap();
+        peer.join().unwrap();
+        assert_eq!(TRACE.with(|t| t.borrow().live), 0);
+    }
 }

@@ -11,6 +11,7 @@ use std::{
     task::Poll,
     time::Duration,
 };
+use upstream_hyper as hyper;
 
 fn decode(bytes: Vec<u8>, fields: usize, size: usize) -> Result<HeaderMap, ()> {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();

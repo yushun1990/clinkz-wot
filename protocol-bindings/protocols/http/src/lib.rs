@@ -1,8 +1,8 @@
 //! Optional Host HTTP/1.1 Consumer Property Read binding.
 //!
 //! This first slice supports cleartext IP literals, default JSON GET, status
-//! 200, and fixed-length/close-delimited responses. Transfer-Encoding and
-//! trailers reject. See README.md for deployment and qualification limits.
+//! 200, and bounded fixed-length, chunked/trailer and close-delimited responses.
+//! See README.md for deployment and qualification limits.
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
 use std::{
@@ -22,7 +22,7 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE: [u8; 32] = sha2_const_stable::Sha256::new()
-    .update(b"clinkz-http-ip-v1\0hyper1.12.0;httparse1.10.1;hyper-util0.1.20;tokio1.52.3;http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;GET;200;json;noTE;noCE;noTrailer;noUpgrade;no1xx;IP;fresh;concurrency1;header32/8192;body4096;wire32768;read4096;hyperbuf8192;noPool;noSpawn;noRetry;noTLS;noDNS")
+    .update(b"clinkz-http-ip-v3\0hyper1.12.0-clinkz.1;httparse1.10.1;tokio1.52.3;http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;GET;200;json;singleChunked;singleCL;noTECL;trailer16/2048inclusive;extensions32768inclusive;noTrailerOverrides;noCE;noUpgrade;no1xx;IP;fresh;concurrency1;header32/8192;body4096;wire32768;read4096;hyperbuf8192;noPool;noSpawn;noRetry;noTLS;noDNS")
     .finalize();
 
 /// Checked immutable permission and policy for the cleartext-IP slice.

@@ -3,7 +3,6 @@
 use super::*;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Empty};
-use hyper_util::rt::TokioIo;
 use std::{future::poll_fn, io};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -37,6 +36,21 @@ struct Ingress {
     wire: usize,
     allowance: Arc<AtomicUsize>,
 }
+fn forbidden_trailer(name: &str) -> bool {
+    [
+        "content-type",
+        "content-length",
+        "transfer-encoding",
+        "content-encoding",
+        "trailer",
+        "upgrade",
+        "connection",
+        "host",
+        "te",
+    ]
+    .iter()
+    .any(|field| name.eq_ignore_ascii_case(field))
+}
 fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "HTTP ingress rejected")
 }
@@ -68,19 +82,32 @@ impl Ingress {
                     return Err(invalid());
                 }
                 let mut media = 0;
+                let mut transfer = 0;
+                let mut lengths = 0;
+                let mut declares_trailers = false;
                 for header in response.headers.iter() {
-                    // Keep transfer framing disabled until the pinned SDK can
-                    // enforce the independent raw trailer limits before delivery.
-                    if [
-                        "transfer-encoding",
-                        "content-encoding",
-                        "trailer",
-                        "upgrade",
-                    ]
-                    .iter()
-                    .any(|name| header.name.eq_ignore_ascii_case(name))
+                    if ["content-encoding", "upgrade"]
+                        .iter()
+                        .any(|name| header.name.eq_ignore_ascii_case(name))
                     {
                         return Err(invalid());
+                    }
+                    if header.name.eq_ignore_ascii_case("transfer-encoding") {
+                        transfer += 1;
+                        if !header.value.eq_ignore_ascii_case(b"chunked") {
+                            return Err(invalid());
+                        }
+                    }
+                    if header.name.eq_ignore_ascii_case("trailer") {
+                        declares_trailers = true;
+                        for field in header.value.split(|b| *b == b',') {
+                            let field = std::str::from_utf8(field).map_err(|_| invalid())?.trim();
+                            if hyper::header::HeaderName::from_bytes(field.as_bytes()).is_err()
+                                || forbidden_trailer(field)
+                            {
+                                return Err(invalid());
+                            }
+                        }
                     }
                     if header.name.eq_ignore_ascii_case("content-type") {
                         media += 1;
@@ -89,6 +116,7 @@ impl Ingress {
                         }
                     }
                     if header.name.eq_ignore_ascii_case("content-length") {
+                        lengths += 1;
                         let length = std::str::from_utf8(header.value)
                             .ok()
                             .and_then(|v| v.parse::<u64>().ok())
@@ -98,7 +126,12 @@ impl Ingress {
                         }
                     }
                 }
-                if media != 1 {
+                if media != 1
+                    || transfer > 1
+                    || lengths > 1
+                    || (transfer != 0 && lengths != 0)
+                    || (declares_trailers && transfer == 0)
+                {
                     return Err(invalid());
                 }
                 self.head_done = true;
@@ -107,11 +140,11 @@ impl Ingress {
         Ok(())
     }
 }
-impl AsyncRead for Ingress {
+impl hyper::rt::Read for Ingress {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        output: &mut ReadBuf<'_>,
+        mut output: hyper::rt::ReadBufCursor<'_>,
     ) -> Poll<io::Result<()>> {
         let available = self
             .allowance
@@ -144,7 +177,7 @@ impl AsyncRead for Ingress {
         }
     }
 }
-impl AsyncWrite for Ingress {
+impl hyper::rt::Write for Ingress {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -164,17 +197,18 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
     let socket = TcpStream::connect(target.address)
         .await
         .map_err(|_| error(604, "HTTP connect failed"))?;
-    let io = TokioIo::new(Ingress {
+    let io = Ingress {
         socket,
         head: [0; 8192],
         head_len: 0,
         head_done: false,
         wire: 0,
         allowance,
-    });
+    };
     let (mut sender, connection) = hyper::client::conn::http1::Builder::new()
         .max_headers(32)
         .max_header_size(8192)
+        .chunked_limits(16, 2048, 32768)
         .max_buf_size(8192)
         .writev(false)
         .handshake::<_, Empty<Bytes>>(io)
@@ -185,7 +219,8 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
         .uri(target.uri.path_and_query().map_or("/", |v| v.as_str()))
         .header("host", target.uri.authority().unwrap().as_str())
         .header("accept", "application/json")
-        .header("connection", "close")
+        .header("connection", "close, te")
+        .header("te", "trailers")
         .body(Empty::<Bytes>::new())
         .map_err(|_| error(605, "HTTP request failed"))?;
     let operation = async {
@@ -216,13 +251,24 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
         })?;
         while let Some(frame) = body.frame().await {
             let frame = frame.map_err(|_| error(606, "HTTP body rejected"))?;
-            let data = frame
-                .into_data()
-                .map_err(|_| error(606, "HTTP trailers rejected"))?;
-            if data.len() > BODY as usize - result.len() {
-                return Err(error(608, "HTTP body limit exceeded"));
+            match frame.into_data() {
+                Ok(data) => {
+                    if data.len() > BODY as usize - result.len() {
+                        return Err(error(608, "HTTP body limit exceeded"));
+                    }
+                    result.extend_from_slice(&data);
+                }
+                Err(frame) => {
+                    let trailers = frame
+                        .into_trailers()
+                        .map_err(|_| error(606, "HTTP frame rejected"))?;
+                    if trailers.keys().any(|name| forbidden_trailer(name.as_str())) {
+                        return Err(error(606, "HTTP trailer field rejected"));
+                    }
+                    // Trailer metadata never changes the primary media, status
+                    // or Core result. The SDK already checked raw ingress limits.
+                }
             }
-            result.extend_from_slice(&data);
         }
         Ok(result)
     };
@@ -261,6 +307,7 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hyper::rt::{Read, ReadBuf as HyperReadBuf};
     use std::{io::Write, task::Waker};
 
     #[test]
@@ -292,7 +339,7 @@ mod tests {
                 let mut cx = Context::from_waker(Waker::noop());
                 assert!(
                     Pin::new(&mut ingress)
-                        .poll_read(&mut cx, &mut ReadBuf::new(&mut storage))
+                        .poll_read(&mut cx, HyperReadBuf::new(&mut storage).unfilled())
                         .is_pending()
                 );
                 assert_eq!(ingress.wire, 0);
@@ -304,8 +351,8 @@ mod tests {
                         // the allowance, independently of Hyper's read strategy.
                         let capacity = if received == 0 { 17 } else { storage.len() };
                         let n = poll_fn(|cx| {
-                            let mut output = ReadBuf::new(&mut storage[..capacity]);
-                            match Pin::new(&mut ingress).poll_read(cx, &mut output) {
+                            let mut output = HyperReadBuf::new(&mut storage[..capacity]);
+                            match Pin::new(&mut ingress).poll_read(cx, output.unfilled()) {
                                 Poll::Ready(Ok(())) => Poll::Ready(output.filled().len()),
                                 Poll::Ready(Err(e)) => panic!("unexpected ingress error: {e}"),
                                 Poll::Pending => Poll::Pending,
@@ -320,14 +367,15 @@ mod tests {
                     if callback != 8 {
                         assert!(
                             Pin::new(&mut ingress)
-                                .poll_read(&mut cx, &mut ReadBuf::new(&mut storage))
+                                .poll_read(&mut cx, HyperReadBuf::new(&mut storage).unfilled())
                                 .is_pending()
                         );
                     }
                 }
                 allowance.store(4096, Ordering::Relaxed);
                 assert!(matches!(
-                    Pin::new(&mut ingress).poll_read(&mut cx, &mut ReadBuf::new(&mut storage)),
+                    Pin::new(&mut ingress)
+                        .poll_read(&mut cx, HyperReadBuf::new(&mut storage).unfilled()),
                     Poll::Ready(Err(_))
                 ));
                 assert_eq!(ingress.wire, 32768);

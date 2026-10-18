@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 exclude = [
+    "protocol-bindings/vendor/hyper",
     "tools/architecture-fixtures/validated-thing-arena-layout",
     "tools/architecture-fixtures/validated-thing-strict-number-lexeme",
     "tools/architecture-fixtures/validated-thing-value-construction",
