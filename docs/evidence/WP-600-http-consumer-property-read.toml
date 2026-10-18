@@ -11,7 +11,7 @@ status = "partial"
 acceptance = "github-pr:193#pullrequestreview-5561188464"
 accepted_ref = "41619afee864cb6962920cca24ad57ab058bcc51"
 admission_review = "github-pr:191#issuecomment-6230142316"
-assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and its review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. PR #196 review 5561667209 accepts the SDK incompatibility diagnosis but finds the attempted chunked enablement nonconforming. framing_slice retains that rejected candidate's observations; framing_slice.review_correction owns the restored raw-head refusal, active unfinished-trailer regressions, direct ingress gate and supported fixed/close lifecycle evidence. parser_policy_amendment records the docs-only ADR-0013 amendment prompted by PR #197 review 5562587383 and independently accepted at exact head a7acfa6c4779ce803c145babf653bd53e7ceebcb by PR #198 review 5562750022. Its admission is restored within the existing in-progress tranche; prior 16/2048 and SDK-correction-only completion recommendations retain historical scope. stock_hyper_v4 records the implemented stock Hyper successor under that admission, with real public Runtime framing/lifecycle/identity tests and separately scoped buffering observations. PR #200 review 5562973765 independently accepts exact head 39fba873cb56f6489401d985ea122ab305cd0f24 as partial production progress. lifecycle_pressure records the subsequent connect-availability defect, private v5 diagnostic identity and real-transport pressure/race evidence. Its remaining_completion owns the current completion gaps; no gate or tranche status changes."
+assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and its review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. PR #196 review 5561667209 accepts the SDK incompatibility diagnosis but finds the attempted chunked enablement nonconforming. framing_slice retains that rejected candidate's observations; framing_slice.review_correction owns the restored raw-head refusal, active unfinished-trailer regressions, direct ingress gate and supported fixed/close lifecycle evidence. parser_policy_amendment records the docs-only ADR-0013 amendment prompted by PR #197 review 5562587383 and independently accepted at exact head a7acfa6c4779ce803c145babf653bd53e7ceebcb by PR #198 review 5562750022. Its admission is restored within the existing in-progress tranche; prior 16/2048 and SDK-correction-only completion recommendations retain historical scope. stock_hyper_v4 records the implemented stock Hyper successor under that admission, with real public Runtime framing/lifecycle/identity tests and separately scoped buffering observations. PR #200 review 5562973765 independently accepts exact head 39fba873cb56f6489401d985ea122ab305cd0f24 as partial production progress. lifecycle_pressure records the subsequent connect-availability defect, private v5 diagnostic identity and real-transport pressure/race evidence. PR #201 review 5563185669 independently accepts exact head 9f2219146201f790493da037b90aa2d3bd3f8113 as partial progress. runtime_qualification below adds the remaining fault, independent-owner and native-stack/disposal observations and repairs the feature-test blocker; its completion_assessment is the current assessment. No gate or tranche status changes."
 source_revision_rule = "The shared amendment production and primary regression changes are committed at implementation_ref. production_slice, framing_slice and their review_correction tables each name exact source revisions. Earlier observations retain historical scope; framing_slice's rejected candidate is not active production authority or an accepted guarantee. Its review_correction records the subsequent safe scope. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Evidence-only edits do not change production or fixtures. Each verification row retains its actual revision and provenance. parser_policy_amendment describes its docs-only revision: production/committed tests/lock at that revision equal base_ref from that table, with Transfer-Encoding refused. stock_hyper_v4 names the subsequent production/fixture checkpoint and supersedes refusal as current behavior; earlier measurements remain historical. Its standalone SDK probes are documentation-extracted counterexamples, not enabled production or transferred fork measurements."
 
 [scope]
@@ -59,17 +59,17 @@ tests = [
 [[evidence]]
 key = "http-consumer-property-read"
 execution_status = "partial"
-limitation = "stock_hyper_v4 implements successful stock Hyper fixed/chunked/trailer/close reads through the existing public Runtime, two distinct source-free targets and 100 alternating reads with per-read FD/account return. PR #200 independently accepted that production slice. lifecycle_pressure renews it with the private v5 diagnostic correction; tranche completion remains open. Earlier partial/refusal/fork results retain historical provenance."
+limitation = "stock_hyper_v4 implements successful stock Hyper fixed/chunked/trailer/close reads through the existing public Runtime, two distinct source-free targets and 100 alternating reads with per-read FD/account return. PR #200 independently accepted that production slice. lifecycle_pressure renews it with the independently accepted private v5 diagnostic correction. runtime_qualification supplies the remaining scoped completion candidate; independent tranche completion acceptance remains open. Earlier partial/refusal/fork results retain historical provenance."
 
 [[evidence]]
 key = "http-resource-lifecycle"
 execution_status = "partial"
-limitation = "stock_hyper_v4 renews accepted parser-envelope production tests, unfinished rejection, declaration interoperability, call-owned retirement/cancellation/reuse and original-account release, plus actual buffer/growth/overlap/disposal observations. lifecycle_pressure adds deterministic first-cause/result/expiry orders under exhausted parent capacity, raw-call allocation refusal, FD exhaustion and retirement/reuse. Its remaining_completion separates applicable evidence gaps from Host deployment assumptions; universal SDK heap/stack bounds are not required. Historical independent 16/2048 incompatibility controls retain historical scope."
+limitation = "stock_hyper_v4 renews accepted parser-envelope production tests, unfinished rejection, declaration interoperability, call-owned retirement/cancellation/reuse and original-account release, plus actual buffer/growth/overlap/disposal observations. lifecycle_pressure adds deterministic first-cause/result/expiry orders under exhausted parent capacity, raw-call allocation refusal, FD exhaustion and retirement/reuse. runtime_qualification adds the remaining representative fault/independent-owner/native-stack/disposal observations and requests independent assessment. Universal SDK heap/stack bounds are not required. Historical independent 16/2048 incompatibility controls retain historical scope."
 
 [[evidence]]
 key = "http-authoring-feature-conformance"
 execution_status = "partial"
-limitation = "stock_hyper_v4 records the independent downstream registry-SDK application, applicable prechecks, Consumer/Producer/portable/workspace/feature/authority runs and normal dependency graphs at their actual source. Independent same-revision completion acceptance remains open. Portable evidence applies to shared libraries, not embedded HTTP; prior failure/acceptance records retain historical scope."
+limitation = "stock_hyper_v4 records the independent downstream registry-SDK application, applicable prechecks, Consumer/Producer/portable/workspace/feature/authority runs and normal dependency graphs at their actual source. runtime_qualification repairs the unfiltered Servient feature-test blocker and renews applicable regressions. Independent same-revision completion acceptance remains open. Portable evidence applies to shared libraries, not embedded HTTP; prior failure/acceptance records retain historical scope."
 
 [independent_review]
 review = "github-pr:193#pullrequestreview-5561188464"
@@ -1044,7 +1044,7 @@ external_application = "Temporary standalone Cargo application copies the unchan
 normal_graphs = "Nine locked/offline normal dependency trees: Core/Planning/Servient in default/no-default/async-no-std contain no Hyper/hyper-util/Tokio/rustls/reqwest. HTTP SDK dependencies remain private to the optional binding."
 
 [stock_hyper_v4.remaining_completion]
-disposition = "Historical PR #200 submission obligations. Independent implementation acceptance is satisfied by review 5562973765; lifecycle_pressure.remaining_completion below owns the current assessment. Do not interpret the old envelope wording as requiring universal Host SDK heap/stack bounds contrary to ADR-0023."
+disposition = "Historical PR #200 submission obligations. Independent implementation acceptance is satisfied by review 5562973765; runtime_qualification.completion_assessment below owns the current assessment. Do not interpret the old envelope wording as requiring universal Host SDK heap/stack bounds contrary to ADR-0023."
 obligations = [
     "Independent exact-revision implementation/completion review. No self-approval, merge, gate or tranche completion transition.",
     "Comprehensive supported SDK constructor/allocation/fault paths, complete continuation/native-stack envelopes, worst-case retained/transient/overlap and disposal work/allocation qualification. Current input bounds and measured paths cannot substitute for these claims.",
@@ -1135,7 +1135,11 @@ observation = "Current authority/package DAG, API ownership, ADR/Directory/legac
 
 
 [lifecycle_pressure]
-status = "partial-progress-pending-independent-review"
+status = "independently-accepted-partial-production-progress"
+acceptance = "github-pr:201#pullrequestreview-5563185669"
+accepted_ref = "9f2219146201f790493da037b90aa2d3bd3f8113"
+merge_ref = "5bdd4b629eea1c0ca219134d9dbdbb7c356734d2"
+acceptance_scope = "Independent COMMENT accepts the local diagnostic correction and pressure/retirement evidence, with no blocking or additional actionable findings. The reviewed tree equals the fetched merged tree. No tranche/WP-600/gate/release completion follows. Reuse its exact accepted pressure, framing, cancellation, resource and identity evidence rather than demand duplicate proofs."
 base_ref = "65ea098b4b4ed8c238b2f5eb1771c19960346dae"
 source_ref = "ee14561311fae2f95c6aef86afa26fa47960ea3a"
 revision_rule = "Production, fixtures and README are exactly source_ref. Subsequent changes record evidence only; final-head authority/hygiene is renewed. Shared source, admission/index, predecessor/gate states and dependency manifests/lock equal base_ref."
@@ -1160,8 +1164,8 @@ deployment = "Application owns a live entered/driven I/O-enabled Tokio runtime, 
 disposal = "Measured local retirement succeeds without peer progress, including unfinished trailers, exhausted engine parent capacity and actual EMFILE. Call::retire drops the sole boxed exchange, including its in-future Hyper connection/operation and Tokio socket, before returning settlement; Call::drop releases busy only after dropping that future. These are finite executed paths and source ownership evidence, not a universal destructor-time/stack theorem. The engine preserves funding through those drops; shared runtime allocations can remain at their own live owner."
 
 [lifecycle_pressure.remaining_completion]
-assessment = "WP-600 and this HTTP tranche remain partial. PR #200 acceptance is satisfied at its exact historical head; this successor needs independent review. ADR-0023 requires qualified input/growth/ownership/refusal/finite local retirement and truthful cost reporting, not a universal SDK heap or native-stack ceiling. Old comprehensive-envelope wording is not an extra admission gate."
-blockers = [
+assessment = "Historical PR #201 submission obligations. Its independent implementation acceptance is now satisfied by review 5563185669. runtime_qualification.completion_assessment below evaluates the remaining obligations; this list preserves the submission boundary, not current unresolved blockers. ADR-0023 requires qualified input/growth/ownership/refusal/finite local retirement and truthful costs, not universal SDK heap/native-stack ceilings."
+historical_submission_obligations = [
     "Representative native-stack and local-disposal work/cost observations remain incomplete. The 9648-byte continuation and configured 16384 transient allowance do not measure native stack. Extend evidence on supported Host paths; stronger hard-RAM/stack availability belongs to a selected deployment contract, not a universal opaque-SDK bound.",
     "Remaining supported transport/runtime fault and retirement paths need risk-based qualification, especially pending-connect/runtime-registration errors and cancellation while another independent Runtime owner has live I/O on the same application reactor. Do not require simulated late Returned output from a transport that retires instead, or general recovery from process OOM/global OS exhaustion.",
     "Unfiltered Servient async/no-std suite still fails at unchanged servient/tests/servient_test.rs:15 (std-only ServientBuilder import). Applicable scoped Consumer/Producer/lib suite passes. This is a broader feature-test coverage blocker, not a demonstrated HTTP production defect.",
@@ -1215,3 +1219,163 @@ commands = [
 ]
 result = "passed"
 observation = "Renewed after the final production/fixture checkpoint and evidence assessment. Active authority/DAG/API/ADR/Directory/legacy, 196 resource fields/3 profiles, vectors and 66 performance fixtures/cases pass. Strict HTTP Clippy/formatting/diff hygiene pass. Later edits record this result only; source, test and README content remains source_ref."
+
+
+[runtime_qualification]
+status = "completion-candidate-pending-independent-review"
+base_ref = "5bdd4b629eea1c0ca219134d9dbdbb7c356734d2"
+source_ref = "f8c642f40c39588c7b37725c596338c3b33e90fc"
+revision_rule = "Production and test sources are exactly source_ref. Later commits edit this evidence and the HTTP README only. All production source, manifests/lock, actual private v5 identity, admission/index, predecessor and gate records equal base_ref."
+selection = "Smallest coherent remaining qualification PR: three real public-Runtime cases reusing the existing allocation observer, one std-only test-gate repair, and this evidence. No production defect was demonstrated in the newly examined paths; do not manufacture a repair, SDK fork, new API or retirement mechanism. Preserve PR #201's independent partial acceptance and exact prior evidence."
+fixture = "protocol-bindings/protocols/http/tests/support/runtime_cases.rs, included once by tests/allocation_trace.rs"
+
+[runtime_qualification.faults_and_owners]
+pending_connect = "First step runs outside any entered runtime and enters the call's captured live handle. With the current-thread reactor not yet driven, a real loopback connect has created its socket but Tokio's connect future remains Pending; try_take returns None and the independently accepted peer observes no request bytes. The peer sets SO_LINGER=0 and closes before the next reactor turn. The accepted call returns 604/DeploymentFailure with plan/binding/generation and RetryClass::Never. No retry appears at the listener; original accounts return to baseline and the same Runtime reads b=29. This stages a pending Rust connect future, not a claim about SYN backlog exhaustion."
+runtime_registration = "Keep and enter a handle after destroying its I/O runtime, before raw acceptance. Handle::try_current succeeds, but actual TcpStream::from_std registration fails through Tokio RegistrationSet::allocate's shutdown check. The original timeout=321ms/request/plan recover with DeploymentFailure, no connection and unchanged parent totals. The identical public owner subsequently reads b=29 on a live reactor. Existing missing/disabled-driver and EMFILE evidence stays at its accepted source. Supported error propagation is qualified; stopping an accepted call's required runtime is not a supported deployment recipe."
+independent_owners = "Two independently provisioned HTTP Runtimes/registrations and separate original parent banks share one application current-thread reactor, with an unrelated application TCP socket also registered. B has received only the first byte of its fixed body and has an actual application-task waker installed. A is either in pending connect (no request emitted) or owns a partial chunked response. Cancel A and execute one funded step synchronously, without an await/reactor tick or peer response; then take Cancelled, release its complete Runtime/registration/report owner and require A's peer EOF/reset, no retry and zero A accounts. B remains Pending with identical account use. The unrelated socket performs a wake-driven echo, B receives its released final byte and completes via a wake-driven public call future, and B then reads b=29 again. Both banks reach zero at their respective owner destruction. No role cancellation or registration destruction shuts the application reactor or another owner's resources."
+source_audit = "Call::retire/Drop destroy the sole boxed exchange before settlement/occupancy release. It contains the Hyper driver/operation and original TcpStream; no spawn, join, reconnect, timer or asynchronous retirement successor exists. Tokio 1.52.3 io/poll_evented.rs::Drop deregisters and drops its actual OS socket; runtime/io/driver.rs::deregister_source performs deregistration then one RegistrationSet pending-release push; runtime/io/registration.rs::Drop clears its wakers. Inert ScheduledIo tokens/queue backing may remain at the real live application-runtime owner until reactor progress/destruction; they are not surviving HTTP sockets or detached jobs. Cancellation cannot require destruction of that independently shared owner."
+
+[runtime_qualification.disposal]
+method = "Existing test-local System allocator observer now also counts deallocations. Only the synchronous cancel plus one public step is timed/observed in the new independent-owner case; peer allocations run on other threads. No timing assertion or throughput budget is added. Time includes engine mediation, observer overhead and host scheduling; it is a single observation, not a latency/allocator ceiling. GDB timings are excluded. Original engine status/handoff and earlier maximum-input growth evidence remain PR #201's accepted claims."
+debug_sample = "Unoptimized rustc 1.95.0 Linux x86_64: pending connect 75688ns, 0 allocations/3 deallocations; partial chunked 159344ns, 2 allocations/13 deallocations, largest request 32 bytes and 32 newly tracked bytes retained at the live reactor. Both return synchronously before any further application reactor turn."
+release_sample = "Optimized plus debug metadata (CARGO_PROFILE_RELEASE_DEBUG=1): pending connect 45849ns, 0 allocations/3 deallocations; partial chunked 235041ns, 2 allocations/13 deallocations, largest 32 and retained 32. These samples are not a debug-versus-release benchmark."
+interpretation = "Finite executed local disposal with the supported bounded protocol owners; no network wait, worker join, replacement work or lost call. One bounded connection/driver, one body-channel frame and bounded parsed fields/backing explain the local object walk. Shared-runtime allocation and mutex/OS scheduling remain owned deployment services. Supported returned constructor/body/socket errors preserve owners; no universal allocation success, worst-case destructor latency, process-OOM recovery or total-stack theorem is asserted."
+
+[runtime_qualification.native_stack]
+environment = "rustc 1.95.0, Linux x86_64, GNU GDB; normal unoptimized test graph and optimized release graph with CARGO_PROFILE_RELEASE_DEBUG=1 (symbol metadata, default optimization otherwise). SDK pins/features and production are unchanged."
+method = "At selected real production function breakpoints, record native rsp and unwind to ConsumerPropertyReadCall::step and the HTTP poll_result/start_cancel caller frames. Subtract the sampled rsp from each caller rsp. Report maximum observed deltas per selected point, including compiler temporaries/spills/stack frames. They exclude the caller's own/executor/peer stack and heap continuation, and do not sample every instruction. The HTTP delta includes the binding callback and SDK path; the public-step delta also includes engine mediation. Release inlining removes some standalone breakpoint symbols. These are representative native-stack observations, not a stack high-water or hard maximum, and not inferred from the 9648-byte future or 16384-byte configured mediation allowance."
+fixtures = [
+    "local_retirement_keeps_independent_http_owner_and_application_io_live",
+    "stock_chunked_growth_overlap_and_incomplete_trailer_disposal_observations",
+]
+reuse = "The second fixture is reused only to observe previously unmeasured native stack during simultaneous maximum input, rejection and unfinished disposal. Its already accepted framing, growth, pressure and cancellation evidence is not a new proof obligation. No duplicate matrix or benchmark framework is added."
+# Each pair is [public-step caller delta, HTTP-callback caller delta], bytes.
+debug_shared_ingress_inspect = [199792, 148560]
+debug_maximum_input_ingress_inspect = [200688, 149456]
+debug_completed_trailer_decode = [193840, 142608]
+debug_cancellation_registration_drop = [57968, 2656]
+release_ingress_poll_read = [116304, 79760]
+release_completed_trailer_decode = [111264, 74720]
+release_cancellation_registration_drop = [37720, 344]
+conclusion = "The actual native call chain is substantially larger than its heap future. No selected Host deployment promises that the continuation/transient declaration is a thread-stack ceiling. Applications must provide suitable stacks for their chosen build/runtime; a smaller-stack or hard-total-RAM deployment needs its own qualification. The observed cost is not an HTTP/engine contract violation and is not a reason to require universal opaque-SDK bounds."
+gdb_script = '''
+set pagination off
+set confirm off
+set print thread-events off
+set debuginfod enabled off
+python
+import gdb, subprocess
+binary = gdb.current_progspace().filename
+raw = subprocess.check_output(['nm', '--defined-only', binary], text=True).splitlines()
+pretty = subprocess.check_output(['nm', '-C', '--defined-only', binary], text=True).splitlines()
+patterns = [
+ 'clinkz_wot_binding_http::Call::retire',
+ 'clinkz_wot_binding_http::transport::Ingress::inspect',
+ '<clinkz_wot_binding_http::transport::Ingress as tokio::io::async_read::AsyncRead>::poll_read',
+ 'hyper::proto::h1::decode::Decoder::decode',
+ 'hyper::proto::h1::decode::decode_trailers',
+ '<tokio::runtime::io::registration::Registration as core::ops::drop::Drop>::drop',
+]
+samples = {}
+class Sample(gdb.Breakpoint):
+ def __init__(self, symbol, label):
+  super().__init__(symbol, internal=True)
+  self.label = label
+ def stop(self):
+  try:
+   f = gdb.newest_frame()
+   sp = int(f.read_register('rsp'))
+   names = []
+   callback_base = None
+   while f:
+    name = f.name() or ''
+    names.append(name)
+    if name.startswith('clinkz_wot_binding_http::') and ('::poll_result' in name or '::start_cancel' in name or '::poll_cancel' in name):
+     callback_base = int(f.older().read_register('rsp'))
+    if name == 'clinkz_wot_servient::consumer_property_read::host::ConsumerPropertyReadCall::step':
+     base = int(f.older().read_register('rsp'))
+     depth = base - sp
+     phase = 'cancel' if any('start_cancel' in n or 'poll_cancel' in n for n in names) else 'progress'
+     key = (phase, self.label)
+     count, deepest, callback_depth, chain = samples.get(key, (0, 0, 0, []))
+     samples[key] = (count + 1, max(deepest, depth), max(callback_depth, callback_base - sp if callback_base else 0), names if depth > deepest else chain)
+     break
+    f = f.older()
+  except gdb.error:
+   pass
+  return False
+for a,b in zip(raw,pretty):
+ parts=a.split(maxsplit=2); readable=b.split(maxsplit=2)
+ if len(parts) == 3 and len(readable) == 3 and readable[2] in patterns:
+  Sample(parts[2],readable[2])
+  print('STACK_PROBE',readable[2])
+end
+run
+python
+for (phase,label),(count,depth,callback_depth,chain) in sorted(samples.items()):
+ print('STACK_SAMPLE phase=%s public_step_bytes=%s http_callback_bytes=%s hits=%s point=%s' % (phase,depth,callback_depth,count,label))
+ if 'Ingress::inspect' in label or phase == 'cancel':
+  print('STACK_CHAIN', ' -> '.join(chain))
+if not samples:
+ raise gdb.GdbError('no production stack samples')
+end
+'''
+
+replay = "Build the allocation_trace test with cargo test --locked --offline -p clinkz-wot-binding-http --test allocation_trace --no-run; repeat with CARGO_PROFILE_RELEASE_DEBUG=1 and --release. Write gdb_script verbatim to /tmp/wp600-stack.gdb. For each emitted test executable and each fixtures entry run: gdb --batch -x /tmp/wp600-stack.gdb --args TEST_EXECUTABLE --exact FIXTURE --nocapture. Both tests must pass; STACK_SAMPLE reports native deltas. For nondebugger disposal costs, execute the new independent-owner test directly with --exact and --nocapture. No custom compiler instrumentation, SDK edits or test-only transport is used."
+
+[runtime_qualification.test_coverage]
+counterexample = "On fetched base 5bdd4b6, cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async fails E0432 at servient/tests/servient_test.rs:15 because ServientBuilder is exported only with std. This is a real feature-test coverage blocker, not a production HTTP failure."
+repair = "Gate that legacy integration target on std, matching the public builder it tests; std already implies async. No production or feature definition changes. The portable Consumer/Producer/lib cases remain enabled and the complete async/no-std suite now passes all 31; no-default also passes 31. All 12 legacy integration cases still execute and pass under workspace/default features. No test was ignored to obtain success."
+
+[runtime_qualification.completion_assessment]
+assessment = "Author assessment for independent review: existing accepted evidence plus this source/evidence is sufficient to consider the admitted HTTP Consumer tranche for completion. No known remaining executable contract or relevant feature-test coverage blocker was found. This is a completion candidate, not independent acceptance or a tranche/WP-600/gate transition. All evidence keys remain in their existing acceptance state pending review."
+required_before_closure = [
+    "Fresh independent exact-head acceptance must assess these new cases, native-stack/disposal observations, test-gate repair, reuse of PR #193/#195/#196/#198/#200/#201's accepted scopes, and whether the four indexed HTTP completion keys are now sufficient. This author does not self-approve or declare completion.",
+]
+not_additional_blockers = [
+    "ADR-0023 requires enforced external-input/concurrency/growth policy, complete physical owners, funded engine handoffs, supported returned failures and finite truthful local retirement. It does not require universal opaque-SDK heap/native-stack/disposal ceilings or Host process-OOM/global-OS-exhaustion recovery. A concrete stronger deployment guarantee would need separate evidence; none is claimed here.",
+    "Current cancellation destroys the sole future instead of returning a late Returned value. Reachable queued-input/first-cause behavior and the shared normal/late seals keep their accepted evidence. A fabricated alternate HTTP late-result mechanism or exhaustive transport interleaving proof adds no applicable contract evidence.",
+    "The live shared application reactor legitimately retains its own inert deregistration backing; shutdown of another active owner would violate the contract. Stopping/destroying that required runtime after acceptance violates the declared application lifetime, and is not a reason to demand a new executor or generic retirement API.",
+    "Accepted shared/portable/feature/dependency/registry evidence is retained with exact source provenance because all corresponding production, feature and dependency files equal base. No additional 35-cell matrix, ARM/QEMU run or SDK archive requalification is required by these test-only changes. Unexecuted broader checks are not presented as new execution.",
+    "HTTP Producer/bidirectional loop, HTTPS/trust/security, DNS/explicit vocabulary, embedded/hardware and release qualification are successors. HTTPS/security remains a release prerequisite; this Consumer tranche cannot close WP-600 or v1.",
+]
+
+[[runtime_qualification.verification]]
+name = "new-public-path-cases-and-http-regressions"
+source_ref = "f8c642f40c39588c7b37725c596338c3b33e90fc"
+command = "cargo test --locked --offline -p clinkz-wot-binding-http --all-targets -- --test-threads=1 --nocapture"
+result = "passed"
+observation = "39 cases, including the three new cases (two independent-owner stages) and unchanged prior regressions. New cases also pass directly in the optimized allocation_trace executable. Existing accepted cases are regression coverage, not repeated independent qualification. An initial fixture compile used Tokio io-util extension traits outside the pinned feature set; it was corrected to the existing AsyncRead/AsyncWrite poll traits, without changing manifests/features/lock."
+
+[[runtime_qualification.verification]]
+name = "workspace-and-portable-complete-suites"
+source_ref = "f8c642f40c39588c7b37725c596338c3b33e90fc"
+commands = [
+    "cargo test --locked --offline --workspace",
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async",
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features",
+]
+result = "passed"
+observation = "Workspace 793 passed, 3 existing ignored documentation examples; includes all 12 std legacy Servient integration cases. Full async/no-std 31 passed; full no-default 31 passed. Former unfiltered async compile blocker is repaired. No ignored/newly disabled portable target is substituted for a failing supported test."
+
+[[runtime_qualification.verification]]
+name = "native-stack-and-local-costs"
+source_ref = "f8c642f40c39588c7b37725c596338c3b33e90fc"
+commands = [
+    "cargo test --locked --offline -p clinkz-wot-binding-http --test allocation_trace --no-run",
+    "CARGO_PROFILE_RELEASE_DEBUG=1 cargo test --release --locked --offline -p clinkz-wot-binding-http --test allocation_trace --no-run",
+    "Execute native_stack.replay with its verbatim gdb_script in debug and release; independently execute each new test directly in the emitted release executable",
+]
+result = "passed"
+observation = "Four GDB runs (two actual production fixtures x two builds) pass, with native samples above; debugger time is excluded from disposal timing. Three new optimized cases pass. Debug test binary allocation_trace-3a735c2e05b5b010; optimized allocation_trace-4981f066ec082e06. Sampled sizes/times are build-specific observations, not universal limits."
+
+[[runtime_qualification.verification]]
+name = "authority-strict-clippy-and-hygiene"
+source_ref = "f8c642f40c39588c7b37725c596338c3b33e90fc"
+commands = [
+    "CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 bash tools/check-design-artifacts.sh",
+    "cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings",
+    "rustfmt --edition 2024 --check protocol-bindings/protocols/http/tests/allocation_trace.rs protocol-bindings/protocols/http/tests/support/runtime_cases.rs servient/tests/servient_test.rs; git diff --check",
+]
+result = "passed"
+observation = "Authority/DAG/API/ADR/Directory/legacy checks, 196 resource fields/3 profiles and 66 performance cases pass. Those cases exclude transport I/O. Strict HTTP Clippy and source formatting pass; unchanged shared warnings do not become a whole-workspace strict Clippy claim. PR #201 reviewed/merged tree equality is checked; production, dependency and state files equal base. Final docs/TOML and authority/hygiene are renewed before submission."

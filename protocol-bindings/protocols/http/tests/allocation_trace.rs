@@ -8,6 +8,7 @@ use std::{
 struct Trace {
     armed: bool,
     count: usize,
+    deallocations: usize,
     live: usize,
     peak: usize,
     largest: usize,
@@ -18,6 +19,7 @@ struct Trace {
 const EMPTY: Trace = Trace {
     armed: false,
     count: 0,
+    deallocations: 0,
     live: 0,
     peak: 0,
     largest: 0,
@@ -97,6 +99,9 @@ unsafe impl GlobalAlloc for Allocator {
     unsafe fn dealloc(&self, p: *mut u8, layout: Layout) {
         let _ = TRACE.try_with(|t| {
             let mut t = t.borrow_mut();
+            if t.armed {
+                t.deallocations += 1;
+            }
             if let Some(i) = t.blocks.iter().position(|b| b.0 == p as usize) {
                 assert_eq!(t.blocks[i].1, layout.size());
                 t.live -= layout.size();
@@ -109,6 +114,9 @@ unsafe impl GlobalAlloc for Allocator {
 // Keep the application/peer implementation in one place. The normal tests are
 // imported only in the real_peer integration target, not repeated here.
 include!("support/application.rs");
+// Reuse the same allocation observer, without repeating the accepted pressure
+// matrix. These cases qualify previously uncovered runtime/independent owners.
+include!("support/runtime_cases.rs");
 
 #[test]
 fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {

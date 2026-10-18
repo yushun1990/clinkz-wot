@@ -1,7 +1,8 @@
 //! P3 integration: produce→expose→dispatch round-trip and consume→invoke via
 //! fake bindings, plus frozen-TD lifecycle (expose/destroy).
 
-#![cfg(feature = "async")]
+// ServientBuilder is a std convenience; portable async has its own runtime tests.
+#![cfg(feature = "std")]
 
 use std::sync::{Arc, Mutex};
 

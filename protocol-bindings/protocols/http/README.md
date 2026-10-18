@@ -172,12 +172,26 @@ The allocation fixture also measures and refuses the fallible raw-call box
 and verifies request recovery, occupancy release and retry. SDK infallible
 OOM remains a Host process-failure assumption.
 
-PR #200 independently accepted the v4 production slice as partial progress.
-Further completion evidence includes representative native-stack and disposal
-costs and remaining supported runtime/fault and retirement paths; universal SDK
-heap/stack bounds are not a Host requirement. Independent review of this change
-and tranche completion remain open. The evidence records exactly which
-workspace, feature, portable, predecessor and authority checks ran. Passing tests
-or the required GitHub diff-hygiene check do not complete this tranche or change a
-gate. HTTPS/trust/security, Producer and embedded/hardware qualification retain
-their separate later boundaries; HTTPS/security remains a release requirement.
+PR #200 independently accepted the v4 production slice and PR #201 independently
+accepted the v5 diagnostic/pressure evidence, both as partial progress.
+`tests/support/runtime_cases.rs` adds real pending-connect reset and stopped-driver
+registration refusal/recovery, plus cancellation and full retirement of one
+public Runtime while another pending HTTP owner and an application socket keep
+using the same reactor. These cases reuse the existing allocation observer.
+
+The evidence now records representative native stack from GDB on actual debug
+and optimized production paths, and synchronous disposal time/allocation/free
+observations. Actual native frames are substantially larger than the heap
+continuation; neither its size nor the transient declaration is a thread-stack
+ceiling. Samples qualify those executed paths and leave stack provisioning and
+stronger availability/fit to the deployment. Universal SDK ceilings are not a
+Host requirement.
+
+The std-only legacy Servient integration target now uses its matching feature
+gate. The full portable async suite passes, and all 12 legacy cases still run
+under default features. The existing evidence assesses the admitted Consumer
+scope as a completion candidate with no known contract or test-coverage blocker;
+independent exact-head completion acceptance remains required. No tranche,
+admission or gate transition follows from these tests. HTTPS/trust/security,
+Producer and embedded/hardware qualification retain their separate later
+boundaries; HTTPS/security remains a release requirement.
