@@ -14,11 +14,14 @@ independent rerun of all ten indexed prechecks. The merged admission basis
 head. This transition grants bounded implementation admission; production
 completion still requires the evidence and independent acceptance below.
 
-The [HTTP parser-policy amendment](#http-parser-policy-amendment) is a candidate
-revision of this same tranche under ADR-0013. The index withholds admission of
-the revised contract pending independent scoped review. The original admission
-and accepted shared/partial implementation evidence retain their exact historical
-scope; they do not accept this amendment or qualify its subsequent implementation.
+The [HTTP parser-policy amendment](#http-parser-policy-amendment) is an accepted
+revision of this same tranche under ADR-0013. [Independent scoped review on PR
+#198](https://github.com/yushun1990/clinkz-wot/pull/198#pullrequestreview-5562750022)
+accepted exact head `a7acfa6c4779ce803c145babf653bd53e7ceebcb`; the index records
+the revised contract as admitted. The tranche remains in progress: this review
+does not qualify its subsequent production implementation. The original
+admission and accepted shared/partial implementation evidence retain their exact
+historical scope.
 
 ## Tranche and predecessor boundary
 
@@ -30,8 +33,8 @@ HTTP execution is std-only; portable cells verify the shared amendment and
 regressions, not an embedded HTTP backend.
 The TD/Core/Planning eligibility amendment below and the HTTP adapter belong to
 this one tranche. The original admission ordered the shared amendment before the
-binding; those accepted implementations retain their recorded scope. This
-parser-policy admission candidate contains no production edits.
+binding; those accepted implementations retain their recorded scope. The
+parser-policy amendment contains no production edits.
 
 The direct predecessor is completed/current
 `WP-400-CONSUMER-RESOURCE-OWNERSHIP`. Its transitive closure contains all ten
@@ -102,7 +105,7 @@ recipe is implementation completion evidence, not a new shared runtime API.
 
 At original admission, lending lost Form extensions/response overrides and the
 closed compiler only copied targets. The accepted PR #193 shared amendment
-implements the following API/semantic contract; this parser-policy candidate
+implements the following API/semantic contract; this parser-policy amendment
 preserves it without new shared source changes:
 
 1. TD adds `ValidatedPropertyReadForm::has_additional_form_metadata(&self)
@@ -244,11 +247,12 @@ Never relabel an old artifact or mutate a captured configuration to enable the
 new behavior. Shared key derivation, strict vectors, complete engine-policy
 identity, schema 2, result limits and all 196 resource defaults are unchanged.
 
-Independent scoped review must judge this amendment's rationale, exact owner
-and identity changes, counterexamples and impact map. It must record the exact
-reviewed head before the index can restore `admitted`; original PR #191
-acceptance cannot stand in for that review. No source, dependency, gate or
-predecessor acceptance transition is part of this docs-only candidate.
+Independent scoped review judged this amendment's rationale, exact owner and
+identity changes, counterexamples and impact map at the exact head recorded
+above. The index projects that acceptance as `admitted`; original PR #191
+acceptance remains the historical basis for the original scope. No source,
+dependency, gate or predecessor acceptance transition is part of this
+docs-only projection.
 
 ## HTTP execution and resource obligations
 
@@ -337,8 +341,9 @@ all 196 numeric defaults remain binding.
 
 The preceding impact map records the original shared amendment. Its accepted
 renewals on PR #193, and PR #195/#196's accepted partial scopes, remain valid at
-their recorded revisions. This parser-policy candidate changes no shared source
-or predecessor contract. Its narrower subsequent implementation impact is:
+their recorded revisions. This accepted parser-policy amendment changes no
+shared source or predecessor contract. Its narrower subsequent implementation
+impact is:
 
 | Affected owner/evidence | Required disposition |
 | --- | --- |
