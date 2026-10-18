@@ -977,8 +977,8 @@ work_package = "WP-600"
 sequence = 600
 status = "in-progress"
 # Original PR #191 admission remains historical authority for its original scope.
-# The binding-private parser-policy amendment requires independent scoped review.
-admission_status = "candidate"
+# PR #198 independently accepted the parser-policy amendment at its exact head.
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-400-CONSUMER-RESOURCE-OWNERSHIP"]
 depends_on_packages = ["WP-000"]
@@ -1023,7 +1023,7 @@ resource_changes = [
     "One paid TD DocumentNodes scalar before Ready, no source work on replay; owned optional scalar in logical plan, no added backing allocation or WorkClass.",
     "Opt-in closed-consumer-default-json-forms-v1 binding key derived from original v1 key; unrestricted and strict vectors, resource schema 2, complete-policy encoding and all 196 numeric defaults preserved.",
     "Renew concrete TD/plan/config/compiler/support/Host-slot and aggregate Layout/work/rollback measurements; no old byte result silently inherited by changed carriers.",
-    "HTTP parser-policy amendment candidate (WP-600 target): stock Hyper 1.12.0 shared 32/8192 parser settings, inclusive main head 32/8192, body 4096, trailers 32 fields/raw bytes <8192 (8191 accepted; 8192 rejects even unfinished), native cumulative extension count <16384 including final zero chunk. Wire 32768 and read/paid-progress 4096 unchanged; permitted trailers discarded without overrides or TE:trailers advertisement. Actual SDK growth/buffering/overlap/continuation/stack/fault/disposal qualification remains separate.",
+    "Accepted HTTP parser-policy amendment (WP-600 target): stock Hyper 1.12.0 shared 32/8192 parser settings, inclusive main head 32/8192, body 4096, trailers 32 fields/raw bytes <8192 (8191 accepted; 8192 rejects even unfinished), native cumulative extension count <16384 including final zero chunk. Wire 32768 and read/paid-progress 4096 unchanged; permitted trailers discarded without overrides or TE:trailers advertisement. Actual SDK growth/buffering/overlap/continuation/stack/fault/disposal qualification remains separate.",
     "Fresh versioned HTTP private-policy identity (successor v4) includes actual SDK/configuration and amended comparison/extension/trailer semantics; same immutable checked restricted configuration captured by client/compiler/support/artifacts/diagnostics. Preserve shared encodings, complete engine-policy identity, result backing and old/new substitution refusal before I/O.",
     "Full engine carrier/request/result Arc and String capacities, constructor overlap, original local/parent retention, conservative cancellation/transfer and allocation-free status/seal/handoff remain funded before effects; SDK-private and deployment costs stay separately owned.",
 ]
@@ -1065,7 +1065,7 @@ subprocess.run(["bash", "-euc", recipe], check=True)
 PY''',
     "git diff --check",
 ]
-admission_review = "pending-independent-scoped-review:docs/evidence/WP-600-http-consumer-property-read.toml#parser_policy_amendment"
+admission_review = "github-pr:198#pullrequestreview-5562750022"
 completion_evidence_keys = [
     "http-form-eligibility", "http-consumer-property-read", "http-resource-lifecycle",
     "http-authoring-feature-conformance",
