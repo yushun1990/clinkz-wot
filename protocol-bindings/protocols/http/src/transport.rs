@@ -69,6 +69,8 @@ impl Ingress {
                 }
                 let mut media = 0;
                 for header in response.headers.iter() {
+                    // Keep transfer framing disabled until the pinned SDK can
+                    // enforce the independent raw trailer limits before delivery.
                     if [
                         "transfer-encoding",
                         "content-encoding",
@@ -254,4 +256,95 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
         }
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io::Write, task::Waker};
+
+    #[test]
+    fn real_socket_ingress_shares_one_callback_credit_and_never_refills_wire() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let peer = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut bytes = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n".to_vec();
+            bytes.resize(32769, b'1');
+            socket.write_all(&bytes).unwrap();
+        });
+        tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let socket = TcpStream::connect(address).await.unwrap();
+                let allowance = Arc::new(AtomicUsize::new(0));
+                let mut ingress = Ingress {
+                    socket,
+                    head: [0; 8192],
+                    head_len: 0,
+                    head_done: false,
+                    wire: 0,
+                    allowance: allowance.clone(),
+                };
+                let mut storage = [0; 16384];
+                let mut cx = Context::from_waker(Waker::noop());
+                assert!(
+                    Pin::new(&mut ingress)
+                        .poll_read(&mut cx, &mut ReadBuf::new(&mut storage))
+                        .is_pending()
+                );
+                assert_eq!(ingress.wire, 0);
+                for callback in 1..=8 {
+                    allowance.store(4096, Ordering::Relaxed);
+                    let mut received = 0;
+                    while allowance.load(Ordering::Relaxed) != 0 {
+                        // Vary requested capacity so multiple reads must share
+                        // the allowance, independently of Hyper's read strategy.
+                        let capacity = if received == 0 { 17 } else { storage.len() };
+                        let n = poll_fn(|cx| {
+                            let mut output = ReadBuf::new(&mut storage[..capacity]);
+                            match Pin::new(&mut ingress).poll_read(cx, &mut output) {
+                                Poll::Ready(Ok(())) => Poll::Ready(output.filled().len()),
+                                Poll::Ready(Err(e)) => panic!("unexpected ingress error: {e}"),
+                                Poll::Pending => Poll::Pending,
+                            }
+                        })
+                        .await;
+                        assert!((1..=4096).contains(&n));
+                        received += n;
+                    }
+                    assert_eq!(received, 4096);
+                    assert_eq!(ingress.wire, callback * 4096);
+                    if callback != 8 {
+                        assert!(
+                            Pin::new(&mut ingress)
+                                .poll_read(&mut cx, &mut ReadBuf::new(&mut storage))
+                                .is_pending()
+                        );
+                    }
+                }
+                allowance.store(4096, Ordering::Relaxed);
+                assert!(matches!(
+                    Pin::new(&mut ingress).poll_read(&mut cx, &mut ReadBuf::new(&mut storage)),
+                    Poll::Ready(Err(_))
+                ));
+                assert_eq!(ingress.wire, 32768);
+                assert_eq!(allowance.load(Ordering::Relaxed), 4096);
+                // The byte beyond the lifetime wire ceiling stayed in the OS;
+                // it was never received into parser/body backing.
+                let mut byte = [0];
+                let n = poll_fn(|cx| {
+                    let mut output = ReadBuf::new(&mut byte);
+                    Pin::new(&mut ingress.socket)
+                        .poll_read(cx, &mut output)
+                        .map_ok(|()| output.filled().len())
+                })
+                .await
+                .unwrap();
+                assert_eq!(n, 1);
+            });
+        peer.join().unwrap();
+    }
 }

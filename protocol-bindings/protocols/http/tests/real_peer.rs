@@ -1,6 +1,122 @@
 include!("support/application.rs");
 use std::sync::mpsc;
+async fn take_woken(call: &mut ConsumerPropertyReadCall) -> CoreResult<InteractionOutput> {
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        std::future::poll_fn(|cx| {
+            call.step(cx, &mut work());
+            match call.try_take(&mut work()).unwrap() {
+                Some(result) => std::task::Poll::Ready(result),
+                None => std::task::Poll::Pending,
+            }
+        }),
+    )
+    .await
+    .expect("call made no wake-driven progress")
+}
+
+fn unfinished_chunked_trailers_must_reject(trailers: Vec<u8>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let peer = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        assert!(request(&mut socket).starts_with("GET /a?x=1 HTTP/1.1\r\n"));
+        let mut bytes = chunked_head();
+        bytes.extend_from_slice(b"0\r\n");
+        bytes.extend_from_slice(&trailers);
+        socket.write_all(&bytes).unwrap();
+        // No empty trailer terminator and no peer EOF. Retirement must result
+        // from the binding's policy, without caller cancellation/deadline.
+        let mut byte = [0];
+        match socket.read(&mut byte) {
+            Ok(0) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
+            other => panic!("unfinished response was not retired: {other:?}"),
+        }
+        let (mut next, _) = listener.accept().unwrap();
+        assert!(request(&mut next).starts_with("GET /b HTTP/1.1\r\n"));
+        next.write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n2",
+        )
+        .unwrap();
+        assert_eq!(next.read(&mut byte).unwrap(), 0);
+    });
+    let (timed_out, error) = recipe().block_on(async {
+        let (runtime, handle, observer, parent) = engine(port);
+        let mut call = handle
+            .read_property("a", InteractionOptions::new(), &mut work())
+            .unwrap();
+        let outcome = tokio::time::timeout(
+            Duration::from_millis(250),
+            std::future::poll_fn(|cx| {
+                call.step(cx, &mut work());
+                match call.try_take(&mut work()).unwrap() {
+                    Some(result) => std::task::Poll::Ready(result),
+                    None => std::task::Poll::Pending,
+                }
+            }),
+        )
+        .await;
+        let timed_out = outcome.is_err();
+        let error = match outcome {
+            Ok(result) => result.unwrap_err(),
+            Err(_) => {
+                // Failure-only cleanup keeps the counterexample's ownership
+                // and peer assertions useful before the production fix too.
+                call.cancel().unwrap();
+                take(&mut call).await.unwrap_err()
+            }
+        };
+        drop(call);
+        let mut next = handle
+            .read_property("b", InteractionOptions::new(), &mut work())
+            .unwrap();
+        assert_eq!(
+            &*take_woken(&mut next).await.unwrap().data().unwrap().body,
+            b"2"
+        );
+        drop(next);
+        drop(handle);
+        shutdown(&runtime);
+        drop(runtime);
+        drop(observer);
+        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        (timed_out, error)
+    });
+    peer.join().unwrap();
+    assert!(
+        !timed_out,
+        "over-limit unfinished trailers remained pending until caller cancellation"
+    );
+    assert!(matches!(error, CoreError::Binding(_)), "{error:?}");
+    assert_eq!(error.context().cause_code(), Some(606));
+    assert_eq!(
+        error.context().resource_failure().unwrap().1,
+        ResourceFailureDomain::BindingPolicy
+    );
+    assert!(error.context().plan().is_some());
+    assert_eq!(
+        error.context().binding(),
+        Some((BindingId::new(600), BindingGeneration::INITIAL))
+    );
+}
+
+#[test]
+fn unfinished_chunked_trailers_over_field_limit_reject_without_caller_cancellation() {
+    unfinished_chunked_trailers_must_reject("X: y\r\n".repeat(17).into_bytes());
+}
+
+#[test]
+fn unfinished_chunked_trailers_over_byte_limit_reject_without_caller_cancellation() {
+    let mut trailers = b"X: ".to_vec();
+    trailers.resize(4096, b'x');
+    unfinished_chunked_trailers_must_reject(trailers);
+}
+
 fn response_case(bytes: Vec<u8>, fragmented: bool, success: bool) {
+    response_case_with_close(bytes, fragmented, success, true);
+}
+fn response_case_with_close(bytes: Vec<u8>, fragmented: bool, success: bool, close_write: bool) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let peer = std::thread::spawn(move || {
@@ -15,7 +131,9 @@ fn response_case(bytes: Vec<u8>, fragmented: bool, success: bool) {
         } else {
             let _ = socket.write_all(&bytes);
         }
-        let _ = socket.shutdown(std::net::Shutdown::Write);
+        if close_write {
+            let _ = socket.shutdown(std::net::Shutdown::Write);
+        }
         let mut byte = [0];
         let retirement = socket.read(&mut byte);
         assert!(
@@ -30,7 +148,7 @@ fn response_case(bytes: Vec<u8>, fragmented: bool, success: bool) {
         let mut call = handle
             .read_property("a", InteractionOptions::new(), &mut work())
             .unwrap();
-        let result = take(&mut call).await;
+        let result = take_woken(&mut call).await;
         assert_eq!(result.is_ok(), success, "{result:?}");
         drop(call);
         drop(handle);
@@ -142,7 +260,6 @@ fn exact_and_one_over_raw_header_limits() {
 #[test]
 fn unsupported_and_broken_responses_never_deliver_success() {
     for bytes in [
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1\r\n1\r\n0\r\n\r\n",
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n\r\n",
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n1",
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Encoding: gzip\r\n\r\n1",
@@ -157,6 +274,294 @@ fn unsupported_and_broken_responses_never_deliver_success() {
         "",
     ] {
         response_case(bytes.as_bytes().to_vec(), true, false);
+    }
+}
+
+fn chunked_head() -> Vec<u8> {
+    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n"
+        .to_vec()
+}
+
+#[test]
+fn chunked_bodies_reject_without_waiting_for_peer_eof() {
+    for fragmented in [false, true] {
+        for n in [0, 1, 4095, 4096, 4097] {
+            let mut bytes = chunked_head();
+            let body = vec![b'1'; n];
+            // Valid chunked responses must still reject at the raw head until
+            // the SDK independently bounds unfinished trailer ingress.
+            for part in body.chunks(511) {
+                bytes.extend_from_slice(format!("{:X};example=value\r\n", part.len()).as_bytes());
+                bytes.extend_from_slice(part);
+                bytes.extend_from_slice(b"\r\n");
+            }
+            bytes.extend_from_slice(b"0\r\n\r\n");
+            response_case_with_close(bytes, fragmented, false, false);
+        }
+    }
+}
+
+#[test]
+fn slow_chunked_head_wakes_public_runtime_and_rejects_before_body() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let peer = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        request(&mut socket);
+        socket.set_nodelay(true).unwrap();
+        // Send only the head, one octet per reactor turn. No body or EOF can
+        // rescue a driver that incorrectly waits for chunk/trailer completion.
+        for byte in b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: cHuNkEd\r\n\r\n" {
+            socket.write_all(&[*byte]).unwrap();
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let mut byte = [0];
+        assert_eq!(socket.read(&mut byte).unwrap(), 0);
+    });
+    recipe().block_on(async {
+        let (runtime, handle, observer, parent) = engine(port);
+        let mut call = handle
+            .read_property("a", InteractionOptions::new(), &mut work())
+            .unwrap();
+        let error = take_woken(&mut call).await.unwrap_err();
+        assert!(matches!(error, CoreError::Binding(_)), "{error:?}");
+        assert_eq!(error.context().cause_code(), Some(606));
+        drop(call);
+        drop(handle);
+        shutdown(&runtime);
+        drop(runtime);
+        drop(observer);
+        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+    });
+    peer.join().unwrap();
+}
+
+#[test]
+fn unsupported_transfer_framing_rejects_without_draining() {
+    for tail in [
+        "g\r\n1\r\n0\r\n\r\n",         // invalid chunk size
+        "10000000000000000\r\n",       // overflow
+        "1\r\n",                       // missing body
+        "2\r\n1",                      // truncated body
+        "1\r\n1X\n0\r\n\r\n",          // missing chunk CR
+        "1\r\n1\rX0\r\n\r\n",          // missing chunk LF
+        "1;extension\n1\r\n0\r\n\r\n", // invalid extension
+        "1\r\n1\r\n",                  // missing final chunk
+        "0\r\n",                       // missing trailer terminator
+        "0\r\nX: y\r\n\r\n",           // actual unannounced trailers
+        "0\r\nX: y\r\n",               // truncated trailers
+    ] {
+        let mut bytes = chunked_head();
+        bytes.extend_from_slice(tail.as_bytes());
+        response_case(bytes, true, false);
+    }
+    for fields in [
+        "Transfer-Encoding: gzip, chunked\r\n",
+        "Transfer-Encoding: chunked, chunked\r\n",
+        "Transfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n",
+        "Transfer-Encoding: chunked\r\nContent-Length: 1\r\n",
+        "Transfer-Encoding: chunked\r\nTrailer: X\r\n",
+    ] {
+        response_case(
+            format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{fields}\r\n1\r\n1\r\n0\r\n\r\n")
+                .into_bytes(),
+            true,
+            false,
+        );
+    }
+}
+
+#[test]
+fn completed_chunked_trailers_and_extensions_reject_at_raw_head() {
+    for n in [16, 17] {
+        let mut bytes = chunked_head();
+        bytes.extend_from_slice(b"0\r\n");
+        bytes.extend_from_slice("X: y\r\n".repeat(n).as_bytes());
+        bytes.extend_from_slice(b"\r\n");
+        response_case(bytes, true, false);
+    }
+    for n in [2048, 2049] {
+        let mut bytes = chunked_head();
+        bytes.extend_from_slice(b"0\r\n");
+        let start = bytes.len();
+        bytes.extend_from_slice(b"X: y");
+        bytes.resize(start + n - 4, b' ');
+        bytes.extend_from_slice(b"\r\n\r\n");
+        response_case(bytes, true, false);
+    }
+    for n in [16383, 16384] {
+        let mut bytes = chunked_head();
+        bytes.extend_from_slice(b"1;");
+        bytes.extend(std::iter::repeat_n(b'x', n));
+        bytes.extend_from_slice(b"\r\n1\r\n0\r\n\r\n");
+        assert!(bytes.len() < 32768);
+        response_case_with_close(bytes, true, false, false);
+    }
+}
+
+#[test]
+fn incomplete_supported_responses_cancel_or_expire_then_reuse_original_runtime() {
+    for partial in [
+        "HTTP/1.1 200 OK\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n1",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n1",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n",
+    ] {
+        for mode in ["cancel", "drop", "deadline"] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let (sent, received) = mpsc::channel();
+            let peer = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                request(&mut socket);
+                socket.write_all(partial.as_bytes()).unwrap();
+                sent.send(()).unwrap();
+                let mut byte = [0];
+                assert_eq!(
+                    socket.read(&mut byte).unwrap(),
+                    0,
+                    "retirement waited for framing"
+                );
+                let (mut next, _) = listener.accept().unwrap();
+                assert!(request(&mut next).starts_with("GET /b HTTP/1.1\r\n"));
+                next.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n2").unwrap();
+            });
+            recipe().block_on(async {
+                let (runtime, handle, observer, parent) = engine(port);
+                let mut call = handle
+                    .read_property(
+                        "a",
+                        if mode == "deadline" {
+                            InteractionOptions::new().with_timeout(Duration::from_millis(100))
+                        } else {
+                            InteractionOptions::new()
+                        },
+                        &mut work(),
+                    )
+                    .unwrap();
+                let end = Instant::now() + Duration::from_secs(5);
+                loop {
+                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                    if received.try_recv().is_ok() {
+                        break;
+                    }
+                    assert!(Instant::now() < end);
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+                // Reactor progress lets the decoder consume the partial frame.
+                for _ in 0..3 {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                    assert!(call.try_take(&mut work()).unwrap().is_none());
+                }
+                assert!(parent.lock().unwrap().iter().any(|a| a.used() != 0));
+                // Result occupancy cannot be borrowed by an ordinary new read.
+                let rejected = handle
+                    .read_property(
+                        "b",
+                        InteractionOptions::new().with_uri_variable("proof", "original"),
+                        &mut work(),
+                    )
+                    .err()
+                    .unwrap();
+                let (options, request) = rejected.into_parts().0;
+                assert!(
+                    request.is_none(),
+                    "engine occupancy must reject before raw construction"
+                );
+                assert_eq!(options.uri_variables().get("proof").unwrap(), "original");
+                if mode == "cancel" {
+                    call.cancel().unwrap();
+                }
+                if mode != "drop" {
+                    let error = take(&mut call).await.unwrap_err();
+                    if mode == "deadline" {
+                        assert!(matches!(error, CoreError::TimedOut(_)), "{error:?}");
+                    } else {
+                        assert!(matches!(error, CoreError::Cancelled(_)), "{error:?}");
+                    }
+                }
+                drop(call);
+                for _ in 0..3 {
+                    runtime.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                }
+                let mut next = handle
+                    .read_property("b", InteractionOptions::new(), &mut work())
+                    .unwrap();
+                assert_eq!(
+                    &*take_woken(&mut next).await.unwrap().data().unwrap().body,
+                    b"2"
+                );
+                drop(next);
+                drop(handle);
+                shutdown(&runtime);
+                drop(runtime);
+                drop(observer);
+                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            });
+            peer.join().unwrap();
+        }
+    }
+}
+
+#[test]
+fn buffered_fixed_body_completion_respects_both_cancel_and_result_orders() {
+    for cancel_first in [true, false] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (sent, received) = mpsc::channel();
+        let (finish, finishing) = mpsc::channel();
+        let peer = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            request(&mut socket);
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n1").unwrap();
+            sent.send(()).unwrap();
+            finishing.recv_timeout(Duration::from_secs(5)).unwrap();
+            socket.write_all(b"2").unwrap();
+            sent.send(()).unwrap();
+            let mut byte = [0];
+            assert!(matches!(socket.read(&mut byte), Ok(0) | Err(_)));
+        });
+        recipe().block_on(async {
+            let (runtime, handle, observer, parent) = engine(port);
+            let mut call = handle
+                .read_property("a", InteractionOptions::new(), &mut work())
+                .unwrap();
+            let end = Instant::now() + Duration::from_secs(5);
+            loop {
+                call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                if received.try_recv().is_ok() {
+                    break;
+                }
+                assert!(Instant::now() < end);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            finish.send(()).unwrap();
+            // Do not poll the engine until the final body byte is available.
+            while received.try_recv().is_err() {
+                assert!(Instant::now() < end);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            if cancel_first {
+                call.cancel().unwrap();
+                assert!(matches!(
+                    take_woken(&mut call).await,
+                    Err(CoreError::Cancelled(_))
+                ));
+            } else {
+                let output = take_woken(&mut call).await.unwrap();
+                assert_eq!(&*output.data().unwrap().body, b"12");
+                assert!(call.cancel().is_err());
+                drop(output);
+            }
+            drop(call);
+            drop(handle);
+            shutdown(&runtime);
+            drop(runtime);
+            drop(observer);
+            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        });
+        peer.join().unwrap();
     }
 }
 #[test]

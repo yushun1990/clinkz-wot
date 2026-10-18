@@ -23,6 +23,17 @@ qualification remains an obligation. Hyper's header-size setting also controls
 trailers; simply using its default trailer handling would not establish the
 admitted separate 16/2048 trailer envelope. No replacement HTTP parser is added.
 
+The raw-head refusal must remain until a corrected pinned SDK enforces trailer
+ingress independently of the 32/8192 main-header limits. Rejecting a completed
+trailer frame is too late: an unfinished oversized trailer can otherwise remain
+buffered indefinitely. `tests/sdk_limits.rs` preserves the SDK counterexamples:
+shared header/trailer settings, an exclusive trailer-byte comparison, raw
+whitespace lost in delivered maps, and a fixed cumulative chunk-extension limit
+of 16384 bytes even when the complete response is below 32768 wire bytes. The
+smallest SDK correction is independent inclusive trailer limits and extension
+controls compatible with the cumulative wire gate. The public Runtime and
+call-owned connection architecture can remain.
+
 ## Application runtime
 
 Run `cargo run --locked -p clinkz-wot-binding-http --example read_property --
@@ -118,6 +129,24 @@ body reservation after request acceptance. The error retains cause 607 and
 control retains cause 608 and `BindingPolicy`. Both connections retire, a later
 read succeeds on the same runtime, and the original parent accounts reclaim.
 This qualifies that supported refusal; other SDK allocation paths remain open.
+
+Active public regressions send 17 complete trailer fields or one 4096-byte
+unfinished trailer field while withholding the final empty line and keeping the
+peer open. The binding must reject through real wakes within the test's 250 ms
+guard, without caller cancellation, a deadline or peer EOF. Both tests also
+verify local retirement, a subsequent fixed-length read on the same runtime and
+original-parent reclamation. Valid chunked bodies and mixed-case slowly
+fragmented heads likewise reject before waiting for body/framing completion.
+These refusal tests do not qualify independent trailer decoding.
+
+A real-socket Ingress test directly observes zero credit, short/large reads
+sharing 4096 bytes per callback, eight callbacks sharing one 32768-byte wire
+total and no read of byte 32769. This qualifies the wrapper's gate; successful
+exact-limit HTTP chunked framing remains unimplemented. Additional supported
+partial-header/fixed/close responses exercise cancellation, dropped tickets,
+deadlines, occupancy refusal with original input and reuse. Two controlled
+fixed-body completion orders test cancel-before-progress and result-before-cancel.
+These are focused interleavings, not comprehensive race or pressure evidence.
 
 Completion still requires successful chunked/trailer envelope qualification;
 real exact/one-over trailer and wire/framing cases; comprehensive SDK buffer/
