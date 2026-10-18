@@ -975,7 +975,7 @@ completion_evidence_path = "docs/evidence/WP-400-consumer-resource-ownership.tom
 id = "WP-600-HTTP-CONSUMER-PROPERTY-READ"
 work_package = "WP-600"
 sequence = 600
-status = "in-progress"
+status = "complete"
 # Original PR #191 admission remains historical authority for its original scope.
 # PR #198 independently accepted the parser-policy amendment at its exact head.
 admission_status = "admitted"

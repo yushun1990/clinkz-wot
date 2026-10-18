@@ -75,19 +75,25 @@ A separate minimal `ObserveProperty` proof remains required before broad
 subscription/emission expansion. The existing WP-400 multi-owner/multi-route
 checkpoint is package evidence and is not another global architecture gate.
 
+The admitted `WP-600-HTTP-CONSUMER-PROPERTY-READ` tranche is complete at its
+independently accepted exact head. The WP-600 package remains planned in the
+work-package index. The production HTTP Producer route and public
+Consumer-to-Producer loop, followed by separate HTTPS/security evidence, remain
+on the critical path. Embedded qualification and v1 release readiness remain
+separate.
+
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
 advance the frontier safely.
 
 ## Critical Path
 
-1. Complete [ADR-0023's admitted resource-ownership migration](docs/ADRs/0023-resource-ownership-and-policy-boundaries.org)
-   for the narrow Consumer path, preserving engine admission, cleanup funding,
-   and the successor's independent production-completion evidence. Then admit
-   and complete the Host HTTP Consumer Property Read target under ADR-0013,
-   using the passed Consumer gate and matching completed predecessors.
-   Choose and qualify concrete HTTP SDKs during Binding implementation.
-   The existing WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
+1. The admitted [ADR-0023 resource-ownership migration](docs/ADRs/0023-resource-ownership-and-policy-boundaries.org)
+   for the narrow Consumer path and the first Host HTTP Consumer Property Read
+   tranche are complete, with engine admission, cleanup funding and the
+   independent production-completion evidence preserved. Concrete HTTP SDKs
+   have been selected and qualified for this Consumer scope. The existing
+   WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
 2. Add the production HTTP Producer route/permit/response path and public
    bidirectional loop, then HTTPS/trust/security evidence before production
    release. Keep this real integration ahead of unrelated broad binding work.

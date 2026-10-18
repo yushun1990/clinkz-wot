@@ -7,11 +7,11 @@ implementation_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
 verification_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
 fixture_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
 recorded_on = "2026-10-18"
-status = "partial"
+status = "passed"
 acceptance = "github-pr:193#pullrequestreview-5561188464"
 accepted_ref = "41619afee864cb6962920cca24ad57ab058bcc51"
 admission_review = "github-pr:191#issuecomment-6230142316"
-assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and its review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. PR #196 review 5561667209 accepts the SDK incompatibility diagnosis but finds the attempted chunked enablement nonconforming. framing_slice retains that rejected candidate's observations; framing_slice.review_correction owns the restored raw-head refusal, active unfinished-trailer regressions, direct ingress gate and supported fixed/close lifecycle evidence. parser_policy_amendment records the docs-only ADR-0013 amendment prompted by PR #197 review 5562587383 and independently accepted at exact head a7acfa6c4779ce803c145babf653bd53e7ceebcb by PR #198 review 5562750022. Its admission is restored within the existing in-progress tranche; prior 16/2048 and SDK-correction-only completion recommendations retain historical scope. stock_hyper_v4 records the implemented stock Hyper successor under that admission, with real public Runtime framing/lifecycle/identity tests and separately scoped buffering observations. PR #200 review 5562973765 independently accepts exact head 39fba873cb56f6489401d985ea122ab305cd0f24 as partial production progress. lifecycle_pressure records the subsequent connect-availability defect, private v5 diagnostic identity and real-transport pressure/race evidence. PR #201 review 5563185669 independently accepts exact head 9f2219146201f790493da037b90aa2d3bd3f8113 as partial progress. runtime_qualification below adds the remaining fault, independent-owner and native-stack/disposal observations and repairs the feature-test blocker; its completion_assessment is the current assessment. No gate or tranche status changes."
+assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and its review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. PR #196 review 5561667209 accepts the SDK incompatibility diagnosis but finds the attempted chunked enablement nonconforming. framing_slice retains that rejected candidate's observations; framing_slice.review_correction owns the restored raw-head refusal, active unfinished-trailer regressions, direct ingress gate and supported fixed/close lifecycle evidence. parser_policy_amendment records the docs-only ADR-0013 amendment prompted by PR #197 review 5562587383 and independently accepted at exact head a7acfa6c4779ce803c145babf653bd53e7ceebcb by PR #198 review 5562750022. Its admission is restored within the existing in-progress tranche; prior 16/2048 and SDK-correction-only completion recommendations retain historical scope. stock_hyper_v4 records the implemented stock Hyper successor under that admission, with real public Runtime framing/lifecycle/identity tests and separately scoped buffering observations. PR #200 review 5562973765 independently accepts exact head 39fba873cb56f6489401d985ea122ab305cd0f24 as partial production progress. lifecycle_pressure records the subsequent connect-availability defect, private v5 diagnostic identity and real-transport pressure/race evidence. PR #201 review 5563185669 independently accepts exact head 9f2219146201f790493da037b90aa2d3bd3f8113 as partial progress. runtime_qualification below adds the remaining fault, independent-owner and native-stack/disposal observations and repairs the feature-test blocker; its completion_assessment records the author assessment at that stage. Those prior evidence revisions made no gate or tranche status changes; the current exact-head completion projection is recorded separately below."
 source_revision_rule = "The shared amendment production and primary regression changes are committed at implementation_ref. production_slice, framing_slice and their review_correction tables each name exact source revisions. Earlier observations retain historical scope; framing_slice's rejected candidate is not active production authority or an accepted guarantee. Its review_correction records the subsequent safe scope. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Evidence-only edits do not change production or fixtures. Each verification row retains its actual revision and provenance. parser_policy_amendment describes its docs-only revision: production/committed tests/lock at that revision equal base_ref from that table, with Transfer-Encoding refused. stock_hyper_v4 names the subsequent production/fixture checkpoint and supersedes refusal as current behavior; earlier measurements remain historical. Its standalone SDK probes are documentation-extracted counterexamples, not enabled production or transferred fork measurements."
 
 [scope]
@@ -58,17 +58,20 @@ tests = [
 
 [[evidence]]
 key = "http-consumer-property-read"
-execution_status = "partial"
+execution_status = "passed"
+acceptance_status = "accepted"
 limitation = "stock_hyper_v4 implements successful stock Hyper fixed/chunked/trailer/close reads through the existing public Runtime, two distinct source-free targets and 100 alternating reads with per-read FD/account return. PR #200 independently accepted that production slice. lifecycle_pressure renews it with the independently accepted private v5 diagnostic correction. runtime_qualification supplies the remaining scoped completion candidate; independent tranche completion acceptance remains open. Earlier partial/refusal/fork results retain historical provenance."
 
 [[evidence]]
 key = "http-resource-lifecycle"
-execution_status = "partial"
+execution_status = "passed"
+acceptance_status = "accepted"
 limitation = "stock_hyper_v4 renews accepted parser-envelope production tests, unfinished rejection, declaration interoperability, call-owned retirement/cancellation/reuse and original-account release, plus actual buffer/growth/overlap/disposal observations. lifecycle_pressure adds deterministic first-cause/result/expiry orders under exhausted parent capacity, raw-call allocation refusal, FD exhaustion and retirement/reuse. runtime_qualification adds the remaining representative fault/independent-owner/native-stack/disposal observations and requests independent assessment. Universal SDK heap/stack bounds are not required. Historical independent 16/2048 incompatibility controls retain historical scope."
 
 [[evidence]]
 key = "http-authoring-feature-conformance"
-execution_status = "partial"
+execution_status = "passed"
+acceptance_status = "accepted"
 limitation = "stock_hyper_v4 records the independent downstream registry-SDK application, applicable prechecks, Consumer/Producer/portable/workspace/feature/authority runs and normal dependency graphs at their actual source. runtime_qualification repairs the unfiltered Servient feature-test blocker and renews applicable regressions. Independent same-revision completion acceptance remains open. Portable evidence applies to shared libraries, not embedded HTTP; prior failure/acceptance records retain historical scope."
 
 [independent_review]
@@ -1379,3 +1382,28 @@ commands = [
 ]
 result = "passed"
 observation = "Authority/DAG/API/ADR/Directory/legacy checks, 196 resource fields/3 profiles and 66 performance cases pass. Those cases exclude transport I/O. Strict HTTP Clippy and source formatting pass; unchanged shared warnings do not become a whole-workspace strict Clippy claim. PR #201 reviewed/merged tree equality is checked; production, dependency and state files equal base. Final docs/TOML and authority/hygiene are renewed before submission."
+
+[completion_projection]
+status = "accepted"
+recorded_on = "2026-10-18"
+acceptance = "github-pr:202#pullrequestreview-5563367696"
+reviewed_ref = "db66ec1589036880d86624cf6d1270a91fccb85d"
+reviewed_base_ref = "5bdd4b629eea1c0ca219134d9dbdbb7c356734d2"
+merge_ref = "0c5d2b5272c610ab7912803ed8f2355558cd8066"
+verdict = "Independent technical completion acceptance; no blocking or additional actionable findings."
+scope = "Completion of WP-600-HTTP-CONSUMER-PROPERTY-READ within the admitted cleartext IP/default GET/NoSec/JSON Host Consumer boundary. The reviewer independently concluded that the four registered completion evidence keys are satisfied."
+evidence_keys = [
+    "http-form-eligibility",
+    "http-consumer-property-read",
+    "http-resource-lifecycle",
+    "http-authoring-feature-conformance",
+]
+scope_exclusions = [
+    "WP-600 package completion",
+    "HTTP Producer integration and the bidirectional Consumer-to-Producer loop",
+    "HTTPS, trust and security qualification",
+    "Embedded or hardware qualification",
+    "v1 release readiness",
+    "Existing architecture-gate verdict changes",
+]
+history = "The pre-completion evidence, including runtime_qualification candidate status and open-obligation notes, retains its recorded source revisions and historical scope. This exact-head acceptance supersedes that pending state for this tranche and closes the aggregate evidence without relabeling earlier partial or rejected results."
