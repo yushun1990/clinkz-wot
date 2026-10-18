@@ -57,6 +57,13 @@ fn engine_with_targets(
     a: String,
     b: String,
 ) -> Engine<impl Fn() -> (Option<CleanupOutcome>, [u64; 4])> {
+    engine_with_clock(a, b, Arc::new(Clock(Instant::now())))
+}
+fn engine_with_clock(
+    a: String,
+    b: String,
+    clock: Arc<dyn RuntimeClock + Send + Sync>,
+) -> Engine<impl Fn() -> (Option<CleanupOutcome>, [u64; 4])> {
     let policy = policy();
     let parent = Arc::new(Mutex::new(policy.parent_accounts()));
     let registration = try_consumer_registration(
@@ -66,13 +73,9 @@ fn engine_with_targets(
         600,
     )
     .unwrap();
-    let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
-        registration,
-        policy,
-        Arc::new(Clock(Instant::now())),
-        parent.clone(),
-    )
-    .unwrap_or_else(|e| panic!("provision: {:?}", e.error()));
+    let (runtime, observer) =
+        ConsumerPropertyReadRuntime::try_new(registration, policy, clock, parent.clone())
+            .unwrap_or_else(|e| panic!("provision: {:?}", e.error()));
     let thing: clinkz_wot_td::thing::Thing = serde_json::from_value(serde_json::json!({
         "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"real HTTP", "id":"urn:real-http",
         "security":["none"], "securityDefinitions":{"none":{"scheme":"nosec"}},

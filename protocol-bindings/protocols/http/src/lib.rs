@@ -24,7 +24,7 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v4\0",
+    "clinkz-http-ip-v5\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET;NoSec;200;json-exact;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
@@ -36,7 +36,8 @@ const PRIVATE_POLICY: &[u8] = concat!(
     "forbidden-trailer=content-type,content-length,transfer-encoding,content-encoding,trailer,upgrade,connection,host,te;",
     "noTEadvertisement;single-chunked;noTEandCL;singleCL;",
     "call-owned-driver;noSpawn;local-drop-before-settlement;noNetworkWait;",
-    "SDK-disposal-may-allocate;noPool;noRetry;noTLS;noDNS"
+    "SDK-disposal-may-allocate;noPool;noRetry;noTLS;noDNS;",
+    "connect-io=DeploymentFailure"
 ).as_bytes();
 const PRIVATE: [u8; 32] = sha2_const_stable::Sha256::new()
     .update(PRIVATE_POLICY)
@@ -65,14 +66,12 @@ impl HttpConsumerConfig {
 }
 
 fn error(code: u16, cause: &'static str) -> CoreError {
+    resource_error(code, cause, ResourceFailureDomain::BindingPolicy)
+}
+fn resource_error(code: u16, cause: &'static str, domain: ResourceFailureDomain) -> CoreError {
     CoreError::Binding(
         ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
-            .with_resource_failure(
-                BindingConfigurationDigest::new(PRIVATE),
-                ResourceFailureDomain::BindingPolicy,
-                None,
-                None,
-            )
+            .with_resource_failure(BindingConfigurationDigest::new(PRIVATE), domain, None, None)
             .with_redacted_cause(code, cause),
     )
 }

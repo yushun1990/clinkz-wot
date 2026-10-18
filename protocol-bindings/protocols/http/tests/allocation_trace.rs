@@ -29,12 +29,25 @@ thread_local! {
     // after acceptance is the fallible body reservation, not SDK internals.
     static DENY_NEXT_BODY: Cell<bool> = const { Cell::new(false) };
     static BODY_REFUSALS: Cell<usize> = const { Cell::new(0) };
+    static DENY_NEXT_CALL: Cell<bool> = const { Cell::new(false) };
+    static CALL_REFUSALS: Cell<usize> = const { Cell::new(0) };
 }
 struct Allocator;
 #[global_allocator]
 static ALLOCATOR: Allocator = Allocator;
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // x86_64's measured 288/8 raw Call box is fallibly constructed before
+        // any SDK progress. The separate test asserts this refusal was reached.
+        if layout.size() == 288
+            && layout.align() == 8
+            && DENY_NEXT_CALL
+                .try_with(|deny| deny.replace(false))
+                .unwrap_or(false)
+        {
+            CALL_REFUSALS.with(|count| count.set(count.get() + 1));
+            return std::ptr::null_mut();
+        }
         if layout.size() == 4096
             && layout.align() == 1
             && DENY_NEXT_BODY
@@ -88,6 +101,47 @@ unsafe impl GlobalAlloc for Allocator {
 // Keep the application/peer implementation in one place. The normal tests are
 // imported only in the real_peer integration target, not repeated here.
 include!("support/application.rs");
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    recipe().block_on(async {
+        let (runtime, handle, observer, parent) = engine(port);
+        let baseline: Vec<_> = parent.lock().unwrap().iter().map(|a| a.used()).collect();
+        CALL_REFUSALS.with(|n| n.set(0));
+        DENY_NEXT_CALL.with(|deny| deny.set(true));
+        let rejected = handle.read_property("a", InteractionOptions::new().with_timeout(Duration::from_millis(321)), &mut work()).err().expect("raw box refusal");
+        assert!(!DENY_NEXT_CALL.with(|deny| deny.replace(false)), "raw box allocation was not reached");
+        assert_eq!(CALL_REFUSALS.with(Cell::get), 1);
+        let ((options, original), error) = rejected.into_parts();
+        assert_eq!(options.timeout, Some(Duration::from_millis(321)));
+        assert_eq!(error.error().context().cause_code(), Some(600), "the raw HTTP constructor, not Core's envelope, must reject");
+        assert_eq!(error.error().context().plan(), Some(original.as_ref().unwrap().plan_id()));
+        assert_eq!(error.error().context().resource_failure().unwrap().1, ResourceFailureDomain::DeploymentFailure);
+        drop((options, original, error));
+        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+        listener.set_nonblocking(false).unwrap();
+        let peer = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            assert!(request(&mut socket).starts_with("GET /b HTTP/1.1\r\n"));
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n29").unwrap();
+            assert_retired(&mut socket);
+        });
+        let mut retry = handle.read_property("b", InteractionOptions::new(), &mut work()).unwrap();
+        assert_eq!(&*take(&mut retry).await.unwrap().data().unwrap().body, b"29");
+        drop(retry);
+        peer.join().unwrap();
+        drop(handle);
+        shutdown(&runtime);
+        drop(runtime);
+        drop(observer);
+        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+    });
+}
 
 #[test]
 fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
