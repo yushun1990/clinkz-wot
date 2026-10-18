@@ -168,8 +168,8 @@ On Linux, `tests/fd_pressure.rs` runs a disposable child with `RLIMIT_NOFILE=128
 It exercises preacceptance input recovery, postacceptance socket creation failure
 (604/DeploymentFailure), silent-peer cancellation while descriptors are exhausted,
 connection refusal and successful reuse. It changes no parent process limit.
-On x86_64, the allocation fixture also refuses the fallible 288-byte raw-call
-box and verifies request recovery, occupancy release and retry. SDK infallible
+The allocation fixture also measures and refuses the fallible raw-call box
+and verifies request recovery, occupancy release and retry. SDK infallible
 OOM remains a Host process-failure assumption.
 
 PR #200 independently accepted the v4 production slice as partial progress.

@@ -11,6 +11,7 @@ struct Trace {
     live: usize,
     peak: usize,
     largest: usize,
+    last_layout: (usize, usize),
     blocks: [(usize, usize); 512],
     sizes: [(usize, usize); 64],
 }
@@ -20,6 +21,7 @@ const EMPTY: Trace = Trace {
     live: 0,
     peak: 0,
     largest: 0,
+    last_layout: (0, 0),
     blocks: [(0, 0); 512],
     sizes: [(0, 0); 64],
 };
@@ -29,7 +31,7 @@ thread_local! {
     // after acceptance is the fallible body reservation, not SDK internals.
     static DENY_NEXT_BODY: Cell<bool> = const { Cell::new(false) };
     static BODY_REFUSALS: Cell<usize> = const { Cell::new(0) };
-    static DENY_NEXT_CALL: Cell<bool> = const { Cell::new(false) };
+    static DENY_NEXT_CALL: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
     static CALL_REFUSALS: Cell<usize> = const { Cell::new(0) };
 }
 struct Allocator;
@@ -37,13 +39,18 @@ struct Allocator;
 static ALLOCATOR: Allocator = Allocator;
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // x86_64's measured 288/8 raw Call box is fallibly constructed before
-        // any SDK progress. The separate test asserts this refusal was reached.
-        if layout.size() == 288
-            && layout.align() == 8
-            && DENY_NEXT_CALL
-                .try_with(|deny| deny.replace(false))
-                .unwrap_or(false)
+        // Refuse only the measured constructor Layout, before SDK progress.
+        // Feature unification can change the raw call representation.
+        if DENY_NEXT_CALL
+            .try_with(|deny| {
+                if deny.get() == Some((layout.size(), layout.align())) {
+                    deny.set(None);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false)
         {
             CALL_REFUSALS.with(|count| count.set(count.get() + 1));
             return std::ptr::null_mut();
@@ -62,6 +69,7 @@ unsafe impl GlobalAlloc for Allocator {
             let mut t = t.borrow_mut();
             if t.armed && !p.is_null() {
                 t.count += 1;
+                t.last_layout = (layout.size(), layout.align());
                 let slot = t.sizes.iter_mut().find(|(n, _)| *n == layout.size());
                 if let Some((_, count)) = slot {
                     *count += 1;
@@ -102,7 +110,6 @@ unsafe impl GlobalAlloc for Allocator {
 // imported only in the real_peer integration target, not repeated here.
 include!("support/application.rs");
 
-#[cfg(target_arch = "x86_64")]
 #[test]
 fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -111,10 +118,22 @@ fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
     recipe().block_on(async {
         let (runtime, handle, observer, parent) = engine(port);
         let baseline: Vec<_> = parent.lock().unwrap().iter().map(|a| a.used()).collect();
+        // The final allocation in Client::invoke is HostBindingCallBox::try_new.
+        // Measure this graph's actual Layout using an accepted, unpolled call;
+        // the rejection's cause below independently checks the raw owner.
+        TRACE.with(|t| *t.borrow_mut() = Trace { armed: true, ..EMPTY });
+        let mut probe = handle.read_property("a", InteractionOptions::new(), &mut work()).unwrap();
+        let layout = TRACE.with(|t| { let mut t = t.borrow_mut(); t.armed = false; t.last_layout });
+        assert_ne!(layout.0, 0);
+        probe.cancel().unwrap();
+        assert!(matches!(take(&mut probe).await, Err(CoreError::Cancelled(_))));
+        drop(probe);
+        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        println!("fallible raw-call allocation Layout={layout:?}");
         CALL_REFUSALS.with(|n| n.set(0));
-        DENY_NEXT_CALL.with(|deny| deny.set(true));
+        DENY_NEXT_CALL.with(|deny| deny.set(Some(layout)));
         let rejected = handle.read_property("a", InteractionOptions::new().with_timeout(Duration::from_millis(321)), &mut work()).err().expect("raw box refusal");
-        assert!(!DENY_NEXT_CALL.with(|deny| deny.replace(false)), "raw box allocation was not reached");
+        assert!(DENY_NEXT_CALL.with(|deny| deny.replace(None)).is_none(), "raw box allocation was not reached");
         assert_eq!(CALL_REFUSALS.with(Cell::get), 1);
         let ((options, original), error) = rejected.into_parts();
         assert_eq!(options.timeout, Some(Duration::from_millis(321)));
