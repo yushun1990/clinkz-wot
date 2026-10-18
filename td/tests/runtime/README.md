@@ -108,7 +108,7 @@ one span advance, and N + 10 streaming actions. These expectations require
 417 main-pass UriBytes and 4,155/16,443 for the long cases. Both URI class
 oracles are checked at each Form and feed the exact shared lifetime boundary.
 The one-unit-short sweep retains multi-class checks. Both independent zero-class
-sweeps cover all 287 positions without selecting them from reported debits.
+sweeps cover all 290 positions without selecting them from reported debits.
 Zero-debit Pending retries contribute no accepted step; actions belonging only
 to other classes may progress and are recorded once. Each run then resumes and
 must reproduce the complete facts, class totals, step count and allocator trace.
@@ -118,9 +118,9 @@ Equal eventual totals cannot establish prepayment of an individual action: a
 two-byte write could debit one unit and recover the missing unit later. The
 fixed first Form therefore has an independent action-position oracle anchored
 to its public Form Ready event, without consulting either URI class debit.
-Insertion precedes Ready by ten actions: four `?x#f` bytes, four tail-span
-advances, UTF-8 completion and Finish. Padding precedes insertion by nine:
-seven shifted `//value` bytes, one shift-end transition and insertion itself.
+Insertion precedes Ready by eleven actions (4 + 4 + 1 + 1 + 1): four `?x#f`
+bytes, four tail-span advances, UTF-8 completion, Finish and paid Form metadata.
+Padding precedes insertion by nine: seven shifted `//value` bytes, one shift-end transition and insertion itself.
 At both positions, three one-output-unit retries run with URI storage read-only
 and require Pending, unchanged credit in every class and an identical allocator
 trace. Stores (including same-value stores) fault. Exactly two output units and

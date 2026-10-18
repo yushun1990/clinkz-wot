@@ -6,11 +6,12 @@ base_ref = "7e7ff219d0cd54d4fd031e56992f6f38812f8c4b"
 implementation_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
 verification_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
 fixture_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
-recorded_on = "2026-10-17"
+recorded_on = "2026-10-18"
 status = "partial"
-acceptance = "pending-independent-review"
+acceptance = "github-pr:193#pullrequestreview-5561188464"
+accepted_ref = "41619afee864cb6962920cca24ad57ab058bcc51"
 admission_review = "github-pr:191#issuecomment-6230142316"
-assessment = "Production shared TD/Core/Planning amendment and its executable regressions. This is the first implementation PR within the already admitted HTTP tranche. HTTP transport and full tranche completion are unimplemented. Executable success is not independent acceptance or predecessor reaffirmation; no gate status changes."
+assessment = "Production shared TD/Core/Planning amendment and its executable regressions. This is the first implementation PR within the already admitted HTTP tranche. HTTP transport and full tranche completion are unimplemented. Independent review 5561188464 accepts the shared amendment at accepted_ref against base_ref and reaffirms exactly the eight affected predecessors, with no blocking findings. Acceptance excludes HTTP implementation/SDK qualification and tranche completion; no gate status changes."
 source_revision_rule = "All production and primary regression changes are committed at implementation_ref. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Later evidence and impact-state edits do not change production or fixtures. Each verification row names the exact revision tested; historical predecessor evidence retains its original observations and acceptance references."
 
 [scope]
@@ -30,7 +31,7 @@ dependencies = "Existing lockfiles and manifests are unchanged, including Core's
 [[evidence]]
 key = "http-form-eligibility"
 execution_status = "passed"
-acceptance_status = "pending-independent-review"
+acceptance_status = "accepted"
 observations = [
     "The former pre-code form_metadata discriminator now calls the real public paid getter, owned plan scalar, checked configuration and closed compiler in std/no-default/async-no-std. It retains default, explicit GET, POST, header, unknown nested extension, response JSON/non-JSON, empty/nonempty additionalResponses, identity coding, empty subprotocol and empty/nonempty scopes, plus typed Form round trips.",
     "Zero-work polls cannot advance to Ready. The final metadata transition consumes exactly one DocumentNodes unit; zero-credit Ready retries preserve the scalar. Rewind reproduces both true and false facts without restoring lifetime credit. TD cancellation retains its first cause through acknowledge/rewind/retry. Complete original inspection/Basic and URI/resource tests pass.",
@@ -69,6 +70,16 @@ limitation = "SDK/parser input ceilings, wire/header/body/trailer and read-ahead
 key = "http-authoring-feature-conformance"
 execution_status = "partial"
 limitation = "Shared library and complete-owner regressions are executed below. Real HTTP authoring/deployment/dependency evidence and independent successor completion acceptance remain open. Portable cells exercise the shared amendment only."
+
+[independent_review]
+review = "github-pr:193#pullrequestreview-5561188464"
+reviewed_ref = "41619afee864cb6962920cca24ad57ab058bcc51"
+base_ref = "7e7ff219d0cd54d4fd031e56992f6f38812f8c4b"
+verdict = "Scoped acceptance: no blocking implementation findings."
+validation = "Rust 1.99.0, locked/offline: 933 passing test/doc-test cases across the reported cells; native TD runtime in both portable graphs; four fresh ARM normal-library builds and decoded layout pairs; separate API, ADR, Directory, resource, legacy, performance (66 fixtures/cases) and diff checks. The full authority command stopped at the pending predecessor impact projection and must be rerun after restoration."
+provenance_limits = "The reviewer did not independently rerun ARM execution, the mutation matrix, Rust 1.95 or the whole-workspace run; their submitted results retain their original provenance."
+nonblocking_finding = "P3, github-pr:193#discussion_r4305492181: correct td/tests/runtime/README.md to 290 lifecycle positions and an eleven-action Ready suffix including paid Form metadata. Documentation corrected in this administrative follow-up; executable fixture unchanged."
+completion_boundary = "Shared amendment and eight predecessor renewals only. HTTP implementation/SDK qualification and tranche completion remain open. Existing gate verdicts remain unchanged."
 
 [identity]
 encoding = "closed-consumer-default-json-forms-v1"
@@ -182,7 +193,8 @@ original_account_controls = "17 static and 19 Host nonzero original parent peaks
 shared_regression = "All original result backing/seal, request ownership, raw call construction, first-cause, late/unread result and transfer tests pass. New restricted normal/late Runtime result-taking also makes zero allocator requests. No new physical allocation is introduced by the scalar."
 
 [impact_review]
-status = "review-required"
+status = "reaffirmed"
+independent_acceptance = "github-pr:193#pullrequestreview-5561188464"
 affected_completed = [
     "WP-100-CONSUMER-VALIDATED-THING",
     "WP-200-CONSUMER-PROPERTY-READ-PLANNING",
@@ -193,7 +205,7 @@ affected_completed = [
     "WP-400-CONSUMER-PROPERTY-READ-RUNTIME",
     "WP-400-CONSUMER-RESOURCE-OWNERSHIP",
 ]
-disposition = "Renewed observations and semantic cases are proposed for independent scoped reaffirmation in this successor owner. Historical predecessor evidence and gate states remain unchanged. This author does not restore current or claim acceptance. There is no new admission cycle."
+disposition = "Independent review 5561188464 accepts these eight scoped renewals at accepted_ref. Restore only their current/reaffirmed impact dispositions. Historical predecessor evidence and gate states remain unchanged. HTTP remains admitted/in-progress; no new admission cycle or full tranche acceptance."
 td = "Renew lending/Ready/rewind/cancel, complete validation, lifetime/URI work, actual current owner and lent-event Layouts, allocation/resource controls."
 planning = "Renew source-free scalar and original selection/identity oracles, all-bounds barrier, actual plan/coordinate/build Layouts and whole-transaction reclaim/refusal."
 compiler_registration = "Renew unchanged strict/original owned vectors plus restricted vectors, closed issuers, captured actual client/compiler/adapter/support equality, callback costs, actual cursor/output/slot/temporary Layouts and all supported allocation refusals/substitutions."
