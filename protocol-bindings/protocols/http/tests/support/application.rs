@@ -140,3 +140,12 @@ fn shutdown(runtime: &ConsumerPropertyReadRuntime) {
     }
     panic!("shutdown stalled");
 }
+
+fn assert_retired(socket: &mut TcpStream) {
+    let mut byte = [0];
+    match socket.read(&mut byte) {
+        Ok(0) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
+        other => panic!("socket was not retired locally: {other:?}"),
+    }
+}
