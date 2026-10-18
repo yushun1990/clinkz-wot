@@ -50,10 +50,9 @@ depends_on = ["WP-100"]
 id = "WP-600"
 status = "planned"
 document = "docs/work-packages/WP-600-protocol-bindings.md"
-# Existing crate inventory. ADR-0022 selects prospective protocols/http creation
-# for the next exact admission; add its owner when that admitted manifest exists.
+# The real optional HTTP member implements the admitted Consumer tranche.
 # The retained Zenoh owner is deferred optional work, not a release dependency.
-owner_crates = ["planning", "protocol-bindings/protocols/zenoh"]
+owner_crates = ["planning", "protocol-bindings/protocols/zenoh", "protocol-bindings/protocols/http"]
 depends_on = ["WP-300"]
 
 [[package]]
@@ -992,8 +991,6 @@ requirements = [
     "STATE-INFLIGHT-001", "CLEANUP-RECORD-001", "HANDLE-DROP-001", "HOST-ASYNC-001",
     "ERR-TAXONOMY-001", "ERR-RETRY-001", "TIME-001", "CRATE-DEPS-001", "FEATURE-MATRIX-001",
 ]
-# The HTTP package is prospective; add its real manifest to WP-600's crate
-# inventory during admitted implementation. No placeholder is required here.
 owner_packages = ["clinkz-wot-td", "clinkz-wot-core", "clinkz-wot-planning", "clinkz-wot-binding-http"]
 feature_cells = ["std", "no-default", "async-no-std"]
 authoritative_artifacts = [
