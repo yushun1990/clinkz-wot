@@ -37,6 +37,21 @@ struct Ingress {
     wire: usize,
     allowance: Arc<AtomicUsize>,
 }
+fn forbidden_trailer(name: &str) -> bool {
+    [
+        "content-type",
+        "content-length",
+        "transfer-encoding",
+        "content-encoding",
+        "trailer",
+        "upgrade",
+        "connection",
+        "host",
+        "te",
+    ]
+    .iter()
+    .any(|field| name.eq_ignore_ascii_case(field))
+}
 fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "HTTP ingress rejected")
 }
@@ -68,19 +83,38 @@ impl Ingress {
                     return Err(invalid());
                 }
                 let mut media = 0;
+                let mut transfer = 0;
+                let mut lengths = 0;
+                let mut declares_trailers = false;
                 for header in response.headers.iter() {
-                    // Keep transfer framing disabled until the pinned SDK can
-                    // enforce the independent raw trailer limits before delivery.
-                    if [
-                        "transfer-encoding",
-                        "content-encoding",
-                        "trailer",
-                        "upgrade",
-                    ]
-                    .iter()
-                    .any(|name| header.name.eq_ignore_ascii_case(name))
+                    if ["content-encoding", "upgrade"]
+                        .iter()
+                        .any(|name| header.name.eq_ignore_ascii_case(name))
                     {
                         return Err(invalid());
+                    }
+                    if header.name.eq_ignore_ascii_case("transfer-encoding") {
+                        transfer += 1;
+                        if !header.value.eq_ignore_ascii_case(b"chunked") {
+                            return Err(invalid());
+                        }
+                    }
+                    if header.name.eq_ignore_ascii_case("trailer") {
+                        declares_trailers = true;
+                        for field in header.value.split(|b| *b == b',') {
+                            let field = std::str::from_utf8(field)
+                                .map_err(|_| invalid())?
+                                .trim_matches([' ', '\t']);
+                            // RFC 9110 list recipients ignore empty members.
+                            if field.is_empty() {
+                                continue;
+                            }
+                            if hyper::header::HeaderName::from_bytes(field.as_bytes()).is_err()
+                                || forbidden_trailer(field)
+                            {
+                                return Err(invalid());
+                            }
+                        }
                     }
                     if header.name.eq_ignore_ascii_case("content-type") {
                         media += 1;
@@ -89,6 +123,7 @@ impl Ingress {
                         }
                     }
                     if header.name.eq_ignore_ascii_case("content-length") {
+                        lengths += 1;
                         let length = std::str::from_utf8(header.value)
                             .ok()
                             .and_then(|v| v.parse::<u64>().ok())
@@ -98,7 +133,12 @@ impl Ingress {
                         }
                     }
                 }
-                if media != 1 {
+                if media != 1
+                    || transfer > 1
+                    || lengths > 1
+                    || (transfer != 0 && lengths != 0)
+                    || (declares_trailers && transfer == 0)
+                {
                     return Err(invalid());
                 }
                 self.head_done = true;
@@ -216,13 +256,24 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
         })?;
         while let Some(frame) = body.frame().await {
             let frame = frame.map_err(|_| error(606, "HTTP body rejected"))?;
-            let data = frame
-                .into_data()
-                .map_err(|_| error(606, "HTTP trailers rejected"))?;
-            if data.len() > BODY as usize - result.len() {
-                return Err(error(608, "HTTP body limit exceeded"));
+            match frame.into_data() {
+                Ok(data) => {
+                    if data.len() > BODY as usize - result.len() {
+                        return Err(error(608, "HTTP body limit exceeded"));
+                    }
+                    result.extend_from_slice(&data);
+                }
+                Err(frame) => {
+                    let trailers = frame
+                        .into_trailers()
+                        .map_err(|_| error(606, "HTTP frame rejected"))?;
+                    if trailers.keys().any(|name| forbidden_trailer(name.as_str())) {
+                        return Err(error(606, "HTTP trailer field rejected"));
+                    }
+                    // Trailer metadata never changes the primary media, status
+                    // or Core result. Stock Hyper checked the shared raw limits.
+                }
             }
-            result.extend_from_slice(&data);
         }
         Ok(result)
     };

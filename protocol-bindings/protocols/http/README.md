@@ -1,160 +1,162 @@
-# Host HTTP Consumer Property Read — first production slice
+# Host HTTP Consumer Property Read
 
-`clinkz-wot-binding-http` is an optional Cargo dependency, used directly with
-`ConsumerPropertyReadRuntime`. It does not change the umbrella facade or install
-an executor. `HttpConsumerConfig::for_cleartext_ip()` explicitly permits cleartext
-IP access. Keep this permission at the application boundary; there is no mutable
-installed-client escape. Registration construction performs no I/O.
+`clinkz-wot-binding-http` is an optional Cargo dependency used with the public
+`ConsumerPropertyReadRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
+permits cleartext IP access; `try_consumer_registration` constructs one complete,
+restricted Consumer-only registration without I/O. The closed compiler accepts
+metadata-free default GET / NoSec / effective `application/json` Forms.
 
-This candidate implements default GET / NoSec / effective `application/json`,
-HTTP/1.1, status 200, IPv4/IPv6 literals, fixed-length and close-delimited bodies.
-Only one call may occupy a registration, including its unread terminal result.
-Each read uses a fresh connection. The selected owned artifact supplies the exact
-path/query and Host authority. There is no source TD, selection, DNS, TLS, pool,
-redirect, retry, decompression, upgrade, background task or detached driver in
-this crate. Nonempty call URI variables and unsupported endpoint syntax reject
-with the original request before raw acceptance. The restricted closed compiler
-rejects additional Form metadata and non-JSON media before publication.
+The binding supports HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
+chunked and close-delimited bodies. One registration admits one call, including
+its unread terminal result. Each read owns a fresh connection and its driver.
+The selected immutable artifact supplies the exact path/query and Host authority.
+Nonempty URI variables and unsupported targets return the original request before
+raw acceptance. No TD rescan, DNS, TLS, pool, redirect, retry, decompression,
+upgrade, background task or detached driver is involved.
 
-**Transfer-Encoding and Trailer reject, including chunked responses.** This is a
-usable production implementation candidate within the existing admission, not
-completion of `WP-600-HTTP-CONSUMER-PROPERTY-READ`. Successful chunked/trailer
-qualification remains an obligation. Hyper's header-size setting also controls
-trailers; simply using its default trailer handling would not establish the
-admitted separate 16/2048 trailer envelope. No replacement HTTP parser is added.
+This implementation uses the existing admission restored after PR #199 and the
+accepted [parser-policy amendment](../../../docs/work-packages/WP-600-http-property-read-target.md#http-parser-policy-amendment).
+It is production progress submitted for independent review; the tranche remains
+in progress. Historical v1 refusal and the unmerged PR #197 fork are not evidence
+for the new stock SDK paths.
 
-The raw-head refusal must remain until a corrected pinned SDK enforces trailer
-ingress independently of the 32/8192 main-header limits. Rejecting a completed
-trailer frame is too late: an unfinished oversized trailer can otherwise remain
-buffered indefinitely. `tests/sdk_limits.rs` preserves the SDK counterexamples:
-shared header/trailer settings, an exclusive trailer-byte comparison, raw
-whitespace lost in delivered maps, and a fixed cumulative chunk-extension limit
-of 16384 bytes even when the complete response is below 32768 wire bytes. The
-smallest SDK correction is independent inclusive trailer limits and extension
-controls compatible with the cumulative wire gate. The public Runtime and
-call-owned connection architecture can remain.
+## Framing policy
 
-## Application runtime
+Hyper `=1.12.0` is an **unmodified crates.io dependency**, with `client,http1` and
+no default features. The workspace manifest/lock and dependency locations are
+unchanged. No Cargo patch or vendored SDK is needed in an external application.
 
-Run `cargo run --locked -p clinkz-wot-binding-http --example read_property --
-TD.json PROPERTY` with an application-owned typed TD file. The example supplies
-a checked owned Host policy, original parent accounts, monotonic clock, manual
-progress, result-taking, shutdown and reclamation. It destroys the Thing after
-consume. Loading that local file is application input, not bounded TD ingestion.
+| Input | Enforced policy |
+| --- | --- |
+| Main response head | At most 32 field lines and 8192 raw bytes inclusive, including status line and final CRLF |
+| Decoded body | At most 4096 bytes, checked before each copy |
+| Trailer section | At most 32 field lines, duplicates included; raw bytes **less than 8192** including final CRLF |
+| Chunk extensions | Hyper's cumulative counter **less than 16384**, across all data chunks and the final zero chunk |
+| Complete response wire | At most 32768 bytes, including every framing phase |
+| Socket ingress | At most 4096 bytes per read and per paid BindingPolls callback |
 
-The application owns Tokio 1.52.3 and must enter an I/O-enabled runtime while
-starting reads, then keep it alive and driving I/O throughout their lifetime.
-A current-thread runtime must be driven by `Runtime::block_on`; merely entering
-it does not drive its reactor. The example uses `enable_io().enable_time()`;
-time is for application polling sleeps. The binding uses the supplied Servient
-clock/deadline and needs no Tokio timer or spawned task. The application must
-provide wake/poll progress and clock progress for slow peers and deadlines.
+The raw-head wrapper uses httparse `=1.10.1` before handing bytes to Hyper. It
+rejects unsupported statuses/versions, informational responses, content encoding,
+upgrades, nonexact/duplicate JSON media, duplicate Content-Length, any coding
+other than a single `chunked`, and TE/Content-Length ambiguity. A `Trailer` header
+requires chunked framing. SP/HTAB around list members is removed and empty members
+are ignored, including `Trailer:` and `Trailer: X,`. Nonempty members must be
+valid field names. This implements the accepted [list recipient rule](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.1.2).
 
-No entered runtime rejects before raw acceptance. Tokio lacks a public
-nonpanicking enabled-I/O query, so acceptance probes reactor registration with
-one unconnected, nonblocking socket, immediately dropped. It does not bind,
-connect, read or write. A disabled-I/O panic is caught under unwind; the panic
-hook can still run. Runtime shutdown after acceptance, `panic=abort`, process
-OOM/abort and OS termination have no in-process reporting guarantee. No runtime
-or thread is created by the library. Deployment owns shared reactor allocations,
-thread-local caches, stacks, allocator fragmentation, OS socket buffers and FD/
-process availability. The probe's extra temporary FD must be available.
+Permitted announced or unannounced trailers are discarded. Neither declarations
+nor actual trailers may contain `content-type`, `content-length`,
+`transfer-encoding`, `content-encoding`, `trailer`, `upgrade`, `connection`, `host`
+or `te`, matched without case. Trailers never modify status, media, routing,
+framing or Core results and provide no integrity/authentication claim. Requests
+send `Connection: close` and do **not** advertise `TE: trailers`.
 
-## Enforced ingress and lifetime
+Hyper owns all chunk framing; no replacement parser is added. Its builder uses
+`max_headers(32)`, `max_header_size(8192)`, `max_buf_size(8192)` and `writev(false)`.
+The shared settings reject trailer byte 8192 and a completed 33rd field without
+waiting for section termination or peer EOF. A partial 33rd field remains under
+the byte/wire bounds. Hyper counts extension octets after the introducing `;`,
+excluding the terminating CRLF; the counter never resets between chunks.
+Being below the wire limit alone does not guarantee that another limit permits
+a particular framing shape. There is no drain or reconnect after rejection.
 
-The production ingress wrapper limits actual socket reads to 4096 bytes total
-per paid BindingPolls callback, and each read to at most 4096. A cumulative wire
-counter never resets and stops reads at 32768. It retains one fixed 8192-byte raw
-head, inspecting it with pinned httparse before handing bytes to Hyper. The
-32-header array rejects overflow, including duplicate field lines; exact header
-bytes include status line and terminating CRLF. Unsupported 1xx, versions,
-status, media, coding and framing reject before Hyper can normalize or hide them.
-Media is exactly `application/json`, with no parameters or duplicate field.
-There is no implicit drain after rejection.
+## Identity, buffering and ownership
 
-Hyper owns HTTP framing. Its builder uses `max_headers(32)`,
-`max_header_size(8192)`, `max_buf_size(8192)` and `writev(false)`; no permissive
-parser options or HTTP/2 features. The body destination reserves 4096 bytes
-fallibly and checks every frame before copying. Content-Length over 4096 rejects
-in the raw head. Unknown-length overflow rejects after bounded read-ahead.
-The fixed raw head (8192), per-read temporary (4096), body destination (4096),
-Hyper read storage and header structures may overlap. Hyper's buffer setting is
-a growth strategy, not a statement of exact heap capacity; its backing/slices,
-channel state and allocator overhead must not be inferred from useful byte
-length. The wire/read gate bounds received input regardless of SDK buffering.
+The actual private encoding is `clinkz-http-ip-v4\0` followed by the exact ASCII
+policy in `src/lib.rs::PRIVATE_POLICY`. It captures pinned SDK versions/features,
+parser comparisons, extension and wire/read limits, declaration/discard/override
+behavior, advertisement, concurrency/growth, retirement/disposal and endpoint
+restrictions. The existing checked restricted configuration derives from its
+SHA-256, preserving shared encodings, schema 2 and result limits. Support, client,
+compiler, complete registration, selected artifact and diagnostics agree.
+Historical v1/v3 and unrestricted configurations cannot substitute in either
+direction; the tests recover original owners/requests and verify no connection.
+A captured registration or old artifact is never relabeled to enable v4.
 
-The complete raw call owns its connection future and the Hyper driver. Both are
-polled together in one future. Return, cancellation and drop destroy that future
-and local socket before terminal settlement/release; no join, network wait,
-reconnect, replacement work or unowned tail is needed. This says nothing about
-whether the remote read executed. Root loss preserves Servient's precommitted
-residual report even when the socket was locally retired.
+The wire counter and per-callback credit never refill by parser phase. The fixed
+8192-byte raw head, 4096-byte read scratch and fallibly reserved 4096-byte body
+may overlap Hyper read storage, raw trailer storage, parsed maps and body-channel
+backing. `max_buf_size` controls a reserve strategy; it is not an allocator
+capacity ceiling. Stock source inspection establishes adaptive read reservation,
+a growable trailer BytesMut starting at 64 bytes, raw-byte comparison **after**
+storing the rejecting byte, a temporary httparse array and normalized HeaderMap,
+and a single queued body frame. Bytes slices can retain their original backing.
 
-Core receives only ordinary untrusted outputs, then applies the existing seals
-and validation. Body is a complete `Arc<[u8]>`; media capacity is 16, with a second
-16-byte coding capacity promised conservatively. Engine funding includes full
-Arc control/alignment and result overlap through the public owned policy. The
-raw carrier reports its concrete Layout; protocol future, socket and parser
-backing remain binding-private. Registration declares a conservative client/Arc
-allowance; complete Core compiler/envelope and engine costs remain owned by
-existing public admission. The 16384-byte callback declaration is a conservative
-configured allowance, not a measured maximum native stack or transitive SDK
-heap certificate. Native stack peak and all SDK allocation-failure/disposal paths
-remain unqualified completion evidence.
+`tests/allocation_trace.rs` measures the actual public production path, including
+simultaneous maximum input, unfinished trailer rejection and cancellation. It
+records allocation sizes/counts, retained/peak/largest requests, callback
+observations and complete release after the application runtime is destroyed.
+See the versioned [evidence](../../../docs/evidence/WP-600-http-consumer-property-read.toml)
+for measured values. These observations distinguish received bytes, physical
+backing, temporary overlap and engine-account funding. They do not certify
+universal SDK memory/native-stack/disposal bounds or recovery from process OOM.
 
-## Executable evidence and remaining work
+The complete call owns the connection future/driver until local retirement.
+Return, cancellation and drop destroy them before terminal settlement/release,
+without a network wait, join or unowned tail. Remote execution is unknown.
+SDK-local disposal may allocate; engine cancel/status and result-taking allocate
+zero on the measured paths. Tokio can retain shared deregistration-queue backing
+until reactor progress or destruction, after the original socket has closed.
 
-Run `cargo test --locked --offline -p clinkz-wot-binding-http --all-targets --
---test-threads=1 --nocapture`. Python 3 is needed for the second independent peer.
-The other peer writes raw TCP bytes and uses neither Hyper nor httparse. Tests
-exercise public registration/consume/select/read/cancel/drop/shutdown, destroyed
-TD input, 100 alternating targets, fresh connections, exact/one-over 32/8192
-headers and 4096 bodies, fragmented fixed/close bodies, malformed/truncated and
-silent peers, statuses/encodings/1xx, explicit chunk rejection, no reconnect,
-deadlines, drain, root loss, unchanged rejected variables and parent reclamation.
-The allocator observer records one 4096-byte public result path, including typed
-input construction, and checks no tracked backing survives runtime destruction.
-A silent-peer cancellation separately measures SDK retirement allocations and
-checks that engine cancel/status and result-taking request no allocations. On
-the measured build SDK retirement requested four allocations (113-byte peak),
-including Tokio's deregistration queue and Hyper's dispatch error. Tokio retains
-32 bytes of runtime-owned queue backing until a reactor turn/destruction. The
-FD and connection future have already retired; the application must continue
-driving the shared runtime. These are path observations, not universal disposal
-guarantees or an exact SDK heap bound.
+Core still validates ordinary untrusted outputs and installs existing seals.
+Engine funding covers complete Arc body/control/alignment, both declared 16-byte
+media/coding capacities and normal/late overlap. Original parent accounts and
+prebacked cancellation/cleanup remain live until release. The concrete call
+reports its measured Layout; protocol backing remains Binding-private. The
+16384-byte transient declaration is a configured allowance, **not** a measured
+maximum native stack or transitive SDK heap certificate.
 
-The public allocation-refusal regression rejects one actual fallible 4096-byte
-body reservation after request acceptance. The error retains cause 607 and
-`DeploymentFailure` while request context is attached. Its decoded-body overflow
-control retains cause 608 and `BindingPolicy`. Both connections retire, a later
-read succeeds on the same runtime, and the original parent accounts reclaim.
-This qualifies that supported refusal; other SDK allocation paths remain open.
+## Application deployment
 
-Active public regressions send 17 complete trailer fields or one 4096-byte
-unfinished trailer field while withholding the final empty line and keeping the
-peer open. The binding must reject through real wakes within the test's 250 ms
-guard, without caller cancellation, a deadline or peer EOF. Both tests also
-verify local retirement, a subsequent fixed-length read on the same runtime and
-original-parent reclamation. Valid chunked bodies and mixed-case slowly
-fragmented heads likewise reject before waiting for body/framing completion.
-These refusal tests do not qualify independent trailer decoding.
+Run the application example against a typed local TD file:
 
-A real-socket Ingress test directly observes zero credit, short/large reads
-sharing 4096 bytes per callback, eight callbacks sharing one 32768-byte wire
-total and no read of byte 32769. This qualifies the wrapper's gate; successful
-exact-limit HTTP chunked framing remains unimplemented. Additional supported
-partial-header/fixed/close responses exercise cancellation, dropped tickets,
-deadlines, occupancy refusal with original input and reuse. Two controlled
-fixed-body completion orders test cancel-before-progress and result-before-cancel.
-These are focused interleavings, not comprehensive race or pressure evidence.
+```sh
+cargo run --locked -p clinkz-wot-binding-http --example read_property -- TD.json PROPERTY
+```
 
-Completion still requires successful chunked/trailer envelope qualification;
-real exact/one-over trailer and wire/framing cases; comprehensive SDK buffer/
-continuation/transient/stack bounds and supported fault injection; invalid/late
-result and deadline/result race renewal with the real transport; further FD and
-ownership observations under pressure; and independent same-revision acceptance.
-The accepted predecessor proofs remain authoritative at their recorded revisions.
-This candidate changes none of their implementations or gate states. HTTPS,
-trust/security, Producer and embedded/hardware qualification retain their own
-later boundaries. See the work-package evidence for exact commands/revisions and
-what was actually run.
+It creates an application-owned Tokio `=1.52.3` current-thread runtime with
+`enable_io().enable_time()`, a monotonic Servient clock, checked owned policy and
+original parent accounts. It consumes the Thing, destroys the source, manually
+polls/takes the result, shuts down and checks original-account reclamation. The
+command exits after one read; Ctrl-C stops the process. Loading the file is
+application input, not bounded remote TD ingestion.
+
+Enter a live I/O-enabled runtime when starting reads and keep it driving through
+their lifetime. Merely entering a current-thread runtime does not run its reactor;
+use `Runtime::block_on`. Time is used for application polling sleeps; the binding
+uses the supplied Servient clock/deadline, without a Tokio timer or spawned task.
+Applications must drive wakes and clock progress for silent peers/deadlines.
+
+No entered runtime rejects before raw acceptance. Tokio has no public nonpanicking
+I/O-driver query, so acceptance probes registration of an unconnected nonblocking
+socket and immediately drops it. No bind/connect/read/write occurs. A disabled
+I/O panic is caught under unwind, although the panic hook can run. Deployment
+owns runtime lifetime, stacks, allocator/OS buffers, shared reactor allocations,
+FD/process availability and the probe's extra temporary FD. Runtime destruction
+after acceptance, panic=abort, process OOM/abort and OS termination have no
+in-process reporting guarantee.
+
+## Validation and remaining obligations
+
+```sh
+cargo test --locked --offline -p clinkz-wot-binding-http --all-targets -- --test-threads=1 --nocapture
+cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings
+```
+
+Python 3 and loopback networking are needed. Independent raw TCP and Python
+standard-library peers exercise public consume/select/read, two distinct targets,
+100 alternating reads across fixed/chunked/trailer/close framing, exact/overflow
+and unfinished inputs, declaration interoperability, cancellation/drop/deadline,
+completion orders, drain/root loss, saturation/reuse and original-account release.
+On Linux, the 100-read test also checks that descriptors return to baseline after
+each peer observes retirement. Supported body-reservation refusal preserves
+607/DeploymentFailure; decoded overflow preserves 608/BindingPolicy, followed by
+a successful read on the same Runtime. Old `tests/sdk_limits.rs` probes retain
+their historical incompatibility scope; they are not successor failures.
+
+Independent acceptance and comprehensive native-stack/continuation, allocator
+failure/disposal, broader late-result/deadline races and process/FD exhaustion
+qualification remain completion obligations. The evidence records exactly which
+workspace, feature, portable, predecessor and authority checks ran. Passing tests
+or the required GitHub diff-hygiene check do not complete this tranche or change a
+gate. HTTPS/trust/security, Producer and embedded/hardware qualification retain
+their separate later boundaries; HTTPS/security remains a release requirement.

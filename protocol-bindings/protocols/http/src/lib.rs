@@ -1,8 +1,8 @@
 //! Optional Host HTTP/1.1 Consumer Property Read binding.
 //!
 //! This first slice supports cleartext IP literals, default JSON GET, status
-//! 200, and fixed-length/close-delimited responses. Transfer-Encoding and
-//! trailers reject. See README.md for deployment and qualification limits.
+//! 200, fixed-length/chunked/close-delimited responses and bounded discarded
+//! trailers. See README.md for deployment and qualification limits.
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
 use std::{
@@ -15,14 +15,31 @@ use std::{
     },
     task::{Context, Poll},
 };
+#[cfg(test)]
+mod identity_tests;
 mod transport;
 
 const BODY: u64 = 4096;
 const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
+const PRIVATE_POLICY: &[u8] = concat!(
+    "clinkz-http-ip-v4\0",
+    "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
+    "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
+    "GET;NoSec;200;json-exact;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
+    "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
+    "fresh;concurrency1-until-release;header32/8192inclusive;body4096;",
+    "trailer32/8192exclusive-duplicates-count;hyper-cumulative-extensions<16384;",
+    "wire32768;read4096;paid-callback4096;hyperbuf8192-adaptive;writevFalse;",
+    "trailer-discard-unannounced;declaration-empty-elements-ignore-SP-HTAB;",
+    "forbidden-trailer=content-type,content-length,transfer-encoding,content-encoding,trailer,upgrade,connection,host,te;",
+    "noTEadvertisement;single-chunked;noTEandCL;singleCL;",
+    "call-owned-driver;noSpawn;local-drop-before-settlement;noNetworkWait;",
+    "SDK-disposal-may-allocate;noPool;noRetry;noTLS;noDNS"
+).as_bytes();
 const PRIVATE: [u8; 32] = sha2_const_stable::Sha256::new()
-    .update(b"clinkz-http-ip-v1\0hyper1.12.0;httparse1.10.1;hyper-util0.1.20;tokio1.52.3;http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;GET;200;json;noTE;noCE;noTrailer;noUpgrade;no1xx;IP;fresh;concurrency1;header32/8192;body4096;wire32768;read4096;hyperbuf8192;noPool;noSpawn;noRetry;noTLS;noDNS")
+    .update(PRIVATE_POLICY)
     .finalize();
 
 /// Checked immutable permission and policy for the cleartext-IP slice.
