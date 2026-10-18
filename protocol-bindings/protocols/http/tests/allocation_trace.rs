@@ -78,12 +78,6 @@ include!("support/application.rs");
 
 #[test]
 fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
-    for chunked in [false, true] {
-        body_refusal_and_retry(chunked);
-    }
-}
-
-fn body_refusal_and_retry(chunked: bool) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let peer = std::thread::spawn(move || {
@@ -91,21 +85,12 @@ fn body_refusal_and_retry(chunked: bool) {
             let (mut socket, _) = listener.accept().unwrap();
             assert!(request(&mut socket).starts_with("GET /a?x=1 HTTP/1.1\r\n"));
             if attempt == 1 {
-                // Reach decoded-body policy without a Content-Length shortcut.
-                if chunked {
-                    socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1001\r\n").unwrap();
-                } else {
-                    socket
-                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
-                        .unwrap();
-                }
+                // No Content-Length: reach the actual decoded-body policy limit.
+                socket
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                    .unwrap();
                 socket.write_all(&[b'1'; 4097]).unwrap();
-                if chunked {
-                    let _ = socket.write_all(b"\r\n0\r\n\r\n");
-                }
                 socket.shutdown(std::net::Shutdown::Write).unwrap();
-            } else if chunked {
-                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1\r\n1\r\n0\r\n\r\n").unwrap();
             } else {
                 socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n1").unwrap();
             }
@@ -192,29 +177,13 @@ fn body_refusal_and_retry(chunked: bool) {
 
 #[test]
 fn public_path_allocation_observation_and_complete_release() {
-    observe_result_allocations(false);
-}
-
-#[test]
-fn chunked_path_allocation_observation_and_complete_release() {
-    observe_result_allocations(true);
-}
-
-fn observe_result_allocations(chunked: bool) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let peer = std::thread::spawn(move || {
         let (mut socket, _) = listener.accept().unwrap();
         request(&mut socket);
-        if chunked {
-            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1000\r\n").unwrap();
-        } else {
-            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n").unwrap();
-        }
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n").unwrap();
         socket.write_all(&[b'1'; 4096]).unwrap();
-        if chunked {
-            socket.write_all(b"\r\n0\r\n\r\n").unwrap();
-        }
         let mut byte = [0];
         assert_eq!(socket.read(&mut byte).unwrap(), 0);
     });
@@ -224,12 +193,7 @@ fn observe_result_allocations(chunked: bool) {
     // Runtime creation is outside the measurement. First-use reactor growth on
     // this thread is still included and reported, not assigned to engine rows.
     let (startup, accepted, terminal, parent_peak, accepted_layouts) = io_runtime.block_on(async {
-        TRACE.with(|t| {
-            *t.borrow_mut() = Trace {
-                armed: true,
-                ..EMPTY
-            }
-        });
+        TRACE.with(|t| t.borrow_mut().armed = true);
         let (runtime, handle, observer, parent) = engine(port);
         let startup_snapshot = TRACE.with(|t| *t.borrow());
         let startup = startup_snapshot.live;
@@ -273,7 +237,7 @@ fn observe_result_allocations(chunked: bool) {
         "tracked backing survived root and I/O runtime destruction"
     );
     println!(
-        "chunked={chunked} startup={startup} accepted={accepted} terminal={terminal} requests={} peak={} largest={} parent_peak_sum={parent_peak} remaining={}",
+        "startup={startup} accepted={accepted} terminal={terminal} requests={} peak={} largest={} parent_peak_sum={parent_peak} remaining={}",
         measured.count, measured.peak, measured.largest, measured.live
     );
     println!(
@@ -288,21 +252,12 @@ fn observe_result_allocations(chunked: bool) {
 
 #[test]
 fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff() {
-    for chunked in [false, true] {
-        observe_cancellation_allocations(chunked);
-    }
-}
-
-fn observe_cancellation_allocations(chunked: bool) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let (sent, received) = std::sync::mpsc::channel();
     let peer = std::thread::spawn(move || {
         let (mut socket, _) = listener.accept().unwrap();
         request(&mut socket);
-        if chunked {
-            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1\r\n1\r\n").unwrap();
-        }
         sent.send(()).unwrap();
         let mut byte = [0];
         assert_eq!(socket.read(&mut byte).unwrap(), 0);
@@ -321,13 +276,6 @@ fn observe_cancellation_allocations(chunked: bool) {
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
-        if chunked {
-            for _ in 0..3 {
-                tokio::time::sleep(Duration::from_millis(1)).await;
-                call.step(&mut Context::from_waker(Waker::noop()), &mut work());
-                assert!(call.try_take(&mut work()).unwrap().is_none());
-            }
-        }
         TRACE.with(|t| {
             let mut t = t.borrow_mut();
             *t = EMPTY;
@@ -344,7 +292,7 @@ fn observe_cancellation_allocations(chunked: bool) {
             t.count
         });
         assert_eq!(requests, disposal.count, "engine result-taking allocated");
-        println!("SDK cancellation chunked={chunked}: requests={} peak={} largest={} retained_before_reactor_turn={}; engine cancel/status and result-taking=0", disposal.count,disposal.peak,disposal.largest,disposal.live);
+        println!("SDK cancellation: requests={} peak={} largest={} retained_before_reactor_turn={}; engine cancel/status and result-taking=0", disposal.count,disposal.peak,disposal.largest,disposal.live);
         assert!(matches!(result, Err(CoreError::Cancelled(_))));
         drop(call);
         drop(handle);

@@ -68,23 +68,19 @@ impl Ingress {
                     return Err(invalid());
                 }
                 let mut media = 0;
-                let mut chunked = false;
-                let mut has_length = false;
                 for header in response.headers.iter() {
-                    if ["content-encoding", "trailer", "upgrade"]
-                        .iter()
-                        .any(|name| header.name.eq_ignore_ascii_case(name))
+                    // Keep transfer framing disabled until the pinned SDK can
+                    // enforce the independent raw trailer limits before delivery.
+                    if [
+                        "transfer-encoding",
+                        "content-encoding",
+                        "trailer",
+                        "upgrade",
+                    ]
+                    .iter()
+                    .any(|name| header.name.eq_ignore_ascii_case(name))
                     {
                         return Err(invalid());
-                    }
-                    if header.name.eq_ignore_ascii_case("transfer-encoding") {
-                        // Hyper remains the only chunk decoder. Until its raw
-                        // trailer policy can be qualified, declarations and
-                        // delivered trailer frames still reject explicitly.
-                        if chunked || !header.value.eq_ignore_ascii_case(b"chunked") {
-                            return Err(invalid());
-                        }
-                        chunked = true;
                     }
                     if header.name.eq_ignore_ascii_case("content-type") {
                         media += 1;
@@ -93,7 +89,6 @@ impl Ingress {
                         }
                     }
                     if header.name.eq_ignore_ascii_case("content-length") {
-                        has_length = true;
                         let length = std::str::from_utf8(header.value)
                             .ok()
                             .and_then(|v| v.parse::<u64>().ok())
@@ -103,7 +98,7 @@ impl Ingress {
                         }
                     }
                 }
-                if media != 1 || (chunked && has_length) {
+                if media != 1 {
                     return Err(invalid());
                 }
                 self.head_done = true;
