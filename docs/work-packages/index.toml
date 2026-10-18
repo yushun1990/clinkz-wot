@@ -976,7 +976,9 @@ id = "WP-600-HTTP-CONSUMER-PROPERTY-READ"
 work_package = "WP-600"
 sequence = 600
 status = "in-progress"
-admission_status = "admitted"
+# Original PR #191 admission remains historical authority for its original scope.
+# The binding-private parser-policy amendment requires independent scoped review.
+admission_status = "candidate"
 impact_status = "current"
 depends_on = ["WP-400-CONSUMER-RESOURCE-OWNERSHIP"]
 depends_on_packages = ["WP-000"]
@@ -1021,7 +1023,8 @@ resource_changes = [
     "One paid TD DocumentNodes scalar before Ready, no source work on replay; owned optional scalar in logical plan, no added backing allocation or WorkClass.",
     "Opt-in closed-consumer-default-json-forms-v1 binding key derived from original v1 key; unrestricted and strict vectors, resource schema 2, complete-policy encoding and all 196 numeric defaults preserved.",
     "Renew concrete TD/plan/config/compiler/support/Host-slot and aggregate Layout/work/rollback measurements; no old byte result silently inherited by changed carriers.",
-    "HTTP ConsumerOwnedHostV2: one call-owned connection, 32/8192 header items/bytes, 4096 body bytes, 16/2048 trailers, 32768 cumulative response wire bytes, 4096 input bytes per read/progress. Actual parser/read-buffer limits and SDK allocation/disposal envelope qualified during implementation.",
+    "HTTP parser-policy amendment candidate (WP-600 target): stock Hyper 1.12.0 shared 32/8192 parser settings, inclusive main head 32/8192, body 4096, trailers 32 fields/raw bytes <8192 (8191 accepted; 8192 rejects even unfinished), native cumulative extension count <16384 including final zero chunk. Wire 32768 and read/paid-progress 4096 unchanged; permitted trailers discarded without overrides or TE:trailers advertisement. Actual SDK growth/buffering/overlap/continuation/stack/fault/disposal qualification remains separate.",
+    "Fresh versioned HTTP private-policy identity (successor v4) includes actual SDK/configuration and amended comparison/extension/trailer semantics; same immutable checked restricted configuration captured by client/compiler/support/artifacts/diagnostics. Preserve shared encodings, complete engine-policy identity, result backing and old/new substitution refusal before I/O.",
     "Full engine carrier/request/result Arc and String capacities, constructor overlap, original local/parent retention, conservative cancellation/transfer and allocation-free status/seal/handoff remain funded before effects; SDK-private and deployment costs stay separately owned.",
 ]
 old_api_removals = []
@@ -1052,9 +1055,17 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features --features async",
+    "cargo test --locked --offline -p clinkz-wot-binding-http --test sdk_limits -- --test-threads=1 --nocapture",
+    '''python3 - <<'PY'
+from pathlib import Path
+import re, subprocess
+source = Path("docs/evidence/WP-600-stock-hyper-policy-probe.md").read_text()
+recipe = re.findall(r"^```sh\n(.*?)^```$", source, re.M | re.S)[0]
+subprocess.run(["bash", "-euc", recipe], check=True)
+PY''',
     "git diff --check",
 ]
-admission_review = "github-pr:191#issuecomment-6230142316"
+admission_review = "pending-independent-scoped-review:docs/evidence/WP-600-http-consumer-property-read.toml#parser_policy_amendment"
 completion_evidence_keys = [
     "http-form-eligibility", "http-consumer-property-read", "http-resource-lifecycle",
     "http-authoring-feature-conformance",

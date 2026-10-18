@@ -27,6 +27,14 @@ passed. The [smallest HTTP admission target](WP-600-http-property-read-target.md
 records admission of the first vertical slice; the index owns its exact state
 and bounded production implementation scope.
 
+Its [parser-policy amendment](WP-600-http-property-read-target.md#http-parser-policy-amendment)
+revises only the existing Consumer tranche's private trailer/extension policy
+and configuration identity for the demonstrated stock-SDK alternative. The
+amended admission requires independent scoped review; accepted predecessor and
+partial production results retain their recorded scopes. SDK input limits do
+not establish total memory, stack or disposal bounds. The amendment imports no
+private fork or production enablement from PR #197.
+
 Consumer execution uses the admitted source-independent consumed plan, selected
 `OutboundRequest`, recoverable call construction, Core result seal, generation
 lease, cancellation and cleanup. Producer execution uses compiled routes,

@@ -197,6 +197,12 @@ side-effect-free metadata read; it grants no callback/destructor attestation.
 Interior policy mutation after capture is prohibited. Runtime occupancy may
 change under the captured policy without changing its identity.
 
+The [WP-600 parser-policy amendment](../work-packages/WP-600-http-property-read-target.md#configuration-identity-and-review-boundary)
+applies this rule to HTTP's changed trailer/extension/SDK policy. It requires a
+fresh private encoding and old/new substitution evidence; it changes neither
+this shared derivation nor complete engine-policy identity. Its scoped review
+and implementation evidence remain obligations of that existing tranche.
+
 Complete Consumer-only registration construction checks the actual client's
 metadata against the declared resource contract and explicit result pair, the
 current cell, and `identity.configuration()`. Strict registration requires
