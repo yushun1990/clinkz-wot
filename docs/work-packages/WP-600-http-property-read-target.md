@@ -29,8 +29,9 @@ property targets in the same TD, and repeated reads after terminal release.
 HTTP execution is std-only; portable cells verify the shared amendment and
 regressions, not an embedded HTTP backend.
 The TD/Core/Planning eligibility amendment below and the HTTP adapter belong to
-this one tranche. Implement the shared amendment first inside the admitted
-tranche, then the binding. This admission PR contains no production edits.
+this one tranche. The original admission ordered the shared amendment before the
+binding; those accepted implementations retain their recorded scope. This
+parser-policy admission candidate contains no production edits.
 
 The direct predecessor is completed/current
 `WP-400-CONSUMER-RESOURCE-OWNERSHIP`. Its transitive closure contains all ten
@@ -57,6 +58,12 @@ the accepted ownership/configuration boundary. No audit or fixture retirement
 is added to this tranche's acceptance criteria.
 
 ## Owners, source and dependency edits after admission
+
+The shared-source rows record the original admission scope, implemented and
+accepted in PR #193. This parser-policy successor changes only the existing HTTP
+crate's private configuration/transport and focused evidence; an intersecting
+shared change requires an explicit impact extension rather than reusing this
+table as new permission.
 
 | Owner | Exact change |
 | --- | --- |
@@ -93,9 +100,10 @@ recipe is implementation completion evidence, not a new shared runtime API.
 
 ## Paid metadata and protocol-neutral compiler amendment
 
-The current lending projection loses Form extensions/response overrides; the
-closed compiler only copies targets. Keep its existing source-reviewed support
-boundary. These are the complete shared API/semantic changes:
+At original admission, lending lost Form extensions/response overrides and the
+closed compiler only copied targets. The accepted PR #193 shared amendment
+implements the following API/semantic contract; this parser-policy candidate
+preserves it without new shared source changes:
 
 1. TD adds `ValidatedPropertyReadForm::has_additional_form_metadata(&self)
    -> bool`, true exactly for nonempty `_extra_fields` or presence of `response`,
@@ -293,15 +301,13 @@ not a remote cleanup certificate.
 
 ## Prechecks, impact and performance
 
-Run every indexed precheck before independent admission. The focused test added
-to the existing aggregate fixture uses real typed TD/paid lending/current compiler
-to reproduce lost metadata and a small scalar/restriction discriminator. Its
-proposed scalar is a pre-code model, not production paid-fact evidence. There is
-no HTTP SDK, alternate aggregate or runtime. Existing public compiler/aggregate/
-Runtime tests establish the reusable baseline; authority validation executes
-current resource/state/performance contracts. No precheck qualifies a future SDK.
-Replace the small model assertions with actual public getter/configuration/compiler
-checks at production completion, retaining their unique negative cases.
+Run every indexed precheck before independent admission. Original admission used
+a small pre-code scalar/restriction discriminator in the existing aggregate
+fixture. Accepted shared completion replaced it with actual public paid-getter,
+configuration and compiler checks while retaining unique negatives. Current
+compiler/aggregate/Runtime tests establish that reusable baseline; authority
+validation executes current resource/state/performance contracts. SDK-level
+counterexamples supply no alternate aggregate, binding or Runtime qualification.
 
 For this parser-policy amendment, rerun the existing indexed baseline checks,
 the committed stock-SDK incompatibility tests and the standalone alternative
@@ -310,16 +316,13 @@ refusal. No test-only enablement or vendored SDK is needed to review the
 counterexamples. The independent reviewer must distinguish a passing SDK probe
 from the still-required public Runtime qualification.
 
-All existing completion files and gate states stay unchanged in admission.
-When source changes, mark affected predecessor impact review-required and renew
-once in the successor completion file: borrowed TD lending/work; closed compiler
-configuration/Layout/callbacks; aggregate/output plan/preflight/rollback; complete
-registrations and Runtime/ownership captured metadata/carrier costs. Preserve
-semantic case identities, old results and strict/owned keys. Independent successor
-completion may reaffirm these impacts together; ten new admission cycles are not
-required. The exact impact map is:
+Original admission left completion files and gate states unchanged. Its shared
+source changes required the following predecessor impact review and renewals
+once in the successor completion file, preserving semantic case identities, old
+results and strict/owned keys. PR #193 independently accepted those renewals;
+they are historical obligations already satisfied, not new parser-policy work:
 
-| Existing tranche(s) | Successor disposition when source changes |
+| Existing tranche(s) | Original shared successor disposition |
 | --- | --- |
 | WP-100-CONSUMER-VALIDATED-THING | Renew paid lending/cursor/layout/Ready/rewind/cancel evidence. |
 | WP-200-CONSUMER-PROPERTY-READ-PLANNING | Renew owned logical-plan Layout/cost and identity/selection regressions. |
