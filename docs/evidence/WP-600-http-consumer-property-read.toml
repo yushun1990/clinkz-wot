@@ -11,8 +11,8 @@ status = "partial"
 acceptance = "github-pr:193#pullrequestreview-5561188464"
 accepted_ref = "41619afee864cb6962920cca24ad57ab058bcc51"
 admission_review = "github-pr:191#issuecomment-6230142316"
-assessment = "Production shared TD/Core/Planning amendment and its executable regressions. This is the first implementation PR within the already admitted HTTP tranche. HTTP transport and full tranche completion are unimplemented. Independent review 5561188464 accepts the shared amendment at accepted_ref against base_ref and reaffirms exactly the eight affected predecessors, with no blocking findings. Acceptance excludes HTTP implementation/SDK qualification and tranche completion; no gate status changes."
-source_revision_rule = "All production and primary regression changes are committed at implementation_ref. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Later evidence and impact-state edits do not change production or fixtures. Each verification row names the exact revision tested; historical predecessor evidence retains its original observations and acceptance references."
+assessment = "Production shared TD/Core/Planning amendment and its executable regressions. The accepted shared amendment is followed by the real Host HTTP production slice recorded in production_slice below. Fixed-length/close-delimited transport is implemented; full tranche completion remains open. Independent review 5561188464 accepts the shared amendment at accepted_ref against base_ref and reaffirms exactly the eight affected predecessors, with no blocking findings. Acceptance excludes HTTP implementation/SDK qualification and tranche completion; no gate status changes."
+source_revision_rule = "The shared amendment production and primary regression changes are committed at implementation_ref; production_slice names the separate HTTP source and fixture revision. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Later evidence and impact-state edits do not change production or fixtures. Each verification row names the exact revision tested; historical predecessor evidence retains its original observations and acceptance references."
 
 [scope]
 implementation = [
@@ -22,11 +22,11 @@ implementation = [
     "Bounds, start and paid step reject unsupported metadata/media with fixed operation/form/plan/binding context. Planning's existing all-bounds barrier rejects the whole transaction before every start. The 64-byte target-copy payload and compatibility remain unchanged, including mock URI acceptance.",
 ]
 excluded = [
-    "No HTTP crate, SDK, parser, socket, readiness runtime, deployment recipe or network execution is added.",
+    "This scope table describes the accepted shared amendment; the later real HTTP implementation and its exclusions are owned by production_slice and the binding README.",
     "No Servient/Foundation production, resource schema/default, compiler issuer, callback family, umbrella, Directory, Producer or Zenoh change.",
     "No package/milestone/gate closure, independent completion acceptance, HTTP latency, embedded backend, hardware-fit, HTTPS/security or v1 qualification claim.",
 ]
-dependencies = "Existing lockfiles and manifests are unchanged, including Core's sha2-const-stable 0.1.0. No HTTP/runtime/TLS dependency enters a neutral library."
+dependencies = "The shared amendment changed no manifests/lockfiles. The later optional HTTP member adds only its own pinned dependency graph to the root manifest/lock; preexisting locked versions are unchanged. No HTTP/runtime/TLS dependency enters a neutral library."
 
 [[evidence]]
 key = "http-form-eligibility"
@@ -58,18 +58,18 @@ tests = [
 
 [[evidence]]
 key = "http-consumer-property-read"
-execution_status = "not-implemented"
-limitation = "The real independent HTTP peer, public cleartext-IP registration and 100 alternating network reads remain binding implementation obligations. Shared mock execution is not HTTP evidence."
+execution_status = "partial"
+limitation = "production_slice executes public HTTP registration and 100 alternating source-free network reads against an independent raw peer, plus a Python standard-library peer. Only fixed-length/close-delimited responses are supported; successful chunked framing and independent production acceptance remain open."
 
 [[evidence]]
 key = "http-resource-lifecycle"
-execution_status = "not-implemented"
-limitation = "SDK/parser input ceilings, wire/header/body/trailer and read-ahead bounds, socket/future retirement, actual network races/faults, SDK allocation/disposal work and application runtime deployment remain binding implementation obligations. Renewed shared engine evidence below does not qualify any SDK."
+execution_status = "partial"
+limitation = "production_slice supplies actual header/body limits, fragmented/failure/cancel/deadline/drain/root-loss retirement and allocation observations for pinned Hyper/Tokio. Chunked/trailer and exact wire-boundary cases, complete private/transient/stack envelopes, supported fault injection and real late/result races remain open. SDK disposal allocates; shared proof is not an SDK qualification substitute."
 
 [[evidence]]
 key = "http-authoring-feature-conformance"
 execution_status = "partial"
-limitation = "Shared library and complete-owner regressions are executed below. Real HTTP authoring/deployment/dependency evidence and independent successor completion acceptance remain open. Portable cells exercise the shared amendment only."
+limitation = "The runnable HTTP application recipe and dependency inspection execute in production_slice. Shared and three-cell Consumer/aggregate regressions pass. Whole-workspace testing was attempted but could not link Zenoh tests after disk exhaustion; independent successor acceptance remains open. Portable cells exercise shared libraries, not HTTP execution."
 
 [independent_review]
 review = "github-pr:193#pullrequestreview-5561188464"
@@ -642,4 +642,148 @@ result = "passed"
 name = "impact-projection-diff"
 source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
 command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true git diff --check 7e7ff219d0cd54d4fd031e56992f6f38812f8c4b...HEAD"
+result = "passed"
+
+[production_slice]
+source_ref = "54bec957b8b91617d87890d4eb92f5bc22c7821a"
+fixture_ref = "54bec957b8b91617d87890d4eb92f5bc22c7821a"
+base_ref = "8206b3e5b119901703ff950e959a03887723af8a"
+acceptance_status = "pending-independent-review"
+status = "partial"
+environment = "Linux x86_64; rustc 1.99.0 (b940084d7 2026-09-28); debug test build; Python 3 standard HTTP server. No cross-platform, MSRV or embedded HTTP claim."
+revision_rule = "All new production, example and executable fixtures are exactly source_ref; later evidence-only edits do not change these sources. Commands below ran against that source/fixture content. Shared implementations and accepted predecessor/gate dispositions are unchanged."
+contract = "ConsumerOwnedHostV2, captured restricted default JSON configuration; target capacity 64, result body 4096, both promised media capacities 16. Full public ConsumerPropertyReadRuntime; no legacy, fixture binding, raw execution or alternate scheduler in the public integration tests/example."
+scope = "One optional HTTP member, checked cleartext-IP configuration, complete restricted closed-compiler/Host-client registration, fixed-length and close-delimited HTTP/1.1 200 JSON GET. Chunked/Trailer, Content-Encoding, informational/status/version/media alternatives reject. No pool, task spawn, DNS, TLS, redirect, retry/reconnect, producer or neutral-library production edit."
+public_api_owner = "protocol-bindings/protocols/http/src/lib.rs and README.md implement the already admitted HTTP surface. Existing shared API ownership rows and source APIs are unchanged; the shared-library API matrix does not inventory concrete binding APIs."
+dependencies = "hyper =1.12.0 (default-features=false, client/http1); hyper-util =0.1.20 (default-features=false, tokio); httparse =1.10.1 (default-features=false, std); http-body-util =0.1.3; bytes =1.11.1; tokio =1.52.3 (default-features=false, net/rt); socket2 =0.6.4; sha2-const-stable =0.1.0. Root Cargo.lock pins full graph/checksums; preexisting package versions/dependency operands are unchanged. TD/Planning/Servient and serde_json are dev/example dependencies only."
+policy_identity = "SHA-256 of the fixed clinkz-http-ip-v1 encoding in source_ref, including SDK versions/configuration and all wire/read/parser/result/concurrency/retirement/URI/status/media restrictions. This private policy enters the existing checked owned configuration and restricted-key derivation, captured equally by client/compiler/support. It is not a caller-supplied binding key or SDK attestation."
+recipe = "Application owns, enters and drives an I/O-enabled Tokio runtime and supplies a monotonic RuntimeClock. Binding creates no runtime/task. A preacceptance probe registers/drops one unconnected nonblocking local socket; no bind/connect/read/write. Missing context/disabled I/O reject with original request (disabled-I/O panic is caught under unwind but invokes the hook). Application keeps runtime alive through calls and drives clocks/reactor; no in-process guarantee under abort/OOM/runtime destruction. See runnable read_property example."
+source_inspection = [
+    "Hyper builder fixes max_headers=32, max_header_size=8192, max_buf_size=8192, writev=false. Its shared main/trailer size setting cannot by itself establish independent trailer byte policy; this slice rejects Transfer-Encoding/Trailer before Hyper response delivery.",
+    "Production raw-head guard uses httparse over one fixed 8192-byte array/32 headers. It preserves exact received head-byte accounting before SDK normalization and rejects 1xx/status/version/coding/framing/media alternatives. It implements policy, not an HTTP framing parser; Hyper owns fixed/close decoding.",
+    "Read gate decrements a single 4096-byte allowance per paid raw callback, caps each actual socket read, and never refills its 32768-byte lifetime wire counter. Body reserve is fallible and capped at 4096; frame copies check remaining decoded capacity. Hyper read strategy/capacity, retained slices and transient copies are not inferred from payload length.",
+    "One call-owned future polls both Hyper driver and operation; no spawn/detach. Returning/cancel/drop destroys future/socket before settlement. Tokio deregistration can retain runtime-owned ScheduledIo bookkeeping after FD closure, until a reactor turn/destruction. Runtime remains an explicit shared deployment owner; FD/future retirement is not a remote-execution certificate.",
+    "Cancellation backtrace inspection identified Tokio RegistrationSet::deregister Vec growth and Hyper client-dispatch error construction on Drop. Allocating SDK-local disposal is real under the accepted Host policy; engine status/handoff is separately observed without allocation. No universal disposal-allocation or stack bound is inferred.",
+]
+source_sha256 = [
+    "hyper-1.12.0/src/client/conn/http1.rs:6ec8124f5dc3f176baae99d9528d467e976e2522912d5bab13603a792fecb203",
+    "hyper-1.12.0/src/proto/h1/io.rs:27287bec2aeb9d23fbf3440b5eea5186a1826301f7de2d855e78fcfce465c745",
+    "hyper-1.12.0/src/client/dispatch.rs:cce049418dcd9e1700b87701d6e78a4a021ba0e9912e9b669fec3d3f037d4e29",
+    "tokio-1.52.3/src/runtime/io/registration_set.rs:9fc341d637583a79667a00dce12fd0bc7959b07c1043917020189ff6615f1e7b",
+    "httparse-1.10.1/src/lib.rs:a8307ce632f27b095cb84de27cfd8fc237977075d3eed41041f463c6afd9b757",
+]
+functional_observations = [
+    "100 alternating a?x=1/b reads after destroying TD/build inputs, distinct body/status checks, exact peer-observed GET/path/Host, fresh connection and EOF at every result; simultaneous read refuses. Independent raw peer uses std TCP without HTTP SDK/parser; a separate Python http.server peer also succeeds.",
+    "Actual fragmented/fixed/close bodies at 0/1/4095/4096/4097 bytes; exact/one-over raw head 8192 bytes and 32 fields (including repeated X fields). Oversized Content-Length rejects before body delivery; no-length overflow rejects after bounded ingress.",
+    "Chunked bodies/trailers explicitly reject. Truncation, malformed/missing header, empty disconnect, 500/302/101/100, HTTP/1.0, gzip and non-JSON media never deliver success; raw peer sees no reconnect. No silent draining after rejection.",
+    "Silent-peer caller cancellation and dropped ticket retire socket and permit a subsequent real read. Deadline preserves TimedOut; drain retires; final root loss precommits residual report then retires. All parent accounts reclaim after observer release. These do not exhaust late/result races or pressure cases.",
+    "Registration/consume without entered Tokio remain valid; actual request acceptance without runtime or with disabled I/O rejects unchanged raw input. Unsupported scheme/DNS/userinfo/port and nonempty URI variables reject with recovered variables and no connection. An accepted unpolled call has no network effect. IPv6 syntax is tested; real peers here are IPv4 only.",
+]
+measurements = [
+    "Native size/alignment: raw Call 288/8, Client 96/8, parsed Target 120/8, protocol exchange future 9648/8. Complete public acceptance's live allocations are [416,28,24,256,24,288] bytes; first Core envelope 416 and raw Call 288 coexist. Net accepted-over-startup storage is 1036 bytes in this case, including SDK/reactor/URI/allowance backing, not a generic engine-row measurement.",
+    "4096-byte result observation: startup live 17014, accepted live 18050, result-taken/live-output 21430; 142 allocation requests, observed peak 56971, largest 11280, final tracked live 0 after I/O runtime destruction. Original parent peak sum 404729 is a sum of independent category peaks, not actual simultaneous heap. Typed input/build allocations are included; runtime creation/block_on harness storage/shared shutdown caches are excluded. First-use reactor growth during execution is included. Peer-thread and OS/allocator costs are excluded. Timing/build-dependent observation, not a hard cap.",
+    "Silent-peer cancellation: SDK retirement requests 4 allocations, observed peak 113 bytes, largest 33; 32 bytes remain in runtime deregistration queue before next reactor turn. Engine cancel/status and result-taking each request 0 allocations. This is one observed SDK disposal path; it neither proves all failure paths nor changes the accepted engine status/fallback requirement.",
+    "Body Vec-to-Arc handoff may overlap the private 4096-byte destination with complete engine-funded Arc body/control/alignment. Payload media capacity is observed as 16; absent coding still reserves the second promised capacity through existing policy. No original account or result seal is replaced.",
+]
+limits_and_remaining = [
+    "Successful chunked/trailer decoding and exact/one-over 16/2048 trailer/framing qualification are unimplemented. Rejecting all Transfer-Encoding is a deliberately narrower first PR, not completion or a change to admitted maxima.",
+    "32768 cumulative wire and 4096/read/callback gates are implemented/source-inspected; the fixed/close integration cases reject body overflow earlier. A real exact/one-over wire/framing suite and direct per-poll ingress observations remain unexecuted. No claim of successful 32768-byte response or trailer ingress qualification.",
+    "16384 callback allowance is configured conservatively; maximum native stack/continuation work/transient overlap and all SDK heap paths have not been bounded experimentally. max_buf_size is a strategy, not exact retained/capacity proof. All-network/private allocation envelope, raw-box and remaining SDK allocation fault injection and disposal failure-path coverage remain completion obligations. review_correction below qualifies the actual fallible body-reservation refusal only.",
+    "Broader real-transport deadline/result races, invalid normal/late success and accepted-error sealing, pressure/refusal/transfer/manual-fallback renewal and systematic FD/account observations remain. Accepted predecessor executable proofs are reused at their recorded revisions, not attributed to this HTTP peer suite.",
+    "Whole-workspace default validation did not finish: disk filled while linking existing Zenoh tests, linker terminated with signal 7. Scoped tests passed; no whole-workspace acceptance is claimed. Strict transitive Clippy finds existing TD warnings; HTTP-only no-deps Clippy passes.",
+    "No independent acceptance, package/tranche/milestone/gate closure, HTTPS/security, Producer HTTP, hardware/embedded operation or empirical protocol neutrality. Remaining completion obligations stay inside the existing admitted tranche; no administrative or admission successor PR is requested.",
+]
+
+[[production_slice.verification]]
+name = "http-public-network-and-resource-tests"
+command = "cargo test --locked --offline -p clinkz-wot-binding-http --all-targets -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 12
+
+[[production_slice.verification]]
+name = "runnable-application"
+command = "cargo run --locked --offline -p clinkz-wot-binding-http --example read_property -- /tmp/wp600-example-td.json value"
+result = "passed"
+observation = "Independent Python HTTP/1.1 server asserted GET /value and returned JSON bytes 41; executable printed 41 and asserted parent reclamation. Typed TD was generated locally for that peer."
+
+[[production_slice.verification]]
+name = "shared-std-regressions"
+command = "CARGO_INCREMENTAL=0 cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient"
+result = "passed"
+passed_test_results = 369
+
+[[production_slice.verification]]
+name = "consumer-three-cells"
+commands = [
+    "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/yushun/clinkz-wot/target cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml [CELL_FLAGS]",
+    "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/yushun/clinkz-wot/target cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml [CELL_FLAGS] --test form_metadata --test aggregate",
+]
+parameters = "Each command executes in std (empty CELL_FLAGS), --no-default-features, and --no-default-features --features async."
+result = "passed"
+passed_test_results = 88
+
+[[production_slice.verification]]
+name = "producer-regressions"
+command = "CARGO_INCREMENTAL=0 cargo test --locked --offline -p clinkz-wot-property-read-binding-fixture -p clinkz-wot-property-read-architecture-runner"
+result = "passed"
+passed_test_results = 17
+
+[[production_slice.verification]]
+name = "authority-and-performance"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "passed"
+observation = "Authority/package DAG, API/ADR/Directory/resource/legacy checks, 196 fields/3 profiles and 66 performance fixtures/cases. No HTTP latency claim."
+
+[[production_slice.verification]]
+name = "dependency-isolation"
+command = "cargo tree --locked --offline -p PACKAGE --edges normal [CELL_FLAGS]"
+parameters = "All nine Core/Planning/Servient std/no-default/async graphs, plus the HTTP member normal graph."
+result = "passed"
+observation = "No HTTP/Tokio/TLS normal dependency enters the neutral packages. SDK/runtime remain in concrete HTTP member."
+
+[[production_slice.verification]]
+name = "http-clippy"
+command = "cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings"
+result = "passed"
+
+[[production_slice.verification]]
+name = "whole-workspace-attempt"
+command = "CARGO_INCREMENTAL=0 cargo test --locked --offline --workspace"
+result = "incomplete-environment-capacity"
+observation = "80GB filesystem exhausted during Zenoh test links; linker signal 7/Bus error. Only generated test binaries/incomplete link outputs were removed to continue scoped checks. This does not count as a successful workspace run."
+
+[[production_slice.verification]]
+name = "transitive-clippy-attempt"
+command = "cargo clippy --locked --offline -p clinkz-wot-binding-http --all-targets -- -D warnings"
+result = "blocked-by-existing-neutral-lints"
+observation = "Nine existing TD errors under -D warnings, including len_without_is_empty and unnecessary_unwrap. No unrelated TD refactor; scoped no-deps check passes."
+
+[production_slice.review_correction]
+source_ref = "6f850cf0fc3c43ef784b9c353374761af4cb63ec"
+reviewed_ref = "fb1881de32a4801d71f792bf1f90b8b1df9f5328"
+finding = "github-pr:195#discussion_r4305606816"
+review = "github-pr:195#pullrequestreview-5561307534"
+acceptance_status = "pending-independent-review"
+change = "Assign DeploymentFailure to the supported fallible body reservation error at creation (cause 607). Protocol-policy errors capture BindingPolicy at creation. Adding selected plan/binding context preserves the original resource-failure identity/domain/owner tuple instead of replacing it unconditionally. Error category, redacted cause, retry class, limits and configuration identity are unchanged."
+regression = "body_allocator_refusal_preserves_deployment_domain_and_allows_retry uses public ConsumerPropertyReadRuntime and an independent raw TCP peer. After raw acceptance, one thread-local null return for a 4096-byte align-1 allocation reaches the real Vec::try_reserve_exact body reservation. It asserts exactly one refusal, Binding category, DeploymentFailure, cause 607/text, selected binding/plan, Never retry and unchanged absent owner coordinates. A 4097-byte close-delimited response independently exercises actual body-policy refusal, retaining BindingPolicy and cause 608/text with the same policy/plan. Peer observes EOF for both, a subsequent read on the same runtime succeeds and all original parent accounts reclaim."
+negative_control = "Before the production fix, the new public-path regression fails with cause 607 intact but actual domain BindingPolicy versus expected DeploymentFailure, reproducing the independent review. The same fixture passes after the fix."
+measurements = "All 13 HTTP tests pass at source_ref, including prior 100-read, header/body limit, lifecycle and allocation controls. Native Layouts remain Call=288/8, Client=96/8, Target=120/8, exchange=9648/8. Prior normal allocation observation remains startup=17014, accepted=18050, terminal=21430, requests=142, peak=56971, largest=11280, final tracked live=0. SDK cancellation still observes 4 allocations/113-byte peak/33-byte largest/32 runtime-owned bytes until reactor turn; engine cancel/status and result-taking remain allocation-free in that case."
+limits = "This adds one supported allocator-refusal qualification; it is not arbitrary SDK OOM injection or comprehensive fault/disposal/stack qualification. Existing chunked/trailer, exact wire, race, platform and whole-workspace limitations remain. No predecessor implementation/impact, resource default, gate or acceptance verdict changes."
+
+[[production_slice.review_correction.verification]]
+command = "CARGO_INCREMENTAL=0 cargo test --locked --offline -p clinkz-wot-binding-http --all-targets -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 13
+
+[[production_slice.review_correction.verification]]
+command = "CARGO_INCREMENTAL=0 cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings"
+result = "passed"
+
+[[production_slice.review_correction.verification]]
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "passed"
+observation = "Authority/DAG, API/ADR/Directory/resource/legacy checks and all 66 performance fixtures/cases. Source/fixtures exactly source_ref; following evidence-only commit records these results."
+
+[[production_slice.review_correction.verification]]
+command = "git diff --check origin/master...HEAD; rustfmt --edition 2024 --check protocol-bindings/protocols/http/src/lib.rs protocol-bindings/protocols/http/src/transport.rs protocol-bindings/protocols/http/tests/allocation_trace.rs"
 result = "passed"
