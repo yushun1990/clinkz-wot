@@ -924,6 +924,7 @@ observation = "Authority/DAG/API/ADR/Directory/legacy, 196 resource fields/3 pro
 
 [parser_policy_amendment]
 base_ref = "098a829a2a5f23cc9fd3446ad2cbb7b942ea583c"
+documentation_ref = "1a61c19b8ed334fec8b20c5d0b5d175956721df8"
 recorded_on = "2026-10-18"
 status = "candidate"
 acceptance_status = "pending-independent-scoped-review"
@@ -958,3 +959,24 @@ subsequent_obligations = [
     "Renew changed carrier/transient/retained/overlap/peak/largest allocation observations, continuation/native stack, supported faults and finite local disposal evidence separately; no stock-input-limit proof of total memory/stack/disposal. Keep complete engine result backing, prebacked cleanup and allocation-free engine status/handoff unchanged.",
     "Run registered feature/Consumer/Producer/shared/portable and locked workspace completion checks, inspect neutral normal-dependency isolation and downstream registry-resolvable build. Existing source-specific results retain their revisions until rerun. HTTPS/security, Producer, embedded and release claims remain separate successors.",
 ]
+
+[[parser_policy_amendment.verification]]
+name = "stock-sdk-alternative-probes"
+command = "Extract embedded manifest/Rust from docs/evidence/WP-600-stock-hyper-policy-probe.md into a temporary crate; cargo generate-lockfile --offline --manifest-path <probe>/Cargo.toml; cargo test --locked --offline --manifest-path <probe>/Cargo.toml -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 2
+observation = "Both documented tests pass with the recorded manifest/source/lock hashes. The original two incompatible-policy counterexamples pass separately in indexed precheck 10. No fork, production edit or whole-process resource claim."
+
+[[parser_policy_amendment.verification]]
+name = "indexed-admission-prechecks"
+index_ref = "f8d180173a9089d734b7f663f6dd900408ba68c3"
+source_fixture_ref = "098a829a2a5f23cc9fd3446ad2cbb7b942ea583c"
+result = "passed-all-11"
+environment = "CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0; separate temporary CARGO_TARGET_DIR. Commands are the exact eleven pre_implementation_checks in the indexed tranche. The later documentation_ref clarifies historical shared-scope wording only; index, code, tests and executable probe are identical."
+observation = "Authority/DAG/API/ADR/Directory/legacy checks, all 196 resource fields/3 profiles, binding/complete-policy vectors and 66 performance cases pass. Existing aggregate/form-metadata and public runner tests pass in std/no-default/async-no-std; indexed TD lending/round-trip, closed compiler and two stock-SDK incompatibility tests pass. Diff hygiene passes. This is admission baseline validation, not changed HTTP production qualification or whole-workspace completion."
+
+[[parser_policy_amendment.verification]]
+name = "docs-only-and-history-boundary"
+command = "git diff --name-only 098a829a2a5f23cc9fd3446ad2cbb7b942ea583c...HEAD; compare all tracked files outside docs/ and workspace/ to base; compare predecessor tranche entries and gate manifests to base"
+result = "passed"
+observation = "Only docs/ and workspace/ differ. No production, tests, fixtures, dependency manifests/lock, vendored SDK or gate manifest changes. Only the existing HTTP tranche's candidate admission/review location, private policy requirements and one existing SDK precheck change in the work-package index; predecessor rows are identical. Original acceptance references and observations remain at their recorded revisions."
