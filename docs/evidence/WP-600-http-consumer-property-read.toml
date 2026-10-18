@@ -11,7 +11,7 @@ status = "partial"
 acceptance = "github-pr:193#pullrequestreview-5561188464"
 accepted_ref = "41619afee864cb6962920cca24ad57ab058bcc51"
 admission_review = "github-pr:191#issuecomment-6230142316"
-assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and its review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. PR #196 review 5561667209 accepts the SDK incompatibility diagnosis but finds the attempted chunked enablement nonconforming. framing_slice retains that rejected candidate's observations; framing_slice.review_correction owns the restored raw-head refusal, active unfinished-trailer regressions, direct ingress gate and supported fixed/close lifecycle evidence. parser_policy_amendment records the docs-only ADR-0013 amendment prompted by PR #197 review 5562587383 and independently accepted at exact head a7acfa6c4779ce803c145babf653bd53e7ceebcb by PR #198 review 5562750022. Its admission is restored within the existing in-progress tranche; prior 16/2048 and SDK-correction-only completion recommendations retain historical scope. stock_hyper_v4 records the implemented stock Hyper successor under that admission, with real public Runtime framing/lifecycle/identity tests and separately scoped buffering observations. Independent acceptance and the remaining completion obligations stay open; no gate status changes."
+assessment = "The shared amendment and eight predecessor renewals retain review 5561188464's acceptance. production_slice and its review_correction record the first real Host HTTP slice, independently accepted as partial progress on PR #195. PR #196 review 5561667209 accepts the SDK incompatibility diagnosis but finds the attempted chunked enablement nonconforming. framing_slice retains that rejected candidate's observations; framing_slice.review_correction owns the restored raw-head refusal, active unfinished-trailer regressions, direct ingress gate and supported fixed/close lifecycle evidence. parser_policy_amendment records the docs-only ADR-0013 amendment prompted by PR #197 review 5562587383 and independently accepted at exact head a7acfa6c4779ce803c145babf653bd53e7ceebcb by PR #198 review 5562750022. Its admission is restored within the existing in-progress tranche; prior 16/2048 and SDK-correction-only completion recommendations retain historical scope. stock_hyper_v4 records the implemented stock Hyper successor under that admission, with real public Runtime framing/lifecycle/identity tests and separately scoped buffering observations. PR #200 review 5562973765 independently accepts exact head 39fba873cb56f6489401d985ea122ab305cd0f24 as partial production progress. lifecycle_pressure records the subsequent connect-availability defect, private v5 diagnostic identity and real-transport pressure/race evidence. Its remaining_completion owns the current completion gaps; no gate or tranche status changes."
 source_revision_rule = "The shared amendment production and primary regression changes are committed at implementation_ref. production_slice, framing_slice and their review_correction tables each name exact source revisions. Earlier observations retain historical scope; framing_slice's rejected candidate is not active production authority or an accepted guarantee. Its review_correction records the subsequent safe scope. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Evidence-only edits do not change production or fixtures. Each verification row retains its actual revision and provenance. parser_policy_amendment describes its docs-only revision: production/committed tests/lock at that revision equal base_ref from that table, with Transfer-Encoding refused. stock_hyper_v4 names the subsequent production/fixture checkpoint and supersedes refusal as current behavior; earlier measurements remain historical. Its standalone SDK probes are documentation-extracted counterexamples, not enabled production or transferred fork measurements."
 
 [scope]
@@ -59,12 +59,12 @@ tests = [
 [[evidence]]
 key = "http-consumer-property-read"
 execution_status = "partial"
-limitation = "stock_hyper_v4 implements successful stock Hyper fixed/chunked/trailer/close reads through the existing public Runtime, two distinct source-free targets and 100 alternating reads with per-read FD/account return. Independent exact-revision acceptance and remaining tranche completion obligations are open. Earlier partial/refusal/fork results retain historical provenance."
+limitation = "stock_hyper_v4 implements successful stock Hyper fixed/chunked/trailer/close reads through the existing public Runtime, two distinct source-free targets and 100 alternating reads with per-read FD/account return. PR #200 independently accepted that production slice. lifecycle_pressure renews it with the private v5 diagnostic correction; tranche completion remains open. Earlier partial/refusal/fork results retain historical provenance."
 
 [[evidence]]
 key = "http-resource-lifecycle"
 execution_status = "partial"
-limitation = "stock_hyper_v4 renews accepted parser-envelope production tests, unfinished rejection, declaration interoperability, call-owned retirement/cancellation/reuse and original-account release, plus actual buffer/growth/overlap/disposal observations. Input bounds and observed peaks do not qualify universal SDK heap/native-stack/disposal or all fault/real late-result/pressure paths. The remaining_completion table states outstanding obligations; old independent 16/2048 incompatibility controls retain historical scope."
+limitation = "stock_hyper_v4 renews accepted parser-envelope production tests, unfinished rejection, declaration interoperability, call-owned retirement/cancellation/reuse and original-account release, plus actual buffer/growth/overlap/disposal observations. lifecycle_pressure adds deterministic first-cause/result/expiry orders under exhausted parent capacity, raw-call allocation refusal, FD exhaustion and retirement/reuse. Its remaining_completion separates applicable evidence gaps from Host deployment assumptions; universal SDK heap/stack bounds are not required. Historical independent 16/2048 incompatibility controls retain historical scope."
 
 [[evidence]]
 key = "http-authoring-feature-conformance"
@@ -985,7 +985,11 @@ result = "passed"
 observation = "Only docs/ and workspace/ differ. No production, tests, fixtures, dependency manifests/lock, vendored SDK or gate manifest changes. Only the existing HTTP tranche's candidate admission/review location, private policy requirements, original SDK precheck and newly registered documented successor probe change in the work-package index; package rows and all other tranche entries are identical. Original acceptance references and observations remain at their recorded revisions."
 
 [stock_hyper_v4]
-status = "partial-production-progress-pending-independent-review"
+status = "independently-accepted-partial-production-progress"
+acceptance = "github-pr:200#pullrequestreview-5562973765"
+accepted_ref = "39fba873cb56f6489401d985ea122ab305cd0f24"
+merge_ref = "65ea098b4b4ed8c238b2f5eb1771c19960346dae"
+acceptance_scope = "COMMENT review independently accepts the scoped implementation/evidence, with no blocking or actionable findings. It does not close HTTP, WP-600, gates or release qualification. The review independently reruns 33 HTTP cases, all 12 indexed prechecks, workspace 787/3 ignored, feature matrix 35/35, strict HTTP Clippy, neutral dependency and registry-source checks, plus three reviewer-authored public-Runtime probes. Exact scope and unrepeated author controls remain in the linked review."
 base_ref = "5f3c5422aee6993e5f6e1bc373b8d9f7e076fe33"
 implementation_ref = "d31e8b0ca9a2704db0d42344b41c408b9e5943a3"
 fixture_ref = "d31e8b0ca9a2704db0d42344b41c408b9e5943a3"
@@ -1040,6 +1044,7 @@ external_application = "Temporary standalone Cargo application copies the unchan
 normal_graphs = "Nine locked/offline normal dependency trees: Core/Planning/Servient in default/no-default/async-no-std contain no Hyper/hyper-util/Tokio/rustls/reqwest. HTTP SDK dependencies remain private to the optional binding."
 
 [stock_hyper_v4.remaining_completion]
+disposition = "Historical PR #200 submission obligations. Independent implementation acceptance is satisfied by review 5562973765; lifecycle_pressure.remaining_completion below owns the current assessment. Do not interpret the old envelope wording as requiring universal Host SDK heap/stack bounds contrary to ADR-0023."
 obligations = [
     "Independent exact-revision implementation/completion review. No self-approval, merge, gate or tranche completion transition.",
     "Comprehensive supported SDK constructor/allocation/fault paths, complete continuation/native-stack envelopes, worst-case retained/transient/overlap and disposal work/allocation qualification. Current input bounds and measured paths cannot substitute for these claims.",
@@ -1127,3 +1132,86 @@ source_ref = "d31e8b0ca9a2704db0d42344b41c408b9e5943a3"
 command = "CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 bash tools/check-design-artifacts.sh"
 result = "passed"
 observation = "Current authority/package DAG, API ownership, ADR/Directory/legacy boundaries, all 196 resource fields/3 profiles, owned configuration vectors and 66 performance fixtures/cases pass after the production checkpoint. Existing work-package admission, predecessor/gate states, manifests/lock and shared code remain unchanged. No HTTP throughput/latency or full ARM/QEMU claim."
+
+
+[lifecycle_pressure]
+status = "partial-progress-pending-independent-review"
+base_ref = "65ea098b4b4ed8c238b2f5eb1771c19960346dae"
+source_ref = "ee14561311fae2f95c6aef86afa26fa47960ea3a"
+revision_rule = "Production, fixtures and README are exactly source_ref. Subsequent changes record evidence only; final-head authority/hygiene is renewed. Shared source, admission/index, predecessor/gate states and dependency manifests/lock equal base_ref."
+selection = "Prioritize an actual after-acceptance resource failure and retirement under pressure over repeating parser admission or requiring an opaque SDK maximum. Use the existing public ConsumerPropertyReadRuntime, actual stock Hyper/Tokio and independent raw TCP peers. No new public API, framing parser, dependency repair, resource row or admission cycle."
+
+[lifecycle_pressure.counterexample]
+fixture = "protocol-bindings/protocols/http/tests/fd_pressure.rs"
+original_result = "At the fetched base, an accepted call followed by Linux EMFILE (24) settles immediately with cause 604/HTTP connect failed and returns original accounts, but resource_failure incorrectly says BindingPolicy. The new behavioral assertion fails: left BindingPolicy, right DeploymentFailure. A sandbox-only attempt first failed to bind loopback; the actual counterexample was run with loopback access."
+repair = "Connect I/O errors now report DeploymentFailure with the existing bounded cause 604, selected plan/binding/generation/private identity and RetryClass::Never. Socket/process/network availability is not a captured input/concurrency ceiling. Preacceptance rejection, fallible body refusal (607/DeploymentFailure), protocol/body rejection (608/BindingPolicy), retirement and no-retry behavior are unchanged. Reuse the same fixed resource-error constructor for body refusal."
+identity = "clinkz-http-ip-v5 NUL separator; exact v4 policy suffix followed by ;connect-io=DeploymentFailure. Encoding is 888 bytes; private SHA-256 b6f53f4023eecdd59110544e7f95b7b36db054048b9bf18365991c8353245f5e; restricted std configuration c96358fbed98bf6e1aa9c4155748e2723cd240f3c50239ed1d451dbb4c6fb276. Independently calculated Python hashlib agrees. Captured client/support/compiler/registration/artifact/diagnostics agree; v1/v3/v4/unrestricted substitutions reject in both directions before I/O with original input recovery. No old artifact is relabeled."
+
+[lifecycle_pressure.execution]
+fd_pressure = "One Linux-only integration test launches its own test binary in a disposable bash child with RLIMIT_NOFILE=128. Open /dev/null until actual EMFILE, without changing parent limits. First, the acceptance runtime probe refuses and returns original timeout/options/request/plan. Second, exhaust after raw acceptance: the first explicit step and try_take settle socket creation failure without reactor/network progress; no connection, FD or parent-account leak. Third, establish a silent real peer, exhaust FDs, cancel/step/take without reactor/network progress, and require peer EOF/reset before reuse. A subsequent public b read returns 29; closing the peer listener then produces structured 604/DeploymentFailure on connection refusal. Original accounts return to baseline between calls and zero at root/observer destruction."
+race_matrix = "One integration test executes 16 controlled cases: fixed/chunked/close/forbidden-actual-trailer x result-first/cancel-first/deadline-first/cancel-then-deadline. Peer gates the final byte/trailer/EOF and independently observes local retirement. An application RuntimeClock fixes 0 and exact deadline tick 100; no wall-clock expiry race determines the oracle. Every case consumes all 20 parent accounts' remaining capacity after acceptance using committed unrelated-owner reservations. Zero and short 0/1/63 BindingPolls plus zero cleanup preserve accepted owner/account use and pending input. Result-first holds the terminal result under zero result-taking cleanup credit, then advances the clock and cancels; the original success or accepted Binding error remains. Exact-tick expiry committed by a zero-work step wins over later cancel; prior cancel wins over later expiry. Valid/invalid queued bytes do not supersede that first cause. Releasing pressure restores exact baseline; b=29 succeeds in the same Runtime, peer retires, final report is complete and all original accounts reach zero."
+raw_constructor = "The existing allocation tracer measures the actual last accepted-but-unpolled constructor Layout, cancels that probe without I/O, then refuses one matching allocation on the next public read. HTTP cause 600 independently identifies raw HostBindingCallBox refusal rather than Core envelope refusal. Original timeout/request/plan recover, parent baseline returns, and b=29 proves occupancy was released. The initial fixed 288/8 fixture passed scoped HTTP but failed workspace feature unification; deriving the actual Layout repairs the fixture. No production defect was inferred from that fixture failure. Current scoped x86_64 Layout is 288/8. Existing fixed/chunked 4096-byte fallible body refusal and policy-overflow controls also pass. Null injection into infallible SDK allocation is deliberately excluded under Host process-failure policy."
+late_output = "This concrete transport has no spawned driver/callback and start_cancel/poll_cancel destroy the owned future before returning Cancelled/Complete. It never returns BindingCallSettlement::Returned after cancellation. Therefore a buffered valid/invalid HTTP response after first cause is discarded by local retirement, not a fabricated late success. New real-transport cases test that reachable behavior. Shared Core normal/late seal and complete-backing regressions remain applicable for bindings that can return late values; no alternate binding or redundant proof is introduced here."
+
+[lifecycle_pressure.resource_scope]
+enforced = "Engine: unchanged admission, full request/carrier/result/backing/overlap, seals, first cause, cleanup/status/fallback and original-account provenance; saturation cases consume no additional parent capacity. Binding: unchanged accepted v4 main head 32/8192 inclusive, body 4096, trailers 32/raw bytes <8192, cumulative extensions <16384, wire 32768, read/paid callback 4096, one fresh call-owned connection and one queued SDK data frame. Socket/future destruction precedes settlement/reuse. No additional network read or driver is spawned by disposal."
+measured = "Fresh scoped Linux x86_64/debug: Call 288/8, Client 96/8, Target 120/8, exchange continuation 9648/8. Maximum-input after-acceptance trace: 72 requests, peak 51465, largest 9648, terminal live 288; actual trailer allocations grow 64 through 8192. Unfinished rejection has the same peak/largest; unfinished cancellation has 66 requests, peak 51465, pending live 47369 and two observed disposal requests. Silent cancellation has four requests, peak 113/largest 33 and 32 shared-runtime bytes retained until reactor progress/destruction. Engine cancel/status and result taking allocate zero on those sampled paths. Full fixed public trace: 142 requests, peak 56971/largest 11280, startup 17014/accepted 18050/terminal 21430; tracked backing ends at zero. These measurements are not SDK ceilings or native-stack measurements."
+deployment = "Application owns a live entered/driven I/O-enabled Tokio runtime, monotonic Servient clock/progress, allocator, OS/FD/thread/stack availability, scheduling/fairness and monitoring/restart. Shared reactor backing belongs to that runtime. Host infallible allocation failure may abort/diverge; supported returned constructor/body/socket errors retain structured failure and owners. Global ENFILE, process abort/termination, destroyed runtime and remote execution certainty have no general in-process recovery guarantee. Native-code isolation requires a deployment isolation boundary."
+disposal = "Measured local retirement succeeds without peer progress, including unfinished trailers, exhausted engine parent capacity and actual EMFILE. Call::retire drops the sole boxed exchange, including its in-future Hyper connection/operation and Tokio socket, before returning settlement; Call::drop releases busy only after dropping that future. These are finite executed paths and source ownership evidence, not a universal destructor-time/stack theorem. The engine preserves funding through those drops; shared runtime allocations can remain at their own live owner."
+
+[lifecycle_pressure.remaining_completion]
+assessment = "WP-600 and this HTTP tranche remain partial. PR #200 acceptance is satisfied at its exact historical head; this successor needs independent review. ADR-0023 requires qualified input/growth/ownership/refusal/finite local retirement and truthful cost reporting, not a universal SDK heap or native-stack ceiling. Old comprehensive-envelope wording is not an extra admission gate."
+blockers = [
+    "Representative native-stack and local-disposal work/cost observations remain incomplete. The 9648-byte continuation and configured 16384 transient allowance do not measure native stack. Extend evidence on supported Host paths; stronger hard-RAM/stack availability belongs to a selected deployment contract, not a universal opaque-SDK bound.",
+    "Remaining supported transport/runtime fault and retirement paths need risk-based qualification, especially pending-connect/runtime-registration errors and cancellation while another independent Runtime owner has live I/O on the same application reactor. Do not require simulated late Returned output from a transport that retires instead, or general recovery from process OOM/global OS exhaustion.",
+    "Unfiltered Servient async/no-std suite still fails at unchanged servient/tests/servient_test.rs:15 (std-only ServientBuilder import). Applicable scoped Consumer/Producer/lib suite passes. This is a broader feature-test coverage blocker, not a demonstrated HTTP production defect.",
+    "Independent review of this exact source/evidence and eventual independent tranche-completion assessment remain required. No self-approval, merge, admission/predecessor/gate transition or WP-600 closure. HTTPS/security, Producer/bidirectional loop, embedded hardware and release remain their separate boundaries.",
+]
+
+[[lifecycle_pressure.verification]]
+name = "public-http-and-costs"
+source_ref = "ee14561311fae2f95c6aef86afa26fa47960ea3a"
+command = "cargo test --locked --offline -p clinkz-wot-binding-http --all-targets -- --test-threads=1 --nocapture"
+result = "passed"
+observation = "36 test cases pass, including all original parser/framing/repeated-read/identity/SDK controls and three new integration cases (16 race subcases). Real loopback and Python peer execution; actual EMFILE and supported raw-call/body allocation refusal. Disposal/retained/overlap measurements above are renewed on this source."
+
+[[lifecycle_pressure.verification]]
+name = "workspace"
+source_ref = "ee14561311fae2f95c6aef86afa26fa47960ea3a"
+command = "cargo test --locked --offline --workspace"
+result = "passed"
+observation = "790 passed test/doc-test cases, 3 existing ignored examples; default Consumer/Producer and Core seal/compiler regressions are included. Initial hardcoded raw-call allocation-injection Layout failed under workspace feature unification; corrected fixture and final whole-workspace run pass. No shared production changes."
+
+[[lifecycle_pressure.verification]]
+name = "authority-and-scoped-hygiene"
+source_ref = "9e59ed1e0bc058dd60b602c36ba7e5e1ab55dd63"
+commands = [
+    "CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 bash tools/check-design-artifacts.sh",
+    "cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings",
+    "rustfmt --edition 2024 --check on all changed HTTP Rust files; git diff --check",
+]
+result = "passed"
+observation = "Authority/DAG/API/ADR/Directory/legacy, 196 resource fields/3 profiles, policy vectors and 66 performance cases pass. Transport I/O is excluded from those performance cases. Only the raw-call test's Layout discovery and README wording change afterward; final-head authority/Clippy/hygiene renewal is recorded separately. Existing public source/manifests/lock and gate/index records equal base_ref; PR #200's 35/35 feature matrix, neutral nine-cell normal dependency and exact registry-SDK/source checks retain accepted provenance rather than redundant repetition."
+
+
+[[lifecycle_pressure.verification]]
+name = "servient-portable-test-boundary"
+source_ref = "ee14561311fae2f95c6aef86afa26fa47960ea3a"
+commands = [
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async",
+    "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --lib --test consumer_property_read --test property_read",
+]
+result = "scoped-passed-unfiltered-blocked-existing-feature-gating"
+observation = "Unfiltered suite reproduces E0432 for std-only ServientBuilder at servient/tests/servient_test.rs:15. Scoped Consumer/Producer/lib suite passes all 31 cases. Shared sources and manifests equal fetched base; no broad-suite success is claimed."
+
+
+[[lifecycle_pressure.verification]]
+name = "final-source-authority-clippy-hygiene"
+source_ref = "ee14561311fae2f95c6aef86afa26fa47960ea3a"
+commands = [
+    "CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 bash tools/check-design-artifacts.sh",
+    "cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings",
+    "rustfmt --edition 2024 --check on all changed HTTP Rust files; git diff --check",
+]
+result = "passed"
+observation = "Renewed after the final production/fixture checkpoint and evidence assessment. Active authority/DAG/API/ADR/Directory/legacy, 196 resource fields/3 profiles, vectors and 66 performance fixtures/cases pass. Strict HTTP Clippy/formatting/diff hygiene pass. Later edits record this result only; source, test and README content remains source_ref."
