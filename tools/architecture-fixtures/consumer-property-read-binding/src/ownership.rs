@@ -139,6 +139,10 @@ impl OwnedPolicy {
     pub fn configuration(&self) -> ConsumerBindingConfiguration {
         self.configuration
     }
+    pub fn with_default_json_forms(mut self) -> Self {
+        self.configuration = self.configuration.with_default_json_forms().unwrap();
+        self
+    }
     pub(super) fn call(&self) -> OwnedCall {
         OwnedCall {
             policy: self.clone(),

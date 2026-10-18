@@ -1,6 +1,109 @@
 // Successor evidence through the production Core/Planning/Servient owners.
 use super::*;
 
+fn default_json_source() -> clinkz_wot_td::thing::Thing {
+    let mut source = source();
+    for property in source.properties.as_mut().unwrap().values_mut() {
+        for form in &mut property._interaction.forms {
+            form.scopes = None;
+            form.content_coding = None;
+        }
+    }
+    source
+}
+
+#[test]
+fn restricted_static_consume_rejects_before_publication_then_retries_and_releases() {
+    for mode in [Mode::Normal, Mode::LatePoll] {
+        let contract = BindingResourceContract::ConsumerOwnedV2;
+        let policy = owned_policy(contract);
+        let parent = RefCell::new(policy.parent_accounts());
+        let clock = Clock::default();
+        let stats = Arc::new(Stats::default());
+        let mut report = report_storage();
+        let registration = binding::static_registration(StaticClient::new_owned(
+            stats.clone(),
+            outputs(),
+            author(contract, mode, pool(), false).with_default_json_forms(),
+        ));
+        let (mut r, o) = StaticConsumerPropertyReadRuntime::try_new(
+            registration,
+            policy,
+            &clock,
+            &parent,
+            &mut report,
+        )
+        .unwrap_or_else(|_| panic!());
+        let clean = default_json_source();
+        let mut bad = clean.clone();
+        bad.properties
+            .as_mut()
+            .unwrap()
+            .get_mut("c-温度")
+            .unwrap()
+            ._interaction
+            .forms[1]
+            .additional_responses = Some(vec![]);
+        let error = r
+            .consume(&bad, &mut work(100000), |b| {
+                for _ in 0..100000 {
+                    b.step(&mut work(4096));
+                    if b.is_finished() {
+                        return;
+                    }
+                }
+                panic!("build stalled");
+            })
+            .unwrap_err();
+        assert!(matches!(error, CoreError::UnsupportedOperation(_)));
+        assert_ne!(r.state(), CompiledPlanSetState::Published);
+        assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+        drop(bad);
+        for _ in 0..10000 {
+            r.step(&mut cx(), &mut work(4096));
+            if r.state() == CompiledPlanSetState::Reclaimed {
+                break;
+            }
+        }
+        assert_eq!(r.state(), CompiledPlanSetState::Reclaimed);
+        assert!(matches!(
+            r.consume(&clean, &mut work(100000), |b| {
+                for _ in 0..100000 {
+                    b.step(&mut work(4096));
+                    if b.is_finished() {
+                        return;
+                    }
+                }
+                panic!("retry stalled");
+            })
+            .unwrap(),
+            StartStatus::Ready(())
+        ));
+        drop(clean);
+        for name in ["a-read", "c-温度"] {
+            let g = r
+                .read_property(name, InteractionOptions::new(), &mut work(100000))
+                .unwrap();
+            if mode == Mode::LatePoll {
+                r.cancel(g).unwrap();
+            }
+            for _ in 0..4 {
+                r.step(&mut cx(), &mut work(100000));
+            }
+            observe(usize::MAX);
+            assert!(r.try_take(g, &mut work(100000)).unwrap().unwrap().is_ok());
+            assert_eq!(trace().requests, 0);
+            disarm();
+        }
+        stop_static(&mut r);
+        drop(r);
+        drop(o);
+        assert_eq!(stats.starts.load(Ordering::SeqCst), 2);
+        assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 2);
+        assert!(parent.borrow().iter().all(|a| a.used() == 0));
+    }
+}
+
 #[test]
 fn owned_static_storage_and_callback_rows_keep_exact_boundaries() {
     let contract = BindingResourceContract::ConsumerOwnedV2;
@@ -878,6 +981,98 @@ mod host_owned {
     use super::super::host::{build, shutdown};
     use super::*;
     use std::sync::Mutex;
+    #[test]
+    fn restricted_host_consume_rejects_before_publication_then_retries_and_releases() {
+        for mode in [Mode::Normal, Mode::LatePoll] {
+            let contract = BindingResourceContract::ConsumerOwnedHostV2;
+            let policy = owned_policy(contract);
+            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let stats = Arc::new(Stats::default());
+            let registration = binding::host_registration(binding::HostClient::new_owned(
+                stats.clone(),
+                outputs(),
+                author(contract, mode, pool(), false).with_default_json_forms(),
+            ));
+            let (r, o) = ConsumerPropertyReadRuntime::try_new(
+                registration,
+                policy,
+                Arc::new(Clock::default()),
+                parent.clone(),
+            )
+            .unwrap_or_else(|_| panic!());
+            let clean = default_json_source();
+            let mut bad = clean.clone();
+            bad.properties
+                .as_mut()
+                .unwrap()
+                .get_mut("c-温度")
+                .unwrap()
+                ._interaction
+                .forms[1]
+                .scopes = Some(vec![]);
+            let error = r
+                .consume(&bad, &mut work(100000), |b| {
+                    for _ in 0..100000 {
+                        b.step(&mut work(4096));
+                        if b.is_finished() {
+                            return;
+                        }
+                    }
+                    panic!("build stalled");
+                })
+                .err()
+                .expect("reject later metadata");
+            assert!(matches!(error, CoreError::UnsupportedOperation(_)));
+            assert_ne!(r.state(), CompiledPlanSetState::Published);
+            assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+            drop(bad);
+            for _ in 0..10000 {
+                r.step(&mut cx(), &mut work(4096));
+                if r.state() == CompiledPlanSetState::Reclaimed {
+                    break;
+                }
+            }
+            assert_eq!(r.state(), CompiledPlanSetState::Reclaimed);
+            let h = match r
+                .consume(&clean, &mut work(100000), |b| {
+                    for _ in 0..100000 {
+                        b.step(&mut work(4096));
+                        if b.is_finished() {
+                            return;
+                        }
+                    }
+                    panic!("retry stalled");
+                })
+                .unwrap()
+            {
+                StartStatus::Ready(h) => h,
+                _ => panic!("not published"),
+            };
+            drop(clean);
+            for name in ["a-read", "c-温度"] {
+                let mut c = h
+                    .read_property(name, InteractionOptions::new(), &mut work(100000))
+                    .unwrap();
+                if mode == Mode::LatePoll {
+                    c.cancel().unwrap();
+                }
+                for _ in 0..4 {
+                    r.step(&mut cx(), &mut work(100000));
+                }
+                observe(usize::MAX);
+                assert!(c.try_take(&mut work(100000)).unwrap().unwrap().is_ok());
+                assert_eq!(trace().requests, 0);
+                disarm();
+            }
+            drop(h);
+            shutdown(&r);
+            drop(r);
+            drop(o);
+            assert_eq!(stats.starts.load(Ordering::SeqCst), 2);
+            assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 2);
+            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        }
+    }
     #[test]
     fn owned_host_engine_local_rows_are_enforced_through_complete_production_calls() {
         let policy = owned_policy(BindingResourceContract::ConsumerOwnedV2);

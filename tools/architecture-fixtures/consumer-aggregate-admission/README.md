@@ -69,12 +69,12 @@ no dev dependencies. Check it in std, no-default and async cells to prove TD's
 compile the actual public Planning aggregate; the historical fixture's ARM
 checks still compile only its narrower library.
 
-`tests/form_metadata.rs` is the focused WP-600 pre-code admission discriminator.
-It reproduces identical current owned logical/compiler inputs for default GET,
-explicit method/header/unknown extensions and response overrides using actual
-TD validation/lending. A small test-side paid presence fact and fail-closed
-restriction distinguish them without changing any production source. It also
-preserves typed round trips and unknown-versus-empty semantics. It does not
-prove the proposed production scalar/work/configuration implementation, HTTP
-execution, SDK qualification or independent admission. Run `--test form_metadata`
-in the same three feature cells above; no new fixture crate/dependency is added.
+`tests/form_metadata.rs` exercises the admitted WP-600 shared amendment using
+the production paid TD getter, owned plan scalar and restricted closed compiler.
+It covers default Forms, explicit method/header/unknown extensions, response
+overrides and present-empty metadata, preserving typed round trips, Ready replay,
+rewind and unknown-versus-empty semantics. `tests/aggregate.rs` exercises the
+actual Planning propagation and later-coordinate rejection before any compiler
+starts, funded rollback/retry and allocation failures for static/public Host
+complete registrations. Run in the same three feature cells above. These shared
+tests supply no HTTP I/O, SDK qualification or independent completion acceptance.

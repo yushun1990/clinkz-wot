@@ -189,9 +189,20 @@ fn slot<A: 'static>(
     (slot, account)
 }
 fn finish<'td, 'env, R: ConsumerPropertyReadRegistration>(
+    build: ConsumerPropertyReadBuild<'td, 'env, R>,
+    runtime: u64,
+    fail: usize,
+) -> Result<
+    ConsumerPropertyReadDraft<R::Artifact>,
+    (CoreError, ConsumerPropertyReadRollback<R::Artifact>),
+> {
+    finish_for(build, runtime, fail, BindingId::new(203))
+}
+fn finish_for<'td, 'env, R: ConsumerPropertyReadRegistration>(
     mut build: ConsumerPropertyReadBuild<'td, 'env, R>,
     runtime: u64,
     fail: usize,
+    binding: BindingId,
 ) -> Result<
     ConsumerPropertyReadDraft<R::Artifact>,
     (CoreError, ConsumerPropertyReadRollback<R::Artifact>),
@@ -213,7 +224,7 @@ fn finish<'td, 'env, R: ConsumerPropertyReadRegistration>(
             } => {
                 assert!(!emitted);
                 emitted = true;
-                assert_eq!(requirements.registration.binding_id(), BindingId::new(203));
+                assert_eq!(requirements.registration.binding_id(), binding);
                 for _ in 0..3 {
                     next = match next.step(&mut budget(4096), false) {
                         ConsumerPropertyReadBuildStep::Pending(next) => next,
@@ -301,6 +312,7 @@ fn success<R: ConsumerPropertyReadRegistration>(
         .unwrap();
         assert_eq!(target(selected.artifact().artifact()), expected);
         assert_eq!(selected.plan().thing_id().as_str(), "urn:aggregate:id");
+        assert_eq!(selected.plan().has_additional_form_metadata(), Some(true));
         assert_eq!(selected.candidate().registration_ordinal(), 0);
         assert_eq!(selected.candidate().candidate_order(), 0);
         assert_eq!(
@@ -393,12 +405,14 @@ fn host_public_aggregate_owns_every_coordinate_and_bounded_cleanup() {
 }
 
 fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
-    let source = source();
+    failures_for(r, &source());
+}
+fn failures_for<R: ConsumerPropertyReadRegistration>(r: &R, source: &Thing) {
     let c = config();
     let (mut root, mut account) = slot::<R::Artifact>(&c);
-    let draft = finish(
+    let draft = finish_for(
         build_consumer_property_read_aggregate(
-            proof(&source),
+            proof(source),
             r,
             &c,
             PlanSetGeneration::INITIAL,
@@ -408,6 +422,7 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
         .unwrap(),
         8 << 20,
         usize::MAX,
+        r.identity().binding_id(),
     )
     .unwrap_or_else(|(e, _)| panic!("baseline {e:?}"));
     let requests = trace().requests;
@@ -418,9 +433,9 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
     disarm();
     for index in 0..requests {
         let held = Box::new([9u8; 17]);
-        let result = finish(
+        let result = finish_for(
             build_consumer_property_read_aggregate(
-                proof(&source),
+                proof(source),
                 r,
                 &c,
                 PlanSetGeneration::INITIAL,
@@ -430,6 +445,7 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
             .unwrap(),
             8 << 20,
             index,
+            r.identity().binding_id(),
         );
         let (cause, owner) = result
             .err()
@@ -443,9 +459,9 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
         disarm();
     }
     // A capped child rejects before its unauthorized first allocator request.
-    let (cause, owner) = finish(
+    let (cause, owner) = finish_for(
         build_consumer_property_read_aggregate(
-            proof(&source),
+            proof(source),
             r,
             &c,
             PlanSetGeneration::INITIAL,
@@ -455,6 +471,7 @@ fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
         .unwrap(),
         0,
         usize::MAX,
+        r.identity().binding_id(),
     )
     .err()
     .unwrap();
@@ -776,6 +793,215 @@ fn owned_complete_registrations_preserve_all_bounds_and_paid_continuations() {
             policy(),
         ))
     });
+}
+
+fn default_json_source() -> Thing {
+    let mut source = source();
+    for property in source.properties.as_mut().unwrap().values_mut() {
+        for form in &mut property._interaction.forms {
+            form.scopes = None;
+            form.content_coding = None;
+            form.subprotocol = None;
+        }
+    }
+    source
+}
+fn restricted_policy() -> clinkz_wot_consumer_property_read_binding_fixture::ownership::OwnedPolicy
+{
+    use clinkz_wot_consumer_property_read_binding_fixture as binding;
+    binding::ownership::OwnedPolicy::try_new(
+        BindingResourceContract::ConsumerOwnedV2,
+        binding::Mode::Normal,
+        binding::ownership::PrivatePool::new(
+            16,
+            std::sync::Arc::new(core::sync::atomic::AtomicUsize::new(0)),
+        ),
+        false,
+        64,
+        64,
+        32,
+    )
+    .unwrap()
+    .with_default_json_forms()
+}
+fn restricted_forms<
+    R: checked_program::ConsumerPropertyReadRegistration + ConsumerPropertyReadRegistration,
+>(
+    factory: impl Fn(std::sync::Arc<clinkz_wot_consumer_property_read_binding_fixture::Stats>) -> R,
+    target: impl Fn(&BindingArtifact<<R as ConsumerPropertyReadRegistration>::Artifact>) -> &str,
+) {
+    use clinkz_wot_consumer_property_read_binding_fixture as binding;
+    use serde_json::json;
+    use std::sync::{Arc, atomic::Ordering};
+    let clean = default_json_source();
+    let stats = Arc::new(binding::Stats::default());
+    let r = factory(stats.clone());
+    assert!(
+        ConsumerPropertyReadRegistration::support(&r)
+            .consumer_configuration()
+            .unwrap()
+            .requires_default_json_forms()
+    );
+    let cfg = config();
+    let (mut root, mut account) = slot::<<R as ConsumerPropertyReadRegistration>::Artifact>(&cfg);
+    let binding = ConsumerPropertyReadRegistration::identity(&r).binding_id();
+    for fields in [
+        json!({"htv:methodName":"GET"}),
+        json!({"htv:methodName":"POST"}),
+        json!({"htv:headers":[]}),
+        json!({"unknown:metadata":{"nested":[1,2,3]}}),
+        json!({"response":{"contentType":"application/json"}}),
+        json!({"response":{"contentType":"text/plain"}}),
+        json!({"additionalResponses":[]}),
+        json!({"additionalResponses":[{"success":false,"contentType":"text/plain"}]}),
+        json!({"contentCoding":"identity"}),
+        json!({"subprotocol":""}),
+        json!({"scopes":[]}),
+        json!({"scopes":["scope"]}),
+        json!({"contentType":"text/plain"}),
+        json!({"contentType":"application/json;charset=utf-8"}),
+    ] {
+        let mut bad = clean.clone();
+        let mut form = json!({"href":"last"});
+        form.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        bad.properties
+            .as_mut()
+            .unwrap()
+            .get_mut("c-温度")
+            .unwrap()
+            ._interaction
+            .forms[1] = serde_json::from_value(form).unwrap();
+        let counts =
+            checked_program::test_support::traced(proof(&bad), factory(stats.clone()), None, false);
+        assert!(counts.failed);
+        assert_eq!(
+            (counts.bounds, counts.starts, counts.steps, counts.aborts),
+            (3, 0, 0, 0)
+        );
+
+        let held = Box::new([9u8; 17]);
+        let result = finish_for(
+            build_consumer_property_read_aggregate(
+                proof(&bad),
+                &r,
+                &cfg,
+                PlanSetGeneration::INITIAL,
+                ledger(0),
+                &mut root,
+            )
+            .unwrap(),
+            8 << 20,
+            usize::MAX,
+            binding,
+        );
+        let (cause, owner) = result
+            .err()
+            .expect("one later ineligible coordinate rejects the transaction");
+        assert!(matches!(cause, CoreError::UnsupportedOperation(_)));
+        assert_eq!(cause.context().form_index(), Some(1));
+        assert_eq!(
+            cause.context().binding(),
+            Some((
+                binding,
+                ConsumerPropertyReadRegistration::identity(&r).binding_generation()
+            ))
+        );
+        assert_eq!(
+            cause.context().operation(),
+            Some(clinkz_wot_td::data_type::Operation::ReadProperty)
+        );
+        assert!(cause.context().plan().is_some());
+        assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
+        drop(bad);
+        reclaim(owner);
+        assert!(root.take().is_none());
+        assert_eq!(trace().live, 0);
+        disarm();
+        assert_eq!(*held, [9; 17]);
+        assert!(
+            account.used() > 0,
+            "original cleanup funding remains committed"
+        );
+
+        // The same registration and original cleanup root can retry after the
+        // failed transaction. Output owns only copied facts, including false.
+        let source = clean.clone();
+        let draft = finish_for(
+            build_consumer_property_read_aggregate(
+                proof(&source),
+                &r,
+                &cfg,
+                PlanSetGeneration::INITIAL,
+                ledger(0),
+                &mut root,
+            )
+            .unwrap(),
+            8 << 20,
+            usize::MAX,
+            binding,
+        )
+        .unwrap_or_else(|(e, _)| panic!("retry {e:?}"));
+        drop(source);
+        for name in ["a-read", "c-温度"] {
+            let selected = select_consumer_property_read_aggregate(
+                &draft,
+                name,
+                &InteractionOptions::default(),
+            )
+            .unwrap();
+            assert_eq!(selected.plan().has_additional_form_metadata(), Some(false));
+            assert_eq!(selected.plan().content_type(), Some("application/json"));
+            assert_eq!(
+                target(selected.artifact().artifact()),
+                selected.plan().resolved_target()
+            );
+        }
+        assert_eq!(draft.footprint().retained_source_bytes, 0);
+        reclaim(draft.into_rollback());
+        assert!(root.take().is_none());
+        assert_eq!(trace().live, 0);
+        disarm();
+    }
+    let bytes = account.used();
+    drop(root);
+    assert!(account.release_committed(bytes));
+    failures_for(&r, &clean);
+}
+#[test]
+fn restricted_static_later_form_rejects_whole_transaction_then_retries() {
+    use clinkz_wot_consumer_property_read_binding_fixture as binding;
+    restricted_forms(
+        |stats| {
+            binding::static_registration(binding::StaticClient::new_owned(
+                stats,
+                core::array::from_fn(|_| None),
+                restricted_policy(),
+            ))
+        },
+        |artifact| artifact.payload().target(),
+    );
+}
+#[cfg(feature = "std")]
+#[test]
+fn restricted_host_later_form_rejects_whole_transaction_then_retries() {
+    use clinkz_wot_consumer_property_read_binding_fixture as binding;
+    restricted_forms(
+        |stats| {
+            binding::host_registration(binding::HostClient::new_owned(
+                stats,
+                core::array::from_fn(|_| None),
+                restricted_policy(),
+            ))
+        },
+        |artifact| {
+            artifact
+                .try_payload::<ResolvedTargetArtifact>(artifact.compatibility())
+                .unwrap()
+                .target()
+        },
+    );
 }
 
 fn invalid_inputs<R: ConsumerPropertyReadRegistration>(r: R) {

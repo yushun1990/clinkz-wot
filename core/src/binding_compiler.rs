@@ -457,6 +457,7 @@ pub struct ConsumerBindingConfiguration {
     contract: BindingResourceContract,
     capacity: u8,
     cell: u8,
+    default_json_forms: bool,
     private_policy: BindingConfigurationDigest,
     result: (u64, u64),
     key: BindingConfigurationDigest,
@@ -515,6 +516,7 @@ impl ConsumerBindingConfiguration {
             contract,
             capacity: target_capacity as u8,
             cell,
+            default_json_forms: false,
             private_policy,
             result: (body_bytes, media_capacity),
             key,
@@ -547,6 +549,45 @@ impl ConsumerBindingConfiguration {
     /// Returns the derived eligibility key, shared by compiler and artifacts.
     pub const fn configuration(&self) -> BindingConfigurationDigest {
         self.key
+    }
+
+    /// Restricts the closed compiler to known metadata-free default JSON Forms.
+    /// The derived key preserves every original configuration operand. Repeated
+    /// application is idempotent and performs no allocation or client callback.
+    pub fn with_default_json_forms(mut self) -> CoreResult<Self> {
+        if self.default_json_forms {
+            return Ok(self);
+        }
+        let key = BindingConfigurationDigest::new(
+            sha2_const_stable::Sha256::new()
+                .update(b"clinkz-consumer-default-json-forms-v1\0")
+                .update(self.key.as_bytes())
+                .finalize(),
+        );
+        if key == self.key || (1..=64).any(|capacity| key == strict_configuration(capacity)) {
+            return Err(CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+                    .with_redacted_cause(327, "Consumer Form restriction identity collision"),
+            ));
+        }
+        self.key = key;
+        self.default_json_forms = true;
+        Ok(self)
+    }
+
+    /// Whether the client and compiler require paid default JSON Form facts.
+    pub const fn requires_default_json_forms(&self) -> bool {
+        self.default_json_forms
+    }
+}
+
+// One additional fixed predicate unit covers presence and the bounded media
+// comparison (at most the length of "application/json"). Strict/unrestricted
+// callbacks retain their existing costs.
+const fn form_eligibility_work(configuration: Option<ConsumerBindingConfiguration>) -> u64 {
+    match configuration {
+        Some(configuration) => configuration.requires_default_json_forms() as u64,
+        None => 0,
     }
 }
 
@@ -608,6 +649,15 @@ impl ResolvedTargetCompiler {
         {
             return Err(resolved_target_error(input));
         }
+        if form_eligibility_work(self.owned) != 0
+            && (input.logical_plan().has_additional_form_metadata() != Some(false)
+                || input.logical_plan().content_type() != Some("application/json"))
+        {
+            return Err(CoreError::UnsupportedOperation(
+                resolved_target_context(input)
+                    .with_redacted_cause(328, "Consumer compiler requires default JSON Forms"),
+            ));
+        }
         Ok(())
     }
 
@@ -646,16 +696,20 @@ impl ResolvedTargetArtifact {
 
 fn resolved_target_error(input: &BindingCompilerInput<'_>) -> CoreError {
     CoreError::Validation(
-        ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-            .with_operation(input.logical_plan().operation())
-            .with_form_index(input.logical_plan().form_index())
-            .with_plan(input.logical_plan().plan_id())
-            .with_binding(
-                input.candidate().binding_id(),
-                input.candidate().binding_generation(),
-            )
+        resolved_target_context(input)
             .with_redacted_cause(321, "input does not match the closed Consumer compiler"),
     )
+}
+
+fn resolved_target_context(input: &BindingCompilerInput<'_>) -> ErrorContext {
+    ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+        .with_operation(input.logical_plan().operation())
+        .with_form_index(input.logical_plan().form_index())
+        .with_plan(input.logical_plan().plan_id())
+        .with_binding(
+            input.candidate().binding_id(),
+            input.candidate().binding_generation(),
+        )
 }
 
 impl BindingCompilerExtension for ResolvedTargetCompiler {
@@ -676,8 +730,10 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
             BindingArtifactFootprint::new(1, size_of::<ResolvedTargetArtifact>() as u64),
             size_of::<ResolvedTargetCompilerCursor>() as u64,
             size_of::<ConsumerCompilerTemporary>() as u64,
-            WorkBudget::new()
-                .with_remaining(WorkClass::BindingPolls, 2 * RESOLVED_TARGET_STEP_WORK),
+            WorkBudget::new().with_remaining(
+                WorkClass::BindingPolls,
+                2 * (RESOLVED_TARGET_STEP_WORK + form_eligibility_work(self.owned)),
+            ),
         ))
     }
 
@@ -703,7 +759,8 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
         consumer_trace::hit(3);
         // Unpaid retries cannot inspect/advance continuation or refill its
         // lifetime allowance. Even a fresh caller budget cannot reset it.
-        if budget.remaining(WorkClass::BindingPolls) < RESOLVED_TARGET_STEP_WORK {
+        let step_work = RESOLVED_TARGET_STEP_WORK + form_eligibility_work(self.owned);
+        if budget.remaining(WorkClass::BindingPolls) < step_work {
             return BindingCompilerStep::Pending(cursor);
         }
         if cursor.remaining == 0 {
@@ -712,14 +769,12 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
                 cursor,
             ));
         }
-        budget
-            .consume(WorkClass::BindingPolls, RESOLVED_TARGET_STEP_WORK)
-            .unwrap();
+        budget.consume(WorkClass::BindingPolls, step_work).unwrap();
         cursor.remaining -= 1;
-        if self.check(input).is_err()
-            || cursor.plan != input.logical_plan().plan_id()
-            || cursor.candidate != input.candidate()
-        {
+        if let Err(cause) = self.check(input) {
+            return BindingCompilerStep::Failed(BindingCompilerFailure::new(cause, cursor));
+        }
+        if cursor.plan != input.logical_plan().plan_id() || cursor.candidate != input.candidate() {
             return BindingCompilerStep::Failed(BindingCompilerFailure::new(
                 resolved_target_error(input),
                 cursor,
@@ -789,15 +844,15 @@ impl ConsumerCompilerSupport {
     }
     /// Fixed pre-bounds cost, known before invoking bounds.
     pub const fn bounds_work(&self) -> u64 {
-        1
+        1 + form_eligibility_work(self.owned)
     }
     /// Fixed native start cost, separate from Host allocation work.
     pub const fn start_work(&self) -> u64 {
-        1
+        1 + form_eligibility_work(self.owned)
     }
     /// Total work per paid step, including supported Host transport when present.
     pub const fn step_work(&self) -> u64 {
-        RESOLVED_TARGET_STEP_WORK + self.host_erased as u64
+        RESOLVED_TARGET_STEP_WORK + form_eligibility_work(self.owned) + self.host_erased as u64
     }
     /// Fixed native abort cost for an owned cursor.
     pub const fn abort_work(&self) -> u64 {

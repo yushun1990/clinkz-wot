@@ -60,6 +60,26 @@ fn owned_configuration_canonical_vectors_namespace_and_constructor_boundaries() 
             .collect::<String>()
     };
     assert_eq!(hex(base), expected);
+    assert!(!base.requires_default_json_forms());
+    let (restricted, requests) = observe(false, || base.with_default_json_forms().unwrap());
+    no_requests(requests);
+    assert!(restricted.requires_default_json_forms());
+    assert_eq!(restricted.with_default_json_forms().unwrap(), restricted);
+    let expected = if cfg!(feature = "std") {
+        "0650f7a9e195b9d2bb70276678d9d636a9287542d836ee8820d11a5b285264a3"
+    } else if cfg!(feature = "async") {
+        "f28d56485b79a2c4f633d8cf0e558a5f5dd2b2622641fe14f669af9f0ee83926"
+    } else {
+        "3ef164109f98114818458634105c878df47105612e92ad9ca6612f8284934928"
+    };
+    // Independently derived with Python hashlib, over the unchanged v1 vectors.
+    assert_eq!(hex(restricted), expected);
+    assert_ne!(restricted.configuration(), base.configuration());
+    println!(
+        "configuration/plan layouts: {:?} {:?}",
+        Layout::new::<ConsumerBindingConfiguration>(),
+        Layout::new::<LogicalInteractionPlan>()
+    );
     if cfg!(feature = "std") {
         for (c, expected) in [
             (
@@ -152,7 +172,18 @@ fn owned_configuration_canonical_vectors_namespace_and_constructor_boundaries() 
             )
         });
         no_requests(requests);
-        assert_ne!(owned.unwrap().configuration(), strict.configuration());
+        let owned = owned.unwrap();
+        assert_ne!(owned.configuration(), strict.configuration());
+        let restricted = owned.with_default_json_forms().unwrap();
+        assert_ne!(restricted.configuration(), owned.configuration());
+        for other_capacity in 1..=64 {
+            assert_ne!(
+                restricted.configuration(),
+                ResolvedTargetCompiler::try_new(other_capacity)
+                    .unwrap()
+                    .configuration()
+            );
+        }
     }
     for (capacity, body, media) in [
         (0, 64, 32),
@@ -740,6 +771,237 @@ fn plan(target: &str) -> LogicalInteractionPlan {
         None,
     )
     .unwrap()
+}
+fn json_plan(metadata: Option<bool>, media: Option<&str>) -> LogicalInteractionPlan {
+    let plan = LogicalInteractionPlan::try_property_read(
+        PlanId::new(
+            SlotIndex::new(23),
+            Generation::INITIAL.checked_next().unwrap(),
+        ),
+        ThingId::from("urn:production:compiler"),
+        "temperature".into(),
+        1,
+        "mock://s/a".into(),
+        media.map(Into::into),
+        None,
+    )
+    .unwrap();
+    assert_eq!(plan.has_additional_form_metadata(), None);
+    match metadata {
+        Some(present) => plan.with_additional_form_metadata(present),
+        None => plan,
+    }
+}
+
+fn assert_form_rejected(error: &CoreError, input: &BindingCompilerInput<'_>) {
+    assert!(matches!(error, CoreError::UnsupportedOperation(_)));
+    let context = error.context();
+    assert_eq!(context.phase(), ErrorPhase::Admission);
+    assert_eq!(context.retry_class(), RetryClass::Never);
+    assert_eq!(context.operation(), Some(input.logical_plan().operation()));
+    assert_eq!(
+        context.form_index(),
+        Some(input.logical_plan().form_index())
+    );
+    assert_eq!(context.plan(), Some(input.logical_plan().plan_id()));
+    assert_eq!(
+        context.binding(),
+        Some((
+            input.candidate().binding_id(),
+            input.candidate().binding_generation()
+        ))
+    );
+}
+
+#[test]
+fn restricted_native_bounds_start_and_paid_step_reject_unknown_present_and_media() {
+    let original = ConsumerBindingConfiguration::try_new(
+        BindingResourceContract::ConsumerOwnedV2,
+        64,
+        BindingConfigurationDigest::new([5; 32]),
+        4096,
+        32,
+    )
+    .unwrap();
+    let compiler = ResolvedTargetCompiler::new_owned(original.with_default_json_forms().unwrap());
+    let id = identity(&compiler, 2);
+    let valid = json_plan(Some(false), Some("application/json"));
+    let valid_input =
+        BindingCompilerInput::new(&valid, candidate(id), BindingArtifactRole::ConsumerCall);
+    assert_eq!(
+        compiler
+            .bounds(&valid_input)
+            .unwrap()
+            .work()
+            .remaining(WorkClass::BindingPolls),
+        6
+    );
+    for metadata in [None, Some(false), Some(true)] {
+        for media in [
+            None,
+            Some("application/json"),
+            Some("text/plain"),
+            Some("application/json;charset=utf-8"),
+            Some("APPLICATION/JSON"),
+        ] {
+            let plan = json_plan(metadata, media);
+            let input =
+                BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);
+            let (bounds, requests) = observe(false, || compiler.bounds(&input));
+            no_requests(requests);
+            let (start, requests) = observe(false, || compiler.start(&input));
+            no_requests(requests);
+            let eligible = metadata == Some(false) && media == Some("application/json");
+            assert_eq!(bounds.is_ok(), eligible);
+            assert_eq!(start.is_ok(), eligible);
+            if !eligible {
+                assert_form_rejected(&bounds.unwrap_err(), &input);
+                assert_form_rejected(&start.unwrap_err(), &input);
+            }
+            let mut cursor = compiler.start(&valid_input).unwrap();
+            for _ in 0..3 {
+                for units in 0..3 {
+                    let mut budget = work(units);
+                    let (step, requests) =
+                        observe(false, || compiler.step(&input, cursor, &mut budget));
+                    no_requests(requests);
+                    let BindingCompilerStep::Pending(next) = step else {
+                        panic!("short credit advanced")
+                    };
+                    cursor = next;
+                    assert_eq!(budget.remaining(WorkClass::BindingPolls), units);
+                }
+            }
+            let mut budget = work(3);
+            let (step, requests) = observe(false, || compiler.step(&input, cursor, &mut budget));
+            no_requests(requests);
+            assert_eq!(budget.remaining(WorkClass::BindingPolls), 0);
+            if eligible {
+                let BindingCompilerStep::Pending(cursor) = step else {
+                    panic!()
+                };
+                let BindingCompilerStep::Complete(output) =
+                    compiler.step(&input, cursor, &mut work(3))
+                else {
+                    panic!()
+                };
+                assert_eq!(output.artifact().payload().target(), "mock://s/a");
+            } else {
+                let BindingCompilerStep::Failed(failure) = step else {
+                    panic!()
+                };
+                let (cause, cursor) = failure.into_parts();
+                assert_form_rejected(&cause, &input);
+                compiler.abort(cursor);
+            }
+            // The original unrestricted owned and strict copy primitive retain
+            // their accepted behavior for all metadata/media combinations.
+            for unrestricted in [
+                ResolvedTargetCompiler::try_new(64).unwrap(),
+                ResolvedTargetCompiler::new_owned(original),
+            ] {
+                let input = BindingCompilerInput::new(
+                    &plan,
+                    candidate(identity(&unrestricted, 2)),
+                    BindingArtifactRole::ConsumerCall,
+                );
+                assert!(unrestricted.bounds(&input).is_ok());
+                unrestricted.abort(unrestricted.start(&input).unwrap());
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn restricted_public_host_compiler_preserves_slot_on_short_credit_and_eligibility_failure() {
+    let configuration = ConsumerBindingConfiguration::try_new(
+        BindingResourceContract::ConsumerOwnedHostV2,
+        64,
+        BindingConfigurationDigest::new([5; 32]),
+        4096,
+        32,
+    )
+    .unwrap()
+    .with_default_json_forms()
+    .unwrap();
+    let native = ResolvedTargetCompiler::new_owned(configuration);
+    let id = identity(&native, 2);
+    let compiler = HostBindingCompilerRegistration::try_new_consumer(native).unwrap();
+    let valid = json_plan(Some(false), Some("application/json"));
+    let valid_input =
+        BindingCompilerInput::new(&valid, candidate(id), BindingArtifactRole::ConsumerCall);
+    assert_eq!(
+        compiler
+            .bounds(&valid_input)
+            .unwrap()
+            .work()
+            .remaining(WorkClass::BindingPolls),
+        8
+    );
+    for (metadata, media) in [
+        (None, Some("application/json")),
+        (Some(true), Some("application/json")),
+        (Some(false), None),
+        (Some(false), Some("text/plain")),
+        (Some(false), Some("application/json;charset=utf-8")),
+        (Some(false), Some("application/json")),
+    ] {
+        let plan = json_plan(metadata, media);
+        let input =
+            BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);
+        let eligible = metadata == Some(false) && media == Some("application/json");
+        if !eligible {
+            assert_form_rejected(&compiler.bounds(&input).unwrap_err(), &input);
+            let (rejected, allocations) = observe(false, || compiler.start(&input));
+            assert_form_rejected(&rejected.unwrap_err(), &input);
+            assert_eq!((allocations.allocations, allocations.releases), (1, 1));
+            assert_eq!(allocations.allocated[0], allocations.released[0]);
+        }
+        let mut cursor = compiler.start(&valid_input).unwrap();
+        for _ in 0..3 {
+            for units in 0..4 {
+                let mut budget = work(units);
+                let (step, allocations) =
+                    observe(false, || compiler.step(&input, cursor, &mut budget));
+                no_requests(allocations);
+                let BindingCompilerStep::Pending(next) = step else {
+                    panic!("short Host credit advanced")
+                };
+                cursor = next;
+                assert_eq!(budget.remaining(WorkClass::BindingPolls), units);
+            }
+        }
+        let mut budget = work(4);
+        let (step, allocations) = observe(false, || compiler.step(&input, cursor, &mut budget));
+        no_requests(allocations);
+        assert_eq!(budget.remaining(WorkClass::BindingPolls), 0);
+        if eligible {
+            let BindingCompilerStep::Pending(cursor) = step else {
+                panic!()
+            };
+            let BindingCompilerStep::Complete(output) = compiler.step(&input, cursor, &mut work(4))
+            else {
+                panic!()
+            };
+            assert_eq!(
+                output
+                    .artifact()
+                    .try_payload::<ResolvedTargetArtifact>(id.artifact_compatibility())
+                    .unwrap()
+                    .target(),
+                "mock://s/a"
+            );
+        } else {
+            let BindingCompilerStep::Failed(failure) = step else {
+                panic!()
+            };
+            let (cause, cursor) = failure.into_parts();
+            assert_form_rejected(&cause, &input);
+            let ((), allocations) = observe(false, || compiler.abort(cursor).unwrap());
+            assert_eq!((allocations.allocations, allocations.releases), (0, 1));
+        }
+    }
 }
 fn candidate(id: BindingRegistrationIdentity) -> BindingCandidate {
     BindingCandidate::new(
@@ -2309,160 +2571,362 @@ mod consumer_only_support {
             .with_consumer_result_limits(c.result_limits().0, c.result_limits().1)
     }
     #[test]
-    fn owned_capture_checks_every_client_operand_and_preserves_exact_complete_owner() {
-        let actual = owned_configuration(64, 1, 64, 32);
+    fn restricted_and_unrestricted_compiler_and_artifact_substitution_rejects_before_client() {
+        let original = owned_configuration(64, 1, 64, 32);
+        let restricted = original.with_default_json_forms().unwrap();
         let drops = Arc::new(AtomicUsize::new(0));
-        for client_config in [
-            None,
-            Some(owned_configuration(63, 1, 64, 32)),
-            Some(owned_configuration(64, 2, 64, 32)),
-            Some(owned_configuration(64, 1, 65, 32)),
-            Some(owned_configuration(64, 1, 64, 33)),
-        ] {
+        let plan = json_plan(Some(false), Some("application/json"));
+        for (actual, foreign) in [(original, restricted), (restricted, original)] {
+            let compiler = ResolvedTargetCompiler::new_owned(actual);
+            let id = identity(&compiler, 7);
+            let foreign_compiler = ResolvedTargetCompiler::new_owned(foreign);
+            let foreign_id = identity(&foreign_compiler, 7);
+            let foreign_input = BindingCompilerInput::new(
+                &plan,
+                candidate(foreign_id),
+                BindingArtifactRole::ConsumerCall,
+            );
+            assert!(matches!(
+                compiler.bounds(&foreign_input),
+                Err(CoreError::Validation(_))
+            ));
+            assert!(matches!(
+                compiler.start(&foreign_input),
+                Err(CoreError::Validation(_))
+            ));
+            let cursor = foreign_compiler.start(&foreign_input).unwrap();
+            let BindingCompilerStep::Failed(failure) =
+                compiler.step(&foreign_input, cursor, &mut work(3))
+            else {
+                panic!("compiler substitution")
+            };
+            let (cause, cursor) = failure.into_parts();
+            assert!(matches!(cause, CoreError::Validation(_)));
+            foreign_compiler.abort(cursor);
+            let cursor = foreign_compiler.start(&foreign_input).unwrap();
+            let BindingCompilerStep::Pending(cursor) =
+                foreign_compiler.step(&foreign_input, cursor, &mut work(3))
+            else {
+                panic!()
+            };
+            let BindingCompilerStep::Complete(output) =
+                foreign_compiler.step(&foreign_input, cursor, &mut work(3))
+            else {
+                panic!()
+            };
+            let envelope = BindingArtifactEnvelope::try_new(
+                artifact_identity(foreign_id, &plan),
+                output.artifact().footprint(),
+                output.into_artifact(),
+            )
+            .unwrap();
+            let request = OutboundRequest::property_read(
+                BindingArtifactRef::new(envelope.identity(), SlotIndex::new(0)),
+                Default::default(),
+                None,
+            )
+            .unwrap();
+            let expected = OutboundRequest::property_read(
+                BindingArtifactRef::new(envelope.identity(), SlotIndex::new(0)),
+                Default::default(),
+                None,
+            )
+            .unwrap();
+            let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
+            client.owned = Some(actual);
+            let mut owner = StaticConsumerBindingRegistration::new(
+                StaticConsumerBindingRegistrationInput::new(
+                    id,
+                    BindingExecutionSupport::application_static(),
+                    StaticBindingCompilerRegistration::new(compiler),
+                    client,
+                    owned_resources(actual),
+                    BindingStatusPolicy::new(3, 5),
+                ),
+            )
+            .unwrap_or_else(|_| panic!());
+            let mut slot = StaticConsumerPropertyReadSlot::new();
+            let (rejected, requests) = observe(false, || {
+                owner.start_consumer_property_read(request, &envelope, &mut slot, &mut work(100))
+            });
+            no_requests(requests);
+            let rejected = rejected.err().expect("artifact substitution");
+            assert_eq!(rejected.input(), &expected);
+            assert!(
+                matches!(rejected.error().error(), CoreError::Validation(_)),
+                "raw client returns UnsupportedOperation if reached"
+            );
+            assert!(slot.is_vacant());
+
+            #[cfg(feature = "std")]
+            {
+                let mut client = CaptureClient::<ResolvedTargetCompiler>::new(
+                    id.artifact_compatibility(),
+                    &drops,
+                );
+                client.owned = Some(actual);
+                let owner = HostConsumerBindingRegistration::new(
+                    HostConsumerBindingRegistrationInput::new(
+                        id,
+                        BindingExecutionSupport::host_erased(),
+                        HostBindingCompilerRegistration::try_new_consumer(
+                            ResolvedTargetCompiler::new_owned(actual),
+                        )
+                        .unwrap(),
+                        Box::new(client),
+                        owned_resources(actual),
+                        BindingStatusPolicy::new(3, 5),
+                    ),
+                )
+                .unwrap_or_else(|_| panic!());
+                let foreign_compiler =
+                    HostBindingCompilerRegistration::try_new_consumer(foreign_compiler).unwrap();
+                let cursor = foreign_compiler.start(&foreign_input).unwrap();
+                let BindingCompilerStep::Pending(cursor) =
+                    foreign_compiler.step(&foreign_input, cursor, &mut work(4))
+                else {
+                    panic!()
+                };
+                let BindingCompilerStep::Complete(output) =
+                    foreign_compiler.step(&foreign_input, cursor, &mut work(4))
+                else {
+                    panic!()
+                };
+                let envelope = BindingArtifactEnvelope::try_new(
+                    artifact_identity(foreign_id, &plan),
+                    output.artifact().footprint(),
+                    output.into_artifact(),
+                )
+                .unwrap();
+                let request = OutboundRequest::property_read(
+                    BindingArtifactRef::new(envelope.identity(), SlotIndex::new(0)),
+                    Default::default(),
+                    None,
+                )
+                .unwrap();
+                let expected = OutboundRequest::property_read(
+                    BindingArtifactRef::new(envelope.identity(), SlotIndex::new(0)),
+                    Default::default(),
+                    None,
+                )
+                .unwrap();
+                let (rejected, requests) = observe(false, || {
+                    owner.start_consumer_property_read(request, &envelope)
+                });
+                no_requests(requests);
+                let rejected = rejected.err().expect("Host artifact substitution");
+                assert_eq!(rejected.input(), &expected);
+                assert!(matches!(rejected.error().error(), CoreError::Validation(_)));
+            }
+        }
+    }
+    #[test]
+    fn owned_capture_checks_every_client_operand_and_preserves_exact_complete_owner() {
+        let original = owned_configuration(64, 1, 64, 32);
+        for actual in [original, original.with_default_json_forms().unwrap()] {
+            let drops = Arc::new(AtomicUsize::new(0));
+            for client_config in [
+                None,
+                Some(if actual.requires_default_json_forms() {
+                    original
+                } else {
+                    original.with_default_json_forms().unwrap()
+                }),
+                Some(owned_configuration(63, 1, 64, 32)),
+                Some(owned_configuration(64, 2, 64, 32)),
+                Some(owned_configuration(64, 1, 65, 32)),
+                Some(owned_configuration(64, 1, 64, 33)),
+            ] {
+                let compiler = ResolvedTargetCompiler::new_owned(actual);
+                let id = identity(&compiler, 7);
+                let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
+                client.owned = client_config;
+                let input = StaticConsumerBindingRegistrationInput::new(
+                    id,
+                    BindingExecutionSupport::application_static(),
+                    StaticBindingCompilerRegistration::new(compiler),
+                    client,
+                    owned_resources(actual),
+                    BindingStatusPolicy::new(3, 5),
+                );
+                let (result, requests) =
+                    observe(false, || StaticConsumerBindingRegistration::new(input));
+                no_requests(requests);
+                let returned = result
+                    .err()
+                    .expect("actual client metadata must match before callbacks")
+                    .into_input();
+                assert_eq!(returned.identity(), id);
+                assert!(Arc::ptr_eq(&returned.client().drops, &drops));
+                drop(returned);
+            }
             let compiler = ResolvedTargetCompiler::new_owned(actual);
             let id = identity(&compiler, 7);
             let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
-            client.owned = client_config;
-            let input = StaticConsumerBindingRegistrationInput::new(
-                id,
-                BindingExecutionSupport::application_static(),
-                StaticBindingCompilerRegistration::new(compiler),
-                client,
-                owned_resources(actual),
-                BindingStatusPolicy::new(3, 5),
-            );
-            let (result, requests) =
-                observe(false, || StaticConsumerBindingRegistration::new(input));
-            no_requests(requests);
-            let returned = result
-                .err()
-                .expect("actual client metadata must match before callbacks")
-                .into_input();
-            assert_eq!(returned.identity(), id);
-            assert!(Arc::ptr_eq(&returned.client().drops, &drops));
-            drop(returned);
-        }
-        let compiler = ResolvedTargetCompiler::new_owned(actual);
-        let id = identity(&compiler, 7);
-        let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
-        client.owned = Some(actual);
-        let (owner, requests) = observe(false, || {
-            StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
-                id,
-                BindingExecutionSupport::application_static(),
-                StaticBindingCompilerRegistration::new(compiler),
-                client,
-                owned_resources(actual),
-                BindingStatusPolicy::new(3, 5),
-            ))
-        });
-        no_requests(requests);
-        let owner = owner.unwrap_or_else(|_| panic!("owned construction"));
-        let (owner, requests) = observe(false, || owner.try_into_consumer_compiler());
-        no_requests(requests);
-        let owner = owner.unwrap_or_else(|_| panic!("owned capture"));
-        let (projection, requests) = observe(false, || owner.support().consumer_configuration());
-        no_requests(requests);
-        assert_eq!(projection, Some(actual));
-        let plan = plan("mock://s/a");
-        let input =
-            BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);
-        let c = owner.registration().compiler().compiler();
-        let bounds = c.bounds(&input).unwrap();
-        let cursor = c.start(&input).unwrap();
-        let BindingCompilerStep::Pending(cursor) = c.step(&input, cursor, &mut work(0)) else {
-            panic!()
-        };
-        let changed = ResolvedTargetCompiler::new_owned(owned_configuration(63, 1, 64, 32));
-        let BindingCompilerStep::Failed(f) = changed.step(&input, cursor, &mut work(2)) else {
-            panic!("paid continuation cannot change configuration")
-        };
-        c.abort(f.into_parts().1);
-        assert!(bounds.artifact().retained_bytes() > 0);
-        println!(
-            "owned compiler/support/cursor/output/temporary layouts: {:?} {:?} {:?} {:?} {:?}",
-            Layout::new::<ResolvedTargetCompiler>(),
-            Layout::new::<ConsumerCompilerSupport>(),
-            owner.support().cursor_layout(),
-            owner.support().output_layout(),
-            owner.support().temporary_layout()
-        );
-    }
-    #[cfg(feature = "std")]
-    #[test]
-    fn owned_host_capture_recovers_client_address_and_prestart_slot_failure() {
-        let actual = owned_configuration(64, 1, 64, 32);
-        let drops = Arc::new(AtomicUsize::new(0));
-        let compiler = ResolvedTargetCompiler::new_owned(actual);
-        let (returned, requests) = observe(true, || {
-            HostBindingCompilerRegistration::try_new_consumer(compiler)
-        });
-        acquired(requests, Layout::new::<ResolvedTargetCompiler>(), false);
-        assert_eq!(
-            returned.unwrap_err().input().configuration(),
-            actual.configuration()
-        );
-        for match_client in [false, true] {
-            let c = ResolvedTargetCompiler::new_owned(actual);
-            let id = identity(&c, 7);
-            let adapter = HostBindingCompilerRegistration::try_new_consumer(c).unwrap();
-            let mut client =
-                CaptureClient::<ResolvedTargetCompiler>::new(id.artifact_compatibility(), &drops);
-            client.owned = Some(if match_client {
-                actual
-            } else {
-                owned_configuration(63, 1, 64, 32)
+            client.owned = Some(actual);
+            let (owner, requests) = observe(false, || {
+                StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+                    id,
+                    BindingExecutionSupport::application_static(),
+                    StaticBindingCompilerRegistration::new(compiler),
+                    client,
+                    owned_resources(actual),
+                    BindingStatusPolicy::new(3, 5),
+                ))
             });
-            let client: Box<dyn ClientBinding> = Box::new(client);
-            let pointer = &*client as *const dyn ClientBinding as *const ();
-            let input = HostConsumerBindingRegistrationInput::new(
-                id,
-                BindingExecutionSupport::host_erased(),
-                adapter,
-                client,
-                owned_resources(actual),
-                BindingStatusPolicy::new(3, 5),
-            );
-            let (owner, requests) = observe(false, || HostConsumerBindingRegistration::new(input));
             no_requests(requests);
-            if !match_client {
-                let input = owner.err().expect("mismatch").into_input();
-                assert_eq!(
-                    input.client() as *const dyn ClientBinding as *const (),
-                    pointer
-                );
-                drop(input);
-                continue;
-            }
-            let owner = owner
-                .unwrap_or_else(|_| panic!())
-                .try_into_consumer_compiler()
-                .unwrap_or_else(|_| panic!());
+            let owner = owner.unwrap_or_else(|_| panic!("owned construction"));
+            let (owner, requests) = observe(false, || owner.try_into_consumer_compiler());
+            no_requests(requests);
+            let owner = owner.unwrap_or_else(|_| panic!("owned capture"));
             let (projection, requests) =
                 observe(false, || owner.support().consumer_configuration());
             no_requests(requests);
             assert_eq!(projection, Some(actual));
-            let plan = plan("mock://s/a");
+            let extra = u64::from(actual.requires_default_json_forms());
+            assert_eq!(
+                (
+                    owner.support().bounds_work(),
+                    owner.support().start_work(),
+                    owner.support().step_work()
+                ),
+                (1 + extra, 1 + extra, 2 + extra)
+            );
+            let plan = json_plan(Some(false), Some("application/json"));
             let input =
                 BindingCompilerInput::new(&plan, candidate(id), BindingArtifactRole::ConsumerCall);
-            let (failure, requests) =
-                observe(true, || owner.registration().compiler().start(&input));
-            acquired(requests, owner.support().host_slot_layout().unwrap(), false);
-            assert!(failure.is_err());
-            let (cursor, requests) =
-                observe(false, || owner.registration().compiler().start(&input));
-            acquired(requests, owner.support().host_slot_layout().unwrap(), true);
-            owner
-                .registration()
-                .compiler()
-                .abort(cursor.unwrap())
-                .unwrap();
-            let input = owner.into_registration().into_input();
-            assert_eq!(
-                input.client() as *const dyn ClientBinding as *const (),
-                pointer
+            let c = owner.registration().compiler().compiler();
+            let bounds = c.bounds(&input).unwrap();
+            let cursor = c.start(&input).unwrap();
+            let BindingCompilerStep::Pending(cursor) = c.step(&input, cursor, &mut work(0)) else {
+                panic!()
+            };
+            let changed = ResolvedTargetCompiler::new_owned(owned_configuration(63, 1, 64, 32));
+            let BindingCompilerStep::Failed(f) = changed.step(&input, cursor, &mut work(2)) else {
+                panic!("paid continuation cannot change configuration")
+            };
+            c.abort(f.into_parts().1);
+            assert!(bounds.artifact().retained_bytes() > 0);
+            println!(
+                "owned compiler/support/cursor/output/temporary layouts: {:?} {:?} {:?} {:?} {:?}",
+                Layout::new::<ResolvedTargetCompiler>(),
+                Layout::new::<ConsumerCompilerSupport>(),
+                owner.support().cursor_layout(),
+                owner.support().output_layout(),
+                owner.support().temporary_layout()
             );
         }
-        assert_eq!(drops.load(Ordering::SeqCst), 2);
+    }
+    #[cfg(feature = "std")]
+    #[test]
+    fn owned_host_capture_recovers_client_address_and_prestart_slot_failure() {
+        let original = owned_configuration(64, 1, 64, 32);
+        for actual in [original, original.with_default_json_forms().unwrap()] {
+            let drops = Arc::new(AtomicUsize::new(0));
+            let compiler = ResolvedTargetCompiler::new_owned(actual);
+            let (returned, requests) = observe(true, || {
+                HostBindingCompilerRegistration::try_new_consumer(compiler)
+            });
+            acquired(requests, Layout::new::<ResolvedTargetCompiler>(), false);
+            assert_eq!(
+                returned.unwrap_err().input().configuration(),
+                actual.configuration()
+            );
+            for match_client in [false, true] {
+                let c = ResolvedTargetCompiler::new_owned(actual);
+                let id = identity(&c, 7);
+                let adapter = HostBindingCompilerRegistration::try_new_consumer(c).unwrap();
+                let mut client = CaptureClient::<ResolvedTargetCompiler>::new(
+                    id.artifact_compatibility(),
+                    &drops,
+                );
+                client.owned = Some(if match_client {
+                    actual
+                } else {
+                    if actual.requires_default_json_forms() {
+                        original
+                    } else {
+                        original.with_default_json_forms().unwrap()
+                    }
+                });
+                let client: Box<dyn ClientBinding> = Box::new(client);
+                let pointer = &*client as *const dyn ClientBinding as *const ();
+                let input = HostConsumerBindingRegistrationInput::new(
+                    id,
+                    BindingExecutionSupport::host_erased(),
+                    adapter,
+                    client,
+                    owned_resources(actual),
+                    BindingStatusPolicy::new(3, 5),
+                );
+                let (owner, requests) =
+                    observe(false, || HostConsumerBindingRegistration::new(input));
+                no_requests(requests);
+                if !match_client {
+                    let input = owner.err().expect("mismatch").into_input();
+                    assert_eq!(
+                        input.client() as *const dyn ClientBinding as *const (),
+                        pointer
+                    );
+                    drop(input);
+                    continue;
+                }
+                let owner = owner
+                    .unwrap_or_else(|_| panic!())
+                    .try_into_consumer_compiler()
+                    .unwrap_or_else(|_| panic!());
+                let (projection, requests) =
+                    observe(false, || owner.support().consumer_configuration());
+                no_requests(requests);
+                assert_eq!(projection, Some(actual));
+                let extra = u64::from(actual.requires_default_json_forms());
+                assert_eq!(
+                    (
+                        owner.support().bounds_work(),
+                        owner.support().start_work(),
+                        owner.support().step_work()
+                    ),
+                    (1 + extra, 1 + extra, 3 + extra)
+                );
+                println!(
+                    "Host restricted={}: adapter={:?}; slot={:?}; cursor={:?}; output={:?}; temporary={:?}; callback work={:?}",
+                    actual.requires_default_json_forms(),
+                    owner.support().host_adapter_layout(),
+                    owner.support().host_slot_layout(),
+                    owner.support().host_cursor_owner_layout(),
+                    owner.support().host_output_owner_layout(),
+                    owner.support().temporary_layout(),
+                    (
+                        owner.support().bounds_work(),
+                        owner.support().start_work(),
+                        owner.support().step_work()
+                    )
+                );
+                let plan = json_plan(Some(false), Some("application/json"));
+                let input = BindingCompilerInput::new(
+                    &plan,
+                    candidate(id),
+                    BindingArtifactRole::ConsumerCall,
+                );
+                let (failure, requests) =
+                    observe(true, || owner.registration().compiler().start(&input));
+                acquired(requests, owner.support().host_slot_layout().unwrap(), false);
+                assert!(failure.is_err());
+                let (cursor, requests) =
+                    observe(false, || owner.registration().compiler().start(&input));
+                acquired(requests, owner.support().host_slot_layout().unwrap(), true);
+                owner
+                    .registration()
+                    .compiler()
+                    .abort(cursor.unwrap())
+                    .unwrap();
+                let input = owner.into_registration().into_input();
+                assert_eq!(
+                    input.client() as *const dyn ClientBinding as *const (),
+                    pointer
+                );
+            }
+            assert_eq!(drops.load(Ordering::SeqCst), 2);
+        }
     }
 }

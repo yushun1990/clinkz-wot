@@ -19,6 +19,7 @@ pub struct LogicalInteractionPlan {
     resolved_target: Box<str>,
     content_type: Option<Box<str>>,
     subprotocol: Option<Box<str>>,
+    additional_form_metadata: Option<bool>,
 }
 
 impl LogicalInteractionPlan {
@@ -50,6 +51,7 @@ impl LogicalInteractionPlan {
             resolved_target,
             content_type,
             subprotocol,
+            additional_form_metadata: None,
         })
     }
 
@@ -91,6 +93,17 @@ impl LogicalInteractionPlan {
     /// Returns the effective subprotocol when one was captured.
     pub fn subprotocol(&self) -> Option<&str> {
         self.subprotocol.as_deref()
+    }
+
+    /// Captures the paid Form-metadata fact without retaining its source.
+    pub const fn with_additional_form_metadata(mut self, present: bool) -> Self {
+        self.additional_form_metadata = Some(present);
+        self
+    }
+
+    /// Returns the captured fact; `None` means unknown, never absent.
+    pub const fn has_additional_form_metadata(&self) -> Option<bool> {
+        self.additional_form_metadata
     }
 }
 

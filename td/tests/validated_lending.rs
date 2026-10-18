@@ -74,6 +74,7 @@ enum Fact {
         security_name: Option<String>,
         scheme: Option<String>,
         copy: u64,
+        additional_metadata: bool,
     },
 }
 fn next(c: &mut ValidatedPropertyReadCursor<'_>) -> Option<Fact> {
@@ -101,6 +102,7 @@ fn next(c: &mut ValidatedPropertyReadCursor<'_>) -> Option<Fact> {
                     security_name: f.security_name().map(str::to_owned),
                     scheme: f.security_scheme().map(str::to_owned),
                     copy: f.copy_bytes(),
+                    additional_metadata: f.has_additional_form_metadata(),
                 });
             }
         }
@@ -147,11 +149,13 @@ fn original_coordinates_defaults_security_scopes_copy_and_rewind() {
             security_name,
             scheme,
             copy,
+            additional_metadata,
         } = &first[position]
         else {
             panic!()
         };
         assert_eq!((*property, name.as_str(), *actual), (0, "a", index));
+        assert_eq!(*additional_metadata, index == 1);
         let expected = clinkz_wot_td::data_type::resolve_form_href(
             t.base.as_ref(),
             &t.properties.as_ref().unwrap()["a"]._interaction.forms[index as usize].href,
@@ -240,6 +244,7 @@ fn expected_form(f: &clinkz_wot_td::ValidatedPropertyReadForm<'_>) -> Fact {
         security_name: f.security_name().map(str::to_owned),
         scheme: f.security_scheme().map(str::to_owned),
         copy: f.copy_bytes(),
+        additional_metadata: f.has_additional_form_metadata(),
     }
 }
 #[test]
@@ -519,4 +524,47 @@ fn derived_uri_stalls_without_output_credit_and_resumes_without_partial_debits()
         }
     }
     panic!("URI failed to resume with copy credit")
+}
+
+#[test]
+fn metadata_ready_cancel_retains_first_cause_and_cursor_layout_is_measured() {
+    let t = review_input();
+    let mut c = proof(&t, GatewayDefaultV1::LIMITS).into_property_read();
+    loop {
+        match c.step(&mut budget(1000), false).unwrap() {
+            Step::Pending => {}
+            Step::Ready(Event::Property { .. }) => c.acknowledge(),
+            Step::Ready(Event::Form(f)) => {
+                assert!(!f.has_additional_form_metadata());
+                break;
+            }
+            Step::Done => panic!("missing Form"),
+        }
+    }
+    let cause = c.step(&mut budget(0), true).err().expect("cancel Ready");
+    assert!(matches!(
+        cause,
+        Cause::Cancelled {
+            phase: ValidatedThingPhase::Semantics
+        }
+    ));
+    c.acknowledge();
+    c = c.rewind();
+    for cancel in [false, true] {
+        let mut credit = budget(1000);
+        assert!(matches!(c.step(&mut credit, cancel), Err(same) if same == cause));
+        for class in W::ALL {
+            assert_eq!(credit.remaining(class), 1000);
+        }
+    }
+    use core::alloc::Layout;
+    println!(
+        "paid Form layouts: cursor={:?}; form={:?}; event={:?}; step={:?}; validation_cursor={:?}; validation_progress={:?}",
+        Layout::new::<ValidatedPropertyReadCursor<'static>>(),
+        Layout::new::<clinkz_wot_td::ValidatedPropertyReadForm<'static>>(),
+        Layout::new::<Event<'static>>(),
+        Layout::new::<Step<'static>>(),
+        Layout::new::<ValidatedThingCursor<'static>>(),
+        Layout::new::<Progress<'static>>()
+    );
 }

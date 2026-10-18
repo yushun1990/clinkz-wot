@@ -2392,6 +2392,7 @@ enum LendingPhase {
     Allocate,
     Uri,
     Finish,
+    Metadata,
     FormReady,
     Done,
 }
@@ -2506,6 +2507,7 @@ pub struct ValidatedPropertyReadCursor<'td> {
     scope: usize,
     scope_bytes: u64,
     copy_bytes: u64,
+    additional_form_metadata: bool,
     alias: Option<&'td str>,
     resolver: Option<uri::Resolution<'td>>,
     scratch: UriBlock,
@@ -2533,6 +2535,7 @@ pub struct ValidatedPropertyReadForm<'step> {
     scheme: Option<&'step str>,
     scope_bytes: u64,
     copy_bytes: u64,
+    additional_form_metadata: bool,
 }
 impl<'step> ValidatedPropertyReadForm<'step> {
     pub fn property_ordinal(&self) -> u32 {
@@ -2584,6 +2587,11 @@ impl<'step> ValidatedPropertyReadForm<'step> {
     pub fn copy_bytes(&self) -> u64 {
         self.copy_bytes
     }
+    /// Returns the paid presence of extensions or response/encoding overrides.
+    /// Explicitly present empty values count; this getter inspects no source.
+    pub fn has_additional_form_metadata(&self) -> bool {
+        self.additional_form_metadata
+    }
 }
 /// Paid sequence size; the receiver pays each advance/copy before using it.
 pub struct ValidatedTextSequence<'step> {
@@ -2624,6 +2632,7 @@ impl<'td> ValidatedThing<'td> {
             scope: 0,
             scope_bytes: 0,
             copy_bytes: 0,
+            additional_form_metadata: false,
             alias: None,
             resolver: None,
             scratch: UriBlock::default(),
@@ -2702,6 +2711,7 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
                     scheme: self.scheme,
                     scope_bytes: self.scope_bytes,
                     copy_bytes: self.copy_bytes,
+                    additional_form_metadata: self.additional_form_metadata,
                 })
             }
             _ => return Ok(ValidatedPropertyReadStep::Pending),
@@ -3054,6 +3064,18 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
                 }
                 self.copy_bytes = copy;
                 self.effective = effective;
+                self.phase = P::Metadata;
+            }
+            P::Metadata => {
+                // The default DocumentNodes debit above pays these constant
+                // presence checks once per Form, before lending any Ready fact.
+                let form = self.current_form();
+                self.additional_form_metadata = !form._extra_fields.is_empty()
+                    || form.response.is_some()
+                    || form.additional_responses.is_some()
+                    || form.content_coding.is_some()
+                    || form.subprotocol.is_some()
+                    || form.scopes.is_some();
                 self.phase = P::FormReady;
             }
             P::PropertyReady | P::FormReady | P::Done => unreachable!("handled before debit"),

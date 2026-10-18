@@ -1,0 +1,633 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-600"
+tranche = "WP-600-HTTP-CONSUMER-PROPERTY-READ"
+base_ref = "7e7ff219d0cd54d4fd031e56992f6f38812f8c4b"
+implementation_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+verification_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+fixture_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+recorded_on = "2026-10-17"
+status = "partial"
+acceptance = "pending-independent-review"
+admission_review = "github-pr:191#issuecomment-6230142316"
+assessment = "Production shared TD/Core/Planning amendment and its executable regressions. This is the first implementation PR within the already admitted HTTP tranche. HTTP transport and full tranche completion are unimplemented. Executable success is not independent acceptance or predecessor reaffirmation; no gate status changes."
+source_revision_rule = "All production and primary regression changes are committed at implementation_ref. fixture_ref additionally renews the existing native/ARM TD runtime fixture's Ready-relative zero-URI suffix and repair positions for the admitted paid metadata transition, and exercises the cached getter under its protected Ready retry. The URI algorithm, independent 162/255-unit charge totals and negative generators are unchanged. Later evidence and impact-state edits do not change production or fixtures. Each verification row names the exact revision tested; historical predecessor evidence retains its original observations and acceptance references."
+
+[scope]
+implementation = [
+    "TD stores one conservative presence scalar during a separate paid DocumentNodes transition before Form Ready. The getter reads only that scalar. Full inspection/Basic, first cause, source loan, Ready replay and nonrefillable rewind remain intact.",
+    "LogicalInteractionPlan owns Option<bool>: direct construction is unknown; Planning always materializes Some(actual paid fact), for restricted, unrestricted and strict complete registrations. No additional backing allocation or source reference is retained.",
+    "The existing closed compiler optionally requires Some(false) and exactly application/json. Its SHA-256 restricted configuration derives from the unchanged original key and excludes that key and all 64 strict keys. Client, compiler, support and Host adapter capture the same actual immutable configuration.",
+    "Bounds, start and paid step reject unsupported metadata/media with fixed operation/form/plan/binding context. Planning's existing all-bounds barrier rejects the whole transaction before every start. The 64-byte target-copy payload and compatibility remain unchanged, including mock URI acceptance.",
+]
+excluded = [
+    "No HTTP crate, SDK, parser, socket, readiness runtime, deployment recipe or network execution is added.",
+    "No Servient/Foundation production, resource schema/default, compiler issuer, callback family, umbrella, Directory, Producer or Zenoh change.",
+    "No package/milestone/gate closure, independent completion acceptance, HTTP latency, embedded backend, hardware-fit, HTTPS/security or v1 qualification claim.",
+]
+dependencies = "Existing lockfiles and manifests are unchanged, including Core's sha2-const-stable 0.1.0. No HTTP/runtime/TLS dependency enters a neutral library."
+
+[[evidence]]
+key = "http-form-eligibility"
+execution_status = "passed"
+acceptance_status = "pending-independent-review"
+observations = [
+    "The former pre-code form_metadata discriminator now calls the real public paid getter, owned plan scalar, checked configuration and closed compiler in std/no-default/async-no-std. It retains default, explicit GET, POST, header, unknown nested extension, response JSON/non-JSON, empty/nonempty additionalResponses, identity coding, empty subprotocol and empty/nonempty scopes, plus typed Form round trips.",
+    "Zero-work polls cannot advance to Ready. The final metadata transition consumes exactly one DocumentNodes unit; zero-credit Ready retries preserve the scalar. Rewind reproduces both true and false facts without restoring lifetime credit. TD cancellation retains its first cause through acknowledge/rewind/retry. Complete original inspection/Basic and URI/resource tests pass.",
+    "Native compiler matrix covers unknown/false/true metadata with missing, JSON, non-JSON, parameterized and uppercase media. Bounds, start and paid step fail closed with exact fixed context. Every short native/Host step budget preserves the continuation and allowance. Original strict/unrestricted copy behavior remains eligible for the same inputs.",
+    "Actual restricted/unrestricted client mismatch, compiler input/cursor substitution and artifact submission are rejected in both directions. Complete owner/client address and unchanged rejected request survive; the raw client is not reached. The private public Host adapter and pre-start slot each receive real null-allocation refusal and successful retry controls in both modes. Host eligibility failure retains its slot until abort.",
+    "Actual public Planning materializes source-free true/false facts for static and Host complete owners. Fourteen later-Form metadata/media negatives fail on the third bounds callback with zero starts/steps/aborts. Public failures return funded rollback, preserve the independent owner and original cleanup account, end controlled live bytes at zero, and retry successfully on the same registration/root. Every restricted materialization/compiler-slot allocation refusal is exercised.",
+    "Production static and public Host Runtime consume reject a later present-empty Form before publication or client start, reclaim, then retry valid Forms on the same runtime. Two property targets execute after source destruction in normal and late-result/cancellation modes; taking the sealed result allocates zero and original parent accounts end at zero.",
+]
+tests = [
+    "production_fact_is_paid_conservative_and_preserves_roundtrips",
+    "paid_metadata_distinguishes_forms_and_restricted_compiler_rejects_them",
+    "restriction_fails_closed_without_protocol_interpretation",
+    "metadata_ready_cancel_retains_first_cause_and_cursor_layout_is_measured",
+    "restricted_native_bounds_start_and_paid_step_reject_unknown_present_and_media",
+    "restricted_public_host_compiler_preserves_slot_on_short_credit_and_eligibility_failure",
+    "restricted_and_unrestricted_compiler_and_artifact_substitution_rejects_before_client",
+    "owned_capture_checks_every_client_operand_and_preserves_exact_complete_owner",
+    "owned_host_capture_recovers_client_address_and_prestart_slot_failure",
+    "restricted_static_later_form_rejects_whole_transaction_then_retries",
+    "restricted_host_later_form_rejects_whole_transaction_then_retries",
+    "restricted_static_consume_rejects_before_publication_then_retries_and_releases",
+    "restricted_host_consume_rejects_before_publication_then_retries_and_releases",
+]
+
+[[evidence]]
+key = "http-consumer-property-read"
+execution_status = "not-implemented"
+limitation = "The real independent HTTP peer, public cleartext-IP registration and 100 alternating network reads remain binding implementation obligations. Shared mock execution is not HTTP evidence."
+
+[[evidence]]
+key = "http-resource-lifecycle"
+execution_status = "not-implemented"
+limitation = "SDK/parser input ceilings, wire/header/body/trailer and read-ahead bounds, socket/future retirement, actual network races/faults, SDK allocation/disposal work and application runtime deployment remain binding implementation obligations. Renewed shared engine evidence below does not qualify any SDK."
+
+[[evidence]]
+key = "http-authoring-feature-conformance"
+execution_status = "partial"
+limitation = "Shared library and complete-owner regressions are executed below. Real HTTP authoring/deployment/dependency evidence and independent successor completion acceptance remain open. Portable cells exercise the shared amendment only."
+
+[identity]
+encoding = "closed-consumer-default-json-forms-v1"
+derivation = "SHA-256(b'clinkz-consumer-default-json-forms-v1\\0' || original_32_byte_v1_key); idempotent immutable restriction; no allocation/callback."
+oracle = "Python hashlib independently derived the literal restricted vectors from the original accepted v1 key vectors. Existing all-64 strict namespace and original owned configuration/cell/policy vectors are executed unchanged."
+std = "0650f7a9e195b9d2bb70276678d9d636a9287542d836ee8820d11a5b285264a3"
+async_no_std = "f28d56485b79a2c4f633d8cf0e558a5f5dd2b2622641fe14f669af9f0ee83926"
+no_default = "3ef164109f98114818458634105c878df47105612e92ad9ca6612f8284934928"
+operands = "The vector fixture is ConsumerOwnedV2, target capacity 64, private key bytes 0..31, body 64, media capacity 32, plus its actual compilation cell and existing compatibility. It is not a future HTTP private-policy key."
+
+[work]
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+td_increment = "One DocumentNodes unit per readable Form per pass. Ready getter/retries consume none; complete validation and both Planning passes share the original lifetime."
+historical_three_form_two_pass_td_lifetime = 2097
+three_form_two_pass_td_lifetime = 2103
+lifetime_controls = "2102 fails with DocumentValidationWorkUnitsMax after preflight in the second pass; 2103/2104 complete. The +6 matches three Forms across two passes. The original fixture/policy maxima and oracle are retained."
+callback_format = "[bounds, native start, paid step], BindingPolls; Host allocation/release each remain one CleanupItems unit, static zero. Abort/destruction remain one. Compatibility remains one."
+unrestricted_native = [1, 1, 2]
+restricted_native = [2, 2, 3]
+unrestricted_host = [1, 1, 3]
+restricted_host = [2, 2, 4]
+native_coordinate_compile_allowance = 6
+host_coordinate_compile_allowance = 8
+accounting = "The additional fixed predicate unit includes presence and at most the application/json comparison length. Planning queries actual support costs before callbacks and acquisition; no new WorkClass or numeric resource default is introduced."
+
+[native_layouts]
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+format = "[size, alignment], x86_64 Rust 1.99.0. Exact Layout observations, not allocator overhead or machine-stack measurements. Static cells agree unless separately identified."
+td_validation_cursor = [1032, 8]
+td_validation_progress = [1040, 8]
+td_semantic_cursor = [1648, 8]
+td_form = [104, 8]
+td_event = [104, 8]
+td_step = [104, 8]
+logical_plan = [104, 8]
+configuration = [88, 8]
+compiler = [96, 8]
+support = [96, 8]
+native_cursor = [76, 4]
+payload = [65, 1]
+native_output = [152, 8]
+native_temporary = [936, 8]
+host_adapter = [96, 8]
+host_slot = [152, 8]
+host_cursor_owner = [16, 8]
+host_output_owner = [104, 8]
+host_temporary = [1232, 8]
+aggregate_layout_order = "node, data, property, coordinate, reclaim, cleanup slot, draft"
+static_aggregate = [[1424, 8], [1416, 8], [32, 8], [808, 8], [64, 8], [656, 8], [8, 8]]
+host_aggregate = [[1424, 8], [1416, 8], [32, 8], [760, 8], [64, 8], [656, 8], [8, 8]]
+static_runtime = [12024, 8]
+portable_static_runtime = [11928, 8]
+static_build = [2776, 8]
+static_complete_slot = [784, 8]
+static_raw_state = [544, 8]
+static_checked_registration = [1344, 8]
+host_root = [11280, 8]
+host_report = [1176, 8]
+host_driver = [6920, 8]
+host_call = [1776, 8]
+charge = [1008, 8]
+build_storage = [3144, 8]
+rollback = [632, 8]
+terminal = [208, 8]
+transfer_destination = [2344, 8]
+policy = [3872, 8]
+error_context = [232, 8]
+core_error = [280, 8]
+bridge_local = [664, 8]
+bridge_rollback_local = [1288, 8]
+bridge_output_owner = [24, 8]
+bridge_rollback_owner = [24, 8]
+bridge_output_result = [944, 8]
+bridge_rollback_result = [1568, 8]
+bridge_overlap = 1568
+comparison = "Plan/configuration scalars fit existing padding on this target. The compiler/support/slot, aggregate and Runtime/bridge observations above reproduce accepted ownership completion measurements; these are fresh queries, not inherited constants. The lent Form/event/step is measured separately at 104 bytes. TD's existing maximum-owner/return inline reservation and all before-allocation capacity checks still apply."
+
+[allocation_measurements]
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+boundary = "Tracked allocator request capacities and charged logical/inline overlap are distinct. Public aggregate observer starts after preflight; Runtime observers name author/capture/provision/build/call boundaries. Source, allocator overhead and SDK/process resources are excluded."
+original_static_aggregate_requests = 31
+original_static_aggregate_live_peak = 4286
+original_static_aggregate_largest = 2424
+original_static_aggregate_logical_peak = 13374
+original_static_aggregate_cleanup_capacity = 2304
+original_host_aggregate_requests = 34
+original_host_aggregate_live_peak = 4598
+original_host_aggregate_largest = 2280
+original_host_aggregate_logical_peak = 13838
+original_host_aggregate_cleanup_capacity = 2256
+restricted_static_aggregate_refusal_sites = 25
+restricted_host_aggregate_refusal_sites = 28
+restricted_fixture = "Same three readable coordinates, with scopes/coding/subprotocol removed. Lower text/table request counts reflect that source; no compiler saving is inferred. Each actual allocator request is failed independently, followed by complete original-account reclaim."
+runtime_static_build_refusal_sites = 34
+runtime_host_build_refusal_sites = 37
+runtime_host_provision_refusal_sites = 2
+runtime_host_call_refusal_sites = 2
+std_author_requests = 20
+std_author_live_peak = 592
+std_author_largest = 168
+std_static_author_and_build_live = 4875
+std_static_author_and_build_peak = 12459
+std_static_build_largest = 7552
+host_capture_layouts = [[96, 8], [960, 8]]
+host_author_capture_provision_live_peak = 14104
+host_provision_requests = 2
+host_provision_layouts = [[1176, 8], [11280, 8]]
+host_call_capacity = 3104
+host_transfer_capacity = 5448
+original_account_controls = "17 static and 19 Host nonzero original parent peaks receive zero, one-short, exact and one-over probes in the existing owned fixtures. Static slot allowance 1520 is distinct from its actual 784-byte Layout. Cleanup funding survives ordinary pressure, refusal, normal/late values, transfer/drain and final root destruction. End accounts are zero; no source/parent provenance is replaced."
+shared_regression = "All original result backing/seal, request ownership, raw call construction, first-cause, late/unread result and transfer tests pass. New restricted normal/late Runtime result-taking also makes zero allocator requests. No new physical allocation is introduced by the scalar."
+
+[impact_review]
+status = "review-required"
+affected_completed = [
+    "WP-100-CONSUMER-VALIDATED-THING",
+    "WP-200-CONSUMER-PROPERTY-READ-PLANNING",
+    "WP-200-CONSUMER-COMPILER-SUPPORT",
+    "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE",
+    "WP-200-CONSUMER-OUTPUT-OWNERSHIP",
+    "WP-300-CONSUMER-ONLY-REGISTRATION",
+    "WP-400-CONSUMER-PROPERTY-READ-RUNTIME",
+    "WP-400-CONSUMER-RESOURCE-OWNERSHIP",
+]
+disposition = "Renewed observations and semantic cases are proposed for independent scoped reaffirmation in this successor owner. Historical predecessor evidence and gate states remain unchanged. This author does not restore current or claim acceptance. There is no new admission cycle."
+td = "Renew lending/Ready/rewind/cancel, complete validation, lifetime/URI work, actual current owner and lent-event Layouts, allocation/resource controls."
+planning = "Renew source-free scalar and original selection/identity oracles, all-bounds barrier, actual plan/coordinate/build Layouts and whole-transaction reclaim/refusal."
+compiler_registration = "Renew unchanged strict/original owned vectors plus restricted vectors, closed issuers, captured actual client/compiler/adapter/support equality, callback costs, actual cursor/output/slot/temporary Layouts and all supported allocation refusals/substitutions."
+runtime_output = "Renew current bridge/carrier, full result backing and parent/cleanup funding through exact production Runtime/output owners. Execute unchanged result/first-cause/late/drain/root-loss tests and new restricted consume/retry/normal/late tests; no Runtime implementation change."
+reused = "WP-000, WP-100-CONSUMER-CALL-VALUES-VALIDATOR, WP-300-CONSUMER-PROPERTY-READ-BINDING and WP-300-CONSUMER-HOST-CALL-CONSTRUCTION retain accepted contracts/evidence. Their shared executable regressions pass. Consumer/Producer gate verdicts stay at their accepted revisions; these runs are regression evidence, not new gate acceptance."
+
+[performance]
+workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-CS-020", "PERF-CS-021"]
+reuse = "Registered fixture identities, generation, budgets, accounting boundaries and deterministic oracles are unchanged. Authority verification checks all 66 fixtures/cases and existing resource vectors. Renewed actual engine allocation/work observations are recorded above."
+limits = "No new pinned-runner timing/cycle measurement, HTTP latency/throughput result, SDK measurement or hardware qualification is claimed. Contract verification is not a transport benchmark."
+
+[limitations]
+remaining_http = "Real client/parser/runtime selection and pinning, independent raw loopback peer, 100 alternating reads, ingress/read-ahead/wire/parser limits, finite socket/future retirement, SDK allocation/disposal and deployment recipe remain unimplemented. The admitted completion contract remains binding within the same tranche."
+remaining_platform = "Explicit HTTP vocabulary (including explicit GET), DNS, HTTPS/security, Producer/bidirectional loop, streaming, embedded networking and general protocol parity are not qualified here. HTTPS/security remains a release prerequisite."
+arm_execution = "QEMU is unavailable in this environment. The production Consumer normal libraries compile and emit fresh ARM layouts in both portable cells; TD runtime and mutation controls execute on native Linux only. Historical ARM execution is not relabelled as current."
+
+[environment]
+host = "x86_64-unknown-linux-gnu"
+primary_rust = "rustc 1.99.0 (b940084d7 2026-09-28), LLVM 23.1.1"
+compatibility_rust = "Rust 1.95.0; Core compiler and Form/aggregate suites rerun in std, no-default and async-no-std"
+arm_target = "thumbv7em-none-eabihf; production normal-library compilation and LLVM Layout extraction, not execution"
+features = "Exact cells are recorded in command rows. Nine locked normal dependency trees for Core/Planning/Servient in std/no-default/async-no-std contain no HTTP SDK, Tokio, rustls or other concrete executor/TLS backend. All manifests and locks are unchanged."
+allocator = "System under the existing bounded per-thread observers for engine tests; original fixed arena/access oracle for the native TD runtime."
+lock_sha256 = [
+    "Cargo.lock:620bf5def51df1695eed250c8265b700e63c3671cc75d7418aecfb2264dbfb09",
+    "tools/architecture-fixtures/consumer-aggregate-admission/Cargo.lock:499ec7431703d5464e2b3eaae8352159be47309510ac581dfa000a324937f18f",
+    "tools/architecture-fixtures/consumer-compiler-support/Cargo.lock:f75e87cef022236a4c7c5cef69c749c1fef40c143f868e5783e4191679a08a54",
+    "tools/architecture-fixtures/consumer-runtime-entry/Cargo.lock:bae065584b072e4084def4ca2c6d8629b0377e8d4554618f7767aac91b2a1195",
+    "td/tests/runtime/Cargo.lock:3a08f2c771f3415657671a0d40b55fe3e326bbce9efac8e18ac35f8139419f20",
+]
+
+[arm_layouts]
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+format = "[size, alignment], Rust 1.99.0 thumbv7em-none-eabihf; decoded little-endian u32 pairs from the two fresh portable-cell LLVM constants. Both cells agree on each row."
+entry_order = "complete registration, captured registration, complete slot, raw state, client, Planning cleanup root, Planning draft, payload, compiler, support, owned configuration, error context"
+entry = [[320, 8], [416, 8], [304, 8], [76, 4], [20, 4], [656, 8], [4, 4], [65, 1], [96, 8], [96, 8], [88, 8], [232, 8]]
+runtime_order = "static Runtime, public build, complete slot, raw state, captured registration, request, Core result, report"
+runtime = [[11512, 8], [2200, 8], [728, 8], [504, 8], [1072, 8], [112, 8], [280, 8], [208, 8]]
+
+[td_native_runtime]
+source_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+passed_cells = ["no-default", "async-no-std"]
+inspect_positions = 1296
+semantic_positions = 290
+ready_positions = 4
+short_actions = 411
+independent_zero_output_and_uri_probes = 578
+independent_two_byte_copy_actions = 2
+fallible_allocation_sites = 5
+independent_logical_boundary_outcomes = 66
+terminal_controlled_bytes = 0
+inline_capacity = 3296
+source_capacity = 59446
+requested_heap_peak = 11328
+largest_request = 7552
+startup_arena_capacity = 421888
+uri_schedule_actions = [72, 182]
+uri_schedule_work = [162, 255]
+first_pass_work = 2177
+class_order = "WorkClass::ALL"
+first_pass_classes = [62, 666, 165, 417, 14, 0, 0, 0, 5, 0, 848, 0]
+exact_eleven_pass_total = 8637
+ready_access = "12 retries; five source URI/scope regions and one derived URI region; zero forbidden reads. The cached metadata getter also executes during the inaccessible-region Ready step. Full logical/physical exact/short/spare, repeated-pass work, no refill, every suspension cancel/drop, allocation refusal and terminal original-source pairing controls pass."
+fixture_correction = "The extra metadata transition moves public Form Ready one poll past Finish. The existing literal oracle adds exactly that zero-UriBytes suffix and one Ready-relative repair offset; it retains every URI charge, corpus target and undercharge/copy counterexample. The initial old-anchor failure is preserved in the verification rows."
+
+[td_native_controls]
+source_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+generator = "td/tests/runtime/check_mutations.py::cases (unchanged)"
+execution = "Both feature cells execute all ten native rows from the existing generator, including baseline. Mutations are confined to a disposable tracked-source snapshot; each builds before its process exit/oracle is assessed. This is the native subset of the existing runtime workflow, not a new repository checker."
+reproduction = "td/tests/runtime/run.sh and td/tests/runtime/run.sh --features async reproduce the native and booted ARM workflow where QEMU is installed. This run executes only the native cargo build/binary portion for the exact generated sources."
+negative_sigsegv = ["acquisition-copy", "zero-output-acquisition-copy", "zero-output-replacement-copy", "compensated-repair-copy-charge"]
+negative_work_oracle = "positive-uri-short-only exits 1 at independent positive URI/copy credit"
+positive_controls = ["baseline", "arm-missing-uri-charge", "arm-zero-credit-missing-uri-charge", "arm-missing-resolved-uri-limit", "arm-missing-effective-content-limit"]
+positive_explanation = "ARM-only mutation branches are inactive in native execution and must still pass there. Their native success is not ARM negative execution evidence."
+compensated_repair = "Both cells reach the independently specified two-byte padding action and reject the mutant with SIGSEGV, retaining the original unique predebit proof."
+
+[verification_interpretation]
+counts = "Suite totals sum test-result lines, including doc tests and reused cases; they are not a count of unique semantic obligations. Portable Producer runner cells have zero executed tests and establish compilation only; the std Producer suite executes its 16 cases and the workspace runs its unified graph."
+superseded = "The first workspace and first ARM-entry attempt failed for disk exhaustion in generated caches; after clearing only ignored build output their exact checks pass. Initial native TD attempts expose the old Ready-anchor oracle and are superseded by fixture_ref's explicit renewal. No production workaround or resource limit change is made."
+
+[[verification]]
+name = "td-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --lib --test validated_admission --test validated_lending --test builder_extension_fields_test -- --nocapture"
+result = "passed"
+passed_test_results = 101
+
+[[verification]]
+name = "td-portable"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-td --no-default-features --features validated-thing --lib --test validated_admission --test validated_lending --test builder_extension_fields_test -- --nocapture"
+result = "passed"
+passed_test_results = 101
+
+[[verification]]
+name = "core-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-core -- --nocapture"
+result = "passed"
+passed_test_results = 194
+
+[[verification]]
+name = "planning-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-planning -- --nocapture"
+result = "passed"
+passed_test_results = 21
+
+[[verification]]
+name = "runtime-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 72
+
+[[verification]]
+name = "aggregate-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml -- --nocapture"
+result = "passed"
+passed_test_results = 35
+
+[[verification]]
+name = "runner-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml -- --nocapture"
+result = "passed"
+passed_test_results = 2
+
+[[verification]]
+name = "compiler-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml -- --nocapture"
+result = "passed"
+passed_test_results = 22
+
+[[verification]]
+name = "producer-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/property-read-runner/Cargo.toml -- --nocapture"
+result = "passed"
+passed_test_results = 16
+
+[[verification]]
+name = "core-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features -- --nocapture"
+result = "passed"
+passed_test_results = 150
+
+[[verification]]
+name = "planning-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features -- --nocapture"
+result = "passed"
+passed_test_results = 14
+
+[[verification]]
+name = "runtime-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test consumer_property_read --lib consumer_property_read -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 24
+
+[[verification]]
+name = "aggregate-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features -- --nocapture"
+result = "passed"
+passed_test_results = 27
+
+[[verification]]
+name = "runner-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features -- --nocapture"
+result = "passed"
+passed_test_results = 14
+
+[[verification]]
+name = "compiler-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features -- --nocapture"
+result = "passed"
+passed_test_results = 12
+
+[[verification]]
+name = "producer-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/property-read-runner/Cargo.toml --no-default-features -- --nocapture"
+result = "passed"
+passed_test_results = 0
+
+[[verification]]
+name = "core-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async -- --nocapture"
+result = "passed"
+passed_test_results = 167
+
+[[verification]]
+name = "planning-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features async -- --nocapture"
+result = "passed"
+passed_test_results = 14
+
+[[verification]]
+name = "runtime-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test consumer_property_read --lib consumer_property_read -- --test-threads=1 --nocapture"
+result = "passed"
+passed_test_results = 24
+
+[[verification]]
+name = "aggregate-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async -- --nocapture"
+result = "passed"
+passed_test_results = 27
+
+[[verification]]
+name = "runner-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features --features async -- --nocapture"
+result = "passed"
+passed_test_results = 14
+
+[[verification]]
+name = "compiler-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features --features async -- --nocapture"
+result = "passed"
+passed_test_results = 12
+
+[[verification]]
+name = "producer-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/property-read-runner/Cargo.toml --no-default-features --features async -- --nocapture"
+result = "passed"
+passed_test_results = 0
+
+[[verification]]
+name = "runtime-entry"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test production --test ownership --test resource_ownership_configuration --test registration -- --nocapture"
+result = "passed"
+passed_test_results = 23
+
+[[verification]]
+name = "authority"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "bash tools/check-design-artifacts.sh"
+result = "passed"
+passed_test_results = 1
+
+[[verification]]
+name = "workspace"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo test --locked --offline --workspace"
+result = "superseded-failure"
+observed_exit = 101
+
+[[verification]]
+name = "arm-entry-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "cargo rustc --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir"
+result = "superseded-failure"
+observed_exit = 101
+
+[[verification]]
+name = "workspace-retry"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo test --locked --offline --workspace"
+result = "passed"
+passed_test_results = 757
+
+[[verification]]
+name = "arm-entry-no-default-retry"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo rustc --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir"
+result = "passed"
+
+[[verification]]
+name = "arm-runner-no-default-retry"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo rustc --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir"
+result = "passed"
+
+[[verification]]
+name = "arm-entry-async-no-std-retry"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo rustc --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir"
+result = "passed"
+
+[[verification]]
+name = "arm-runner-async-no-std-retry"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo rustc --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async --target thumbv7em-none-eabihf --lib -- --emit=llvm-ir"
+result = "passed"
+
+[[verification]]
+name = "td-native-runtime-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo run --locked --offline --release --manifest-path td/tests/runtime/Cargo.toml --target-dir /tmp/wp600-form-metadata-a1d0d3b/td-runtime --target x86_64-unknown-linux-gnu"
+result = "superseded-failure"
+observed_exit = 1
+
+[[verification]]
+name = "td-native-runtime-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo run --locked --offline --release --manifest-path td/tests/runtime/Cargo.toml --target-dir /tmp/wp600-form-metadata-a1d0d3b/td-runtime --target x86_64-unknown-linux-gnu --features async"
+result = "superseded-failure"
+observed_exit = 1
+
+[[verification]]
+name = "msrv-core-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo +1.95.0 test --locked --offline -p clinkz-wot-core --test consumer_compiler_support"
+result = "passed"
+passed_test_results = 20
+
+[[verification]]
+name = "msrv-aggregate-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo +1.95.0 test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --test form_metadata --test aggregate"
+result = "passed"
+passed_test_results = 24
+
+[[verification]]
+name = "msrv-core-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo +1.95.0 test --locked --offline -p clinkz-wot-core --no-default-features --test consumer_compiler_support"
+result = "passed"
+passed_test_results = 10
+
+[[verification]]
+name = "msrv-aggregate-no-default"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo +1.95.0 test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --test form_metadata --test aggregate"
+result = "passed"
+passed_test_results = 17
+
+[[verification]]
+name = "msrv-core-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo +1.95.0 test --locked --offline -p clinkz-wot-core --no-default-features --features async --test consumer_compiler_support"
+result = "passed"
+passed_test_results = 10
+
+[[verification]]
+name = "msrv-aggregate-async-no-std"
+source_ref = "a1d0d3ba6037c0dce089ed65d8bb433c2865c153"
+command = "CARGO_INCREMENTAL=0 cargo +1.95.0 test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async --test form_metadata --test aggregate"
+result = "passed"
+passed_test_results = 17
+
+[[verification]]
+name = "td-native-renewed-no-default"
+source_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+command = "CARGO_INCREMENTAL=0 cargo run --locked --offline --release --manifest-path td/tests/runtime/Cargo.toml --target-dir /tmp/wp600-form-metadata-a1d0d3b/td-runtime --target x86_64-unknown-linux-gnu"
+result = "passed"
+
+[[verification]]
+name = "td-native-renewed-async-no-std"
+source_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+command = "CARGO_INCREMENTAL=0 cargo run --locked --offline --release --manifest-path td/tests/runtime/Cargo.toml --target-dir /tmp/wp600-form-metadata-a1d0d3b/td-runtime --target x86_64-unknown-linux-gnu --features async"
+result = "passed"
+
+[[verification]]
+name = "authority-with-renewed-TD-fixture-before-impact-projection"
+source_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "passed"
+observations = "Current authority, package DAG, API/ADR/Directory/resource/legacy checks, 196 fields/three profiles, existing eight configuration vectors and 66 performance fixtures/cases pass before recording the required predecessor impact-review states."
+
+[[verification]]
+name = "normal-dependency-inspection"
+source_ref = "61919e26e587d0d3eb882d8eff5d8a9f24a1c23e"
+command = "cargo tree --locked --offline -p PACKAGE --edges normal [CELL_FLAGS]"
+parameters = "PACKAGE is each of clinkz-wot-core, clinkz-wot-planning, clinkz-wot-servient; CELL_FLAGS is empty, --no-default-features, or --no-default-features --features async. All nine commands execute."
+result = "passed"
+
+[impact_projection_validation]
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+status = "awaiting-independent-reaffirmation"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "blocked-by-required-predecessor-impact-review"
+observed = "The unchanged package-DAG checker rejects a current WP-300-CONSUMER-HOST-CALL-CONSTRUCTION dependency on review-required WP-300-CONSUMER-ONLY-REGISTRATION. Other current dependents likewise await the eight scoped renewals. This expected administrative boundary must not be removed by the implementation author or confused with a runtime/contract test failure."
+acceptance_boundary = "A fresh independent reviewer can accept this shared implementation and scoped renewals without claiming HTTP/tranche completion. A non-author status-only projection can then restore the accepted predecessor impacts. No new admission, gate transition or author self-acceptance is requested."
+
+[[verification]]
+name = "impact-projection-authority"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-design-artifacts.sh"
+result = "blocked-by-required-predecessor-impact-review"
+
+[[verification]]
+name = "impact-projection-api"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-api-ownership.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-adrs"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-architecture-adrs.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-directory"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-directory-client-scope.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-resources"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-resource-limits.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-legacy"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true bash tools/check-legacy-api-absence.sh"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-performance"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true cargo run --locked --offline --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+result = "passed"
+
+[[verification]]
+name = "impact-projection-diff"
+source_ref = "356a9835807793f3fd158d7510bcb00a9e197ef6"
+command = "CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true git diff --check 7e7ff219d0cd54d4fd031e56992f6f38812f8c4b...HEAD"
+result = "passed"

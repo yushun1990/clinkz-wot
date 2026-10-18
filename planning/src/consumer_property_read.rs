@@ -1994,7 +1994,8 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                         c.parts.content.take(),
                         c.parts.protocol.take(),
                     )
-                    .expect("paid nonempty TD facts checked before allocation"),
+                    .expect("paid nonempty TD facts checked before allocation")
+                    .with_additional_form_metadata(form.has_additional_form_metadata()),
                 );
             }
         }
