@@ -1,4 +1,4 @@
-# Host HTTP Consumer Property Read — first production slice
+# Host HTTP Consumer Property Read
 
 `clinkz-wot-binding-http` is an optional Cargo dependency, used directly with
 `ConsumerPropertyReadRuntime`. It does not change the umbrella facade or install
@@ -7,7 +7,8 @@ IP access. Keep this permission at the application boundary; there is no mutable
 installed-client escape. Registration construction performs no I/O.
 
 This candidate implements default GET / NoSec / effective `application/json`,
-HTTP/1.1, status 200, IPv4/IPv6 literals, fixed-length and close-delimited bodies.
+HTTP/1.1, status 200, IPv4/IPv6 literals, fixed-length, close-delimited and chunked
+bodies without trailers.
 Only one call may occupy a registration, including its unread terminal result.
 Each read uses a fresh connection. The selected owned artifact supplies the exact
 path/query and Host authority. There is no source TD, selection, DNS, TLS, pool,
@@ -16,12 +17,29 @@ this crate. Nonempty call URI variables and unsupported endpoint syntax reject
 with the original request before raw acceptance. The restricted closed compiler
 rejects additional Form metadata and non-JSON media before publication.
 
-**Transfer-Encoding and Trailer reject, including chunked responses.** This is a
-usable production implementation candidate within the existing admission, not
-completion of `WP-600-HTTP-CONSUMER-PROPERTY-READ`. Successful chunked/trailer
-qualification remains an obligation. Hyper's header-size setting also controls
-trailers; simply using its default trailer handling would not establish the
-admitted separate 16/2048 trailer envelope. No replacement HTTP parser is added.
+Only a single `Transfer-Encoding: chunked` is supported. Other transfer codings,
+duplicate transfer fields, Content-Length together with Transfer-Encoding,
+Trailer declarations and actual trailer frames reject. The binding never treats
+decoded body bytes alone as a completed chunked response: the terminating chunk
+and empty trailer terminator must arrive before success. Hyper owns all framing.
+
+This remains partial progress under `WP-600-HTTP-CONSUMER-PROPERTY-READ`.
+`tests/sdk_limits.rs` preserves two concrete pinned-SDK incompatibilities with
+the full admitted contract. Hyper shares main-header/trailer limits, uses an
+exclusive trailer-byte comparison, and discards raw whitespace before delivering
+trailers. Its fixed cumulative chunk-extension ceiling also rejects 16384
+extension bytes even in responses below the 32768-byte wire limit. These are
+outstanding obligations, not amendments to the admitted 16/2048 trailer or
+32768 wire maxima. The private policy encoding is v2 and includes this slice's
+actual chunked/extension restrictions.
+
+The smallest necessary SDK correction is separate inclusive trailer field/byte
+limits and an extension ceiling compatible with the cumulative wire gate.
+Qualify a corrected pinned SDK before enabling trailers. Lowering the shared
+header setting would reject admissible main headers; measuring a normalized
+trailer map cannot enforce raw bytes. The call-owned driver/ingress/runtime
+architecture can remain. No replacement HTTP parser or SDK fork is introduced
+by this slice.
 
 ## Application runtime
 
@@ -57,7 +75,8 @@ counter never resets and stops reads at 32768. It retains one fixed 8192-byte ra
 head, inspecting it with pinned httparse before handing bytes to Hyper. The
 32-header array rejects overflow, including duplicate field lines; exact header
 bytes include status line and terminating CRLF. Unsupported 1xx, versions,
-status, media, coding and framing reject before Hyper can normalize or hide them.
+status, media, coding and unsupported head framing reject before Hyper can
+normalize or hide them.
 Media is exactly `application/json`, with no parameters or duplicate field.
 There is no implicit drain after rejection.
 
@@ -71,6 +90,14 @@ Hyper read storage and header structures may overlap. Hyper's buffer setting is
 a growth strategy, not a statement of exact heap capacity; its backing/slices,
 channel state and allocator overhead must not be inferred from useful byte
 length. The wire/read gate bounds received input regardless of SDK buffering.
+
+Unannounced trailers reach Hyper's decoder before their frame rejects. Its
+current shared settings reject at raw trailer byte 8192 or completed field 33;
+the offending byte/partial field can already be buffered. Buffer capacity,
+growth and overlap remain owned by the SDK.
+This reject-all path does not qualify the independent 16/2048 trailer envelope
+or bound its allocation by the normalized field sizes. No trailer succeeds at
+either side of that admitted boundary in this slice.
 
 The complete raw call owns its connection future and the Hyper driver. Both are
 polled together in one future. Return, cancellation and drop destroy that future
@@ -98,8 +125,8 @@ Run `cargo test --locked --offline -p clinkz-wot-binding-http --all-targets --
 The other peer writes raw TCP bytes and uses neither Hyper nor httparse. Tests
 exercise public registration/consume/select/read/cancel/drop/shutdown, destroyed
 TD input, 100 alternating targets, fresh connections, exact/one-over 32/8192
-headers and 4096 bodies, fragmented fixed/close bodies, malformed/truncated and
-silent peers, statuses/encodings/1xx, explicit chunk rejection, no reconnect,
+headers and 4096 bodies, fragmented fixed/close/chunked bodies, malformed/truncated
+and silent peers, statuses/encodings/1xx, explicit trailer rejection, no reconnect,
 deadlines, drain, root loss, unchanged rejected variables and parent reclamation.
 The allocator observer records one 4096-byte public result path, including typed
 input construction, and checks no tracked backing survives runtime destruction.
@@ -117,10 +144,23 @@ body reservation after request acceptance. The error retains cause 607 and
 `DeploymentFailure` while request context is attached. Its decoded-body overflow
 control retains cause 608 and `BindingPolicy`. Both connections retire, a later
 read succeeds on the same runtime, and the original parent accounts reclaim.
-This qualifies that supported refusal; other SDK allocation paths remain open.
+Both fixed and chunked paths exercise this supported refusal. Other SDK
+allocation paths remain open.
 
-Completion still requires successful chunked/trailer envelope qualification;
-real exact/one-over trailer and wire/framing cases; comprehensive SDK buffer/
+The framing suite drives actual public calls with real wakes and checks exact
+body bytes, including 4094 one-byte chunks with an 8192-byte head at cumulative
+wire totals 32767/32768/32769. Success does not require peer EOF; the one-over
+case must reject before completing its final terminator. A direct real-socket
+ingress test observes zero credit, shared credit across short/large reads and
+eight callbacks without lifetime-wire refill; byte 32769 stays in the OS.
+Incomplete chunk-size/body/terminator/trailer phases exercise cancellation,
+dropped tickets and deadlines, occupancy refusal with original input, subsequent
+read and account reclamation. Two controlled buffered-completion orders check
+cancel-before-progress and result-before-cancel. These are targeted interleavings,
+not exhaustive race or pressure qualification.
+
+Completion still requires the SDK correction and successful trailer envelope
+qualification; full admitted chunk-extension support; comprehensive SDK buffer/
 continuation/transient/stack bounds and supported fault injection; invalid/late
 result and deadline/result race renewal with the real transport; further FD and
 ownership observations under pressure; and independent same-revision acceptance.
