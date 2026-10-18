@@ -112,6 +112,13 @@ FD and connection future have already retired; the application must continue
 driving the shared runtime. These are path observations, not universal disposal
 guarantees or an exact SDK heap bound.
 
+The public allocation-refusal regression rejects one actual fallible 4096-byte
+body reservation after request acceptance. The error retains cause 607 and
+`DeploymentFailure` while request context is attached. Its decoded-body overflow
+control retains cause 608 and `BindingPolicy`. Both connections retire, a later
+read succeeds on the same runtime, and the original parent accounts reclaim.
+This qualifies that supported refusal; other SDK allocation paths remain open.
+
 Completion still requires successful chunked/trailer envelope qualification;
 real exact/one-over trailer and wire/framing cases; comprehensive SDK buffer/
 continuation/transient/stack bounds and supported fault injection; invalid/late

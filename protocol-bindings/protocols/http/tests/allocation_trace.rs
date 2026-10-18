@@ -2,7 +2,7 @@
 //! or null injection is attempted inside unqualified infallible SDK operations.
 use std::{
     alloc::{GlobalAlloc, Layout, System},
-    cell::RefCell,
+    cell::{Cell, RefCell},
 };
 #[derive(Clone, Copy)]
 struct Trace {
@@ -22,11 +22,26 @@ const EMPTY: Trace = Trace {
     blocks: [(0, 0); 512],
 };
 thread_local! { static TRACE: RefCell<Trace> = const { RefCell::new(EMPTY) }; }
+thread_local! {
+    // On this pinned public path, the first 4096-byte, align-1 allocation
+    // after acceptance is the fallible body reservation, not SDK internals.
+    static DENY_NEXT_BODY: Cell<bool> = const { Cell::new(false) };
+    static BODY_REFUSALS: Cell<usize> = const { Cell::new(0) };
+}
 struct Allocator;
 #[global_allocator]
 static ALLOCATOR: Allocator = Allocator;
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if layout.size() == 4096
+            && layout.align() == 1
+            && DENY_NEXT_BODY
+                .try_with(|deny| deny.replace(false))
+                .unwrap_or(false)
+        {
+            BODY_REFUSALS.with(|count| count.set(count.get() + 1));
+            return std::ptr::null_mut();
+        }
         let p = unsafe { System.alloc(layout) };
         let _ = TRACE.try_with(|t| {
             let mut t = t.borrow_mut();
@@ -60,6 +75,106 @@ unsafe impl GlobalAlloc for Allocator {
 // Keep the application/peer implementation in one place. The normal tests are
 // imported only in the real_peer integration target, not repeated here.
 include!("support/application.rs");
+
+#[test]
+fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let peer = std::thread::spawn(move || {
+        for attempt in 0..3 {
+            let (mut socket, _) = listener.accept().unwrap();
+            assert!(request(&mut socket).starts_with("GET /a?x=1 HTTP/1.1\r\n"));
+            if attempt == 1 {
+                // No Content-Length: reach the actual decoded-body policy limit.
+                socket
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                    .unwrap();
+                socket.write_all(&[b'1'; 4097]).unwrap();
+                socket.shutdown(std::net::Shutdown::Write).unwrap();
+            } else {
+                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n1").unwrap();
+            }
+            let mut byte = [0];
+            assert_eq!(
+                socket.read(&mut byte).unwrap(),
+                0,
+                "socket survived settlement"
+            );
+        }
+    });
+    recipe().block_on(async {
+        let (runtime, handle, observer, parent) = engine(port);
+        let mut failures = Vec::new();
+        BODY_REFUSALS.with(|count| count.set(0));
+        for domain in [
+            ResourceFailureDomain::DeploymentFailure,
+            ResourceFailureDomain::BindingPolicy,
+        ] {
+            let mut call = handle
+                .read_property("a", InteractionOptions::new(), &mut work())
+                .unwrap();
+            DENY_NEXT_BODY
+                .with(|deny| deny.set(domain == ResourceFailureDomain::DeploymentFailure));
+            let result = take(&mut call).await;
+            let still_armed = DENY_NEXT_BODY.with(|deny| deny.replace(false));
+            assert!(!still_armed, "body reservation was not reached");
+            let error = result.unwrap_err();
+            assert!(matches!(error, CoreError::Binding(_)), "{error:?}");
+            let (key, actual_domain, local, parent_owner) =
+                error.context().resource_failure().unwrap();
+            assert_eq!(actual_domain, domain, "{error:?}");
+            assert_eq!((local, parent_owner), (None, None));
+            assert_eq!(
+                error.context().binding(),
+                Some((BindingId::new(600), BindingGeneration::INITIAL))
+            );
+            assert!(error.context().plan().is_some());
+            assert_eq!(error.context().phase(), ErrorPhase::Binding);
+            assert_eq!(error.retry_class(), RetryClass::Never);
+            assert_eq!(
+                error.context().cause_code(),
+                Some(if domain == ResourceFailureDomain::DeploymentFailure {
+                    607
+                } else {
+                    608
+                })
+            );
+            assert_eq!(
+                error.context().redacted_cause(),
+                Some(if domain == ResourceFailureDomain::DeploymentFailure {
+                    "HTTP body backing unavailable"
+                } else {
+                    "HTTP body limit exceeded"
+                })
+            );
+            failures.push((key, error.context().plan()));
+            drop(call);
+        }
+        assert_eq!(BODY_REFUSALS.with(Cell::get), 1);
+        assert_eq!(
+            failures[0], failures[1],
+            "policy identity or selected plan changed"
+        );
+        let mut retry = handle
+            .read_property("a", InteractionOptions::new(), &mut work())
+            .unwrap();
+        let output = take(&mut retry).await.unwrap();
+        assert_eq!(&*output.data().unwrap().body, b"1");
+        assert_eq!(
+            Some(output.metadata().binding_response().unwrap().plan_id()),
+            failures[0].1
+        );
+        drop(output);
+        drop(retry);
+        drop(handle);
+        shutdown(&runtime);
+        drop(runtime);
+        drop(observer);
+        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+    });
+    peer.join().unwrap();
+}
+
 #[test]
 fn public_path_allocation_observation_and_complete_release() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();

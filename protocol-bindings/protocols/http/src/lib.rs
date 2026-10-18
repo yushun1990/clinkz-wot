@@ -49,7 +49,14 @@ impl HttpConsumerConfig {
 
 fn error(code: u16, cause: &'static str) -> CoreError {
     CoreError::Binding(
-        ErrorContext::new(ErrorPhase::Binding, RetryClass::Never).with_redacted_cause(code, cause),
+        ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+            .with_resource_failure(
+                BindingConfigurationDigest::new(PRIVATE),
+                ResourceFailureDomain::BindingPolicy,
+                None,
+                None,
+            )
+            .with_redacted_cause(code, cause),
     )
 }
 fn reject(
@@ -275,13 +282,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
                     CoreError::Binding(
                         (*cause.context())
                             .with_plan(request.plan_id())
-                            .with_binding(request.binding_id(), request.binding_generation())
-                            .with_resource_failure(
-                                BindingConfigurationDigest::new(PRIVATE),
-                                ResourceFailureDomain::BindingPolicy,
-                                None,
-                                None,
-                            ),
+                            .with_binding(request.binding_id(), request.binding_generation()),
                     )
                 });
                 Poll::Ready(result.and_then(|body| {

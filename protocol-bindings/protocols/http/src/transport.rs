@@ -198,9 +198,20 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
         }
         let mut body = response.into_body();
         let mut result = Vec::new();
-        result
-            .try_reserve_exact(BODY as usize)
-            .map_err(|_| error(607, "HTTP body backing unavailable"))?;
+        result.try_reserve_exact(BODY as usize).map_err(|_| {
+            // The captured protocol ceiling permits this reservation;
+            // refusal belongs to the application's allocator/deployment.
+            CoreError::Binding(
+                ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+                    .with_resource_failure(
+                        BindingConfigurationDigest::new(PRIVATE),
+                        ResourceFailureDomain::DeploymentFailure,
+                        None,
+                        None,
+                    )
+                    .with_redacted_cause(607, "HTTP body backing unavailable"),
+            )
+        })?;
         while let Some(frame) = body.frame().await {
             let frame = frame.map_err(|_| error(606, "HTTP body rejected"))?;
             let data = frame
