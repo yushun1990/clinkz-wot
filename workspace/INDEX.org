@@ -28,6 +28,8 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
+- [[file:0089-http-producer-entry-readiness.md][0089 HTTP Producer Property Read Entry Readiness]]
+
 - [[file:0082-logical-physical-subscription-decoupling.md][0082 Logical Subscriptions Versus Physical Broker Subscriptions]]
 
 ** DISCUSSING
