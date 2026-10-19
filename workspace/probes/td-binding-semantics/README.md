@@ -10,6 +10,10 @@ application API. The [responsibility reassessment](../../0056-target-spi-externa
 compares a common descriptive-class contract with explicit operational profiles
 and records its compatibility limits. Applications must not classify unfamiliar
 terms or maintain domain-class lists.
+The [standard-profile counterexample](../../0056-target-spi-external-validation-and-cross-protocol-neutrality.md#standard-thingprofile-advertisement-activation-and-coverage)
+separates `Thing.profile` advertisement, trusted interpretation, native support
+and Engine selection. Annotation interoperability here covers class assertions;
+unfamiliar annotation predicates still fail.
 
 From this directory, with Python 3.12:
 
@@ -33,6 +37,7 @@ checks belong in the investigation PR.
 | `mqtt_lowering.py` | Independently readable MQTT packet/topic/filter lowering, with the same imports and interface. |
 | `test_probe.py` | Positive examples and intentional counterexamples, including one passing test that **proves information loss**. |
 | `test_role_contract.py` | Four A/B counterexamples using a shared descriptive-class rule and an explicitly selected parent-context dialect; no role registry/framework. |
+| `test_profile_boundary.py` | Five cases using standard `Thing.profile`, a locally supplied HTTP Basic read-slice interpreter and generic coverage checking before selection; also preserves the non-class annotation refusal counterexample. |
 
 The HTTP and MQTT lowerers are 40 and 49 physical lines respectively,
 including imports, comments and blank lines.
@@ -79,7 +84,7 @@ Neither Binding imports or maintains that policy. Requiring applications to
 author it no longer meets the architecture requirement; moving the same lists
 into every Binding is not recommended either.
 
-The four new cases bring the total to **27**. They use the existing experimental
+The four role-contract cases use the existing experimental
 hook to compare a fixed rule that preserves all parent extension classes as
 descriptive, without an IRI inventory. SAREF and a wholly unknown class coexist
 with both lowerers; numeric DataSchema meaning remains intact. Unknown Form
@@ -97,6 +102,32 @@ offline interpreter dependency ownership are analyzed in 0056 without building
 a manifest system merely to test it. Shared profile activation/composition and
 production Rust helper ergonomics remain unverified. These test-only policies
 select no target registration API or production default.
+
+Five standard-profile/annotation cases bring the total to **32**. The original
+resolver retains `profile` as `td:followsProfile`; the HTTP lowerer rejects it.
+The added test-only preparation retains advertised URI values separately and
+calls an explicitly supplied local interpreter before any Binding runs. That
+interpreter applies only the HTTP Basic draft's read request/response rule.
+An aware example encodes JSON `Accept` and expected status 200; ordinary HTTP
+does not discharge that opaque obligation and is excluded by a generic coverage
+check. Changing Binding order or requesting an incomplete Binding cannot weaken
+the fixed requirement. Unknown/missing profile interpretation fails before
+native compilation; installation without advertisement activates nothing here.
+The helpers consume resolved facts, without rescanning TD syntax or contexts.
+
+This is not full HTTP Basic profile support, qualification of its Common
+Constraints or proof of peer conformance. Profile composition, scope across
+different Forms/protocols and runtime/provider coverage remain unverified. The
+fixture deliberately refuses unknown profiles; that is a proposed admission
+policy with an availability cost, not a W3C mandate. No registry, manifest,
+profile dispatcher or public registration interface is implemented.
+
+The final case preserves `rdfs:label` on Thing/Property scopes but still refuses
+it for both HTTP and MQTT, including after known-profile preparation. The
+class-only rule does not accept arbitrary annotation predicates. Such members
+need a maintained common rule/interpreter or remain unsupported; applications
+must not supply per-term exceptions. Whether that limit suffices for v1 remains
+an Owner decision after independent review.
 
 `select(interactions, property_name, operation, bindings, *, strict_form=None,
 strict_binding=None)` filters all those coordinates before calling any lowerer.

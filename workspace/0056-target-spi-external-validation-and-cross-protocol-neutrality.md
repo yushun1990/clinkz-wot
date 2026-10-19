@@ -17,6 +17,10 @@ The [responsibility reassessment](#responsibility-reassessment-without-applicati
 supersedes the experiment's application-supplied annotation-role policy. Ordinary
 applications select supported profiles and deployment/security policy; they do
 not classify vocabulary terms or maintain domain-class allowlists.
+The [standard-profile counterexample](#standard-thingprofile-advertisement-activation-and-coverage)
+distinguishes `Thing.profile` claims, trusted interpretation, native support and
+Engine selection. Annotation interoperability is demonstrated for class
+assertions only; unfamiliar annotation predicates still cause refusal.
 
 The original investigation, decision and migration below record the pre-probe
 feedback-order decision. That migrated history is preserved. The
@@ -900,6 +904,7 @@ binding guidance.
 | --- | --- |
 | [TD 1.1 Recommendation](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#sec-default-values), §§5.3–5.4, 6.3–6.5, 7, 8.3 and Appendix D | Defines WoT defaults/inheritance, Form requests, extension contexts and HTTP method rules. It supplies no Engine-to-Binding SPI. Core semantic resolution is more than JSON-LD expansion. |
 | [WoT Architecture 1.1](https://www.w3.org/TR/2023/REC-wot-architecture11-20231205/#protocol-bindings), §§6.7, 7.5 and 8.6 | Separates abstract interactions and concrete protocol messages. Scheme alone cannot identify every subprotocol/platform mapping. It does not prescribe this project's plan ownership, storage or registration types. |
+| [WoT Profiles, November 2025 Working Draft](https://www.w3.org/TR/2025/WD-wot-profile-20251104/#sec-profiling-mechanism), §§4–6 | Defines profile conformance claims, shared constraints and native mapping rules. This is a Working Draft, not a Recommendation. Its standard `Thing.profile` carrier is tested below; neither the URI nor the advertisement supplies trusted executable interpretation. |
 | [Binding Templates, May 2024 Note](https://www.w3.org/TR/2024/NOTE-wot-binding-templates-20240528/#protocol-binding-templates), §4 | Describes protocol, payload and platform binding dimensions. The [November 2025 Note](https://www.w3.org/TR/2025/NOTE-wot-binding-templates-20251104/#sotd) retires the main document and redirects future work. Neither is a universal operational interpreter. |
 | [HTTP binding](https://w3c.github.io/wot-binding-templates/bindings/protocols/http/) and [MQTT binding](https://w3c.github.io/wot-binding-templates/bindings/protocols/mqtt/) | Consulted the respective mapping/vocabulary sections. These evolve; HTTP examples include a newer TD context, and MQTT explicitly remains work in progress. The probe uses TD 1.1 HTTP rules and an explicitly declared illustrative MQTT vocabulary, not a new normative MQTT profile. |
 | [JSON-LD 1.1](https://www.w3.org/TR/json-ld11/#scoped-contexts), §§4.1, 4.2 and 9 | Term definitions can affect keys, values, scoped contexts, datatypes, lists and JSON literals. Identity expansion supplies no protocol semantics or ontology entailment. Lexically different aliases can denote the same property. |
@@ -1134,13 +1139,11 @@ back to a GET that omits it. The class remains preserved and queryable.
 
 [TD 1.1's Thing and Form models](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form)
 describe semantic tags, profile associations and subprotocol metadata. They do
-not provide this proposed criticality contract. In particular, a context URL is
-not a must-understand declaration, and `Thing.profile` is not a universal list
-of mandatory interpreters. A concrete profile must define how its execution
-requirements are identified; unsupported requirements cannot be treated as
-advisory solely because a generic profile name is unfamiliar. The probe uses
-an existing Form `subprotocol` discriminant for one illustrative dialect. It
-selects no new TD keyword, universal profile syntax or activation API.
+not provide this proposed criticality contract. A context URL is not a
+must-understand declaration. `Thing.profile` is a standard conformance claim
+with potentially operational consequences, not a universal interpreter-loading
+instruction. The earlier `subprotocol` fixture proves one local dialect only;
+the standard carrier and its interpretation boundary are examined below.
 
 #### Responsibility, activation and dependency ownership
 
@@ -1214,17 +1217,162 @@ relocation of an allowlist can make both interpretations correct. The base
 contract deliberately admits the first meaning and requires an explicit
 operational profile for the second. This is not universal semantic discovery.
 
+#### Standard `Thing.profile`: advertisement, activation and coverage
+
+**Standards reconstruction.** [TD 1.1 §5.3.1.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing)
+makes `profile` optional, accepting one URI or an array, identifying mechanisms
+followed by the TD and Thing. [WoT Profiles §4](https://www.w3.org/TR/2025/WD-wot-profile-20251104/#sec-profiling-mechanism)
+uses it to claim conformance; profile conformance includes the profile's
+normative assertions. The draft permits extra bindings and cautions that a
+claim is not proof of conformance. It recommends avoiding changed defaults or
+unexpected behavior for non-profile consumers; these are SHOULD NOT statements,
+not a universal guarantee that unknown profiles impose no requirements.
+
+The same draft includes common security/error constraints and an HTTP Basic
+`readproperty` mapping with GET, JSON acceptance and a successful 200 JSON
+response. Profile meaning therefore exceeds a protocol scheme or a Form's
+`subprotocol`. Listing several profiles claims several conformances; it is not
+an ordered list from which a compiler can choose the weakest interpretation.
+Nothing in these specifications installs trusted code from a URI or proves a
+Consumer's profile conformance from one successful operation.
+
+**Actual trace at the earlier `c9067d4` probe boundary.** `ROOT_KEYS` omits
+`profile`; the pinned official context expands its key to
+`https://www.w3.org/2019/wot/td#followsProfile`. That context does not `@id`-coerce
+its values: the example is `Member(..., (Atom(profile_uri),), ...)`, not a
+`Reference`. `Trace.scope` retains it in `Interaction.root_extensions`.
+`DescriptiveParentTypes` changes classes only. HTTP reaches `common_support`,
+which rejects the field as unknown. MQTT does likewise for an MQTT Form, or
+rejects the HTTP scheme first. Thus preservation works; standard-profile
+activation did not. Production [Thing](../td/src/thing.rs) already stores profile
+URIs; this is a limitation of the disposable semantic adapter, not evidence that
+master lacks the standard field.
+
+Simply adding `profile` to `ROOT_KEYS` would silence that rejection while
+carrying neither advertisement nor requirements. That is not a repair. The
+existing Form dialect experiment is also not a substitute for interpreting
+document-level profile constraints.
+
+**Preferred responsibility boundary, still proposed.** Treat the standard
+advertisement as an input to preparation, not as trusted implementation or a
+candidate Binding choice:
+
+1. Shared TD processing preserves and validates advertised profile identities
+   separately from active requirements. Context processing does not interpret
+   the associated specifications. No profile URL is fetched as executable code.
+2. Already installed, versioned profile interpretation code establishes the
+   obligations of the selected admission contract from those claims and the
+   resolved TD. The provider comes from a supported profile/Binding package or
+   shared library, with pinned specification/context/code dependencies. Applications
+   choose such packages/whole contracts; they never enumerate annotation roles.
+3. Before native candidate compilation, fix requirements for each operation/Form
+   coordinate, including document-wide constraints. Interpretation can inspect
+   resolved Form facts to define scope, but cannot depend on which Binding wins.
+   Known profile composition must be consistent; unsupported dependencies or
+   unresolved scope cause refusal. Candidate removal, priority or strict Binding
+   selection cannot weaken these requirements.
+4. Bindings lower against that fixed input and report which assigned obligations
+   they implement. The Engine checks complete coverage before ranking supported
+   candidates. It compares identities/coverage generically; profile/native
+   libraries interpret the obligations. Security/codec/Engine obligations require
+   their appropriate providers too, rather than making every native Binding
+   implement an entire profile. Strict selection cannot waive missing coverage.
+
+Requirements can be a pure function of the fixed contract, advertised profiles,
+resolved TD and operation/role/Form coordinate. This does not require eagerly
+storing a second requirement table for every Form. Evaluating only requested
+coordinates must give the same requirements regardless of candidate registration
+or ranking.
+
+This needs no universal protocol registry: ordinary linked libraries can supply
+a local interpretation function before selection. A small opaque requirement
+token suffices for the counterexample, not for every future requirement or Rust
+SPI. Token recognition and a compiler's coverage claim are not conformance proof;
+qualified interpretation, actual native behavior and dependency evidence are
+still necessary. Returning success only when every assigned requirement is
+implemented could carry the same contract; the test's explicit coverage set does
+not mandate a second manually maintained SDK ledger. This investigation adds no manifest grammar, generic
+profile dispatcher or production registration obligation.
+
+**Small executable distinction.** [Five added cases](probes/td-binding-semantics/test_profile_boundary.py)
+leave the resolver, public interface and HTTP/MQTT lowerers unchanged. Test-only
+preparation reads the already-resolved standard member and retains its claims
+alongside immutable requirements. An explicitly supplied local function
+interprets only the HTTP Basic draft's read request/response rule; it is not a
+complete profile implementation. The Engine-side wrapper checks opaque coverage
+before using the existing selector; no HTTP vocabulary appears in that check.
+
+| Input/action | Observed result and implication |
+| --- | --- |
+| Standard HTTP Basic URI, or singleton-array spelling | Both resolve to the same preserved advertisement. The original lowerer still refuses `followsProfile`; this negative evidence remains. |
+| Erase the standard field without interpretation | Ordinary HTTP emits no expected response status. Advertisement erasure loses a profile obligation; successful compilation is insufficient. |
+| Supply the local read-slice interpreter before either candidate | It fixes one versioned read-rule obligation. Ordinary HTTP can construct a native GET but reports no profile coverage; the Engine excludes it. The aware example emits JSON `Accept` and expected status 200, and covers that rule. |
+| Reverse candidate order, remove the aware Binding, or strictly request ordinary HTTP | Reversing order still selects the aware candidate. Removing it or strictly requesting the incomplete candidate fails. Requirements retain the same identity; selection cannot dilute them. |
+| Missing interpreter, unknown advertised URI, or known-plus-unknown array | Refusal occurs before the sentinel native compiler can run. Knowing one advertised profile does not justify dropping the other. This is the experiment's conservative admission policy, not a TD-mandated treatment of all unknown profiles. |
+| Install interpretation code without an advertisement | No profile requirement activates in this fixture. Deployment-required profiles would need a separately declared contract; installation alone does not reinterpret a TD. |
+| Profile claim plus contradictory POST, unknown subprotocol/Form step, or Basic security unsupported by the native example | No candidate is selected. A profile claim neither overrides explicit native instructions nor supplies missing security capability. |
+
+**Remaining trade-offs.** Whole-profile conformance, operation-compatible
+execution and native Binding support are different claims. The read-slice
+function omits shared constraints, other operations, security bootstrapping,
+runtime validation and complete profile conformance. The fixture demonstrates
+coverage ordering and one native obligation, not admission safety for arbitrary
+profiled TDs. Its interpreter deliberately refuses non-HTTP reads; it does not
+show that profiles should prohibit extra MQTT Forms.
+
+For a general implementation, compute scoped requirements for all eligible
+coordinates before Binding ranking. A known SSE profile's observation rules
+need not apply to a simple read, and HTTP-specific rules need not govern an
+additional MQTT Form. Shared constraints can still apply. An unavailable
+profile interpreter cannot establish such isolation. Conservatively refusing
+that unknown document-level claim preserves uncertainty but reduces availability,
+including a known-plus-unknown array that might actually be compatible. A broader
+base-TD-only path would require a qualified contract establishing that the
+ignored profile has no required effects on the selected operation; guessing
+from a URI or choosing a weaker Binding is insufficient. No such path is proven.
+
+The preferred next experiment is scoped known-profile composition and real
+shared-constraint/provider coverage, not a manifest framework. Exact activation,
+scope/composition, offline dependency qualification and truthful native coverage
+remain open before production SPI design. Unknown-profile refusal is a proposed
+feature/availability limit for Owner review, not a new standards requirement.
+
+#### Exact limit for non-`@type` annotations
+
+The proposed common rule covers parent **class assertions only**. “Unknown”
+here means uninterpreted by the selected common rules/libraries; a published,
+resolvable IRI is not sufficient. The new case attaches
+[RDFS's human-readable label](https://www.w3.org/TR/rdf-schema/#ch_label) to a
+Thing or Property. Its resolved predicate/literal is preserved, but both native
+lowerers refuse it as an unknown extension. Activating the known read-profile
+slice does not exempt it. This demonstrates a concrete annotation availability
+failure, not loss of information or proof that the label is an instruction.
+
+**Recommendation for the initial feature envelope:** deliberately leave automatic
+acceptance of unfamiliar non-`@type` predicates unsupported. A maintained shared
+interpreter or separately reviewed common rule may classify/interpret specific
+annotation properties. Do not ask applications or every Binding to maintain
+term exceptions, and do not let a known profile bless an entire namespace.
+Broad arbitrary semantic-annotation interoperability is therefore not a proven
+property or part of this initial proposal. If it is required for v1, this scope
+is insufficient and that contract needs further investigation before migration;
+the Owner must accept or reject the availability limit. The prototype's refusal
+is not a justification for permanently classifying all foreign predicates as
+mandatory protocol instructions.
+
 #### Evidence, exclusions and decision boundary
 
 The original 23 tests still establish their narrow information/selection facts;
 the exact application allowlist proves only that an explicit classification can
 make those fixtures compile. It is **no longer recommended** as the target API,
-whether maintained by an application or copied into every Binding. Four new
-[role-contract cases](probes/td-binding-semantics/test_role_contract.py) are the
-only added executable surface. They distinguish the common-rule alternative,
+whether maintained by an application or copied into every Binding. The four
+[role-contract cases](probes/td-binding-semantics/test_role_contract.py) distinguish the common-rule alternative,
 mandatory-instruction refusal, explicit parent-context activation and the hidden
 class-obligation counterexample. Conflicting/incomplete declarations are concrete
-reasoning cases above, not tests of an invented manifest framework.
+reasoning cases above, not tests of an invented manifest framework. The five
+standard-profile/annotation cases above additionally distinguish advertisement,
+trusted read-slice interpretation, fixed requirement coverage and native
+applicability. They do not complete the whole-profile model.
 
 **Proposed decision for independent review and Owner approval:** prefer the
 minimal common-rule/explicit-operational-profile combination. Keep the stronger
@@ -1358,9 +1506,9 @@ HTTP and MQTT lowerers import only that interface and the Python standard
 library. Both were authored in this investigation, so separate readability is
 evidence of interface use, not independent implementation review.
 
-The original 23 cases are preserved, with four added role-contract cases: 27
-tests pass, including deliberate refusal, information-loss and hidden-obligation
-counterexamples. The original cases test prefix/alias/full-IRI/supplied-context
+The original 23 cases are preserved, with four role-contract and five
+standard-profile/annotation cases: 32 tests pass, including deliberate refusal,
+information-loss and hidden-obligation counterexamples. The original cases test prefix/alias/full-IRI/supplied-context
 equivalence, scoped contexts, IRI/literal/list/JSON distinctions, alias collisions,
 effective operations/security, response instructions, unsupported extensions, Consumer
 choice, strict choice and Producer coverage. Unknown datatypes remain visible
@@ -1381,7 +1529,8 @@ is needed to expose these semantic differences.
 | Shared public model is 144 lines; experimental Engine adapter is 281. | Semantic preparation is nontrivial work transferred to one owner, not eliminated. Occurrence tracing depends on a private PyLD hook and must not become a production dependency by accident. |
 | Authors enumerate the native instructions they interpret and inspect applicable scopes. | Actual protocol support policy remains necessary. Common semantic rules and shared vocabulary helpers remove unrelated class inventories and duplicate common interpretation. They must not require a parallel hand-maintained declaration of every parser branch. |
 | Historical exact scoped `AnnotationProfile` composes with both unchanged lowerers. | Establishes explicit classification/preservation only. Application ownership fails the clarified requirement; copying its lists into Bindings is also no longer recommended. |
-| A test-only common parent-class rule composes with both unchanged lowerers; a small dialect wrapper consumes parent context. | No class inventory or domain lookup is needed for the base rule. Explicit dialect discrimination prevents ordinary HTTP fallback in that fixture. Production activation, shared-interpreter composition, requirement coverage and author ergonomics remain unproved. |
+| A test-only common parent-class rule composes with both unchanged lowerers; a small dialect wrapper consumes parent context. | No class inventory or domain lookup is needed for the base rule. Explicit dialect discrimination prevents ordinary HTTP fallback in that fixture. This composability claim excludes unfamiliar annotation predicates. |
+| A test-only standard-profile interpreter fixes one read obligation before any candidate. | Five cases separate advertisement, trusted interpretation, native support and Engine coverage/selection. The author of this narrow HTTP example reuses native lowering; full profile composition, common runtime/provider coverage and Rust author ergonomics remain unproved. |
 | No author implements Host/static transport wrappers or Engine ledgers in this probe. | Demonstrates separation for pure lowering only. Generic Rust registration, allocating programs, pending jobs, indirect backing and cleanup remain unproved authoring costs. Do not extrapolate these line counts to a network binding. |
 
 ### Proven limitations and concrete counterexamples
@@ -1431,6 +1580,13 @@ is needed to expose these semantic differences.
    to ordinary HTTP. An explicit dialect activates the parent-context-dependent
    requirement and blocks that fallback. This proves a conditional distinction,
    not correctness for unconstrained legacy class implications.
+10. **Profile/annotation limit:** a standard `profile` claim is preserved but
+    rejected by the original examples; stripping it can omit required response
+    behavior. The added read-slice interpreter prevents that omission by fixing
+    requirements before selection. It does not qualify whole-profile execution,
+    mixed-scope profile composition or ignoring unknown profiles. A preserved
+    `rdfs:label` still prevents both mappings at parent scopes; the class-only
+    rule does not provide arbitrary annotation-predicate interoperability.
 
 The closed security discriminator above is a separate source-level
 counterexample to assuming all future vocabulary can enter through today's TD
@@ -1451,6 +1607,10 @@ HTTP refuses its explicit selector. Requested property/Form/Binding
 constraints exclude unrelated lowerers before compilation. The Engine-side
 resolver and selector contain no HTTP/MQTT vocabulary branches. This establishes
 constructive expressibility for those cases, not general protocol independence.
+The standard-profile experiment additionally fixes one opaque read obligation
+independently of candidate order, excludes incomplete native coverage, and
+selects a corresponding native definition. This is operation-slice evidence,
+not full W3C profile conformance or a general profile implementation.
 
 **Proven limitations/counterexamples:** The existing compiler input is lossy by
 source inspection; raw source lending does not discharge context interpretation;
@@ -1503,9 +1663,13 @@ review:**
    operational interpreters may consume their preserved context. Unknown
    instructions remain unsupported. Optional shared vocabulary/profile libraries
    belong with their maintainers, not an application allowlist, per-Binding
-   domain inventory or central protocol registry. Accepting the exclusion of
-   undeclared implicit protocol/security obligations is the residual product
-   decision; no production role API is approved here.
+   domain inventory or central protocol registry. Use `Thing.profile` claims as
+   preparation inputs to installed trusted interpretation, separately retaining
+   the advertisements; fix scoped active requirements independently of native
+   candidate choice and verify coverage before selection. Accepting exclusions
+   for undeclared implicit obligations, unknown profile interpretation and
+   unfamiliar annotation predicates is the residual product decision. No
+   production role/activation API is approved here.
 
 The smallest independently reviewable next step is **one isolated semantic
 contract refinement**, before any production SPI migration. First independently
