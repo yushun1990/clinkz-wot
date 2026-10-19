@@ -32,6 +32,7 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
+- [[file:0056-target-spi-external-validation-and-cross-protocol-neutrality.md][0056 Target SPI External Validation and Conditional Protocol Independence]]
 - [[file:0081-reusable-plan-and-thing-identity.md][0081 Reusable Plan Semantics Versus Thing-Generation Ownership]]
 - [[file:0083-host-zenoh-consumer-query-ownership.md][0083 Host Zenoh Consumer Query Ownership — deferred optional binding]]
 - [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 Composable Capabilities and Runtime Boundaries]]
@@ -122,7 +123,6 @@ Topics are retained after migration as decision history.
 - [[file:0053-wp400-first-entry-input-closure-audit.md][0053 WP-400 First-Legal-Entry Input Closure Audit]]
 - [[file:0054-autonomous-progression-review-cycle-boundary.md][0054 Autonomous Progression Review-Cycle Boundary]]
 - [[file:0055-project-state-role-and-retention.md][0055 PROJECT_STATE Role and Retention]]
-- [[file:0056-target-spi-external-validation-and-cross-protocol-neutrality.md][0056 Target SPI External Validation and Cross-Protocol Neutrality]]
 - [[file:0057-decision-migration-effectiveness.md][0057 Decision Migration Effectiveness]]
 - [[file:0058-host-route-state-succession-question.md][0058 Host Route State Succession]]
 - [[file:0059-property-read-response-sealing-boundary.md][0059 Property Read Response-Sealing Boundary]]
