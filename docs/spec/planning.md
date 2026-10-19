@@ -834,6 +834,14 @@ impl HostBindingCompilerRegistration {
         C::Cursor: Send + 'static,
         C::Artifact: Send + Sync + 'static;
 
+    pub fn try_new<C>(compiler: C) -> Result<Self, BindingInputRejection<C>>
+    where
+        C: BindingCompilerExtension + Send + Sync + 'static,
+        C::Cursor: Send + 'static,
+        C::Artifact: Send + Sync + 'static;
+
+    pub fn slot_layout(&self) -> core::alloc::Layout;
+
     pub fn compatibility(&self) -> BindingArtifactCompatibility;
     pub fn bounds(
         &self,
@@ -870,6 +878,10 @@ impl BindingArtifact<HostBindingArtifact> {
     where
         T: Send + Sync + 'static;
 }
+
+impl HostBindingArtifact {
+    pub fn storage_overhead(&self) -> u64;
+}
 ```
 
 Core implements erasure with safe standard-library type inspection. A cursor
@@ -877,6 +889,29 @@ type mismatch makes `step` return `Failed` with the original erased cursor;
 `abort` returns `Err(original_cursor)`. Compatibility or payload-type mismatch
 returns `None` for borrowed access and `Err(original_artifact)` for consuming
 access. Binding crates neither implement nor invoke an unsafe erasure hook.
+
+Both generic and closed Consumer erasure use one typed slot holding either the
+native cursor or the completed output. `start` acquires its complete actual
+`slot_layout()` fallibly before the native callback. Pending, Failed and Complete
+reuse that allocation; artifact extraction also requires no new allocation.
+`try_new` returns the original compiler on startup allocation refusal without a
+native callback. `new` retains the Host deployment-failure policy for startup.
+The slot records the concrete compiler type, so sharing associated cursor and
+artifact types does not authorize a different compiler body to consume a job.
+This is type pairing, not live registration or generation validation.
+
+The native artifact footprint still covers its inline payload and private
+backing. `storage_overhead()` reports the
+slot's bytes beyond the inline native payload, including tag, output metadata,
+padding and retained cursor capacity. Host Producer retained-output admission
+adds this overhead once to compiled/runtime storage; native artifact quotas
+continue to measure the native payload. Closed Consumer admission already charges
+its full slot separately and must not add this overhead again. Native private
+backing, outer owners, callback work and transient overlap remain separate.
+Static retained-output accounting excludes the native inline payload from the
+outer-envelope charge because that payload is already in its native footprint.
+These physical storage rules do not open closed Consumer eligibility or qualify
+arbitrary callbacks, destructors or complete generic compiler admission.
 
 ### Complete-registration relationship
 

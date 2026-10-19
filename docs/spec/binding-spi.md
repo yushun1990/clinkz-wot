@@ -365,8 +365,11 @@ installation. Consuming completion ends the preparation loan; the artifact
 contains no registration or input reference.
 
 Static preparation uses the fixed native cursor and artifact. The supported
-Host adapter acquires one fallible slot large/aligned enough for its cursor and
-completed output **before invoking the native start callback**. Planning must
+Host constructor uses the same generic typed-slot adapter described by
+[Planning](planning.md#host-compiler-representation), with its existing closed
+eligibility and prepaid transport costs. It acquires one fallible slot large and
+aligned enough for its cursor and completed output **before invoking the native
+start callback**. Planning must
 authorize that actual Layout and prepay the adapter/callback/cleanup costs from
 the descriptor before calling `start`; logical capacity is not physical backing.
 Acquisition failure invokes no native start and loses no input or existing owner.

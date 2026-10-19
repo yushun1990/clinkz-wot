@@ -794,6 +794,7 @@ impl AdmissionReservations {
         slot: ThingSlotId,
         artifact: &BindingArtifactEnvelope<A>,
         logical: u64,
+        erased_overhead: Option<u64>,
     ) -> CoreResult<()> {
         if self.compiled {
             return Err(validation_error(slot));
@@ -802,6 +803,16 @@ impl AdmissionReservations {
         let structural = (core::mem::size_of::<PlanBuildOutput<A>>()
             + core::mem::size_of::<BindingArtifactEnvelope<A>>()
             + core::mem::size_of::<BindingArtifactRef>()) as u64;
+        let structural = match erased_overhead {
+            // The static envelope already contains the native payload; its
+            // bytes are also in the native footprint. Count them only once.
+            None => structural - core::mem::size_of::<A>() as u64,
+            // The erased envelope holds an outer owner, with native payload
+            // and slot overhead in a separate retained allocation.
+            Some(overhead) => structural
+                .checked_add(overhead)
+                .ok_or_else(|| validation_error(slot))?,
+        };
         let compiled = logical
             .checked_add(footprint.retained_bytes())
             .and_then(|v| v.checked_add(structural))
@@ -1030,6 +1041,7 @@ fn verify_first_entry_closure<A>(
     plan_set: &CompiledPlanSetRecord<A>,
     prepare: &PrepareInput,
     artifact: &BindingArtifactEnvelope<A>,
+    erased_overhead: Option<u64>,
     registration: BindingRegistrationIdentity,
     admitted_route_footprint: BindingLifetimeFootprint,
     thing_slot: ThingSlotId,
@@ -1053,7 +1065,13 @@ fn verify_first_entry_closure<A>(
         admitted_route_footprint,
     )?;
     let activation = activation.ok_or_else(|| validation_error(thing_slot))?;
-    admission.reserve_compiled(limits, thing_slot, artifact, derived.logical_bytes)?;
+    admission.reserve_compiled(
+        limits,
+        thing_slot,
+        artifact,
+        derived.logical_bytes,
+        erased_overhead,
+    )?;
     admission.reserve_handler(limits, thing_slot, handler_footprint)?;
     let route = *prepare.route();
     if !core::ptr::eq(resolved, artifact)
@@ -1406,6 +1424,7 @@ where
                     &self.plan_set,
                     &prepare,
                     artifact,
+                    None,
                     self.registration.identity(),
                     self.registration.resources().route_state(),
                     self.thing_slot,
@@ -3283,6 +3302,7 @@ impl HostPropertyReadRuntime {
                     &self.plan_set,
                     &prepare,
                     artifact,
+                    Some(artifact.artifact().payload().storage_overhead()),
                     self.registration.identity(),
                     self.registration.resources().route_state(),
                     self.thing_slot,
@@ -4309,6 +4329,67 @@ mod tests {
             BindingArtifactRef::new(artifact_identity, SlotIndex::new(0)),
             plan_set_generation(),
         )
+    }
+
+    #[test]
+    fn compiled_admission_counts_native_inline_once_and_erased_storage_separately() {
+        use clinkz_wot_foundation::{GatewayDefaultV1, StaticResourceProfile};
+        let record = base_record();
+        let artifact = &record.output.as_ref().unwrap().artifacts()[0];
+        let empty = || AdmissionReservations {
+            charges: Vec::new(),
+            call_cleanup: None,
+            route_cleanup: None,
+            #[cfg(feature = "std")]
+            cleanup_call_cleanup: None,
+            #[cfg(feature = "std")]
+            transfer_cleanup: None,
+            compiled: false,
+            handler: None,
+            response_bytes: 0,
+            #[cfg(feature = "std")]
+            host_call_ceiling: None,
+            #[cfg(feature = "std")]
+            host_call_recovery_ceiling: None,
+            deadline: Deadline::NONE,
+        };
+        let logical = 128;
+        let outer = (core::mem::size_of::<PlanBuildOutput<u8>>()
+            + core::mem::size_of::<BindingArtifactEnvelope<u8>>()
+            + core::mem::size_of::<BindingArtifactRef>()) as u64;
+        // Static outer storage already contains the single native byte.
+        // Erased outer storage contains its wrapper; native bytes live in the
+        // retained allocation alongside an independently measured 256-byte tail.
+        for (overhead, expected) in [(None, logical + outer), (Some(256), logical + outer + 257)] {
+            for kind in [
+                ResourceKind::CompiledPlanBytesMax,
+                ResourceKind::CompiledRuntimeBytesPerThingMax,
+                ResourceKind::CompiledRuntimeBytesGlobalMax,
+            ] {
+                for accepted in [false, true] {
+                    let mut limits = GatewayDefaultV1::LIMITS.clone();
+                    assert!(limits.set(kind, Some(expected - u64::from(!accepted))));
+                    let mut admission = empty();
+                    let result = admission.reserve_compiled(
+                        &limits,
+                        thing_slot(),
+                        artifact,
+                        logical,
+                        overhead,
+                    );
+                    assert_eq!(result.is_ok(), accepted, "{kind:?}, {overhead:?}");
+                    if let Err(CoreError::LimitExceeded {
+                        resource,
+                        requested,
+                        ..
+                    }) = result
+                    {
+                        assert_eq!(resource, kind);
+                        assert_eq!(requested, Some(expected));
+                    }
+                }
+            }
+        }
     }
 
     fn prepare(reference: BindingArtifactRef, route: BindingRouteKey) -> PrepareInput {

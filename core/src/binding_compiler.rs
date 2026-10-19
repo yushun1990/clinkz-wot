@@ -908,7 +908,7 @@ impl ConsumerCompilerSupport {
     #[cfg(feature = "std")]
     pub const fn host_slot_layout(&self) -> Option<Layout> {
         if self.host_erased {
-            Some(Layout::new::<ConsumerCompilerSlot>())
+            Some(Layout::new::<HostCompilerSlot<ResolvedTargetCompiler>>())
         } else {
             None
         }
@@ -1105,12 +1105,11 @@ impl<C: fmt::Debug> fmt::Debug for StaticBindingCompilerRegistration<C> {
 
 #[cfg(feature = "std")]
 /// Core-erased host cursor. Its concrete type remains ownership-preserving.
-pub struct HostBindingCompilerCursor(HostCursorStorage);
-
-#[cfg(feature = "std")]
-enum HostCursorStorage {
-    Generic(Box<dyn Any + Send>),
-    Consumer(Box<ConsumerCompilerSlot>),
+pub struct HostBindingCompilerCursor {
+    storage: Box<dyn Any + Send>,
+    // Preserve the admitted closed Consumer's prepaid transport allowance.
+    // Generic compilers retain their native work contract.
+    consumer_steps: Option<u8>,
 }
 
 #[cfg(feature = "std")]
@@ -1124,58 +1123,86 @@ impl fmt::Debug for HostBindingCompilerCursor {
 
 #[cfg(feature = "std")]
 /// Core-erased immutable host artifact payload.
-pub struct HostBindingArtifact(HostArtifactStorage);
+pub struct HostBindingArtifact(Box<dyn ErasedHostArtifact>);
+
+// Only exclusive access to the cursor is exposed. This allows a Send, !Sync
+// native cursor to share an allocation with a later Send + Sync artifact,
+// without requiring a lock or strengthening the public compiler bounds.
+#[cfg(feature = "std")]
+struct Exclusive<T>(T);
 
 #[cfg(feature = "std")]
-enum HostArtifactStorage {
-    Generic(Box<dyn Any + Send + Sync>),
-    Consumer(Box<ConsumerCompilerSlot>),
+// SAFETY: Exclusive has no shared projection of T. Its value can only be moved
+// out through ownership; shared artifact access never projects the cursor.
+unsafe impl<T: Send> Sync for Exclusive<T> {}
+
+#[cfg(feature = "std")]
+enum HostCompilerSlot<C: BindingCompilerExtension> {
+    Vacant,
+    Cursor(Exclusive<C::Cursor>),
+    Complete(BindingCompilerOutput<C::Artifact>),
 }
 
 #[cfg(feature = "std")]
-enum ConsumerCompilerSlot {
-    Vacant,
-    Cursor(ResolvedTargetCompilerCursor),
-    Complete(BindingCompilerOutput<ResolvedTargetArtifact>),
+trait ErasedHostArtifact: Send + Sync {
+    fn storage_overhead(&self) -> u64;
+    fn payload(&self) -> &dyn Any;
+    fn take_payload(&mut self, destination: &mut dyn Any);
+}
+
+#[cfg(feature = "std")]
+impl<C> ErasedHostArtifact for HostCompilerSlot<C>
+where
+    C: BindingCompilerExtension + 'static,
+    C::Cursor: Send + 'static,
+    C::Artifact: Send + Sync + 'static,
+{
+    fn storage_overhead(&self) -> u64 {
+        // The native footprint already includes the inline payload. Charge the
+        // rest of the retained slot once, including unused cursor capacity.
+        (size_of::<Self>() - size_of::<C::Artifact>()) as u64
+    }
+
+    fn payload(&self) -> &dyn Any {
+        let Self::Complete(output) = self else {
+            unreachable!("only a completed slot becomes a Host artifact")
+        };
+        output.artifact().payload()
+    }
+
+    fn take_payload(&mut self, destination: &mut dyn Any) {
+        // Type-check before moving the output; no new erasure allocation is
+        // needed to extract a native payload, including a zero-sized payload.
+        let destination = destination
+            .downcast_mut::<Option<C::Artifact>>()
+            .expect("payload type checked before extraction");
+        let Self::Complete(output) = core::mem::replace(self, Self::Vacant) else {
+            unreachable!()
+        };
+        *destination = Some(output.into_artifact().into_payload());
+    }
 }
 
 #[cfg(feature = "std")]
 impl HostBindingArtifact {
-    fn payload(&self) -> &dyn Any {
-        match &self.0 {
-            HostArtifactStorage::Generic(payload) => &**payload,
-            HostArtifactStorage::Consumer(slot) => {
-                let ConsumerCompilerSlot::Complete(output) = &**slot else {
-                    unreachable!("only a completed slot becomes a Host artifact")
-                };
-                output.artifact().payload()
-            }
-        }
+    /// Engine-owned slot bytes beyond the native inline payload.
+    /// Add these to the native footprint when charging retained output; outer
+    /// owners and native private backing remain separate physical costs.
+    pub fn storage_overhead(&self) -> u64 {
+        self.0.storage_overhead()
     }
 
-    fn into_payload<T: Send + Sync + 'static>(self) -> Result<T, Self> {
+    fn payload(&self) -> &dyn Any {
+        self.0.payload()
+    }
+
+    fn into_payload<T: Send + Sync + 'static>(mut self) -> Result<T, Self> {
         if !self.payload().is::<T>() {
             return Err(self);
         }
-        match self.0 {
-            HostArtifactStorage::Generic(payload) => Ok(*payload
-                .downcast::<T>()
-                .expect("type checked before consuming")),
-            HostArtifactStorage::Consumer(slot) => {
-                let ConsumerCompilerSlot::Complete(output) = *slot else {
-                    unreachable!()
-                };
-                // Safe type identity also permits moving an inline payload
-                // without a new erasure box or an unsafe cast. The old slot
-                // releases exactly once; the returned native value is owned.
-                let mut payload = Some(output.into_artifact().into_payload());
-                Ok((&mut payload as &mut dyn Any)
-                    .downcast_mut::<Option<T>>()
-                    .expect("type checked before consuming")
-                    .take()
-                    .unwrap())
-            }
-        }
+        let mut payload: Option<T> = None;
+        self.0.take_payload(&mut payload);
+        Ok(payload.expect("completed slot supplied its payload"))
     }
 }
 
@@ -1202,7 +1229,7 @@ pub(crate) fn try_box<T>(value: T) -> Result<Box<T>, T> {
 fn host_allocation_error() -> CoreError {
     CoreError::Backpressure(
         ErrorContext::new(ErrorPhase::Admission, RetryClass::Safe)
-            .with_redacted_cause(322, "closed Consumer compiler allocation failed"),
+            .with_redacted_cause(322, "Host compiler allocation failed"),
     )
 }
 
@@ -1217,6 +1244,7 @@ impl fmt::Debug for HostBindingArtifact {
 
 #[cfg(feature = "std")]
 trait ErasedBindingCompiler: Send + Sync {
+    fn slot_layout(&self) -> Layout;
     fn compatibility(&self) -> BindingArtifactCompatibility;
     fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds>;
     fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<HostBindingCompilerCursor>;
@@ -1239,6 +1267,10 @@ where
     C::Cursor: Send + 'static,
     C::Artifact: Send + Sync + 'static,
 {
+    fn slot_layout(&self) -> Layout {
+        Layout::new::<HostCompilerSlot<C>>()
+    }
+
     fn compatibility(&self) -> BindingArtifactCompatibility {
         self.0.compatibility()
     }
@@ -1248,9 +1280,15 @@ where
     }
 
     fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<HostBindingCompilerCursor> {
-        self.0
-            .start(input)
-            .map(|cursor| HostBindingCompilerCursor(HostCursorStorage::Generic(Box::new(cursor))))
+        // Acquire the complete cursor/output slot before invoking native code.
+        // A completed artifact never needs another engine allocation.
+        let mut slot =
+            try_box(HostCompilerSlot::<C>::Vacant).map_err(|_| host_allocation_error())?;
+        *slot = HostCompilerSlot::Cursor(Exclusive(self.0.start(input)?));
+        Ok(HostBindingCompilerCursor {
+            storage: slot,
+            consumer_steps: None,
+        })
     }
 
     fn step(
@@ -1259,66 +1297,83 @@ where
         cursor: HostBindingCompilerCursor,
         budget: &mut WorkBudget,
     ) -> BindingCompilerStep<HostBindingCompilerCursor, HostBindingArtifact> {
-        let HostCursorStorage::Generic(storage) = cursor.0 else {
-            return BindingCompilerStep::Failed(BindingCompilerFailure::new(
-                host_cursor_mismatch(input),
-                cursor,
-            ));
-        };
-        let cursor = match storage.downcast::<C::Cursor>() {
-            Ok(cursor) => *cursor,
-            Err(cursor) => {
+        let HostBindingCompilerCursor {
+            storage,
+            consumer_steps,
+        } = cursor;
+        let mut slot = match storage.downcast::<HostCompilerSlot<C>>() {
+            Ok(slot) => slot,
+            Err(storage) => {
                 return BindingCompilerStep::Failed(BindingCompilerFailure::new(
                     host_cursor_mismatch(input),
-                    HostBindingCompilerCursor(HostCursorStorage::Generic(cursor)),
+                    HostBindingCompilerCursor {
+                        storage,
+                        consumer_steps,
+                    },
                 ));
             }
         };
-
-        match self.0.step(input, cursor, budget) {
-            BindingCompilerStep::Pending(cursor) => BindingCompilerStep::Pending(
-                HostBindingCompilerCursor(HostCursorStorage::Generic(Box::new(cursor))),
-            ),
+        let HostCompilerSlot::Cursor(Exclusive(native)) =
+            core::mem::replace(&mut *slot, HostCompilerSlot::Vacant)
+        else {
+            unreachable!("only a live cursor is returned to its compiler")
+        };
+        match self.0.step(input, native, budget) {
+            BindingCompilerStep::Pending(native) => {
+                *slot = HostCompilerSlot::Cursor(Exclusive(native));
+                BindingCompilerStep::Pending(HostBindingCompilerCursor {
+                    storage: slot,
+                    consumer_steps,
+                })
+            }
             BindingCompilerStep::Complete(output) => {
-                let (compatibility, footprint, reservation, payload) =
-                    output.into_artifact().into_route_parts();
+                let compatibility = output.artifact().compatibility();
+                let footprint = output.artifact().footprint();
+                let reservation = output.artifact().route_reservation();
+                *slot = HostCompilerSlot::Complete(output);
+                let payload = HostBindingArtifact(slot);
                 let artifact = match reservation {
                     Some(reservation) => BindingArtifact::producer_route(
                         compatibility,
                         footprint,
                         reservation,
-                        HostBindingArtifact(HostArtifactStorage::Generic(Box::new(payload))),
+                        payload,
                     ),
-                    None => BindingArtifact::new(
-                        compatibility,
-                        footprint,
-                        HostBindingArtifact(HostArtifactStorage::Generic(Box::new(payload))),
-                    ),
+                    None => BindingArtifact::new(compatibility, footprint, payload),
                 };
                 BindingCompilerStep::Complete(BindingCompilerOutput::new(artifact))
             }
             BindingCompilerStep::Failed(failure) => {
-                let (error, cursor) = failure.into_parts();
+                let (error, native) = failure.into_parts();
+                *slot = HostCompilerSlot::Cursor(Exclusive(native));
                 BindingCompilerStep::Failed(BindingCompilerFailure::new(
                     error,
-                    HostBindingCompilerCursor(HostCursorStorage::Generic(Box::new(cursor))),
+                    HostBindingCompilerCursor {
+                        storage: slot,
+                        consumer_steps,
+                    },
                 ))
             }
         }
     }
 
     fn abort(&self, cursor: HostBindingCompilerCursor) -> Result<(), HostBindingCompilerCursor> {
-        let HostCursorStorage::Generic(storage) = cursor.0 else {
-            return Err(cursor);
-        };
-        match storage.downcast::<C::Cursor>() {
-            Ok(cursor) => {
-                self.0.abort(*cursor);
+        let HostBindingCompilerCursor {
+            storage,
+            consumer_steps,
+        } = cursor;
+        match storage.downcast::<HostCompilerSlot<C>>() {
+            Ok(slot) => {
+                let HostCompilerSlot::Cursor(Exclusive(native)) = *slot else {
+                    unreachable!()
+                };
+                self.0.abort(native);
                 Ok(())
             }
-            Err(cursor) => Err(HostBindingCompilerCursor(HostCursorStorage::Generic(
-                cursor,
-            ))),
+            Err(storage) => Err(HostBindingCompilerCursor {
+                storage,
+                consumer_steps,
+            }),
         }
     }
 }
@@ -1338,18 +1393,15 @@ fn host_cursor_mismatch(input: &BindingCompilerInput<'_>) -> CoreError {
 #[cfg(feature = "std")]
 /// Host compiler component with Core-owned safe type erasure.
 pub struct HostBindingCompilerRegistration {
-    compiler: HostCompilerStorage,
-}
-
-#[cfg(feature = "std")]
-enum HostCompilerStorage {
-    Generic(Box<dyn ErasedBindingCompiler>),
-    Consumer(Box<ResolvedTargetCompiler>),
+    compiler: Box<dyn ErasedBindingCompiler>,
+    consumer_support: Option<ConsumerCompilerSupport>,
 }
 
 #[cfg(feature = "std")]
 impl HostBindingCompilerRegistration {
     /// Erases one portable compiler using safe standard-library type identity.
+    /// Startup allocation follows the Host deployment failure policy. Use
+    /// [`Self::try_new`] when the original compiler must survive refusal.
     pub fn new<C>(compiler: C) -> Self
     where
         C: BindingCompilerExtension + Send + Sync + 'static,
@@ -1357,144 +1409,119 @@ impl HostBindingCompilerRegistration {
         C::Artifact: Send + Sync + 'static,
     {
         Self {
-            compiler: HostCompilerStorage::Generic(Box::new(HostCompilerAdapter(compiler))),
+            compiler: Box::new(HostCompilerAdapter(compiler)),
+            consumer_support: None,
         }
     }
 
-    /// Fallibly constructs the private supported Host adapter.
-    ///
-    /// Startup acquisition is separate from the retained per-coordinate slot.
-    /// Failure returns the actual immutable compiler, with no callback invoked.
-    pub fn try_new_consumer(
-        compiler: ResolvedTargetCompiler,
-    ) -> Result<Self, crate::BindingInputRejection<ResolvedTargetCompiler>> {
-        match try_box(compiler) {
+    /// Fallibly erases any portable compiler, returning it unchanged on refusal.
+    /// No native callback runs during adapter construction.
+    pub fn try_new<C>(compiler: C) -> Result<Self, crate::BindingInputRejection<C>>
+    where
+        C: BindingCompilerExtension + Send + Sync + 'static,
+        C::Cursor: Send + 'static,
+        C::Artifact: Send + Sync + 'static,
+    {
+        match try_box(HostCompilerAdapter(compiler)) {
             Ok(compiler) => Ok(Self {
-                compiler: HostCompilerStorage::Consumer(compiler),
+                compiler,
+                consumer_support: None,
             }),
-            Err(compiler) => Err(crate::BindingInputRejection::new(
+            Err(HostCompilerAdapter(compiler)) => Err(crate::BindingInputRejection::new(
                 compiler,
                 crate::BindingOperationalError::new(host_allocation_error()),
             )),
         }
     }
 
+    /// Captures the existing closed Consumer contract using the generic adapter.
+    /// This constructor does not widen Consumer compiler eligibility.
+    pub fn try_new_consumer(
+        compiler: ResolvedTargetCompiler,
+    ) -> Result<Self, crate::BindingInputRejection<ResolvedTargetCompiler>> {
+        let support = compiler.support(true);
+        let mut registration = Self::try_new(compiler)?;
+        registration.consumer_support = Some(support);
+        Ok(registration)
+    }
+
     pub(crate) fn consumer_support(&self) -> Option<ConsumerCompilerSupport> {
-        match &self.compiler {
-            HostCompilerStorage::Consumer(compiler) => Some(compiler.support(true)),
-            HostCompilerStorage::Generic(_) => None,
-        }
+        self.consumer_support
+            .as_ref()
+            .map(|support| ConsumerCompilerSupport {
+                capacity: support.capacity,
+                host_erased: support.host_erased,
+                owned: support.owned,
+            })
+    }
+
+    /// Actual retained allocation for one cursor and its completed output.
+    /// Includes native alignment, tag and artifact metadata. Native bounds and
+    /// private backing are separate; this is not a total-memory declaration.
+    pub fn slot_layout(&self) -> Layout {
+        self.compiler.slot_layout()
     }
 
     /// Returns the erased compiler's stable compatibility identity.
     pub fn compatibility(&self) -> BindingArtifactCompatibility {
-        match &self.compiler {
-            HostCompilerStorage::Generic(compiler) => compiler.compatibility(),
-            HostCompilerStorage::Consumer(_) => RESOLVED_TARGET_COMPATIBILITY,
+        // Closed compatibility is already captured; preserve callback costs.
+        if self.consumer_support.is_some() {
+            RESOLVED_TARGET_COMPATIBILITY
+        } else {
+            self.compiler.compatibility()
         }
     }
 
-    /// Obtains bounds without beginning compiler progress.
+    /// Obtains native bounds without beginning compiler progress.
     pub fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
-        match &self.compiler {
-            HostCompilerStorage::Generic(compiler) => compiler.bounds(input),
-            HostCompilerStorage::Consumer(compiler) => {
-                let native = compiler.bounds(input)?;
-                // Native bytes remain native semantic declarations. Physical
-                // slot/owner bytes are exposed separately by the descriptor;
-                // adding the payload to that slot would count it twice.
-                Ok(BindingCompilerBounds::new(
-                    native.artifact(),
-                    native.cursor_bytes(),
-                    compiler.support(true).temporary_layout().size() as u64,
-                    WorkBudget::new().with_remaining(
-                        WorkClass::BindingPolls,
-                        2 * compiler.support(true).step_work(),
-                    ),
-                ))
-            }
+        let native = self.compiler.bounds(input)?;
+        match &self.consumer_support {
+            None => Ok(native),
+            Some(support) => Ok(BindingCompilerBounds::new(
+                native.artifact(),
+                native.cursor_bytes(),
+                support.temporary_layout().size() as u64,
+                WorkBudget::new().with_remaining(WorkClass::BindingPolls, 2 * support.step_work()),
+            )),
         }
     }
 
-    /// Creates an erased pure cursor.
+    /// Acquires the complete slot fallibly before invoking native start.
     pub fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<HostBindingCompilerCursor> {
-        match &self.compiler {
-            HostCompilerStorage::Generic(compiler) => compiler.start(input),
-            HostCompilerStorage::Consumer(compiler) => {
-                // Backing is acquired before native start, and retained for
-                // every subsequent outcome. Even reporting failure allocates
-                // nothing. A failed start drops the still-vacant slot.
-                let mut slot =
-                    try_box(ConsumerCompilerSlot::Vacant).map_err(|_| host_allocation_error())?;
-                *slot = ConsumerCompilerSlot::Cursor(compiler.start(input)?);
-                Ok(HostBindingCompilerCursor(HostCursorStorage::Consumer(slot)))
-            }
-        }
+        let mut cursor = self.compiler.start(input)?;
+        cursor.consumer_steps = self.consumer_support.as_ref().map(|_| 2);
+        Ok(cursor)
     }
 
-    /// Performs one erased compiler step.
+    /// Performs one erased compiler step without allocating engine backing.
     pub fn step(
         &self,
         input: &BindingCompilerInput<'_>,
-        cursor: HostBindingCompilerCursor,
+        mut cursor: HostBindingCompilerCursor,
         budget: &mut WorkBudget,
     ) -> BindingCompilerStep<HostBindingCompilerCursor, HostBindingArtifact> {
-        let compiler = match &self.compiler {
-            HostCompilerStorage::Generic(compiler) => return compiler.step(input, cursor, budget),
-            HostCompilerStorage::Consumer(compiler) => compiler,
-        };
-        // Do not invoke native code or transport storage on short credit.
-        if budget.remaining(WorkClass::BindingPolls) < compiler.support(true).step_work() {
-            return BindingCompilerStep::Pending(cursor);
+        if let Some(support) = &self.consumer_support {
+            if budget.remaining(WorkClass::BindingPolls) < support.step_work() {
+                return BindingCompilerStep::Pending(cursor);
+            }
         }
-        let HostCursorStorage::Consumer(mut slot) = cursor.0 else {
+        if cursor.consumer_steps.is_some() != self.consumer_support.is_some() {
             return BindingCompilerStep::Failed(BindingCompilerFailure::new(
                 host_cursor_mismatch(input),
                 cursor,
             ));
-        };
-        let ConsumerCompilerSlot::Cursor(native) = &*slot else {
-            unreachable!()
-        };
-        if native.remaining == 0 {
-            return BindingCompilerStep::Failed(BindingCompilerFailure::new(
-                resolved_target_error(input),
-                HostBindingCompilerCursor(HostCursorStorage::Consumer(slot)),
-            ));
         }
-        budget.consume(WorkClass::BindingPolls, 1).unwrap();
-        let ConsumerCompilerSlot::Cursor(native) =
-            core::mem::replace(&mut *slot, ConsumerCompilerSlot::Vacant)
-        else {
-            unreachable!()
-        };
-        match compiler.step(input, native, budget) {
-            BindingCompilerStep::Pending(native) => {
-                *slot = ConsumerCompilerSlot::Cursor(native);
-                BindingCompilerStep::Pending(HostBindingCompilerCursor(
-                    HostCursorStorage::Consumer(slot),
-                ))
+        if let Some(remaining) = &mut cursor.consumer_steps {
+            if *remaining == 0 {
+                return BindingCompilerStep::Failed(BindingCompilerFailure::new(
+                    resolved_target_error(input),
+                    cursor,
+                ));
             }
-            BindingCompilerStep::Failed(failure) => {
-                let (error, native) = failure.into_parts();
-                *slot = ConsumerCompilerSlot::Cursor(native);
-                BindingCompilerStep::Failed(BindingCompilerFailure::new(
-                    error,
-                    HostBindingCompilerCursor(HostCursorStorage::Consumer(slot)),
-                ))
-            }
-            BindingCompilerStep::Complete(output) => {
-                let compatibility = output.artifact().compatibility();
-                let footprint = output.artifact().footprint();
-                debug_assert_eq!(output.artifact().route_reservation(), None);
-                *slot = ConsumerCompilerSlot::Complete(output);
-                BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
-                    compatibility,
-                    footprint,
-                    HostBindingArtifact(HostArtifactStorage::Consumer(slot)),
-                )))
-            }
+            budget.consume(WorkClass::BindingPolls, 1).unwrap();
+            *remaining -= 1;
         }
+        self.compiler.step(input, cursor, budget)
     }
 
     /// Aborts a matching cursor, returning an original mismatched cursor.
@@ -1502,19 +1529,10 @@ impl HostBindingCompilerRegistration {
         &self,
         cursor: HostBindingCompilerCursor,
     ) -> Result<(), HostBindingCompilerCursor> {
-        match &self.compiler {
-            HostCompilerStorage::Generic(compiler) => compiler.abort(cursor),
-            HostCompilerStorage::Consumer(compiler) => {
-                let HostCursorStorage::Consumer(slot) = cursor.0 else {
-                    return Err(cursor);
-                };
-                let ConsumerCompilerSlot::Cursor(native) = *slot else {
-                    unreachable!()
-                };
-                compiler.abort(native);
-                Ok(())
-            }
+        if cursor.consumer_steps.is_some() != self.consumer_support.is_some() {
+            return Err(cursor);
         }
+        self.compiler.abort(cursor)
     }
 }
 
@@ -1962,10 +1980,11 @@ mod consumer_trace {
         assert_eq!(calls(), [0; 5]); // Null acquisition never reaches native start.
         let mut cursor = host.start(&input).unwrap();
         assert_eq!(calls(), [0, 0, 1, 0, 0]);
-        let HostCursorStorage::Consumer(slot) = &cursor.0 else {
-            panic!("supported slot")
-        };
-        let address = &**slot as *const ConsumerCompilerSlot;
+        let slot = cursor
+            .storage
+            .downcast_ref::<HostCompilerSlot<ResolvedTargetCompiler>>()
+            .unwrap();
+        let address = slot as *const HostCompilerSlot<ResolvedTargetCompiler>;
         for _ in 0..4 {
             for units in 0..support.step_work() {
                 let BindingCompilerStep::Pending(returned) = host.step(
@@ -1977,10 +1996,14 @@ mod consumer_trace {
                 };
                 cursor = returned;
                 assert_eq!(calls(), [0, 0, 1, 0, 0]);
-                let HostCursorStorage::Consumer(slot) = &cursor.0 else {
-                    panic!("slot")
-                };
-                assert_eq!(&**slot as *const ConsumerCompilerSlot, address);
+                let slot = cursor
+                    .storage
+                    .downcast_ref::<HostCompilerSlot<ResolvedTargetCompiler>>()
+                    .unwrap();
+                assert_eq!(
+                    slot as *const HostCompilerSlot<ResolvedTargetCompiler>,
+                    address
+                );
             }
         }
         let BindingCompilerStep::Pending(cursor) = host.step(
@@ -1991,10 +2014,14 @@ mod consumer_trace {
             panic!("paid Pending")
         };
         assert_eq!(calls(), [0, 0, 1, 1, 0]);
-        let HostCursorStorage::Consumer(slot) = &cursor.0 else {
-            panic!("slot")
-        };
-        assert_eq!(&**slot as *const ConsumerCompilerSlot, address);
+        let slot = cursor
+            .storage
+            .downcast_ref::<HostCompilerSlot<ResolvedTargetCompiler>>()
+            .unwrap();
+        assert_eq!(
+            slot as *const HostCompilerSlot<ResolvedTargetCompiler>,
+            address
+        );
         let changed =
             BindingCompilerInput::new(&plan, candidate, BindingArtifactRole::ProducerRoute);
         let BindingCompilerStep::Failed(failure) = host.step(
@@ -2016,10 +2043,14 @@ mod consumer_trace {
             };
             cursor = failure.into_parts().1;
             assert_eq!(calls(), [0, 0, 1, 2, 0]);
-            let HostCursorStorage::Consumer(slot) = &cursor.0 else {
-                panic!("slot")
-            };
-            assert_eq!(&**slot as *const ConsumerCompilerSlot, address);
+            let slot = cursor
+                .storage
+                .downcast_ref::<HostCompilerSlot<ResolvedTargetCompiler>>()
+                .unwrap();
+            assert_eq!(
+                slot as *const HostCompilerSlot<ResolvedTargetCompiler>,
+                address
+            );
         }
         host.abort(cursor).unwrap();
         assert_eq!(calls(), [0, 0, 1, 2, 1]);
