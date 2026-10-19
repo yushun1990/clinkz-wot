@@ -117,6 +117,17 @@ ignore an explicit method/header/response instruction. Exact API and source
 changes require that tranche's ADR-0013 admission. Existing mock evidence has
 no HTTP-vocabulary interpretation claim and remains accepted within its scope.
 
+Information sufficiency is relative to a declared support envelope. If two
+admitted documents produce identical complete lawful inputs to a component,
+that component must not be required to distinguish their applicability or
+execution meaning. A trusted upstream check may instead reject one document
+or establish their equivalence before effects. This refines `PLAN-COST-003`,
+`PLAN-ARTIFACT-001` and `FORM-COVERAGE-001`; it requires neither a complete TD
+copy nor one new logical-plan field per source field. Facts may be discharged
+by admission, retained as bounded resolved data, or lowered by the responsible
+compiler. A public plan constructor or metadata setter is a data constructor,
+not evidence that trusted source admission occurred.
+
 Planning starts from a TD-owned validated semantic view or produced-Thing draft
 plus immutable policy and registration snapshots. For the first Consumer
 aggregate, TD supplies paid short semantic loans from its opaque validated
@@ -1823,6 +1834,96 @@ route preparation. The envelope borrow ends when initial preparation returns;
 pending preparation and every later route phase use only binding-owned bounded
 runtime state. A fixture-created logical plan, artifact, or preparation
 substitute is not evidence for this contract.
+
+### Proposed replacement of the compilation boundary
+
+This is the proposed architecture replacement from
+[0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution),
+subject to independent review and later authority migration. It does not admit
+production work or silently change the implemented contracts above. The earlier
+PR #206 choice of narrow Producer preflight with closed Consumer lowering is
+superseded as the target design.
+
+Select compilation from bounded resolved views into small immutable execution
+entries, with public Binding-owned lowering for each supported role. Do not
+require `LogicalInteractionPlan` to survive as a universal compiler input or
+persisted per-coordinate object. Required engine selection/validation/dispatch
+facts and opaque native artifacts may be stored once at their actual owners.
+The public data shape must follow information and runtime needs, not today's
+fixture projections.
+
+TD owns Basic validity, operation defaulting, security inheritance and generic
+URI meaning. The selected compiler receives those effective facts and bounded
+access to all relevant Form/affordance/root/schema/response/security metadata,
+including extension values and namespace/context identity. Source views may be
+borrowed during preparation; completed runtime output retains no source loan or
+complete lossless TD. Preserve absence versus explicit-empty/value distinctions.
+A generic bounded value/context interface carries new protocol vocabulary without
+new Core fields. No automatic remote context loading is required.
+
+Binding compilation interprets protocol vocabulary and protocol-specific defaults,
+without repeating TD defaults, selecting another Form, obtaining credentials or
+starting I/O. A metadata-presence boolean is sufficient only to reject a narrow
+unsupported case; it cannot replace the contents needed for useful lowering.
+Target capacity, media and native instruction support are Binding/profile
+capabilities, not restrictions imposed by a universal Core target-copy compiler.
+
+Planning enumerates and ranks candidates deterministically, connects supported
+security/codec choices, and records supported-artifact, candidate-unsupported or
+failure outcomes. A supported Consumer alternative can remain usable when
+another Form is unsupported. Strict explicit selection still reports that
+selected alternative's failure; no silent post-effect fallback follows.
+
+Every advertised Producer operation/Form must have matching route and handler/
+security coverage. Reject unsupported or unclassified advertised behavior before
+native route effects and publication. Do not freeze the first successful read
+leaf as evidence for the whole draft. TD-defaulted write-only is not a read;
+TD-defaulted read/write advertises more than read-only. A partial-description API
+would need to construct the reduced advertised TD explicitly before exposure;
+the initial target requires complete coverage of the submitted description.
+
+Build privately with controlled capacity acquired before growth and complete
+funded rollback. Sequential candidate reservation/compilation under aggregate
+caps is sufficient when failure preserves the transaction. A global all-bounds-
+before-any-start barrier and separate whole-draft preflight are optional
+mechanisms for particular availability/cost promises. All promised runtime and
+cleanup capacity, selection and Producer coverage must be settled before native
+effects/publication. Keep compilation pure and preserve input/partial output on
+allocation refusal, cancellation or callback failure.
+
+Compile jobs, artifacts and storage adapters must support independent external
+implementations. Replace sealed exact-compiler eligibility with the generic
+Binding contract and actual-layout/budgeted storage boundary described in
+[Binding SPI](binding-spi.md#proposed-open-lowering-and-execution-boundary).
+Conforming callback work and destruction still require evidence; neither a
+self-reported budget nor an open trait proves them. Finite caps may permit a paid
+atomic operation; incremental work is required where actual bounds demand it.
+
+Separate live instance/registration/generation authority from immutable artifact
+content. Typed composition or generic erasure must keep each artifact paired
+with its actual executor and role. Do not infer content equivalence from
+configuration/generation tags. This introduces no cache, persistent program,
+mandatory deduplication or universal bytecode.
+
+The private build transfers its complete execution table into one published
+instance-generation owner. Draining and leases govern reclamation. Do not require
+an independently versioned plan-set manager when the table cannot change apart
+from its instance. Reused call/route slots retain appropriate stale-use checks.
+Use eager compilation first; lazy/negative caching is an optional optimization,
+not an admission prerequisite for protocol independence.
+
+Local instance/slot identity does not require a source TD `id`; keep the optional
+source identity for its semantic/provenance use. Support affordance keys admitted
+by the TD kernel without inheriting the current logical-plan constructor's
+nonempty-name restriction. Neither prerequisite is an ownership invariant.
+
+The rewrite intersects TD semantic lending, Core compilation/storage, Planning,
+and both Servient roots. The source contracts, evidence obligations and affected
+requirements must be migrated explicitly before implementation. #204's Producer
+counterexamples remain mandatory regressions, but a narrow rejection preflight
+alone cannot close the independent-lowering goal. Existing route and Consumer
+proofs retain only their original implementation scope until replacement evidence
+is independently accepted.
 
 ## Property Read route-reservation projection
 

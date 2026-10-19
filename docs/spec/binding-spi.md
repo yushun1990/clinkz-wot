@@ -169,6 +169,93 @@ All binding, provider, codec, contributor, and application callbacks run outside
 engine locks and constrained critical sections. Returning `Pending` never gives
 permission to detach semantic ownership into an unregistered task.
 
+## Proposed open lowering and execution boundary
+
+This section records the replacement proposal in
+[0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution)
+for independent architecture review. It does not activate a new SPI or admit
+production edits. The detailed current contracts below remain implementation
+authority pending deliberate supersession. Retaining them during review is not
+an architectural recommendation to preserve them.
+
+**Target:** a third party can supply both lowering and execution for an already
+supported WoT capability through public generic contracts, without a protocol
+case, compiler whitelist entry or native lifecycle branch in Core, Planning or
+Servient. New wire instructions for an existing operation do not by themselves
+constitute a new engine semantic capability. A healthy supported mapping must
+complete; a restriction that rejects all such Forms does not satisfy the target.
+
+The present Consumer path fails that target. Static capture checks the actual
+`ResolvedTargetCompiler` type; Host capture requires its private supported
+adapter, rejecting generic erasure of even the same compiler. Planning's
+registration trait is sealed around checked complete owners. Producer compiler
+authoring is open, but its logical input discards necessary source distinctions
+and its public entry lacks whole-draft coverage. These are defects/restrictions
+to replace, not the definition of protocol independence.
+
+Select public role-specific compiler/executor contracts paired by a complete
+registration, with native associated artifact/state types and generic storage
+adapters. A compiler receives the bounded resolved semantic/source/context view
+specified in [Planning](planning.md#proposed-replacement-of-the-compilation-boundary).
+Protocol vocabulary and its defaults are Binding-owned. TD semantics, candidate
+selection and handler authority remain outside the Binding. Compilation is pure;
+its output contains no live native resources, credentials or handlers.
+
+Delete exact-type admission, private Consumer adapter eligibility and the
+source-known `ConsumerCompilerSupport` descriptor from the required path. Remove
+`ResolvedTargetCompiler` as Core's mandatory lowering; retire it or retain a
+literal-target helper only as optional Binding support. No compatibility marker,
+self-reported cost, or application assertion certifies conformance.
+
+Derive actual slot Layout/alignment and erasure overhead from generic concrete
+types. Supply explicit budgets and controlled storage during construction,
+progress and rollback, including work that today's unbudgeted bounds/start/abort
+callbacks perform. A Host adapter owns the complete typed compile job across
+Pending, failure and completion, retaining partial output on allocation refusal.
+Static composition admits independently authored compilers and application-owned
+enums with inline storage and no mandatory atomics. Neither path needs a
+Core-maintained list of implementations or a Binding-authored unsafe cast.
+
+Bounded callback/destructor behavior is an externally qualifiable conformance
+obligation of trusted linked code. The application can select a conforming
+third-party implementation without a Core source change or centrally issued
+support token. Engine-owned storage and provenance remain enforced. Types and
+numeric declarations cannot prove arbitrary native code terminates; a strict
+profile requires evidence for its actual implementation and input bounds. This
+preserves the behavioral guarantee rather than presenting openness as proof.
+
+Replace public prepare/readiness/activate/commit phase families with one owned
+endpoint installation driver. Its semantic lifecycle is Installing ->
+LocallyReady -> Serving -> Closing -> Closed; failed/cancelled installation
+retains the same owner for close. LocallyReady describes readiness to obey the
+local engine gate, not guaranteed remote reachability. Native substates,
+handshakes and partial recovery are Binding-private. The engine retains its
+wrapper, identity, lease and cleanup destination throughout.
+
+Servient atomically publishes complete local dispatch authority after coverage
+and capacity checks, and closes it before draining. Bindings may progress
+bounded native ingress/control traffic before publication but may not dispatch
+handlers. A registration/session driver may multiplex endpoints and return
+route-attributed semantic events with owned reply opportunities. Native shared
+sessions have explicit last-user/callback retirement; one route's cancellation
+cannot retire a sibling's resources. Consumer calls retain owned progress,
+first-cause cancellation, late-result validation and terminal disposal. Protocol
+I/O and correlation remain Binding-owned; selection, authorization and dispatch
+remain engine-owned.
+
+Stage-specific public owners are replaceable machinery. The essential contract
+is that every accepted resource and uncertain effect retains an accountable owner
+through failure, cancellation, transfer and retirement. Cleanup capacity must be
+funded before effects; Drop, timeout or a residual record cannot discharge live
+local work. Ownership-scoped resource policy applies to compiler carriers as well
+as runtime state. Host and static representations may differ physically.
+
+This proposal requires cross-domain authority, API/resource/state and work-package
+migration plus independent evidence before replacement source work. It establishes
+neither implemented openness, subscription support nor empirical protocol-shape
+neutrality. The complete alternatives, tradeoffs, rewrite boundary and falsifiers
+remain in 0056; no new topic, gate or production admission is created here.
+
 ## Constructible compiler components
 
 The compiler/artifact SPI is implemented once by WP-200 at the Core owner
@@ -1241,6 +1328,14 @@ impl HostPreparedRouteGuard {
 ```
 
 ### Lifecycle calls
+
+The following phase-specific calls describe the current implementation contract.
+The [replacement proposal](#proposed-open-lowering-and-execution-boundary) selects
+one owned endpoint driver instead of retaining this public phase split. Until
+that migration is accepted, a phase may complete immediately when its promises
+already hold; no phase implies a separate physical session or native handshake.
+False readiness, prepublication dispatch and loss of partial cleanup ownership
+remain invalid under either design.
 
 The host server component uses owned calls for every callback that can remain
 pending:
