@@ -10,8 +10,8 @@ Target: conditional protocol independence for already supported WoT semantic cap
 
 The [semantic-boundary investigation](#semantic-boundary-investigation) below
 challenges the replacement proposal's unresolved input assumption with standards
-and disposable HTTP/MQTT lowering evidence. It is the current recommendation
-for that question, pending independent architectural review and Owner approval.
+and disposable HTTP/MQTT lowering evidence. It records PR #211's recommendation,
+subsequently challenged by the [capability-matching follow-up](#engine-owned-capability-matching-follow-up).
 It adopts no replacement SPI or architecture gate.
 The [responsibility reassessment](#responsibility-reassessment-without-application-allowlists)
 supersedes the experiment's application-supplied annotation-role policy. Ordinary
@@ -19,8 +19,8 @@ applications select supported profiles and deployment/security policy; they do
 not classify vocabulary terms or maintain domain-class allowlists.
 The [standard-profile counterexample](#standard-thingprofile-advertisement-activation-and-coverage)
 distinguishes `Thing.profile` claims, trusted interpretation, native support and
-Engine selection. Annotation interoperability is demonstrated for class
-assertions only; unfamiliar annotation predicates still cause refusal.
+Engine selection. That earlier path demonstrates annotation interoperability for
+class assertions only; the follow-up tests a broader explicit execution contract.
 
 The original investigation, decision and migration below record the pre-probe
 feedback-order decision. That migrated history is preserved. The
@@ -1596,6 +1596,10 @@ and provider can satisfy them; preservation cannot authorize access.
 
 ### Evidence classification and recommended decision
 
+This subsection records PR #211's proposed decision. The
+[follow-up below](#engine-owned-capability-matching-follow-up) challenges its
+unknown-extension and role-classification policy before any production adoption.
+
 **Proven feasibility:** Within the probe's explicit property/JSON/NoSec input
 profile, one resolved public interface carries enough information for HTTP and
 MQTT lowering, including alternate term spellings, scoped resolution, native
@@ -1688,3 +1692,200 @@ separate. Do not reopen #210 or activate old gates to shortcut this evidence.
 This investigation changes only this workspace topic and its disposable probe.
 It does not adopt a replacement architecture, modify production SPI contracts,
 admit implementation, change milestone/gate states, or authorize a merge.
+
+## Engine-owned capability matching follow-up
+
+Status: DISCUSSING. Investigation after merged [PR #211](https://github.com/yushun1990/clinkz-wot/pull/211),
+reconstructed from fetched master `86605fcc55539663d11a6ea4b2b995395c89dffe`,
+its final independent review, the implementation linked above and the standards
+below. The Owner's matching direction is a hypothesis. These results neither
+approve an SPI nor admit a production migration.
+
+### Conclusion and competing models
+
+**Prefer Engine-owned capability discovery and pure semantic compilation under
+an independently fixed execution contract for further architecture work.**
+The experiment removes annotation inventories and most role classification from
+ordinary Binding authoring. It does **not** eliminate the need to establish
+mandatory meaning or interpret active Profiles. Matching alone is insufficient
+for Producer correctness. Universal inference from arbitrary extensions is
+falsified; the narrower architecture is promising, conditional evidence.
+
+| Model | Result and remaining cost |
+| --- | --- |
+| Conservative unknown-extension rejection | Refuses harmless `rdfs:label`, vendor metadata and domain types. Preserves uncertainty by losing availability; refusal still does not implement required meaning. Suitable for a deliberately closed admission contract, unsuitable as the unrestricted interoperability default. |
+| PR #211's descriptive classes plus explicit vocabulary roles/interpreters | Solves class annotations, leaves ordinary annotation predicates unavailable. A general role inventory creates maintenance/composition work without supplying executable meaning. Profiles remain necessary where they impose real behavior. |
+| Capabilities determine which extensions are requirements | Incorrect. Removing the only method-capable registration makes an explicit POST disappear from the inferred requirement set and selects GET. Recognition counts likewise prefer six metadata fields over one required instruction. |
+| Positive requirement derivation, capabilities, one pure compiler | Preserves unknown data without classifying it, fixes real obligations first, filters candidates and compiles parameter semantics once. Remaining interpretation is concentrated in supported mapping/profile/criticality contracts; it cannot be inferred away. |
+
+The current [`BindingCompilerInput`](../core/src/binding_compiler.rs) still loans
+an insufficient `LogicalInteractionPlan`; the
+[Consumer aggregate](../planning/src/consumer_property_read.rs) still captures a
+restricted compiler. Neither is retained as the proposed boundary because of
+existing implementation. The shared WoT/context view investigated in #211 is
+reused; no production source or authority changes here.
+
+### Standards reconstruction
+
+Rechecked primary sources on 2026-10-19:
+
+| Source | Consequence for this hypothesis |
+| --- | --- |
+| [TD 1.1 Recommendation, §§7–8.3.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#protocol-bindings) | Distinguishes semantic annotations and native mappings. Form targets identify protocols; Forms must describe accepted requests accurately. HTTP operation defaults apply when the method is absent. An explicit method cannot be discarded to obtain a default. |
+| [JSON-LD 1.1, scoped contexts](https://www.w3.org/TR/json-ld11/#scoped-contexts) | Actual expanded identities, values and scope matter. A class assertion can select a context that changes an executable term. Preserve/process that context before ignoring the class for native execution. Namespace advertisements alone establish neither occurrence nor criticality. |
+| [Binding Templates 2024 Note](https://www.w3.org/TR/2024/NOTE-wot-binding-templates-20240528/#protocol-binding-templates), [2025 retirement Note](https://www.w3.org/TR/2025/NOTE-wot-binding-templates-20251104/) and [HTTP editor material](https://w3c.github.io/wot-binding-templates/bindings/protocols/http/) | Protocol/payload/platform dimensions exceed scheme equality. HTTP headers are another concrete operational extension, independently required even when neither example implements them. Notes/editor material are guidance, not a prescribed Engine SPI or universal execution classifier. |
+| [Profiles Working Draft, §§4–6](https://www.w3.org/TR/2025/WD-wot-profile-20251104/#sec-profiling-mechanism) | Conformance claims can entail shared and native assertions, while extra bindings are allowed. The read slice requires GET/JSON acceptance and successful 200 JSON responses. Advertisement, trusted interpretation, an application-required Profile path and full conformance are separate facts. This remains a draft. |
+| [MQTT 3.1.1, §3.3.1.3](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) and [WoT MQTT draft](https://w3c.github.io/wot-binding-templates/bindings/protocols/mqtt/) | A broker can deliver stored values on subscription. We infer that this provides no per-read dispatch request to the publishing application's handler. A retained Consumer read is not automatically a Producer request route. Other broker-integrated/request-response designs remain possible. |
+
+No consulted specification supplies a general must-understand marker for all
+extension vocabularies, requires a Binding to interpret every annotation, or
+defines this project's matching algorithm. Permitting ignored unknowns is an
+explicit admission/execution contract, not a theorem about arbitrary foreign TDs.
+
+### Small executable experiment and results
+
+The existing [probe](probes/td-binding-semantics/README.md) gains one generic
+[`matching.py`](probes/td-binding-semantics/matching.py) and one
+[`test_matching.py`](probes/td-binding-semantics/test_matching.py). It reuses the
+resolver, structured values, checked-in context, original tests and both native
+lowerers unchanged. All requirement interpretation and example Binding code
+live in the test module, outside the protocol-neutral matcher. No new test
+framework, external service dependency or protocol union is introduced.
+
+| Counterexample/test | Observed result |
+| --- | --- |
+| Default and extended HTTP; HTTP and MQTT Forms for the same read | Engine discovers candidates from actual scheme/operation/requirements. Both HTTP implementations work for defaults. Extension-aware HTTP is necessary for explicit POST/status instructions; a generic HTTP registration cannot win by priority. MQTT remains a real alternative for an ordinary Consumer read. |
+| SAREF types, `rdfs:label`, unfamiliar vendor metadata | Original conservative path refuses. New path retains resolved data, including scoped types and security metadata, and produces identical native definitions for both HTTP implementations and MQTT. No annotation IRI inventory is used. |
+| Actual HTTP execution | One standard-library loopback server captures GET before/after metadata with identical method/path/Accept. Explicit method changes the wire request to POST. The known read Profile produces GET with JSON Accept and checks expected 200. |
+| Prefix, alias, full IRI, type-scoped context and unused context entries | Equivalent operational meanings produce the same required feature and request. Unused namespaces add no requirement. A method term at Thing scope does not become a Form instruction. MQTT topic versus filter requirements depend on the effective operation, even when both occur in one Form. |
+| Unknown extension with/without explicit criticality | Unmarked data is preserved and ignored under the base contract. The fixture-owned `requires` carrier establishes an unknown scoped obligation; every candidate refuses. Null/empty/malformed carriers and references to absent instructions fail preparation. |
+| Known HTTP headers, unsupported by every registered Binding | Independent interpretation still establishes the requirement; all HTTP candidates refuse. A different unfamiliar display term in the same namespace adds no requirement. Registration coverage does not define criticality. |
+| Required confirmation at Thing, affordance or Form | Preferred default HTTP is ineligible; specific HTTP emits a confirmation-bearing definition. Removing/reordering registrations or strictly choosing the generic implementation cannot waive the obligation. Unsupported parameter values fail inside the single compiler. No confirmation handshake is executed. |
+| More metadata recognition, fewer actual semantics | A generic compiler actually reads six annotation fields. The specific compiler recognizes fewer of the present terms but implements confirmation. Eligibility chooses the latter without counting recognized fields. |
+| Known Profile with mixed HTTP/MQTT | HTTP read gets its read-rule requirement; MQTT does not inherit an HTTP rule. An application requiring that Profile path excludes MQTT fallback. Removing the aware HTTP candidate, strict MQTT choice or a contradictory POST fails. An additional MQTT path remains legal when the application does not require the Profile path. |
+| Missing security/codec, operation/role or strict coordinate | Refusal precedes compilation. Valid Form security override is respected. Eligible fatal compiler errors propagate; an excluded fatal compiler is never called. Provider strings are fixture inputs, not credential/codec qualification. |
+| Additional arbitrary `newwire` scheme with explicit nonce requirement | An ordinary registration/compiler implements it without changing matcher or requirement dispatch. The known criticality carrier supplies its requirement independently of that registration. |
+| Producer coverage | Consumer success for one HTTP Form cannot cover an advertised MQTT Form. MQTT retained reads are explicitly refused for Producer handler dispatch. Mixed HTTP/MQTT writes produce distinct route definitions for every advertised coordinate; missing handlers/roles fail. Profiled HTTP read plus an extra MQTT write retains both obligations. |
+| Producer native overlap | Two individually eligible HTTP coordinates lower to the same GET endpoint for different handlers. Assignment succeeds: this is an intentional falsification of matching as sufficient publication proof. Native collision/readiness checks remain mandatory before installation/publication. |
+
+### Proposed responsibility contract
+
+**Capability declaration (question 1).** Minimum useful discovery data is a stable
+registration identity paired with its executor, a pinned execution contract and
+coarse scheme and role/operation coverage. Semantic feature coverage may be an
+optional index: omission means asking the pure compiler, not waiving requirements.
+The experiment verifies both declared coverage and omitted semantic indexes.
+Native media/security capabilities and deployment compatibility can also be
+indexed when they exclude candidates cheaply. Use mapping/dialect features
+or shared constants from parser code, not a hand-maintained inventory of every
+recognized predicate. Optional coarse indexes may overapproximate; they must
+not exclude an implementation's valid inputs or claim compilation proves support
+outside the advertised role. Native value restrictions belong in compilation.
+
+**Resolved matching (questions 2–3).** Fix shared WoT meaning first, then query
+the effective Form and relevant parent/response/security scopes. Mapping/profile
+libraries derive positive operational requirements from expanded terms, values,
+operation and scope. The Engine intersects schemes, role/operation, mandatory
+features, media, security/provider availability, activated Profile paths and hard
+application constraints. A preferred Binding is not permission to weaken these.
+Only complete candidates are ordered. This experiment uses explicit scheme
+preference, explicit Binding preference, source Form index and stable identity
+as a final tie break; registration order has no effect. No semantic score or
+"most fields recognized" metric is used. Security alternatives, trust, codecs
+and real deployment readiness need richer production evidence than these sets.
+
+**Applicability (questions 4–5).** For a given coordinate, give every candidate
+resolved facts and the same previously fixed native obligations. One pure compiler
+returns a complete native definition or `Unsupported`; construction/resource/contract failures are
+distinct and propagate. Success means implementing **all** assigned native
+requirements, including parameter constraints. This eliminates separate
+`supports()` parsing and a manually maintained per-result coverage ledger.
+Static declarations only prune; a lying compiler can still violate its contract.
+Qualified implementation/runtime evidence is necessary. Generic HTTP is excluded
+when a required mapping feature is missing; being more specific is otherwise no
+automatic entitlement to win over another eligible implementation.
+
+**Unknowns and requirement independence (questions 6–7).** Preserve extension
+values and context effects whether or not native code uses them. Under the
+proposed base contract, unestablished extensions are advisory for native
+execution. Mandatory behavior must be established by standard WoT semantics,
+an independently supported mapping/profile contract, an explicit understood
+criticality carrier, or a whole application execution constraint. Unknown
+criticality is refusal, never fallback permission. This experiment's carrier is
+an invented, local contract, not a W3C term or proposed final TD extension.
+
+Requirement derivation has **no Binding-list argument**. Its mapping/Profile
+dependencies remain part of the fixed admission contract when registrations
+are removed. A dependency missing from that contract's closure is an admission
+failure, not an opportunity to rediscover fewer requirements. Adding new native
+implementations can improve coverage, never reinterpret existing mandatory
+semantics. Changing the execution contract/dependency versions is a separate
+explicit semantic change. Applications select whole packages/contracts and
+providers; they never label arbitrary vocabulary terms.
+
+Uninterpreted standard Profile claims are conservatively refused here, including
+known-plus-unknown arrays. This is still an availability trade-off, not a W3C
+mandate or a policy decided by a candidate. Known advertisement activates scoped
+read interpretation; the application's required Profile path further restricts
+Consumer choice. Producer coverage permits extra non-Profile Forms while
+requiring the claimed path and all advertised coordinates. Full Profile common
+constraints/provider coverage cannot be reduced to a native feature token.
+
+### Complexity, unavoidable information and recommendation limits
+
+**Complexity (question 8).** The matcher is 115 physical lines. The ordinary
+example compiler bodies are 4 lines for default HTTP, 18 for extended HTTP and
+9 for MQTT, reusing the original 40/49-line lowerers plus a shared projection
+adapter and native output records. They have no domain-class lists, role table,
+context parser, second support implementation or coverage-token return list.
+The positive HTTP/MQTT requirement helpers and Profile/criticality preparation
+remain real work. These are Python source observations, not Rust ergonomics,
+resource bounds, independent third-party authoring or a total LOC comparison
+against production Core/Planning. Most of the added file is falsification tests.
+
+The Engine retains context/default/security resolution, dependency admission,
+scoped requirement/provider composition, candidate filtering, deterministic
+selection, diagnostics and complete Producer advertisement. Native compilers
+retain protocol interpretation/value checks. Native install code must detect
+route/topic overlap and establish readiness before Engine publication. Matching
+reduces annotation machinery and duplicated authoring; it does not remove those
+semantic and ownership responsibilities. A generic interpreter/role registry
+would reintroduce much of the cost without resolving unknown meaning.
+
+It is impossible to infer the following from an arbitrary unknown extension
+without more trusted information:
+
+- Whether its value/class is descriptive, advisory or a mandatory native step.
+- Its activation, scope, defaults, parameter grammar, ordering and interactions
+  with other extensions or Profiles.
+- Hidden authentication, confirmation, freshness, completion or codec duties.
+- Whether another Form/protocol is an equivalent permitted alternative.
+- Required implementation/dependency versions, peer conformance or actual native
+  support, including Producer route overlap and broker/handler behavior.
+
+The identical unknown `requiresNonce` input passes as metadata in this contract
+and could fail a foreign author's undisclosed handshake requirement. No matcher
+can distinguish those meanings from these bytes. Admission of unconstrained
+legacy TDs with a universal semantics-preservation guarantee is therefore
+unproved and incompatible with unconditional unknown acceptance. Supported
+contracts must make mandatory behavior discoverable; closed legacy contracts
+may require conservative refusal. The Owner clarification permits unknowns with
+no established requirement; it does not establish every foreign producer's
+contract.
+
+Recommend this narrower capability model over expanding #211's annotation-role
+machinery, while retaining the independent requirement/activation boundary.
+Keep the hypothesis open for independent acceptance. The probe omits arbitrary
+core-field admission, complete schemas/response composition/templates, general
+security expressions, Profile common constraints/composition, live MQTT,
+Producer installation and all Rust/Embedded resource contracts. The projection
+adapter is safe only inside this fixture's admitted input slice; it must not
+erase unsupported standard WoT fields in production. Unknowns are preserved
+within #211's semantic representation limits, including its recorded source
+array/null counterexample, not as a promise of byte-for-byte round trips.
+
+Only HTTP method/path/Accept and successful response status receive loopback
+execution evidence. Other native programs are pure definitions. Passing these
+cases selects no Rust API, compiler container, replacement lifecycle, gate state
+or architecture acceptance. Independent review and the Owner retain the merge
+and architecture decision.
