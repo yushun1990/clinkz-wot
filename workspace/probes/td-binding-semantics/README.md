@@ -5,6 +5,12 @@ This directory is outside the Cargo workspace and all production dependency and
 gate paths. It can be removed after the investigation. It is not a replacement
 SPI implementation, TD validator, network runtime or embedded qualification.
 
+`AnnotationProfile` is a **historical allowlist experiment**, not a recommended
+application API. The [responsibility reassessment](../../0056-target-spi-external-validation-and-cross-protocol-neutrality.md#responsibility-reassessment-without-application-allowlists)
+compares a common descriptive-class contract with explicit operational profiles
+and records its compatibility limits. Applications must not classify unfamiliar
+terms or maintain domain-class lists.
+
 From this directory, with Python 3.12:
 
 ```sh
@@ -22,10 +28,11 @@ checks belong in the investigation PR.
 | File | Responsibility |
 | --- | --- |
 | `interface.py` | Public resolved facts, semantic values, scoped annotations, source occurrences, explicit unsupported result and bounded member queries. |
-| `engine.py` | One experimental shared resolver, explicit annotation-role profile and generic candidate/selection/coverage logic. |
+| `engine.py` | One experimental shared resolver, historical exact annotation-role hook and generic candidate/selection/coverage logic. |
 | `http_lowering.py` | Independently readable HTTP method/response lowering. Imports only the public interface and the standard library. |
 | `mqtt_lowering.py` | Independently readable MQTT packet/topic/filter lowering, with the same imports and interface. |
 | `test_probe.py` | Positive examples and intentional counterexamples, including one passing test that **proves information loss**. |
+| `test_role_contract.py` | Four A/B counterexamples using a shared descriptive-class rule and an explicitly selected parent-context dialect; no role registry/framework. |
 
 The HTTP and MQTT lowerers are 40 and 49 physical lines respectively,
 including imports, comments and blank lines.
@@ -38,7 +45,7 @@ draft; the fixture does not claim that namespace or its QoS default is a W3C
 standard. Broker URIs with topic paths and wildcard reads are deliberately
 outside this author's supported mapping.
 
-The 23 tests exercise:
+The original 23 tests exercise:
 
 - Prefix, alias, full-IRI and supplied remote-context equivalence at lowering.
 - WoT operation defaults, HTTP per-operation defaults and source cardinality,
@@ -62,14 +69,34 @@ The 23 tests exercise:
   semantic equivalence for that data model. A declared JSON literal keeps
   positional syntax. A passing suite is not a universal sufficiency result.
 
-`resolve(..., annotation_profile=AnnotationProfile(...))` accepts trusted exact
+The historical `resolve(..., annotation_profile=AnnotationProfile(...))` accepts exact
 scope/type declarations for Thing/affordance domain annotations. It retains
 them in `Interaction.annotations`; it cannot exempt Form/response/security
 instructions, arbitrary properties or a whole namespace. There is no automatic
 inertness inference. The tests use the review's example IRI and the published
 SAREF TemperatureSensor class, with aliased names and numeric property schemas.
-The investigation compares alternative policies and records the remaining
-Owner trade-off. Neither Binding imports or maintains that policy.
+Neither Binding imports or maintains that policy. Requiring applications to
+author it no longer meets the architecture requirement; moving the same lists
+into every Binding is not recommended either.
+
+The four new cases bring the total to **27**. They use the existing experimental
+hook to compare a fixed rule that preserves all parent extension classes as
+descriptive, without an IRI inventory. SAREF and a wholly unknown class coexist
+with both lowerers; numeric DataSchema meaning remains intact. Unknown Form
+instructions and parent predicates still fail. A fixture-owned versioned Form
+`subprotocol` activates a confirmation requirement using preserved Thing/Property
+class context; ordinary HTTP cannot be selected for that dialect. Removing the
+dialect intentionally produces ordinary HTTP, exposing the hidden-class-obligation
+limit. Explicit WoT security is not weakened. The wrapper only emits a native
+definition; no confirmation handshake is implemented.
+
+That rule defines accepted execution meaning; neither scope nor IRI identity
+proves a foreign class safe to ignore. Admission of arbitrary legacy TDs under
+that rule is not established. Conflicting/incomplete role declarations and
+offline interpreter dependency ownership are analyzed in 0056 without building
+a manifest system merely to test it. Shared profile activation/composition and
+production Rust helper ergonomics remain unverified. These test-only policies
+select no target registration API or production default.
 
 `select(interactions, property_name, operation, bindings, *, strict_form=None,
 strict_binding=None)` filters all those coordinates before calling any lowerer.

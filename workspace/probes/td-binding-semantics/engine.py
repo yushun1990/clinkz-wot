@@ -32,7 +32,7 @@ class ResolutionError(ValueError):
 
 @dataclass(frozen=True)
 class AnnotationProfile:
-    """Trusted application declarations: exact scope/type pairs, never inferred.
+    """Historical allowlist experiment; not a recommended application API.
 
     This experiment supports domain types at Thing/affordance scope only. It
     cannot mark Form, response or security instructions inert, or allow an

@@ -13,6 +13,10 @@ challenges the replacement proposal's unresolved input assumption with standards
 and disposable HTTP/MQTT lowering evidence. It is the current recommendation
 for that question, pending independent architectural review and Owner approval.
 It adopts no replacement SPI or architecture gate.
+The [responsibility reassessment](#responsibility-reassessment-without-application-allowlists)
+supersedes the experiment's application-supplied annotation-role policy. Ordinary
+applications select supported profiles and deployment/security policy; they do
+not classify vocabulary terms or maintain domain-class allowlists.
 
 The original investigation, decision and migration below record the pre-probe
 feedback-order decision. That migrated history is preserved. The
@@ -840,6 +844,11 @@ whether it changes framing, completion, authorization, or something the Engine
 cannot implement. A new mapping of an existing WoT operation need not change
 the Engine; a new WoT operation or authorization/lifecycle guarantee may.
 
+The [role-responsibility reassessment](#responsibility-reassessment-without-application-allowlists)
+rejects application-maintained class lists. Its preferred common-rule/profile
+combination is conditional: open descriptive classes and arbitrary undisclosed
+class-implied execution obligations cannot both be guaranteed.
+
 ### Reconstructed baseline and prior evidence
 
 Inspected source baseline: fetched master
@@ -965,7 +974,7 @@ merely because the shallow sidecar cannot meet that stronger contract.
 | Unmapped compact-looking term | `oops:methodName` may itself be an absolute IRI; it is not thereby HTTP's method term. No guessed namespace repair. |
 | Remote contexts | Use an immutable, supplied dependency closure with URLs, document bases and content identity. Missing dependencies are resolution failures. Fetching, if a Host application opts into it, belongs to an explicit acquisition policy outside pure lowering. |
 | Unsupported JSON-LD features | Name the unsupported feature/scope. Do not interpret it approximately. Reverse/named-graph/propagation/import support can be added generically, independently of a protocol crate. |
-| Unknown extension | Preserve it. The Binding/platform/codec interpreter declares support or an explicit known-inert policy; unknown does not mean optional. The Engine cannot discover “critical” versus annotation from an arbitrary IRI. |
+| Unknown extension | Preserve it. Apply the selected common execution contract or a trusted interpreter, then require support for its operational requirements. Unknown does not mean optional; an IRI alone supplies no criticality information. Parent classes under the proposed descriptive contract are a defined exception, not automatically inferred safe terms. |
 
 Conservative refusal of unknown instructions is an availability trade-off.
 Ignoring all unfamiliar terms is an incorrect extensibility story; rejecting
@@ -976,6 +985,11 @@ that candidate unavailable. The probe expands the entire document and does
 not demonstrate recovery from an unavailable Form-local context.
 
 ### Annotation roles and composability
+
+**Historical experiment.** `AnnotationProfile` is retained as counterexample and
+comparison evidence, not the recommended application API. The
+[responsibility reassessment](#responsibility-reassessment-without-application-allowlists)
+below incorporates the Owner's prohibition on application-maintained role lists.
 
 The empty-profile refusal policy has a concrete availability defect: adding
 the review's Thing-level `@type: "https://schema.org/TemperatureSensor"` to a
@@ -989,7 +1003,7 @@ its prefix proves a role in native execution.
 | --- | --- |
 | Reject every unknown at every scope | Reproduced by the empty-profile test. Preserves conservative refusal but prevents unrelated domain annotations from composing with both mappings. Insufficient as an unqualified product recommendation. |
 | Ignore all unknowns, a whole namespace, or everything on a parent scope | Reject. A parent `requireConfirmation` instruction can affect every child interaction. Namespace membership or scope alone does not establish inertness. |
-| Treat every Thing/affordance `@type` as descriptive by contract | Credible simpler alternative if the product forbids native/security semantics from depending on those classes. That restriction must be explicit; it cannot be inferred from arbitrary future vocabulary. |
+| Treat every Thing/affordance `@type` as descriptive by contract | Credible simpler alternative if classes alone cannot activate native/security requirements. An explicitly activated interpreter can still consume the class context. That restriction must be explicit; it cannot be inferred from arbitrary future vocabulary. |
 | Explicit scoped vocabulary-role profile | Selected for the narrow experiment. Trusted declarations classify exact type IRIs at Thing/affordance scope as non-operational metadata. Unclassified values remain available to interpreters and unsupported instructions remain refused. No protocol-specific Engine branch or per-Binding annotation list is required. |
 | Separate dialect/interpreter capability manifests | Credible way to supply/check such declarations without every application author maintaining lists. Conflict, completeness, trust and resource costs remain unverified; no manifest framework is implemented here. |
 
@@ -1011,15 +1025,234 @@ domain type on a Form, an undeclared type in the same namespace, and a type
 declared only for another scope are not exempted. This experiment cannot
 classify Form/response/security statements or arbitrary annotation properties.
 
-**Owner trade-off, still requiring independent review:** accept a trusted scoped
-role profile and conservative refusal of unclassified parent metadata, or
-establish a broader contract declaring parent domain classes non-operational
-and restrict what mappings may depend on them. The first has configuration and
-availability costs; the second can exclude native dialects that use those
-classes. An erroneous declaration that an operational class is inert can
-invalidate execution. No generic resolver can certify that declaration from
-identity alone. Any compiled-data reuse must include the actual interpretation
-profile/rules in its dependencies, not just a human-readable profile name.
+The earlier experiment left ownership of these declarations unresolved. Requiring
+applications to supply them is now ruled out: successful compilation after an
+application author labels classes inert does not establish practical semantic
+interoperability. An erroneous declaration can invalidate execution, regardless
+of whether an application, Binding or central list supplies it. The experiment
+does establish preservation and the cost of blanket refusal. Any future compiled
+reuse must include its actual interpretation contract/dependencies, not just a
+human-readable profile name.
+
+### Responsibility reassessment without application allowlists
+
+**Preferred direction:** a small, versioned common execution contract for domain
+class assertions, combined with explicit activation of protocol/profile
+requirements and optional shared interpreters for requirements that need them.
+Do not build a universal role classifier. Ordinary applications install Bindings
+and supported semantic profiles and set security/deployment policy; they never
+decide whether an unfamiliar class or predicate is harmless.
+
+This revises the responsibility recommendation, not production authority.
+Neither independent review of the earlier probe nor the Owner's clarification
+adopts this particular mechanism. The new executable cases test distinctions
+between alternatives; they do not implement the proposed profile-composition
+or requirement-accounting contract.
+
+#### Assumptions challenged
+
+1. Refusing every unfamiliar term is not a neutral safety policy: it makes
+   independent metadata an availability dependency of every native mapping.
+   The original default refuses a harmless-to-the-mapping SAREF assertion.
+2. A context expands names/values; it does not tell a consumer which operational
+   rules it must implement. An ontology, an IRI, a namespace and a role label
+   are not by themselves executable interpretation or a trust certificate.
+3. Moving the exact inert-class list into every Binding duplicates a common
+   problem. Moving it into a centrally approved list changes its administrator,
+   not its logical sufficiency or extensibility cost.
+4. A role declaration needs an interpretation contract, provenance, version,
+   activation condition and applicable scope. A naked `descriptive=true` flag
+   cannot override native or security requirements safely.
+5. Registration support and semantic obligation are different. An installed
+   Binding may understand a vocabulary without imposing that vocabulary's
+   rules on every other mapping. Installing another Binding must not silently
+   reinterpret an already admitted description.
+
+#### Alternatives and developer costs
+
+| Alternative | Constructive value and falsifier | Assessment |
+| --- | --- | --- |
+| Common descriptive-class contract | One shared rule accepts new parent class assertions without class inventories. It cannot discover an unstated nonce/authentication obligation implied solely by a foreign class. | Preferred base, conditional on the explicit execution contract below. Not proof that arbitrary classes are intrinsically inert. |
+| Reusable trusted vocabulary/role definitions for every extension | One vocabulary/profile provider can supply shared interpretation to several Bindings. Missing definitions for every new domain class become admission blockers; a role label without an interpreter can still lose required behavior. | Useful for selected operational profiles and annotation predicates outside common rules; unnecessary for every descriptive class. A universal prerequisite recreates the original availability problem. |
+| Binding-declared interpretation capabilities alone | Native authors already know their dialects, inputs and unsupported instructions. Independent Binding declarations can disagree on whether a parent requirement is optional, leaving a less capable Binding as an unsafe fallback. | Necessary support evidence, insufficient as global role authority. Capabilities must satisfy requirements fixed independently of candidate ranking. |
+| Common rules plus optional shared profile/vocabulary interpreters | No domain-class enumeration for base mappings. A selected dialect can use parent context; shared codecs/security/profile helpers interpret common rules once, outside native adapters. Costs arise only for the additional semantics actually selected. | Preferred combination. Ordinary Cargo libraries/typed helpers suffice as a starting hypothesis; no manifest framework or central protocol registry is justified. |
+| Conservative refusal of every class with an unavailable role definition | Can support a closed semantic profile that refuses ambiguity. It rejects new SAREF-like metadata even when the native Form is complete. | Credible optional strict/legacy profile, not the general WoT default. The application selects a complete supported profile, not per-IRI exceptions. |
+| Ignore all unknown parent metadata or rely on namespace/scope alone | A Thing-level `requireConfirmation` member can govern all Forms. A Form annotation can be descriptive too, while a parent extension can be operational. | Reject as a general inference rule. A normative contract can assign roles; location or spelling cannot prove harmlessness. |
+
+The preferred combination avoids universal vocabulary coverage: common rules
+handle descriptive class assertions; an actual extension interpreter handles
+the additional semantics it claims. A complete new native protocol mapping
+still needs its own protocol code, not a Core vocabulary case. A common payload,
+security or profile vocabulary should have a reusable helper/interpreter shared
+by those mappings, rather than independent copies of its defaulting logic.
+
+#### What treating parent `@type` as descriptive actually means
+
+Under the proposed **base execution contract**, extension class assertions on
+Thing and affordance nodes are preserved semantic descriptions. They do not,
+by themselves, add mandatory protocol steps, change authorization, select a
+different native dialect or change WoT operation semantics. No list of SAREF,
+schema.org or future class IRIs is needed. The rule belongs in common semantic
+preparation/SDK code and applies identically to all base Bindings.
+
+This defines the proposed execution contract, **not an inference that a term
+is safe to ignore because it occurs at a parent scope**. It does not alter the
+standard DataSchema `type`, effective WoT security, Form instructions, response
+rules or required codec semantics. Those remain operational requirements.
+Arbitrary unknown parent predicates remain unresolved requirements unless a
+common rule or selected interpreter gives them another meaning. In particular,
+the proposal does not solve arbitrary annotation-property interoperability.
+This classification happens after context processing: even a descriptive class
+can select a type-scoped JSON-LD context that changes expansion of operational
+values. Removing it before resolution would corrupt those values.
+
+The rule excludes an unconstrained legacy mapping that says only
+`Thing.@type = ex:ConfirmedDevice` while silently requiring an extra handshake,
+or `ex:AuthenticatedDevice` while omitting the relevant security requirements.
+The Engine cannot discover these implications from the class assertion alone.
+A trusted, supported semantic profile can accommodate such a mapping only when
+its activation and complete interpretation are established before candidate
+selection. A closed legacy profile may require all relevant role definitions
+and refuse unknown classes; it cannot inherit the base contract's openness and
+also promise discovery of arbitrary implicit obligations.
+
+Merely selecting the base contract locally does not prove that an arbitrary
+legacy producer followed it. Admission needs a supported producer/profile
+contract or deployment qualification establishing that operational requirements
+are explicit. The exact assertion/qualification mechanism remains unresolved.
+If admission must accept unconstrained TDs while guaranteeing every foreign
+class implication, the stated combination is impossible; conservative refusal
+with a known complete profile is the narrow credible alternative. Neither a
+context URL nor an application-supplied per-term exception supplies that proof.
+
+Descriptive assertions **may be inputs** to an explicitly activated interpreter.
+For example, a Form's known versioned dialect can require a confirmation step
+whose parameters depend on a Thing/Property class or member. The dialect,
+not the ambient class alone, activates the obligation. Every eligible Binding
+must implement it or reject that candidate; a plain HTTP Binding cannot fall
+back to a GET that omits it. The class remains preserved and queryable.
+
+[TD 1.1's Thing and Form models](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form)
+describe semantic tags, profile associations and subprotocol metadata. They do
+not provide this proposed criticality contract. In particular, a context URL is
+not a must-understand declaration, and `Thing.profile` is not a universal list
+of mandatory interpreters. A concrete profile must define how its execution
+requirements are identified; unsupported requirements cannot be treated as
+advisory solely because a generic profile name is unfamiliar. The probe uses
+an existing Form `subprotocol` discriminant for one illustrative dialect. It
+selects no new TD keyword, universal profile syntax or activation API.
+
+#### Responsibility, activation and dependency ownership
+
+| Owner | Obligation and ordinary cost |
+| --- | --- |
+| Engine/TD semantic layer and common SDK | Implement standard WoT meaning, context resolution, the selected common contract, preservation and generic traversal/coverage diagnostics. Keep execution requirements distinct from declared descriptive assertions. Native vocabulary meanings stay outside Core. |
+| Vocabulary/profile/codec/security library maintainer | Supply versioned interpretation for its additional semantics, including activation, shared defaults/validation, scope and required dependencies. Ship it with a supported Binding/profile package or ordinary shared library. Descriptive-only class IRIs need no such package under the base contract. |
+| Binding author | Implement native lowering and declare supported operation/role/dialect/profile capabilities and actual interpretation dependencies. Return unsupported for unsatisfied requirements. Reuse common semantic and vocabulary helpers; do not maintain an inventory of unrelated domain classes or mirror a second hand-written registry of every parser branch. |
+| Application developer | Choose installed Bindings, supported whole profiles, credentials/security policy and deployment limits. Normal dependency/version selection is allowed; manual per-term role decisions are not. |
+| Deployment/tooling | Acquire approved immutable dependencies before admission and qualify the selected environment. Host preparation can emit checked definitions for constrained execution; runtime network fetching is not required. |
+
+Establish the active interpretation contract/dependency closure before lowering.
+Resolve explicit caller/property/operation/Form/Binding constraints as already
+demonstrated. Derive required semantics using common rules and the selected
+trusted interpreter; then test each candidate's support. A candidate cannot
+erase a requirement merely because it does not understand it. Final selection
+and Producer coverage remain Engine-owned, with explainable unsupported/missing
+dependency/conflicting-declaration outcomes. Do not use registration order to
+settle semantic conflicts. Different explicitly selected profiles may coexist
+without sharing one global vocabulary-role map.
+
+The additional metadata, where needed, comes from the supported interpreter's
+maintainer, not an application's hand-authored allowlist or an arbitrary
+document retrieved at compile time. Its smallest credible form is normal code
+and package data documenting a fixed interpretation/version and its dependencies.
+A source/schema/profile author must identify the relevant operational dialect
+according to that contract. A role-only definition cannot implement required
+behavior without matching interpretation and native support.
+
+Validate dependency identity/composition when preparing the installed profile
+and validate applicability/completeness against the actual TD before exposing
+support. Pin context URL, effective document/base URL, exact content identity,
+semantic-contract/vocabulary version and interpreter implementation dependency.
+Context version alone is insufficient when operational meaning changes without
+new term IRIs. A digest identifies content; package provenance/qualification
+establishes trust. Conflicting active meanings or missing required dependencies
+fail preparation or the affected candidate before effects. A bare claim of
+support is a linked-code conformance obligation, not proof from metadata.
+
+No public-network access is implicit. Contexts needed for key/value expansion
+must exist in the supplied closure, or resolution fails. An absolute unknown
+class IRI can be preserved under the descriptive contract without dereferencing
+its vocabulary. An unknown Form instruction, unfulfilled operational profile,
+or unknown security requirement is unsupported when its required interpreter
+is unavailable. An optional definition must not be needed to decide whether
+an otherwise invisible mandatory obligation exists: that would recreate the
+ambiguity rather than solve it.
+
+#### Counterexamples that distinguish the alternatives
+
+| Case | Independently checkable consequence |
+| --- | --- |
+| SAREF class on a Thing and numeric Property | The original empty `AnnotationProfile` path rejects. The added common-rule experiment preserves the class and NumberSchema and produces unchanged HTTP/MQTT programs without an IRI list. A second Binding requires no new domain policy. |
+| Mandatory unknown `ex:requireConfirmation` on a Form | Both the original and common-rule paths refuse it. Knowing the HTTP scheme/method or a harmless parent class does not discharge this instruction. A namespace-wide exemption would admit it incorrectly. |
+| Same required predicate on Thing/Property | The common-rule path still refuses it. The proposal does not infer that all parent metadata is descriptive. |
+| Parent context drives a known selected dialect | In the added fixture, `probe-confirmed-read-v1` requires a parent `ConfirmedDevice` class and compiles a confirmation-bearing native definition. Ordinary HTTP rejects that dialect. Missing context, an unknown dialect or another unknown Form step prevents selection. This is lowering evidence, not a handshake runtime. |
+| Operational meaning implied only by a class | Remove the dialect selector from the preceding input: the base mapping emits its ordinary GET. The passing test deliberately records this limitation. A foreign vocabulary requiring confirmation or authentication from that class alone is outside this base contract. |
+| Two Bindings share a domain vocabulary | A single common rule handles its class assertions; neither lowerer contains the vocabulary. If they instead share an operational codec/profile vocabulary, both can call one maintained interpreter. Reusing logic does not prove once-per-document work or shared runtime ownership. |
+| Conflicting active declarations | Within selected profile P/v1, one dependency declares R descriptive, another declares R requires a nonce. A planner that accepts the first declaration or a less capable Binding can omit the nonce. Refuse the inconsistent composition. P/v1 and a separate explicit P/v2 are different contracts, not automatically conflicting global entries. No conflict manager is implemented here. |
+| Incomplete declaration | A package labels R operational but lacks its referenced nonce schema/interpreter, or Binding A implements its obligation while B merely recognizes R's name. Neither the label nor B's name recognition can justify support. Require complete interpretation/dependencies; B rejects. |
+| Completely unknown vocabulary, no local definition | A resolved parent class assertion is descriptive under the chosen base contract; an unknown Form/parent instruction or required profile is unsupported. If even its context needed for expansion is missing, fail resolution. Fetching an ontology cannot replace an absent execution contract. |
+
+There is an unavoidable ambiguity outside a contract: two authors can supply
+the same otherwise complete HTTP TD with `@type = urn:unknown:X`. One vocabulary
+means only a domain classification; the other also demands a nonce before
+success. The plain server can reject an unsolicited nonce exchange, while the
+other rejects a GET before that exchange; always adding a handshake does not
+repair the ambiguity. With no definition/activation information, all observable
+TD input is identical but required native behavior differs. No algorithm, new Rust type or
+relocation of an allowlist can make both interpretations correct. The base
+contract deliberately admits the first meaning and requires an explicit
+operational profile for the second. This is not universal semantic discovery.
+
+#### Evidence, exclusions and decision boundary
+
+The original 23 tests still establish their narrow information/selection facts;
+the exact application allowlist proves only that an explicit classification can
+make those fixtures compile. It is **no longer recommended** as the target API,
+whether maintained by an application or copied into every Binding. Four new
+[role-contract cases](probes/td-binding-semantics/test_role_contract.py) are the
+only added executable surface. They distinguish the common-rule alternative,
+mandatory-instruction refusal, explicit parent-context activation and the hidden
+class-obligation counterexample. Conflicting/incomplete declarations are concrete
+reasoning cases above, not tests of an invented manifest framework.
+
+**Proposed decision for independent review and Owner approval:** prefer the
+minimal common-rule/explicit-operational-profile combination. Keep the stronger
+closed interpretation path available as a profile-specific alternative where
+legacy class implications are required. Do not require an ontology/role package
+for each domain class, and do not let application role exceptions repair missing
+interpreter support. A generic consumed/required-fact helper may be useful for
+Binding authors; this investigation does not settle its API or justify a
+universal declaration language, resolver registry or vocabulary service.
+
+**Residual product trade-off:** accepting the descriptive-class contract gives
+open class-annotation interoperability while excluding undeclared implicit
+protocol/security obligations. Supporting such legacy semantics requires a
+trusted whole profile and refusal when its needed interpretation is unavailable.
+The Owner decides whether that compatibility limit is acceptable; applications
+must not be asked to make per-term exceptions. This question does not shift the
+technical responsibility for defining/qualifying a supported profile to them.
+
+**Still unverified before a Rust SPI:** the exact profile activation/composition
+contract; standard/vendor mapping compatibility with the base rule; operational
+annotation predicates beyond class assertions; scope/link/response/schema and
+per-call parameter completeness; conflict/coverage diagnostics; helper ergonomics
+for an independently authored Binding; and actual preparation/storage/cleanup
+costs. Host can prepare with a broader feature envelope, and build-time tooling
+can supply immutable native definitions to `no_std` firmware. Neither that
+decomposition nor these Python tests proves bounded embedded resolution, memory
+fit, SDK termination or a production security guarantee. No additional native
+resource accounting or registration framework is selected.
 
 ### Applicability and final choice
 
@@ -1125,10 +1358,11 @@ HTTP and MQTT lowerers import only that interface and the Python standard
 library. Both were authored in this investigation, so separate readability is
 evidence of interface use, not independent implementation review.
 
-The 23-case suite passes, including deliberate refusal and information-loss
-cases. It tests prefix/alias/full-IRI/supplied-context equivalence, scoped
-contexts, IRI/literal/list/JSON distinctions, alias collisions, effective
-operations/security, response instructions, unsupported extensions, Consumer
+The original 23 cases are preserved, with four added role-contract cases: 27
+tests pass, including deliberate refusal, information-loss and hidden-obligation
+counterexamples. The original cases test prefix/alias/full-IRI/supplied-context
+equivalence, scoped contexts, IRI/literal/list/JSON distinctions, alias collisions,
+effective operations/security, response instructions, unsupported extensions, Consumer
 choice, strict choice and Producer coverage. Unknown datatypes remain visible
 but unsupported: carrying `"GET"` with a custom datatype cannot justify treating
 it as an ordinary HTTP method.
@@ -1145,8 +1379,9 @@ is needed to expose these semantic differences.
 | --- | --- |
 | HTTP/MQTT modules are 40/49 physical lines, including comments and blanks. | Actual protocol lowering is small in these deliberately narrow examples. Neither duplicates context resolution, WoT defaults, security inheritance or candidate selection. |
 | Shared public model is 144 lines; experimental Engine adapter is 281. | Semantic preparation is nontrivial work transferred to one owner, not eliminated. Occurrence tracing depends on a private PyLD hook and must not become a production dependency by accident. |
-| Authors must enumerate interpreted/known-inert fields and inspect applicable scopes. | This is unavoidable protocol support policy. Generic traversal/consumption helpers can reduce repetition; silently ignoring unknown fields would lower LOC by losing correctness. |
-| One scoped annotation profile composes with both unchanged lowerers. | Removes repeated domain-class lists from protocol authors for those declarations. Application/vocabulary providers now own classification and its trust/configuration cost; arbitrary metadata composability is not established. |
+| Authors enumerate the native instructions they interpret and inspect applicable scopes. | Actual protocol support policy remains necessary. Common semantic rules and shared vocabulary helpers remove unrelated class inventories and duplicate common interpretation. They must not require a parallel hand-maintained declaration of every parser branch. |
+| Historical exact scoped `AnnotationProfile` composes with both unchanged lowerers. | Establishes explicit classification/preservation only. Application ownership fails the clarified requirement; copying its lists into Bindings is also no longer recommended. |
+| A test-only common parent-class rule composes with both unchanged lowerers; a small dialect wrapper consumes parent context. | No class inventory or domain lookup is needed for the base rule. Explicit dialect discrimination prevents ordinary HTTP fallback in that fixture. Production activation, shared-interpreter composition, requirement coverage and author ergonomics remain unproved. |
 | No author implements Host/static transport wrappers or Engine ledgers in this probe. | Demonstrates separation for pure lowering only. Generic Rust registration, allocating programs, pending jobs, indirect backing and cleanup remain unproved authoring costs. Do not extrapolate these line counts to a network binding. |
 
 ### Proven limitations and concrete counterexamples
@@ -1190,6 +1425,12 @@ is needed to expose these semantic differences.
    instance. An immutable payload or matching digest does not fund its final
    owner or isolate a late callback. No semantic representation proves these
    runtime properties.
+9. **Role/activation limit:** the same unknown parent class can mean a domain
+   category to one producer and an implicit nonce/authentication requirement to
+   another. Under the tested descriptive contract, the unmarked input compiles
+   to ordinary HTTP. An explicit dialect activates the parent-context-dependent
+   requirement and blocks that fallback. This proves a conditional distinction,
+   not correctness for unconstrained legacy class implications.
 
 The closed security discriminator above is a separate source-level
 counterexample to assuming all future vocabulary can enter through today's TD
@@ -1202,8 +1443,11 @@ and provider can satisfy them; preservation cannot authorize access.
 **Proven feasibility:** Within the probe's explicit property/JSON/NoSec input
 profile, one resolved public interface carries enough information for HTTP and
 MQTT lowering, including alternate term spellings, scoped resolution, native
-defaults and generic applicability/selection diagnostics. Explicitly declared
-domain types compose with both mappings, and requested property/Form/Binding
+defaults and generic applicability/selection diagnostics. Domain types compose
+with both mappings under either the historical exact-list experiment or the
+new shared descriptive-class rule; the latter needs no application/domain IRI
+inventory. The fixture dialect can use preserved parent context while ordinary
+HTTP refuses its explicit selector. Requested property/Form/Binding
 constraints exclude unrelated lowerers before compilation. The Engine-side
 resolver and selector contain no HTTP/MQTT vocabulary branches. This establishes
 constructive expressibility for those cases, not general protocol independence.
@@ -1212,7 +1456,9 @@ constructive expressibility for those cases, not general protocol independence.
 source inspection; raw source lending does not discharge context interpretation;
 the tested shallow-presence projection collides on ordered source data; unknown
 meaning and unsupported feature/resource cases cannot be repaired by naming
-the interface “semantic.” The negative suite intentionally records these limits.
+the interface “semantic.” The hidden class-obligation counterexample excludes
+unconstrained operational class implications from the descriptive contract.
+The negative suite intentionally records these limits.
 
 **Unverified assumptions:** The selected list/JSON-literal profile covers enough
 real mapping vocabularies; a complete nested source overlay, if needed, can
@@ -1221,8 +1467,10 @@ future bindings; strict resolution can meet actual embedded limits; generic Rust
 Host/static adapters can hide accounting without obscuring physical ownership;
 definition factoring saves meaningful work. Neither existing ADRs nor passing
 fixtures establish these assumptions. Generic classification of unknown
-annotations versus executable instructions is not proven; a trusted scoped
-profile only makes a particular interpretation policy explicit.
+annotations versus executable instructions is impossible without a contract or
+additional trusted interpretation. The proposed base contract's compatibility,
+admission qualification, activation/composition, conflict diagnostics and shared
+interpreter ergonomics remain unverified. No role metadata framework is built.
 
 **Proposed architectural decisions requiring Owner approval after independent
 review:**
@@ -1249,19 +1497,27 @@ review:**
    Producer coverage with the Engine. Separate unsupported alternatives from
    fatal failures. Keep Host deployment contracts distinct from strict embedded
    qualification, with one semantic contract and optional preparation tooling.
-5. Require a declared annotation-role policy rather than equating every unknown
-   semantic annotation with an executable requirement. The experiment favors
-   exact scoped declarations while preserving the unresolved Owner trade-off
-   described above; it does not approve ignoring unknown Form instructions.
+5. Prefer the minimal common-rule/explicit-operational-profile responsibility
+   model described above, subject to qualification of its admission and activation
+   contract. Parent extension classes are descriptive by contract; selected
+   operational interpreters may consume their preserved context. Unknown
+   instructions remain unsupported. Optional shared vocabulary/profile libraries
+   belong with their maintainers, not an application allowlist, per-Binding
+   domain inventory or central protocol registry. Accepting the exclusion of
+   undeclared implicit protocol/security obligations is the residual product
+   decision; no production role API is approved here.
 
 The smallest independently reviewable next step is **one isolated semantic
-contract refinement**, before any production SPI migration: specify the
-supported value/container profile and test that dropped or malformed nested
-instructions cannot silently become defaults; add linked response/schema and
-one URI-template/per-call-operand example; and have a fresh reviewer author
-another lowering against only the public contract. Measure resolver work/storage
-and author-side helpers; retain failures as counterexamples. Challenge whether
-real mappings require the broader source overlay. Only then specify a small Rust semantic-access/compiler
+contract refinement**, before any production SPI migration. First independently
+challenge admission/activation, the class-only compatibility limit and the
+smallest shared interpreter contract using an existing mapping with parent
+semantics. If that direction survives review, specify the supported value/container
+profile and test that dropped or malformed nested instructions cannot silently
+become defaults; add linked response/schema and one URI-template/per-call-operand
+example; and have a fresh reviewer author another lowering against only the
+public contract. Measure resolver work/storage and author-side helpers; retain
+failures as counterexamples. Challenge whether real mappings require the broader
+source overlay. Only then specify a small Rust semantic-access/compiler
 vertical slice with generic registration; runtime ownership migration remains
 separate. Do not reopen #210 or activate old gates to shortcut this evidence.
 
