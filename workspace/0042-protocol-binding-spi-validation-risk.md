@@ -8,6 +8,14 @@ Priority: HIGH
 
 Target: the progression of the public Protocol Binding SPI from the narrow WP-300 Property Read candidate through broad WP-300, WP-400 composition, and WP-600 production bindings
 
+The migrated decision below owns the historical maturity and reopening rationale.
+[0056's conditional protocol-independence assessment](0056-target-spi-external-validation-and-cross-protocol-neutrality.md#reassessment-conditional-protocol-independence)
+consolidates the subsequent architectural question, including semantic information,
+installed extension paths and lifecycle substitutability. Its structural argument
+and the implementation evidence required by this maturity ladder answer different
+claims. Read current contracts and production scope from the registered owners;
+the earlier roadmap observations below are historical.
+
 ## Scope and authority
 
 This topic records a Project Owner concern about whether the current evidence order, public-surface freeze points, reopening predicates, and validation claims are sufficient to establish an effective Protocol Binding SPI.
