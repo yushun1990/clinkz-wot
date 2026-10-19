@@ -2930,3 +2930,384 @@ mod consumer_only_support {
         }
     }
 }
+
+// External authorship: no source-known compiler, marker or private erasure hook.
+#[cfg(feature = "std")]
+mod generic_host_storage {
+    use super::*;
+    use std::sync::atomic::AtomicBool;
+
+    #[derive(Debug, Default)]
+    struct Counts {
+        starts: AtomicUsize,
+        steps: AtomicUsize,
+        aborts: AtomicUsize,
+        cursors: AtomicUsize,
+        artifacts: AtomicUsize,
+        reject_start: AtomicBool,
+        reject_step: AtomicBool,
+    }
+    #[derive(Debug)]
+    struct Compiler(Arc<Counts>);
+    // Cell deliberately makes the native cursor !Sync, while still Send.
+    struct Cursor {
+        turn: Cell<u8>,
+        counts: Arc<Counts>,
+        _scratch: [u8; 769],
+    }
+    impl Drop for Cursor {
+        fn drop(&mut self) {
+            self.counts.cursors.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    #[repr(align(128))]
+    struct Artifact {
+        instructions: [u8; 257],
+        counts: Arc<Counts>,
+    }
+    impl Drop for Artifact {
+        fn drop(&mut self) {
+            self.counts.artifacts.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    const FORMAT: BindingArtifactCompatibility = BindingArtifactCompatibility::new([42; 16]);
+    impl BindingCompilerExtension for Compiler {
+        type Cursor = Cursor;
+        type Artifact = Artifact;
+        fn compatibility(&self) -> BindingArtifactCompatibility {
+            FORMAT
+        }
+        fn bounds(&self, _: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+            Ok(BindingCompilerBounds::new(
+                BindingArtifactFootprint::new(1, std::mem::size_of::<Artifact>() as u64),
+                std::mem::size_of::<Cursor>() as u64,
+                0,
+                work(4),
+            ))
+        }
+        fn start(&self, _: &BindingCompilerInput<'_>) -> CoreResult<Cursor> {
+            self.0.starts.fetch_add(1, Ordering::SeqCst);
+            if self.0.reject_start.load(Ordering::SeqCst) {
+                return Err(test_error());
+            }
+            Ok(Cursor {
+                turn: Cell::new(0),
+                counts: self.0.clone(),
+                _scratch: [0; 769],
+            })
+        }
+        fn step(
+            &self,
+            _: &BindingCompilerInput<'_>,
+            cursor: Cursor,
+            budget: &mut WorkBudget,
+        ) -> BindingCompilerStep<Cursor, Artifact> {
+            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+                return BindingCompilerStep::Pending(cursor);
+            }
+            self.0.steps.fetch_add(1, Ordering::SeqCst);
+            if self.0.reject_step.load(Ordering::SeqCst) {
+                return BindingCompilerStep::Failed(BindingCompilerFailure::new(
+                    test_error(),
+                    cursor,
+                ));
+            }
+            cursor.turn.set(cursor.turn.get() + 1);
+            if cursor.turn.get() < 3 {
+                return BindingCompilerStep::Pending(cursor);
+            }
+            // Native instructions, not a copied URI; payload owns no source loan.
+            BindingCompilerStep::Complete(BindingCompilerOutput::new(
+                BindingArtifact::producer_route(
+                    FORMAT,
+                    BindingArtifactFootprint::new(1, std::mem::size_of::<Artifact>() as u64),
+                    RouteReservationIdentity::new(
+                        CollisionDomainId::new([3; 16]),
+                        EndpointReservationKey::new([4; 32]),
+                    ),
+                    Artifact {
+                        instructions: [cursor.turn.get(); 257],
+                        counts: self.0.clone(),
+                    },
+                ),
+            ))
+        }
+        fn abort(&self, _: Cursor) {
+            self.0.aborts.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    fn input(plan: &LogicalInteractionPlan) -> BindingCompilerInput<'_> {
+        BindingCompilerInput::new(
+            plan,
+            BindingCandidate::new(
+                BindingId::new(8),
+                BindingGeneration::INITIAL,
+                BindingConfigurationDigest::new([9; 32]),
+                FORMAT,
+                0,
+                0,
+            ),
+            BindingArtifactRole::ProducerRoute,
+        )
+    }
+
+    #[test]
+    fn generic_construction_and_start_refusal_preserve_the_compiler_and_existing_job() {
+        let counts = Arc::new(Counts::default());
+        let (rejected, requests) = observe(true, || {
+            HostBindingCompilerRegistration::try_new(Compiler(counts.clone())).unwrap_err()
+        });
+        acquired(requests, Layout::new::<Compiler>(), false);
+        assert!(Arc::ptr_eq(&rejected.input().0, &counts));
+        assert_eq!(counts.starts.load(Ordering::SeqCst), 0);
+        let compiler = HostBindingCompilerRegistration::try_new(rejected.into_input()).unwrap();
+        let source = plan("native:address");
+        let input = input(&source);
+        let (held, requests) = observe(false, || compiler.start(&input).unwrap());
+        let held_allocation = acquired(requests, compiler.slot_layout(), true);
+        let (refused, requests) = observe(true, || compiler.start(&input));
+        acquired(requests, compiler.slot_layout(), false);
+        assert!(matches!(refused, Err(CoreError::Backpressure(_))));
+        assert_eq!(counts.starts.load(Ordering::SeqCst), 1);
+        counts.reject_start.store(true, Ordering::SeqCst);
+        let (refused, requests) = observe(false, || compiler.start(&input));
+        assert!(matches!(refused, Err(CoreError::UnsupportedOperation(_))));
+        assert_eq!((requests.allocations, requests.releases), (1, 1));
+        assert_eq!(requests.allocated[0], requests.released[0]);
+        let ((), requests) = observe(false, || compiler.abort(held).unwrap());
+        released(requests, held_allocation);
+        assert_eq!(counts.cursors.load(Ordering::SeqCst), 1);
+        assert_eq!(counts.aborts.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn generic_pending_failure_and_completion_keep_one_aligned_allocation() {
+        fn shareable<T: Send + Sync>() {}
+        shareable::<HostBindingArtifact>();
+        let counts = Arc::new(Counts::default());
+        let compiler = HostBindingCompilerRegistration::new(Compiler(counts.clone()));
+        let source = plan("native:address");
+        let input = input(&source);
+        let (mut cursor, requests) = observe(false, || compiler.start(&input).unwrap());
+        let allocation = acquired(requests, compiler.slot_layout(), true);
+        assert_eq!(allocation.align, 128);
+        for _ in 0..4 {
+            let (step, requests) = observe(false, || compiler.step(&input, cursor, &mut work(0)));
+            no_requests(requests);
+            let BindingCompilerStep::Pending(returned) = step else {
+                panic!("unpaid")
+            };
+            cursor = returned;
+        }
+        assert_eq!(counts.steps.load(Ordering::SeqCst), 0);
+        counts.reject_step.store(true, Ordering::SeqCst);
+        for _ in 0..3 {
+            let (step, requests) = observe(false, || compiler.step(&input, cursor, &mut work(1)));
+            no_requests(requests);
+            let BindingCompilerStep::Failed(returned) = step else {
+                panic!("failed with retained owner")
+            };
+            cursor = returned.into_parts().1;
+        }
+        counts.reject_step.store(false, Ordering::SeqCst);
+        for _ in 0..2 {
+            let (step, requests) = observe(false, || compiler.step(&input, cursor, &mut work(1)));
+            no_requests(requests);
+            let BindingCompilerStep::Pending(returned) = step else {
+                panic!("paid pending")
+            };
+            cursor = returned;
+        }
+        let (step, requests) = observe(false, || compiler.step(&input, cursor, &mut work(1)));
+        no_requests(requests);
+        let BindingCompilerStep::Complete(output) = step else {
+            panic!("complete")
+        };
+        assert!(output.artifact().route_reservation().is_some());
+        assert_eq!(counts.cursors.load(Ordering::SeqCst), 1);
+        let artifact = output.into_artifact();
+        assert_eq!(
+            artifact.payload().storage_overhead() + std::mem::size_of::<Artifact>() as u64,
+            allocation.size as u64,
+        );
+        drop(source);
+        drop(compiler);
+        let payload = artifact.try_payload::<Artifact>(FORMAT).unwrap();
+        let address = payload as *const Artifact as usize;
+        assert_eq!(address % 128, 0);
+        assert!(
+            address >= allocation.address
+                && address + std::mem::size_of::<Artifact>()
+                    <= allocation.address + allocation.size
+        );
+        assert_eq!(payload.instructions, [3; 257]);
+        let (artifact, requests) = observe(false, || {
+            artifact.try_into_payload::<u8>(FORMAT).unwrap_err()
+        });
+        no_requests(requests);
+        let (artifact, requests) = observe(false, || {
+            artifact
+                .try_into_payload::<Artifact>(BindingArtifactCompatibility::new([0; 16]))
+                .err()
+                .unwrap()
+        });
+        no_requests(requests);
+        // Shared access from another thread is valid although the old cursor
+        // was !Sync. The allocation now contains only the completed artifact.
+        std::thread::scope(|scope| {
+            let task = scope.spawn(|| {
+                artifact
+                    .try_payload::<Artifact>(FORMAT)
+                    .unwrap()
+                    .instructions[0]
+            });
+            assert_eq!(task.join().unwrap(), 3);
+        });
+        let (payload, requests) = observe(false, || {
+            artifact.try_into_payload::<Artifact>(FORMAT).ok().unwrap()
+        });
+        released(requests, allocation);
+        assert_eq!(counts.artifacts.load(Ordering::SeqCst), 0);
+        drop(payload);
+        assert_eq!(counts.artifacts.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn generic_mismatch_with_identical_native_types_returns_the_original_job() {
+        struct OtherCompiler;
+        impl BindingCompilerExtension for OtherCompiler {
+            type Cursor = Cursor;
+            type Artifact = Artifact;
+            fn compatibility(&self) -> BindingArtifactCompatibility {
+                FORMAT
+            }
+            fn bounds(&self, _: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+                panic!("wrong compiler")
+            }
+            fn start(&self, _: &BindingCompilerInput<'_>) -> CoreResult<Cursor> {
+                panic!("wrong compiler")
+            }
+            fn step(
+                &self,
+                _: &BindingCompilerInput<'_>,
+                _: Cursor,
+                _: &mut WorkBudget,
+            ) -> BindingCompilerStep<Cursor, Artifact> {
+                panic!("wrong compiler")
+            }
+            fn abort(&self, _: Cursor) {
+                panic!("wrong compiler")
+            }
+        }
+        let counts = Arc::new(Counts::default());
+        let compiler = HostBindingCompilerRegistration::new(Compiler(counts.clone()));
+        let wrong = HostBindingCompilerRegistration::new(OtherCompiler);
+        let source = plan("native:address");
+        let input = input(&source);
+        let (cursor, requests) = observe(false, || compiler.start(&input).unwrap());
+        let allocation = acquired(requests, compiler.slot_layout(), true);
+        let (step, requests) = observe(false, || wrong.step(&input, cursor, &mut work(1)));
+        no_requests(requests);
+        let BindingCompilerStep::Failed(rejected) = step else {
+            panic!("compiler type mismatch")
+        };
+        let (cursor, requests) =
+            observe(false, || wrong.abort(rejected.into_parts().1).unwrap_err());
+        no_requests(requests);
+        let ((), requests) = observe(false, || drop(cursor));
+        released(requests, allocation);
+        assert_eq!(counts.cursors.load(Ordering::SeqCst), 1);
+        assert_eq!(counts.aborts.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn generic_drop_of_completed_output_releases_slot_and_native_payload_once() {
+        let counts = Arc::new(Counts::default());
+        let compiler = HostBindingCompilerRegistration::new(Compiler(counts.clone()));
+        let source = plan("native:address");
+        let input = input(&source);
+        let (mut cursor, requests) = observe(false, || compiler.start(&input).unwrap());
+        let allocation = acquired(requests, compiler.slot_layout(), true);
+        for _ in 0..2 {
+            let BindingCompilerStep::Pending(returned) =
+                compiler.step(&input, cursor, &mut work(1))
+            else {
+                panic!("pending")
+            };
+            cursor = returned;
+        }
+        let BindingCompilerStep::Complete(output) = compiler.step(&input, cursor, &mut work(1))
+        else {
+            panic!("complete")
+        };
+        let ((), requests) = observe(false, || drop(output));
+        released(requests, allocation);
+        assert_eq!(counts.artifacts.load(Ordering::SeqCst), 1);
+        assert_eq!(counts.cursors.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn zero_sized_compiler_cursor_and_payload_need_only_the_retained_output_slot() {
+        struct UnitCompiler;
+        impl BindingCompilerExtension for UnitCompiler {
+            type Cursor = ();
+            type Artifact = ();
+            fn compatibility(&self) -> BindingArtifactCompatibility {
+                FORMAT
+            }
+            fn bounds(&self, _: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+                Ok(BindingCompilerBounds::new(
+                    BindingArtifactFootprint::new(1, 0),
+                    0,
+                    0,
+                    work(1),
+                ))
+            }
+            fn start(&self, _: &BindingCompilerInput<'_>) -> CoreResult<()> {
+                Ok(())
+            }
+            fn step(
+                &self,
+                _: &BindingCompilerInput<'_>,
+                cursor: (),
+                budget: &mut WorkBudget,
+            ) -> BindingCompilerStep<(), ()> {
+                if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+                    return BindingCompilerStep::Pending(cursor);
+                }
+                BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
+                    FORMAT,
+                    BindingArtifactFootprint::new(1, 0),
+                    (),
+                )))
+            }
+            fn abort(&self, _: ()) {}
+        }
+        let (compiler, requests) = observe(false, || {
+            HostBindingCompilerRegistration::try_new(UnitCompiler)
+                .ok()
+                .unwrap()
+        });
+        no_requests(requests);
+        let source = plan("native:address");
+        let input = input(&source);
+        let (cursor, requests) = observe(false, || compiler.start(&input).unwrap());
+        let allocation = acquired(requests, compiler.slot_layout(), true);
+        let (step, requests) = observe(false, || compiler.step(&input, cursor, &mut work(1)));
+        no_requests(requests);
+        let BindingCompilerStep::Complete(output) = step else {
+            panic!("complete")
+        };
+        assert_eq!(
+            output.artifact().payload().storage_overhead(),
+            allocation.size as u64
+        );
+        let ((), requests) = observe(false, || {
+            output
+                .into_artifact()
+                .try_into_payload::<()>(FORMAT)
+                .unwrap()
+        });
+        released(requests, allocation);
+    }
+}

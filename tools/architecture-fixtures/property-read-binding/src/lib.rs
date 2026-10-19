@@ -307,7 +307,11 @@ impl BindingCompilerExtension for MockCompiler {
         input: &BindingCompilerInput<'_>,
     ) -> clinkz_wot_core::CoreResult<BindingCompilerBounds> {
         Ok(BindingCompilerBounds::new(
-            BindingArtifactFootprint::new(1, input.logical_plan().resolved_target().len() as u64),
+            BindingArtifactFootprint::new(
+                1,
+                (core::mem::size_of::<MockArtifact>()
+                    + input.logical_plan().resolved_target().len()) as u64,
+            ),
             core::mem::size_of::<MockCompilerCursor>() as u64,
             0,
             WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1),
@@ -331,7 +335,10 @@ impl BindingCompilerExtension for MockCompiler {
             return BindingCompilerStep::Pending(cursor);
         }
         let target: Box<str> = input.logical_plan().resolved_target().into();
-        let footprint = BindingArtifactFootprint::new(1, target.len() as u64);
+        let footprint = BindingArtifactFootprint::new(
+            1,
+            (core::mem::size_of::<MockArtifact>() + target.len()) as u64,
+        );
         let payload = MockArtifact {
             variant: MockArtifactVariant::Target(target),
             drop_probe: self.artifact_drops.as_ref().map(Arc::clone),
