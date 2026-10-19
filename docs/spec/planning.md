@@ -1489,7 +1489,16 @@ ADR-0013 envelope. No public ledger observation becomes a parent permit,
 and no wrapper around the existing local graph is claimed to make it transferable.
 
 Compiler bounds/start/step/abort callbacks are themselves supported bounded
-primitives. Predebit their admitted callback cost, including the cost to compute
+primitives. At aggregate entry, before Planning source traversal or compiler
+callbacks, qualify captured compatibility, bounds, start and total progress costs against the selected
+`PlanCompileWorkUnitsPerStepMax`. Compatibility was captured during startup and
+is not called again by the build. Also qualify the combined indivisible
+allocation/abort/artifact-destruction/release prepayment against
+`CleanupWorkItemsPerStepMax`, including Host transport costs. A larger caller
+budget cannot raise either configured ceiling. An excessive captured cost is
+`LimitExceeded` before bounds/start or compiler-state acquisition; insufficient
+caller credit for an eligible cost remains Pending without work.
+Predebit their admitted callback cost, including the cost to compute
 bounds, before calling them; returned bounds cannot retrospectively pay for the
 callback. Obtain conservative cursor/temporary storage before start and check
 actual requests before allocation, not after an infallible callback has exceeded
@@ -1522,7 +1531,14 @@ selected source coordinate, prepay/evaluate bounds, check actual inline layouts,
 then start/progress that job before advancing. Each native step must debit its
 qualified work; Pending cannot refill the coordinate remainder. A later bounds
 or lowering failure can follow earlier completed artifacts and must reclaim
-them under the original funded root. There is no all-bounds-before-start barrier. The aggregate compiler-work maximum is the
+them under the original funded root. There is no all-bounds-before-start barrier.
+Diagnostics follow deterministic coordinate order, then bounds/start/progress
+within that coordinate. The first failure stops traversal: an earlier progress
+failure wins over a later bounds failure, whose callback is never entered.
+This deliberately replaces the former bounds-first diagnostic precedence.
+Validation, preflight, materialization and profile qualification failures still
+precede every compiler start. No protocol execution or publication occurs while
+lowering. The aggregate compiler-work maximum is the
 checked product of readable-coordinate count and that existing per-step value;
 the count is already bounded by `forms_per_context_max` and
 `forms_per_thing_max`. This narrow eligibility rule does not reinterpret the

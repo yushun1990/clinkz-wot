@@ -467,7 +467,6 @@ impl ConsumerPropertyReadPolicy {
         }
         if !resources.declared().fits_within(self.registration)
             || !self.call.fits_within(resources.admitted())
-            || r.support().target_capacity() as u64 > self.input[3].max(self.input[1])
             || (host && self.limits.get(K::PendingClientCallsGlobalMax).unwrap_or(0) == 0)
         {
             return Err(unsupported());
@@ -508,6 +507,9 @@ impl ConsumerPropertyReadPolicy {
             K::BindingCompilerCursorBytesPerItemMax,
             r.support().cursor_layout().size() as u64,
         )?;
+        // Planning qualifies the captured generic compiler work/layouts against
+        // this policy's build config. Source limits belong to that admission;
+        // an external compiler need not have a literal target-buffer capacity.
         add(self.call_temporary(resources)?, self.call_bytes()?)?;
         self.check(
             K::LargestContiguousAllocationBytesMax,

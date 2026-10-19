@@ -30,11 +30,18 @@ preflight, all-readable output, no partial publication, source-free rollback,
 actual storage admission and Servient capacity provenance remain binding.
 The old zero-start guarantee for a later bounds error is deliberately retired;
 zero native execution/publication and complete cleanup are the required outcome.
+Coordinate-first bounds/start/progress fixes the first cause; an earlier progress
+failure prevents a later bounds callback. This intentionally replaces global
+bounds-first diagnostic precedence. Materialization and profile-qualification
+failures still guarantee zero compiler starts. The downstream
+`consumer-aggregate-admission/tests/open_compiler.rs` fixture covers atomic-cost
+qualification, actual later bounds failure, competing failures, rejected-output retention, funded cleanup,
+exact destruction and original-slot/account retry in both representations.
 
-This changes only `planning/src/consumer_property_read.rs` and the intersecting
-TD/Core authoring contracts, with downstream tests and the affected Host
-allocation regression. It does not replace the Producer lifecycle or activate
-broader operation/selection semantics. Original acceptance below is historical
+This changes `planning/src/consumer_property_read.rs`, the intersecting TD/Core
+authoring contracts and Servient's generic eligibility projection, with downstream
+tests and affected runtime/HTTP regressions. It does not replace the Producer
+lifecycle or activate broader operation/selection semantics. Original acceptance below is historical
 same-revision evidence, not independent acceptance of this amendment. The
 compiler support record owns the external-inline work/storage contract and
 replacement evidence boundary.
@@ -43,8 +50,8 @@ replacement evidence boundary.
 
 The smallest useful implementation unit is the complete unpublished,
 one-registration/all-readable Property Read aggregate, paired across typed
-static and public Host preparation. Preflight, materialization, the all-bounds
-barrier, sequential compilation, output sealing and variable rollback share
+static and public Host preparation. Preflight, materialization, sequential pure
+bounds/start/progress, output sealing and variable rollback share
 one failure/ownership boundary. Splitting them into source tranches would not
 supply independently usable output or remove a different dependency. No
 Servient publication, call execution or broad compiler framework belongs here.
@@ -72,7 +79,7 @@ Alternatives considered:
 | --- | --- |
 | Add Foundation identity/policy getters or mint a new universal capacity certificate | An equal tuple/ceiling does not prove a held parent allowance. The coordinator already owns transaction association; no Foundation API is needed for this local preparation boundary. |
 | Keep a `ResourceReservation` inside the lifetime-free cleanup slot | It borrows its account. Commit the guard and retain the actual account/parent at the coordinator instead. |
-| Streaming compile, a singleton, or a successful subset | Violates all-readable output and zero starts after a later materialization/bounds failure. |
+| Publishing a streaming compile, singleton, or successful subset | Violates all-readable output. Sequential pure construction is allowed only under the original unpublished funded root; a later failure rolls back every earlier artifact. |
 | Static-only admission | Silently narrows the accepted paired capability despite completed public Host support. Physical evidence remains separate. |
 | Contracts extraction, generated images, or runtime/crate redesign | Review 07 and topic 0076 identify credible later alternatives, but no concrete defect here requires them. Keep one TD meaning and one Planning program. |
 | Another fixed compiler implementation or copied TD rules | The production closed primitive and paid TD cursor already supply those responsibilities. |
@@ -177,11 +184,14 @@ entry, not just the discriminator:
    from present-empty and strict original-index mismatch. It visits only the
    matching sealed range and uses no TD, registration scan or support probe.
 3. Preflight is emitted once from the consumed build, and waits without replay.
-   Both semantic passes retain the same non-resettable TD allowance. Ready
+   All three semantic passes retain the same non-resettable TD allowance. Ready
    retries pay no prefix sizing/URI/security replay and acknowledge no partial
-   copy. Materialization completes before every bounds call, each exactly once;
-   all succeed before the first start. Every materialization/bounds negative,
-   including a last-coordinate failure, has zero starts and complete rollback.
+   copy. Materialization completes before every bounds call. Bounds and start
+   run once per coordinate in deterministic order; progress may suspend without
+   refilling its allowance. Materialization negatives
+   have zero compiler starts; actual later bounds failures retain earlier outputs
+   for complete rollback without client invocation or publication. Competing
+   earlier progress/later bounds failures preserve coordinate-first cause.
 4. Compiler progress is sequential and retains its coordinate remainder through
    movement, zero/short budgets and fresh caller budgets. Validate zero,
    non-BindingPolls, over-step and checked-product overflow with test-side bound

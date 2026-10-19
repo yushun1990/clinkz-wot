@@ -30,7 +30,7 @@ scalars, external immutable references or owned storage, never references into
 its own scratch. No complete derived TD table is required.
 
 Planning owns complete preflight, required runtime facts, every property lookup
-row, all compiler bounds before any start, sequential eager compilation, exact
+row, complete materialization before sequential pure bounds/start/progress, exact
 output accounting and a source-independent Frozen draft. Concrete artifacts
 and suspended compiler state must satisfy the owned-input/cleanup contract;
 a lifetime-free wrapper alone is insufficient.
@@ -80,7 +80,7 @@ unless a separate owning adapter proves bounded source destruction.
 
 Complete Basic and structural rejection, the Number amendment and AP access,
 finite resource/work/lifetime bounds, first-cause diagnostics, bounded cleanup,
-complete Planning output, the all-bounds barrier, source/artifact independence,
+complete Planning output, funded sequential pure lowering, source/artifact independence,
 generation/registration integrity, atomic publication, leases/drain and bounded
 reclamation remain required. URI resolution is byte-resumable in production;
 the discriminator's conservative quadratic atomic envelope is historical local
@@ -106,3 +106,35 @@ adds another retained representation; one Ready coordinate is sufficient.
 Unrestricted synchronous queries, raw Thing Planning input, caller-minted proof,
 hidden source retention and an unbounded parse/drop convenience would each
 evade an active semantic, progress or ownership boundary and are rejected.
+
+* Inline lowering ordering amendment
+
+The open inline Consumer cut supersedes this ADR's former all-bounds-before-start
+ordering and the intersecting preservation clauses of ADR-0022/0023. Complete
+validation/preflight/materialization, selected-profile eligibility and rollback
+capacity still precede compiler starts. Then each coordinate's pure bounds,
+start and progress finishes before the next coordinate is examined. The exact
+behavior is owned by [[file:../spec/planning.md][Planning's aggregate construction contract]].
+
+A separate paid all-bounds pass remains constructible and is not incompatible
+with open compilers. Sequential lowering is selected to lend one original
+source/context at a time without retaining another derived coordinate table or
+replaying that source for start/progress. It simplifies this inline cut while
+preserving admission and whole-transaction publication. It is not an admission
+shortcut or a requirement imposed by compiler openness.
+
+The diagnostic tradeoff is intentional: coordinate-first failure replaces global
+bounds-first failure. An earlier progress Validation wins over a later bounds
+UnsupportedOperation, which is not evaluated. A later actual bounds failure
+retains earlier artifacts under the original funded root. A failed cursor is
+aborted exactly once using work prepaid before its creation; variable output
+destruction waits for explicit funded cleanup. No client invocation, protocol
+effect or subset publication occurs. Pre-materialization and profile failures
+retain their zero-compiler-start guarantee.
+
+Existing accepted evidence remains evidence of its named revisions and former
+contract. It does not independently accept this amendment. Replacement evidence
+must exercise actual later bounds failure, competing earlier-progress/later-bounds
+failures, original-account/root retention, unpaid cleanup, exact destruction and
+retry in static and public Host representations, plus installed runtime and HTTP
+regressions. Gate/milestone status and independent acceptance remain separate.

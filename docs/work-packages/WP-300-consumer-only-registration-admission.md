@@ -61,8 +61,8 @@ arbitrary erased native compiler are insufficient. No new support issuer or
 public attestation token is permitted.
 
 Planning adds sealed `ConsumerPropertyReadRegistration` implementations for
-those two checked owners. It delegates to the same paid aggregate, all-bounds
-barrier, selector and source-free rollback. It gains no compiler knowledge,
+those two checked owners. It delegates to the same paid aggregate, sequential
+pure lowering under ADR-0021's ordering amendment, selector and source-free rollback. It gains no compiler knowledge,
 raw-client path, TD interpretation or parent/provenance authority.
 
 Static complete owners expose the existing signatures for
@@ -156,7 +156,8 @@ Required public production evidence:
    erasure with unchanged-owner return. Reproduce supported Host allocation
    failure and retained-slot cleanup through the actual public surface.
 4. Use both new checked owners through actual aggregate validation/preflight,
-   all bounds before start, complete multi-property output and lookup. After
+   complete materialization then sequential pure bounds/start/progress,
+   complete multi-property output and lookup. After
    source destruction, retain the separate complete registration and execute
    from concrete artifacts. Preserve empty ranges and original Form coordinates.
 5. Invoke only new complete-owner methods; normal sync/pending and

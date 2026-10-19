@@ -319,6 +319,11 @@ preserves the original compiler/complete owner. The engine-owned registration
 wrapper and private installed client continue enforcing provenance and pairing.
 
 Planning prepays bounds/start/abort/destruction and physical acquisition/release.
+It first qualifies captured compatibility/bounds/start/total-progress costs
+against the selected compile-step cap, and combined allocation/abort/destruction/
+release prepayment against the selected cleanup-step cap. Host transport is
+included. Excess rejects before aggregate callbacks even with a larger caller
+budget; insufficient caller credit for an eligible operation does no work.
 Returned native bounds must fit actual inline layouts and qualified progress.
 Every returned artifact is checked against compatibility, role and admitted
 footprint; an invalid result remains owned for rollback. Generic Layouts, not

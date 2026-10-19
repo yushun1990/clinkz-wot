@@ -72,7 +72,7 @@ table as new permission.
 | --- | --- |
 | TD / WP-100 | `td/src/validated.rs`: one paid scalar on existing semantic lending. Necessary exports only in `td/src/lib.rs`. Preserve ordinary Form construction, round trips and Basic validation. |
 | Core compiler/plan / WP-200 | `core/src/plan.rs`, `core/src/binding_compiler.rs`, necessary `core/src/lib.rs` exports: scalar carrier and opt-in closed restriction below. No open compiler attestation or new artifact/callback family. |
-| Planning / WP-200 | `planning/src/consumer_property_read.rs`: carry the scalar through existing preflight/materialization. Preserve all-bounds-before-start, source-free output and rollback. No protocol branch or raw TD access. |
+| Planning / WP-200 | `planning/src/consumer_property_read.rs`: carry the scalar through existing preflight/materialization. Preserve source-free output and rollback. ADR-0021's inline amendment replaces the former all-bounds barrier with sequential pure lowering and coordinate-first failure precedence; renewed evidence must retain zero client invocation/publication. No protocol branch or Planning-owned vocabulary interpretation. |
 | HTTP / WP-600 | Create `protocol-bindings/protocols/http/{Cargo.toml,src/,tests/,examples/}` as `clinkz-wot-binding-http`. Core/Foundation are normal shared dependencies; TD/Planning/Servient are test/example dependencies. SDK/runtime dependencies remain private to this crate. |
 | Runtime / WP-400 | Use existing public Host provision/consume/read/cancel/drain/cleanup. No production Servient or Foundation changes. A demonstrated insufficiency requires a reproducer and scoped readmission. |
 
@@ -141,7 +141,9 @@ preserves it without new shared source changes:
    mode accept only metadata `Some(false)` and effective media
    `Some("application/json")`. Otherwise return `UnsupportedOperation` with fixed
    operation/form/plan/binding context from bounds, start and paid step, preserving
-   identity/capacity checks. All coordinate bounds precede every start/I/O/
+   identity/capacity checks. Complete materialization precedes compiler starts;
+   sequential pure bounds/start/progress follows ADR-0021's ordering amendment.
+   Every coordinate must finish before client invocation/I/O/
    publication. One bad coordinate fails the transaction with funded rollback;
    never skip it or silently execute default GET. Renew fixed callback/work costs.
 5. Keep the 64-byte target-copy artifact, compatibility and payload format.
@@ -331,7 +333,7 @@ they are historical obligations already satisfied, not new parser-policy work:
 | WP-100-CONSUMER-VALIDATED-THING | Renew paid lending/cursor/layout/Ready/rewind/cancel evidence. |
 | WP-200-CONSUMER-PROPERTY-READ-PLANNING | Renew owned logical-plan Layout/cost and identity/selection regressions. |
 | WP-200-CONSUMER-COMPILER-SUPPORT | Renew restricted configuration, actual support/adapter/cursor/output Layouts, fixed callback work, refusal/recovery and substitution negatives. |
-| WP-200-CONSUMER-PROPERTY-READ-AGGREGATE; WP-200-CONSUMER-OUTPUT-OWNERSHIP | Renew source-free scalar, all-bounds barrier, whole-build work/peaks and original-account rollback/reclaim. |
+| WP-200-CONSUMER-PROPERTY-READ-AGGREGATE; WP-200-CONSUMER-OUTPUT-OWNERSHIP | Renew source-free scalar, sequential pure lowering with actual later-bounds rollback/coordinate-first diagnostics, whole-build work/peaks and original-account rollback/reclaim. |
 | WP-300-CONSUMER-ONLY-REGISTRATION | Renew complete-owner capture/equality, changed configuration/support layouts and rejection recovery. |
 | WP-400-CONSUMER-PROPERTY-READ-RUNTIME; WP-400-CONSUMER-RESOURCE-OWNERSHIP | Renew metadata/cell/policy correspondence, dependent carrier measurements and normal/late handoff/cleanup funding; no new Runtime implementation. |
 | WP-100-CONSUMER-CALL-VALUES-VALIDATOR; WP-300-CONSUMER-PROPERTY-READ-BINDING; WP-300-CONSUMER-HOST-CALL-CONSTRUCTION; WP-000 | Reuse unchanged contracts/evidence. Run shared regressions at completion; a demonstrated intersecting layout/behavior change extends impact review rather than silently inheriting measurements. |
@@ -381,7 +383,7 @@ configuration/runtime/deployment and independent acceptance references.
 
 | Stable key | Required executable evidence |
 | --- | --- |
-| `http-form-eligibility` | Production paid scalar/source-free plan in all three cells; default/explicit GET/POST/header/unknown extension/response/additional-response/coding/subprotocol/scopes, including present-empty. Zero/short credit, Ready replay, rewind/cancel and round trips. Native/public Host restricted positives; unknown/present/media negatives; later bad coordinate causes zero starts/I/O/publication and funded rollback/retry. Actual allocation refusals, unchanged strict keys and restricted/unrestricted client/compiler/artifact substitution negatives. |
+| `http-form-eligibility` | Production paid scalar/source-free plan in all three cells; default/explicit GET/POST/header/unknown extension/response/additional-response/coding/subprotocol/scopes, including present-empty. Zero/short credit, Ready replay, rewind/cancel and round trips. Native/public Host restricted positives; unknown/present/media negatives; later bad coordinate causes zero client invocation/I/O/publication and funded rollback/retry of earlier compiled artifacts. Materialization/qualification failures still precede compiler starts. Actual allocation refusals, unchanged strict keys and restricted/unrestricted client/compiler/artifact substitution negatives. |
 | `http-consumer-property-read` | Public Host registration, consume/select/read of two targets, then at least 100 alternating reads after terminal release. Independently implemented loopback peer asserts GET/path and distinct results. Destroy TD/build inputs after consume. No raw-client/legacy bypass or retained source; saturation returns unchanged input. |
 | `http-resource-lifecycle` | Stock pinned SDK/source and independent raw peer: amended parser-policy simultaneous/exact/one-over/unfinished header/body/trailer/extension/wire cases, declaration-list positives and forbidden overrides; fragmented/chunked/no-length, malformed/slow/truncated/disconnected peer, statuses/upgrades/encodings, no retry. Caller cancel/drop, deadline/result races, invalid normal/late success, accepted error, drain/root loss preserve seals/first cause and show FD/future retirement. Retained/transient/peak/largest allocations, actual growth/read-ahead/overlap, continuation/native stack, supported fault injection, finite disposal work/allocations, allocation-free engine status/handoff and original-account release. Separate enforced bounds, measurements/estimates and assumptions. |
 | `http-authoring-feature-conformance` | External real Consumer-only construction and runtime/permission recipe. Renew affected predecessor cases/layouts/failures; execute registered Consumer/Producer regressions, portable Core/Planning/Servient cells, authority/workload checks, locked workspace tests and dependency inspection. No neutral-library HTTP/runtime/TLS dependency or inferred embedded claim. |

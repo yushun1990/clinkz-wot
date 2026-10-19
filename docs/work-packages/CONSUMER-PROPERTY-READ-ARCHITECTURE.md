@@ -5,6 +5,13 @@ commands are owned only by
 [`consumer-property-read-architecture-gate.toml`](consumer-property-read-architecture-gate.toml).
 This record defines the bounded cross-package claim and its acceptance obligations.
 
+ADR-0021's inline ordering amendment changes the original bounds-first compiler
+contract. Existing acceptance and recorded measurements remain scoped to their
+named revisions; neither covers the open inline implementation automatically.
+The evidence inputs below include replacement qualification, sequential rollback
+and installed-path cases for fresh independent exact-head review. Updating those
+inputs does not change gate status or claim acceptance of the amendment.
+
 ## Purpose and prerequisite boundary
 
 This is the Consumer one-shot proof required by the architecture backbone and
@@ -33,7 +40,8 @@ that existing candidate; it admits no new source tranche or architecture change.
 caller-owned immutable typed Thing + complete client-only registration + checked policy
   -> Servient paired build/cleanup and real parent capacity
   -> TD whole-input inspection, shared Basic and paid semantic lending
-  -> Planning all-readable preflight, complete materialization and all-bounds barrier
+  -> Planning all-readable preflight and complete materialization
+  -> sequential pure bounds/start/progress with funded whole-output rollback
   -> pure eager compiler output and source-independent Frozen owner
   -> consume build owner, end source/config/compiler loans, finish scratch cleanup
   -> Servient final registration/identity/generation/capacity/cancellation checks
@@ -86,7 +94,8 @@ categories, exactly-once settlement, publication boundaries, retained generation
 and parent capacity, and terminal destruction. The private final-check unit test
 supplements public interleavings with mutable-identity fault injection; it cannot
 substitute for public publication evidence. The registered aggregate-admission
-fixture observes actual compiler bounds/starts and protects the all-bounds barrier;
+fixture observes actual compiler bounds/starts, sequential failure precedence,
+funded later-bounds rollback and zero starts before materialization/qualification;
 Runtime rejection tests separately observe no client invocation or publication.
 Those counters measure different effects. TD/Core/Planning tests protect their
 own semantic and ownership boundaries, rather than standing in for composition.
@@ -108,7 +117,7 @@ diff-hygiene status does not establish any of these conclusions.
 | Obligation | Required falsifiable evidence |
 | --- | --- |
 | Complete public composition and provenance | Both downstream applications use real TD admission, all-readable Planning output, complete client-only registration and public Servient publication/calls. After source destruction, explicit original Form selection resolves distinct real compiled targets. Audit the no-fabrication and no-legacy boundaries above; a status-only assertion is insufficient for coordinate correctness. |
-| Whole transaction and publication | Validation/materialization/bounds/final-check/allocation failure and abandonment retain the original whole unpublished owner and cleanup account. Later bounds failure starts no compiler. Zero/short/exact final credit and real cancel-before/cancel-after ordering establish private permit linearization and an allocation-free, callback-free, non-yielding install; no subset becomes visible. |
+| Whole transaction and publication | Validation/materialization/bounds/final-check/allocation failure and abandonment retain the original whole unpublished owner and cleanup account. Sequential pure lowering may leave earlier artifacts on later bounds failure; funded rollback destroys each once. Earlier progress failure wins over unevaluated later bounds. Pre-materialization/qualification failures start no compiler. No failure invokes a client or publishes a subset. Zero/short/exact final credit and real cancel-before/cancel-after ordering establish private permit linearization and an allocation-free, callback-free, non-yielding install. |
 | Selected call and shared validation | Installed Core produces a name-free selected request, retains its one-use seal with the complete call/slot and preserves normal, immediate-late and polled-late identity/shape/error rules. Rejection recovers original input before effects; accepted overrun remains accepted cleanup. No automatic fallback or runtime TD query occurs. |
 | Interest, generation and lock ownership | Zero work causes no callback progress. Saturation, stale tickets, handle/root/ticket loss, close/drain, Host checkout reentrancy and unwind preserve exact generation/root ownership until settlement. Closing rejects new pins while a live accepted call can still settle; callbacks run outside structural locks. |
 | Cancellation and terminal disposition | First cause and fresh independent drain deadline survive bounded progress without deadline extension. Host whole-call transfer acceptance/refusal and static fabricated-transfer rejection retain their legal complete owners. Late results still pass Core validation. Acknowledgement/destruction occurs once, and incomplete external shutdown is recorded as residual before local disposal rather than claimed complete. |

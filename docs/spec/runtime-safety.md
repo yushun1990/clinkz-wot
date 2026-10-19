@@ -96,8 +96,13 @@ checked actual layout/accounting and paired local/parent allowances. Logical byt
 or allowance totals are neither physical source capacities nor contiguous requests.
 
 Planning preflight and complete materialization produce every property row and
-readable original coordinate; all compiler bounds pass before any start. Only
-one pure compiler cursor progresses at a time, with bounded callbacks and
+readable original coordinate before compiler starts. Profile-qualified pure
+lowering then runs bounds/start/progress sequentially per coordinate under the
+[Planning contract](planning.md#aggregate-construction). An earlier progress
+failure wins over an unevaluated later bounds failure. Earlier artifacts remain
+unpublished under the original funded rollback owner; there is no all-bounds
+barrier or early client invocation. Only one compiler cursor progresses at a
+time, with bounded callbacks and
 exactly-once abort. Concrete artifacts/callbacks and suspended cursors must be
 source-independent, not merely hidden behind a lifetime-free generic wrapper.
 The consumed build owner structurally ends all input-bearing state before

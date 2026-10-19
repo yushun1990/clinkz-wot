@@ -133,8 +133,12 @@ and gives no bounded ingestion guarantee. The detailed TD and ingestion contract
 belong to the [TD admission record](../work-packages/WP-100-consumer-validated-thing-admission.md).
 
 Every validation/semantic/limit/materialization/bounds/compile/cleanup/reconciliation/
-cancellation/final-check failure rejects the whole unpublished aggregate. Later
-materialization or bounds failure yields zero compiler starts. Output is usable
+cancellation/final-check failure rejects the whole unpublished aggregate.
+Materialization and profile qualification precede every compiler start. Pure
+bounds/start/progress follows coordinate order; a later bounds failure can leave
+earlier artifacts for funded rollback, and an earlier progress failure prevents
+evaluation of later bounds. Neither case invokes a client or publishes output.
+Output is usable
 after Thing and build-registration destruction; the separately retained complete
 registration supplies execution. All bounded build cleanup finishes before permit.
 Cancellation linearizes at the last check; after permit the successful atomic

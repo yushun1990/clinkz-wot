@@ -801,6 +801,18 @@ this task.
 
 ### Consumer inline-lowering implementation cut
 
+The ordering decision compares a separate paid all-bounds pass with sequential
+source lending. Both can support open compilers; sequential pure lowering is
+selected for this inline cut to avoid retaining another derived source table or
+replaying source for start/progress. Its deliberate diagnostic tradeoff is that
+an earlier coordinate's progress failure wins over an unevaluated later bounds
+failure. Actual later bounds failure still retains earlier artifacts and the
+original funded rollback root. Profile qualification includes every captured
+atomic compile cost and the combined cleanup prepayment before any build
+callback, even with caller credit above the configured limits. This conclusion
+is migrated to ADR-0021 and the registered Planning/Binding/runtime owners;
+historical accepted revisions do not accept the replacement automatically.
+
 The implementation chooses the existing Consumer transaction as the first open
 lowering cut. Remove the exact compiler downcast/private-adapter eligibility;
 attach qualified inline callback costs and actual generic layouts to the paired

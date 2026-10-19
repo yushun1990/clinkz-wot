@@ -12,7 +12,8 @@ The fixed two-coordinate witness runs real validation and both paid semantic
 passes, materializes Core logical plans, finishes all real bounds before starts,
 and uses the concrete outputs after actual source/registration destruction.
 The original non-first Form indices and empty property events are literal test
-expectations. A later actual 65-byte target bound rejects with zero starts.
+expectations. The original admission evidence also rejected a later 65-byte
+target bound with zero starts; that bounds-first oracle is historical.
 Synthetic bound values exercise zero/foreign/over-step/overflow eligibility;
 they are not attributed to the production closed compiler.
 
@@ -74,8 +75,8 @@ the production paid TD getter, owned plan scalar and restricted closed compiler.
 It covers default Forms, explicit method/header/unknown extensions, response
 overrides and present-empty metadata, preserving typed round trips, Ready replay,
 rewind and unknown-versus-empty semantics. `tests/aggregate.rs` exercises the
-actual Planning propagation and later-coordinate rejection before any compiler
-starts, funded rollback/retry and allocation failures for static/public Host
+actual Planning propagation and later-coordinate bounds rejection after earlier
+pure compilation, funded rollback/retry and allocation failures for static/public Host
 complete registrations. Run in the same three feature cells above. These shared
 tests supply no HTTP I/O, SDK qualification or independent completion acceptance.
 
@@ -84,3 +85,15 @@ not the current production aggregate. Its later-bounds/zero-start test is retire
 the current shared-source tests and downstream native compiler/runtime probe
 exercise sequential compilation, original-owner rollback and zero client effects.
 Fixed slot/guard tests remain useful within their original narrower scope.
+
+`tests/open_compiler.rs` is a separate downstream public Planning suite with an
+external compiler, 128-byte alignment and native cursor/artifact storage above
+64 bytes. It rejects excessive captured callback and combined cleanup costs
+before compiler work, and completes at exactly the selected profile caps.
+Actual later bounds failure, competing earlier progress/later bounds errors,
+invalid artifacts and unpaid progress retain the original output/cursor owners.
+It proves no client invocation, source destruction before cleanup, unpaid cleanup
+retention, exactly-once abort/destruction, slot occupancy until terminal rollback
+and retry under the same original account. It runs in all three cells above;
+installed execution is separately covered by the runtime runner's open compiler
+suite. Neither suite establishes arbitrary callback honesty or real-wire behavior.

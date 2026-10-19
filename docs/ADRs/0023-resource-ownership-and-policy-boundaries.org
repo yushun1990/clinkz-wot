@@ -227,7 +227,7 @@ not admitted by this ADR and need not wait for broad package completion.
 |--------------------+--------------------------------|
 | Foundation: =API-RESOURCE-001=, =RES-LIMIT-001..003=, =ADMIT-MEM-001= | Define engine policy scope and separate binding/deployment declarations. Classify affected byte rows/applicability; version every semantic reinterpretation and its diagnostics/configuration identity. Preserve linear work and controlled construction. |
 | Binding: =BIND-REG-001=, =BIND-MEM-001=, =BIND-STORAGE-001=, =BIND-DELIVERY-001=, =BIND-IO-001=, =BIND-CALL-CANCEL-001=, =BIND-HOST-CANCEL-001= | Separate carrier/handoff capacity from protocol-private storage; retain complete ownership, normal/late seals, bounded ingress, accepted-input recovery and actual retirement. Precisely scope Host disposal allocation. |
-| Planning/Runtime: =PLAN-BOUND-001=, =PLAN-ARTIFACT-001=, =ADMIT-TXN-001=, =HANDLE-DROP-001=, =HOST-ASYNC-001=; architecture 30/40/50 | Retain paid owned artifacts/all-bounds/publication and original accounts. Resolve startup scratch, complete-call/transfer/cancel accounting and final-root disposal without losing cleanup funding or attributing released protocol state to a surviving owner. |
+| Planning/Runtime: =PLAN-BOUND-001=, =PLAN-ARTIFACT-001=, =ADMIT-TXN-001=, =HANDLE-DROP-001=, =HOST-ASYNC-001=; architecture 30/40/50 | Retain paid owned artifacts, sequential pure lowering/funded rollback under ADR-0021's ordering amendment, whole-transaction publication and original accounts. Resolve startup scratch, complete-call/transfer/cancel accounting and final-root disposal without losing cleanup funding or attributing released protocol state to a surviving owner. |
 | Resource/API/state/performance projections and WP-100/200/300/400 | Give affected rows/APIs/traces/workloads an unchanged, reinterpreted, superseded or new-evidence disposition. Do not change frozen metadata under the old schema identity or silently delete a failing assertion. Existing tranches remain original-scope evidence; successor changed source needs exact readmission. |
 | ADR-0006/0011/0015/0022 | Preserve linear work, complete cleanup transfer and allocation-free engine fallback. Migrate the transitive SDK footprint/disposal interpretation explicitly; retain the superseded rationale. |
 | WP-600 / HTTP target | Consume the migrated shared boundary. Choose/qualify the SDK during implementation with real peers, input/overload/cancellation/disposal tests and honest physical measurements; no advance SDK fork/qualification package. |
@@ -248,7 +248,8 @@ Keep gate/tranche/evidence states and production code unchanged in this decision
 Nothing here falsifies the completed controlled implementations.
 
 - Reaffirm unchanged: TD Basic/semantic lending, source-free Planning and
-  all-bounds barrier; Core backing/seals and constructor recovery; generation,
+  complete materialization and sequential pure lowering/funded rollback under
+  ADR-0021's ordering amendment; Core backing/seals and constructor recovery; generation,
   permit, first-cause, late-result and complete transfer semantics; real local/
   parent retention and finite controlled mock/static disposal.
 - Reinterpret only after migration: footprint maxima, original-account physical

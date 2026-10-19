@@ -40,6 +40,14 @@ the affected Core/Planning/Servient tests, HTTP regressions and design checks.
 Fresh independent review of the replacement diff is required; no gate/milestone
 status changes or new acceptance claim are made by this amendment.
 
+The public Planning regression suite
+`consumer-aggregate-admission/tests/open_compiler.rs` supplies separate static/
+Host evidence for selected-profile callback/combined-cleanup cost rejection and
+exact caps, larger over-aligned native storage, actual later bounds failure,
+coordinate-first competing errors, rejected-output retention and original funded
+slot/account retry. Its inert execution halves cannot substitute for the runtime
+suite or real HTTP evidence.
+
 ## Scope and decision
 
 `WP-200-CONSUMER-COMPILER-SUPPORT` admits the narrow compiler precursor needed

@@ -889,6 +889,9 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
 /// work. Bounds/start/abort/destruction have the declared fixed upper bounds.
 /// No callback allocates indirect backing or acquires a live native resource.
 /// These are linked-code conformance obligations, not mechanically proven costs.
+/// Planning also qualifies the captured compile and combined cleanup costs
+/// against its selected profile before entering aggregate callbacks; larger
+/// caller credit cannot override that profile.
 #[derive(Clone, Copy, Debug)]
 pub struct ConsumerCompilerContract {
     configuration: BindingConfigurationDigest,

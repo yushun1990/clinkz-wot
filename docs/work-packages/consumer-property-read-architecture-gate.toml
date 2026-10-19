@@ -20,10 +20,16 @@ evidence = [
     "servient/tests/consumer_property_read/mod.rs",
     "servient/tests/consumer_property_read/host.rs",
     "tools/architecture-fixtures/consumer-aggregate-admission/tests/aggregate.rs",
+    "tools/architecture-fixtures/consumer-aggregate-admission/tests/open_compiler.rs",
     "tools/architecture-fixtures/consumer-aggregate-admission/tests/composition.rs",
     "docs/evidence/WP-400-consumer-property-read-runtime.toml",
 ]
 evidence_cases = [
+    "oversized_atomic_compiler_costs_reject_before_callbacks_in_both_representations",
+    "exact_atomic_compiler_costs_complete_at_the_selected_caps",
+    "external_later_bounds_first_cause_and_rejected_outputs_keep_funded_rollback",
+    "actual_last_bound_failure_is_sequential_and_occupied_slot_rejects_before_start",
+    "public_aggregate_keeps_one_td_lifetime_across_all_passes",
     "external_native_lowering_executes_after_source_destruction_in_static_runtime",
     "external_native_lowering_executes_after_source_destruction_in_host_runtime",
     "later_native_rejection_rolls_back_earlier_artifacts_without_invocation",

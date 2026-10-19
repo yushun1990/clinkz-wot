@@ -1269,6 +1269,25 @@ pub fn build_consumer_property_read_aggregate<
         return Err(CoreError::UnsupportedOperation(context()));
     }
     let support = registration.support();
+    // A caller's larger budget cannot override the selected profile. Qualify
+    // every indivisible callback and the combined prepaid cleanup debit before
+    // lending source or acquiring any compiler state. Startup compatibility is
+    // captured already; the build never re-enters that callback.
+    for work in [
+        support.compatibility_work(),
+        support.bounds_work(),
+        support.start_work(),
+        support.progress_work(),
+    ] {
+        config.check(K::PlanCompileWorkUnitsPerStepMax, work)?;
+    }
+    config.check(
+        K::CleanupWorkItemsPerStepMax,
+        support.allocation_work()
+            + support.abort_work()
+            + support.destruction_work()
+            + support.release_work(),
+    )?;
     config.check(
         K::BindingArtifactBytesPerItemMax,
         support.artifact_layout().size() as u64,

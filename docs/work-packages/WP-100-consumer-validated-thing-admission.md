@@ -551,7 +551,7 @@ plus concrete no-source-pointer/callback evidence; that bound alone is insuffici
 
 Servient captures policy/registration identities, pairs allowances and drives:
 inspect -> complete Basic -> paid preflight -> runtime/record/slot reservation
--> complete materialization -> all bounds -> sequential compile/reconcile/freeze
+-> complete materialization -> sequential pure bounds/start/progress/reconcile/freeze
 -> end all input/derived/config/compiler loans -> finish build scratch cleanup
 -> reconcile actual owners -> final identity/generation/resource/cancellation/slot
 checks -> private permit -> atomic install. Preflight is associated privately
@@ -561,8 +561,10 @@ be reused for another input. A new input or captured identity starts a new build
 Every property receives a deterministic lookup row, including empty ranges;
 original Form indices survive. No ID synthesis, credential/provider commit,
 protocol I/O, handler/task, lazy slot or external-operation lease occurs while
-building. All materialization and all bounds precede every compiler start;
-later-coordinate failures reject the whole aggregate. A complete registration
+building. All materialization precedes every compiler start. Sequential pure
+lowering follows coordinate-first failure precedence under
+[Planning](../spec/planning.md#aggregate-construction); later bounds failures
+retain earlier artifacts for funded whole-aggregate rollback. A complete registration
 is retained separately and joined only by checked identity/generation.
 Published has zero TD/source/document-retention charge attributable to this
 borrowed build and contains only owned runtime material and its lifecycle accounts.
@@ -911,13 +913,16 @@ neither admission nor the non-production witnesses establish production completi
    every cancellation/drop position and child-before-parent release. Prove
    typed-content/string/extension/depth/count/Number/work thresholds and zero
    invented source charge. A real upstream source must retain its original charge.
-5. **External semantic join.** An external Planning witness accepts only the
+5. **External semantic join.** The original external Planning witness accepts only the
    trusted cursor, traverses non-first original coordinates and owns actual Core
    plans and concrete artifacts from a complete registration. It exercises
    paid operations/security/relative URI, complete output/empty lookup, later
    materialization/bounds failure with zero starts, actual input/registration
    destruction, and bounded fixture rollback. Its fixed catalog is not a claim
-   of production variable-output cleanup or Servient race acceptance.
+   of production variable-output cleanup or Servient race acceptance. Its
+   bounds-first/zero-start ordering is historical feasibility evidence. The
+   current aggregate instead follows ADR-0021's sequential ordering amendment
+   and requires its separate later-bounds rollback/precedence evidence.
 6. **Disjoint evidence and impact.** Reaffirm Foundation #69 and Context #70,
    general ledger/work primitives, the unchanged row/value schema, completed
    exact WP-100 call/response, WP-200 leaf, WP-300 execution and Producer gate.
@@ -941,7 +946,8 @@ all source inspection/query/cancel/drop/grow causes and zero controlled bytes
 on terminal cleanup. This evidence claims only the TD tranche.
 
 WP-200 must separately prove the complete aggregate, concrete source-free
-artifact/callback and compiler-Pending ownership, all-bounds-before-start,
+artifact/callback and compiler-Pending ownership, sequential pure lowering and
+coordinate-first diagnostics under ADR-0021's ordering amendment,
 pre-admitted/actual final/cursor/temporary/work costs, exactly-once abort,
 variable rollback/reclaim and exact PlanFootprint. WP-400 must prove simultaneous
 local/global accounting including upstream sources, real slot/generation and

@@ -71,7 +71,7 @@ Accepted predecessor owners, all `complete/current` with `passed` evidence:
 | --- | --- |
 | `WP-100-CONSUMER-VALIDATED-THING` | `WP-100-consumer-borrowed-td-admission.toml`: complete inspection/Basic and paid semantic lending from caller-owned typed input |
 | `WP-200-CONSUMER-COMPILER-SUPPORT` | `WP-200-consumer-compiler-support.toml`: closed compiler support and bounded compiler storage/work |
-| `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` | `WP-200-consumer-property-read-aggregate.toml`: paid whole-readable census, all-bounds barrier, complete source-free output, original manual root/reclaimer |
+| `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` | `WP-200-consumer-property-read-aggregate.toml`: accepted original paid whole-readable census/bounds-first contract, complete source-free output and original manual root/reclaimer. ADR-0021's sequential inline amendment needs renewed exact-revision evidence; old acceptance does not cover its changed ordering. |
 | `WP-300-CONSUMER-PROPERTY-READ-BINDING` | `WP-300-consumer-property-read-binding-execution.toml`: name-free selected requests and installed normal/late-result sealing |
 | `WP-300-CONSUMER-ONLY-REGISTRATION` | `WP-300-consumer-only-registration.toml`: real complete client-only owners, without a dummy server |
 | `WP-200-CONSUMER-OUTPUT-OWNERSHIP` | `WP-200-consumer-output-ownership.toml`: unique structurally Send output/rollback transfer, preserving the physical root and original account; [independent review](https://github.com/yushun1990/clinkz-wot/pull/159#issuecomment-6138896086) |
@@ -194,8 +194,10 @@ Publication order is fixed:
 2. Complete TD inspection/Basic and paid Planning preflight. A missing Thing ID
    fails here before runtime reservation. Reserve the real parent/global output,
    runtime-record, call/cleanup and terminal-discard envelopes, then call
-   `admit_runtime`; materialize all rows/coordinates and finish all bounds before
-   the first compiler start.
+   `admit_runtime`; materialize all rows/coordinates before sequential pure
+   bounds/start/progress under the current Planning contract. Later bounds failure
+   may retain earlier artifacts for funded rollback; earlier progress failure
+   prevents evaluation of later bounds. Neither invokes clients or publishes output.
 3. Consume input-bearing completion, finish bounded scratch cleanup and end all
    source/compiler/configuration loans. Reconcile physical owners and accounts.
    Retained upstream engine source stays charged while physically live.

@@ -878,7 +878,7 @@ fn restricted_forms<
         assert!(counts.failed);
         assert_eq!(
             (counts.bounds, counts.starts, counts.steps, counts.aborts),
-            (3, 0, 0, 0)
+            (3, 2, 4, 0)
         );
 
         let held = Box::new([9u8; 17]);
@@ -915,6 +915,25 @@ fn restricted_forms<
         assert!(cause.context().plan().is_some());
         assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
         drop(bad);
+        let original_reservation = root.reservation();
+        assert!(owner.observations().unwrap().0 > 0);
+        assert!(matches!(
+            build_consumer_property_read_aggregate(
+                proof(&clean),
+                &r,
+                &cfg,
+                PlanSetGeneration::INITIAL,
+                ledger(0),
+                &mut root,
+            ),
+            Err(CoreError::Backpressure(_))
+        ));
+        let owner = match owner.step(&mut budget(0)) {
+            ConsumerPropertyReadRollbackStep::Pending(owner) => owner,
+            _ => panic!("unpaid rollback released output"),
+        };
+        assert_eq!(root.reservation(), original_reservation);
+        assert!(owner.observations().unwrap().0 > 0);
         reclaim(owner);
         assert!(root.take().is_none());
         assert_eq!(trace().live, 0);
@@ -1187,7 +1206,7 @@ fn host_empty_aggregate_and_output_capacity_boundaries_are_exact() {
 }
 
 #[test]
-fn public_aggregate_keeps_one_td_lifetime_across_both_passes() {
+fn public_aggregate_keeps_one_td_lifetime_across_all_passes() {
     let source = source();
     let cfg = config();
     let c = ResolvedTargetCompiler::try_new(64).unwrap();
@@ -1261,7 +1280,7 @@ fn public_aggregate_keeps_one_td_lifetime_across_both_passes() {
     let (complete, preflight, cause) = run(high - 1);
     assert!(
         !complete && preflight,
-        "exhaustion must occur in the second pass: exact={high}, complete={complete}, preflight={preflight}, cause={cause:?}"
+        "exhaustion must occur after preflight: exact={high}, complete={complete}, preflight={preflight}, cause={cause:?}"
     );
     assert!(matches!(
         cause,
@@ -1275,7 +1294,7 @@ fn public_aggregate_keeps_one_td_lifetime_across_both_passes() {
     let bytes = account.used();
     drop(root);
     assert!(account.release_committed(bytes));
-    println!("two_pass_td_lifetime_exact={high}; one_short_fails_after_preflight=true");
+    println!("three_pass_td_lifetime_exact={high}; one_short_fails_after_preflight=true");
 }
 
 type Terminal<A> =
@@ -1407,7 +1426,7 @@ fn host_cancel_and_abandon_every_public_poll_boundary() {
 }
 
 #[test]
-fn actual_last_bound_failure_and_occupied_slot_reject_without_start() {
+fn actual_last_bound_failure_is_sequential_and_occupied_slot_rejects_before_start() {
     let mut source = source();
     source
         .properties
@@ -1429,7 +1448,10 @@ fn actual_last_bound_failure_and_occupied_slot_reject_without_start() {
         false,
     );
     assert!(counts.failed);
-    assert_eq!((counts.bounds, counts.starts), (3, 0));
+    assert_eq!(
+        (counts.bounds, counts.starts, counts.steps, counts.aborts),
+        (3, 2, 4, 0)
+    );
     #[cfg(feature = "std")]
     {
         let c = ResolvedTargetCompiler::try_new(64).unwrap();
@@ -1440,7 +1462,10 @@ fn actual_last_bound_failure_and_occupied_slot_reject_without_start() {
             None,
             false,
         );
-        assert_eq!((counts.bounds, counts.starts), (3, 0));
+        assert_eq!(
+            (counts.bounds, counts.starts, counts.steps, counts.aborts),
+            (3, 2, 4, 0)
+        );
     }
     let source = self::source();
     let cfg = config();

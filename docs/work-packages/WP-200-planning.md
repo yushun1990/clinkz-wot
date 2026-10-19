@@ -323,7 +323,7 @@ Permitted production paths are exactly:
 
 `planning/src/property_read.rs` may extract one crate-private coordinate-
 preparation kernel solely to preserve the completed exact-coordinate behavior
-while allowing all bounds to be collected before any compiler starts. Public
+while keeping complete materialization before sequential pure lowering. Public
 `PropertyReadPlanCompiler::consumer_call` semantics and the existing completion
 evidence remain regression requirements, not superseded authority.
 
@@ -333,11 +333,12 @@ readable Form, requires one TD-resolved NoSec result for every retained
 coordinate, and uses only registration ordinal/candidate order zero. A Basic-
 valid semantic value without an ID fails preflight. After Servient reports that
 the preflight reservation is held, Planning materializes every coordinate,
-calls each pure `bounds` exactly once, rejects non-`BindingPolls`, zero, over-
-step, and checked-product overflow, and completes the all-bounds barrier before
-the first `start`. Materialization or bounds failure returns the still-
-uncommitted reservation disposition and proves zero starts; no subset may be
-sealed.
+then calls pure `bounds`/`start`/progress per coordinate. It rejects non-
+`BindingPolls`, zero, over-step and checked-product overflow. Captured callback
+and cleanup costs must fit the selected profile before source/compiler work.
+Materialization failure proves zero compiler starts; a later bounds failure
+retains earlier artifacts under funded whole-transaction rollback. An earlier
+progress failure prevents later bounds evaluation. No subset may be sealed.
 
 The tranche derives its complete bound only from existing document/Form,
 compiled-runtime, artifact, temporary, per-step, and reclaim limits. It adds no
@@ -348,8 +349,9 @@ The completion evidence key is
 `consumer-property-read-aggregate`, at
 `docs/evidence/WP-200-consumer-property-read-aggregate.toml`. Evidence must
 cover deterministic multi-property/multi-Form ordering, empty-vs-missing
-lookup, all-coordinate NoSec admission, every materialization/bounds negative
-with zero compiler starts and complete rollback, non-resettable compiler and
+lookup, all-coordinate NoSec admission, materialization negatives with zero
+compiler starts, later bounds failure and competing-error precedence with
+complete rollback and no client invocation/publication, non-resettable compiler and
 Planning work, exact-coordinate regression, draft independence from TD and
 compiler inputs, an external consuming-completion proof that ends all input/scratch loans and
 uses concrete output after Thing and compiler-registration destruction; supported

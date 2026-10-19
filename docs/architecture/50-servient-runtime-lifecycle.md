@@ -114,7 +114,10 @@ and releases the plan set only after every lease and cleanup owner is terminal.
 The first Consumer Property Read transaction retains a caller-owned immutable
 Thing loan through complete TD inspection/Basic and paid semantic lending. Planning
 preflight precedes Servient runtime reservation, which precedes complete owned
-materialization and all bounds before any compiler start. The terminal build owner
+materialization and sequential pure bounds/start/progress per coordinate.
+The [Planning contract](../spec/planning.md#aggregate-construction) fixes
+coordinate-first failure precedence and funded whole-output rollback; compiler
+starts are not client invocation or publication. The terminal build owner
 ends input/derived/config/compiler loans structurally before returning its complete
 source-independent Frozen draft. The exact TD boundary is owned by the
 [admission record](../work-packages/WP-100-consumer-validated-thing-admission.md).
