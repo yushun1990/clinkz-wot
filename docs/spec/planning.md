@@ -1851,11 +1851,13 @@ to the frozen output. Servient must not prepare a route from an unchecked
 successful leaf. No application promise, binding TD inspection or fixture-built
 plan may supply this missing barrier.
 
-The minimal positive envelope is one advertised Property Read route with exact
-handler coverage, a literal resolved target, default JSON media, exactly one
-effective NoSec definition, and no additional Form metadata, scopes or
-URI-variable requirements. An explicit `readproperty` Form or TD-defaulted
-read-only property can qualify. The entire draft must advertise no other
+The minimal positive envelope is a Basic-valid draft with a present TD `id`
+and one advertised Property Read route with exact handler coverage, a literal
+resolved target, default JSON media, exactly one effective NoSec definition, and
+no additional Form metadata, scopes or URI-variable requirements. Basic validity
+does not require `id`; both Host and static entries continue to reject a draft
+without it. An explicit `readproperty` Form or TD-defaulted read-only property
+can qualify. The entire draft must advertise no other
 operation or route: extra Forms, readable properties, writes, actions, events
 and Thing-root operations cannot be silently ignored. Reject unsupported or
 unclassified declarations rather than implement multiple routes, authorization,
