@@ -1912,6 +1912,11 @@ from its instance. Reused call/route slots retain appropriate stale-use checks.
 Use eager compilation first; lazy/negative caching is an optional optimization,
 not an admission prerequisite for protocol independence.
 
+Local instance/slot identity does not require a source TD `id`; keep the optional
+source identity for its semantic/provenance use. Support affordance keys admitted
+by the TD kernel without inheriting the current logical-plan constructor's
+nonempty-name restriction. Neither prerequisite is an ownership invariant.
+
 The rewrite intersects TD semantic lending, Core compilation/storage, Planning,
 and both Servient roots. The source contracts, evidence obligations and affected
 requirements must be migrated explicitly before implementation. #204's Producer

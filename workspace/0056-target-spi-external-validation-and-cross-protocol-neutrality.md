@@ -599,6 +599,14 @@ session to serve many Things. It mandates no universal program, bytecode,
 serialization format, content hash, cache, persistence or deduplication service.
 Existing numeric digests are not certificates of source behavior or authority.
 
+Issue local instance/slot identity independently of the optional source TD `id`.
+Retain that source identity when present for its actual semantic/provenance use;
+do not require it merely to construct an ownership record. Treat affordance names
+as source keys, including empty keys accepted by the TD semantic kernel, rather
+than imposing `LogicalInteractionPlan`'s nonempty-name constructor restriction.
+Any narrower product policy needs its own reason. These old prerequisites are
+implementation restrictions to remove in the rewrite, not safety invariants.
+
 **Open admission with real bounds.** Delete exact-type/private-adapter eligibility
 and the source-known `ConsumerCompilerSupport` descriptor as installation
 requirements. Derive physical slot Layouts, alignment and wrapper/erasure overhead
