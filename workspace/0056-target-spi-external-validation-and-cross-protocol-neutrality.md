@@ -975,6 +975,52 @@ whole document. A proven isolated unsupported Form extension can make only
 that candidate unavailable. The probe expands the entire document and does
 not demonstrate recovery from an unavailable Form-local context.
 
+### Annotation roles and composability
+
+The empty-profile refusal policy has a concrete availability defect: adding
+the review's Thing-level `@type: "https://schema.org/TemperatureSensor"` to a
+healthy HTTP description makes its lowerer reject. This is not a satisfactory
+general default for an extensible WoT product. [TD semantic annotations](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#semantic-annotations)
+include domain metadata, and the [SAREF TemperatureSensor class](https://saref.etsi.org/core/TemperatureSensor)
+supplies a real domain-class example. Neither the existence of a class IRI nor
+its prefix proves a role in native execution.
+
+| Interpretation policy | Disposition |
+| --- | --- |
+| Reject every unknown at every scope | Reproduced by the empty-profile test. Preserves conservative refusal but prevents unrelated domain annotations from composing with both mappings. Insufficient as an unqualified product recommendation. |
+| Ignore all unknowns, a whole namespace, or everything on a parent scope | Reject. A parent `requireConfirmation` instruction can affect every child interaction. Namespace membership or scope alone does not establish inertness. |
+| Treat every Thing/affordance `@type` as descriptive by contract | Credible simpler alternative if the product forbids native/security semantics from depending on those classes. That restriction must be explicit; it cannot be inferred from arbitrary future vocabulary. |
+| Explicit scoped vocabulary-role profile | Selected for the narrow experiment. Trusted declarations classify exact type IRIs at Thing/affordance scope as non-operational metadata. Unclassified values remain available to interpreters and unsupported instructions remain refused. No protocol-specific Engine branch or per-Binding annotation list is required. |
+| Separate dialect/interpreter capability manifests | Credible way to supply/check such declarations without every application author maintaining lists. Conflict, completeness, trust and resource costs remain unverified; no manifest framework is implemented here. |
+
+`AnnotationProfile` is an experimental application-supplied declaration, not
+semantic inference or a conformance certificate. It accepts exact scope/type
+pairs, never wildcards. Declared types remain in the public
+`Interaction.annotations` facts after classification, and the full schema still
+retains its classes. A property's standard data type and additional semantic
+class are separated using their actual context-resolved origins, so a numeric
+schema can also carry a domain annotation. The native lowerers are unchanged.
+
+The side-by-side tests use both the review's example IRI and SAREF at Thing
+and typed-property scope, including a class alias with its own scoped context.
+Both lowerers produce
+the same programs as the unannotated inputs when that interpretation profile
+is explicitly supplied. A fixture-defined mandatory `requireConfirmation`
+instruction remains unsupported at Thing, affordance and Form scope. The same
+domain type on a Form, an undeclared type in the same namespace, and a type
+declared only for another scope are not exempted. This experiment cannot
+classify Form/response/security statements or arbitrary annotation properties.
+
+**Owner trade-off, still requiring independent review:** accept a trusted scoped
+role profile and conservative refusal of unclassified parent metadata, or
+establish a broader contract declaring parent domain classes non-operational
+and restrict what mappings may depend on them. The first has configuration and
+availability costs; the second can exclude native dialects that use those
+classes. An erroneous declaration that an operational class is inert can
+invalidate execution. No generic resolver can certify that declaration from
+identity alone. Any compiled-data reuse must include the actual interpretation
+profile/rules in its dependencies, not just a human-readable profile name.
+
 ### Applicability and final choice
 
 **Selection ownership (question 5).** The Engine determines that a Form can
@@ -991,6 +1037,13 @@ failure does not masquerade as permission to choose another protocol.
 Compilation can supply the support verdict; a mandatory separate `supports`
 pass risks duplicate parsing and disagreement.
 
+Before invoking any lowerer, restrict the candidate set by the requested
+affordance identity, operation, explicit Form and explicit Binding. A Form
+index is local to its affordance, not a global selector. The probe now requires
+the property name, with Actions/Events still outside its input profile, and
+records that name in candidate diagnostics. This corrects the earlier
+operation-only selection and post-compilation strict Form filter.
+
 The Engine ranks supported Consumer candidates deterministically using caller
 constraints, policy, Form order and explicit registration priority. Multiple
 Bindings can support the same scheme. Strict Form/Binding selection must fail
@@ -998,6 +1051,13 @@ if unavailable, without choosing an unrequested alternative. One unsupported
 Form must not invalidate another supported Consumer Form. Preserve a bounded
 reason for skipped alternatives. Runtime fallback after effects is a distinct
 operation policy, not a side effect of compilation failure handling.
+
+The negative evidence checks a fatal earlier compiler outside a strict Form
+selection, an excluded Binding, two read properties both with Form index zero,
+and mismatched operation/missing identity. Excluded lowerers are never invoked;
+a fatal failure from an eligible lowerer still propagates. This establishes
+pre-lowering filtering in the property probe, not scoped TD-validation or
+resolution: `resolve()` still processes the full input first.
 
 For Producers, every advertised Form/operation needs a supported owner and
 handler/security/codec coverage before publication. Multiple native owners
@@ -1065,7 +1125,7 @@ HTTP and MQTT lowerers import only that interface and the Python standard
 library. Both were authored in this investigation, so separate readability is
 evidence of interface use, not independent implementation review.
 
-The 18-case suite passes, including deliberate refusal and information-loss
+The 23-case suite passes, including deliberate refusal and information-loss
 cases. It tests prefix/alias/full-IRI/supplied-context equivalence, scoped
 contexts, IRI/literal/list/JSON distinctions, alias collisions, effective
 operations/security, response instructions, unsupported extensions, Consumer
@@ -1084,8 +1144,9 @@ is needed to expose these semantic differences.
 | Authoring observation | Interpretation and remaining cost |
 | --- | --- |
 | HTTP/MQTT modules are 40/49 physical lines, including comments and blanks. | Actual protocol lowering is small in these deliberately narrow examples. Neither duplicates context resolution, WoT defaults, security inheritance or candidate selection. |
-| Shared public model is 137 lines; experimental Engine adapter is 240. | Semantic preparation is nontrivial work transferred to one owner, not eliminated. Occurrence tracing depends on a private PyLD hook and must not become a production dependency by accident. |
+| Shared public model is 144 lines; experimental Engine adapter is 281. | Semantic preparation is nontrivial work transferred to one owner, not eliminated. Occurrence tracing depends on a private PyLD hook and must not become a production dependency by accident. |
 | Authors must enumerate interpreted/known-inert fields and inspect applicable scopes. | This is unavoidable protocol support policy. Generic traversal/consumption helpers can reduce repetition; silently ignoring unknown fields would lower LOC by losing correctness. |
+| One scoped annotation profile composes with both unchanged lowerers. | Removes repeated domain-class lists from protocol authors for those declarations. Application/vocabulary providers now own classification and its trust/configuration cost; arbitrary metadata composability is not established. |
 | No author implements Host/static transport wrappers or Engine ledgers in this probe. | Demonstrates separation for pure lowering only. Generic Rust registration, allocating programs, pending jobs, indirect backing and cleanup remain unproved authoring costs. Do not extrapolate these line counts to a network binding. |
 
 ### Proven limitations and concrete counterexamples
@@ -1141,7 +1202,9 @@ and provider can satisfy them; preservation cannot authorize access.
 **Proven feasibility:** Within the probe's explicit property/JSON/NoSec input
 profile, one resolved public interface carries enough information for HTTP and
 MQTT lowering, including alternate term spellings, scoped resolution, native
-defaults and generic applicability/selection diagnostics. The Engine-side
+defaults and generic applicability/selection diagnostics. Explicitly declared
+domain types compose with both mappings, and requested property/Form/Binding
+constraints exclude unrelated lowerers before compilation. The Engine-side
 resolver and selector contain no HTTP/MQTT vocabulary branches. This establishes
 constructive expressibility for those cases, not general protocol independence.
 
@@ -1157,7 +1220,9 @@ remain small and ergonomic; generic graph/reference access will cover relevant
 future bindings; strict resolution can meet actual embedded limits; generic Rust
 Host/static adapters can hide accounting without obscuring physical ownership;
 definition factoring saves meaningful work. Neither existing ADRs nor passing
-fixtures establish these assumptions.
+fixtures establish these assumptions. Generic classification of unknown
+annotations versus executable instructions is not proven; a trusted scoped
+profile only makes a particular interpretation policy explicit.
 
 **Proposed architectural decisions requiring Owner approval after independent
 review:**
@@ -1184,6 +1249,10 @@ review:**
    Producer coverage with the Engine. Separate unsupported alternatives from
    fatal failures. Keep Host deployment contracts distinct from strict embedded
    qualification, with one semantic contract and optional preparation tooling.
+5. Require a declared annotation-role policy rather than equating every unknown
+   semantic annotation with an executable requirement. The experiment favors
+   exact scoped declarations while preserving the unresolved Owner trade-off
+   described above; it does not approve ignoring unknown Form instructions.
 
 The smallest independently reviewable next step is **one isolated semantic
 contract refinement**, before any production SPI migration: specify the

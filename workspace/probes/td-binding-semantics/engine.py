@@ -6,7 +6,7 @@ candidate Rust implementation or a claim of bounded JSON-LD processing.
 """
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
@@ -14,7 +14,7 @@ from urllib.parse import urljoin, urlsplit
 from pyld import jsonld
 
 from interface import (Atom, Interaction, Member, Node, Occurrence, Ordered,
-                       Reference, Security, Unsupported)
+                       Reference, ScopedAnnotations, Security, Unsupported)
 
 TD_CONTEXT = "https://www.w3.org/2022/wot/td/v1.1"
 TD = "https://www.w3.org/2019/wot/td#"
@@ -28,6 +28,27 @@ FORM_KEYS = {"href", "op", "contentType", "contentCoding", "subprotocol", "secur
 
 class ResolutionError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class AnnotationProfile:
+    """Trusted application declarations: exact scope/type pairs, never inferred.
+
+    This experiment supports domain types at Thing/affordance scope only. It
+    cannot mark Form, response or security instructions inert, or allow an
+    entire namespace. Values remain available in Interaction.annotations.
+    """
+    type_terms: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self):
+        if any(scope not in {"thing", "affordance"} for scope, _ in self.type_terms):
+            raise ResolutionError("annotation profile only classifies Thing/affordance types")
+
+    def split(self, scope, node):
+        metadata = tuple(t for t in node.types if (scope, t) in self.type_terms)
+        remaining = tuple(t for t in node.types if (scope, t) not in self.type_terms)
+        annotations = (ScopedAnnotations(scope, metadata),) if metadata else ()
+        return replace(node, types=remaining), annotations
 
 
 def array(value):
@@ -47,10 +68,12 @@ class Trace(jsonld.JsonLdProcessor):
         super().__init__()
         self.nodes = {}
         self.origins = {}
+        self.type_origins = {}
 
     def _expand_object(self, active_ctx, active_property, expanded_active_property,
-                       element, expanded_parent, options, *args, **kwargs):
-        facts, unresolved = {}, []
+                       element, expanded_parent, options, inside_list=False,
+                       type_key=None, type_scoped_ctx=None):
+        facts, unresolved, type_origins = {}, [], []
         for key, value in element.items():
             if key in {"@context", MARK}:
                 continue
@@ -61,9 +84,15 @@ class Trace(jsonld.JsonLdProcessor):
                 unresolved.append((key, json.dumps(value, sort_keys=True)))
             else:
                 facts.setdefault(iri, []).append(Occurrence(key, shape(value)))
+                if iri == "@type":
+                    type_origins.extend((key, self._expand_iri(type_scoped_ctx, term, vocab=True,
+                                                             base=options.get("base", "")))
+                                        for term in array(value))
         self.origins[id(expanded_parent)] = (facts, tuple(unresolved))
+        self.type_origins[id(expanded_parent)] = type_origins
         result = super()._expand_object(active_ctx, active_property, expanded_active_property,
-                                        element, expanded_parent, options, *args, **kwargs)
+                                        element, expanded_parent, options,
+                                        inside_list, type_key, type_scoped_ctx)
         if MARK in element:
             marker = element[MARK]
             self.nodes[marker] = (expanded_parent, facts, tuple(unresolved))
@@ -101,18 +130,24 @@ class Trace(jsonld.JsonLdProcessor):
         expanded, facts, unresolved = self.nodes[marker]
         exclude = {iri for iri, occurrences in facts.items()
                    if any(o.spelling in core_keys for o in occurrences)}
-        # A core spelling and extension alias for the same property cannot be
-        # silently separated after expansion.
+        # Non-type core/extension collisions cannot be silently separated.
+        # Class values have per-spelling origins from the expansion hook.
         for iri in exclude:
-            if any(o.spelling not in core_keys for o in facts[iri]):
+            if iri != "@type" and any(o.spelling not in core_keys for o in facts[iri]):
                 raise ResolutionError("alias collides with a shared TD field")
         # The official TD context inserts these index-map labels. They are
         # already carried as typed source names, not extension instructions.
         exclude |= {"name", "hasInstanceConfiguration"}
-        return self.node(expanded, facts, unresolved, exclude)
+        node = self.node(expanded, facts, unresolved, exclude)
+        if "@type" in exclude:
+            # A DataSchema's lexical `type` and semantic `@type` both expand
+            # here. Preserve extension classes without reclassifying the schema.
+            node = replace(node, types=tuple(t for spelling, t in self.type_origins[id(expanded)]
+                                            if spelling not in core_keys and t in expanded.get("@type", ())))
+        return node
 
 
-def resolve(source, contexts=None, max_bytes=32768):
+def resolve(source, contexts=None, max_bytes=32768, *, annotation_profile=AnnotationProfile()):
     """Narrow property TD adapter; rejects unimplemented shared fields.
 
     No network loader. Input/output caps do NOT bound PyLD's peak memory/time.
@@ -164,9 +199,11 @@ def resolve(source, contexts=None, max_bytes=32768):
     root = trace.scope("root", ROOT_KEYS)
     # Root @id is source identity, not an extension or execution authority.
     root = Node(root.fields, root.types, None, root.unresolved)
+    root, root_annotations = annotation_profile.split("thing", root)
     interactions = []
     for name, prop in original["properties"].items():
         aff = trace.scope("affordance:" + name, PROPERTY_KEYS)
+        aff, aff_annotations = annotation_profile.split("affordance", aff)
         expanded_prop, facts, unresolved = trace.nodes["affordance:" + name]
         schema = trace.node(expanded_prop, facts, unresolved, {TD + "hasForm", "name"})
         for index, form in enumerate(prop["forms"]):
@@ -198,7 +235,8 @@ def resolve(source, contexts=None, max_bytes=32768):
                     form.get("subprotocol"), tuple(requirements),
                     "form" if "security" in form else "thing", tuple(array(form.get("scopes", []))),
                     trace.scope(f"form:{name}:{index}", FORM_KEYS), root, aff, response,
-                    form.get("response", {}).get("contentType", form.get("contentType", "application/json")), schema))
+                    form.get("response", {}).get("contentType", form.get("contentType", "application/json")),
+                    schema, root_annotations + aff_annotations))
     return tuple(interactions)
 
 
@@ -209,32 +247,35 @@ class Selection:
     program: object
 
 
-def candidates(interactions, operation, bindings):
+def candidates(interactions, affordance, operation, bindings, *, strict_form=None, strict_binding=None):
     """Engine coordinates; Bindings decide native applicability, without effects."""
     supported, diagnostics = [], []
     for i in interactions:
-        if i.operation != operation:
+        if i.name != affordance or i.operation != operation:
+            continue
+        if strict_form is not None and i.form_index != strict_form:
             continue
         for name, lower in bindings:
+            if strict_binding is not None and name != strict_binding:
+                continue
             try:
                 supported.append(Selection(name, i, lower(i)))
             except Unsupported as error:
-                diagnostics.append((i.form_index, name, str(error)))
+                diagnostics.append((i.name, i.form_index, name, str(error)))
     return supported, diagnostics
 
 
-def select(interactions, operation, bindings, strict_form=None):
-    supported, diagnostics = candidates(interactions, operation, bindings)
-    if strict_form is not None:
-        supported = [s for s in supported if s.interaction.form_index == strict_form]
+def select(interactions, affordance, operation, bindings, *, strict_form=None, strict_binding=None):
+    supported, diagnostics = candidates(interactions, affordance, operation, bindings,
+                                        strict_form=strict_form, strict_binding=strict_binding)
     if not supported:
-        raise Unsupported(str(diagnostics))
+        raise Unsupported("no supported candidate for requested constraints: " + str(diagnostics))
     return supported[0], diagnostics
 
 
 def producer_coverage(interactions, bindings):
     """Every advertised coordinate needs exactly one owner in this experiment."""
     for i in interactions:
-        supported, _ = candidates((i,), i.operation, bindings)
+        supported, _ = candidates((i,), i.name, i.operation, bindings)
         if len(supported) != 1:
             raise Unsupported("uncovered or ambiguous Producer coordinate")

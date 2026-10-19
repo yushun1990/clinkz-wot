@@ -103,6 +103,12 @@ class Security:
 
 
 @dataclass(frozen=True)
+class ScopedAnnotations:
+    scope: str
+    types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Interaction:
     name: str
     form_index: int
@@ -121,6 +127,7 @@ class Interaction:
     response_extensions: Node
     response_media: str
     schema: Node
+    annotations: tuple[ScopedAnnotations, ...] = ()
 
 
 def common_support(i, credit):

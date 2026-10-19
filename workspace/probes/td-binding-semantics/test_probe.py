@@ -4,13 +4,14 @@ import unittest
 
 from pyld import jsonld
 
-from engine import (TD_CONTEXT, ResolutionError, candidates, producer_coverage,
+from engine import (TD_CONTEXT, AnnotationProfile, ResolutionError, candidates, producer_coverage,
                     resolve, select)
 import http_lowering as http
 import mqtt_lowering as mqtt
-from interface import Atom, Credit, Exhausted, Node, Ordered, Reference, Unsupported
+from interface import Atom, Credit, Exhausted, Node, Ordered, Reference, ScopedAnnotations, Unsupported
 
 EX = "https://example.test/vocab#"
+SAREF_SENSOR = "https://saref.etsi.org/core/TemperatureSensor"
 BINDINGS = (("http", http.lower), ("mqtt", mqtt.lower))
 
 
@@ -191,14 +192,14 @@ class Probe(unittest.TestCase):
         s = td([{"href": "coap://unsupported.test/p"}, {"href": "https://device.test/p"},
                 {"href": "mqtt://broker.test", "mqv:filter": "sensors/p", "mqv:retain": True}])
         views = resolve(s)
-        supported, diagnostics = candidates(views, "readproperty", BINDINGS)
+        supported, diagnostics = candidates(views, "p", "readproperty", BINDINGS)
         self.assertEqual([(c.interaction.form_index, c.binding) for c in supported], [(1, "http"), (2, "mqtt")])
-        chosen, _ = select(views, "readproperty", BINDINGS)
+        chosen, _ = select(views, "p", "readproperty", BINDINGS)
         self.assertEqual(chosen.binding, "http")
         self.assertTrue(diagnostics)
         with self.assertRaises(Unsupported):
-            select(views, "readproperty", BINDINGS, strict_form=0)
-        self.assertEqual(select(views, "readproperty", BINDINGS, strict_form=2)[0].binding, "mqtt")
+            select(views, "p", "readproperty", BINDINGS, strict_form=0)
+        self.assertEqual(select(views, "p", "readproperty", BINDINGS, strict_form=2)[0].binding, "mqtt")
         with self.assertRaisesRegex(Unsupported, "uncovered"):
             producer_coverage(views, BINDINGS)
         producer_coverage(views[1:], BINDINGS)
@@ -208,7 +209,102 @@ class Probe(unittest.TestCase):
     def test_unknown_first_form_does_not_hide_a_supported_consumer_form(self):
         s = td([{"href": "https://device.test/p", EX + "required": True},
                 {"href": "https://device.test/alternative"}])
-        self.assertEqual(select(resolve(s), "readproperty", BINDINGS)[0].interaction.form_index, 1)
+        self.assertEqual(select(resolve(s), "p", "readproperty", BINDINGS)[0].interaction.form_index, 1)
+
+    def test_strict_form_and_binding_constraints_precede_lowering(self):
+        s = td([{"href": "https://device.test/bad"}, {"href": "https://device.test/good"}])
+        calls = []
+        def unrelated_binding(i):
+            raise MemoryError("unrequested Binding")
+        def lower(i):
+            calls.append((i.name, i.form_index))
+            if i.form_index == 0:
+                raise MemoryError("unrelated earlier Form")
+            return http.lower(i)
+        bindings = (("unrelated", unrelated_binding), ("http", lower))
+        selected, diagnostics = select(resolve(s), "p", "readproperty", bindings,
+                                       strict_form=1, strict_binding="http")
+        self.assertEqual(selected.program.endpoint, "https://device.test/good")
+        self.assertEqual(calls, [("p", 1)])
+        self.assertEqual(diagnostics, [])
+        for constraints in ({"strict_form": 9}, {"strict_binding": "missing"}):
+            with self.assertRaises(Unsupported):
+                select(resolve(s), "p", "readproperty", bindings, **constraints)
+        self.assertEqual(calls, [("p", 1)])
+        with self.assertRaisesRegex(MemoryError, "earlier Form"):
+            select(resolve(s), "p", "readproperty", bindings, strict_form=0, strict_binding="http")
+
+    def test_affordance_and_operation_constraints_precede_lowering(self):
+        s = td()
+        s["properties"]["q"] = {"type": "number", "readOnly": True,
+                                    "forms": [{"href": "https://device.test/q"}]}
+        calls = []
+        def lower(i):
+            calls.append((i.name, i.form_index))
+            if i.name == "p":
+                raise MemoryError("unrelated property")
+            return http.lower(i)
+        views, bindings = resolve(s), (("http", lower),)
+        selected, _ = select(views, "q", "readproperty", bindings, strict_form=0)
+        self.assertEqual((selected.interaction.name, selected.interaction.form_index), ("q", 0))
+        self.assertEqual(selected.program.endpoint, "https://device.test/q")
+        self.assertEqual(calls, [("q", 0)])
+        for name, operation in (("missing", "readproperty"), ("q", "writeproperty")):
+            with self.assertRaises(Unsupported):
+                select(views, name, operation, bindings)
+        self.assertEqual(calls, [("q", 0)])
+        with self.assertRaisesRegex(MemoryError, "unrelated property"):
+            select(views, "p", "readproperty", bindings, strict_form=0)
+
+    def test_declared_domain_annotations_compose_with_both_protocols(self):
+        # Include the review's example IRI and a published SAREF domain class.
+        for iri in ("https://schema.org/TemperatureSensor", SAREF_SENSOR):
+            profile = AnnotationProfile((("thing", iri), ("affordance", iri)))
+            for lower, source_form in ((http.lower, {"href": "https://device.test/p"}),
+                    (mqtt.lower, {"href": "mqtt://broker.test", "mqv:filter": "sensors/p", "mqv:retain": True})):
+                with self.subTest(iri=iri, lower=lower.__module__):
+                    s = td([source_form])
+                    baseline = lower(resolve(s)[0])
+                    # A type-scoped context remaps its own alias for nested
+                    # values; the class identity uses the prior type context.
+                    s["@context"].append({"Sensor": {"@id": iri, "@context": {
+                        "Sensor": EX + "DifferentInsideScope"}}})
+                    s["@type"] = iri
+                    s["properties"]["p"]["@type"] = "Sensor"
+                    with self.assertRaises(Unsupported):
+                        lower(resolve(s)[0])  # Empty-profile counterexample survives.
+                    i = resolve(s, annotation_profile=profile)[0]
+                    self.assertEqual(lower(i), baseline)
+                    self.assertEqual(i.annotations, (ScopedAnnotations("thing", (iri,)),
+                                                     ScopedAnnotations("affordance", (iri,))))
+                    self.assertIn(iri, i.schema.types)
+                    self.assertIn("https://www.w3.org/2019/wot/json-schema#NumberSchema", i.schema.types)
+
+    def test_annotation_profile_cannot_hide_required_unknown_instructions(self):
+        profile = AnnotationProfile((("thing", SAREF_SENSOR), ("affordance", SAREF_SENSOR)))
+        for scope in ("thing", "affordance", "form"):
+            s = td()
+            s["@type"] = SAREF_SENSOR
+            # The fixture defines this as a mandatory native confirmation rule.
+            target = {"thing": s, "affordance": s["properties"]["p"], "form": form(s)}[scope]
+            target[EX + "requireConfirmation"] = "before-success"
+            with self.assertRaisesRegex(Unsupported, "unknown extension"):
+                http.lower(resolve(s, annotation_profile=profile)[0])
+        with self.assertRaisesRegex(ResolutionError, "Thing/affordance"):
+            AnnotationProfile((("form", EX + "requireConfirmation"),))
+        s = td()
+        form(s)["@type"] = SAREF_SENSOR
+        with self.assertRaises(Unsupported):
+            http.lower(resolve(s, annotation_profile=profile)[0])
+
+    def test_annotation_profile_is_exact_and_scope_specific(self):
+        s = td()
+        s["@type"] = SAREF_SENSOR
+        with self.assertRaises(Unsupported):
+            http.lower(resolve(s, annotation_profile=AnnotationProfile((("affordance", SAREF_SENSOR),)))[0])
+        s["@type"] = "https://saref.etsi.org/core/UnknownNativeBehavior"
+        with self.assertRaises(Unsupported):
+            http.lower(resolve(s, annotation_profile=AnnotationProfile((("thing", SAREF_SENSOR),)))[0])
 
     def test_query_exhaustion_and_nonsemantic_failure_do_not_become_fallback(self):
         with self.assertRaises(Exhausted):
@@ -216,7 +312,7 @@ class Probe(unittest.TestCase):
         def broken(_):
             raise MemoryError("construction failure is not Unsupported")
         with self.assertRaises(MemoryError):
-            select(resolve(td()), "readproperty", (("broken", broken),) + BINDINGS)
+            select(resolve(td()), "p", "readproperty", (("broken", broken),) + BINDINGS)
         with self.assertRaisesRegex(ResolutionError, "byte cap"):
             resolve(td(), max_bytes=1)
 

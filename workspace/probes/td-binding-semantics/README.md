@@ -21,8 +21,8 @@ checks belong in the investigation PR.
 
 | File | Responsibility |
 | --- | --- |
-| `interface.py` | Public resolved facts, semantic values, source occurrences, explicit unsupported result and bounded member queries. |
-| `engine.py` | One experimental shared resolver and generic candidate/selection/coverage logic. |
+| `interface.py` | Public resolved facts, semantic values, scoped annotations, source occurrences, explicit unsupported result and bounded member queries. |
+| `engine.py` | One experimental shared resolver, explicit annotation-role profile and generic candidate/selection/coverage logic. |
 | `http_lowering.py` | Independently readable HTTP method/response lowering. Imports only the public interface and the standard library. |
 | `mqtt_lowering.py` | Independently readable MQTT packet/topic/filter lowering, with the same imports and interface. |
 | `test_probe.py` | Positive examples and intentional counterexamples, including one passing test that **proves information loss**. |
@@ -38,7 +38,7 @@ draft; the fixture does not claim that namespace or its QoS default is a W3C
 standard. Broker URIs with topic paths and wildcard reads are deliberately
 outside this author's supported mapping.
 
-The initial 18 tests exercise:
+The 23 tests exercise:
 
 - Prefix, alias, full-IRI and supplied remote-context equivalence at lowering.
 - WoT operation defaults, HTTP per-operation defaults and source cardinality,
@@ -50,11 +50,32 @@ The initial 18 tests exercise:
 - Security override versus inheritance, response mapping, supported Consumer
   alternatives, strict selection, ambiguous/uncovered Producer coordinates,
   query exhaustion and fatal failures that cannot become candidate skips.
+- Declared domain classes on Thing/typed-property scopes compose with both
+  mappings and remain preserved; the empty-profile counterexample, unknown
+  mandatory instructions, wrong scope and same-namespace unknowns remain refused.
+- Property, operation, strict Form and strict Binding constraints are applied
+  before lowering, including two read properties with Form index zero and an
+  excluded fatal compiler. Fatal failures from eligible lowerers still propagate.
 - The explicit `[null,"A"]` / `["A",null]` counterexample: the tested expanded
   projection plus occurrence shape loses the distinction. Ordinary JSON-LD
   arrays are unordered, so this disproves arbitrary source preservation, not
   semantic equivalence for that data model. A declared JSON literal keeps
   positional syntax. A passing suite is not a universal sufficiency result.
+
+`resolve(..., annotation_profile=AnnotationProfile(...))` accepts trusted exact
+scope/type declarations for Thing/affordance domain annotations. It retains
+them in `Interaction.annotations`; it cannot exempt Form/response/security
+instructions, arbitrary properties or a whole namespace. There is no automatic
+inertness inference. The tests use the review's example IRI and the published
+SAREF TemperatureSensor class, with aliased names and numeric property schemas.
+The investigation compares alternative policies and records the remaining
+Owner trade-off. Neither Binding imports or maintains that policy.
+
+`select(interactions, property_name, operation, bindings, *, strict_form=None,
+strict_binding=None)` filters all those coordinates before calling any lowerer.
+The required property name disambiguates Form indices. Producer coverage still
+checks every advertised coordinate. Full-input resolution precedes selection;
+these tests do not establish isolation from unrelated TD validation/context errors.
 
 `Trace` instruments PyLD 3.1.0's private expansion hook to collect occurrences
 under the actual active context. Bindings never see that hook or a context.
