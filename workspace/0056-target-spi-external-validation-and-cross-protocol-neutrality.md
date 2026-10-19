@@ -8,6 +8,12 @@ Priority: HIGH
 
 Target: conditional protocol independence for already supported WoT semantic capabilities and the evidence boundary of the public Binding/Servient SPI
 
+The [semantic-boundary investigation](#semantic-boundary-investigation) below
+challenges the replacement proposal's unresolved input assumption with standards
+and disposable HTTP/MQTT lowering evidence. It is the current recommendation
+for that question, pending independent architectural review and Owner approval.
+It adopts no replacement SPI or architecture gate.
+
 The original investigation, decision and migration below record the pre-probe
 feedback-order decision. That migrated history is preserved. The
 [reassessment](#reassessment-conditional-protocol-independence) reopens the assurance
@@ -573,8 +579,8 @@ effects and publication. A separate whole-draft preflight may optimize failure
 cost, but is not a required architecture layer.
 
 **Artifacts and execution entries.** Remove the requirement to materialize and
-retain a `LogicalInteractionPlan` for every candidate. Compile directly from the
-resolved view into an immutable entry containing only engine-used semantic
+retain a `LogicalInteractionPlan` for every effective Form/operation. Compile
+directly from the resolved view into an immutable entry containing only engine-used semantic
 selection/validation/dispatch data and the Binding's opaque artifact. Share
 neutral data where useful. Native parsed targets, wire instructions and response
 mapping belong in the artifact; they need not be reparsed at every invocation.
@@ -798,3 +804,398 @@ one endpoint owner covers every failure/recovery case, and any retained public
 concept is necessary. Findings and exact executed checks belong directly in
 PR #206. Production implementation, authority activation and merge remain outside
 this task.
+
+## Semantic-boundary investigation
+
+Status: DISCUSSING; recommendation for independent review and final Owner
+approval, not an accepted replacement contract.
+
+### Answer and claim boundary
+
+**A useful protocol-neutral semantic boundary is feasible and worth pursuing,
+but neither today's logical plan nor a universally sufficient expanded graph
+is that boundary.** The defensible design is an Engine-owned semantic service:
+resolved WoT facts plus structured, context-resolved extension values and
+explicit loss/feature diagnostics, accessed through bounded queries. Bindings own
+the meaning of their protocol vocabulary. This selects responsibilities and
+information obligations, not a universal Rust type, graph store or VM.
+
+The executable evidence proves useful common-interface lowering for two
+contrasting mappings. It also falsifies the stronger hypothesis that expanded
+values plus shallow source-presence metadata preserve every future extension's
+inputs. **The tested interface is not ready to replace production contracts.**
+Prefer an explicit input profile first: extensions express ordering through
+semantic lists and opaque JSON payload structure through JSON literals;
+unsupported constructs are reported before execution. Ordinary JSON-LD arrays
+are unordered, so the counterexample is not a semantic failure for such
+vocabularies. A complete source overlay is a broader alternative whose need,
+sufficiency and cost remain unverified. This restricts representational
+features, not protocol names or approved compiler implementations.
+
+There is no information-theoretic obstacle to preserving a finite input tree
+and its resolved identities. There is a fundamental obstacle to deriving the
+operational meaning of an arbitrary new vocabulary from its IRIs alone. A
+generic resolver can carry `vendor:confirmMode`; only its interpreter can know
+whether it changes framing, completion, authorization, or something the Engine
+cannot implement. A new mapping of an existing WoT operation need not change
+the Engine; a new WoT operation or authorization/lifecycle guarantee may.
+
+### Reconstructed baseline and prior evidence
+
+Inspected source baseline: fetched master
+`d904987caca33e8970e810116d06294c1aa435ce`. The links below identify the
+relevant implementation, not evidence that its architecture is optimal.
+
+| Area | Observed implementation and consequence |
+| --- | --- |
+| TD representation | [Thing](../td/src/thing.rs), [Form](../td/src/components/form.rs), [Context](../td/src/components/context.rs) and response/schema/security models retain many unknown values as extension maps. Context entries retain JSON objects/URIs; they do not resolve extension identities. Form deserialization already collapses omitted and explicit default `contentType`. “Lossless” must name which distinctions matter, rather than promise original syntax. |
+| Validation/defaults | [Validation](../td/src/validate.rs) checks typed TD semantics at project-defined levels. Profile/Full context checks recognize official context placement; they are not JSON-LD expansion. [Default helpers](../td/src/td_defaults.rs) centralize effective operations, security inheritance and additional-response media. [Validated lending](../td/src/validated.rs) budgets inspection/resolution but exposes extension presence rather than a resolved extension tree. Project validation levels must not be mistaken for a completed standards-wide semantic resolver. |
+| Earlier extension rejection | [SecurityScheme deserialization](../td/src/components/security_scheme.rs) accepts a fixed scheme discriminator set and rejects other names. A future `scheme: "ex:Ticket"` cannot reach any downstream semantic view through that model. Preservation must start at ingestion; an extensible view after a closed parser is insufficient. Supporting the new authorization behavior additionally needs a suitable security provider, not just retained metadata. |
+| Compilation bottleneck | [LogicalInteractionPlan](../core/src/plan.rs) contains a Property Read projection, target/media/subprotocol and metadata-presence state. [BindingCompilerInput](../core/src/binding_compiler.rs) adds candidate/role, not extension values or complete effective security/response data. At equal registration, changing only the native method or MQTT topic cannot be lowered differently from otherwise equal inputs. Opening a trait does not recover an erased input. |
+| Matching/selection | [Consumer aggregate](../planning/src/consumer_property_read.rs) materializes readable coordinates for one captured registration, requires its closed compiler support, and selects the first coordinate or a strict Form index. It does not implement the broader [specified capability index](../docs/spec/planning.md#capability-indexes). A compiler rejection can fail construction rather than classify an unsupported alternative. [Producer planning](../planning/src/property_read.rs) still takes the first read-looking Form and treats absent `op` as readable in that loop. |
+| Registration | [Static capture](../core/src/binding.rs) downcasts to `ResolvedTargetCompiler`; Host supported capture also remains closed. Master includes #209's typed retained Host job improvement, not #210's external admission. [HTTP registration](../protocol-bindings/protocols/http/src/lib.rs) pairs that compiler and its Host client; invocation parses the copied target. These are useful restricted paths, not independent general lowering. |
+| Ownership/resource split | [Planning's output](../planning/src/lib.rs), [compiler envelopes](../core/src/binding_compiler.rs), [Binding carriers](../core/src/binding.rs) and [Servient](../servient/src/property_read.rs) carry live identities, storage, leases and cleanup. They establish constraints worth preserving, not a reason to make every native program contain Engine generations or to expose Engine accounting mechanics to its author. |
+| Separate legacy path | [Protocol-binding helpers](../protocol-bindings/core/src/form.rs) expose raw Forms and shared default/selection helpers. They demonstrate existing semantic work, but cannot silently serve as a fallback that restores raw TD interpretation inside a replacement Binding. |
+
+[PR #206](https://github.com/yushun1990/clinkz-wot/pull/206) proposed open
+lowering and smaller runtime entries. Its
+[independent review](https://github.com/yushun1990/clinkz-wot/pull/206#pullrequestreview-5567741696)
+left namespace/parameter sufficiency, session retirement and non-equivalence
+collision relations as obligations. This investigation tests the first; it
+does not claim to close the latter two. The current normative logical-plan
+model is one plan per effective Form/operation, shared across candidates; the
+replacement rationale is corrected here accordingly. The reason to reconsider
+it is mandatory persistence and insufficient information, not assumed
+per-candidate plan duplication.
+
+[Closed PR #210](https://github.com/yushun1990/clinkz-wot/pull/210), inspected at
+`1219bbd70e51e76c193d594ccd2deb0753118a14`, lends original Thing, Property and
+Form objects and inherited security names to its compiler. That demonstrates
+external inline compiler admission, with actual-layout storage and rollback
+work. It also makes the downstream author responsible for recovering meaning
+from raw extension/context structures. It does not meet this task's boundary.
+Its [review probe](https://github.com/yushun1990/clinkz-wot/pull/210#issuecomment-6264001657)
+found per-step cap and error-order issues at an earlier revision; its final
+description reports repairs. Those runtime reports were inspected, not rerun
+or adopted as semantic evidence. The
+[closure finding](https://github.com/yushun1990/clinkz-wot/pull/210#issuecomment-6266271563)
+is consistent with the source. No #210 code is imported here.
+
+### Standards versus project choices
+
+Consulted the specifications directly on 2026-10-19, including the following
+sections. Fixed publication URLs separate stable requirements from evolving
+binding guidance.
+
+| Source | Standards contribution; limit of that contribution |
+| --- | --- |
+| [TD 1.1 Recommendation](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#sec-default-values), §§5.3–5.4, 6.3–6.5, 7, 8.3 and Appendix D | Defines WoT defaults/inheritance, Form requests, extension contexts and HTTP method rules. It supplies no Engine-to-Binding SPI. Core semantic resolution is more than JSON-LD expansion. |
+| [WoT Architecture 1.1](https://www.w3.org/TR/2023/REC-wot-architecture11-20231205/#protocol-bindings), §§6.7, 7.5 and 8.6 | Separates abstract interactions and concrete protocol messages. Scheme alone cannot identify every subprotocol/platform mapping. It does not prescribe this project's plan ownership, storage or registration types. |
+| [Binding Templates, May 2024 Note](https://www.w3.org/TR/2024/NOTE-wot-binding-templates-20240528/#protocol-binding-templates), §4 | Describes protocol, payload and platform binding dimensions. The [November 2025 Note](https://www.w3.org/TR/2025/NOTE-wot-binding-templates-20251104/#sotd) retires the main document and redirects future work. Neither is a universal operational interpreter. |
+| [HTTP binding](https://w3c.github.io/wot-binding-templates/bindings/protocols/http/) and [MQTT binding](https://w3c.github.io/wot-binding-templates/bindings/protocols/mqtt/) | Consulted the respective mapping/vocabulary sections. These evolve; HTTP examples include a newer TD context, and MQTT explicitly remains work in progress. The probe uses TD 1.1 HTTP rules and an explicitly declared illustrative MQTT vocabulary, not a new normative MQTT profile. |
+| [JSON-LD 1.1](https://www.w3.org/TR/json-ld11/#scoped-contexts), §§4.1, 4.2 and 9 | Term definitions can affect keys, values, scoped contexts, datatypes, lists and JSON literals. Identity expansion supplies no protocol semantics or ontology entailment. Lexically different aliases can denote the same property. |
+| [JSON-LD algorithms](https://www.w3.org/TR/json-ld11-api/#expansion-algorithm), §§4–5 and [9.4](https://www.w3.org/TR/json-ld11-api/#remote-document-and-context-retrieval) | Expansion can discard unmapped properties/nulls and normalize value containers. A custom loader can supply context documents. A resolved graph alone is not a lossless source representation. |
+
+The project's stronger obligations—no Binding TD rescans, deterministic final
+selection, complete Producer advertisement, source-free execution, bounded
+resource ownership and portable deployment—are architectural choices to
+justify. They do not follow automatically from standards conformance.
+
+### Alternatives challenged
+
+| Candidate | Falsifier or cost | Disposition |
+| --- | --- | --- |
+| Raw TD/context loan, as in #210 | Each author needs TD navigation and context/value/default semantics. Two extension aliases can become different native requests. | Reject as the semantic boundary, even if borrowing is safe. |
+| Larger fixed resolved operation record | Adding HTTP method and MQTT fields works until another vocabulary needs a nested rule, schema reference or response predicate. | Retain a small shared WoT projection, reject a protocol-field union as the extension mechanism. |
+| Flat IRI-to-JSON map | `verb` under a property-scoped context, an IRI-coerced string and a JSON literal require different processing. Prefix substitution and arbitrary string expansion misinterpret them. | Insufficient. |
+| Expanded JSON-LD graph/tree alone | Source coordinates, omitted/empty/null distinctions and some container structure disappear. It also leaves WoT defaulting undone. | Insufficient as a complete compiler input. |
+| Expanded values plus shallow presence/shape | Handles useful aliases and typed values cheaply for an author, but `[null,"A"]` and `["A",null]` collide in the executable probe. | Universal source preservation falsified; plausible semantic subset when vocabularies declare lists/JSON literals. |
+| Shared WoT facts plus structured extension values and bounded queries, under a declared feature profile | Must specify scope/linking, value types, loss diagnostics and budgets. Unsupported representational features are explicit. | Recommended minimum responsibility boundary; not yet a complete production contract. |
+| Add a complete resolved source overlay | Must annotate nested source occurrences before expansion loses them, including null positions and lexical containers. | Credible broader alternative for demonstrated syntax-sensitive mappings; not mandatory without that need. |
+| General SPARQL/reasoning service | Adds graph/entailment machinery and uncertain work bounds without resolving syntax preservation or protocol meaning. | Unnecessary. Queries should initially be scope/member/reference access. |
+| Require preprocessed binding definitions | Host tooling resolves TD/contexts and invokes the Binding compiler ahead of runtime. Limits dynamic admission; useful for fixed firmware. | Credible deployment of the recommended boundary, not a second semantic interpretation. |
+| Move whole TD processing to each Binding | Simplifies the Engine by transferring exactly the duplication the Owner wants removed. | Reject under the stated goal. |
+
+An extensible data algebra is sufficient in principle; a query facade need not
+materialize a second full TD. It can borrow indexed source nodes with resolved
+annotations, traverse a prepared compact table, or use an admitted cursor.
+Representation should follow measured cost and semantics. A different public
+Rust struct is not itself an architectural improvement.
+
+### Proposed semantic contract and its limits
+
+**Shared resolution (questions 1–4).** The Engine interprets standard WoT
+terms once: effective operation and its complete source Form operation set,
+access flags, schemas, security requirement expressions/references and defaults,
+media/response relationships, URI bases/templates and variable declarations.
+Keep origin/presence when it affects meaning or diagnostics. Retrieval base,
+TD `base`, JSON-LD `@base` and optional source `id` are distinct; using one as
+another is not a generic resolution rule.
+
+The extension side exposes named scopes for Thing, affordance, Form, schemas,
+security definitions and responses, with generic references to other admitted
+nodes where needed. Terms have expanded identities; values distinguish node
+references, literals with datatype/language/direction, ordered lists, value
+collections and opaque JSON literals. Do not combine root/affordance/Form
+extensions into an implicit override map: protocol-specific precedence belongs
+to the relevant Binding/platform interpreter. An unknown extension at a parent
+scope can matter to a child operation.
+
+Define **semantic structure preservation** against the declared vocabulary
+contract. Semantic lists retain order; JSON literals retain their JSON data;
+ordinary value collections carry no order guarantee. Native request defaults
+must not hide malformed/dropped instructions, so preserve occurrence/error
+facts where a vocabulary's validity/defaulting depends on them. The probe
+conservatively refuses explicit empty/null method values instead of turning
+them into an absent method. It does not validate every nested vocabulary shape.
+
+If an admitted mapping really requires source member/container order or null
+positions outside semantic lists/JSON literals, either reject that input feature
+or deliberately add a complete resolved source overlay. Such an overlay must
+correlate source occurrences with resolved identities throughout nested objects;
+raw TD/context lending is not a repair. Original bytes and signatures are
+separate provenance capabilities. Do not require a second full source model
+merely because the shallow sidecar cannot meet that stronger contract.
+
+| Context/extension case | Required behavior |
+| --- | --- |
+| Different prefixes, aliases, equivalent supplied contexts | Resolve to the same semantic identities and lowering, within the declared processing profile. Lexical spelling remains diagnostic provenance. |
+| Property/type scoped contexts and keyword aliases | Engine applies them before exposing values. Never let a Binding implement a second context processor. TD core aliases/remappings require deliberate TD serialization/validation support; the probe qualifies extension aliases only. |
+| Undefined simple terms | With a vocabulary mapping they may expand to an unfamiliar IRI; without one they may be dropped by ordinary expansion. Preserve/report that condition rather than infer a protocol default. |
+| Unmapped compact-looking term | `oops:methodName` may itself be an absolute IRI; it is not thereby HTTP's method term. No guessed namespace repair. |
+| Remote contexts | Use an immutable, supplied dependency closure with URLs, document bases and content identity. Missing dependencies are resolution failures. Fetching, if a Host application opts into it, belongs to an explicit acquisition policy outside pure lowering. |
+| Unsupported JSON-LD features | Name the unsupported feature/scope. Do not interpret it approximately. Reverse/named-graph/propagation/import support can be added generically, independently of a protocol crate. |
+| Unknown extension | Preserve it. The Binding/platform/codec interpreter declares support or an explicit known-inert policy; unknown does not mean optional. The Engine cannot discover “critical” versus annotation from an arbitrary IRI. |
+
+Conservative refusal of unknown instructions is an availability trade-off.
+Ignoring all unfamiliar terms is an incorrect extensibility story; rejecting
+every extended TD globally is also too restrictive. Classify support at the
+smallest sound scope. A missing root context can invalidate resolution of the
+whole document. A proven isolated unsupported Form extension can make only
+that candidate unavailable. The probe expands the entire document and does
+not demonstrate recovery from an unavailable Form-local context.
+
+### Applicability and final choice
+
+**Selection ownership (question 5).** The Engine determines that a Form can
+describe the requested WoT operation, validates shared requirements and applies
+application/security/codec constraints. A Binding determines whether it can
+implement the resulting native request, including its protocol defaults,
+extensions, URI dialect and supported execution profile. Coarse indexed
+capabilities are an over-approximation, not the final support verdict.
+
+Use one pure lowering result per eligible Form/operation/registration:
+supported native definition, unsupported with a diagnostic, or a fatal
+construction/contract/resource failure. Separate these outcomes so allocation
+failure does not masquerade as permission to choose another protocol.
+Compilation can supply the support verdict; a mandatory separate `supports`
+pass risks duplicate parsing and disagreement.
+
+The Engine ranks supported Consumer candidates deterministically using caller
+constraints, policy, Form order and explicit registration priority. Multiple
+Bindings can support the same scheme. Strict Form/Binding selection must fail
+if unavailable, without choosing an unrequested alternative. One unsupported
+Form must not invalidate another supported Consumer Form. Preserve a bounded
+reason for skipped alternatives. Runtime fallback after effects is a distinct
+operation policy, not a side effect of compilation failure handling.
+
+For Producers, every advertised Form/operation needs a supported owner and
+handler/security/codec coverage before publication. Multiple native owners
+require explicit resolution, not incidental registration order. Reject the
+draft or explicitly derive a reduced advertised description first; never
+publish an unchanged unsupported advertisement. Native pattern/topic overlap
+still belongs to Binding session/install logic, with Engine-owned publication
+and exact route provenance. Equality keys cannot describe every overlap relation.
+The probe checks coverage/ambiguity without installing anything.
+
+### Plan, program, context and resource ownership
+
+**Execution division (questions 6–8).** Keep semantic authority and native
+execution data distinct, without requiring a mandatory persisted intermediate
+object between them.
+
+| Owner/object | Necessary content; content that belongs elsewhere |
+| --- | --- |
+| Engine Plan/execution entry | Operation and affordance identity, supported candidate/registration association, security/codec/result obligations, dispatch and diagnostic coordinates, and program reference. Retain only facts actually needed for selection/validation/execution; it is not the Binding's source-information container. |
+| Binding Compiled Program | Pure native instructions: parsed endpoint/template, method/packet, topic/filter and response/correlation mapping. Native representation can be an ordinary typed value. No socket, SDK task, handler, credentials or live generation authority. |
+| Reusable definition | Optional factoring of immutable instructions/schema/template work with an explicit dependency and operand contract. Same TD model name, compatibility marker or binding configuration does not prove equivalent programs. No mandatory cache, serialization, VM or program registry. |
+| Instance context | Checked endpoint/tenant parameters, selected definition, credential-provider references and instance routing/authorization associations where they actually vary. Live authority comes from current Engine ownership, not reusable bytes. Per-call URI variables remain checked per-call operands. |
+| Runtime Binding owner | Sessions/connections, subscriptions, pending replies, correlation state, native buffers and SDK tasks. A shared broker session may serve many instances; closing one must not destroy siblings. |
+| Engine generic adapters | Controlled table/job/slot/erasure allocation, actual layouts, storage leases and funded rollback/cleanup transfer. Third-party lowerers should not recreate Engine resource-account schemas. |
+| Binding/application policy | Binding bounds native retained work/input and reports its capabilities/requirements; application qualifies SDK/runtime behavior and supplies deployment resources. An in-process trait cannot prove termination, honest costs or recoverability from SDK OOM. |
+
+Retain Cargo-linked startup registration and pairing of compiler/executor by
+native associated types or a generic erased adapter. **Redesign eligibility**:
+remove concrete compiler recognition and private support tokens as conditions
+for independent authorship. Consumer-only and Producer-only authors need no
+dummy other half. The useful complete-registration invariant does not justify
+today's representation-specific boilerplate.
+
+Host authors should implement one lowering body and their native execution
+owner, using generic storage/erasure helpers. They should not implement both
+Host and static APIs unless they claim both deployments. A strict static
+adapter can require caller-owned storage, finite resumable work and qualified
+cleanup. Host can use allocating native types and its selected executor under
+truthful deployment limits. Shared semantic outcomes do not imply identical
+allocation failure or destructor contracts.
+
+Separate preparation from execution dependencies. A fixed `no_std` application
+can consume build-produced typed definitions and checked instance operands;
+it need not link a JSON-LD processor. On-device dynamic admission needs a named
+finite feature profile and actual input/context/depth/output/work bounds, with
+resumable resolution or qualified atomic maxima. Host preprocessing may accept
+a wider profile. Context dependency identity and compiler/profile versions
+must accompany prepared data so another device cannot reinterpret it silently.
+No probe here proves those resource bounds, an allocation-free implementation,
+or physical MCU suitability.
+
+[0081](0081-reusable-plan-and-thing-identity.md) already distinguishes definition
+reuse from instance authority. This investigation adds no reuse implementation
+or measured cold-start benefit. Do not force definitions to be parameterized
+before a real compiler has reusable work. One per-instance execution-table
+owner is sufficient unless plans can be replaced independently; remove a
+separate mandatory plan-set lifecycle when it serves no such capability.
+
+### Executable evidence and authoring burden
+
+The [isolated probe](probes/td-binding-semantics/README.md) uses a pinned W3C TD
+context and PyLD 3.1.0 to perform actual context resolution. Instrumentation
+collects source occurrences; the public interface contains no raw TD or context.
+HTTP and MQTT lowerers import only that interface and the Python standard
+library. Both were authored in this investigation, so separate readability is
+evidence of interface use, not independent implementation review.
+
+The 18-case suite passes, including deliberate refusal and information-loss
+cases. It tests prefix/alias/full-IRI/supplied-context equivalence, scoped
+contexts, IRI/literal/list/JSON distinctions, alias collisions, effective
+operations/security, response instructions, unsupported extensions, Consumer
+choice, strict choice and Producer coverage. Unknown datatypes remain visible
+but unsupported: carrying `"GET"` with a custom datatype cannot justify treating
+it as an ordinary HTTP method.
+
+The HTTP example produces GET/PUT from one defaulted read/write Form, accepts
+an explicit POST for a single-operation Form, and refuses an explicit method
+over a multi-operation Form. The MQTT example produces distinct subscribe/
+retained-message and publish programs from broker and topic/filter metadata.
+Its retained-read flag is a declared mapping prerequisite, not proof that a
+broker currently holds a value or that delivery is fresh. No network runtime
+is needed to expose these semantic differences.
+
+| Authoring observation | Interpretation and remaining cost |
+| --- | --- |
+| HTTP/MQTT modules are 40/49 physical lines, including comments and blanks. | Actual protocol lowering is small in these deliberately narrow examples. Neither duplicates context resolution, WoT defaults, security inheritance or candidate selection. |
+| Shared public model is 137 lines; experimental Engine adapter is 240. | Semantic preparation is nontrivial work transferred to one owner, not eliminated. Occurrence tracing depends on a private PyLD hook and must not become a production dependency by accident. |
+| Authors must enumerate interpreted/known-inert fields and inspect applicable scopes. | This is unavoidable protocol support policy. Generic traversal/consumption helpers can reduce repetition; silently ignoring unknown fields would lower LOC by losing correctness. |
+| No author implements Host/static transport wrappers or Engine ledgers in this probe. | Demonstrates separation for pure lowering only. Generic Rust registration, allocating programs, pending jobs, indirect backing and cleanup remain unproved authoring costs. Do not extrapolate these line counts to a network binding. |
+
+### Proven limitations and concrete counterexamples
+
+1. **Preservation failure:** `[null,"A"]` and `["A",null]` under one ordinary
+   extension property yield equal tested views. A future vocabulary whose
+   positional instruction matters cannot be implemented from that input.
+   Declared `@json` preserves it; declared list semantics preserve ordered
+   semantic values. [JSON-LD's ordering model](https://www.w3.org/TR/json-ld11/#sets-and-lists)
+   makes ordinary arrays unordered. This falsifies arbitrary source preservation,
+   not sufficiency for semantic vocabularies using the right value constructs.
+   Supporting syntax-sensitive mappings needs more than this sidecar; do not
+   assume such support is necessary for every Binding.
+2. **Meaning failure:** a preserved unfamiliar `requireConfirmation` term could
+   require a handshake before success. An Engine cannot safely assume it is
+   annotation, and a Binding cannot claim support by merely retaining it.
+   Refusal or a corresponding interpreter is necessary.
+3. **Address/profile mismatch:** the MQTT lowerer refuses wildcard reads and
+   broker URIs with topic paths. These are author limitations, not failures
+   to preserve the URI or a need for MQTT branches in Planning. Different
+   mapping dialects can be separate registrations with the same scheme.
+4. **Runtime mismatch:** a retained MQTT publication is not a fresh read at
+   invocation time; exactly-once transport delivery does not prove an action
+   executed exactly once. A semantic view cannot supply these guarantees.
+   The Binding must qualify its mapping against the WoT operation contract.
+5. **Graph/features limit:** reverse edges are explicitly refused by the probe;
+   named graphs, imported/propagated contexts and arbitrary core aliases are
+   not qualified. A complete JSON-LD processor underneath does not establish
+   that its public projection exposes every feature correctly.
+6. **Context/resource limit:** an unavailable root context prevents resolution;
+   an unbounded remote dependency chain cannot fit a finite embedded budget.
+   Input caps and bounded member queries do not bound PyLD's preceding
+   allocations/expansion. This code supplies no strict preprocessing guarantee.
+7. **Whole-document/operand limit:** additional responses, schema references,
+   cross-affordance platform rules, URI templates, per-call parameters and
+   credential alternatives are not demonstrated. A Form-only fixed record
+   cannot claim their sufficiency. Full document scope/link access and typed
+   WoT projections are proposed remedies, not executed proof.
+8. **Reuse/ownership limit:** two instances with different broker credentials
+   or tenant topics cannot safely share a program specialized on the first
+   instance. An immutable payload or matching digest does not fund its final
+   owner or isolate a late callback. No semantic representation proves these
+   runtime properties.
+
+The closed security discriminator above is a separate source-level
+counterexample to assuming all future vocabulary can enter through today's TD
+types. Generic extension/security description preservation must precede any
+new SPI. Unknown authorization requirements still fail unless an interpreter
+and provider can satisfy them; preservation cannot authorize access.
+
+### Evidence classification and recommended decision
+
+**Proven feasibility:** Within the probe's explicit property/JSON/NoSec input
+profile, one resolved public interface carries enough information for HTTP and
+MQTT lowering, including alternate term spellings, scoped resolution, native
+defaults and generic applicability/selection diagnostics. The Engine-side
+resolver and selector contain no HTTP/MQTT vocabulary branches. This establishes
+constructive expressibility for those cases, not general protocol independence.
+
+**Proven limitations/counterexamples:** The existing compiler input is lossy by
+source inspection; raw source lending does not discharge context interpretation;
+the tested shallow-presence projection collides on ordered source data; unknown
+meaning and unsupported feature/resource cases cannot be repaired by naming
+the interface “semantic.” The negative suite intentionally records these limits.
+
+**Unverified assumptions:** The selected list/JSON-literal profile covers enough
+real mapping vocabularies; a complete nested source overlay, if needed, can
+remain small and ergonomic; generic graph/reference access will cover relevant
+future bindings; strict resolution can meet actual embedded limits; generic Rust
+Host/static adapters can hide accounting without obscuring physical ownership;
+definition factoring saves meaningful work. Neither existing ADRs nor passing
+fixtures establish these assumptions.
+
+**Proposed architectural decisions requiring Owner approval after independent
+review:**
+
+1. Adopt Engine-owned WoT/context resolution plus Binding-owned protocol
+   interpretation as the replacement direction. Remove raw TD/context access
+   from its ordinary lowering contract. Explicitly accept a declared semantic
+   feature envelope and refusal of unknown executable meaning. Preserve admitted
+   extension data before typed parsing rejects/normalizes it; do not promise
+   automatic support for future vocabularies or security requirements.
+2. Select bounded queries over structured resolved data rather than a fixed
+   universal Semantic View, protocol-field union or reasoning engine. Start
+   with the explicit list/JSON-literal feature profile and loss diagnostics;
+   require a real syntax-sensitive mapping and preservation evidence before
+   adopting a complete source overlay.
+3. **Remove the mandatory persisted `LogicalInteractionPlan` as a compiler
+   bottleneck. Redesign the compiler SPI** around resolved input and native
+   pure output. Retain minimal Engine execution facts and their authority.
+   **Retain paired startup registration, redesign its openness/adapters** and
+   remove concrete compiler eligibility. **Retain Plan/Compiled Program
+   responsibility separation, redesign its persistent containers/lifecycles**;
+   no universal program or mandatory reuse layer is selected.
+4. Keep native applicability with the Binding and final Consumer selection/
+   Producer coverage with the Engine. Separate unsupported alternatives from
+   fatal failures. Keep Host deployment contracts distinct from strict embedded
+   qualification, with one semantic contract and optional preparation tooling.
+
+The smallest independently reviewable next step is **one isolated semantic
+contract refinement**, before any production SPI migration: specify the
+supported value/container profile and test that dropped or malformed nested
+instructions cannot silently become defaults; add linked response/schema and
+one URI-template/per-call-operand example; and have a fresh reviewer author
+another lowering against only the public contract. Measure resolver work/storage
+and author-side helpers; retain failures as counterexamples. Challenge whether
+real mappings require the broader source overlay. Only then specify a small Rust semantic-access/compiler
+vertical slice with generic registration; runtime ownership migration remains
+separate. Do not reopen #210 or activate old gates to shortcut this evidence.
+
+This investigation changes only this workspace topic and its disposable probe.
+It does not adopt a replacement architecture, modify production SPI contracts,
+admit implementation, change milestone/gate states, or authorize a merge.
