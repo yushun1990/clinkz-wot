@@ -21,13 +21,18 @@ role or run on every platform; capabilities and evidence must name their actual
 intersection. [WP-600](../work-packages/WP-600-protocol-bindings.md) owns the
 production sequence without adding a global gate.
 
-The [Binding SPI's conditional scope](../spec/binding-spi.md#conditional-independence-and-admitted-extension-scope)
-distinguishes protocol-independent execution authority from complete compiler
-substitutability. Current Producer and Consumer installation paths have different
-lowering restrictions. Planning owns the [Producer semantic-entry repair](../spec/planning.md#producer-semantic-entry-correction-boundary);
-neither generic registration nor the accepted route proofs establish that repair.
-The bounded rationale remains in topic 0056. This refinement changes no lifecycle,
-package dependency, source admission, gate or release-evidence requirement.
+The [replacement proposal in 0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution)
+finds the current closed Consumer compiler and lossy compiler input structurally
+incompatible with independent third-party lowering for supported WoT semantics.
+It selects open Binding-owned compilation, minimal immutable execution entries
+and one owned endpoint driver in place of mandatory public native setup phases.
+[Planning](../spec/planning.md#proposed-replacement-of-the-compilation-boundary)
+and [Binding SPI](../spec/binding-spi.md#proposed-open-lowering-and-execution-boundary)
+record the proposed boundary. This is a candidate for independent review and
+cross-domain authority migration, not activation of a replacement SPI. Current
+source/admission contracts, package/gate states and release requirements remain
+in force until explicitly migrated. Their temporary authority is not a reason
+to preserve the design. No production implementation is admitted by this PR.
 
 `build.rs` is not a binding discovery or dependency mechanism. Cargo resolves
 Rust dependencies before build scripts run; recursively invoking Cargo would

@@ -12,12 +12,19 @@ The original investigation, decision and migration below record the pre-probe
 feedback-order decision. That migrated history is preserved. The
 [reassessment](#reassessment-conditional-protocol-independence) reopens the assurance
 question in this topic, consolidating PR #205's former 0090 proposal with 0042.
-The [decision refinement](#decision-refinement-bounded-property-read-contract)
-below selects a bounded correction and projects its contract into the existing
-Planning and Binding owners. It remains a candidate for independent acceptance;
-source admission and empirical release evidence retain their existing owners.
+The [replacement decision](#decision-refinement-protocol-independent-compilation-and-execution)
+below reassesses the complete architecture under the Owner's explicit pre-v1
+breaking-change authorization. It supersedes the earlier recommendation to retain
+closed Consumer lowering and the public route phase split. It is a proposal for
+independent review, not implementation admission or an activated specification
+migration. Existing source contracts remain effective until deliberately replaced.
 
 ## Scope and authority
+
+The following scope and probe history describe the original investigation. The
+current reassessment and replacement decision below use the Owner's broader
+authorization; the original restriction on what was being investigated is not a
+restriction on this proposal.
 
 This topic records a Project Owner concern, strengthened by an independent Ultra project review, that the current narrow Property Read slices and repository fixtures may establish internal consistency before the target Protocol Binding SPI has received enough feedback from real protocol implementations.
 
@@ -152,6 +159,10 @@ probe evidence, or release material treats Zenoh/zenoh-pico alone as general
 protocol-shape neutrality. Such evidence reopens this topic.
 
 ## Reassessment: conditional protocol independence
+
+Historical assessment from PR #205. Its source findings and conditional-property
+formulation remain useful; its recommendation to preserve the macro architecture
+is superseded by the replacement decision below.
 
 ### Boundary and conclusions
 
@@ -415,164 +426,367 @@ Independent reassessment should attack the nonempty-envelope condition, the six
 obligations, the exact role-specific paths, #204's information argument and the
 lifecycle defense/counterargument. Assess the exact diff against current
 authority and source. Record findings in PR comments. That assessment changed
-workspace reasoning only. The decision refinement below now supplies the bounded
-specification projection; implementation admission remains separate.
+workspace reasoning only. The replacement decision below changes the proposed
+architecture direction; authority migration and implementation remain separate.
 
-## Decision refinement: bounded Property Read contract
+## Decision refinement: protocol-independent compilation and execution
 
-### Selected direction and scope
+### Verdict and review boundary
 
-This decision reconstructs fetched master
-`f324947bfa0b89eacd4d745129523ff1cfa4f1d0`, after PR #205. The assessment above
-is reasoning history, not architectural closure. Select a narrow Producer
-semantic-entry repair, retain closed Consumer compiler support for its actual
-scope, retain the route lifecycle and execution authority, and preserve future
-definition/context separation without implementing it.
+**Replace the current compilation/admission boundary and simplify the execution
+SPI. The present target is not a defensible protocol-independent extension
+architecture for the stated goal.** Preserve correct WoT semantics and ownership
+properties where useful; do not preserve `ResolvedTargetCompiler`,
+`LogicalInteractionPlan`, exact compiler-type admission, or the current runtime
+decomposition as architectural requirements.
 
-These are conformance and claim-boundary refinements of existing requirements,
-not a new lifecycle or compiler-admission architecture. Their normative owners
-are [Planning](../docs/spec/planning.md#producer-semantic-entry-correction-boundary)
-and [Binding SPI](../docs/spec/binding-spi.md#conditional-independence-and-admitted-extension-scope),
-with navigation in architecture 40. No invariant reversal requiring another ADR,
-parallel investigation, new gate or package graph is selected. Independent review
-must accept this interpretation before it guides the successor admission.
+This reassessment reconstructs master
+`f324947bfa0b89eacd4d745129523ff1cfa4f1d0` and the previous PR #206 proposal at
+`c611bbcae4293a595b91c5e360d3a8c538c5ade7`. The Owner explicitly authorizes breaking
+changes and a clean-slate design in this pre-v1 project. Compatibility, completed
+proofs, implementation cost already incurred, and accepted decisions carry no
+presumption of architectural correctness. The earlier proposal's narrow Producer
+preflight could repair a safety defect; retaining closed Consumer lowering and
+waiting for a future protocol counterexample would still fail the requested goal.
 
-Instantiate four scopes, rather than quantify over every visible WoT API.
-For each protocol, declare its native target language and configuration family
-from native semantics before assessment. The envelope contains all documents
-within the row using that bounded target language, not only successful fixtures:
+Select an **open Binding-owned lowering boundary, small immutable execution
+entries, and engine-owned transactions with Binding-owned native drivers**.
+Rewrite the intersecting Core/Planning/Servient contracts rather than extending
+the closed helper one exception at a time. This is a cross-domain architecture
+replacement proposal, not a clarification of existing admission.
 
-| Semantic scope | Input/configuration envelope | Implementation/evidence boundary |
-| --- | --- | --- |
-| Consumer Property Read, Host | One finalized Consumer registration; a Basic-valid borrowed Thing with a present `id`, at least one readable coordinate, [nonempty property names](../docs/spec/planning.md#logical-interaction-plan) for every retained readable coordinate, one effective NoSec definition per retained coordinate, default JSON Forms without additional metadata, literal targets of at most the configured `1..=64` UTF-8 bytes, no call URI variables, and sufficient admitted capacity. | The restricted target-copy primitive plus an external client. The aggregate may contain multiple properties/Forms; Runtime evidence covers one consumed generation and one active call. |
-| Consumer Property Read, application-static | The same semantic envelope under its actual typed/manual representation and supported resource contract. | Actual compiler type capture and resident owners; portable compilation is not board or protocol qualification. |
-| Producer Property Read, Host | One Basic-valid draft with a present `id`, advertising exactly one read route, exact handler coverage, literal target, default JSON, one effective NoSec definition, no additional Form metadata/scopes/URI-variable requirements, and sufficient `StrictV1` capacity. | This is the correction target, **not** the current entry guarantee. The compiler/server pair is open; semantic admission is defective. |
-| Producer Property Read, application-static | The same one-route semantic envelope with typed state and its actual `StrictV1` costs. | The same missing entry guarantee; application-owned compiler enums remain possible. |
+PR #206 and this existing topic remain the review boundary. The Planning and
+Binding specification additions describe the proposed migration, explicitly
+without activating it. No production change, new topic, gate transition, package
+admission, roadmap closure, approval, or merge follows from this decision.
+Independent acceptance must challenge the selected architecture itself.
 
-Fix actual configuration, limits, concurrency, deadline and resource/failure
-policy before evaluating a mapping. The envelopes contain families of names,
-targets, payload values and TD representations, not a post-hoc singleton or one
-selected protocol. Explicit read and a defaulted read-only property may be
-equivalent; default read/write is outside the one-read Producer envelope.
-Consumer unrestricted/mock support remains evidence for its original finite
-authors, not arbitrary Form semantics. Unsupported declarations cannot be
-interpreted as defaults.
+### First principles and the required extension property
 
-The observable contract is selected Property Read, opaque application payload
-preservation and current success/result-origin checks, exact live identity,
-local publication, first-cause cancellation, late-result handling and truthful
-terminal cleanup. Core's seal is not general JSON/schema validation or proof of
-peer authenticity. NoSec adds no credential/provider selection promise. Profiles
-preserve semantic outcomes, not identical physical costs. Native control traffic
-is distinct from accepting a WoT application call.
+Fix a supported WoT semantic capability, role, security/result contract, execution
+profile, and declared resource/failure policy. For each protocol with a native
+mapping that satisfies those observable obligations, a third party must be able
+to implement and install the mapping through public generic contracts and normal
+application composition. Core, Planning, and Servient must need no protocol name,
+vocabulary case, permitted compiler type, or protocol-specific lifecycle branch.
+A Binding must complete healthy supported interactions, not merely reject them.
 
-Legacy `ConsumedThingHandle` still selects/clones Forms at interaction time;
-legacy `ServerBinding::serve` receives `Dispatch`. These are actual remaining
-paths, not target-SPI evidence. Their writes, actions, subscriptions and
-collections are neither silently certified nor removed here. The v5.1 deferred
-domains and staged-removal roadmap retain authority. A public method or enum
-variant alone establishes no compiled target capability.
+Native feasibility means that the protocol can express the semantic operation,
+mediate application dispatch, and retain bounded accountable work under the
+selected profile. It does not mean that it already fits today's Rust SPI. A new
+WoT operation or new authorization semantics can require an engine capability
+change. A different wire method, option, address representation, response code,
+or protocol setup sequence for an existing capability cannot be reclassified as
+new WoT semantics merely to excuse a closed extension boundary.
 
-### Conditional construction and its limits
+This distinction follows the standards' separation of abstract operations from
+protocol adaptation. [TD 1.1 sections 7.2 and 8.3](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#protocol-bindings)
+allow binding vocabulary in Forms; its HTTP section includes explicit method
+selection. The [Binding Templates Note](https://www.w3.org/TR/2024/NOTE-wot-binding-templates-20240528/#protocol-binding-templates)
+illustrates different protocol mappings for the same operation. These sources
+support an information/extension requirement, not this proposal's Rust design.
 
-The intended protocol class consists of native one-shot reads whose destination
-and fixed request meaning are determined by a literal target and immutable
-registration policy, whose values map to this payload/result contract, and
-whose native state and local retirement are bounded under the chosen policy.
-The native operation must permit mediated application acceptance and progress
-under a fair available environment. These are native semantic properties,
-independent of the current guards or compiler. They exclude per-Form instructions
-absent from the declared envelope; they do not assume an SPI implementation.
+The semantic requirements are deterministic selection; correct operation,
+security and result meaning; truthful advertised capability; local publication
+and dispatch authority; live identity and attribution; overload behavior; and
+accountable cancellation/retirement. Neither WoT nor those requirements imply a
+universal persisted logical-plan structure, a Core-owned compiler implementation,
+four native setup phases, or the same physical runtime on Host and embedded.
 
-For Consumer, the installed primitive copies the target exactly. An external
-client can derive native syntax into its call/slot state before I/O, retaining
-the supplied selected identity and deadline. This is protocol adaptation, not
-TD interpretation or form reselection. Core need not understand that address
-language or gain a protocol-specific compiler branch. Producer can compile its
-route and canonical reservation through the open compiler after trusted
-admission discharges omitted distinctions. Both keep correlation, framing,
-native retries and physical session sharing private.
+### Fundamental findings
 
-This source/contract construction establishes information and authority
-placement, not an implemented adapter for every such protocol. Work, backing,
-failure, readiness and retirement must fit the chosen representation. A feasible
-mapping that cannot traverse a mandatory boundary remains a counterexample;
-it cannot be excluded by redefining the class after failure. No guarantee for
-arbitrary foreign compiler callbacks or every bounded native protocol is
-established. A need for preserved Form contents or a different pre-I/O lowering
-may intersect closed Consumer support and require a reviewed generic correction.
-
-### Defects, restrictions and remedies
-
-The Producer failure is stronger than missing maturity evidence. Its lawful
-compiler input is plan/candidate/role; fixed registration cannot recover erased
-method/response/security or whole-draft distinctions. Public expose roots freeze
-the first leaf plan and check its selected handler without a whole-draft
-barrier. Also, `property_read_plan` treats absent `op` as readable, while TD's
-`default_property_operations` distinguishes write-only from read-only and
-read/write. This is the same semantic-entry defect category, not a reason to
-duplicate defaulting rules. The evidence is [Producer source](../planning/src/property_read.rs),
-[orchestration](../servient/src/property_read.rs) and
-[TD authority](../td/src/td_defaults.rs). #204 adds separately reported execution
-of its eight mutations; no new protocol experiment is claimed here.
-
-| Remedy | Decision |
+| Finding | Source evidence and architectural consequence |
 | --- | --- |
-| Paid whole-draft preflight and narrow rejection | Selected. Prove the complete one-route envelope before freeze/prepare, use TD semantics, preserve truthful metadata facts and charge continuation/rollback. Details and closure belong to Planning. |
-| General security/schema/extension fields in every logical plan | Unnecessary for this envelope. Discharge eligibility upstream and retain only needed facts. More fields alone leave coverage and provenance unresolved. |
-| Raw TD access, an HTTP branch, or a caller eligibility flag | Reject. These bypass semantic ownership or replace the real entry barrier with an assertion. |
-| Metadata-presence bit alone | Insufficient for effective security, operation defaults and coverage. Existing `Option<bool>` suffices for the narrower fact when populated truthfully. |
-| Multiple routes or silently reduced effective TD | Reject for this repair. Unsupported advertised operations must fail admission; broader positive support is another tranche. |
-| Open Consumer compiler admission | Not selected. Closed support deliberately substantiates callback/storage/destruction behavior. It limits compiler authorability but proves no protocol-specific shared branch is required. Do not remove that proof or call it universal openness. |
-| Replace four Producer phases with one universal kernel | Not justified. Native setup may be immediate/private; partial failure still needs an identified recovery owner. No lawful native-state counterexample defeats that refinement. Repeated wrappers alone are not such evidence. |
-| Another protocol as primary architectural proof | Not selected. It tests one adapter, not the quantified property. A focused discriminator needs a named unresolved structural claim; the independent empirical release requirement remains. |
+| Consumer compiler installation is closed by implementation identity. | [`static_consumer_support`](../core/src/binding.rs) downcasts to the exact `ResolvedTargetCompiler`. [`HostCompilerStorage` and `consumer_support`](../core/src/binding_compiler.rs) recognize only the private Consumer adapter; generic erasure of even the same compiler is ineligible. [`ConsumerPropertyReadRegistration`](../planning/src/consumer_property_read.rs) is sealed around that capture. A conforming independently authored lowering cannot reach the real Consumer path. This is a structural failure of the required extension property, regardless of whether the whitelist contains protocol names. |
+| Necessary information is erased before the Binding can compile it. | [`LogicalInteractionPlan`](../core/src/plan.rs) retains target/media/subprotocol and a metadata-presence flag; [`BindingCompilerInput`](../core/src/binding_compiler.rs) adds candidate/role. Effective security, response details and extension values are absent. Even [`ValidatedPropertyReadForm`](../td/src/validated.rs) exposes metadata presence without its extension contents. Merely unsealing the compiler does not restore them. |
+| Producer semantic admission is incorrect. | [`property_read_plan`](../planning/src/property_read.rs) returns the first read-looking Form and treats absent `op` as read support. [`TD defaulting`](../td/src/td_defaults.rs) distinguishes write-only, read-only and read/write. Both [`Servient expose paths`](../servient/src/property_read.rs) check the selected handler, not complete advertised coverage. #204's eight Basic-valid mutations collapse to equal plans and still reach preparation/dispatch. |
+| A representation proof has become the public extension policy. | [`ConsumerCompilerSupport`](../core/src/binding_compiler.rs) derives callback costs and storage from one known implementation and fixed 64-byte target payload. Core configuration also carries the default-JSON restriction. Known costs explain the original construction proof; they do not justify making every new lowering depend on a Core release. The current HTTP client must parse/derive its target in [`invoke`](../protocol-bindings/protocols/http/src/lib.rs) instead of using an independently compiled native artifact. |
+| Runtime mechanisms have been promoted to semantic requirements. | [`PollServerBinding`](../core/src/binding.rs), the Host route guards, and [`HostRouteState`](../servient/src/property_read.rs) expose prepare/readiness/activate/commit plus phase-specific cancellation, transfer and joining. They protect real ownership, but each exposed phase multiplies recovery cases. No semantic requirement establishes that four public phase families are necessary. The absence of a native impossibility counterexample does not justify their cost. |
+| Immutable content, instance data and live authority are coupled. | Compiler input includes Thing/plan/candidate generations and concrete targets; envelopes and per-generation output repeat identity and storage ownership. [0081](0081-reusable-plan-and-thing-identity.md) explains why these cannot be treated as content-equivalence keys. This is not proof that a cache would help, but a rewrite should stop requiring live authority inside reusable immutable content. |
+| The product still has competing execution truths. | [`ConsumedThingHandle`](../servient/src/handle.rs) selects/clones Forms at interaction time; legacy server dispatch hands authority to bindings. [`Servient's manifest`](../servient/Cargo.toml) also contains the concrete optional Zenoh edge. These paths cannot establish the new extension property or remain implicit fallbacks for a migrated capability. |
 
-### Definition/context compatibility
+The information defect is not just a missing struct field. If two admitted
+sources have identical complete lawful compiler inputs but require different
+native behavior, no downstream compiler can recover the distinction. A trusted
+upstream rejection can make a narrow implementation safe; repeatedly rejecting
+all newly needed vocabulary is not a protocol-independent architecture. Target
+length and inline storage may be Binding/profile limits, never universal limits
+on a semantic Property Read capability.
 
-Topic [0081](0081-reusable-plan-and-thing-identity.md) retains the reuse decision.
-Do not turn transaction-local eligibility into durable program identity or put
-credentials, route/session owners, handlers or cleanup into immutable artifacts.
-Bind retained eligibility to the current draft/context and registration. A future
-definition must declare static dependencies and recheck remaining instance
-operands. Current Thing/plan/binding/generation envelopes still authorize each
-execution; they are not content-equivalence keys. One binding can execute many
-artifact values. Sharing a definition or session cannot merge publication or
-last-owner cleanup. This permits a later split but establishes no reuse,
-persistence, scalability benefit, cache format or runtime abstraction now.
+The existing finite tests remain useful: their passing whitelist rejections
+establish actual behavior, not desirable extensibility. PR #204's diagnostic
+uses a mock registration and demonstrates lost input/coverage, not HTTP wire
+conformance or a demonstrated lifecycle impossibility.
 
-### Authority, correction scope and closure
+### Selected target: resolve, lower, install, execute
 
-| Owner / requirements | Correction or reaffirmation |
+```text
+immutable source + policy + linked registrations
+        |
+TD semantic resolution + bounded source/context views
+        |
+Planning: enumerate candidates -> Binding-owned pure lowering
+        |                         (opaque native artifact)
+        v
+immutable execution entries + generic selection/coverage indexes
+        |
+Servient: reserve/build/publish, dispatch, leases and retirement
+        |
+Binding-owned client operations / endpoint and shared-session drivers
+        |
+native protocol I/O
+```
+
+**Resolution and compilation.** Keep one implementation of TD validity,
+operation defaulting, security inheritance and generic URI semantics. Give the
+Binding compiler a bounded borrowed view of the selected interaction and all
+applicable source context: effective operation and role, resolved target or
+validated template, schemas/media/response/security requirements, and preserved
+Form/affordance/root extension data with namespace/context identity. Preserve
+absent, explicit-empty and explicit values where semantically distinct.
+
+This is compile-time access, not runtime TD retention or authority to reselect
+another Form. A generic bounded value/context view must carry future vocabulary
+without adding a Core field per protocol. TD owns interpretation of shared TD
+terms; the Binding owns its protocol vocabulary and protocol-specific defaults,
+even when those defaults are documented by W3C. Unknown relevant instructions
+must produce explicit unsupported/error outcomes. Namespace interpretation uses
+bounded local or explicitly supplied immutable context; no implicit remote
+context fetching is needed. Do not mandate a second complete normalized TD tree.
+
+Use public role-specific compiler/executor contracts paired by one registration,
+with associated native artifact/state types. Consumer-only registration requires
+no dummy server, and Producer-only requires no client. The compiler is pure:
+no socket, handler, credential acquisition, reactor task or native subscription.
+It returns supported artifact, candidate rejection, or failure. Planning performs
+generic deterministic ranking, supported security/codec selection and coverage;
+it contains no protocol-specific rejection logic. An unsupported alternative
+Form does not automatically invalidate a Consumer's supported alternative.
+
+Every advertised Producer operation/Form must have matching installed routes
+and handler/security coverage before publication. Initially require complete
+coverage of the submitted advertised TD. A future API may explicitly construct
+a reduced description before exposure, but silently publishing an unchanged TD
+while serving its first route is never acceptable. Pure compilation may proceed
+privately before the final coverage check; that check must precede native route
+effects and publication. A separate whole-draft preflight may optimize failure
+cost, but is not a required architecture layer.
+
+**Artifacts and execution entries.** Remove the requirement to materialize and
+retain a `LogicalInteractionPlan` for every candidate. Compile directly from the
+resolved view into an immutable entry containing only engine-used semantic
+selection/validation/dispatch data and the Binding's opaque artifact. Share
+neutral data where useful. Native parsed targets, wire instructions and response
+mapping belong in the artifact; they need not be reparsed at every invocation.
+Artifacts contain no live protocol resources, credentials or cleanup jobs.
+
+Use one unpublished build owner and one published instance-generation owner for
+the execution table. Publication transfers ownership; closure stops new leases,
+drains existing work and reclaims the table. Frozen describes completed private
+construction, not a required extra runtime manager. Separate plan-set generations
+are needed only if plans can be replaced independently of the instance; do not
+require that machinery for an immutable per-instance table. Call/route slots
+still need their own stale-use protection where they are reused. Select eager
+compilation initially; lazy compilation, negative caches and persistence are
+optional optimizations with separate evidence, not fundamental WoT requirements.
+
+Keep publication/generation/registration authority in an engine-owned record and
+its nonforgeable handles. Bind artifact use to the exact installed registration
+and role through typed composition or its generic erased equivalent. Keep any
+instance parameters distinct from immutable definition content where they truly
+vary. This allows one Binding to execute many artifacts and one shared native
+session to serve many Things. It mandates no universal program, bytecode,
+serialization format, content hash, cache, persistence or deduplication service.
+Existing numeric digests are not certificates of source behavior or authority.
+
+**Open admission with real bounds.** Delete exact-type/private-adapter eligibility
+and the source-known `ConsumerCompilerSupport` descriptor as installation
+requirements. Derive physical slot Layouts, alignment and wrapper/erasure overhead
+from actual generic types. Supply budgeted compilation/storage access and an
+owned compile job whose partial output can always be rolled back. Bound initial
+construction, progress, allocation, failure and disposal, not just `step` after
+an unbudgeted `bounds` callback. Returned costs alone cannot prepay that callback.
+
+A generic Host adapter owns one complete typed job through Pending, failure,
+completion and release; it must not consume/rebox state on every Pending or
+allocate an unretainable output after completion. Static composition uses inline
+slots, application-owned enums or equivalent typed storage without mandatory
+atomics. Capacity is acquired before controlled growth and retained until actual
+release. Preallocating a whole job is one simple mechanism; its correctness must
+be established generically, not by recognizing a compiler name.
+
+Finite callback/destructor behavior is an explicit conformance obligation of a
+trusted linked Binding, just as for its runtime callbacks and SDK. An application
+can qualify external source and execute the public conformance suite without a
+Core source change or centrally issued support token. Engine APIs enforce actual
+controlled storage, handle provenance and accounting; Rust types cannot prove
+that arbitrary native code terminates or reports honestly. This does not weaken
+the behavioral bound or certify a self-reported cost. A stricter embedded product
+must qualify its actual implementation/input maxima; hostile in-process code
+requires isolation, not a compiler whitelist.
+
+Do not require all candidate bounds before the first pure compile job. Reserve
+and compile candidates sequentially under aggregate caps and funded rollback;
+complete selection/coverage and all promised capacity before publication/native
+effects. Preserve a complete pre-reservation mode where a product actually
+promises worst-case success. This removes a global barrier and duplicate census
+machinery without removing admission or permitting unowned partial output.
+
+**Execution and ownership.** Servient owns semantic transactions, selection,
+security/handler dispatch, local publication, active leases, cancellation cause
+and cleanup policy. Binding owns native I/O, framing, correlation, retries within
+policy, authentication adaptation, buffers, multiplexing and shared sessions.
+An endpoint is a logical WoT owner, not a mandatory socket/session.
+
+Replace the mandatory public prepare/readiness/activate/commit families with one
+owned endpoint installation driver: Installing -> LocallyReady -> Serving ->
+Closing -> Closed. Servient retains one wrapper/lease throughout; native setup
+states and partial recovery remain inside the Binding driver. Installation may
+finish immediately. LocallyReady means local installation is ready to obey the
+engine gate, not guaranteed peer reachability or completion of a user request.
+An error/cancel at any point leaves the same owner available for close.
+
+Servient's publication step opens the local dispatch gate after complete coverage
+and resource checks. The Binding may receive bounded traffic/control messages
+earlier, but cannot dispatch a handler before publication or after closure.
+This promises atomic local dispatch visibility, not atomic remote advertisement
+or rollback of already-visible native effects. Endpoint collision identity stays
+Binding-derived and engine-checked; it does not require public native commit.
+
+A registration/session driver may multiplex ingress across endpoints and return
+bounded semantic events carrying engine route identity and an owned reply
+opportunity. Servient validates them and dispatches. Client operations and replies
+retain owned progress/cancel/retire state. There is no Binding-held handler or
+registry capability. Host may use its reactor under an explicitly retained native
+owner; embedded may poll manually. Do not force one route poller per physical
+session or a universal executor. Close one route without killing siblings;
+retire shared infrastructure only after its final user and callbacks are gone.
+
+Cancellation fixes the first cause, closes new acceptance, and progresses the
+same owned operation toward terminal retirement. A late result is validated and
+released while its owner/lease remains live. If the ordinary driver is abandoned,
+transfer the whole owner into a prebacked cleanup destination or retain an
+explicit manual close handle. Report uncertain remote effects distinctly from
+local retirement. Do not use Drop, a closed flag, a deadline, or a residual record
+as proof that surviving tasks and buffers are gone. Generic owned progress may
+serve multiple operations, but do not invent a universal semantic state machine
+from Property Read alone; subscriptions retain distinct long-lived obligations.
+
+**Deployment and module boundaries.** Keep concrete protocols/SDKs outside the
+normal Core/Planning/Servient dependency graph; the application or umbrella
+selects them. Keep startup composition as the simple default: open third-party
+authoring requires neither dynamic code loading nor hot replacement. A bounded
+registration set can contain multiple external implementations. Runtime
+replacement, if ever needed, is a separate capability.
+
+Separate execution contracts and data from dynamic TD admission/compilation so
+a fixed Consumer or Producer need not link a whole dynamic runtime. Host can
+compose both; firmware can use build-time preparation with the same semantic
+compiler, or opt into on-device admission where justified. Binding-specific typed
+definitions are sufficient for build-time output; installation still checks the
+current instance/configuration and issues fresh live authority. No universal
+artifact image or saved generation seal follows. Share semantic definitions and
+rule bodies, not necessarily storage or scheduling implementations. A packaging
+split must serve those dependencies; no mandatory new crate hierarchy is selected.
+
+### Safety invariants versus replaceable machinery
+
+| Essential guarantee retained | Machinery not required by that guarantee |
 | --- | --- |
-| TD under ADR-0021; WP-100 | Reuse paid Basic/default/security/URI semantics. Do not mandate the Consumer aggregate's physical representation for Producer. |
-| Planning: `PLAN-COST-003`, `PLAN-ARTIFACT-001`, `FORM-COVERAGE-001`; WP-200 | Whole-draft support/coverage preflight and truthful facts before freeze/prepare; no mandatory new public carrier. |
-| Core/Binding: `BIND-REG-001`, `BIND-ROUTE-001`, `BIND-IO-001`, `BIND-OUT-001`; WP-300 | Actual role-specific installation limits; preserve artifact identity, result sealing, private adaptation and stage-specific recovery. |
-| Servient: `ADMIT-TXN-001`, `LIFE-EXPOSE-001..003`; WP-400 | Both expose roots enforce the barrier and retain rollback. No new dispatch/publication authority or state machine. |
-| Foundation/API/resource/performance projections | Reconcile paid work, actual layouts, continuations and rollback in correction admission. New schema/API rows are needed only if the selected source repair changes them. |
-| WP-600 and #204 | Correct public Producer entry before real HTTP Producer admission. Consumer resource migration does not authorize a Producer policy change. |
+| Trusted TD meaning; sufficient information for each lowering; no hot-path source interpretation. | A fixed owned `LogicalInteractionPlan`, metadata bits instead of vocabulary, or a second normalized TD. |
+| Deterministic supported-candidate selection and truthful advertised coverage. | One Core compiler for every Consumer, all-readable candidate success, first-Form exposure, or a one-route/default-JSON architecture envelope. |
+| Controlled storage bounded before growth; paid work; overload and rollback ownership. | Core-known compiler bodies, a central source-admission list, identical Host/static bytes, or all bounds collected before pure compilation. |
+| Complete local publication/closure and authorized dispatch. | Four public native setup phases and stage-specific carrier types. |
+| Exact live registration/route/call provenance; stale results cannot execute. | Every immutable payload embedding live generation fields, independently versioned plan-set machinery without independent replacement, or mandatory cryptographic digests of every constructor setting. |
+| A retained owner through late completion, cancellation and cleanup; shared last-user retirement. | One physical session per Thing, nonreplaceable stage succession as a public API, or a universal cleanup-transfer taxonomy. |
+| Bounded cleanup with funded fallback; truthful remote uncertainty. | Universal recovery from Host process OOM or allocation-free destruction inside every Host SDK. |
+| Portable semantics and predictable constrained ownership. | Dynamic TD admission on every firmware, one scheduler/allocator representation, or mandatory Arc/atomics. |
 
-Decision acceptance requires a fresh independent context to reconstruct the
-source/contracts and challenge the four scopes, native class, preflight choice,
-Consumer restriction and lifecycle refinement. This PR supplies the specification
-decision boundary; it does not close the source defect. No package admission,
-accepted gate or milestone changes in this decision.
+Use ADR-0023's ownership allocation consistently: engine-controlled storage and
+promised handoffs are admitted; Binding policy bounds native input/state; the
+application composes deployment resources. Inline native types held in engine
+slots still count, and private backing is never an excuse for ownerless work.
+Host process failure is outside recoverable in-process capacity promises.
+Embedded fit requires actual RAM/stack/flash/backend evidence. Neither a numeric
+quota nor a portable compile test provides that evidence.
 
-The successor closes only when its reviewed ADR-0013 scope supplies both public
-Host/static paths with useful baseline acceptance; pre-effect distinction or
-rejection for #204's eligibility/coverage mutations, defaulted write-only and
-read/write, and extra advertised operations; explicit-empty/unknown handling;
-and paid zero/short-budget, cancellation, failure and rollback evidence. Recheck
-actual source/identity/layout impact and affected Producer compiler/route/Servient
-regressions. Existing mock route/permit/carrier traces remain original-scope
-evidence, not semantic-admission certification. Completed Consumer/HTTP
-qualification is disjoint unless changed shared carriers invalidate measured
-costs or behavior; then revalidate the exact affected cases.
+Prefer synchronous bounded operations for explicitly capped small inputs when
+one paid atomic step suffices. Keep incremental work for variable inputs and
+required latency/cancellation bounds. Derive capability-specific limits from
+real owners rather than requiring every future schema field in every product.
+Do not weaken bounds by calling them estimates; distinguish enforced limits,
+qualified finite maxima, measured costs and deployment assumptions explicitly.
 
-No finding here demands a general compiler-support issuer, lifecycle replacement
-or program/context runtime before that correction. A later counterexample must
-name the lost fact, rejected complete public installation or mandatory ownership
-transition and its lawful native mapping. Topic 0056 and normal change control
-remain the reopening path. General SPI substitutability, empirical protocol-shape
-neutrality and production/release qualification remain separate unclosed claims.
-Findings, checks and unresolved issues belong in PR comments, not a repository
-task-state record.
+### Alternatives under the same requirements
+
+| Design | Assessment |
+| --- | --- |
+| Previous PR #206: narrow Producer preflight, closed Consumer compiler, existing public phases. | Can safely support its small literal-target class. Fails independent lowering for the same semantic capability and freezes known exclusions. Reject as the architecture target. |
+| Remove downcasts and keep the rest. | Opens syntax, not a constructible contract. Missing vocabulary, generic erasure costs and unbounded callback/disposal gaps remain. Reject. |
+| Open resolved-input compiler, retain all existing plan/lifecycle containers. | Can meet protocol independence after substantial information/storage repairs. Credible fallback if a simplified driver loses a required invariant, but carries redundant persistent projections and phase/recovery multiplication without a demonstrated benefit. |
+| Open lowering, minimal execution entries, owned native drivers, thin engine transactions. | Selected clean-slate target. Separates semantics from protocol mechanism and safety from representation proofs; permits generic Host and static authoring. Requires a deliberate contract/runtime rewrite and new behavioral evidence. |
+| Put TD selection/handlers in bindings, interpret TD on each call, or introduce a universal protocol VM/allocator. | Reject. The first choices duplicate semantics or lose authority/performance; the latter adds a language/runtime and authoring burden without a need. |
+| Rewrite TD semantics and every Foundation primitive too. | Unnecessary. Existing default/security/URI kernels, time, linear reservations and useful tests can be retained when they satisfy the selected contracts. Reuse is judged by fit, not sunk cost. |
+
+The selected design is smaller in obligatory public concepts, not a measured LOC
+or throughput claim. External conformance carries a real qualification burden;
+open trusted code cannot supply mechanical proof of every callback. Collapsing
+public phases hides native failure detail inside the driver, so bounded/redacted
+phase diagnostics and adversarial partial-installation tests are needed. These
+are explicit tradeoffs, not reasons to retain a known closed extension boundary.
+
+### Proposed rewrite boundary and independent acceptance
+
+The replacement boundary spans the supported Property Read compilation and both
+Consumer/Producer installation/execution roots. Do not implement another
+protocol-specific compiler exception or a Producer-only preflight as closure of
+this decision. Keep HTTP's native transport tests and useful semantic kernels;
+replace their shared integration contract where necessary.
+
+| Affected owners | Required migration before replacement production code |
+| --- | --- |
+| Architecture 10/20/30/40/50; ADR-0008/0009/0010/0012/0019/0021/0023 | Record deliberate supersession of fixed logical projection, closed compiler admission and public route phases; retain useful semantic/resource rationale. Use existing architecture change control, not another parallel investigation. |
+| TD/WP-100; `DOC-RUNTIME-001`, `PLAN-COST-003` | Define bounded complete compile-time source/context views, shared semantic meaning and source-independent output. Reuse Basic/default/URI kernels; remove metadata-only information bottlenecks. |
+| Planning/WP-200; `PLAN-ARTIFACT-001`, `PLAN-BOUND-001`, `FORM-COVERAGE-001` | Open candidate lowering, minimal entries, deterministic selection, coverage and sequential funded construction/rollback. Delete required per-coordinate logical-plan duplication and closed support dependence. |
+| Core/Binding/WP-300; `BIND-REG-001`, `BIND-IO-001`, `BIND-ROUTE-001`, `BIND-OUT-001` | Generic paired compiler/executor registrations and actual-layout storage adapters; replace `ConsumerCompilerSupport` and exact-type checks. Remove `ResolvedTargetCompiler` from Core's required path; retire it or move any useful literal-target helper into optional Binding support. Replace stage-specific public route families with an owned endpoint driver. |
+| Servient/WP-400; `ADMIT-TXN-001`, `STATE-EXPOSE-001`, `STATE-BIND-001`, `HANDLE-DROP-001`, `LIFE-EXPOSE-001..003` | Replace intersecting per-phase orchestration with admission/publication/dispatch/lease/retirement owners in Host and static representations. Preserve first-cause and late-value semantics; remove implicit legacy fallback for migrated capabilities. |
+| Foundation/resource/API/state/performance projections; WP-600/700 | Replace representation-specific cost/generation/status contracts where the new owner model changes them. Requalify HTTP integration; preserve distinct Host/embedded and protocol-ingress evidence. Revise scoped work-package dependencies and release surface deliberately. |
+
+Do not run two competing production dispatch/admission systems indefinitely.
+Implement the replacement as coherent capability cuts after authority review,
+then delete the displaced target implementation and its exclusive proof
+machinery. A temporary development adapter must have a removal boundary and
+cannot certify the replacement. Unmigrated pre-v1 legacy operations need an
+explicit retire/defer/replace disposition; backward compatibility does not
+require preserving them. Independent acceptance must invalidate or scope affected
+old claims, not automatically carry accepted gates into a different design.
+Unchanged semantic/HTTP transport regressions keep their original evidence value.
+
+Before treating the target as constructible, require ordinary external packages
+to author the compiler and execution sides without engine patches or private
+tokens. Use at least two contrasting Property Read mappings: default/explicit
+HTTP instructions and a non-URI-copy native artifact using per-Form vocabulary
+and shared-session setup. Demonstrate distinct native artifacts/behavior for
+distinct relevant metadata; valid alternative selection; Producer full coverage;
+and cross-registration, stale-generation and wrong-role rejection. Execute the
+same semantic contract through Host erasure and static composition, including an
+application enum containing externally authored compilers.
+
+Failure evidence must cover unpaid/short work, acquisition refusal, compiler
+failure and abandonment, every partial installation boundary, cancellation racing
+with publication/result delivery, late results, full cleanup destinations,
+multiplexed sibling isolation and final-owner retirement. Measure actual carrier
+backing, erasure/rollback overhead and retained release at those owners. One real
+public Consumer-to-Producer protocol round trip is needed for useful product
+integration; contrasting native adaptation evidence is needed for the extension
+boundary. No finite test suite proves every conceivable protocol, and no passing
+old gate supplies replacement acceptance. A later ObserveProperty proof must
+exercise long-lived semantics rather than infer them from reads.
+
+These are falsifiable completion criteria for the proposed rewrite, not a new
+gate or permission to start it. Independent review should challenge whether the
+resolved views expose enough context, external admission is honestly bounded,
+one endpoint owner covers every failure/recovery case, and any retained public
+concept is necessary. Findings and exact executed checks belong directly in
+PR #206. Production implementation, authority activation and merge remain outside
+this task.

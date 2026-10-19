@@ -1835,66 +1835,90 @@ pending preparation and every later route phase use only binding-owned bounded
 runtime state. A fixture-created logical plan, artifact, or preparation
 substitute is not evidence for this contract.
 
-### Producer semantic-entry correction boundary
+### Proposed replacement of the compilation boundary
 
-Topic [0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-bounded-property-read-contract)
-selects a bounded conformance repair of the existing Producer entry. The
-completed leaf and route/permit proofs do not establish whole-draft semantic
-admission. This correction target requires its own independently reviewed
-ADR-0013 source scope and completion evidence; it is not implemented or admitted
-by this specification refinement.
+This is the proposed architecture replacement from
+[0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution),
+subject to independent review and later authority migration. It does not admit
+production work or silently change the implemented contracts above. The earlier
+PR #206 choice of narrow Producer preflight with closed Consumer lowering is
+superseded as the target design.
 
-Use a paid, whole-draft semantic preflight on the ordinary Host and static
-expose paths. TD owns Basic validity, effective operations, security inheritance
-and URI meaning. Planning owns support/coverage decisions and their connection
-to the frozen output. Servient must not prepare a route from an unchecked
-successful leaf. No application promise, binding TD inspection or fixture-built
-plan may supply this missing barrier.
+Select compilation from bounded resolved views into small immutable execution
+entries, with public Binding-owned lowering for each supported role. Do not
+require `LogicalInteractionPlan` to survive as a universal compiler input or
+persisted per-coordinate object. Required engine selection/validation/dispatch
+facts and opaque native artifacts may be stored once at their actual owners.
+The public data shape must follow information and runtime needs, not today's
+fixture projections.
 
-The minimal positive envelope is a Basic-valid draft with a present TD `id`
-and one advertised Property Read route with exact handler coverage, a literal
-resolved target, default JSON media, exactly one effective NoSec definition, and
-no additional Form metadata, scopes or URI-variable requirements. Basic validity
-does not require `id`; both Host and static entries continue to reject a draft
-without it. An explicit `readproperty` Form or TD-defaulted read-only property
-can qualify. The entire draft must advertise no other
-operation or route: extra Forms, readable properties, writes, actions, events
-and Thing-root operations cannot be silently ignored. Reject unsupported or
-unclassified declarations rather than implement multiple routes, authorization,
-response overrides or protocol vocabularies in this repair. Unrelated descriptive
-TD data may remain. The native binding still decides whether the admitted
-literal target and fixed protocol policy are applicable.
+TD owns Basic validity, operation defaulting, security inheritance and generic
+URI meaning. The selected compiler receives those effective facts and bounded
+access to all relevant Form/affordance/root/schema/response/security metadata,
+including extension values and namespace/context identity. Source views may be
+borrowed during preparation; completed runtime output retains no source loan or
+complete lossless TD. Preserve absence versus explicit-empty/value distinctions.
+A generic bounded value/context interface carries new protocol vocabulary without
+new Core fields. No automatic remote context loading is required.
 
-Preflight must inspect explicit and defaulted operations through TD authority;
-`op == None` alone is not evidence of read support. In particular, default
-write-only does not advertise read, and default read/write advertises more than
-this one-read envelope. Explicit-empty and absent values remain distinct.
-Effective NoSec eligibility is independent of metadata absence; a metadata
-presence bit cannot prove security or whole-draft coverage.
+Binding compilation interprets protocol vocabulary and protocol-specific defaults,
+without repeating TD defaults, selecting another Form, obtaining credentials or
+starting I/O. A metadata-presence boolean is sufficient only to reject a narrow
+unsupported case; it cannot replace the contents needed for useful lowering.
+Target capacity, media and native instruction support are Binding/profile
+capabilities, not restrictions imposed by a universal Core target-copy compiler.
 
-Successful admission must preserve the required source facts or discharge them
-in the trusted transaction. Populate the existing metadata-presence projection
-truthfully when it is used; unknown is never known-absent. Prefer transaction-
-local checked eligibility and narrow rejection to a new public proof factory
-or general security/extension carrier. Any retained eligibility must be tied
-to the exact immutable draft, selected coordinate, registration/configuration
-and supported envelope; it cannot authorize a changed draft or another build.
-Protocol syntax and canonical endpoint reservation remain binding-owned.
+Planning enumerates and ranks candidates deterministically, connects supported
+security/codec choices, and records supported-artifact, candidate-unsupported or
+failure outcomes. A supported Consumer alternative can remain usable when
+another Form is unsupported. Strict explicit selection still reports that
+selected alternative's failure; no silent post-effect fallback follows.
 
-Charge source inspection, derived/retained facts, continuation and rollback.
-Zero/short budgets, cancellation, preflight failure and allocation failure must
-preserve owners and prevent freeze/prepare/publication from bypassing admission.
-End source loans before route execution. The correction must demonstrate useful
-baseline acceptance plus rejection of eligibility/coverage-changing mutations
-through both public expose representations before route or handler effects.
-Compiler callbacks remain pure and bounded under their existing contracts.
+Every advertised Producer operation/Form must have matching route and handler/
+security coverage. Reject unsupported or unclassified advertised behavior before
+native route effects and publication. Do not freeze the first successful read
+leaf as evidence for the whole draft. TD-defaulted write-only is not a read;
+TD-defaulted read/write advertises more than read-only. A partial-description API
+would need to construct the reduced advertised TD explicitly before exposure;
+the initial target requires complete coverage of the submitted description.
 
-This narrows implementation support explicitly while preserving the broader
-taxonomy and required semantic distinctions above. Later positive support for
-extensions needs sufficient bounded resolved data or a new checked eligibility
-rule under reviewed admission. It cannot be obtained by interpreting discarded
-information as defaults. The repair adds no mandatory public plan fields and
-does not select the Consumer borrowed-input representation for Producer.
+Build privately with controlled capacity acquired before growth and complete
+funded rollback. Sequential candidate reservation/compilation under aggregate
+caps is sufficient when failure preserves the transaction. A global all-bounds-
+before-any-start barrier and separate whole-draft preflight are optional
+mechanisms for particular availability/cost promises. All promised runtime and
+cleanup capacity, selection and Producer coverage must be settled before native
+effects/publication. Keep compilation pure and preserve input/partial output on
+allocation refusal, cancellation or callback failure.
+
+Compile jobs, artifacts and storage adapters must support independent external
+implementations. Replace sealed exact-compiler eligibility with the generic
+Binding contract and actual-layout/budgeted storage boundary described in
+[Binding SPI](binding-spi.md#proposed-open-lowering-and-execution-boundary).
+Conforming callback work and destruction still require evidence; neither a
+self-reported budget nor an open trait proves them. Finite caps may permit a paid
+atomic operation; incremental work is required where actual bounds demand it.
+
+Separate live instance/registration/generation authority from immutable artifact
+content. Typed composition or generic erasure must keep each artifact paired
+with its actual executor and role. Do not infer content equivalence from
+configuration/generation tags. This introduces no cache, persistent program,
+mandatory deduplication or universal bytecode.
+
+The private build transfers its complete execution table into one published
+instance-generation owner. Draining and leases govern reclamation. Do not require
+an independently versioned plan-set manager when the table cannot change apart
+from its instance. Reused call/route slots retain appropriate stale-use checks.
+Use eager compilation first; lazy/negative caching is an optional optimization,
+not an admission prerequisite for protocol independence.
+
+The rewrite intersects TD semantic lending, Core compilation/storage, Planning,
+and both Servient roots. The source contracts, evidence obligations and affected
+requirements must be migrated explicitly before implementation. #204's Producer
+counterexamples remain mandatory regressions, but a narrow rejection preflight
+alone cannot close the independent-lowering goal. Existing route and Consumer
+proofs retain only their original implementation scope until replacement evidence
+is independently accepted.
 
 ## Property Read route-reservation projection
 
