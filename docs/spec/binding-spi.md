@@ -232,32 +232,6 @@ local engine gate, not guaranteed remote reachability. Native substates,
 handshakes and partial recovery are Binding-private. The engine retains its
 wrapper, identity, lease and cleanup destination throughout.
 
-**Registration/session ownership (migration obligation).** If native installation
-creates a shared listener, transport session, reactor task or other owner above
-one endpoint, that owner must have a retained progress/close destination before
-its first possible effect, including when the first endpoint never becomes
-LocallyReady or nothing is ever published. Endpoint retirement releases only
-its own lease; it cannot destroy shared infrastructure while another endpoint,
-reply, callback or close job still depends on it. The final lease release starts
-or completes bounded native retirement through the same accountable owner;
-`Closed`, Drop or a reference count by itself does not prove callbacks drained.
-The Binding may keep native substates private, but cancellation, allocation
-refusal, startup failure and local publication failure must all leave a
-reachable cleanup owner. Qualify A and B sharing one session: cancel A during
-installation and while a reply is live, verify B still works, then close B and
-retire the original session owner with no orphaned task or buffer.
-
-**Exact identity is not native overlap (migration obligation).** An equality key
-such as `(domain, key)` may identify an exact reservation but cannot generally
-encode a non-transitive overlap relation. The Binding-owned installation/session
-logic must check relevant native route conflicts and refuse or resolve them
-before local publication, with serialization against concurrent installs and
-explicit rollback ownership; the engine still checks exact route identity and
-controls its dispatch gate. Test A covering `{1,2}`, B covering `{1}`, and C
-covering `{2}`: A conflicts with each, while B and C may coexist. Do not add a
-Core protocol-specific pattern matcher or treat a hash/key equality check as a
-universal collision proof.
-
 Servient atomically publishes complete local dispatch authority after coverage
 and capacity checks, and closes it before draining. Bindings may progress
 bounded native ingress/control traffic before publication but may not dispatch
