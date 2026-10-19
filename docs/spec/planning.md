@@ -1852,6 +1852,29 @@ facts and opaque native artifacts may be stored once at their actual owners.
 The public data shape must follow information and runtime needs, not today's
 fixture projections.
 
+**Parameterized definition, instance and call boundary (migration obligation).**
+A compiled native definition may hold an immutable, protocol-specific address
+program or template and validated semantic metadata. It is not itself a live
+endpoint, registered session or generation authority. Binding-owned instance
+parameters (such as a gateway authority or meter identity) and call inputs
+(such as admitted `uriVariables`) are distinct: neither may be silently
+frozen into shared definition content or recovered by scanning the TD during
+execution. A Binding may specialize/recompile a definition for an instance when
+necessary; no cache or cross-instance artifact reuse is promised.
+
+For example, one compiled `https://gateway.invalid/meters/{meter}{?unit}`
+definition may be installed for meter `17` and meter `23`. Calls with `unit=C`
+and `unit=F` must reach the appropriate instance-specific authorized target,
+without reinterpreting the source TD. The owning semantic layer checks which
+variables may be supplied, their declared constraints and the caller's authority;
+the Binding checks native encoding/expansion and rejects missing, invalid or
+unsupported native inputs before their effects. Instance reconfiguration or
+retirement must not turn an outstanding call into a different endpoint.
+Provenance belongs to the exact registration, instance and call lease, not to
+an artifact content digest. Acceptance needs two instances and two varying
+calls on both Host and static paths, including cross-instance, invalid-variable
+and stale-generation negative cases.
+
 TD owns Basic validity, operation defaulting, security inheritance and generic
 URI meaning. The selected compiler receives those effective facts and bounded
 access to all relevant Form/affordance/root/schema/response/security metadata,

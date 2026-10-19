@@ -572,8 +572,10 @@ privately before the final coverage check; that check must precede native route
 effects and publication. A separate whole-draft preflight may optimize failure
 cost, but is not a required architecture layer.
 
-**Artifacts and execution entries.** Remove the requirement to materialize and
-retain a `LogicalInteractionPlan` for every candidate. Compile directly from the
+**Artifacts and execution entries.** Remove the mandatory persistent logical-plan/artifact layering. The current
+implementation already shares one logical plan per effective Form/operation
+across binding candidates; this replacement does not rely on a supposed
+per-candidate copy. Compile directly from the
 resolved view into an immutable entry containing only engine-used semantic
 selection/validation/dispatch data and the Binding's opaque artifact. Share
 neutral data where useful. Native parsed targets, wire instructions and response
