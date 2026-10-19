@@ -117,6 +117,17 @@ ignore an explicit method/header/response instruction. Exact API and source
 changes require that tranche's ADR-0013 admission. Existing mock evidence has
 no HTTP-vocabulary interpretation claim and remains accepted within its scope.
 
+Information sufficiency is relative to a declared support envelope. If two
+admitted documents produce identical complete lawful inputs to a component,
+that component must not be required to distinguish their applicability or
+execution meaning. A trusted upstream check may instead reject one document
+or establish their equivalence before effects. This refines `PLAN-COST-003`,
+`PLAN-ARTIFACT-001` and `FORM-COVERAGE-001`; it requires neither a complete TD
+copy nor one new logical-plan field per source field. Facts may be discharged
+by admission, retained as bounded resolved data, or lowered by the responsible
+compiler. A public plan constructor or metadata setter is a data constructor,
+not evidence that trusted source admission occurred.
+
 Planning starts from a TD-owned validated semantic view or produced-Thing draft
 plus immutable policy and registration snapshots. For the first Consumer
 aggregate, TD supplies paid short semantic loans from its opaque validated
@@ -1823,6 +1834,65 @@ route preparation. The envelope borrow ends when initial preparation returns;
 pending preparation and every later route phase use only binding-owned bounded
 runtime state. A fixture-created logical plan, artifact, or preparation
 substitute is not evidence for this contract.
+
+### Producer semantic-entry correction boundary
+
+Topic [0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-bounded-property-read-contract)
+selects a bounded conformance repair of the existing Producer entry. The
+completed leaf and route/permit proofs do not establish whole-draft semantic
+admission. This correction target requires its own independently reviewed
+ADR-0013 source scope and completion evidence; it is not implemented or admitted
+by this specification refinement.
+
+Use a paid, whole-draft semantic preflight on the ordinary Host and static
+expose paths. TD owns Basic validity, effective operations, security inheritance
+and URI meaning. Planning owns support/coverage decisions and their connection
+to the frozen output. Servient must not prepare a route from an unchecked
+successful leaf. No application promise, binding TD inspection or fixture-built
+plan may supply this missing barrier.
+
+The minimal positive envelope is one advertised Property Read route with exact
+handler coverage, a literal resolved target, default JSON media, exactly one
+effective NoSec definition, and no additional Form metadata, scopes or
+URI-variable requirements. An explicit `readproperty` Form or TD-defaulted
+read-only property can qualify. The entire draft must advertise no other
+operation or route: extra Forms, readable properties, writes, actions, events
+and Thing-root operations cannot be silently ignored. Reject unsupported or
+unclassified declarations rather than implement multiple routes, authorization,
+response overrides or protocol vocabularies in this repair. Unrelated descriptive
+TD data may remain. The native binding still decides whether the admitted
+literal target and fixed protocol policy are applicable.
+
+Preflight must inspect explicit and defaulted operations through TD authority;
+`op == None` alone is not evidence of read support. In particular, default
+write-only does not advertise read, and default read/write advertises more than
+this one-read envelope. Explicit-empty and absent values remain distinct.
+Effective NoSec eligibility is independent of metadata absence; a metadata
+presence bit cannot prove security or whole-draft coverage.
+
+Successful admission must preserve the required source facts or discharge them
+in the trusted transaction. Populate the existing metadata-presence projection
+truthfully when it is used; unknown is never known-absent. Prefer transaction-
+local checked eligibility and narrow rejection to a new public proof factory
+or general security/extension carrier. Any retained eligibility must be tied
+to the exact immutable draft, selected coordinate, registration/configuration
+and supported envelope; it cannot authorize a changed draft or another build.
+Protocol syntax and canonical endpoint reservation remain binding-owned.
+
+Charge source inspection, derived/retained facts, continuation and rollback.
+Zero/short budgets, cancellation, preflight failure and allocation failure must
+preserve owners and prevent freeze/prepare/publication from bypassing admission.
+End source loans before route execution. The correction must demonstrate useful
+baseline acceptance plus rejection of eligibility/coverage-changing mutations
+through both public expose representations before route or handler effects.
+Compiler callbacks remain pure and bounded under their existing contracts.
+
+This narrows implementation support explicitly while preserving the broader
+taxonomy and required semantic distinctions above. Later positive support for
+extensions needs sufficient bounded resolved data or a new checked eligibility
+rule under reviewed admission. It cannot be obtained by interpreting discarded
+information as defaults. The repair adds no mandatory public plan fields and
+does not select the Consumer borrowed-input representation for Producer.
 
 ## Property Read route-reservation projection
 

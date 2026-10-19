@@ -21,6 +21,14 @@ role or run on every platform; capabilities and evidence must name their actual
 intersection. [WP-600](../work-packages/WP-600-protocol-bindings.md) owns the
 production sequence without adding a global gate.
 
+The [Binding SPI's conditional scope](../spec/binding-spi.md#conditional-independence-and-admitted-extension-scope)
+distinguishes protocol-independent execution authority from complete compiler
+substitutability. Current Producer and Consumer installation paths have different
+lowering restrictions. Planning owns the [Producer semantic-entry repair](../spec/planning.md#producer-semantic-entry-correction-boundary);
+neither generic registration nor the accepted route proofs establish that repair.
+The bounded rationale remains in topic 0056. This refinement changes no lifecycle,
+package dependency, source admission, gate or release-evidence requirement.
+
 `build.rs` is not a binding discovery or dependency mechanism. Cargo resolves
 Rust dependencies before build scripts run; recursively invoking Cargo would
 create incompatible type identities, features, targets, profiles, and lock

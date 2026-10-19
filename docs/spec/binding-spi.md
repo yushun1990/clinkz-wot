@@ -169,6 +169,48 @@ All binding, provider, codec, contributor, and application callbacks run outside
 engine locks and constrained critical sections. Returning `Pending` never gives
 permission to detach semantic ownership into an unregistered task.
 
+## Conditional independence and admitted extension scope
+
+Protocol-independent execution authority means that a conforming target binding
+maps native I/O to the selected semantic operation while Servient retains
+selection, publication, handler dispatch and cleanup policy. It does not imply
+that every semantic projection or compiler implementation is installable. A
+substitution claim must identify operation, role, profile, input/configuration
+envelope, resource/failure policy and progress assumptions. It must preserve
+semantic traces and complete healthy supported interactions; rejecting all
+inputs is insufficient. Native feasibility must be assessed independently of
+whether today's SPI can implement it.
+
+The active Property Read paths have these different extension boundaries:
+
+| Path | Public extension boundary | Claim limit |
+| --- | --- | --- |
+| Host Producer | A generic compiler component can be paired with `RouteServerBinding` in a complete registration and installed through `ServientBuilder::binding_registration`. | Producer resources remain `StrictV1`. Whole-draft semantic admission still needs the [Planning correction](planning.md#producer-semantic-entry-correction-boundary); compiler openness cannot recover erased facts. |
+| Static Producer | The application chooses the compiler/server types and any matching compiler/cursor/artifact enums. | Application closure is ordinary composition, not a Core-maintained protocol list. Current Planning admits only `BindingPolls` compiler work. |
+| Host/static Consumer | External client execution is installable with Core's checked `ResolvedTargetCompiler` and actual matching complete owner. Host requires its private supported adapter; static capture checks the actual compiler type. | Arbitrary external lowerings, generic Host erasure and application compiler wrappers remain ineligible. The primitive preserves the target only; it does not preserve arbitrary Form meaning for execution. |
+
+Both current Property Read planners admit only `BindingPolls` compiler work.
+Consumer Planning's registration trait is sealed around checked complete owners;
+an external application cannot bypass capture by implementing that trait.
+
+Retain closed Consumer compiler admission for this implemented scope. Its fixed
+callback, storage and destruction proof is a representation restriction, not a
+protocol interpretation rule. Different clients may use the target-copy
+primitive when their native operation is determined by that target and fixed
+registration policy. Native target parsing/derivation at request construction
+is permitted; TD rescanning, new candidate selection and repeated W3C defaulting
+are not. No arbitrary compiler openness or universal substitution follows.
+A needed foreign lowering requires reviewed generic support or separately
+admitted support; matching compatibility, caller cost claims or a new protocol
+name do not confer eligibility. No such broadening is selected here.
+
+The bounded decision, native mapping argument and limits are recorded in
+[0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-bounded-property-read-contract).
+It retains the current lifecycle and registration contracts. Concrete semantic
+projection and SDK/progress/retirement conformance still require their scoped
+evidence. Legacy operations and deferred capability declarations are not proofs
+of target execution; existing empirical release evidence remains required.
+
 ## Constructible compiler components
 
 The compiler/artifact SPI is implemented once by WP-200 at the Core owner
@@ -1241,6 +1283,17 @@ impl HostPreparedRouteGuard {
 ```
 
 ### Lifecycle calls
+
+These phases separate ownership and recovery obligations; they do not require
+four native handshakes or a separate physical session per route, stage or Thing.
+A phase may complete immediately without native work when its readiness and
+cleanup promises are already true. Shared native infrastructure remains private
+to the binding under its explicit last-user retirement contract. Closed ingress
+must still permit any native control traffic needed for readiness without
+accepting an application request. If a native mapping requires application
+acceptance to become ready, that concrete conflict must be resolved explicitly;
+false readiness or hidden dispatch cannot adapt it. Keep stage-specific owners
+until a named failure/cleanup counterexample justifies a narrower correction.
 
 The host server component uses owned calls for every callback that can remain
 pending:
