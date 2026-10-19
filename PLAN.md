@@ -82,14 +82,6 @@ Consumer-to-Producer loop, followed by separate HTTPS/security evidence, remain
 on the critical path. Embedded qualification and v1 release readiness remain
 separate.
 
-PR #206's independently reviewed replacement direction supersedes mandatory
-closed Consumer lowering and the public native phase split. Its merge did not
-migrate implementation authority or production source. Before extending the
-HTTP Producer on the displaced SPI, migrate the intersecting public contracts
-through ADR-0013 and qualify a thin Consumer-to-Producer path against the
-replacement. Preserve the existing HTTP Consumer transport regressions as
-historical evidence, not replacement-SPI acceptance.
-
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
 advance the frontier safely.
@@ -102,13 +94,9 @@ advance the frontier safely.
    independent production-completion evidence preserved. Concrete HTTP SDKs
    have been selected and qualified for this Consumer scope. The existing
    WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
-2. Migrate the accepted #206 open lowering, runtime-owner and execution boundaries
-   into current authority and implement one independently authored, end-to-end
-   Consumer/Producer Property Read slice. Replace the displaced SPI rather than
-   patching its closed compiler or stage-specific Producer entry. Then qualify
-   real HTTP Producer/public bidirectional I/O and HTTPS/trust/security before
-   production release. Keep useful transport evidence and retire replaced
-   integration machinery as soon as the replacement is qualified.
+2. Add the production HTTP Producer route/permit/response path and public
+   bidirectional loop, then HTTPS/trust/security evidence before production
+   release. Keep this real integration ahead of unrelated broad binding work.
 3. Broaden one-shot Core, Planning, Binding, and Servient capabilities only
    through exact admitted tranches. Before broad subscription/emission work,
    complete the corresponding domain-entry review and one minimal
