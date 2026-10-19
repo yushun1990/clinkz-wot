@@ -78,3 +78,9 @@ actual Planning propagation and later-coordinate rejection before any compiler
 starts, funded rollback/retry and allocation failures for static/public Host
 complete registrations. Run in the same three feature cells above. These shared
 tests supply no HTTP I/O, SDK qualification or independent completion acceptance.
+
+The composition model's all-bounds ordering is historical precursor evidence,
+not the current production aggregate. Its later-bounds/zero-start test is retired:
+the current shared-source tests and downstream native compiler/runtime probe
+exercise sequential compilation, original-owner rollback and zero client effects.
+Fixed slot/guard tests remain useful within their original narrower scope.

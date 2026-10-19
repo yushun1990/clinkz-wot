@@ -612,7 +612,7 @@ fn traced_failures<R: checked_program::ConsumerPropertyReadRegistration>(
         if index < requests - if host { 3 } else { 0 } {
             assert_eq!(counts.starts, 0, "materialization allocation {index}");
         } else {
-            assert_eq!(counts.bounds, 3);
+            assert_eq!(counts.bounds, counts.starts);
             assert_eq!(counts.aborts, 0, "failed start never produced a cursor");
         }
         assert_eq!(trace().live, 0);
@@ -644,7 +644,7 @@ fn host_materialization_allocation_failures_have_zero_starts() {
 }
 
 #[test]
-fn all_bounds_barrier_and_compiler_remainders_use_the_checked_production_source() {
+fn sequential_bounds_and_compiler_remainders_use_the_checked_production_source() {
     let source = source();
     for spare in [0, 1] {
         let c = ResolvedTargetCompiler::try_new(64).unwrap();
@@ -676,7 +676,7 @@ fn all_bounds_barrier_and_compiler_remainders_use_the_checked_production_source(
         );
         if bad.is_some() {
             assert!(counts.failed);
-            assert_eq!(counts.starts, 0);
+            assert_eq!(counts.starts, bad.unwrap() - 1);
             assert_eq!(counts.bounds, bad.unwrap());
         } else {
             assert!(!counts.failed);
@@ -697,7 +697,7 @@ fn all_bounds_barrier_and_compiler_remainders_use_the_checked_production_source(
     assert!(counts.failed);
     assert_eq!(
         (counts.bounds, counts.starts, counts.steps, counts.aborts),
-        (3, 1, 1, 1)
+        (1, 1, 1, 1)
     );
     #[cfg(feature = "std")]
     {
@@ -723,13 +723,13 @@ fn all_bounds_barrier_and_compiler_remainders_use_the_checked_production_source(
         );
         assert_eq!(
             (counts.bounds, counts.starts, counts.steps, counts.aborts),
-            (3, 1, 1, 1)
+            (1, 1, 1, 1)
         );
     }
 }
 
 #[test]
-fn owned_complete_registrations_preserve_all_bounds_and_paid_continuations() {
+fn owned_complete_registrations_preserve_sequential_bounds_and_paid_continuations() {
     use clinkz_wot_consumer_property_read_binding_fixture as binding;
     use std::sync::Arc;
     let source = source();
@@ -768,7 +768,7 @@ fn owned_complete_registrations_preserve_all_bounds_and_paid_continuations() {
                 checked_program::test_support::traced(proof(source), factory(), bad, false);
             if let Some(bad) = bad {
                 assert!(counts.failed);
-                assert_eq!((counts.bounds, counts.starts), (bad, 0));
+                assert_eq!((counts.bounds, counts.starts), (bad, bad - 1));
             } else {
                 assert!(!counts.failed);
                 assert_eq!(

@@ -54,9 +54,10 @@ pub use binding_compiler::{
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,
     BindingArtifactRejection, BindingArtifactRejectionReason, BindingArtifactRole,
     BindingCompilerBounds, BindingCompilerExtension, BindingCompilerFailure, BindingCompilerInput,
-    BindingCompilerOutput, BindingCompilerStep, ConsumerBindingConfiguration,
-    ConsumerCompilerSupport, ResolvedTargetArtifact, ResolvedTargetCompiler,
-    ResolvedTargetCompilerCursor, StaticBindingCompilerRegistration,
+    BindingCompilerOutput, BindingCompilerSource, BindingCompilerStep,
+    ConsumerBindingConfiguration, ConsumerCompilerContract, ConsumerCompilerSupport,
+    ResolvedTargetArtifact, ResolvedTargetCompiler, ResolvedTargetCompilerCursor,
+    StaticBindingCompilerRegistration,
 };
 #[cfg(feature = "std")]
 pub use binding_compiler::{

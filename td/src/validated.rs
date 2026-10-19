@@ -2526,6 +2526,8 @@ pub enum ValidatedPropertyReadEvent<'step> {
 }
 /// Fully paid immutable facts. Planning decides eligibility and owns copies.
 pub struct ValidatedPropertyReadForm<'step> {
+    thing: &'step Thing,
+    property: &'step PropertyAffordance,
     ordinal: u32,
     name: &'step str,
     index: u32,
@@ -2538,6 +2540,21 @@ pub struct ValidatedPropertyReadForm<'step> {
     additional_form_metadata: bool,
 }
 impl<'step> ValidatedPropertyReadForm<'step> {
+    /// Original immutable source/context. These constant-time loans do not pay
+    /// for a receiver's traversal or grant runtime TD interpretation authority.
+    pub fn thing(&self) -> &'step Thing {
+        self.thing
+    }
+    pub fn property(&self) -> &'step PropertyAffordance {
+        self.property
+    }
+    pub fn form(&self) -> &'step Form {
+        self.form
+    }
+    pub fn effective_security(&self) -> &'step [String] {
+        self.names
+    }
+
     pub fn property_ordinal(&self) -> u32 {
         self.ordinal
     }
@@ -2702,6 +2719,8 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
             },
             LendingPhase::FormReady => {
                 ValidatedPropertyReadEvent::Form(ValidatedPropertyReadForm {
+                    thing: self.owner.thing,
+                    property: self.property.unwrap().1,
                     ordinal: self.ordinal as u32,
                     name: self.property.unwrap().0,
                     index: self.form as u32,

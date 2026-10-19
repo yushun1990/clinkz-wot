@@ -30,6 +30,11 @@ impl Context {
         &self.entries
     }
 
+    /// Borrows local context declarations without traversal or remote fetching.
+    pub fn entries(&self) -> &[ContextEntry] {
+        &self.entries
+    }
+
     /// Create a standard WoT 1.1 Context.
     /// By default, it contains only the 1.1 URI.
     pub fn new() -> Self {

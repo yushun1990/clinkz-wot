@@ -440,7 +440,15 @@ Ready. Done is stable until rewind or owner release. On failure the cursor
 fixes the first cause and subsequent polls return it without semantic work;
 its fixed blocks remain owned until prepaid release. Validation failure returns
 Failed only after TD's fixed cleanup is terminal. Proof/cursors are neither
-Copy nor Clone and have no raw Thing/storage/mutable accessor.
+Copy nor Clone and have no mutable accessor or unrestricted semantic query.
+The inline lowering amendment lends original source references on an already
+Ready `ValidatedPropertyReadForm`: `thing()`, `property()`, `form()` and
+`effective_security()`. `Context::entries()` lends local context declarations.
+These are constant-time compile-time loans, not a validation bypass or prepaid
+traversal. Basic/default/security/URI meaning remains in TD; the compiler must
+pay for its own bounded vocabulary inspection. No source loan enters output.
+Native callback/storage contracts belong to Binding SPI; Planning owns the
+third paid pass and ends the source-bearing owner before publication.
 
 Each property emits one Property event; only effective readable original Forms
 emit Form events. Security name/scheme are Some only for a single effective
@@ -456,7 +464,8 @@ UTF-8 validity, security lookup and scope count/byte sum. Explicit empty ops
 remain empty; explicit empty security overrides inheritance. The sequence's
 `len`, `byte_len` and iterator creation are constant-time; Planning charges each
 iterator advance/copy before using it. No unrestricted synchronous URI/security
-lookup or raw-map iterator is exposed. Planning alone decides exactly-one-NoSec
+lookup is exposed. Original map contents are only compile-time source loans;
+the receiver budgets traversal. Planning alone decides exactly-one-NoSec
 eligibility. A failed copy debit cannot repeat source sizing/UTF-8 validation or
 accumulate credit. Extended operation facts enter only through an admitted TD
 semantic extension.

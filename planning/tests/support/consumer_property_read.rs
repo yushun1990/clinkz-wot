@@ -55,7 +55,10 @@ impl<R: ConsumerPropertyReadRegistration> ConsumerPropertyReadRegistration for T
     fn start(&self, i: &BindingCompilerInput<'_>) -> CoreResult<Self::Cursor> {
         let mut c = self.counts.get();
         c.starts += 1;
-        assert_eq!(c.bounds, 3, "all bounds before every start");
+        assert_eq!(
+            c.bounds, c.starts,
+            "each coordinate is bounded before its start"
+        );
         assert_eq!(c.aborts, 0);
         self.counts.set(c);
         self.registration.start(i)

@@ -81,7 +81,7 @@ Basic/default/security/URI meaning never moves into Planning. There is no mandat
 complete normalized TD or unrestricted synchronous semantic view.
 
 Planning owns complete preflight, owned required facts/lookup/candidates, every
-compiler bound before start, sequential eager compilation, exact output footprint
+coordinate's bound before its start, sequential eager native compilation, exact output footprint
 and a source-independent Frozen draft. It retains no loan/pointer into scratch
 across Pending and consumes input-bearing state before returning the draft.
 Concrete artifacts satisfy owned-lifetime and cleanup eligibility, beyond a generic

@@ -279,8 +279,8 @@ Host representations. Entry requires
 
 The tranche owns one-registration/all-readable preflight, conservative
 capacity requirements, complete plan/candidate materialization, evaluation of
-every compiler bound, the completed all-bounds-before-start barrier,
-sequential eager compilation, the sealed TD-free
+each compiler bound before its coordinate start,
+sequential eager source-aware native compilation with funded rollback, the sealed TD-free
 `ConsumerPropertyReadDraft`, deterministic property/Form lookup, exact
 `PlanFootprint`, and monotonic `PlanningItems` work/reclamation projections. It
 does not own persistent-capacity reservation, publication, the retained

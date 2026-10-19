@@ -1147,9 +1147,8 @@ fn host(
     )
     .unwrap_or_else(|_| panic!("complete Host construction"))
 }
-fn check_descriptor(support: &ConsumerCompilerSupport, capacity: usize, host: bool) {
+fn check_descriptor(support: &ConsumerCompilerSupport, _capacity: usize, host: bool) {
     assert_eq!(support.consumer_configuration(), None);
-    assert_eq!(support.target_capacity(), capacity);
     assert_eq!(
         support.cursor_layout(),
         Layout::new::<ResolvedTargetCompilerCursor>()

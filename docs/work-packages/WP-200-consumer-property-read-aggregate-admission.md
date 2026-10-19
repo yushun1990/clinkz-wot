@@ -19,6 +19,26 @@ static/public Host measurements. Completion covers this tranche only; broader
 WP-200, WP-400 admission/completion, Consumer gate registration/acceptance and
 milestones remain separate.
 
+## Inline lowering amendment
+
+The current [Planning contract](../spec/planning.md#aggregate-construction)
+replaces the all-bounds-before-start barrier with sequential pure lowering from
+a third paid TD lending pass. It forwards the selected original source/context
+without interpreting protocol vocabulary. Earlier completed artifacts remain
+under the original funded root when a later bounds/lowering fails. Complete
+preflight, all-readable output, no partial publication, source-free rollback,
+actual storage admission and Servient capacity provenance remain binding.
+The old zero-start guarantee for a later bounds error is deliberately retired;
+zero native execution/publication and complete cleanup are the required outcome.
+
+This changes only `planning/src/consumer_property_read.rs` and the intersecting
+TD/Core authoring contracts, with downstream tests and the affected Host
+allocation regression. It does not replace the Producer lifecycle or activate
+broader operation/selection semantics. Original acceptance below is historical
+same-revision evidence, not independent acceptance of this amendment. The
+compiler support record owns the external-inline work/storage contract and
+replacement evidence boundary.
+
 ## Decision and challenged assumptions
 
 The smallest useful implementation unit is the complete unpublished,

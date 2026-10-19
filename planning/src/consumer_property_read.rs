@@ -1866,8 +1866,9 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                 {
                     return Err(invariant());
                 }
-                // No more semantic queries; destruction is fixed/prepaid TD work.
-                self.td = None;
+                // Re-lend the same validated coordinates during native lowering.
+                // Only the unpublished build retains this source loan.
+                self.td = Some(self.td.take().unwrap().rewind());
                 self.phase = Phase::Bounds;
                 self.position = 0;
                 if self.census.forms != 0 {
@@ -2014,20 +2015,24 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
 {
     fn collect_bound(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
         let d = self.root.as_mut().unwrap().data_mut();
-        if self.position == d.coordinates.len() {
-            if !d.bounds.debit(
-                budget,
-                Cost {
-                    items: 1,
-                    ..Cost::default()
-                },
-            )? {
+        let td = self.td.as_mut().unwrap();
+        let form = match td.step(budget, false).map_err(td_error)? {
+            TdStep::Pending => return Ok(()),
+            TdStep::Ready(Event::Property { .. }) => {
+                td.acknowledge();
                 return Ok(());
             }
-            self.phase = Phase::Compile;
-            self.position = 0;
-            return Ok(());
-        }
+            TdStep::Ready(Event::Form(form)) => form,
+            TdStep::Done => {
+                if self.position != d.coordinates.len() {
+                    return Err(invariant());
+                }
+                self.td = None;
+                self.phase = Phase::SealRows;
+                self.position = 0;
+                return Ok(());
+            }
+        };
         if !d.bounds.debit(
             budget,
             Cost {
@@ -2043,7 +2048,13 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             c.plan.as_ref().unwrap(),
             c.candidate,
             BindingArtifactRole::ConsumerCall,
-        );
+        )
+        .with_source(BindingCompilerSource::property_read(
+            form.thing(),
+            form.property(),
+            form.form(),
+            form.effective_security(),
+        ));
         let bound = self.registration.bounds(&input)?;
         validate_bound(
             &bound,
@@ -2060,23 +2071,26 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
         )?;
         self.config
             .check(K::BindingCompilerCursorBytesGlobalMax, bound.cursor_bytes())?;
-        if bound.cursor_bytes() > self.registration.support().cursor_layout().size() as u64
+        if bound.work().remaining(W::BindingPolls) != self.registration.support().progress_work()
+            || bound.artifact().retained_items() > 1
+            || bound.artifact().retained_bytes()
+                > self.registration.support().artifact_layout().size() as u64
+            || bound.cursor_bytes() > self.registration.support().cursor_layout().size() as u64
             || bound.temporary_bytes()
                 > self.registration.support().temporary_layout().size() as u64
         {
             return Err(invariant());
         }
         d.coordinates[self.position].bound = Some(bound);
-        self.position += 1;
+        self.phase = Phase::Compile;
         Ok(())
     }
     fn compile_coordinate(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
         let d = self.root.as_mut().unwrap().data_mut();
-        if self.position == d.coordinates.len() {
-            self.phase = Phase::SealRows;
-            self.position = 0;
-            return Ok(());
-        }
+        let td = self.td.as_mut().unwrap();
+        let TdStep::Ready(Event::Form(form)) = td.step(budget, false).map_err(td_error)? else {
+            return Err(invariant());
+        };
         let support = self.registration.support();
         if self.cursor.is_none() {
             if !d.compile.debit(
@@ -2114,7 +2128,13 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                     c.plan.as_ref().unwrap(),
                     c.candidate,
                     BindingArtifactRole::ConsumerCall,
-                );
+                )
+                .with_source(BindingCompilerSource::property_read(
+                    form.thing(),
+                    form.property(),
+                    form.form(),
+                    form.effective_security(),
+                ));
                 let cursor = self.registration.start(&input)?;
                 match guard {
                     Some(guard) => guard.commit(),
@@ -2153,14 +2173,21 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             c.plan.as_ref().unwrap(),
             c.candidate,
             BindingArtifactRole::ConsumerCall,
-        );
+        )
+        .with_source(BindingCompilerSource::property_read(
+            form.thing(),
+            form.property(),
+            form.form(),
+            form.effective_security(),
+        ));
         let mut child = WorkBudget::new().with_remaining(W::BindingPolls, available);
         let result = self
             .registration
             .progress(&input, self.cursor.take().unwrap(), &mut child);
-        let used = available
-            .checked_sub(child.remaining(W::BindingPolls))
-            .ok_or_else(invariant)?;
+        // Preserve the returned cursor/artifact before rejecting a malformed
+        // callback budget. Linked-code conformance is not an ownership excuse.
+        let debit = available.checked_sub(child.remaining(W::BindingPolls));
+        let used = debit.unwrap_or(0);
         budget.consume(W::BindingPolls, used).unwrap();
         d.compile.binding -= used;
         self.compiler_remaining -= used;
@@ -2173,8 +2200,8 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             }
             BindingCompilerStep::Complete(output) => {
                 let c = &mut d.coordinates[self.position];
-                // The closed issuer guarantees compatibility and exact payload.
-                // Preserve any rejected output in the cleanup owner nevertheless.
+                // Check every external output and retain a rejected artifact
+                // in the same cleanup owner.
                 let artifact = output.into_artifact();
                 let envelope = match BindingArtifactEnvelope::try_new(
                     c.reference.identity(),
@@ -2190,7 +2217,12 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                 c.artifact = ArtifactOwner::Ready(envelope);
                 self.position += 1;
                 self.compiler_remaining = 0;
+                td.acknowledge();
+                self.phase = Phase::Bounds;
             }
+        }
+        if debit.is_none() || used != step {
+            return Err(invariant());
         }
         Ok(())
     }

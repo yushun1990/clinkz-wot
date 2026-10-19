@@ -433,7 +433,11 @@ authoritative_artifacts = [
 ]
 api_items = [
     "ResolvedTargetCompiler", "ResolvedTargetCompilerCursor", "ResolvedTargetArtifact",
-    "ConsumerCompilerSupport", "ConsumerCompilerRegistration",
+    "ConsumerCompilerSupport", "ConsumerCompilerRegistration", "ConsumerCompilerContract", "BindingCompilerSource",
+    "consumer_compiler_contract_try_new", "binding_compiler_extension_consumer_contract",
+    "binding_compiler_input_source", "binding_compiler_input_with_source", "consumer_compiler_support_progress_work",
+    "binding_compiler_source_property_read", "binding_compiler_source_thing", "binding_compiler_source_property",
+    "binding_compiler_source_form", "binding_compiler_source_effective_security",
     "resolved_target_compiler_try_new", "resolved_target_compiler_configuration",
     "resolved_target_artifact_target", "host_binding_compiler_registration_try_new_consumer",
     "static_binding_registration_try_into_consumer_compiler", "host_binding_registration_try_into_consumer_compiler",
@@ -441,11 +445,14 @@ api_items = [
     "consumer_compiler_registration_into_registration",
 ]
 state_machines = []
-resource_changes = ["No schema/profile/WorkClass change; closed compiler costs and representation-specific actual slot/owner Layouts are known before callbacks, with binding payload counted once and held physical backing distinct from logical allowance"]
+resource_changes = ["No schema/profile/WorkClass change; qualified inline callback costs and actual generic slot/owner Layouts are captured before preparation callbacks, with binding payload counted once and held physical backing distinct from logical allowance"]
 old_api_removals = []
 performance_workloads = []
 implementation_paths = ["core/src/binding_compiler.rs", "core/src/binding.rs", "core/src/lib.rs"]
 pre_implementation_checks = [
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --test open_compiler",
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --test open_compiler",
+    "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async --test open_compiler",
     "tools/check-design-artifacts.sh",
     "cargo run --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --bin witness",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml",

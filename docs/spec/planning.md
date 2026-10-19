@@ -658,13 +658,15 @@ uses the same complete registration digest in native/Host compiler checks,
 candidates and artifact envelopes. Planning forwards it unchanged; no engine-
 policy key or translated capacity key substitutes. This eligibility identity is
 not a content-equivalence or storage-sharing key. The extension changes no
-Planning algorithm, public input, generation or all-bounds-before-start rule.
+literal helper's configuration encoding or result policy. Sequential inline
+lowering is defined below.
 
 The compiler input and ownership-bearing outcomes are exactly:
 
 ```rust
 pub struct BindingCompilerInput<'a> {
     logical_plan: &'a LogicalInteractionPlan,
+    source: Option<BindingCompilerSource<'a>>,
     candidate: BindingCandidate,
     role: BindingArtifactRole,
 }
@@ -696,6 +698,7 @@ pub trait BindingCompilerExtension {
     type Cursor;
     type Artifact;
 
+    fn consumer_contract(&self) -> Option<ConsumerCompilerContract> { None }
     fn compatibility(&self) -> BindingArtifactCompatibility;
     fn bounds(
         &self,
@@ -910,7 +913,7 @@ its full slot separately and must not add this overhead again. Native private
 backing, outer owners, callback work and transient overlap remain separate.
 Static retained-output accounting excludes the native inline payload from the
 outer-envelope charge because that payload is already in its native footprint.
-These physical storage rules do not open closed Consumer eligibility or qualify
+These physical storage rules alone do not qualify
 arbitrary callbacks, destructors or complete generic compiler admission.
 
 ### Complete-registration relationship
@@ -1252,7 +1255,7 @@ common capability; it does not establish every embedded deployment. Fixed-image
 preparation/installation remains a separate, unadmitted trust boundary.
 
 The shared contract is TD-owned meaning, deterministic coordinate/candidate
-selection, complete preflight, all bounds before any start, owned immutable
+selection, complete storage preflight, sequential funded pure lowering, owned immutable
 output, qualified identities, monotonic work, whole-transaction failure and
 bounded terminal ownership. Concrete binding compilers lower resolved inputs
 into protocol artifacts; they do not repeat TD semantics or select candidates.
@@ -1273,9 +1276,9 @@ or destructor proof is inherited by a static implementation, or vice versa.
 
 [WP-600 HTTP admission](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
 owns the admitted paid-metadata scalar and restricted closed-compiler projection.
-Carry that scalar in the existing owned logical plan; retain whole-transaction
-all-bounds-before-start and rollback. This permits no raw TD/protocol branch and
-limits source scope to that admission. Existing unrestricted support/evidence
+Carry that scalar in the existing owned logical plan for the literal helper.
+The inline extension below retains whole-transaction publication/rollback while
+replacing the all-bounds-before-start barrier. No protocol branch enters Planning. Existing unrestricted support/evidence
 remains valid for its original scope; changed carrier costs require successor completion.
 
 #### Aggregate construction
@@ -1285,8 +1288,10 @@ one TD-owned validated immutable Thing loan and exactly one finalized complete
 Consumer-capable Property Read registration. Properties use Thing's BTreeMap key
 order; Forms retain original array indices. TD's paid lending cursor supplies
 raw/resolved targets, content type/coding, subprotocol/scopes, effective operations
-and security-definition meaning. Planning receives no raw Thing/map/storage
-access and owns no Basic/default/security/URI rules. Each property gets a lookup
+and security-definition meaning. The selected Form also lends original Thing,
+property, Form and effective-security references. Planning forwards these loans
+to the compiler without interpreting extension vocabulary. It owns no
+Basic/default/security/URI rules. Each property gets a lookup
 row, including an empty readable range. Each retained coordinate has registration
 ordinal/candidate order zero, one eager ConsumerCall artifact, no credentials and
 exactly one TD-resolved NoSec definition. Explicit empty ops/security remain empty.
@@ -1316,9 +1321,11 @@ and copy before actual materialization. Zero/short credit cannot accumulate acro
 calls or acknowledge a partial event.
 
 After preflight, Servient reserves runtime/record/slot/rollback envelopes. Planning
-then materializes **every** coordinate and owned logical input before collecting
-all pure compiler bounds. No native source scan or synchronous public Thing helper
-is an aggregate entry. The existing exact-coordinate `PlanBuildInput<&Thing>` is
+then materializes every coordinate and engine-used logical input. A third paid
+TD lending pass supplies the same selected source to bounds/start/step while
+Planning compiles coordinates sequentially. Rewind never refills TD lifetime
+work. No extra source tree/reference table is retained. No synchronous public
+Thing helper is an aggregate entry. The existing exact-coordinate `PlanBuildInput<&Thing>` is
 narrow leaf regression authority and proves no validated trust boundary.
 
 The portable consumed build boundary is frozen as follows (private layouts and
@@ -1328,7 +1335,7 @@ helper modules are implementation mechanics):
 pub trait ConsumerPropertyReadRegistration: private::Sealed {
     type Artifact: 'static;
     // Projection from Core's checked ConsumerCompilerRegistration<R>, which
-    // retains the complete Host/static registration and its closed support.
+    // retains the complete Host/static registration and its inline work/layout contract.
 }
 pub struct ConsumerPropertyReadBuildConfig { /* checked fixed Planning projection */ }
 pub struct ConsumerPropertyReadRollback<A: 'static> { /* owned output, accounts, fixed cause/positions */ }
@@ -1391,10 +1398,10 @@ selected preparation representation/configuration before any aggregate compiler 
 Bounds/start/step/abort primitive costs, cursor/temporary storage, allocation
 behavior and artifact destruction are part of that support. A limits projection,
 compatibility identifier or complete-registration validity alone is not a support
-attestation. [Core's closed support contract](binding-spi.md#closed-consumer-compiler-support)
-owns the consuming complete-owner construction, actual immutable compiler
-configuration and selected Host adapter. The first eligible implementation is
-the fixed resolved-target copy primitive, not the open native compiler trait.
+attestation. [Core's inline contract](binding-spi.md#inline-consumer-compiler-support)
+provides actual generic layouts and qualified callback costs. Independent linked
+compilers may opt in without a Core type entry. Complete ownership remains
+necessary; an unqualified native trait implementation alone is insufficient.
 The [precursor](../work-packages/WP-200-consumer-compiler-support-admission.md)
 must complete its public Host/static evidence before aggregate admission. The
 existing build signature takes the checked owner as `R`; its limits-only config
@@ -1496,30 +1503,39 @@ allocator storage. Checking a returned artifact after infallible allocation is
 not such a proof. No universal allocator trait or rewrite of all compiler
 implementations follows from this obligation. A `'static` artifact bound is necessary;
 concrete no-source-pointer/callback, declaration honesty and post-destruction
-execution evidence are also required. Each callback receives a short owned-input
-loan; suspended compiler state owns data or checked positions, never a loan into
-movable transaction output.
+execution evidence are also required. Each callback receives a short input loan, including the selected original
+source/context during dynamic Consumer preparation. Suspended compiler state
+owns inline data or checked positions, never a source/output loan. The source
+root includes local context, security/schema definitions and root extensions;
+the selected property/Form retain extensions, response/encoding fields and
+absent/empty distinctions. Getters lend references in constant time; the linked
+compiler budgets its own bounded traversal. No implicit remote context fetching
+or hot-path TD retention is introduced. Synthetic preconstructed-plan and
+unchanged Producer callers may have no source (`BindingCompilerInput::new`);
+production Consumer preparation always sets `with_source`. A compiler requiring
+vocabulary must explicitly reject a missing source.
 
 Every bound must declare only `WorkClass::BindingPolls`, with a nonzero total
 no greater than the existing `plan_compile_work_units_per_step_max`. All
-coordinate bounds must succeed and a completed all-bounds barrier must exist
-before the first compiler `start`. Compilers then run sequentially with one
-non-resettable coordinate remainder. The aggregate compiler-work maximum is the
+coordinate storage/cleanup capacity is reserved before construction. For each
+selected source coordinate, prepay/evaluate bounds, check actual inline layouts,
+then start/progress that job before advancing. Each native step must debit its
+qualified work; Pending cannot refill the coordinate remainder. A later bounds
+or lowering failure can follow earlier completed artifacts and must reclaim
+them under the original funded root. There is no all-bounds-before-start barrier. The aggregate compiler-work maximum is the
 checked product of readable-coordinate count and that existing per-step value;
 the count is already bounded by `forms_per_context_max` and
 `forms_per_thing_max`. This narrow eligibility rule does not reinterpret the
 global field as a per-plan or per-admission limit and introduces no resource
 row.
 
-The persistent reservation remains uncommitted through materialization and
-bounds evaluation. Any failure there releases every still-uncommitted
-reservation, produces zero compiler `start` calls, and cannot enter
-publication. Compilation failure, reconciliation failure, cancellation, or a
-seal failure likewise fails the whole unpublished aggregate; no successful
-subset is published. The existing exact-coordinate
-`PropertyReadPlanCompiler::consumer_call` remains the behavioral leaf. A
-crate-private preparation kernel may be shared to support the barrier, but the
-completed exact-coordinate semantics and evidence remain unchanged.
+Persistent capacity remains paired with the coordinator's transaction through
+construction and publication. A failure before publication, including a later
+bounds error, fails the whole unpublished aggregate and produces source-free
+rollback; no successful subset is published and no client invocation occurs.
+The current one-registration aggregate still requires every readable coordinate
+to lower successfully. Skipping an unsupported alternative and broader
+security/codec selection remain replacement work.
 
 Lookup addresses one property row and only its contiguous readable-Form range.
 Omitted `form_index` selects the first readable row; an explicit index must
@@ -1679,7 +1695,7 @@ owner that references them is terminal.
 
 The accepted [Consumer resource migration](consumer-resource-ownership.md)
 reaffirms full compiler/cursor/artifact/output admission. It changes no Planning
-API, all-bounds barrier or source-independent ownership contract; shared Core
+API or source-independent ownership contract; shared Core
 metadata Layout changes still require fresh affected measurements.
 
 All profiles enforce the exact resource fields registered in

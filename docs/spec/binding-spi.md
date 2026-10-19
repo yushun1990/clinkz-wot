@@ -185,13 +185,12 @@ Servient. New wire instructions for an existing operation do not by themselves
 constitute a new engine semantic capability. A healthy supported mapping must
 complete; a restriction that rejects all such Forms does not satisfy the target.
 
-The present Consumer path fails that target. Static capture checks the actual
-`ResolvedTargetCompiler` type; Host capture requires its private supported
-adapter, rejecting generic erasure of even the same compiler. Planning's
-registration trait is sealed around checked complete owners. Producer compiler
-authoring is open, but its logical input discards necessary source distinctions
-and its public entry lacks whole-draft coverage. These are defects/restrictions
-to replace, not the definition of protocol independence.
+The Consumer inline-lowering migration below removes the exact compiler-type
+restriction and supplies the selected source/context through the installed path.
+Planning remains sealed around engine-owned complete registrations, not around
+a compiler implementation. Producer compilation still loses source distinctions
+and lacks whole-draft coverage. General allocating compilation and the broader
+replacement described here remain unimplemented.
 
 Select public role-specific compiler/executor contracts paired by a complete
 registration, with native associated artifact/state types and generic storage
@@ -277,122 +276,73 @@ by `ServientBuilder`. Their only purpose is to carry the exact compiler
 contract into the later complete bundle and to make independent third-party
 authoring compile-testable without waiting for the WP-300 execution API.
 
+### Inline Consumer compiler support
+
+This is the first implementation cut of the open-lowering direction. It replaces
+exact-type Consumer admission with a public finite inline contract and actual
+concrete-type Layouts. It does not activate the proposed Producer driver or
+claim general protocol conformance. No Core/compiler-name allowlist is involved.
+
+`BindingCompilerExtension::consumer_contract()` defaults to `None`. An external
+compiler may return `ConsumerCompilerContract::try_new(configuration,
+compatibility, work, steps)`, where `work` contains compatibility, bounds, start,
+step, abort and artifact-destruction upper bounds. Every cost and the step count
+is positive; progress and cleanup arithmetic must fit. This declaration is a
+linked-code obligation, not a certificate. The application qualifies callback
+behavior and input maxima, as it qualifies native runtime callbacks. Arbitrary
+in-process code cannot be made honest or terminating by Rust types or a token.
+
+The supported contract is deliberately **inline**: native cursors/artifacts own
+no indirectly allocated backing, source loans, live protocol resources,
+credentials or cleanup jobs. Bounds/start/abort/destruction allocate nothing
+and have the declared finite cost. Step consumes exactly its declared native
+work on each paid invocation, including Pending/Failed, and finishes within the
+declared number of steps. Short credit does no work. Compilation is pure;
+protocol I/O remains in execution. Allocating native jobs require a future
+controlled-backing contract, rather than an unchecked retained-byte assertion.
+
+Core captures configuration, compatibility and actual cursor, artifact, output,
+transport-overlap, adapter and Host-slot Layouts from the complete registration's
+concrete compiler. Compatibility is checked during startup; no bounds/start/step
+callback is used to discover eligibility. `ConsumerCompilerSupport` is this
+read-only accounting projection, not a source-known compiler approval. Configuration
+and client/resource-policy equality checks remain binding. The owned literal
+helper's existing `ConsumerBindingConfiguration` encoding is unchanged; external
+inline compilers can use StrictV1 with their own immutable configuration digest.
+
+Static complete Consumer-capable owners capture that contract directly.
+`HostBindingCompilerRegistration::try_new_consumer<C>(C)` captures it fallibly for
+any matching linked compiler (`C: BindingCompilerExtension + Send + Sync + 'static`,
+`C::Cursor: Send + 'static`, `C::Artifact: Send + Sync + 'static`). An ordinary
+Host adapter without this captured work contract remains ineligible. Rejection
+preserves the original compiler/complete owner. The engine-owned registration
+wrapper and private installed client continue enforcing provenance and pairing.
+
+Planning prepays bounds/start/abort/destruction and physical acquisition/release.
+Returned native bounds must fit actual inline layouts and qualified progress.
+Every returned artifact is checked against compatibility, role and admitted
+footprint; an invalid result remains owned for rollback. Generic Layouts, not
+64 bytes, determine the engine's storage admission. `ResolvedTargetCompiler`
+remains an optional literal-copy implementation with its own 1..=64 limit and
+existing default-JSON/owned-policy options. It is no longer required lowering.
+
+The Host adapter retains one complete typed slot across Pending, Failed and
+Complete. Its actual allocation is reserved/acquired before native start; output
+transfer allocates nothing. Native payload occurs once inside the slot. Tag,
+alignment, metadata, retained cursor slack and outer owners remain charged.
+Host progress adds one prepaid transport unit per native step. Cursor mismatch
+returns its original owner. Static composition adds no Host allocation/atomics.
+Source and result sealing do not grant bindings selection or dispatch authority.
+
 ### Closed Consumer compiler support
 
-The [HTTP admission amendment](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
-proposes one opt-in default-JSON restriction on this same closed primitive, with
-a paid source-free metadata scalar and distinct configuration encoding. It owns
-that exact additive contract/API; no arbitrary compiler gains support. Existing
-unrestricted support, artifact format and generic-adapter exclusions stay intact.
-Production changes require independent ADR-0013 admission.
-
-This is the contract of the completed ADR-0013 precursor. Its
-[registered evidence](../evidence/WP-200-consumer-compiler-support.toml) owns the
-accepted production boundary and its exclusions.
-
-The scoped [Consumer ownership successor](consumer-resource-ownership.md#closed-consumer-binding-configuration)
-extends this compiler with checked immutable owned configuration and a passive
-actual-client configuration projection. That section owns its exact API,
-encoding, equality checks and StrictV1 preservation. It is subject to the
-successor's independent readmission; the completed precursor proves only the
-existing strict implementation. The portable compiler SPI, target-copy payload
-format, closed static type and private supported Host adapter remain unchanged.
-
-The first dynamic Consumer aggregate uses a closed compiler support path. An
-open `BindingCompilerExtension`, its compatibility value, or a complete bundle
-cannot attest arbitrary native callback behavior. Core therefore supplies one
-narrow, source-reviewed `ResolvedTargetCompiler`: it copies the already resolved
-target into an owned 64-byte artifact, with an immutable checked capacity in
-`1..=64`, scalar continuation, fixed callback work and fixed destruction. It
-interprets no TD, URI, security, candidate-selection or protocol rule. Its
-configuration digest is derived from its actual immutable configuration, rather
-than accepted as a caller assertion. Binding execution consumes the owned target
-through the ordinary artifact boundary. This establishes support only for that
-Consumer lowering primitive, not arbitrary protocol compilers or Producer
-compilation.
-
-`ConsumerCompilerRegistration<R>` owns the original complete registration and
-its private support descriptor. Only Core can construct it, by consuming a
-validated complete Consumer-capable registration. Static capture checks the
-actual compiler type and configuration; Host capture requires Core's private
-supported adapter kind and that same configuration. An ordinary generic Host
-adapter remains ineligible even when it wraps `ResolvedTargetCompiler`. Every
-registration identity field is preserved. Rejection returns the unchanged
-complete owner. There is no constructor accepting costs, a support flag, a
-foreign attestation, a lowering callback or an artifact destructor.
-
-The additive surface is:
-
-```rust
-impl ResolvedTargetCompiler {
-    pub fn try_new(capacity: usize) -> CoreResult<Self>;
-    pub fn configuration(&self) -> BindingConfigurationDigest;
-}
-impl<B: PollServerBinding> StaticBindingRegistration<B>
-where B::Compiler: 'static {
-    pub fn try_into_consumer_compiler(self)
-        -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>;
-}
-#[cfg(feature = "std")]
-impl HostBindingCompilerRegistration {
-    pub fn try_new_consumer(compiler: ResolvedTargetCompiler)
-        -> Result<Self, BindingInputRejection<ResolvedTargetCompiler>>;
-}
-#[cfg(feature = "std")]
-impl HostBindingRegistration {
-    pub fn try_into_consumer_compiler(self)
-        -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>;
-}
-impl<R> ConsumerCompilerRegistration<R> {
-    pub fn registration(&self) -> &R;
-    pub fn support(&self) -> &ConsumerCompilerSupport;
-    pub fn into_registration(self) -> R;
-}
-impl ResolvedTargetArtifact {
-    pub fn target(&self) -> &str;
-}
-```
-
-`ResolvedTargetCompiler` implements the unchanged portable compiler SPI with
-`ResolvedTargetCompilerCursor` and `ResolvedTargetArtifact`. The support
-descriptor exposes fixed callback/abort/destruction costs, configured target
-capacity, actual cursor/output/owner Layouts and conservative temporary overlap.
-It is read-only metadata, not a transferable admission certificate. Planning
-accepts support only through the owning checked registration; borrowing its
-compiler projection keeps that complete owner alive. Servient captures the
-checked owner at startup and separately owns policy, parent capacity and
-installation. Consuming completion ends the preparation loan; the artifact
-contains no registration or input reference.
-
-Static preparation uses the fixed native cursor and artifact. The supported
-Host constructor uses the same generic typed-slot adapter described by
-[Planning](planning.md#host-compiler-representation), with its existing closed
-eligibility and prepaid transport costs. It acquires one fallible slot large and
-aligned enough for its cursor and completed output **before invoking the native
-start callback**. Planning must
-authorize that actual Layout and prepay the adapter/callback/cleanup costs from
-the descriptor before calling `start`; logical capacity is not physical backing.
-Acquisition failure invokes no native start and loses no input or existing owner.
-Pending and Failed restore the cursor to that same held allocation. Complete
-moves the output into it and transfers its owner to `HostBindingArtifact`.
-No post-callback allocation, reboxing, or allocation to report failure is allowed.
-Zero/short progress credit invokes no callback or storage transport. Abort and
-artifact release have supported fixed work and release backing exactly once.
-Safe payload/type/compatibility projections must retain the existing mismatch
-recovery contract. Binding payload bytes occur once inside the slot; its tag,
-padding, output metadata and outer wrappers are separate physical costs.
-
-“Before callbacks” here means before aggregate preparation callbacks. Ordinary
-complete-registration construction already calls compatibility during startup;
-that fixed primitive and startup provisioning are separately accounted. Capture
-and support queries themselves invoke no compiler callback. No boundedness claim
-is made for the unchanged generic registration path or its startup callbacks.
-
-The [precursor admission](../work-packages/WP-200-consumer-compiler-support-admission.md)
-owns exact source scope and the distinction between construction-model evidence
-and required production Host completion. Supporting an allocating native mock,
-Zenoh compiler or foreign lowering requires separate source admission; a new
-compatibility ID or implementation of an open trait cannot extend this set.
+Historical scope: the original closed literal-copy admission and its exact
+accepted evidence are retained in the
+[precursor record](../work-packages/WP-200-consumer-compiler-support-admission.md).
+The inline contract above supersedes its compiler-identity and private-adapter
+eligibility rules. Prior acceptance does not independently accept this extension.
+The same complete-owner projections (`registration`, `support`,
+`into_registration`) and optional literal artifact's `target()` remain available.
 
 ## Complete registration
 
@@ -2188,7 +2138,7 @@ Consumer-only installed execution uses the same Core-private single-use seal,
 normal/late response validator, static terminal acknowledgement and Host
 decorated-call accounting as dual-role execution. Raw clients remain authoring
 components and are not projected by an installed bundle. Only Core's consuming
-closed-support capture makes the new complete owners eligible for the aggregate.
+inline-contract capture makes the complete owners eligible for the aggregate.
 Neither role completeness nor compatibility identity proves bounded callbacks,
 fallible Host call backing or Servient parent-capacity provenance.
 

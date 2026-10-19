@@ -99,9 +99,9 @@ caller-owned immutable typed Thing
   -> TD paid Property/Form semantic lending, one Ready coordinate at a time
   -> Planning complete one-registration/all-readable preflight
   -> Servient runtime/record/slot/rollback capacity reservation
-  -> Planning complete owned materialization + every compiler bound
-  -> completed all-bounds-before-start barrier
-  -> sequential pure compiler progress + actual footprint reconciliation
+  -> Planning complete owned materialization
+  -> paid selected-source/context loan -> bounds/start/progress per coordinate
+  -> sequential pure native lowering + funded rollback + footprint reconciliation
   -> complete source-independent Frozen draft
   -> consume input-bearing build owner; end every short/input/config/compiler loan
   -> finish controlled build scratch cleanup + reconcile actual live owners
@@ -119,7 +119,8 @@ read_property(name, options)
 
 [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org) supersedes the mandatory
 normalized TD Snapshot. TD owns shared Basic/default/security/URI meaning;
-Planning receives short trusted semantic loans, never raw Thing/storage access.
+Planning receives short trusted semantic loans and forwards original source/context
+to qualified native lowering. It does not interpret the Binding vocabulary.
 Ready UTF-8 and copy-sizing facts are already paid; insufficient credit preserves
 the event without rescanning. Caller Thing lives immutably until the consumed
 build owner ends its loan. Actual controlled workspace/output accounts preserve

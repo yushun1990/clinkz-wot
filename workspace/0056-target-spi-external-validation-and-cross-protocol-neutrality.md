@@ -798,3 +798,32 @@ one endpoint owner covers every failure/recovery case, and any retained public
 concept is necessary. Findings and exact executed checks belong directly in
 PR #206. Production implementation, authority activation and merge remain outside
 this task.
+
+### Consumer inline-lowering implementation cut
+
+The implementation chooses the existing Consumer transaction as the first open
+lowering cut. Remove the exact compiler downcast/private-adapter eligibility;
+attach qualified inline callback costs and actual generic layouts to the paired
+complete owner. Forward the selected original source/context while TD's paid
+cursor retains the immutable loan. Compile sequentially under existing capacity
+and rollback roots, then destroy source-bearing state before publication.
+The Binding/Planning specifications and original work-package owners carry the
+exact replacement contracts; their original acceptance does not accept this cut.
+
+Removing only downcasts leaves source distinctions erased. A Producer preflight
+repairs unsafe coverage but leaves Consumer lowering closed. Another storage
+repair has less direct extension value after #209. A complete Producer driver
+rewrite combines independent ingress/session/publication risks with compilation.
+This cut exercises an independent compiler/executor through both installed
+Consumer runtimes now, without selecting those later mechanisms. It deliberately
+retains the engine-used logical plan until a smaller execution entry replaces
+its actual consumers; no duplication-per-binding premise justifies that work.
+
+The finite external binding probe distinguishes locally aliased READ/FETCH
+instructions, owns targets beyond 64 bytes, executes after TD destruction, and
+rejects an unknown later instruction with earlier outputs rolled back. This is
+an executable extension boundary, not real-wire conformance or universal
+callback qualification. Allocating native lowering, supported-alternative
+selection, optional identity/empty-name correction, parameterized definitions,
+Producer source/coverage/driver replacement, registration/session retirement,
+native route overlap and legacy/public-facade removal remain fundamental work.

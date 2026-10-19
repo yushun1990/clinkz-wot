@@ -12,6 +12,12 @@ This file owns the accepted detailed contract and API delta. The
 row dispositions. The [readmission record](../work-packages/WP-400-consumer-resource-ownership-admission.md)
 owns implementation scope, evidence obligations and impact disposition.
 
+The [inline compiler migration](binding-spi.md#inline-consumer-compiler-support)
+supersedes only this record's closed-compiler eligibility and all-bounds barrier.
+The configuration encoding and actual-client/result-policy checks below remain
+the literal helper's owned-policy contract. They do not define compiler openness
+or certify independently authored callbacks. No SDK allocation policy changes.
+
 ## Scope and rejected expansion
 
 Apply only to one startup Consumer-only registration, one eager generation and

@@ -22,6 +22,7 @@ use core::{
     task::{Context, Poll},
 };
 
+pub mod native;
 pub mod ownership;
 use ownership::{OwnedCall, OwnedPolicy};
 
@@ -64,6 +65,9 @@ impl Mode {
     }
 }
 pub struct Stats {
+    pub compiler_polls: AtomicUsize,
+    pub compilations: AtomicUsize,
+    pub compiler_aborts: AtomicUsize,
     pub starts: AtomicUsize,
     pub polls: AtomicUsize,
     pub cancels: AtomicUsize,
@@ -72,7 +76,7 @@ pub struct Stats {
     pub clients_destroyed: AtomicUsize,
     pub mode: AtomicU8,
     pub validation: AtomicU8,
-    pub target: [AtomicU8; 64],
+    pub target: [AtomicU8; 256],
     pub target_len: AtomicUsize,
     #[cfg(feature = "std")]
     pub hook: std::sync::Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
@@ -80,6 +84,9 @@ pub struct Stats {
 impl Default for Stats {
     fn default() -> Self {
         Self {
+            compiler_polls: AtomicUsize::new(0),
+            compilations: AtomicUsize::new(0),
+            compiler_aborts: AtomicUsize::new(0),
             starts: AtomicUsize::new(0),
             polls: AtomicUsize::new(0),
             cancels: AtomicUsize::new(0),
@@ -361,23 +368,11 @@ impl Drop for StaticClient {
         self.stats.clients_destroyed.fetch_add(1, Ordering::SeqCst);
     }
 }
-impl PollClientBinding for StaticClient {
-    type Compiler = ResolvedTargetCompiler;
-    type RequestState = State;
-    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
-        self.owned.as_ref().map(|p| p.configuration())
-    }
-    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        ResolvedTargetCompiler::try_new(64).unwrap().compatibility()
-    }
-    fn request_state_layout(&self) -> BindingStateLayout {
-        BindingStateLayout::of::<State>(BindingLifetimeFootprint::new(4, 1024))
-            .with_transient(BindingTransientFootprint::new(128))
-    }
-    fn start_request(
+impl StaticClient {
+    fn start_target(
         &mut self,
         request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<ResolvedTargetArtifact>,
+        target: &str,
         slot: &mut ClientRequestSlot<State>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
@@ -396,7 +391,7 @@ impl PollClientBinding for StaticClient {
                 ResourceFailureDomain::BindingPolicy,
             ));
         }
-        self.stats.selected(artifact.artifact().payload().target());
+        self.stats.selected(target);
         let output = prepare_output(
             &request,
             self.outputs[self.next].take().unwrap(),
@@ -426,6 +421,35 @@ impl PollClientBinding for StaticClient {
             },
         );
         Ok(StartStatus::Pending)
+    }
+}
+impl PollClientBinding for StaticClient {
+    type Compiler = ResolvedTargetCompiler;
+    type RequestState = State;
+    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        self.owned.as_ref().map(|p| p.configuration())
+    }
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
+        ResolvedTargetCompiler::try_new(64).unwrap().compatibility()
+    }
+    fn request_state_layout(&self) -> BindingStateLayout {
+        BindingStateLayout::of::<State>(BindingLifetimeFootprint::new(4, 1024))
+            .with_transient(BindingTransientFootprint::new(128))
+    }
+    fn start_request(
+        &mut self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<ResolvedTargetArtifact>,
+        slot: &mut ClientRequestSlot<State>,
+        budget: &mut WorkBudget,
+    ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
+    {
+        self.start_target(
+            request,
+            artifact.artifact().payload().target(),
+            slot,
+            budget,
+        )
     }
     fn poll_request(
         &mut self,
@@ -540,17 +564,11 @@ impl Drop for HostClient {
     }
 }
 #[cfg(feature = "std")]
-impl binding::ClientBinding for HostClient {
-    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
-        self.owned.as_ref().map(|p| p.configuration())
-    }
-    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        ResolvedTargetCompiler::try_new(64).unwrap().compatibility()
-    }
-    fn invoke(
+impl HostClient {
+    fn invoke_target(
         &self,
         request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+        target: &str,
     ) -> Result<
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
@@ -584,13 +602,7 @@ impl binding::ClientBinding for HostClient {
                 ResourceFailureDomain::BindingPolicy,
             ));
         }
-        self.stats.selected(
-            artifact
-                .artifact()
-                .try_payload::<ResolvedTargetArtifact>(self.artifact_compatibility())
-                .unwrap()
-                .target(),
-        );
+        self.stats.selected(target);
         let state = State {
             request: Some(request),
             output: Some(Ok(inbox.0[index].take().unwrap())),
@@ -619,6 +631,32 @@ impl binding::ClientBinding for HostClient {
         inbox.1 += 1;
         self.stats.starts.fetch_add(1, Ordering::SeqCst);
         Ok(call)
+    }
+}
+#[cfg(feature = "std")]
+impl binding::ClientBinding for HostClient {
+    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        self.owned.as_ref().map(|p| p.configuration())
+    }
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
+        ResolvedTargetCompiler::try_new(64).unwrap().compatibility()
+    }
+    fn invoke(
+        &self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> Result<
+        HostBindingCallBox<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    > {
+        self.invoke_target(
+            request,
+            artifact
+                .artifact()
+                .try_payload::<ResolvedTargetArtifact>(self.artifact_compatibility())
+                .unwrap()
+                .target(),
+        )
     }
 }
 #[cfg(feature = "std")]

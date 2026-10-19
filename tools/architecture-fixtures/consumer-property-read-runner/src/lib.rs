@@ -61,8 +61,21 @@ pub fn application(
     client: StaticClient,
     clock: &dyn RuntimeClock,
 ) -> CoreResult<[u16; 2]> {
-    let contract = PollClientBinding::consumer_configuration(&client)
-        .map_or(BindingResourceContract::StrictV1, |c| c.resource_contract());
+    let registration =
+        clinkz_wot_consumer_property_read_binding_fixture::static_registration(client);
+    application_registered(thing, registration, clock)
+}
+
+pub fn application_registered<C: PollClientBinding>(
+    thing: Thing,
+    registration: ConsumerCompilerRegistration<StaticConsumerBindingRegistration<C>>,
+    clock: &dyn RuntimeClock,
+) -> CoreResult<[u16; 2]>
+where
+    C::Compiler: 'static,
+    <C::Compiler as BindingCompilerExtension>::Artifact: 'static,
+{
+    let contract = registration.registration().resources().resource_contract();
     let policy = checked_policy(contract, GatewayDefaultV1::LIMITS.clone());
     let parent = RefCell::new(policy.parent_accounts());
     let mut report = (
@@ -75,8 +88,6 @@ pub fn application(
             4096,
         )),
     );
-    let registration =
-        clinkz_wot_consumer_property_read_binding_fixture::static_registration(client);
     let (mut runtime, observer) = StaticConsumerPropertyReadRuntime::try_new(
         registration,
         policy,
@@ -135,11 +146,19 @@ pub fn host_application(
     client: clinkz_wot_consumer_property_read_binding_fixture::HostClient,
     clock: alloc::sync::Arc<dyn RuntimeClock + Send + Sync>,
 ) -> CoreResult<[u16; 2]> {
-    let contract = binding::ClientBinding::consumer_configuration(&client)
-        .map_or(BindingResourceContract::StrictV1, |c| c.resource_contract());
+    let registration = clinkz_wot_consumer_property_read_binding_fixture::host_registration(client);
+    host_application_registered(thing, registration, clock)
+}
+
+#[cfg(feature = "std")]
+pub fn host_application_registered(
+    thing: Thing,
+    registration: ConsumerCompilerRegistration<HostConsumerBindingRegistration>,
+    clock: alloc::sync::Arc<dyn RuntimeClock + Send + Sync>,
+) -> CoreResult<[u16; 2]> {
+    let contract = registration.registration().resources().resource_contract();
     let policy = checked_policy(contract, GatewayDefaultV1::LIMITS.clone());
     let parent = alloc::sync::Arc::new(std::sync::Mutex::new(policy.parent_accounts()));
-    let registration = clinkz_wot_consumer_property_read_binding_fixture::host_registration(client);
     let (runtime, report) =
         ConsumerPropertyReadRuntime::try_new(registration, policy, clock, parent.clone())
             .map_err(|e| e.error().error().clone())?;

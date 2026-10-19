@@ -200,10 +200,64 @@ impl BindingArtifactIdentity {
     }
 }
 
+/// Compile-time source loan for the selected Property Read coordinate.
+///
+/// Getters are constant-time loans, not semantic interpretation or permission to
+/// select another Form. The linked compiler must budget its traversal. Neither
+/// this view nor any source reference may escape into a cursor or artifact.
+/// ```compile_fail
+/// use clinkz_wot_core::{BindingCompilerInput, BindingCompilerSource};
+/// fn retain(input: BindingCompilerInput<'_>) -> BindingCompilerSource<'static> {
+///     input.source().unwrap()
+/// }
+/// ```
+#[derive(Clone, Copy)]
+pub struct BindingCompilerSource<'a> {
+    thing: &'a clinkz_wot_td::thing::Thing,
+    property: &'a clinkz_wot_td::affordance::PropertyAffordance,
+    form: &'a clinkz_wot_td::form::Form,
+    security: &'a [alloc::string::String],
+}
+impl<'a> BindingCompilerSource<'a> {
+    /// Borrows original vocabulary/context and TD-resolved security names.
+    pub const fn property_read(
+        thing: &'a clinkz_wot_td::thing::Thing,
+        property: &'a clinkz_wot_td::affordance::PropertyAffordance,
+        form: &'a clinkz_wot_td::form::Form,
+        security: &'a [alloc::string::String],
+    ) -> Self {
+        Self {
+            thing,
+            property,
+            form,
+            security,
+        }
+    }
+    pub const fn thing(&self) -> &'a clinkz_wot_td::thing::Thing {
+        self.thing
+    }
+    pub const fn property(&self) -> &'a clinkz_wot_td::affordance::PropertyAffordance {
+        self.property
+    }
+    pub const fn form(&self) -> &'a clinkz_wot_td::form::Form {
+        self.form
+    }
+    pub const fn effective_security(&self) -> &'a [alloc::string::String] {
+        self.security
+    }
+}
+impl fmt::Debug for BindingCompilerSource<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BindingCompilerSource")
+            .finish_non_exhaustive()
+    }
+}
+
 /// Read-only resolved input passed to a binding compiler.
 #[derive(Clone, Copy)]
 pub struct BindingCompilerInput<'a> {
     logical_plan: &'a LogicalInteractionPlan,
+    source: Option<BindingCompilerSource<'a>>,
     candidate: BindingCandidate,
     role: BindingArtifactRole,
 }
@@ -219,7 +273,19 @@ impl<'a> BindingCompilerInput<'a> {
             logical_plan,
             candidate,
             role,
+            source: None,
         }
+    }
+
+    /// Adds the selected original source for compile-time lowering only.
+    pub const fn with_source(mut self, source: BindingCompilerSource<'a>) -> Self {
+        self.source = Some(source);
+        self
+    }
+    /// Production Consumer preparation always supplies this loan. Synthetic
+    /// preconstructed-plan callers may have no source.
+    pub const fn source(&self) -> Option<BindingCompilerSource<'a>> {
+        self.source
     }
 
     /// Returns the resolved immutable logical plan.
@@ -407,6 +473,13 @@ pub trait BindingCompilerExtension {
     /// Immutable protocol-specific artifact payload.
     type Artifact;
 
+    /// Opts into inline, pure Consumer compilation. The application qualifies
+    /// callback/destructor bounds; this declaration is not a Core certificate.
+    /// Native cursors/artifacts must own no indirect backing or live resources.
+    fn consumer_contract(&self) -> Option<ConsumerCompilerContract> {
+        None
+    }
+
     /// Returns the stable compatibility identity of produced artifacts.
     fn compatibility(&self) -> BindingArtifactCompatibility;
 
@@ -443,10 +516,6 @@ type ConsumerCompilerTemporary = (
     ResolvedTargetArtifact,
     CoreError,
 );
-
-pub(crate) const fn resolved_target_compatibility() -> BindingArtifactCompatibility {
-    RESOLVED_TARGET_COMPATIBILITY
-}
 
 /// Checked immutable eligibility of the closed Consumer compiler and client.
 ///
@@ -660,14 +729,6 @@ impl ResolvedTargetCompiler {
         }
         Ok(())
     }
-
-    pub(crate) fn support(&self, host_erased: bool) -> ConsumerCompilerSupport {
-        ConsumerCompilerSupport {
-            capacity: self.capacity,
-            host_erased,
-            owned: self.owned,
-        }
-    }
 }
 
 /// Fixed native continuation and coordinate identity; never an input pointer.
@@ -715,6 +776,23 @@ fn resolved_target_context(input: &BindingCompilerInput<'_>) -> ErrorContext {
 impl BindingCompilerExtension for ResolvedTargetCompiler {
     type Cursor = ResolvedTargetCompilerCursor;
     type Artifact = ResolvedTargetArtifact;
+
+    fn consumer_contract(&self) -> Option<ConsumerCompilerContract> {
+        Some(ConsumerCompilerContract {
+            configuration: self.configuration(),
+            compatibility: RESOLVED_TARGET_COMPATIBILITY,
+            work: [
+                1,
+                1 + form_eligibility_work(self.owned),
+                1 + form_eligibility_work(self.owned),
+                RESOLVED_TARGET_STEP_WORK + form_eligibility_work(self.owned),
+                1,
+                1,
+            ],
+            steps: 2,
+            owned: self.owned,
+        })
+    }
 
     fn compatibility(&self) -> BindingArtifactCompatibility {
         #[cfg(all(test, feature = "std"))]
@@ -803,117 +881,178 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
     }
 }
 
-/// Read-only source-owned costs and layouts, attached to one complete owner.
+/// Qualified finite callback costs for a pure, inline Consumer compiler.
 ///
-/// This value cannot be constructed by a binding, transferred to certify a
-/// different registration, or used to attest an arbitrary compiler. Costs are
-/// fixed work units, not timings. Callers prepay bounds/compatibility/start in
-/// `BindingPolls`, and allocation/abort/destruction/release in `CleanupItems`.
-/// Only step debits its supplied budget; other SPI signatures are unchanged.
-/// Startup storage and per-coordinate storage are separate accounts.
-///
-/// ```compile_fail
-/// # use clinkz_wot_core::ConsumerCompilerSupport;
-/// let unsupported = ConsumerCompilerSupport { capacity: 64, host_erased: false };
-/// ```
-#[derive(Debug)]
-pub struct ConsumerCompilerSupport {
-    capacity: u8,
-    host_erased: bool,
+/// `work` is [compatibility, bounds, start, step, abort, artifact destruction].
+/// Every paid native step consumes exactly its declared step work, including
+/// Pending/Failed; it completes or fails within `steps`. Unpaid retries do no
+/// work. Bounds/start/abort/destruction have the declared fixed upper bounds.
+/// No callback allocates indirect backing or acquires a live native resource.
+/// These are linked-code conformance obligations, not mechanically proven costs.
+#[derive(Clone, Copy, Debug)]
+pub struct ConsumerCompilerContract {
+    configuration: BindingConfigurationDigest,
+    compatibility: BindingArtifactCompatibility,
+    work: [u64; 6],
+    steps: u64,
     owned: Option<ConsumerBindingConfiguration>,
 }
+impl ConsumerCompilerContract {
+    pub fn try_new(
+        configuration: BindingConfigurationDigest,
+        compatibility: BindingArtifactCompatibility,
+        work: [u64; 6],
+        steps: u64,
+    ) -> CoreResult<Self> {
+        if steps == 0
+            || work.contains(&0)
+            || work[4]
+                .checked_add(work[5])
+                .and_then(|n| n.checked_add(2))
+                .is_none()
+            || work[3]
+                .checked_add(1)
+                .and_then(|n| n.checked_mul(steps))
+                .is_none()
+        {
+            return Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Admission,
+                RetryClass::Never,
+            )));
+        }
+        Ok(Self {
+            configuration,
+            compatibility,
+            work,
+            steps,
+            owned: None,
+        })
+    }
+}
 
+/// Actual generic layouts and qualified work, captured with a complete owner.
+/// It is an engine accounting projection, not a compiler-identity whitelist.
+#[derive(Clone, Copy, Debug)]
+pub struct ConsumerCompilerSupport {
+    contract: ConsumerCompilerContract,
+    host_erased: bool,
+    cursor: Layout,
+    artifact: Layout,
+    output: Layout,
+    temporary: Layout,
+    #[cfg(feature = "std")]
+    adapter: Layout,
+    #[cfg(feature = "std")]
+    slot: Layout,
+}
+
+pub(crate) fn consumer_compiler_support<C: BindingCompilerExtension>(
+    compiler: &C,
+    host_erased: bool,
+) -> Option<ConsumerCompilerSupport> {
+    let contract = compiler.consumer_contract()?;
+    if contract.compatibility != compiler.compatibility() {
+        return None;
+    }
+    type Temporary<C> = (
+        <C as BindingCompilerExtension>::Cursor,
+        BindingCompilerStep<
+            <C as BindingCompilerExtension>::Cursor,
+            <C as BindingCompilerExtension>::Artifact,
+        >,
+        BindingCompilerOutput<<C as BindingCompilerExtension>::Artifact>,
+        <C as BindingCompilerExtension>::Artifact,
+        CoreError,
+    );
+    let temporary = Layout::new::<Temporary<C>>();
+    #[cfg(feature = "std")]
+    let temporary = if host_erased {
+        Layout::new::<(
+            Temporary<C>,
+            BindingCompilerStep<HostBindingCompilerCursor, HostBindingArtifact>,
+        )>()
+    } else {
+        temporary
+    };
+    Some(ConsumerCompilerSupport {
+        contract,
+        host_erased,
+        cursor: Layout::new::<C::Cursor>(),
+        artifact: Layout::new::<C::Artifact>(),
+        output: Layout::new::<BindingCompilerOutput<C::Artifact>>(),
+        temporary,
+        #[cfg(feature = "std")]
+        adapter: Layout::new::<HostCompilerAdapter<C>>(),
+        #[cfg(feature = "std")]
+        slot: Layout::new::<HostCompilerSlot<C>>(),
+    })
+}
 impl ConsumerCompilerSupport {
     pub(crate) const fn configuration(&self) -> BindingConfigurationDigest {
-        match self.owned {
-            Some(configuration) => configuration.configuration(),
-            None => strict_configuration(self.capacity),
-        }
+        self.contract.configuration
     }
-    /// Projects the actual immutable owned configuration; strict support has none.
+    pub(crate) const fn compatibility(&self) -> BindingArtifactCompatibility {
+        self.contract.compatibility
+    }
+    /// Total native work including the fixed Host transport, when present.
+    pub const fn progress_work(&self) -> u64 {
+        self.contract.steps * self.step_work()
+    }
     pub const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
-        self.owned
+        self.contract.owned
     }
-    /// Returns the actual checked target capacity in bytes.
-    pub const fn target_capacity(&self) -> usize {
-        self.capacity as usize
-    }
-    /// Fixed cost of an explicitly invoked compatibility callback.
     pub const fn compatibility_work(&self) -> u64 {
-        1
+        self.contract.work[0]
     }
-    /// Fixed pre-bounds cost, known before invoking bounds.
     pub const fn bounds_work(&self) -> u64 {
-        1 + form_eligibility_work(self.owned)
+        self.contract.work[1]
     }
-    /// Fixed native start cost, separate from Host allocation work.
     pub const fn start_work(&self) -> u64 {
-        1 + form_eligibility_work(self.owned)
+        self.contract.work[2]
     }
-    /// Total work per paid step, including supported Host transport when present.
     pub const fn step_work(&self) -> u64 {
-        RESOLVED_TARGET_STEP_WORK + form_eligibility_work(self.owned) + self.host_erased as u64
+        self.contract.work[3] + self.host_erased as u64
     }
-    /// Fixed native abort cost for an owned cursor.
     pub const fn abort_work(&self) -> u64 {
-        1
+        self.contract.work[4]
     }
-    /// Fixed destruction cost of the native, allocation-free output.
     pub const fn destruction_work(&self) -> u64 {
-        1
+        self.contract.work[5]
     }
-    /// Fixed per-coordinate physical acquisition work; zero in the static cell.
     pub const fn allocation_work(&self) -> u64 {
         self.host_erased as u64
     }
-    /// Fixed per-coordinate backing release work; zero in the static cell.
     pub const fn release_work(&self) -> u64 {
         self.host_erased as u64
     }
-    /// Exact fixed native cursor layout.
     pub const fn cursor_layout(&self) -> Layout {
-        Layout::new::<ResolvedTargetCompilerCursor>()
+        self.cursor
     }
-    /// Exact binding-authored payload layout (included once in a Host slot).
     pub const fn artifact_layout(&self) -> Layout {
-        Layout::new::<ResolvedTargetArtifact>()
+        self.artifact
     }
-    /// Exact native output layout, including Core artifact metadata.
     pub const fn output_layout(&self) -> Layout {
-        Layout::new::<BindingCompilerOutput<ResolvedTargetArtifact>>()
+        self.output
     }
-    /// Conservative callback/transport overlap in addition to retained backing.
-    /// This includes native output while the Host slot still exists. It is a
-    /// fixed ownership bound, not target-specific machine stack measurement.
     pub const fn temporary_layout(&self) -> Layout {
-        #[cfg(feature = "std")]
-        if self.host_erased {
-            return Layout::new::<(
-                ConsumerCompilerTemporary,
-                BindingCompilerStep<HostBindingCompilerCursor, HostBindingArtifact>,
-            )>();
-        }
-        Layout::new::<ConsumerCompilerTemporary>()
+        self.temporary
     }
-    /// Exact startup adapter allocation, separate from per-coordinate admission.
     #[cfg(feature = "std")]
     pub const fn host_adapter_layout(&self) -> Option<Layout> {
         if self.host_erased {
-            Some(Layout::new::<ResolvedTargetCompiler>())
+            Some(self.adapter)
         } else {
             None
         }
     }
-    /// Exact retained Host allocation, including tag, metadata, and payload.
     #[cfg(feature = "std")]
     pub const fn host_slot_layout(&self) -> Option<Layout> {
         if self.host_erased {
-            Some(Layout::new::<HostCompilerSlot<ResolvedTargetCompiler>>())
+            Some(self.slot)
         } else {
             None
         }
     }
-    /// Exact outer Host cursor owner; additional to, not inside, its slot.
     #[cfg(feature = "std")]
     pub const fn host_cursor_owner_layout(&self) -> Option<Layout> {
         if self.host_erased {
@@ -922,7 +1061,6 @@ impl ConsumerCompilerSupport {
             None
         }
     }
-    /// Exact outer completed artifact owner; additional to its retained slot.
     #[cfg(feature = "std")]
     pub const fn host_output_owner_layout(&self) -> Option<Layout> {
         if self.host_erased {
@@ -1107,9 +1245,9 @@ impl<C: fmt::Debug> fmt::Debug for StaticBindingCompilerRegistration<C> {
 /// Core-erased host cursor. Its concrete type remains ownership-preserving.
 pub struct HostBindingCompilerCursor {
     storage: Box<dyn Any + Send>,
-    // Preserve the admitted closed Consumer's prepaid transport allowance.
-    // Generic compilers retain their native work contract.
-    consumer_steps: Option<u8>,
+    // Captured inline contracts prepay a finite number of Host transports.
+    // Unqualified generic compiler jobs retain their native work contract.
+    consumer_steps: Option<u64>,
 }
 
 #[cfg(feature = "std")]
@@ -1434,12 +1572,22 @@ impl HostBindingCompilerRegistration {
         }
     }
 
-    /// Captures the existing closed Consumer contract using the generic adapter.
-    /// This constructor does not widen Consumer compiler eligibility.
-    pub fn try_new_consumer(
-        compiler: ResolvedTargetCompiler,
-    ) -> Result<Self, crate::BindingInputRejection<ResolvedTargetCompiler>> {
-        let support = compiler.support(true);
+    /// Captures a linked compiler's inline contract and actual generic layouts.
+    /// Rejection preserves the original compiler; no native job is started.
+    pub fn try_new_consumer<C>(compiler: C) -> Result<Self, crate::BindingInputRejection<C>>
+    where
+        C: BindingCompilerExtension + Send + Sync + 'static,
+        C::Cursor: Send + 'static,
+        C::Artifact: Send + Sync + 'static,
+    {
+        let Some(support) = consumer_compiler_support(&compiler, true) else {
+            return Err(crate::BindingInputRejection::new(
+                compiler,
+                crate::BindingOperationalError::new(CoreError::UnsupportedOperation(
+                    ErrorContext::new(ErrorPhase::Admission, RetryClass::Never),
+                )),
+            ));
+        };
         let mut registration = Self::try_new(compiler)?;
         registration.consumer_support = Some(support);
         Ok(registration)
@@ -1447,12 +1595,6 @@ impl HostBindingCompilerRegistration {
 
     pub(crate) fn consumer_support(&self) -> Option<ConsumerCompilerSupport> {
         self.consumer_support
-            .as_ref()
-            .map(|support| ConsumerCompilerSupport {
-                capacity: support.capacity,
-                host_erased: support.host_erased,
-                owned: support.owned,
-            })
     }
 
     /// Actual retained allocation for one cursor and its completed output.
@@ -1464,9 +1606,9 @@ impl HostBindingCompilerRegistration {
 
     /// Returns the erased compiler's stable compatibility identity.
     pub fn compatibility(&self) -> BindingArtifactCompatibility {
-        // Closed compatibility is already captured; preserve callback costs.
-        if self.consumer_support.is_some() {
-            RESOLVED_TARGET_COMPATIBILITY
+        // Qualified compatibility was checked during startup.
+        if let Some(support) = self.consumer_support {
+            support.compatibility()
         } else {
             self.compiler.compatibility()
         }
@@ -1477,19 +1619,34 @@ impl HostBindingCompilerRegistration {
         let native = self.compiler.bounds(input)?;
         match &self.consumer_support {
             None => Ok(native),
-            Some(support) => Ok(BindingCompilerBounds::new(
-                native.artifact(),
-                native.cursor_bytes(),
-                support.temporary_layout().size() as u64,
-                WorkBudget::new().with_remaining(WorkClass::BindingPolls, 2 * support.step_work()),
-            )),
+            Some(support) => {
+                if native.work().remaining(WorkClass::BindingPolls)
+                    != support.contract.steps * support.contract.work[3]
+                    || WorkClass::ALL
+                        .into_iter()
+                        .any(|w| w != WorkClass::BindingPolls && native.work().remaining(w) != 0)
+                    || native.artifact().retained_items() > 1
+                    || native.artifact().retained_bytes() > support.artifact_layout().size() as u64
+                    || native.cursor_bytes() > support.cursor_layout().size() as u64
+                    || native.temporary_bytes() > support.temporary_layout().size() as u64
+                {
+                    return Err(host_cursor_mismatch(input));
+                }
+                Ok(BindingCompilerBounds::new(
+                    native.artifact(),
+                    native.cursor_bytes(),
+                    support.temporary_layout().size() as u64,
+                    WorkBudget::new()
+                        .with_remaining(WorkClass::BindingPolls, support.progress_work()),
+                ))
+            }
         }
     }
 
     /// Acquires the complete slot fallibly before invoking native start.
     pub fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<HostBindingCompilerCursor> {
         let mut cursor = self.compiler.start(input)?;
-        cursor.consumer_steps = self.consumer_support.as_ref().map(|_| 2);
+        cursor.consumer_steps = self.consumer_support.as_ref().map(|s| s.contract.steps);
         Ok(cursor)
     }
 
@@ -1968,13 +2125,13 @@ mod consumer_trace {
         CALLS.with(|cell| cell.set([0; 5]));
         FAIL_NEXT.with(|cell| cell.set(true));
         let rejection = HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap_err();
-        assert_eq!(calls(), [0; 5]);
+        assert_eq!(calls(), [1, 0, 0, 0, 0]);
         let host =
             HostBindingCompilerRegistration::try_new_consumer(rejection.into_input()).unwrap();
         let support = host.consumer_support().unwrap();
         assert_eq!(host.compatibility(), RESOLVED_TARGET_COMPATIBILITY);
-        assert_eq!(support.target_capacity(), 64);
-        assert_eq!(calls(), [0; 5]); // Captured immutable metadata, no callback.
+        assert_eq!(calls(), [2, 0, 0, 0, 0]); // Qualification is checked at startup.
+        CALLS.with(|cell| cell.set([0; 5]));
         FAIL_NEXT.with(|cell| cell.set(true));
         assert!(host.start(&input).is_err());
         assert_eq!(calls(), [0; 5]); // Null acquisition never reaches native start.

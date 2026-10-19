@@ -1306,7 +1306,7 @@ fn host_late_validation_deadline_overrun_and_preacceptance_recovery() {
 }
 
 #[test]
-fn host_missing_id_and_later_bounds_cannot_start_any_compiler_or_binding() {
+fn host_missing_id_and_later_bounds_preserve_atomic_publication_and_rollback() {
     for missing_id in [true, false] {
         let mut thing = source();
         if missing_id {
@@ -1350,10 +1350,11 @@ fn host_missing_id_and_later_bounds_cannot_start_any_compiler_or_binding() {
         disarm();
         assert!(result.is_err());
         assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
-        assert!(
-            !observed.layouts[..observed.requests]
+        assert_eq!(
+            observed.layouts[..observed.requests]
                 .contains(&(artifact_layout.size(), artifact_layout.align())),
-            "all bounds precede first compiler slot acquisition"
+            !missing_id,
+            "sequential pure lowering may acquire earlier slots; missing ID still fails before any slot"
         );
         if missing_id {
             assert_eq!(parent.lock().unwrap()[3].peak(), 0);

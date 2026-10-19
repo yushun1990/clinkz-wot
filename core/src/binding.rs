@@ -28,7 +28,7 @@ use crate::{
 };
 use crate::{
     BindingCompilerExtension, ConsumerBindingConfiguration, ConsumerCompilerSupport,
-    ResolvedTargetCompiler, StaticBindingCompilerRegistration,
+    StaticBindingCompilerRegistration,
 };
 #[cfg(feature = "std")]
 use crate::{HostBindingArtifact, HostBindingCompilerRegistration};
@@ -2459,7 +2459,7 @@ where
     input: StaticBindingRegistrationInput<B>,
 }
 
-/// One complete registration and Core-issued closed Consumer support.
+/// One complete registration and captured inline Consumer work/layout contract.
 ///
 /// Borrowing the registration's compiler keeps the complete owner alive. The
 /// descriptor is metadata, not a certificate that can be paired with another
@@ -2502,7 +2502,7 @@ impl<B: PollServerBinding> StaticBindingRegistration<B>
 where
     B::Compiler: 'static,
 {
-    /// Captures only the actual closed compiler and its checked configuration.
+    /// Captures the concrete compiler's inline contract and checked configuration.
     /// Rejection returns the unchanged complete owner, without a callback.
     pub fn try_into_consumer_compiler(
         self,
@@ -3879,8 +3879,7 @@ pub struct HostBindingRegistration {
 
 #[cfg(feature = "std")]
 impl HostBindingRegistration {
-    /// Captures only Core's fallible supported Host adapter and actual config.
-    /// Generic erasure confers no support, even for the closed compiler type.
+    /// Captures the fallible Host adapter's inline contract and actual config.
     pub fn try_into_consumer_compiler(
         self,
     ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
@@ -4101,18 +4100,16 @@ fn static_consumer_support<C: BindingCompilerExtension + 'static>(
     resources: BindingResourceDeclarations,
     client: Option<ConsumerBindingConfiguration>,
 ) -> Option<ConsumerCompilerSupport> {
-    let actual =
-        (compiler.compiler() as &dyn core::any::Any).downcast_ref::<ResolvedTargetCompiler>();
+    let actual = crate::binding_compiler::consumer_compiler_support(compiler.compiler(), false);
     if capabilities.supports_consumer_property_read()
         && execution.supports_application_static()
         && let Some(actual) = actual
         && identity.configuration() == actual.configuration()
         && consumer_metadata_matches(identity, resources, client)
-        && actual.support(false).consumer_configuration() == client
-        && identity.artifact_compatibility()
-            == crate::binding_compiler::resolved_target_compatibility()
+        && actual.consumer_configuration() == client
+        && identity.artifact_compatibility() == actual.compatibility()
     {
-        Some(actual.support(false))
+        Some(actual)
     } else {
         None
     }
@@ -4133,8 +4130,7 @@ fn host_consumer_support(
         && identity.configuration() == support.configuration()
         && consumer_metadata_matches(identity, resources, client)
         && support.consumer_configuration() == client
-        && identity.artifact_compatibility()
-            == crate::binding_compiler::resolved_target_compatibility()
+        && identity.artifact_compatibility() == compiler.compatibility()
     {
         Some(support)
     } else {
@@ -4337,8 +4333,8 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistration<C>
 where
     C::Compiler: 'static,
 {
-    /// Consumes the exact complete owner to capture Core's closed support.
-    /// Generic native compiler validity alone does not confer aggregate support.
+    /// Consumes the complete owner to capture its inline compiler contract.
+    /// A native compiler without qualified finite work remains ineligible.
     pub fn try_into_consumer_compiler(
         self,
     ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {

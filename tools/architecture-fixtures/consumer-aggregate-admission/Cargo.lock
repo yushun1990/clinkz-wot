@@ -107,6 +107,7 @@ version = "0.0.0"
 dependencies = [
  "clinkz-wot-core",
  "clinkz-wot-foundation",
+ "clinkz-wot-td",
 ]
 
 [[package]]

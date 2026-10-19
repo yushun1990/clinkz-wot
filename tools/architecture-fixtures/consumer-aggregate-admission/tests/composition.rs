@@ -284,31 +284,6 @@ fn production_td_and_public_host_owner_preserve_the_same_facts_with_distinct_sto
 }
 
 #[test]
-fn later_actual_bounds_failure_prevents_every_start() {
-    let source = source();
-    let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
-    let r = production_static_registration(
-        compiler,
-        identity(&ResolvedTargetCompiler::try_new(64).unwrap()),
-    );
-    let mut td = validate(&source).into_property_read();
-    let mut plans = materialize(&mut td);
-    plans[1] = LogicalInteractionPlan::try_property_read(
-        plans[1].plan_id(),
-        ThingId::from("urn:joined"),
-        "z-read".into(),
-        1,
-        "x".repeat(65).into_boxed_str(),
-        None,
-        None,
-    )
-    .unwrap();
-    let mut events = Vec::new();
-    assert!(compile(&r, &plans, &mut events).is_err());
-    assert_eq!(events, ["bounds", "bounds"]);
-}
-
-#[test]
 fn malformed_work_and_overflow_reject_without_a_callback() {
     let bound = |work| BindingCompilerBounds::new(BindingArtifactFootprint::new(1, 72), 1, 0, work);
     assert_eq!(compiler_envelope(&bound(WorkBudget::new()), 2, 16), None);

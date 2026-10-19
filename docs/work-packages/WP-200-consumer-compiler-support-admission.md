@@ -11,6 +11,35 @@ of exact candidate head `c64ab912ba48aff4b61460d25fcfdc0a88a3ab91` against base
 `98af47cbc6046c64ceec4d27547890d77ad2004d` has the same tree as that reviewed head.
 The production obligations below are preserved as the admitted completion contract.
 
+## Inline lowering replacement
+
+The [current inline contract](../spec/binding-spi.md#inline-consumer-compiler-support)
+replaces the precursor's exact compiler-type/private-adapter restriction under
+the direction accepted in PR #206. The original admission, completion revision
+and exclusions below remain historical evidence; they do not certify foreign
+compiler callbacks or accept this replacement automatically.
+
+The replacement implementation envelope is Core's existing compiler, complete
+registration and export files, plus the TD source loan and Planning join owned
+by the aggregate/TD records. `ConsumerCompilerContract` and
+`BindingCompilerSource` are public Core authoring values, not eligibility tokens.
+The engine wrapper still owns the complete paired registration. Native storage
+is inline, with actual generic Layouts and no indirect compiler backing.
+Callback/destructor conformance is qualified linked code. Host erasure remains
+fallible and retains the original concrete job/output slot. The literal helper
+is optional and its owned configuration/result-policy encoding is unchanged.
+
+Executable replacement evidence must include both public Consumer runtimes
+with independently authored lowering, contrasting preserved vocabulary/local
+prefixes, native storage/targets above 64 bytes, source destruction before
+execution, and later failure with no publication/invocation and exact rollback.
+The downstream `consumer-property-read-runner/tests/open_compiler.rs` supplies
+that extension probe; existing allocator/mismatch/cleanup fixtures remain
+required regression evidence. Run its no-default, async-no-std and std cells,
+the affected Core/Planning/Servient tests, HTTP regressions and design checks.
+Fresh independent review of the replacement diff is required; no gate/milestone
+status changes or new acceptance claim are made by this amendment.
+
 ## Scope and decision
 
 `WP-200-CONSUMER-COMPILER-SUPPORT` admits the narrow compiler precursor needed
