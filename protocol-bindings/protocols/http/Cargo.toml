@@ -7,6 +7,7 @@ edition.workspace = true
 result_large_err = "allow"
 
 [dependencies]
+clinkz-wot-td = { path = "../../../td" }
 clinkz-wot-core = { path = "../../../core" }
 clinkz-wot-foundation = { path = "../../../foundation" }
 hyper = { version = "=1.12.0", default-features = false, features = ["client", "http1"] }
@@ -19,7 +20,6 @@ socket2 = { version = "=0.6.4", default-features = false }
 sha2-const-stable = "=0.1.0"
 
 [dev-dependencies]
-clinkz-wot-td = { path = "../../../td" }
 clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }
 serde_json = { workspace = true, features = ["std"] }

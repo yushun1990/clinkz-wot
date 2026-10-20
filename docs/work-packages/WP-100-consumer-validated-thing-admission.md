@@ -947,3 +947,119 @@ must prove the strict value/field/Number/date contract, first-allocation source
 accounting, complete decoding/work/cancellation/discard/release and shared TD
 semantics before Directory/Discovery or release claims rely on external runtime
 JSON. Ordinary parsing followed by borrowing cannot satisfy that capability.
+
+## Host resolved extension lending
+
+The Host semantic Consumer path adds `ResolvedSemanticDocument` and
+`ValidatedPropertyReadCursor::resolve_extensions(property, form_index, budget)`.
+After Basic admission, Planning resolves one scheme-eligible Form at a time,
+including its enclosing Thing/property schema, responses and effective security
+definitions. It excludes sibling Forms/properties and unused security definitions.
+These local contexts follow JSON-LD's [context scoping](https://www.w3.org/TR/json-ld11/#scoped-contexts);
+the resolver's unsupported syntax is not a whole-TD validity rule.
+
+Each pass reserves 65,536 `DocumentNodes` units and two `CleanupItems` against both
+the current step and the TD owner's nonrenewable lifetime. Short credit does not
+begin the pass. After success or refusal, only unspent node/lookup/UTF-8-byte fuel
+is returned; actual work and the two buffer operations remain charged. Fresh
+budgets never replenish actual source work. The maximum is an atomic reservation,
+not a mandatory charge of 65,536 for every small Form. This permits representative
+multi-Form documents within the existing lifetime policy.
+
+One closure has 128 tree nodes, 32 scope records and depth 16. The two exact
+fallible Layout allocations contain borrowed scalars/indices and have bounded
+destruction; their summed capacity is reserved as temporary memory before use.
+No output retains the original Thing loan. Focused tests check physical backing,
+exact node/scope/depth boundaries, fuel exhaustion, short/zero credit, work classes
+and finite lifetime across fresh budgets. The HTTP suite executes a 24-property,
+48-Form TD against a raw TCP peer. These are application workload evidence, not
+universal WoT capacity or conformance claims.
+
+The arena/depth/fuel maxima are fixed for this adapter; application resource
+limits cannot enlarge them. Resource ceilings can still restrict admission.
+Making the semantic envelope configurable requires a corresponding compiler work
+qualification; increasing constants globally would not solve unsupported JSON-LD
+semantics. This slice instead isolates unrelated scopes. Oversized relevant root
+annotations and unsupported shared contexts remain explicit interoperability
+limits; they may make all affected Forms unavailable without asserting TD invalidity.
+
+The public input also exposes `PropertyFacts`, `SchemaView`/`SchemaFacts`, expanded
+`ResolvedFormFacts`, scoped URI-variable schemas, effective NoSec facts and
+additional-response facts. Schema handles borrow the same admitted source; they
+expose declared type (including omitted type), effective read/write flags,
+observable, metadata, format/unit, numeric/string/array constraints, required
+members, const/default/enum, properties, items and oneOf. Nested/composed children
+have the same interface and their own resolved extensions. Standard validation
+and defaults remain TD-owned. This is a facade over existing typed facts, not a
+new schema parser or a second normalized schema graph. Literal values are JSON
+payload data; a literal member named `@context` is never processed as a context.
+
+`SecurityFacts` retains the effective NoSec definition's scheme, optional `proxy`
+server, description/descriptions, semantic tags and resolved extensions. Per
+[TD 1.1 SecurityScheme](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#securityscheme),
+an absent proxy means the endpoint; those scopes are never collapsed. These
+borrowed strings and language maps use the same preparation fuel and source
+lifetime. Availability of a fact does not authorize its execution: a Binding must
+decline targets it cannot execute under the Engine's common security constraints.
+Other security kinds remain explicit unsupported dependencies of this adapter.
+
+Scalar getters allocate nothing. Child queries scan at most the admitted arena;
+iteration advances over prepared nodes. Preparation charges the reachable typed
+facts, strings, literal nodes and keys against the same 65,536-unit fuel and
+original lifetime as extension work. Literal backing remains in the admitted
+source rather than being copied into arena nodes. Native inspection/copy work is
+part of each qualified compiler's prepaid `BindingPolls` declaration; read-only
+queries are not a sandbox for arbitrary linked callbacks. Schema handles cannot
+outlive the semantic loan or enter the source-independent artifact.
+
+Thing and affordance URI-variable maps retain distinct scopes and absent/empty
+states. Standard `additionalResponses.schema` dependencies prepare only the named
+schema definitions they need, within the same arena/work limits. Queries outside
+that prepared closure return `OutsidePreparedScope`, not a false absence.
+Unsupported JSON Schema/Thing Model references, including aliases of `tm:ref`,
+and generic `items` children not validated by the upstream typed representation
+are explicit `UnsupportedDependency` refusals before native compilation. They
+do not become partially valid child handles. Other untyped scalar facets retained
+by the supplied model remain available by expanded name in schema semantics.
+
+`ArraySchema::items_are_tuple` preserves the previously collapsed distinction
+between uniform `items: {...}` and positional `items: [{...}]`. The source serde
+and public schema view retain that meaning, including one-element tuples; builders
+retain their previous one-schema uniform convention. This is a necessary source
+fidelity correction for nested schema access. It adds no descendant allocation.
+The source model still bounds typed numeric domains and accepts only its modeled
+schema shapes/security identifiers. This boundary does not recover unsupported
+source syntax or claim full JSON Schema/TD ingestion conformance.
+
+The supported subset resolves the standard TD context prefixes, absolute local
+prefixes, term aliases, local/property/Form and term-scoped object contexts,
+`@vocab`, and absolute/compact IRI values with `@id`/`@vocab` coercion. It retains
+unknown predicates, class identities, structured arrays/objects, nulls and empty
+values at Thing, Property/root-schema, Form, primary/additional response and
+security-definition scope, including nested payload-schema extension structure.
+Standard Form overrides are exposed separately as resolved facts. Profile URIs
+remain advertisements, not proof that a profile is activated or implemented.
+
+This is not full JSON-LD expansion or a new ingestion contract. Unprepared remote
+extension contexts, relative identifier coercion, context reset/base/propagation,
+type-scoped contexts, keyword/IRI-key aliases, containers, reverse properties,
+datatype/language coercions and unrepresentable chained compact-prefix/vocabulary
+definitions are unsupported rather than partially interpreted. Core TD aliases and lexical distinctions already collapsed by the
+existing typed serde model are not recovered. No Binding receives raw TD/context
+or reparses JSON-LD. Supporting more context syntax belongs here, not in a Binding.
+Context lookup captures the immutable defining map environment and vocabulary
+for each term. Later root-array entries, Form contexts, prefix overrides and
+vocabulary changes cannot reinterpret inherited aliases. Same-map forward
+references are resolved within that defining environment; cyclic/unrepresentable
+expansions are refused. `@vocab` uses the ordinary IRI expansion rules in the
+preceding active context, before installing the new map's term definitions.
+Standard prefixes (for example `htv:`) and already defined local prefixes expand
+there; subsequent redefinitions cannot change the captured vocabulary. A namespace
+that would require appending a third borrowed segment is explicitly refused.
+This profile permits one initial standard TD context URI
+followed by inline maps; repeating that URI after overrides is refused rather than
+pretending to implement a context reset. Chained prefix aliases remain unsupported.
+These rules follow the [JSON-LD 1.1 algorithms](https://www.w3.org/TR/json-ld11-api/#create-term-definition).
+The subset/cap refusal is an explicit interoperability limit, not a W3C prohibition
+or evidence of arbitrary-TD/protocol conformance. Existing strict Embedded lending
+is unchanged and does not allocate this Host arena.

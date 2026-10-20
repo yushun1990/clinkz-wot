@@ -61,6 +61,7 @@ pub use binding_compiler::{
 #[cfg(feature = "std")]
 pub use binding_compiler::{
     HostBindingArtifact, HostBindingCompilerCursor, HostBindingCompilerRegistration,
+    HostSemanticCompiler, ResolvedBindingInput,
 };
 pub use deadline::Deadline;
 pub use error::{

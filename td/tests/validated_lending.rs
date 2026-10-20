@@ -56,6 +56,68 @@ fn input() -> Thing {
       }
     }"#).unwrap()
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn host_resolution_charges_step_credit_and_the_original_td_work_lifetime() {
+    use clinkz_wot_td::{ValidatedSemanticError, semantic::RESOLUTION_WORK};
+    let thing = input();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(R::DocumentValidationWorkUnitsMax, Some(2 * RESOLUTION_WORK)));
+    let mut cursor = proof(&thing, &limits).into_property_read();
+    assert!(
+        cursor
+            .resolve_extensions("a", 1, &mut WorkBudget::new())
+            .unwrap()
+            .is_none()
+    );
+    let mut short = budget(RESOLUTION_WORK - 1);
+    assert!(
+        cursor
+            .resolve_extensions("a", 1, &mut short)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        W::ALL
+            .into_iter()
+            .all(|class| short.remaining(class) == RESOLUTION_WORK - 1)
+    );
+    let mut work = budget(RESOLUTION_WORK);
+    let document = cursor
+        .resolve_extensions("a", 1, &mut work)
+        .unwrap()
+        .unwrap();
+    let used = RESOLUTION_WORK - work.remaining(W::DocumentNodes);
+    assert!(used > 0 && used < RESOLUTION_WORK);
+    assert_eq!(work.remaining(W::CleanupItems), RESOLUTION_WORK - 2);
+    assert!(
+        W::ALL
+            .into_iter()
+            .filter(|class| !matches!(class, W::DocumentNodes | W::CleanupItems))
+            .all(|class| work.remaining(class) == RESOLUTION_WORK)
+    );
+    println!(
+        "semantic closure: {used} DocumentNodes, 2 CleanupItems; atomic reservation {RESOLUTION_WORK}"
+    );
+    drop(document);
+    // A second small closure fits; upper-bound reservations are not all spent.
+    drop(
+        cursor
+            .resolve_extensions("a", 1, &mut budget(1_000_000))
+            .unwrap(),
+    );
+    // Actual source work remains finite across fresh step budgets.
+    for _ in 0..100_000 {
+        if let Err(ValidatedSemanticError::Admission(Cause::Limit(limit))) =
+            cursor.resolve_extensions("a", 1, &mut budget(1_000_000))
+        {
+            assert_eq!(limit.kind(), R::DocumentValidationWorkUnitsMax);
+            return;
+        }
+    }
+    panic!("source work was replenished");
+}
 #[derive(Debug, PartialEq)]
 enum Fact {
     Property(u32, String),

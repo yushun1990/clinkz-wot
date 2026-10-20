@@ -4133,8 +4133,7 @@ fn host_consumer_support(
         && identity.configuration() == support.configuration()
         && consumer_metadata_matches(identity, resources, client)
         && support.consumer_configuration() == client
-        && identity.artifact_compatibility()
-            == crate::binding_compiler::resolved_target_compatibility()
+        && identity.artifact_compatibility() == support.compatibility()
     {
         Some(support)
     } else {

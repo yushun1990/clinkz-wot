@@ -63,12 +63,13 @@ long-lived proof before broad streaming expansion. Package closure cannot waive
 those predecessors by calling their implementation unsupported; protocol-specific
 unsupported cells remain an explicit separate capability disposition.
 
-The entry envelope conservatively rejects form extensions and response overrides
-through the minimum paid TD/compiler support projection. Before claiming a useful
-production HTTP vocabulary, admit bounded explicit method/header/response mapping
-for the advertised capability set, including explicit GET as well as default GET.
-Unsupported semantics must reject visibly; a local default-only read is not a
-complete HTTP interoperability or security claim.
+The original entry envelope rejected form extensions through a paid presence
+projection. The [native compilation amendment](WP-600-http-property-read-target.md#native-host-compilation-amendment)
+replaces HTTP's closed lowering with bounded resolved input and Binding-owned
+method/header/primary-response mapping. Supported explicit instructions and
+native defaults are Binding obligations; unknown annotations remain preserved
+without claims about their behavior. This scoped Host change does not expand the
+accepted production Producer, security, Embedded or arbitrary-protocol envelope.
 
 ## Resource and environment contract
 

@@ -818,6 +818,27 @@ this task.
 Status: DISCUSSING; recommendation for independent review and final Owner
 approval, not an accepted replacement contract.
 
+### Protocol-owned mapping reassessment
+
+The same-protocol matching experiment was reverted by #213; its findings and
+review corrections remain in #212, not a retained framework. The preferred
+production boundary is protocol-owned native mapping/defaults/vendor handling,
+with Engine-owned common WoT semantics, Form selection, security and lifecycle.
+Earlier annotation refusal, shared interpreter/coverage and matching proposals
+below are historical alternatives, not implementation requirements. TD 1.1
+specifies neither a universal extension criticality marker nor vocabulary scoring.
+
+The bounded Host implementation migrates the compilation seam first: TD resolves
+supported local extension syntax once, generic scheme/Form dispatch supplies a
+native compiler, and HTTP executes its own immutable artifact. Reusing the current
+runtime records preserves tested identity/security/lease/cleanup responsibilities;
+requiring them as native input would preserve the information-loss defect.
+A simultaneous Producer endpoint/lifecycle rewrite is unnecessary for this slice.
+The exact contracts are migrated to the existing TD, Planning, Binding and HTTP
+owners. Producer coverage/collision evidence and the immediate production HTTP
+Producer loop remain necessary. Independent architecture acceptance is still
+required; the Rust examples do not prove arbitrary-protocol conformance.
+
 ### Answer and claim boundary
 
 **A useful protocol-neutral semantic boundary is feasible and worth pursuing,

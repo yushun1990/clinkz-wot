@@ -129,6 +129,8 @@ extern crate alloc;
 extern crate self as td_candidate;
 
 pub mod core;
+#[cfg(feature = "std")]
+pub mod semantic;
 pub mod td_defaults;
 pub mod thing;
 pub mod thing_model;
@@ -137,6 +139,8 @@ pub mod validate;
 mod validated;
 pub use core::data_type;
 pub use core::data_type::AbsoluteUri;
+#[cfg(all(feature = "validated-thing", feature = "std"))]
+pub use validated::ValidatedSemanticError;
 #[cfg(feature = "validated-thing")]
 pub use validated::{
     ValidatedPropertyReadCursor, ValidatedPropertyReadEvent, ValidatedPropertyReadForm,

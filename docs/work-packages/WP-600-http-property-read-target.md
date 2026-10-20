@@ -406,3 +406,44 @@ predecessor impact. HTTP Producer/bidirectional loop, explicit HTTP vocabulary
 (including explicit GET), DNS, HTTPS/trust/security, streaming and embedded
 networking remain successors. HTTPS/security remains a release prerequisite.
 This tranche alone cannot close WP-600 or qualify v1 release/protocol parity.
+
+## Native Host compilation amendment
+
+The production follow-up replaces HTTP's mandatory Core target-copy compiler with
+Binding-owned native compilation through the public
+[Host semantic contract](../spec/binding-spi.md#host-semantic-consumer-compilation)
+and [generic Form dispatch](../spec/planning.md#host-semantic-form-dispatch).
+The [TD owner](WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending)
+defines the bounded resolved input. This supersedes metadata-free/default-only
+eligibility for HTTP; original accepted completion evidence remains historical
+for its exact former mapping, not acceptance of this public API amendment.
+Independent architecture acceptance is required for the changed boundary.
+
+HTTP's declared read mapping now handles default GET, explicit GET/POST/PUT/PATCH/
+DELETE, bounded `htv:headers` with `htv:fieldName`/`htv:fieldValue`, and explicit
+primary status 200. Malformed/unsupported explicit instructions do not become
+defaults. Framing, target and security headers cannot override engine/transport
+constraints. The precise supported limits and refusal cases belong to the
+[HTTP implementation](../../protocol-bindings/protocols/http/README.md).
+The standard basis is [TD 1.1 §8.3.1](https://www.w3.org/TR/wot-thing-description11/#http-binding-assertions)
+and the [HTTP vocabulary](https://www.w3.org/TR/2020/NOTE-wot-binding-templates-20200130/#http-vocabulary).
+Unknown annotations survive; unknown vendor semantics and Profiles are not claimed.
+
+Required focused evidence is the production HTTP suite (including raw TCP default/
+explicit method, scoped alias, header, annotation invariance, unsupported Form and
+strict-selection cases, definition-time alias shadowing in both wrong-method
+directions, independent Form preparation failures and a 24-property/
+48-Form document), TD semantic-tree/refusal/backing/work tests, the existing Core/
+Planning/Servient lifecycle/resource regressions and portable compile checks.
+The downstream request/reply compiler/executor exercises independent authoring
+through the same production path without an Engine protocol case; it is not a
+second real transport or arbitrary-protocol conformance proof. A separate
+non-`Copy`, 64-KiB, 512-step compiler demonstrates generic erasure ownership and
+the still-closed Consumer admission for owned/resumable compilers. That wider
+compiler SPI remains unfinished. The public native input must also retain admitted
+standard Property/schema facts, nested/composed schemas, uniform/tuple items and
+resolved extensions, with bounded access and explicit dependency refusal. The
+schema-aware downstream compiler exercises that path after source Drop. Exact commands and
+revisions belong in the implementation PR. No package/gate/milestone closure or
+strict Embedded HTTP backend follows. Production HTTP Producer and the public
+Consumer-to-Producer loop remain the next product boundary.

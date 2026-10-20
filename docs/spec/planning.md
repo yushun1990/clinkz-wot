@@ -111,11 +111,10 @@ interpreted as defaults merely because the current compiler input lacks them.
 TD lends bounded immutable facts; Planning preserves the facts or their paid
 eligibility proof needed for the registration's declared support envelope.
 The binding compiler interprets protocol vocabulary without raw TD access or
-execution-time rescan. ADR-0022's first HTTP entry rejects form extensions and
-response overrides through the minimum support projection; it does not silently
-ignore an explicit method/header/response instruction. Exact API and source
-changes require that tranche's ADR-0013 admission. Existing mock evidence has
-no HTTP-vocabulary interpretation claim and remains accepted within its scope.
+execution-time rescan. The original HTTP entry rejected form extensions through
+a minimum presence projection. The [Host semantic amendment](#host-semantic-form-dispatch)
+replaces that shortcut with resolved content and native lowering. Existing mock
+evidence retains its original scope; it proves no HTTP vocabulary interpretation.
 
 Information sufficiency is relative to a declared support envelope. If two
 admitted documents produce identical complete lawful inputs to a component,
@@ -1278,6 +1277,53 @@ all-bounds-before-start and rollback. This permits no raw TD/protocol branch and
 limits source scope to that admission. Existing unrestricted support/evidence
 remains valid for its original scope; changed carrier costs require successor completion.
 
+#### Host semantic Form dispatch
+
+For `HostSemanticCompiler`, preparation resolves a semantic closure for each
+scheme-eligible Form immediately before native start. The closure contains Thing,
+the selected property's typed schema and resolved extensions, that Form and its
+responses, effective security definitions, scoped URI-variable schemas and named
+additional-response schema dependencies. Other properties/Forms/unused security definitions are not
+visited by this pass. Basic TD validation and common security constraints still
+apply to the complete input. This replaces whole-document semantic preparation:
+a valid MQTT Form's unsupported local context or its large annotation must not
+make an independent HTTP Form unavailable.
+
+Engine capacity for one pair of arena buffers is reserved before allocation and
+reused as a temporary allowance across coordinates. Type/configuration-based
+bounds are collected before any compiler starts; they do not inspect extensions.
+The selected closure survives that coordinate's start/step callbacks, then is
+released. Only one closure is live; none enters published plans or requests. TD
+reserves the atomic work maximum, then settles only actual lookup/node/byte work
+and returns unused credit. All actual work consumes the original TD lifetime.
+
+Coarse scheme declarations supplied by the captured Binding filter effective
+readable Forms before materialization. Planning contains no protocol enum or
+HTTP/MQTT term branch. Operation defaults, security inheritance, the current
+exactly-one-NoSec constraint and engine authority remain common. The bounded
+aggregate still captures one complete registration; arbitrary multi-registration
+discovery and automatic same-protocol competition are not implemented.
+
+A semantic profile/capacity/unsupported-dependency refusal or native
+`UnsupportedOperation` makes only
+the affected coordinate unavailable. A live compiler slot is released when
+present. A shared Thing/property context restriction can affect every Form in
+that scope; this remains a resolver-profile limitation, not TD invalidity or a
+W3C prohibition. Basic invalidity, security refusal, allocation failure and
+exhaustion of the original TD work lifetime still abort the transaction.
+Default selection chooses the first supported coordinate;
+a strict Form index cannot fall through to another Form. Scheme-excluded Forms
+are unavailable to that registration. No fallback occurs after native effects.
+An unsupported coordinate creates no request or I/O, and retained negative
+coordinates participate in the same funded plan cleanup. Whole-draft Producer
+coverage/collision/readiness rules are unchanged and are not proved by this
+Consumer selection behavior.
+
+This is an incremental compilation-boundary migration. `LogicalInteractionPlan`
+remains the existing engine runtime identity/selection record; the Host compiler
+receives the separate resolved input. Retiring runtime containers or replacing
+Producer installation stages requires evidence at those boundaries.
+
 #### Aggregate construction
 
 The first aggregate contains every effective readable Property Read Form from
@@ -1393,8 +1439,9 @@ behavior and artifact destruction are part of that support. A limits projection,
 compatibility identifier or complete-registration validity alone is not a support
 attestation. [Core's closed support contract](binding-spi.md#closed-consumer-compiler-support)
 owns the consuming complete-owner construction, actual immutable compiler
-configuration and selected Host adapter. The first eligible implementation is
-the fixed resolved-target copy primitive, not the open native compiler trait.
+configuration and selected Host adapter. The original eligible implementation is
+the fixed resolved-target copy primitive. The Host semantic contract above
+supersedes exact-compiler eligibility only for its declared representation.
 The [precursor](../work-packages/WP-200-consumer-compiler-support-admission.md)
 must complete its public Host/static evidence before aggregate admission. The
 existing build signature takes the checked owner as `R`; its limits-only config

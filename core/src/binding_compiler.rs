@@ -206,6 +206,8 @@ pub struct BindingCompilerInput<'a> {
     logical_plan: &'a LogicalInteractionPlan,
     candidate: BindingCandidate,
     role: BindingArtifactRole,
+    #[cfg(feature = "std")]
+    semantics: Option<&'a clinkz_wot_td::semantic::ResolvedSemanticDocument<'a>>,
 }
 
 impl<'a> BindingCompilerInput<'a> {
@@ -219,6 +221,8 @@ impl<'a> BindingCompilerInput<'a> {
             logical_plan,
             candidate,
             role,
+            #[cfg(feature = "std")]
+            semantics: None,
         }
     }
 
@@ -236,6 +240,56 @@ impl<'a> BindingCompilerInput<'a> {
     pub const fn role(&self) -> BindingArtifactRole {
         self.role
     }
+
+    /// Attaches common resolved semantics for a native Host compiler. The
+    /// legacy logical record remains engine storage, not the native input API.
+    #[cfg(feature = "std")]
+    pub fn with_semantics(
+        mut self,
+        semantics: &'a clinkz_wot_td::semantic::ResolvedSemanticDocument<'a>,
+    ) -> Self {
+        self.semantics = Some(semantics);
+        self
+    }
+
+    #[cfg(feature = "std")]
+    pub fn resolved(&self) -> Option<ResolvedBindingInput<'a>> {
+        let document = self.semantics?;
+        if document.thing_id() != Some(self.logical_plan.thing_id().as_str())
+            || document.property().name != self.logical_plan.property_name()
+            || document
+                .form_facts(
+                    self.logical_plan.property_name(),
+                    self.logical_plan.form_index(),
+                )
+                .is_none()
+        {
+            return None;
+        }
+        Some(ResolvedBindingInput {
+            operation: self.logical_plan.operation(),
+            property: self.logical_plan.property_name(),
+            form_index: self.logical_plan.form_index(),
+            target: self.logical_plan.resolved_target(),
+            content_type: self.logical_plan.content_type(),
+            subprotocol: self.logical_plan.subprotocol(),
+            document,
+        })
+    }
+}
+
+/// Native compilation input: effective WoT facts plus resolved scoped values.
+/// No TD/context parser, security decision, handler or live resource is lent.
+#[cfg(feature = "std")]
+#[derive(Clone, Copy)]
+pub struct ResolvedBindingInput<'a> {
+    pub operation: clinkz_wot_td::data_type::Operation,
+    pub property: &'a str,
+    pub form_index: u32,
+    pub target: &'a str,
+    pub content_type: Option<&'a str>,
+    pub subprotocol: Option<&'a str>,
+    pub document: &'a clinkz_wot_td::semantic::ResolvedSemanticDocument<'a>,
 }
 
 impl fmt::Debug for BindingCompilerInput<'_> {
@@ -428,6 +482,127 @@ pub trait BindingCompilerExtension {
     fn abort(&self, cursor: Self::Cursor);
 }
 
+/// Independently authored, pure, bounded atomic Host lowering for Property Read.
+/// WORK bounds native inspection/copy/destruction under the TD arena limits.
+/// Implementations are trusted linked code and require executable qualification;
+/// numeric declarations and safe erasure cannot prove their behavior. Native
+/// private backing follows the selected Host policy. Strict Embedded compilers
+/// retain their separate incremental storage/work contract.
+///
+/// This is a restricted adapter, not the target general compiler SPI. Generic
+/// `BindingCompilerExtension` erasure supports owned artifacts and resumable
+/// jobs, but those generic registrations cannot enter Consumer planning yet.
+#[cfg(feature = "std")]
+pub trait HostSemanticCompiler: Send + Sync + 'static {
+    /// This first Host slice stores source-free inline native instructions.
+    /// Copy excludes owned heap descendants and native resource destructors.
+    type Artifact: Copy + Send + Sync + 'static;
+    const WORK: u64;
+    fn compatibility(&self) -> BindingArtifactCompatibility;
+    fn configuration(&self) -> ConsumerBindingConfiguration;
+    fn schemes(&self) -> &'static [&'static str];
+    fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<Self::Artifact>;
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone, Copy, Debug)]
+struct NativeConsumerSupport {
+    compatibility: BindingArtifactCompatibility,
+    schemes: &'static [&'static str],
+    work: u64,
+    cursor: Layout,
+    artifact: Layout,
+    output: Layout,
+    temporary: Layout,
+    adapter: Layout,
+    slot: Layout,
+}
+#[cfg(feature = "std")]
+struct SemanticCompilerAdapter<C>(C);
+#[cfg(feature = "std")]
+struct SemanticCompilerCursor {
+    plan: PlanId,
+    candidate: BindingCandidate,
+}
+#[cfg(feature = "std")]
+impl<C: HostSemanticCompiler> BindingCompilerExtension for SemanticCompilerAdapter<C> {
+    type Cursor = SemanticCompilerCursor;
+    type Artifact = C::Artifact;
+    fn compatibility(&self) -> BindingArtifactCompatibility {
+        self.0.compatibility()
+    }
+    fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+        // This adapter's bounds depend only on captured types/configuration.
+        // Mapping inspection waits for the coordinate's prepared semantics.
+        self.check_identity(input)?;
+        Ok(BindingCompilerBounds::new(
+            BindingArtifactFootprint::new(1, size_of::<C::Artifact>() as u64),
+            size_of::<SemanticCompilerCursor>() as u64,
+            size_of::<(BindingCompilerStep<Self::Cursor, C::Artifact>, CoreError)>() as u64,
+            WorkBudget::new().with_remaining(WorkClass::BindingPolls, C::WORK),
+        ))
+    }
+    fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<Self::Cursor> {
+        self.check(input)?;
+        Ok(SemanticCompilerCursor {
+            plan: input.logical_plan().plan_id(),
+            candidate: input.candidate(),
+        })
+    }
+    fn step(
+        &self,
+        input: &BindingCompilerInput<'_>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> BindingCompilerStep<Self::Cursor, Self::Artifact> {
+        if budget.consume(WorkClass::BindingPolls, C::WORK).is_err() {
+            return BindingCompilerStep::Pending(cursor);
+        }
+        let result = self.check(input).and_then(|()| {
+            if cursor.plan != input.logical_plan().plan_id()
+                || cursor.candidate != input.candidate()
+            {
+                return Err(resolved_target_error(input));
+            }
+            self.0.compile(
+                input
+                    .resolved()
+                    .ok_or_else(|| resolved_target_error(input))?,
+            )
+        });
+        match result {
+            Ok(artifact) => {
+                BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
+                    self.0.compatibility(),
+                    BindingArtifactFootprint::new(1, size_of::<C::Artifact>() as u64),
+                    artifact,
+                )))
+            }
+            Err(cause) => BindingCompilerStep::Failed(BindingCompilerFailure::new(cause, cursor)),
+        }
+    }
+    fn abort(&self, _: Self::Cursor) {}
+}
+#[cfg(feature = "std")]
+impl<C: HostSemanticCompiler> SemanticCompilerAdapter<C> {
+    fn check_identity(&self, input: &BindingCompilerInput<'_>) -> CoreResult<()> {
+        if input.role() != BindingArtifactRole::ConsumerCall
+            || input.candidate().configuration() != self.0.configuration().configuration()
+            || input.candidate().compatibility() != self.0.compatibility()
+        {
+            return Err(resolved_target_error(input));
+        }
+        Ok(())
+    }
+    fn check(&self, input: &BindingCompilerInput<'_>) -> CoreResult<()> {
+        self.check_identity(input)?;
+        if input.resolved().is_none() {
+            return Err(resolved_target_error(input));
+        }
+        Ok(())
+    }
+}
+
 const RESOLVED_TARGET_CAPACITY: usize = 64;
 const RESOLVED_TARGET_COMPATIBILITY: BindingArtifactCompatibility =
     BindingArtifactCompatibility::new(*b"clinkz-target-v1");
@@ -458,6 +633,10 @@ pub struct ConsumerBindingConfiguration {
     capacity: u8,
     cell: u8,
     default_json_forms: bool,
+    #[cfg(feature = "std")]
+    native: Option<BindingArtifactCompatibility>,
+    #[cfg(feature = "std")]
+    native_capacity: usize,
     private_policy: BindingConfigurationDigest,
     result: (u64, u64),
     key: BindingConfigurationDigest,
@@ -517,6 +696,10 @@ impl ConsumerBindingConfiguration {
             capacity: target_capacity as u8,
             cell,
             default_json_forms: false,
+            #[cfg(feature = "std")]
+            native: None,
+            #[cfg(feature = "std")]
+            native_capacity: 0,
             private_policy,
             result: (body_bytes, media_capacity),
             key,
@@ -528,6 +711,10 @@ impl ConsumerBindingConfiguration {
     }
     /// Returns the supported target capacity.
     pub const fn target_capacity(&self) -> usize {
+        #[cfg(feature = "std")]
+        if self.native.is_some() {
+            return self.native_capacity;
+        }
         self.capacity as usize
     }
     /// Returns the singleton compilation cell captured by this configuration.
@@ -551,10 +738,58 @@ impl ConsumerBindingConfiguration {
         self.key
     }
 
+    /// Native Host target capacity is Binding policy, independent of the old
+    /// inline copy helper's ceiling. Result backing remains engine-checked.
+    #[cfg(feature = "std")]
+    pub fn for_semantic_host(
+        target_capacity: usize,
+        private_policy: BindingConfigurationDigest,
+        compatibility: BindingArtifactCompatibility,
+        body_bytes: u64,
+        media_capacity: u64,
+    ) -> CoreResult<Self> {
+        if target_capacity == 0
+            || crate::response::consumer_result_backing(body_bytes, media_capacity).is_none()
+        {
+            return Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Admission,
+                RetryClass::Never,
+            )));
+        }
+        let key = BindingConfigurationDigest::new(
+            sha2_const_stable::Sha256::new()
+                .update(b"clinkz-native-consumer-configuration-v1\0")
+                .update(compatibility.as_bytes())
+                .update(private_policy.as_bytes())
+                .update(&(target_capacity as u64).to_le_bytes())
+                .update(&body_bytes.to_le_bytes())
+                .update(&media_capacity.to_le_bytes())
+                .finalize(),
+        );
+        Ok(Self {
+            contract: BindingResourceContract::ConsumerOwnedHostV2,
+            capacity: 0,
+            cell: 2,
+            default_json_forms: false,
+            native: Some(compatibility),
+            native_capacity: target_capacity,
+            private_policy,
+            result: (body_bytes, media_capacity),
+            key,
+        })
+    }
+
     /// Restricts the closed compiler to known metadata-free default JSON Forms.
     /// The derived key preserves every original configuration operand. Repeated
     /// application is idempotent and performs no allocation or client callback.
     pub fn with_default_json_forms(mut self) -> CoreResult<Self> {
+        #[cfg(feature = "std")]
+        if self.native.is_some() {
+            return Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Admission,
+                RetryClass::Never,
+            )));
+        }
         if self.default_json_forms {
             return Ok(self);
         }
@@ -666,6 +901,8 @@ impl ResolvedTargetCompiler {
             capacity: self.capacity,
             host_erased,
             owned: self.owned,
+            #[cfg(feature = "std")]
+            native: None,
         }
     }
 }
@@ -818,17 +1055,53 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
 /// ```
 #[derive(Debug)]
 pub struct ConsumerCompilerSupport {
+    #[cfg(feature = "std")]
+    native: Option<NativeConsumerSupport>,
     capacity: u8,
     host_erased: bool,
     owned: Option<ConsumerBindingConfiguration>,
 }
 
 impl ConsumerCompilerSupport {
+    #[cfg(feature = "std")]
     pub(crate) const fn configuration(&self) -> BindingConfigurationDigest {
         match self.owned {
             Some(configuration) => configuration.configuration(),
             None => strict_configuration(self.capacity),
         }
+    }
+    /// Whether this compiler consumes the common Host semantic view.
+    pub const fn uses_semantics(&self) -> bool {
+        #[cfg(feature = "std")]
+        {
+            return self.native.is_some();
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            false
+        }
+    }
+    /// Coarse scheme applicability only; no vocabulary ranking or interpretation.
+    pub fn accepts_target(&self, target: &str) -> bool {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return target.split_once(':').is_some_and(|(scheme, _)| {
+                native
+                    .schemes
+                    .iter()
+                    .any(|s| scheme.eq_ignore_ascii_case(s))
+            });
+        }
+        let _ = target;
+        true
+    }
+    #[cfg(feature = "std")]
+    pub(crate) const fn compatibility(&self) -> BindingArtifactCompatibility {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return native.compatibility;
+        }
+        RESOLVED_TARGET_COMPATIBILITY
     }
     /// Projects the actual immutable owned configuration; strict support has none.
     pub const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
@@ -836,6 +1109,12 @@ impl ConsumerCompilerSupport {
     }
     /// Returns the actual checked target capacity in bytes.
     pub const fn target_capacity(&self) -> usize {
+        #[cfg(feature = "std")]
+        if let Some(configuration) = self.owned {
+            if configuration.native.is_some() {
+                return configuration.target_capacity();
+            }
+        }
         self.capacity as usize
     }
     /// Fixed cost of an explicitly invoked compatibility callback.
@@ -844,14 +1123,26 @@ impl ConsumerCompilerSupport {
     }
     /// Fixed pre-bounds cost, known before invoking bounds.
     pub const fn bounds_work(&self) -> u64 {
+        #[cfg(feature = "std")]
+        if self.native.is_some() {
+            return 1;
+        }
         1 + form_eligibility_work(self.owned)
     }
     /// Fixed native start cost, separate from Host allocation work.
     pub const fn start_work(&self) -> u64 {
+        #[cfg(feature = "std")]
+        if self.native.is_some() {
+            return 1;
+        }
         1 + form_eligibility_work(self.owned)
     }
     /// Total work per paid step, including supported Host transport when present.
     pub const fn step_work(&self) -> u64 {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return native.work + 1;
+        }
         RESOLVED_TARGET_STEP_WORK + form_eligibility_work(self.owned) + self.host_erased as u64
     }
     /// Fixed native abort cost for an owned cursor.
@@ -872,20 +1163,36 @@ impl ConsumerCompilerSupport {
     }
     /// Exact fixed native cursor layout.
     pub const fn cursor_layout(&self) -> Layout {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return native.cursor;
+        }
         Layout::new::<ResolvedTargetCompilerCursor>()
     }
     /// Exact binding-authored payload layout (included once in a Host slot).
     pub const fn artifact_layout(&self) -> Layout {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return native.artifact;
+        }
         Layout::new::<ResolvedTargetArtifact>()
     }
     /// Exact native output layout, including Core artifact metadata.
     pub const fn output_layout(&self) -> Layout {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return native.output;
+        }
         Layout::new::<BindingCompilerOutput<ResolvedTargetArtifact>>()
     }
     /// Conservative callback/transport overlap in addition to retained backing.
     /// This includes native output while the Host slot still exists. It is a
     /// fixed ownership bound, not target-specific machine stack measurement.
     pub const fn temporary_layout(&self) -> Layout {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return native.temporary;
+        }
         #[cfg(feature = "std")]
         if self.host_erased {
             return Layout::new::<(
@@ -898,6 +1205,10 @@ impl ConsumerCompilerSupport {
     /// Exact startup adapter allocation, separate from per-coordinate admission.
     #[cfg(feature = "std")]
     pub const fn host_adapter_layout(&self) -> Option<Layout> {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return Some(native.adapter);
+        }
         if self.host_erased {
             Some(Layout::new::<ResolvedTargetCompiler>())
         } else {
@@ -907,6 +1218,10 @@ impl ConsumerCompilerSupport {
     /// Exact retained Host allocation, including tag, metadata, and payload.
     #[cfg(feature = "std")]
     pub const fn host_slot_layout(&self) -> Option<Layout> {
+        #[cfg(feature = "std")]
+        if let Some(native) = &self.native {
+            return Some(native.slot);
+        }
         if self.host_erased {
             Some(Layout::new::<HostCompilerSlot<ResolvedTargetCompiler>>())
         } else {
@@ -1399,6 +1714,58 @@ pub struct HostBindingCompilerRegistration {
 
 #[cfg(feature = "std")]
 impl HostBindingCompilerRegistration {
+    /// Captures an independently authored native compiler with actual layouts.
+    /// The complete registration subsequently checks its client/config pairing.
+    pub fn try_new_semantic<C: HostSemanticCompiler>(
+        compiler: C,
+    ) -> Result<Self, crate::BindingInputRejection<C>> {
+        let configuration = compiler.configuration();
+        let compatibility = compiler.compatibility();
+        if C::WORK == 0
+            || C::WORK == u64::MAX
+            || compiler.schemes().is_empty()
+            || configuration.native != Some(compatibility)
+        {
+            return Err(crate::BindingInputRejection::new(
+                compiler,
+                crate::BindingOperationalError::new(CoreError::Validation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ))),
+            ));
+        }
+        let native = NativeConsumerSupport {
+            compatibility,
+            schemes: compiler.schemes(),
+            work: C::WORK,
+            cursor: Layout::new::<SemanticCompilerCursor>(),
+            artifact: Layout::new::<C::Artifact>(),
+            output: Layout::new::<BindingCompilerOutput<C::Artifact>>(),
+            temporary: Layout::new::<(
+                BindingCompilerStep<SemanticCompilerCursor, C::Artifact>,
+                BindingCompilerStep<HostBindingCompilerCursor, HostBindingArtifact>,
+                CoreError,
+            )>(),
+            adapter: Layout::new::<SemanticCompilerAdapter<C>>(),
+            slot: Layout::new::<HostCompilerSlot<SemanticCompilerAdapter<C>>>(),
+        };
+        let support = ConsumerCompilerSupport {
+            native: Some(native),
+            capacity: configuration.capacity,
+            host_erased: true,
+            owned: Some(configuration),
+        };
+        match Self::try_new(SemanticCompilerAdapter(compiler)) {
+            Ok(mut registration) => {
+                registration.consumer_support = Some(support);
+                Ok(registration)
+            }
+            Err(rejected) => {
+                let (adapter, error) = rejected.into_parts();
+                Err(crate::BindingInputRejection::new(adapter.0, error))
+            }
+        }
+    }
     /// Erases one portable compiler using safe standard-library type identity.
     /// Startup allocation follows the Host deployment failure policy. Use
     /// [`Self::try_new`] when the original compiler must survive refusal.
@@ -1452,6 +1819,7 @@ impl HostBindingCompilerRegistration {
                 capacity: support.capacity,
                 host_erased: support.host_erased,
                 owned: support.owned,
+                native: support.native,
             })
     }
 
@@ -1465,8 +1833,8 @@ impl HostBindingCompilerRegistration {
     /// Returns the erased compiler's stable compatibility identity.
     pub fn compatibility(&self) -> BindingArtifactCompatibility {
         // Closed compatibility is already captured; preserve callback costs.
-        if self.consumer_support.is_some() {
-            RESOLVED_TARGET_COMPATIBILITY
+        if let Some(support) = &self.consumer_support {
+            support.compatibility()
         } else {
             self.compiler.compatibility()
         }
@@ -1481,7 +1849,10 @@ impl HostBindingCompilerRegistration {
                 native.artifact(),
                 native.cursor_bytes(),
                 support.temporary_layout().size() as u64,
-                WorkBudget::new().with_remaining(WorkClass::BindingPolls, 2 * support.step_work()),
+                WorkBudget::new().with_remaining(
+                    WorkClass::BindingPolls,
+                    (if support.uses_semantics() { 1 } else { 2 }) * support.step_work(),
+                ),
             )),
         }
     }
@@ -1489,7 +1860,10 @@ impl HostBindingCompilerRegistration {
     /// Acquires the complete slot fallibly before invoking native start.
     pub fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<HostBindingCompilerCursor> {
         let mut cursor = self.compiler.start(input)?;
-        cursor.consumer_steps = self.consumer_support.as_ref().map(|_| 2);
+        cursor.consumer_steps = self
+            .consumer_support
+            .as_ref()
+            .map(|s| if s.uses_semantics() { 1 } else { 2 });
         Ok(cursor)
     }
 

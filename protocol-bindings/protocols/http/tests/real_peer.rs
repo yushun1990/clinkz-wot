@@ -779,7 +779,9 @@ fn preacceptance_rejections_recover_the_original_request_without_connecting() {
             Err(r) => r,
             Ok(_) => panic!("unsupported target accepted: {target}"),
         };
-        assert!(rejected.into_parts().0.1.is_some());
+        // Unsupported native targets now fail during compilation/selection,
+        // before construction of an OutboundRequest.
+        assert!(rejected.into_parts().0.1.is_none());
         drop(handle);
         shutdown(&runtime);
         drop(runtime);

@@ -155,6 +155,7 @@ pub fn into_td(decoded: Decoded<Source>) -> DataSchema {
         Shape::Array { items, min, max } => DataSchema::Array(ArraySchema {
             _context: context,
             items,
+            items_are_tuple: false,
             min_items: min,
             max_items: max,
         }),

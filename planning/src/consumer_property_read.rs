@@ -487,6 +487,7 @@ struct Coordinate<A> {
     reference: BindingArtifactRef,
     bound: Option<BindingCompilerBounds>,
     artifact: ArtifactOwner<A>,
+    unsupported: bool,
     scope_bytes: u64,
     scope_capacity_bytes: u64,
     backing_bytes: u64,
@@ -508,6 +509,7 @@ impl<A> Coordinate<A> {
             reference: BindingArtifactRef::new(identity, slot),
             bound: None,
             artifact: ArtifactOwner::Empty,
+            unsupported: false,
             scope_bytes: 0,
             scope_capacity_bytes: 0,
             backing_bytes: 0,
@@ -1039,12 +1041,23 @@ pub fn select_consumer_property_read_aggregate<'a, A: 'static>(
         return Err(failure(SelectionFailureReason::NoFormSupportsOperation));
     }
     let coordinate = match options.form_index() {
-        None => &range[0],
+        None => range
+            .iter()
+            .find(|c| !c.unsupported)
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?,
         Some(index) => range
             .iter()
             .find(|c| c.plan.as_ref().unwrap().form_index() as usize == index)
             .ok_or_else(|| failure(SelectionFailureReason::StrictSelectionMismatch))?,
     };
+    if coordinate.unsupported {
+        let plan = coordinate.plan.as_ref().unwrap();
+        return Err(CoreError::UnsupportedOperation(
+            context()
+                .with_form_index(plan.form_index())
+                .with_plan(plan.plan_id()),
+        ));
+    }
     Ok(ConsumerPropertyReadSelection { coordinate })
 }
 
@@ -1211,6 +1224,8 @@ struct Census {
 #[must_use]
 pub struct ConsumerPropertyReadBuild<'td, 'environment, R: ConsumerPropertyReadRegistration> {
     td: Option<ValidatedPropertyReadCursor<'td>>,
+    #[cfg(feature = "std")]
+    semantics: Option<clinkz_wot_td::semantic::ResolvedSemanticDocument<'td>>,
     registration: &'environment R,
     cleanup: &'environment mut ConsumerPropertyReadCleanupSlot<R::Artifact>,
     config: ConsumerPropertyReadBuildConfig,
@@ -1293,6 +1308,14 @@ pub fn build_consumer_property_read_aggregate<
         size_of::<ConsumerPropertyReadBuild<'td, 'environment, R>>() as u64,
         planning_temporary,
     )?;
+    #[cfg(feature = "std")]
+    let fixed_charge = if support.uses_semantics() {
+        let bytes = clinkz_wot_td::semantic::ResolvedSemanticDocument::capacity_bytes();
+        config.check(K::LargestContiguousAllocationBytesMax, bytes)?;
+        add(fixed_charge, bytes)?
+    } else {
+        fixed_charge
+    };
     let temporary = add(fixed_charge, support.temporary_layout().size() as u64)?;
     config.check(K::AdmissionTemporaryBytesPerOperationMax, temporary)?;
     config.check(K::AdmissionTemporaryBytesGlobalMax, temporary)?;
@@ -1312,6 +1335,8 @@ pub fn build_consumer_property_read_aggregate<
     let host_backing = 0;
     Ok(ConsumerPropertyReadBuild {
         td: Some(td.into_property_read()),
+        #[cfg(feature = "std")]
+        semantics: None,
         registration,
         cleanup,
         config: *config,
@@ -1487,6 +1512,10 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             }
         }
         self.td = None;
+        #[cfg(feature = "std")]
+        {
+            self.semantics = None;
+        }
         if let Some(r) = self.root.as_mut() {
             let d = r.data_mut();
             d.release_temporary();
@@ -1612,6 +1641,14 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                                 self.census.property_forms = 0;
                             }
                             Event::Form(form) => {
+                                if !self
+                                    .registration
+                                    .support()
+                                    .accepts_target(form.resolved_href())
+                                {
+                                    self.td.as_mut().unwrap().acknowledge();
+                                    return Ok(Advance::Pending);
+                                }
                                 let (text, table, scopes) = form_size(&form)?;
                                 self.census.forms = add(self.census.forms, 1)?;
                                 self.config.check(K::FormsPerThingMax, self.census.forms)?;
@@ -1866,8 +1903,11 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                 {
                     return Err(invariant());
                 }
-                // No more semantic queries; destruction is fixed/prepaid TD work.
-                self.td = None;
+                // Native compilers still need one semantic closure per coordinate.
+                // The immutable TD loan is released before draft publication.
+                if !self.registration.support().uses_semantics() {
+                    self.td = None;
+                }
                 self.phase = Phase::Bounds;
                 self.position = 0;
                 if self.census.forms != 0 {
@@ -1911,6 +1951,14 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                 });
             }
             TdStep::Ready(Event::Form(form)) => {
+                if !self
+                    .registration
+                    .support()
+                    .accepts_target(form.resolved_href())
+                {
+                    td.acknowledge();
+                    return Ok(());
+                }
                 let (text, scope_table, scopes) = form_size(&form)?;
                 if !d.material.debit(
                     budget,
@@ -2044,6 +2092,11 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             c.candidate,
             BindingArtifactRole::ConsumerCall,
         );
+        #[cfg(feature = "std")]
+        let input = match &self.semantics {
+            Some(s) => input.with_semantics(s),
+            None => input,
+        };
         let bound = self.registration.bounds(&input)?;
         validate_bound(
             &bound,
@@ -2076,6 +2129,34 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             self.phase = Phase::SealRows;
             self.position = 0;
             return Ok(());
+        }
+        #[cfg(feature = "std")]
+        if self.registration.support().uses_semantics() && self.semantics.is_none() {
+            use clinkz_wot_td::{ValidatedSemanticError as E, semantic::SemanticError};
+            let plan = d.coordinates[self.position].plan.as_ref().unwrap();
+            match self.td.as_mut().unwrap().resolve_extensions(
+                plan.property_name(),
+                plan.form_index(),
+                budget,
+            ) {
+                Ok(Some(semantics)) => self.semantics = Some(semantics),
+                Ok(None) => return Ok(()),
+                Err(E::Admission(cause)) => return Err(td_error(cause)),
+                Err(E::Resolution(SemanticError::Allocation)) => {
+                    return Err(CoreError::Backpressure(context()));
+                }
+                Err(E::Resolution(
+                    SemanticError::Limit
+                    | SemanticError::UnsupportedContext
+                    | SemanticError::UnsupportedDependency,
+                )) => {
+                    // Preparation profile/capacity refusal applies to this
+                    // coordinate. It is not a whole-TD WoT validity judgment.
+                    d.coordinates[self.position].unsupported = true;
+                    self.position += 1;
+                    return Ok(());
+                }
+            }
         }
         let support = self.registration.support();
         if self.cursor.is_none() {
@@ -2115,6 +2196,11 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                     c.candidate,
                     BindingArtifactRole::ConsumerCall,
                 );
+                #[cfg(feature = "std")]
+                let input = match &self.semantics {
+                    Some(s) => input.with_semantics(s),
+                    None => input,
+                };
                 let cursor = self.registration.start(&input)?;
                 match guard {
                     Some(guard) => guard.commit(),
@@ -2154,6 +2240,11 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             c.candidate,
             BindingArtifactRole::ConsumerCall,
         );
+        #[cfg(feature = "std")]
+        let input = match &self.semantics {
+            Some(s) => input.with_semantics(s),
+            None => input,
+        };
         let mut child = WorkBudget::new().with_remaining(W::BindingPolls, available);
         let result = self
             .registration
@@ -2168,6 +2259,16 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             BindingCompilerStep::Pending(cursor) => self.cursor = Some(cursor),
             BindingCompilerStep::Failed(failure) => {
                 let (cause, cursor) = failure.into_parts();
+                if support.uses_semantics() && matches!(cause, CoreError::UnsupportedOperation(_)) {
+                    self.registration.abort(cursor);
+                    d.release(self.host_backing);
+                    let c = &mut d.coordinates[self.position];
+                    c.backing_bytes = 0;
+                    c.unsupported = true;
+                    d.footprint.artifact_bytes -= self.host_backing;
+                    self.finish_coordinate();
+                    return Ok(());
+                }
                 self.cursor = Some(cursor);
                 return Err(cause);
             }
@@ -2188,11 +2289,18 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                     }
                 };
                 c.artifact = ArtifactOwner::Ready(envelope);
-                self.position += 1;
-                self.compiler_remaining = 0;
+                self.finish_coordinate();
             }
         }
         Ok(())
+    }
+    fn finish_coordinate(&mut self) {
+        #[cfg(feature = "std")]
+        {
+            self.semantics = None;
+        }
+        self.position += 1;
+        self.compiler_remaining = 0;
     }
     fn seal(&mut self, budget: &mut WorkBudget) -> CoreResult<Advance> {
         let d = self.root.as_mut().unwrap().data_mut();
@@ -2228,6 +2336,10 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                 return Ok(Advance::Complete);
             }
             let c = &d.coordinates[self.position];
+            if c.unsupported {
+                self.position += 1;
+                return Ok(Advance::Pending);
+            }
             let artifact = c.artifact.as_ref().ok_or_else(invariant)?;
             if c.reference.identity() != artifact.identity()
                 || c.reference.artifact_slot() != SlotIndex::new(self.position as u32)

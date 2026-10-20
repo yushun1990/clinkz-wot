@@ -228,6 +228,12 @@ pub struct ArraySchema {
     /// Used to define the characteristic of an array.
     pub items: Option<Vec<DataSchema>>,
 
+    /// Retains positional `items: [...]` for a one-element tuple.
+    /// Otherwise one item schema applies uniformly to every array element.
+    /// Zero/multiple schemas are always positional. Builders retain their
+    /// existing one-schema uniform convention; set this for a one-item tuple.
+    pub items_are_tuple: bool,
+
     /// Define the minimum number of items that have to be in the array.
     pub min_items: Option<u32>,
 
@@ -243,13 +249,16 @@ impl<'de> Deserialize<'de> for ArraySchema {
         // `serde_with::OneOrMany` because the latter buffers through serde's
         // `Content` layer, which would block the `Box<RawValue>` capture that
         // `DataSchema` now relies on.
+        let was_array = map.get("items").is_some_and(serde_json::Value::is_array);
         let items = crate::flat::take_one_or_many::<DataSchema, D::Error>(&mut map, "items")?;
+        let items_are_tuple = was_array && items.as_ref().is_some_and(|items| items.len() == 1);
         let min_items = crate::flat::take(&mut map, "minItems")?;
         let max_items = crate::flat::take(&mut map, "maxItems")?;
         let context = crate::flat::from_remaining::<DataSchemaContext, D::Error>(map)?;
         Ok(ArraySchema {
             _context: context,
             items,
+            items_are_tuple,
             min_items,
             max_items,
         })
@@ -272,7 +281,11 @@ impl ArraySchema {
     ) -> Result<(), S::Error> {
         self._context.serialize_into(map)?;
         if let Some(items) = &self.items {
-            map.serialize_entry("items", &crate::flat::OneOrManyRef(items))?;
+            if !self.items_are_tuple && items.len() == 1 {
+                map.serialize_entry("items", &items[0])?;
+            } else {
+                map.serialize_entry("items", items)?;
+            }
         }
         if let Some(min_items) = self.min_items {
             map.serialize_entry("minItems", &min_items)?;
@@ -302,6 +315,7 @@ impl ArraySchemaBuilder {
             schema: ArraySchema {
                 _context: DataSchemaContext::default(),
                 items: None,
+                items_are_tuple: false,
                 min_items: None,
                 max_items: None,
             },

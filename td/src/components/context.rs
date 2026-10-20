@@ -25,7 +25,7 @@ mod normalized_snapshot_probe;
 
 impl Context {
     /// Borrowed field access for TD's complete typed inspection program.
-    #[cfg(feature = "validated-thing")]
+    #[cfg(any(feature = "validated-thing", feature = "std"))]
     pub(crate) fn admission_entries(&self) -> &[ContextEntry] {
         &self.entries
     }
