@@ -4,12 +4,13 @@ use bytes::Bytes;
 use http_body_util::Full;
 use hyper::{Response, server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
+#[cfg(target_os = "linux")]
+use std::os::fd::AsRawFd;
 use std::{
     convert::Infallible,
     future::Future,
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
-    os::fd::AsRawFd,
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -109,16 +110,17 @@ fn native_listener_can_backpressure_before_poll_and_retain_one_close_owner() {
         // A request can suspend in Hyper while an outer Engine owns the unique
         // reply opportunity. Returning the reply later must wake and complete
         // the original connection, without a spawned driver or reentrant handler.
-        let mut slot = reply.lock().unwrap();
-        slot.0 = Some(
-            Response::builder()
-                .header("content-type", "application/json")
-                .header("connection", "close")
-                .body(Full::new(Bytes::from_static(b"42")))
-                .unwrap(),
-        );
-        slot.1.take().unwrap().wake();
-        drop(slot);
+        {
+            let mut slot = reply.lock().unwrap();
+            slot.0 = Some(
+                Response::builder()
+                    .header("content-type", "application/json")
+                    .header("connection", "close")
+                    .body(Full::new(Bytes::from_static(b"42")))
+                    .unwrap(),
+            );
+            slot.1.take().unwrap().wake();
+        }
         connection.await.unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
@@ -138,6 +140,7 @@ fn native_listener_can_backpressure_before_poll_and_retain_one_close_owner() {
         });
         let (stream, _) = listener.accept().await.unwrap();
         stream.readable().await.unwrap();
+        #[cfg(target_os = "linux")]
         let descriptor = stream.as_raw_fd();
         let service_calls = calls.clone();
         let service = service_fn(move |_: hyper::Request<hyper::body::Incoming>| {
