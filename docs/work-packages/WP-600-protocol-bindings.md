@@ -71,6 +71,13 @@ native defaults are Binding obligations; unknown annotations remain preserved
 without claims about their behavior. This scoped Host change does not expand the
 accepted production Producer, security, Embedded or arbitrary-protocol envelope.
 
+The [focused Producer admission candidate](WP-600-http-producer-property-read.md)
+now defines the next single-route production slice and public HTTP loop. It
+proposes the necessary resolved-input, whole-description coverage and Host
+endpoint-driver replacements. The earlier committed-closed path remains its
+historical baseline until independent admission; no production Producer is
+implemented or admitted by merely referencing this candidate.
+
 ## Resource and environment contract
 
 The binding declares enforceable item/byte/connection/header/body/work limits

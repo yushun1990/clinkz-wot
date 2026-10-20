@@ -309,3 +309,12 @@ workspace member list. It must compile against public crates, construct a
 complete registration, support consume/expose, and pass cancellation, cleanup,
 generation, resource, and hot-path tests without modifying engine or umbrella
 source.
+
+## Host Producer admission subset
+
+The [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
+proposes the [retained endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
+in place of Host Property Read public phase families. Paired native compilation,
+Engine publication/dispatch, borrowed acceptance permits and retained close
+ownership are the boundary. Other roles/representations remain separate; the
+candidate neither activates code nor proves general protocol neutrality.

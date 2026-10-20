@@ -33,6 +33,20 @@ closed Consumer lowering and the public route phase split. It is a proposal for
 independent review, not implementation admission or an activated specification
 migration. Existing source contracts remain effective until deliberately replaced.
 
+## Producer admission subset
+
+The [WP-600 Host Producer candidate](../docs/work-packages/WP-600-http-producer-property-read.md)
+migrates a bounded subset of this investigation into the existing Planning,
+Binding, runtime/architecture and ADR owners for independent ADR-0013 admission:
+resolved Producer facts, complete advertised coverage, one instance-owned entry,
+a retained Host endpoint driver and real HTTP ownership evidence. The admission
+PR resolves those design questions only for its one-route Host scope; it does
+not treat this DISCUSSING topic or #206/#211 as implementation authority.
+General Consumer compiler openness, shared/multi-route sessions, profile
+interpretation, reuse and cross-protocol claims remain open and are outside
+this tranche. The old Producer counterexamples are executable prechecks,
+not an assertion that the proposed production replacement already works.
+
 ## Scope and authority
 
 The following scope and probe history describe the original investigation. The

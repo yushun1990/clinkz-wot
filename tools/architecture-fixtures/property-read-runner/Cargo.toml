@@ -26,3 +26,7 @@ std = [
     "clinkz-wot-servient/std",
     "clinkz-wot-td/std",
 ]
+
+[dev-dependencies]
+clinkz-wot-planning = { path = "../../../planning", default-features = false }
+serde_json = { workspace = true, features = ["std"] }

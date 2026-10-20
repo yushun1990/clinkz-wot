@@ -187,3 +187,11 @@ Evidence must cover cold maximum-plan compilation, repeated hot selection,
 single-flight lazy compilation, deterministic negative caching, cancellation at
 each build phase, maximum-generation drain, and zero retained plan/artifact
 bytes after reclamation.
+
+## Host Producer admission subset
+
+The [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
+proposes the [single-entry Planning contract](../spec/planning.md#host-producer-property-read-entry)
+for its immutable one-instance scope. This replaces mandatory persistent logical
+plans and independently versioned plan-set ownership only in that scope, after
+independent admission. Other scopes and old evidence keep their stated limits.

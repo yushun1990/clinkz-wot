@@ -1871,6 +1871,61 @@ returns the exact post-security-commit request before binding acceptance, but it
 does not prove that choosing and committing another candidate would be
 side-effect free.
 
+## Host Producer Property Read entry
+
+The ADR-0013 [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
+proposes this bounded replacement for Host Producer Property Read. It takes
+implementation authority only after independent admission; existing source is
+not claimed conforming. Other roles and static representations retain their
+stated contracts. This section is the scoped replacement of the mandatory
+persistent logical-plan part of `PLAN-COST-001` and separate plan-set identity
+in `PLAN-SET-001`: one immutable entry is owned by one produced instance, with
+no independently replaceable plan-set generation. Lease/reclamation and
+registration/route stale-use invariants remain mandatory.
+
+TD owns whole-input Basic validation and effective operations/security/URI
+resolution. Its Producer semantic continuation must reuse the shared validation,
+default and bounded resolved-tree kernel; it must not call the Consumer's
+first-read selection or require a source id. Pure private construction may
+precede rejection. Before install, Planning examines **all** declared Property,
+Action, Event and root Forms and their effective operation sets, including
+omitted/defaulted and empty declarations. The first scope rejects unsupported
+shape/capability rather than selecting a supported leaf of an uncovered draft.
+Each retained Form/operation needs exactly one paired owner, executable mapping,
+supported effective security and exact handler capability. No Binding callback
+may obtain a handler object. No effects occur from compilation.
+
+`ResolvedProducerInput<'a>` lends the chosen coordinate's effective operation,
+resolved target, media/subprotocol and the existing `ResolvedSemanticDocument`
+(schema, Form/response, security/proxy, URI-variable and scoped extension facts).
+Unknown extension data is preserved for the paired compiler, not certified
+as supported behavior by mere preservation. The first Producer support policy
+explicitly refuses unhandled predicates and Profiles before installation.
+Source id is optional. Producer-only construction does not go through
+`BindingCompilerInput::resolved`'s logical-plan/id check. All source inspection,
+arena construction and compilation consume original lifetime/step credit before
+work, with explicit limit/dependency refusal. Do not reparse serialized TD or
+JSON-LD in Planning or the Binding. The existing 128-node/32-scope/depth-16,
+65,536-unit reservation is an initial Host resolver limit, not a WoT limit.
+
+`ProducerExecutionEntry<A>` owns only the Engine's immutable dispatch/validation
+facts (Property key, operation, media/response constraints and source coordinate)
+and the paired Binding's source-free native artifact. Private fields tie it to
+the actual captured registration and route. `ThingSlotId` is live local authority;
+optional TD id is provenance. Existing `HandlerContext::thing_id()` uses the
+source id when present and an explicitly local generated id otherwise; authority
+checks always use slot/generation. The published source is not assigned that id.
+Empty TD-valid Property keys require no sentinel encoding. Entry lifetime,
+physical backing and account ownership follow the instance owner. Compiler input
+never needs a persistent `LogicalInteractionPlan` or native resource.
+
+A privately completed entry plus exact complete-coverage result permits driver
+construction only after Engine, ingress/response and cleanup capacity is funded.
+Drop/cancel/refusal rolls back original-account scratch and partial output.
+Neither a publicly constructible fact nor a configuration digest is a coverage
+certificate. Source loans end before install; source ownership, if requested for
+TD retrieval, is explicit and separate from runtime execution.
+
 ## Property Read Producer-route projection
 
 The package-local Property Read plan slice initially completed a private

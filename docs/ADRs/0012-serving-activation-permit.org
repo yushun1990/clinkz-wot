@@ -183,3 +183,13 @@ state is not a substitute for guard cleanup ownership.
 - Silently dropping an unavailable advertised route was rejected because the
   published TD and plan set would claim a route that the serving generation
   cannot provide.
+
+* Scoped Host Producer replacement candidate
+
+The ADR-0013 [[file:../work-packages/WP-600-http-producer-property-read.md][Host HTTP
+Producer candidate]] replaces the explicit committed-closed guard prerequisite
+with a locally ready retained endpoint under the
+[[file:../spec/binding-spi.md#host-producer-endpoint-contract][Host endpoint contract]].
+The private publication transition, exact live generation and borrowed unique
+accept permit remain mandatory. No Binding gate-opening callback is added.
+Other scopes retain this ADR; the replacement awaits independent admission.

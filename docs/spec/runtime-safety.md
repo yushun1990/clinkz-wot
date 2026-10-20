@@ -178,3 +178,13 @@ generation. A guard drop is not a transition, late callbacks are generation
 checked, and a draining or closed route never returns to serving. Terminal
 cleanup or durable residual acknowledgement releases the carrier state exactly
 once.
+
+## Host Producer admission subset
+
+The [Host Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
+proposes [single-driver ownership](binding-spi.md#host-producer-endpoint-contract)
+and the `host-producer-endpoint` state projection. Whole-description coverage and
+all Engine/cleanup funding precede native effects. Retained close ownership
+applies to partial installation, cancellation, root loss and response races.
+The Host Producer ownership interpretation is explicit; Consumer-only seals and
+StrictV1 SDK assumptions cannot be reused as Producer qualification.
