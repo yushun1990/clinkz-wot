@@ -994,6 +994,15 @@ and defaults remain TD-owned. This is a facade over existing typed facts, not a
 new schema parser or a second normalized schema graph. Literal values are JSON
 payload data; a literal member named `@context` is never processed as a context.
 
+`SecurityFacts` retains the effective NoSec definition's scheme, optional `proxy`
+server, description/descriptions, semantic tags and resolved extensions. Per
+[TD 1.1 SecurityScheme](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#securityscheme),
+an absent proxy means the endpoint; those scopes are never collapsed. These
+borrowed strings and language maps use the same preparation fuel and source
+lifetime. Availability of a fact does not authorize its execution: a Binding must
+decline targets it cannot execute under the Engine's common security constraints.
+Other security kinds remain explicit unsupported dependencies of this adapter.
+
 Scalar getters allocate nothing. Child queries scan at most the admitted arena;
 iteration advances over prepared nodes. Preparation charges the reachable typed
 facts, strings, literal nodes and keys against the same 65,536-unit fuel and
@@ -1034,15 +1043,20 @@ remain advertisements, not proof that a profile is activated or implemented.
 This is not full JSON-LD expansion or a new ingestion contract. Unprepared remote
 extension contexts, relative identifier coercion, context reset/base/propagation,
 type-scoped contexts, keyword/IRI-key aliases, containers, reverse properties,
-datatype/language coercions and chained compact-prefix/vocabulary definitions are unsupported rather than partially
-interpreted. Core TD aliases and lexical distinctions already collapsed by the
+datatype/language coercions and unrepresentable chained compact-prefix/vocabulary
+definitions are unsupported rather than partially interpreted. Core TD aliases and lexical distinctions already collapsed by the
 existing typed serde model are not recovered. No Binding receives raw TD/context
 or reparses JSON-LD. Supporting more context syntax belongs here, not in a Binding.
 Context lookup captures the immutable defining map environment and vocabulary
 for each term. Later root-array entries, Form contexts, prefix overrides and
 vocabulary changes cannot reinterpret inherited aliases. Same-map forward
 references are resolved within that defining environment; cyclic/unrepresentable
-expansions are refused. This profile permits one initial standard TD context URI
+expansions are refused. `@vocab` uses the ordinary IRI expansion rules in the
+preceding active context, before installing the new map's term definitions.
+Standard prefixes (for example `htv:`) and already defined local prefixes expand
+there; subsequent redefinitions cannot change the captured vocabulary. A namespace
+that would require appending a third borrowed segment is explicitly refused.
+This profile permits one initial standard TD context URI
 followed by inline maps; repeating that URI after overrides is refused rather than
 pretending to implement a context reset. Chained prefix aliases remain unsupported.
 These rules follow the [JSON-LD 1.1 algorithms](https://www.w3.org/TR/json-ld11-api/#create-term-definition).

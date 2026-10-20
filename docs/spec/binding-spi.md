@@ -301,7 +301,10 @@ const/default/enum and required members are not discarded. `items_mode()` preser
 uniform versus positional array semantics. Effective operations/security and
 response/URI-variable facts stay TD-owned. Named response-schema dependencies are
 prepared explicitly; out-of-scope access and unsupported dependencies are
-separate from absent facts. The [TD contract](../work-packages/WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending)
+separate from absent facts. NoSec facts retain their optional proxy server and
+descriptive metadata alongside resolved extensions; a Binding must explicitly
+decline an unsupported security target rather than treating it as endpoint
+security. The [TD contract](../work-packages/WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending)
 owns the exact profile and query/work bounds. It receives no raw TD/context,
 handler, credentials or live resource. Protocol vocabulary, explicit native instructions, native defaults and
 private vendor extensions are interpreted inside the Binding. Compilation is pure.

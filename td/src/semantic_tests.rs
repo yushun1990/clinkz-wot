@@ -1,5 +1,5 @@
 use super::*;
-use alloc::vec;
+use alloc::{format, vec};
 use serde_json::json;
 
 fn source() -> Value {
@@ -7,6 +7,97 @@ fn source() -> Value {
         "security":["none"], "securityDefinitions":{"none":{"scheme":"nosec"}},
         "properties":{"p":{"forms":[{"href":"http://127.0.0.1/p"}]}}})
 }
+#[test]
+fn compact_vocabularies_expand_standard_prefixes_without_protocol_interpretation() {
+    for (prefix, namespace) in [
+        ("htv", "http://www.w3.org/2011/http#"),
+        ("rdfs", "http://www.w3.org/2000/01/rdf-schema#"),
+        ("xsd", "http://www.w3.org/2001/XMLSchema#"),
+        ("dct", "http://purl.org/dc/terms/"),
+        ("tm", "https://www.w3.org/2019/wot/tm#"),
+        ("td", "https://www.w3.org/2019/wot/td#"),
+        ("hctl", "https://www.w3.org/2019/wot/hypermedia#"),
+        ("jsonschema", "https://www.w3.org/2019/wot/json-schema#"),
+        ("wotsec", "https://www.w3.org/2019/wot/security#"),
+    ] {
+        let mut td = source();
+        td["properties"]["p"]["forms"][0]["@context"] = json!({"@vocab":format!("{prefix}:")});
+        td["properties"]["p"]["forms"][0]["annotation"] = json!("preserved");
+        let thing = serde_json::from_value(td).unwrap();
+        let document = ResolvedSemanticDocument::resolve(&thing, "p", 0).unwrap();
+        assert_eq!(
+            document
+                .scope(SemanticScope::Form {
+                    property: "p",
+                    index: 0
+                })
+                .unwrap()
+                .field(&format!("{namespace}annotation"))
+                .unwrap()
+                .value(),
+            SemanticValue::Text("preserved")
+        );
+    }
+}
+
+#[test]
+fn security_scope_and_metadata_are_preserved_and_share_the_source_work_limit() {
+    for proxy in [None, Some("http://127.0.0.1:32199/")] {
+        let mut td = source();
+        let security = &mut td["securityDefinitions"]["none"];
+        security["description"] = json!("access");
+        security["descriptions"] = json!({"en":"access"});
+        security["urn:security:annotation"] = json!("preserved");
+        if let Some(proxy) = proxy {
+            security["proxy"] = json!(proxy);
+        }
+        let thing = serde_json::from_value(td.clone()).unwrap();
+        let (result, used) = ResolvedSemanticDocument::resolve_metered(&thing, "p", 0);
+        let document = result.unwrap();
+        let facts = document.security("none").unwrap();
+        assert_eq!(facts.scheme, "nosec");
+        assert_eq!(facts.proxy, proxy);
+        assert_eq!(facts.description, Some("access"));
+        assert_eq!(facts.descriptions.unwrap().as_map()["en"], "access");
+        assert_eq!(
+            facts
+                .semantics
+                .field("urn:security:annotation")
+                .unwrap()
+                .value(),
+            SemanticValue::Text("preserved")
+        );
+        assert!(matches!(
+            document.security("unused"),
+            Err(SemanticAccessError::OutsidePreparedScope)
+        ));
+        drop(document);
+
+        assert!(used < RESOLUTION_WORK);
+        for (field, value) in [
+            ("description", json!("x".repeat(RESOLUTION_WORK as usize))),
+            (
+                "descriptions",
+                json!({"en":"x".repeat(RESOLUTION_WORK as usize)}),
+            ),
+            (
+                "proxy",
+                json!(format!(
+                    "http://127.0.0.1/{}",
+                    "x".repeat(RESOLUTION_WORK as usize)
+                )),
+            ),
+        ] {
+            let mut large = td.clone();
+            large["securityDefinitions"]["none"][field] = value;
+            let thing = serde_json::from_value(large).unwrap();
+            let (result, exhausted) = ResolvedSemanticDocument::resolve_metered(&thing, "p", 0);
+            assert!(matches!(result, Err(SemanticError::Limit)));
+            assert!(exhausted <= RESOLUTION_WORK);
+        }
+    }
+}
+
 #[test]
 fn resolves_aliases_scoped_contexts_and_keeps_structured_unknown_values() {
     let mut td = source();

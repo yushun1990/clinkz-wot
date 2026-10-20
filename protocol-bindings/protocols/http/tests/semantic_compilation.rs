@@ -66,6 +66,128 @@ fn close<O>(
 }
 
 #[test]
+fn compact_vocabularies_keep_their_context_time_meaning_on_the_http_wire() {
+    let http = "http://www.w3.org/2011/http#";
+    let vendor = "urn:vendor:";
+    let cases = [
+        (json!({"@vocab":"htv:"}), "POST", "methodName"),
+        (json!([{"ex":http}, {"@vocab":"ex:"}]), "POST", "methodName"),
+        // @vocab is expanded before this map's term definitions are installed.
+        (json!({"@vocab":"htv:", "htv":vendor}), "POST", "methodName"),
+        (json!({"htv":vendor, "@vocab":"htv:"}), "POST", "methodName"),
+        (
+            json!([{"htv":vendor}, {"@vocab":"htv:"}]),
+            "GET",
+            "methodName",
+        ),
+        (json!({"@vocab":"ex:", "ex":http}), "GET", "methodName"),
+        (
+            json!([{"ex":{"@id":http,"@prefix":true}}, {"@vocab":"ex:"}]),
+            "POST",
+            "methodName",
+        ),
+        (
+            json!([{"@vocab":"htv:","verb":"methodName"}, {"@vocab":vendor}]),
+            "POST",
+            "verb",
+        ),
+    ];
+    let methods = cases.each_ref().map(|(_, method, _)| *method);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let target = format!("http://{}/a", listener.local_addr().unwrap());
+    let peer = std::thread::spawn(move || {
+        for method in methods {
+            let (mut socket, _) = listener.accept().unwrap();
+            let observed = request(&mut socket);
+            assert!(
+                observed.starts_with(&format!("{method} /a HTTP/1.1\r\n")),
+                "{observed}"
+            );
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n7").unwrap();
+            assert_retired(&mut socket);
+        }
+    });
+    recipe().block_on(async {
+        for (context, _, field) in cases {
+            let mut form = json!({"href":target, "@context":context});
+            form[field] = json!("POST");
+            let td = source(json!([form]));
+            let (runtime, handle, observer, parent) = consume_source(td);
+            let mut call = handle
+                .read_property("a", InteractionOptions::new(), &mut work())
+                .unwrap();
+            assert!(take(&mut call).await.is_ok());
+            drop(call);
+            close(runtime, handle, observer, parent);
+        }
+    });
+    peer.join().unwrap();
+}
+
+#[test]
+fn proxy_scoped_security_is_refused_and_other_forms_remain_executable() {
+    let endpoint = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    proxy.set_nonblocking(true).unwrap();
+    let target = format!("http://{}/a", endpoint.local_addr().unwrap());
+    let proxy_uri = format!("http://{}/", proxy.local_addr().unwrap());
+    let peer = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut socket, _) = endpoint.accept().unwrap();
+            assert!(request(&mut socket).starts_with("GET /a HTTP/1.1\r\n"));
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n7").unwrap();
+            assert_retired(&mut socket);
+        }
+    });
+    recipe().block_on(async {
+        for with_endpoint in [false, true] {
+            let mut forms = vec![json!({"href":target, "security":["proxy"]})];
+            if with_endpoint {
+                forms.push(json!({"href":target}));
+            }
+            let mut td = source(json!(forms));
+            td["securityDefinitions"]["proxy"] = json!({"scheme":"nosec", "proxy":proxy_uri});
+            if !with_endpoint {
+                td["security"] = json!(["proxy"]);
+                td["properties"]["a"]["forms"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("security");
+            }
+            let (runtime, handle, observer, parent) = consume_source(td);
+            assert!(
+                handle
+                    .read_property(
+                        "a",
+                        InteractionOptions::new().with_form_index(0),
+                        &mut work()
+                    )
+                    .is_err()
+            );
+            if with_endpoint {
+                for options in [
+                    InteractionOptions::new().with_form_index(1),
+                    InteractionOptions::new(),
+                ] {
+                    let mut call = handle.read_property("a", options, &mut work()).unwrap();
+                    assert!(take(&mut call).await.is_ok());
+                    drop(call);
+                }
+            } else {
+                assert!(
+                    handle
+                        .read_property("a", InteractionOptions::new(), &mut work())
+                        .is_err()
+                );
+            }
+            assert!(matches!(proxy.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
+            close(runtime, handle, observer, parent);
+        }
+    });
+    peer.join().unwrap();
+}
+
+#[test]
 fn inherited_aliases_keep_definition_time_meaning_on_the_http_wire() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let target = format!("http://{}/a", listener.local_addr().unwrap());
@@ -126,21 +248,33 @@ fn unsupported_context_dependencies_never_turn_explicit_instructions_into_defaul
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let target = format!("http://{}/a", listener.local_addr().unwrap());
-    for context in [
-        json!(["https://www.w3.org/2022/wot/td/v1.1", {"base":"http://www.w3.org/2011/http#", "x":"base", "verb":"x:methodName"}]),
-        json!(["https://www.w3.org/2022/wot/td/v1.1", {"htv":"urn:vendor:"}, "https://www.w3.org/2022/wot/td/v1.1"]),
-    ] {
-        let mut td = source(json!([{"href":target,"verb":"POST"}]));
-        td["@context"] = context;
-        let (runtime, handle, observer, parent) = consume_source(td);
-        assert!(
-            handle
-                .read_property("a", InteractionOptions::new(), &mut work())
-                .is_err()
-        );
-        assert!(listener.accept().is_err());
-        close(runtime, handle, observer, parent);
-    }
+    recipe().block_on(async {
+        for context in [
+            json!(["https://www.w3.org/2022/wot/td/v1.1", {"base":"http://www.w3.org/2011/http#", "x":"base", "verb":"x:methodName"}]),
+            json!(["https://www.w3.org/2022/wot/td/v1.1", {"htv":"urn:vendor:"}, "https://www.w3.org/2022/wot/td/v1.1"]),
+        ] {
+            let mut td = source(json!([{"href":target,"verb":"POST"}]));
+            td["@context"] = context;
+            let (runtime, handle, observer, parent) = consume_source(td);
+            assert!(
+                handle
+                    .read_property("a", InteractionOptions::new(), &mut work())
+                    .is_err()
+            );
+            assert!(listener.accept().is_err());
+            close(runtime, handle, observer, parent);
+        }
+        for context in [
+            json!({"@vocab":"htv:namespace:"}),
+            json!([{"ex":"htv:"}, {"@vocab":"ex:"}]),
+        ] {
+            let td = source(json!([{"href":target,"@context":context,"methodName":"POST"}]));
+            let (runtime, handle, observer, parent) = consume_source(td);
+            assert!(handle.read_property("a", InteractionOptions::new(), &mut work()).is_err());
+            assert!(matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
+            close(runtime, handle, observer, parent);
+        }
+    });
 }
 
 #[test]

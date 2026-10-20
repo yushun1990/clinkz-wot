@@ -77,13 +77,18 @@ Explicit Accept must equal `application/json` and may occur once. The default
 Accept is emitted once. Primary `response.contentType` may explicitly be JSON and
 `htv:statusCodeValue` may explicitly be 200; other response codes/media, additional
 responses, coding, scopes and subprotocols remain unsupported.
+Only endpoint NoSec is executable. An effective security definition with a `proxy`
+server is explicitly declined during native compilation; it cannot silently turn
+into a direct endpoint request. Another supported Form remains selectable.
 
 Root/Property/Form/nested-schema/response/security extensions and semantic class
 annotations arrive in TD's bounded resolved tree. Aliases and supported scoped
 contexts are resolved by TD, not reparsed by HTTP. Inherited aliases retain their
 definition-time meaning across later context entries, prefix shadowing and
-vocabulary changes; unsupported expansion dependencies are refused before I/O. Labels, SAREF types and unrelated
-vendor annotations do not change the request. Unknown semantics and advertised
+vocabulary changes; unsupported expansion dependencies are refused before I/O.
+`@vocab` expands standard and previously defined local prefixes in its preceding
+context; definitions in the same new map cannot change that expansion. Labels,
+SAREF types and unrelated vendor annotations do not change the request. Unknown semantics and advertised
 Profiles are preserved without Profile/extension conformance claims; this slice
 implements no activated Profile. The resolver is explicitly a bounded local-context
 subset, not general JSON-LD: see

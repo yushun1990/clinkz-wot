@@ -119,6 +119,18 @@ impl HostSemanticCompiler for HttpCompiler {
             .document
             .form_facts(input.property, input.form_index)
             .ok_or_else(unsupported)?;
+        let [security_name] = facts.effective_security else {
+            return Err(unsupported());
+        };
+        let security = input
+            .document
+            .security(security_name)
+            .map_err(|_| unsupported())?;
+        // This transport executes endpoint NoSec only. A proxy target must not
+        // silently become endpoint security or an invented direct route.
+        if security.proxy.is_some() {
+            return Err(unsupported());
+        }
         if facts.content_coding.is_some()
             || facts.scopes.is_some()
             || facts.additional_responses

@@ -222,8 +222,15 @@ pub struct ResponseFacts<'a> {
     pub schema: Option<&'a str>,
     pub semantics: SemanticNode<'a>,
 }
+/// Standard shared NoSec facts, borrowing the prepared admitted source.
+/// Semantic tags and resolved extensions are retained in `semantics`.
 pub struct SecurityFacts<'a> {
     pub scheme: &'a str,
+    /// Server this configuration applies to; absence means the endpoint.
+    /// Preserving this target does not confer proxy execution support.
+    pub proxy: Option<&'a str>,
+    pub description: Option<&'a str>,
+    pub descriptions: Option<&'a MultiLanguage>,
     pub semantics: SemanticNode<'a>,
 }
 
@@ -330,14 +337,39 @@ impl<'a> ResolvedSemanticDocument<'a> {
         if definition.scheme() != "nosec" {
             return Err(SemanticAccessError::UnsupportedDependency);
         }
+        let context = crate::validate::basic_typed::security_context(definition);
         Ok(SecurityFacts {
             scheme: definition.scheme(),
+            proxy: context.proxy.as_ref().map(|uri| uri.as_str()),
+            description: context.description.as_deref(),
+            descriptions: context.descriptions.as_ref(),
             semantics,
         })
     }
 }
 
 impl<'a> Resolver<'a> {
+    pub(super) fn security_facts_cost(
+        &mut self,
+        security: &crate::security_scheme::SecuritySchemeContext,
+    ) -> Result<(), SemanticError> {
+        for text in [
+            Some(security.scheme.as_str()),
+            security.proxy.as_ref().map(|uri| uri.as_str()),
+            security.description.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            self.pay(text.len() as u64 + 1)?;
+        }
+        if let Some(map) = &security.descriptions {
+            for (key, value) in map.as_map() {
+                self.pay((key.len() + value.len() + 1) as u64)?;
+            }
+        }
+        Ok(())
+    }
     pub(super) fn metadata_cost(
         &mut self,
         metadata: &crate::data_type::Metadata,

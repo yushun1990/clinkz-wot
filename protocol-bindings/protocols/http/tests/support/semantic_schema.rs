@@ -7,6 +7,7 @@ mod standard_schema {
 
     struct SchemaCompiler {
         base: Compiler,
+        security_seen: Arc<AtomicUsize>,
     }
     impl HostSemanticCompiler for SchemaCompiler {
         type Artifact = Program;
@@ -232,7 +233,29 @@ mod standard_schema {
             assert!(form.declared_security.is_none());
             assert_eq!(form.effective_security.len(), 1);
             assert_eq!(form.effective_security[0], "none");
-            assert_eq!(document.security("none").unwrap().scheme, "nosec");
+            let security = document.security("none").unwrap();
+            assert_eq!(security.scheme, "nosec");
+            assert_eq!(security.description, Some("access"));
+            assert_eq!(security.descriptions.unwrap().as_map()["en"], "access");
+            assert_eq!(
+                security
+                    .semantics
+                    .field("urn:security:annotation")
+                    .unwrap()
+                    .value(),
+                SemanticValue::Text("preserved")
+            );
+            if let Some(proxy) = security.proxy {
+                assert_eq!(proxy, "http://127.0.0.1:32199/");
+                self.security_seen.fetch_or(2, Ordering::Relaxed);
+                // This independent protocol also declines unsupported targets;
+                // observing the fact does not grant proxy execution authority.
+                return Err(CoreError::UnsupportedOperation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                )));
+            }
+            self.security_seen.fetch_or(1, Ordering::Relaxed);
             let mut program = self.base.compile(input)?;
             // Observable source-free instructions, distinguished after TD Drop.
             program.request_topic[31] = code;
@@ -280,10 +303,11 @@ mod standard_schema {
     fn admitted_common_facts_survive_public_consumer_compilation_and_source_drop() {
         recipe().block_on(async {
             let seen = Arc::new(AtomicUsize::new(0));
-            for variant in 0..6 {
+            let security_seen = Arc::new(AtomicUsize::new(0));
+            for variant in 0..7 {
                 let compiled = Arc::new(AtomicUsize::new(0));
                 let config = ConsumerBindingConfiguration::for_semantic_host(64, BindingConfigurationDigest::new([93;32]), COMPAT,4096,16).unwrap();
-                let compiler = HostBindingCompilerRegistration::try_new_semantic(SchemaCompiler { base:Compiler { config, compiled:compiled.clone() } }).unwrap_or_else(|_| panic!("capture"));
+                let compiler = HostBindingCompilerRegistration::try_new_semantic(SchemaCompiler { base:Compiler { config, compiled:compiled.clone() }, security_seen:security_seen.clone() }).unwrap_or_else(|_| panic!("capture"));
                 let owner = HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
                     BindingRegistrationIdentity::new(BindingId::new(903), BindingGeneration::INITIAL, config.configuration(),COMPAT,903),
                     BindingExecutionSupport::host_erased(), compiler, Box::new(SchemaClient { config, seen:seen.clone() }),
@@ -293,6 +317,10 @@ mod standard_schema {
                 let policy = policy(); let parent = Arc::new(Mutex::new(policy.parent_accounts()));
                 let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(owner,policy,Arc::new(Clock(Instant::now())),parent.clone()).unwrap_or_else(|_| panic!("runtime"));
                 let mut td = source(json!([]));
+                td["securityDefinitions"]["none"]["description"] = json!("access");
+                td["securityDefinitions"]["none"]["descriptions"] = json!({"en":"access"});
+                td["securityDefinitions"]["none"]["urn:security:annotation"] = json!("preserved");
+                if variant == 6 { td["securityDefinitions"]["none"]["proxy"] = json!("http://127.0.0.1:32199/"); }
                 td["properties"]["a"] = match variant { 0 => json!({"minimum":2}), 1 => json!({"type":"string"}), 2 => json!({"type":"integer"}), _ => complex() };
                 td["properties"]["a"]["forms"] = json!([{"href":"replybus:temperature","urn:replybus:replyTopic":"replies"}]);
                 td["urn:opaque:annotation"] = json!("retained"); td["properties"]["a"]["urn:opaque:unit"] = json!("Kelvin");
@@ -324,6 +352,7 @@ mod standard_schema {
                 close(runtime,handle,observer,parent);
             }
             assert_eq!(seen.load(Ordering::Relaxed),0b1111);
+            assert_eq!(security_seen.load(Ordering::Relaxed),0b11);
         });
     }
 }

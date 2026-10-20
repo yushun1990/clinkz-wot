@@ -382,6 +382,7 @@ impl<'a> Resolver<'a> {
                 .get(name)
                 .ok_or(SemanticError::UnsupportedContext)?;
             let security = crate::validate::basic_typed::security_context(security);
+            resolver.security_facts_cost(security)?;
             let mut context = root_context;
             context.vocab = "https://www.w3.org/2019/wot/security#";
             let context = resolver.local(context, &security._extra_fields)?;
@@ -588,11 +589,17 @@ impl<'a> Resolver<'a> {
             if !vocab.contains(':') {
                 return Err(SemanticError::UnsupportedContext);
             }
-            let prefix = vocab.split_once(':').unwrap().0;
-            if context.definition(prefix, &mut self.fuel)?.is_some() {
-                return Err(SemanticError::UnsupportedContext);
-            }
-            context.vocab = vocab;
+            // JSON-LD context processing expands @vocab before installing this
+            // map's term definitions. Use the preceding environment, including
+            // the standard context's prefixes, through the ordinary IRI rules.
+            let mut preceding = *context;
+            preceding.len -= 1;
+            context.vocab = match self.name(vocab, preceding, 0)? {
+                SemanticName::Iri(SemanticIri { prefix, suffix: "" }) => prefix,
+                // Appending a name to a two-segment namespace would require a
+                // third segment. Refuse it instead of retaining compact text.
+                _ => return Err(SemanticError::UnsupportedContext),
+            };
         } else if key.starts_with('@') || key.contains([':', '/']) {
             return Err(SemanticError::UnsupportedContext);
         }
