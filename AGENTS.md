@@ -150,6 +150,41 @@ When a conclusion is stable, migrate it to the proper specification, ADR,
 architecture document, work-package record, code, or test. Do not copy the
 same conclusion into multiple current-state documents.
 
+## Long-term Engineering Principles
+
+These are design and execution priorities, not additional gates, a parallel
+specification, or permission to overstate compliance.
+
+1. **W3C standards before project-specific invention.** Treat the applicable
+   W3C WoT interaction model, TD vocabulary, and published protocol-mapping
+   contracts as the baseline. Distinguish Recommendations from evolving Notes,
+   drafts, and third-party vocabularies. Do not invent parallel WoT extension
+   semantics, generic mandatory-extension markers, or Binding matching schemes
+   without a concrete product/interoperability need. Where standards leave a
+   gap, document the limit and isolate any justified ClinkZ-specific behavior.
+   Keep protocol vocabulary interpretation within concrete Bindings rather
+   than adding protocol cases to the Engine.
+
+2. **Prove architecture through real execution.** ADRs, design arguments,
+   synthetic fixtures, and passing CI can expose errors but cannot alone prove
+   a usable or reliable runtime. For claims about interoperability, resource
+   ownership, cancellation, cleanup, or protocol neutrality, seek focused
+   executable Rust integration with actual protocol I/O and representative
+   failure paths. Scope evidence to the claim: do not demand hardware,
+   end-to-end deployment, or broad conformance evidence for a change that makes
+   no such claim. Favor a working, testable vertical slice over additional
+   speculative proofs.
+
+3. **Keep pre-v1 redesign freedom.** Existing APIs, plan abstractions,
+   compiler types, accepted ADRs, and prior implementation effort have no
+   presumption of design correctness. When evidence shows a boundary is wrong,
+   prefer correcting, deleting, or replacing it over preserving it through
+   compatibility layers. Evaluate simpler alternatives and real migration
+   costs; deliberately supersede affected accepted contracts and retain
+   relevant correctness/evidence obligations. This does not justify churn
+   without an identified defect, credible counterexample, or clear
+   simplification benefit.
+
 ## Implementation Judgment
 
 - Implement for realistic usage, not merely for internal checker satisfaction.
