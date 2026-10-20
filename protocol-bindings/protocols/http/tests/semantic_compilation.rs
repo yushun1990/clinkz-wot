@@ -66,6 +66,84 @@ fn close<O>(
 }
 
 #[test]
+fn inherited_aliases_keep_definition_time_meaning_on_the_http_wire() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let target = format!("http://{}/a", listener.local_addr().unwrap());
+    let peer = std::thread::spawn(move || {
+        for method in ["POST", "POST", "GET", "GET", "POST"] {
+            let (mut socket, _) = listener.accept().unwrap();
+            assert!(request(&mut socket).starts_with(&format!("{method} /a HTTP/1.1\r\n")));
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n7").unwrap();
+            assert_retired(&mut socket);
+        }
+    });
+    recipe().block_on(async {
+        for variant in 0..5 {
+            let mut td = source(json!([{"href":target, "verb":"POST"}]));
+            let http = "http://www.w3.org/2011/http#";
+            let vendor = "urn:vendor:";
+            let initial = if variant == 2 { vendor } else { http };
+            td["@context"] = json!(["https://www.w3.org/2022/wot/td/v1.1",
+                {"ex":initial, "verb":"ex:methodName"}]);
+            match variant {
+                0 | 2 => {
+                    td["properties"]["a"]["forms"][0]["@context"] =
+                        json!({"ex":if variant == 2 {http} else {vendor}});
+                    if variant == 2 {
+                        td["properties"]["a"]["forms"][0]["verb"] = json!("DELETE");
+                    }
+                }
+                1 => td["@context"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!({"ex":vendor})),
+                3 => {
+                    td["@context"] = json!(["https://www.w3.org/2022/wot/td/v1.1",
+                        {"@vocab":vendor,"verb":"methodName"}]);
+                    td["properties"]["a"]["forms"][0]["@context"] = json!({"@vocab":http});
+                    td["properties"]["a"]["forms"][0]["verb"] = json!("DELETE");
+                }
+                _ => {
+                    td["properties"]["a"]["forms"][0]["@context"] = json!([
+                        {"verb":"ex:methodName"}, {"ex":vendor}
+                    ])
+                }
+            }
+            let (runtime, handle, observer, parent) = consume_source(td);
+            let mut call = handle
+                .read_property("a", InteractionOptions::new(), &mut work())
+                .unwrap();
+            assert!(take(&mut call).await.is_ok());
+            drop(call);
+            close(runtime, handle, observer, parent);
+        }
+    });
+    peer.join().unwrap();
+}
+
+#[test]
+fn unsupported_context_dependencies_never_turn_explicit_instructions_into_defaults() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let target = format!("http://{}/a", listener.local_addr().unwrap());
+    for context in [
+        json!(["https://www.w3.org/2022/wot/td/v1.1", {"base":"http://www.w3.org/2011/http#", "x":"base", "verb":"x:methodName"}]),
+        json!(["https://www.w3.org/2022/wot/td/v1.1", {"htv":"urn:vendor:"}, "https://www.w3.org/2022/wot/td/v1.1"]),
+    ] {
+        let mut td = source(json!([{"href":target,"verb":"POST"}]));
+        td["@context"] = context;
+        let (runtime, handle, observer, parent) = consume_source(td);
+        assert!(
+            handle
+                .read_property("a", InteractionOptions::new(), &mut work())
+                .is_err()
+        );
+        assert!(listener.accept().is_err());
+        close(runtime, handle, observer, parent);
+    }
+}
+
+#[test]
 fn independent_forms_do_not_share_semantic_preparation_failures() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let target = format!("http://{}/a", listener.local_addr().unwrap());
@@ -419,6 +497,7 @@ mod reply_bus {
     };
     const COMPAT: BindingArtifactCompatibility =
         BindingArtifactCompatibility::new(*b"replybus-read-v1");
+    include!("support/semantic_schema.rs");
     #[derive(Clone, Copy)]
     struct Program {
         request_topic: [u8; 32],

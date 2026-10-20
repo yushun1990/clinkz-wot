@@ -35,7 +35,9 @@ extensions and protocol mappings, not a W3C requirement about Rust packaging.
 
 The bounded [Host semantic compilation contract](../spec/binding-spi.md#host-semantic-consumer-compilation)
 implements the first compilation-boundary migration through actual HTTP Consumer
-execution with per-Form semantic preparation. Its atomic, inline-artifact adapter
+execution with per-Form semantic preparation. Its input lends admitted standard
+Property/schema facts and scoped resolved extensions together; preserving only
+extensions is not sufficient for a replaceable native compiler. Its atomic, inline-artifact adapter
 does not establish general owned/resumable Consumer compiler openness. Legacy
 static compilers and runtime plan/lease records remain for their
 separately exercised ownership and selection responsibilities. They are not the

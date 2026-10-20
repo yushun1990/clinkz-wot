@@ -2145,7 +2145,11 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                 Err(E::Resolution(SemanticError::Allocation)) => {
                     return Err(CoreError::Backpressure(context()));
                 }
-                Err(E::Resolution(SemanticError::Limit | SemanticError::UnsupportedContext)) => {
+                Err(E::Resolution(
+                    SemanticError::Limit
+                    | SemanticError::UnsupportedContext
+                    | SemanticError::UnsupportedDependency,
+                )) => {
                     // Preparation profile/capacity refusal applies to this
                     // coordinate. It is not a whole-TD WoT validity judgment.
                     d.coordinates[self.position].unsupported = true;

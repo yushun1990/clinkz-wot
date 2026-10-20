@@ -294,8 +294,16 @@ copy helper. The target capacity is Binding policy, not a universal 64-byte limi
 
 The native `compile` callback receives `ResolvedBindingInput`: effective WoT
 operation/target/media, original affordance/Form coordinate, and TD's resolved
-scoped extension tree. It receives no raw TD/context, handler, credentials or live
-resource. Protocol vocabulary, explicit native instructions, native defaults and
+scoped extensions plus bounded typed common facts for the admitted Property Read
+scope. `document.property().schema` provides the same standard facts at every
+nested properties/items/oneOf node; declared types, constraints, format/unit,
+const/default/enum and required members are not discarded. `items_mode()` preserves
+uniform versus positional array semantics. Effective operations/security and
+response/URI-variable facts stay TD-owned. Named response-schema dependencies are
+prepared explicitly; out-of-scope access and unsupported dependencies are
+separate from absent facts. The [TD contract](../work-packages/WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending)
+owns the exact profile and query/work bounds. It receives no raw TD/context,
+handler, credentials or live resource. Protocol vocabulary, explicit native instructions, native defaults and
 private vendor extensions are interpreted inside the Binding. Compilation is pure.
 Unknown semantic data may remain uninterpreted without claiming its behavior or
 Profile conformance. No generic vocabulary inventory, must-understand marker or
@@ -308,8 +316,7 @@ Consumer path alongside it. `BindingCompilerExtension` and generic Host erasure
 can carry non-`Copy` owned artifacts and incremental jobs, but generic captures
 cannot obtain Consumer planning support. The executable counterexample builds a
 64-KiB owned instruction buffer over 512 paid steps through generic erasure, then
-demonstrates
-Consumer capture refusal and exact artifact destruction. General owned/resumable
+demonstrates Consumer capture refusal and exact artifact destruction. General owned/resumable
 Consumer compilation remains unfinished; the request/reply fixture does not prove
 that target. Removing `Copy` alone would not supply retained-memory accounting,
 cleanup funding or resumable progress for that path.
@@ -336,8 +343,15 @@ arbitrary-protocol conformance. Host evidence grants no Embedded callback,
 allocation, atomics or hardware guarantee.
 
 This section supersedes closed exact-compiler eligibility for this Host path only.
-The remaining open endpoint/lifecycle proposals above are unimplemented. Runtime
-plan containers remain for current engine selection, security, lease and cleanup
+General owned/resumable Consumer compilation must be revisited before the first
+compiler needing it, and before this adapter is reused for another operation
+family. Storage/wrapper/phase simplifications remain deferred until the next
+Consumer output-owner/storage change or before a second one-shot operation,
+whichever comes first; HTTP Producer is not their prerequisite. Producer setup
+stage grouping must be evaluated with the first real HTTP Producer setup,
+rollback/readiness and permit path before freezing a reusable Producer pattern.
+These are engineering revisit points, not new gates. The remaining open
+endpoint/lifecycle proposals above are unimplemented. Runtime plan containers remain for current engine selection, security, lease and cleanup
 invariants; native compilers are not required to understand those containers.
 
 ### Closed Consumer compiler support

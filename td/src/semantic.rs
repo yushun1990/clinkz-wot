@@ -14,6 +14,9 @@ use alloc::{alloc::alloc, collections::BTreeMap, string::String, vec::Vec};
 use core::{alloc::Layout, mem::size_of};
 use serde_json::{Map, Number, Value};
 
+mod facts;
+pub use facts::*;
+
 const NODES: usize = 128;
 const SCOPES: usize = 32;
 const DEPTH: usize = 16;
@@ -28,6 +31,7 @@ pub enum SemanticError {
     UnsupportedContext,
     Limit,
     Allocation,
+    UnsupportedDependency,
 }
 
 /// An expanded IRI in two borrowed segments; no protocol meaning is assigned.
@@ -73,6 +77,7 @@ struct Node<'a> {
     name: SemanticName<'a>,
     value: SemanticValue<'a>,
     end: usize,
+    schema: Option<&'a crate::data_schema::DataSchema>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticScope<'a> {
@@ -92,6 +97,11 @@ pub enum SemanticScope<'a> {
         index: u32,
     },
     Security(&'a str),
+    SchemaDefinition(&'a str),
+    UriVariable {
+        property: Option<&'a str>,
+        name: &'a str,
+    },
 }
 struct Scope<'a> {
     key: SemanticScope<'a>,
@@ -101,6 +111,13 @@ struct Scope<'a> {
 
 /// Standard Form facts kept distinct from its extension tree.
 pub struct ResolvedFormFacts<'a> {
+    pub href: &'a str,
+    pub content_type: &'a str,
+    pub subprotocol: Option<&'a str>,
+    pub declared_operations: Option<&'a [crate::data_type::Operation]>,
+    pub effective_operations: &'a [crate::data_type::Operation],
+    pub declared_security: Option<&'a [String]>,
+    pub effective_security: &'a [String],
     pub content_coding: Option<&'a str>,
     pub scopes: Option<&'a [String]>,
     pub response_content_type: Option<&'a str>,
@@ -147,6 +164,12 @@ impl<'a> SemanticNode<'a> {
 pub struct ResolvedSemanticDocument<'a> {
     nodes: Vec<Node<'a>>,
     scopes: Vec<Scope<'a>>,
+    selected: Option<Selected<'a>>,
+}
+struct Selected<'a> {
+    thing: &'a Thing,
+    property: &'a crate::affordance::PropertyAffordance,
+    name: &'a str,
 }
 impl<'a> ResolvedSemanticDocument<'a> {
     pub const fn capacity_bytes() -> u64 {
@@ -168,6 +191,22 @@ impl<'a> ResolvedSemanticDocument<'a> {
             .find(|s| s.key == SemanticScope::Form { property, index })?
             .form?;
         Some(ResolvedFormFacts {
+            href: form.href.as_str(),
+            content_type: &form.content_type,
+            subprotocol: form.subprotocol.as_deref(),
+            declared_operations: form.op.as_deref(),
+            effective_operations: form.op.as_deref().unwrap_or_else(|| {
+                crate::td_defaults::default_operations_for_context(
+                    crate::td_defaults::FormContext::Property(
+                        self.selected.as_ref().unwrap().property,
+                    ),
+                )
+            }),
+            declared_security: form.security.as_deref(),
+            effective_security: crate::td_defaults::effective_form_security(
+                self.selected.as_ref().unwrap().thing,
+                form,
+            ),
             content_coding: form.content_coding.as_deref(),
             scopes: form.scopes.as_deref(),
             response_content_type: form.response.as_ref().map(|r| r.content_type.as_str()),
@@ -189,7 +228,11 @@ impl<'a> ResolvedSemanticDocument<'a> {
     ) -> (Result<Self, SemanticError>, u64) {
         let mut resolver = match (buffer(NODES), buffer(SCOPES)) {
             (Ok(nodes), Ok(scopes)) => Resolver {
-                document: Self { nodes, scopes },
+                document: Self {
+                    nodes,
+                    scopes,
+                    selected: None,
+                },
                 fuel: RESOLUTION_WORK,
             },
             _ => return (Err(SemanticError::Allocation), 0),
@@ -207,18 +250,30 @@ impl<'a> Resolver<'a> {
         selected_form: u32,
     ) -> Result<(), SemanticError> {
         let resolver = self;
+        resolver.metadata_cost(&thing._metadata)?;
+        if let Some(id) = &thing.id {
+            resolver.pay(id.as_str().len() as u64 + 1)?;
+        }
         let mut context = ActiveContext::new("https://www.w3.org/2019/wot/td#");
+        let mut seeded = false;
         for entry in thing.context.admission_entries() {
             resolver.pay(1)?;
             match entry {
                 ContextEntry::Uri(uri)
-                    if matches!(uri.as_str(), WOT_CONTEXT_1_0 | WOT_CONTEXT_1_1) => {}
+                    if !seeded && matches!(uri.as_str(), WOT_CONTEXT_1_0 | WOT_CONTEXT_1_1) =>
+                {
+                    seeded = true;
+                }
                 ContextEntry::Uri(_) => return Err(SemanticError::UnsupportedContext),
                 ContextEntry::Object(map) => {
+                    if !seeded {
+                        return Err(SemanticError::UnsupportedContext);
+                    }
                     context.push(ContextMap::Typed(map))?;
                     for (key, value) in map {
                         resolver.context_definition(&mut context, key, value)?;
                     }
+                    context.maps[context.len - 1].as_mut().unwrap().vocab = context.vocab;
                 }
             }
         }
@@ -268,6 +323,8 @@ impl<'a> Resolver<'a> {
             context,
         )?;
         let root = resolver.document.scopes.last().unwrap().root;
+        resolver.document.nodes[root].schema = Some(&property._schema);
+        resolver.schema_facts(&property._schema, 0, context)?;
         resolver.schema_children(&property._schema, context, 0)?;
         resolver.finish(root);
         let index = selected_form;
@@ -276,6 +333,7 @@ impl<'a> Resolver<'a> {
             .forms
             .get(index as usize)
             .ok_or(SemanticError::UnsupportedContext)?;
+        resolver.form_facts_cost(form)?;
         let mut form_context = context;
         form_context.vocab = "https://www.w3.org/2019/wot/hypermedia#";
         let form_context = resolver.local(form_context, &form._extra_fields)?;
@@ -334,6 +392,43 @@ impl<'a> Resolver<'a> {
                 context,
             )?;
         }
+        resolver.uri_variables(thing.uri_variables.as_ref(), None, root_context)?;
+        resolver.uri_variables(
+            property._interaction.uri_variables.as_ref(),
+            Some(name),
+            context,
+        )?;
+        if let Some(responses) = &form.additional_responses {
+            for response in responses {
+                if let Some(reference) = &response.schema {
+                    resolver.pay(reference.len() as u64 + 1)?;
+                    if resolver
+                        .document
+                        .scope(SemanticScope::SchemaDefinition(reference))
+                        .is_some()
+                    {
+                        continue;
+                    }
+                    let schema = thing
+                        .schema_definitions
+                        .as_ref()
+                        .and_then(|definitions| definitions.get(reference))
+                        .ok_or(SemanticError::UnsupportedDependency)?;
+                    let mut context = root_context;
+                    context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+                    resolver.schema_scope(
+                        SemanticScope::SchemaDefinition(reference),
+                        schema,
+                        context,
+                    )?;
+                }
+            }
+        }
+        resolver.document.selected = Some(Selected {
+            thing,
+            property,
+            name,
+        });
         Ok(())
     }
 }
@@ -352,6 +447,11 @@ fn buffer<T>(count: usize) -> Result<Vec<T>, SemanticError> {
 enum ContextMap<'a> {
     Typed(&'a BTreeMap<String, Value>),
     Json(&'a Map<String, Value>),
+}
+#[derive(Clone, Copy)]
+struct ContextFrame<'a> {
+    map: ContextMap<'a>,
+    vocab: &'a str,
 }
 impl<'a> ContextMap<'a> {
     fn get(self, name: &str, fuel: &mut u64) -> Result<Option<&'a Value>, SemanticError> {
@@ -382,7 +482,7 @@ impl<'a> ContextMap<'a> {
 }
 #[derive(Clone, Copy)]
 struct ActiveContext<'a> {
-    maps: [Option<ContextMap<'a>>; DEPTH],
+    maps: [Option<ContextFrame<'a>>; DEPTH],
     len: usize,
     vocab: &'a str,
 }
@@ -398,14 +498,32 @@ impl<'a> ActiveContext<'a> {
         if self.len == DEPTH {
             return Err(SemanticError::Limit);
         }
-        self.maps[self.len] = Some(map);
+        self.maps[self.len] = Some(ContextFrame {
+            map,
+            vocab: self.vocab,
+        });
         self.len += 1;
         Ok(())
     }
     fn definition(self, name: &str, fuel: &mut u64) -> Result<Option<&'a Value>, SemanticError> {
+        Ok(self.defined_in(name, fuel)?.map(|(value, _)| value))
+    }
+    // Source maps are immutable. Truncating at the defining map reconstructs
+    // its environment, including same-map forward references, without allowing
+    // later contexts to reinterpret an inherited mapping. Vocabulary is captured
+    // with that frame, not taken from the current Property/Form environment.
+    fn defined_in(
+        self,
+        name: &str,
+        fuel: &mut u64,
+    ) -> Result<Option<(&'a Value, Self)>, SemanticError> {
         for index in (0..self.len).rev() {
-            if let Some(value) = self.maps[index].unwrap().get(name, fuel)? {
-                return Ok(Some(value));
+            let frame = self.maps[index].unwrap();
+            if let Some(value) = frame.map.get(name, fuel)? {
+                let mut defining = self;
+                defining.len = index + 1;
+                defining.vocab = frame.vocab;
+                return Ok(Some((value, defining)));
             }
         }
         Ok(None)
@@ -442,6 +560,7 @@ impl<'a> Resolver<'a> {
                 for (key, value) in map {
                     self.context_definition(context, key, value)?;
                 }
+                context.maps[context.len - 1].as_mut().unwrap().vocab = context.vocab;
                 Ok(())
             }
             Value::Array(array) => {
@@ -522,7 +641,7 @@ impl<'a> Resolver<'a> {
         if text.starts_with('@') {
             return Ok(SemanticName::Keyword(text));
         }
-        if let Some(definition) = context.definition(text, &mut self.fuel)? {
+        if let Some((definition, defining)) = context.defined_in(text, &mut self.fuel)? {
             self.check_definition(definition)?;
             return match definition {
                 Value::Null => Ok(SemanticName::Unmapped(text)),
@@ -530,12 +649,12 @@ impl<'a> Resolver<'a> {
                     prefix: if text.contains(':') {
                         text
                     } else {
-                        context.vocab
+                        defining.vocab
                     },
                     suffix: if text.contains(':') { "" } else { text },
                 })),
-                Value::String(id) => self.name(id, context, depth + 1),
-                Value::Object(map) => self.name(map["@id"].as_str().unwrap(), context, depth + 1),
+                Value::String(id) => self.name(id, defining, depth + 1),
+                Value::Object(map) => self.name(map["@id"].as_str().unwrap(), defining, depth + 1),
                 _ => Err(SemanticError::UnsupportedContext),
             };
         }
@@ -546,7 +665,15 @@ impl<'a> Resolver<'a> {
                     suffix: "",
                 }));
             }
-            let definition = context.definition(prefix, &mut self.fuel)?;
+            let found = context.defined_in(prefix, &mut self.fuel)?;
+            let definition = found.map(|(value, _)| value);
+            let defining = found.map_or(context, |(_, defining)| defining);
+            if matches!(definition, Some(Value::String(base)) if !base.contains(':')) {
+                // Prefix flags depend on the expanded mapping. A chained plain
+                // alias is outside this two-segment prefix profile; treating it
+                // as a non-prefix would silently erase an executable predicate.
+                return Err(SemanticError::UnsupportedContext);
+            }
             let base = match definition {
                 Some(Value::String(base))
                     if base.ends_with([':', '/', '?', '#', '[', ']', '@']) =>
@@ -577,7 +704,7 @@ impl<'a> Resolver<'a> {
                 let Some((base_prefix, _)) = base.split_once(':') else {
                     return Err(SemanticError::UnsupportedContext);
                 };
-                if context.definition(base_prefix, &mut self.fuel)?.is_some()
+                if defining.definition(base_prefix, &mut self.fuel)?.is_some()
                     || matches!(
                         base_prefix,
                         "htv"
@@ -624,6 +751,7 @@ impl<'a> Resolver<'a> {
             name,
             value,
             end: index + 1,
+            schema: None,
         });
         Ok(index)
     }
@@ -756,6 +884,8 @@ impl<'a> Resolver<'a> {
     ) -> Result<(), SemanticError> {
         let context = self.local(context, &schema.context()._extra_fields)?;
         let root = self.push(name, SemanticValue::Object)?;
+        self.document.nodes[root].schema = Some(schema);
+        self.schema_facts(schema, depth, context)?;
         for (key, value) in &schema.context()._extra_fields {
             if key != "@context" {
                 self.member(key, value, context, depth)?;

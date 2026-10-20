@@ -254,6 +254,18 @@ impl<'a> BindingCompilerInput<'a> {
 
     #[cfg(feature = "std")]
     pub fn resolved(&self) -> Option<ResolvedBindingInput<'a>> {
+        let document = self.semantics?;
+        if document.thing_id() != Some(self.logical_plan.thing_id().as_str())
+            || document.property().name != self.logical_plan.property_name()
+            || document
+                .form_facts(
+                    self.logical_plan.property_name(),
+                    self.logical_plan.form_index(),
+                )
+                .is_none()
+        {
+            return None;
+        }
         Some(ResolvedBindingInput {
             operation: self.logical_plan.operation(),
             property: self.logical_plan.property_name(),
@@ -261,7 +273,7 @@ impl<'a> BindingCompilerInput<'a> {
             target: self.logical_plan.resolved_target(),
             content_type: self.logical_plan.content_type(),
             subprotocol: self.logical_plan.subprotocol(),
-            document: self.semantics?,
+            document,
         })
     }
 }

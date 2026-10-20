@@ -1281,8 +1281,9 @@ remains valid for its original scope; changed carrier costs require successor co
 
 For `HostSemanticCompiler`, preparation resolves a semantic closure for each
 scheme-eligible Form immediately before native start. The closure contains Thing,
-the selected property's schema, that Form and its responses, and its effective
-security definitions. Other properties/Forms/unused security definitions are not
+the selected property's typed schema and resolved extensions, that Form and its
+responses, effective security definitions, scoped URI-variable schemas and named
+additional-response schema dependencies. Other properties/Forms/unused security definitions are not
 visited by this pass. Basic TD validation and common security constraints still
 apply to the complete input. This replaces whole-document semantic preparation:
 a valid MQTT Form's unsupported local context or its large annotation must not
@@ -1303,7 +1304,8 @@ exactly-one-NoSec constraint and engine authority remain common. The bounded
 aggregate still captures one complete registration; arbitrary multi-registration
 discovery and automatic same-protocol competition are not implemented.
 
-A semantic profile/capacity refusal or native `UnsupportedOperation` makes only
+A semantic profile/capacity/unsupported-dependency refusal or native
+`UnsupportedOperation` makes only
 the affected coordinate unavailable. A live compiler slot is released when
 present. A shared Thing/property context restriction can affect every Form in
 that scope; this remains a resolver-profile limitation, not TD invalidity or a

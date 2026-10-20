@@ -983,6 +983,45 @@ semantics. This slice instead isolates unrelated scopes. Oversized relevant root
 annotations and unsupported shared contexts remain explicit interoperability
 limits; they may make all affected Forms unavailable without asserting TD invalidity.
 
+The public input also exposes `PropertyFacts`, `SchemaView`/`SchemaFacts`, expanded
+`ResolvedFormFacts`, scoped URI-variable schemas, effective NoSec facts and
+additional-response facts. Schema handles borrow the same admitted source; they
+expose declared type (including omitted type), effective read/write flags,
+observable, metadata, format/unit, numeric/string/array constraints, required
+members, const/default/enum, properties, items and oneOf. Nested/composed children
+have the same interface and their own resolved extensions. Standard validation
+and defaults remain TD-owned. This is a facade over existing typed facts, not a
+new schema parser or a second normalized schema graph. Literal values are JSON
+payload data; a literal member named `@context` is never processed as a context.
+
+Scalar getters allocate nothing. Child queries scan at most the admitted arena;
+iteration advances over prepared nodes. Preparation charges the reachable typed
+facts, strings, literal nodes and keys against the same 65,536-unit fuel and
+original lifetime as extension work. Literal backing remains in the admitted
+source rather than being copied into arena nodes. Native inspection/copy work is
+part of each qualified compiler's prepaid `BindingPolls` declaration; read-only
+queries are not a sandbox for arbitrary linked callbacks. Schema handles cannot
+outlive the semantic loan or enter the source-independent artifact.
+
+Thing and affordance URI-variable maps retain distinct scopes and absent/empty
+states. Standard `additionalResponses.schema` dependencies prepare only the named
+schema definitions they need, within the same arena/work limits. Queries outside
+that prepared closure return `OutsidePreparedScope`, not a false absence.
+Unsupported JSON Schema/Thing Model references, including aliases of `tm:ref`,
+and generic `items` children not validated by the upstream typed representation
+are explicit `UnsupportedDependency` refusals before native compilation. They
+do not become partially valid child handles. Other untyped scalar facets retained
+by the supplied model remain available by expanded name in schema semantics.
+
+`ArraySchema::items_are_tuple` preserves the previously collapsed distinction
+between uniform `items: {...}` and positional `items: [{...}]`. The source serde
+and public schema view retain that meaning, including one-element tuples; builders
+retain their previous one-schema uniform convention. This is a necessary source
+fidelity correction for nested schema access. It adds no descendant allocation.
+The source model still bounds typed numeric domains and accepts only its modeled
+schema shapes/security identifiers. This boundary does not recover unsupported
+source syntax or claim full JSON Schema/TD ingestion conformance.
+
 The supported subset resolves the standard TD context prefixes, absolute local
 prefixes, term aliases, local/property/Form and term-scoped object contexts,
 `@vocab`, and absolute/compact IRI values with `@id`/`@vocab` coercion. It retains
@@ -999,7 +1038,14 @@ datatype/language coercions and chained compact-prefix/vocabulary definitions ar
 interpreted. Core TD aliases and lexical distinctions already collapsed by the
 existing typed serde model are not recovered. No Binding receives raw TD/context
 or reparses JSON-LD. Supporting more context syntax belongs here, not in a Binding.
-The supported prefix rules follow the [JSON-LD 1.1 algorithms](https://www.w3.org/TR/json-ld11-api/#create-term-definition).
+Context lookup captures the immutable defining map environment and vocabulary
+for each term. Later root-array entries, Form contexts, prefix overrides and
+vocabulary changes cannot reinterpret inherited aliases. Same-map forward
+references are resolved within that defining environment; cyclic/unrepresentable
+expansions are refused. This profile permits one initial standard TD context URI
+followed by inline maps; repeating that URI after overrides is refused rather than
+pretending to implement a context reset. Chained prefix aliases remain unsupported.
+These rules follow the [JSON-LD 1.1 algorithms](https://www.w3.org/TR/json-ld11-api/#create-term-definition).
 The subset/cap refusal is an explicit interoperability limit, not a W3C prohibition
 or evidence of arbitrary-TD/protocol conformance. Existing strict Embedded lending
 is unchanged and does not allocate this Host arena.

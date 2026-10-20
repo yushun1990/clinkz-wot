@@ -80,7 +80,9 @@ responses, coding, scopes and subprotocols remain unsupported.
 
 Root/Property/Form/nested-schema/response/security extensions and semantic class
 annotations arrive in TD's bounded resolved tree. Aliases and supported scoped
-contexts are resolved by TD, not reparsed by HTTP. Labels, SAREF types and unrelated
+contexts are resolved by TD, not reparsed by HTTP. Inherited aliases retain their
+definition-time meaning across later context entries, prefix shadowing and
+vocabulary changes; unsupported expansion dependencies are refused before I/O. Labels, SAREF types and unrelated
 vendor annotations do not change the request. Unknown semantics and advertised
 Profiles are preserved without Profile/extension conformance claims; this slice
 implements no activated Profile. The resolver is explicitly a bounded local-context
@@ -93,6 +95,13 @@ exhaust its arena or impose unsupported local contexts. Shared root/property
 restrictions can still make all affected Forms unavailable; this is an adapter
 interoperability limit, not TD invalidity. The public example supplies that credit.
 The production tests include 24 properties/48 Forms and actual repeated HTTP I/O.
+The same public input exposes bounded borrowed standard Property/DataSchema facts,
+nested/composed schemas and named response-schema dependencies alongside resolved
+extensions. A non-HTTP compiler fixture consumes these facts and executes distinct
+owned native instructions after the TD is dropped; it is not a real alternate
+transport or general conformance proof. HTTP keeps its existing execution limits,
+including no URI-template/coding/additional-response execution. Common fact access
+does not imply support for those capabilities.
 The public native compiler adapter still requires `Copy` inline artifacts and one
 atomic compile callback; general owned/resumable Consumer compilation is unfinished.
 

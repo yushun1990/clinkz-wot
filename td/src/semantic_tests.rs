@@ -124,6 +124,7 @@ fn unsupported_context_semantics_are_refused_instead_of_partially_expanded() {
         json!({"@base":"https://example.org/"}),
         json!({"x":{"@reverse":"urn:x:"}}),
         json!({"x":"htv:", "verb":"x:methodName"}),
+        json!({"base":"http://www.w3.org/2011/http#", "x":"base", "verb":"x:methodName"}),
     ] {
         let mut td = source();
         td["@context"] = json!(["https://www.w3.org/2022/wot/td/v1.1", extension]);
@@ -178,6 +179,88 @@ fn prefix_flags_and_absolute_iris_follow_the_supported_json_ld_rules() {
     ] {
         assert!(root.field(iri).is_some(), "missing {iri}");
     }
+}
+
+#[test]
+fn schema_handles_distinguish_absent_empty_and_extension_collisions() {
+    let mut td = source();
+    td["properties"]["p"]["type"] = json!("object");
+    td["properties"]["p"]["https://www.w3.org/2019/wot/json-schema#properties"] =
+        json!({"fake":{}});
+    let thing = serde_json::from_value(td.clone()).unwrap();
+    let document = ResolvedSemanticDocument::resolve(&thing, "p", 0).unwrap();
+    assert!(document.property().schema.properties().is_none());
+    td["properties"]["p"]["properties"] = json!({});
+    td["properties"]["p"]["oneOf"] = json!([]);
+    let thing = serde_json::from_value(td.clone()).unwrap();
+    let document = ResolvedSemanticDocument::resolve(&thing, "p", 0).unwrap();
+    assert_eq!(document.property().schema.properties().unwrap().count(), 0);
+    assert_eq!(document.property().schema.one_of().unwrap().count(), 0);
+    assert!(document.property().schema.items().is_none());
+    td["properties"]["p"]["properties"] = json!({"actual":{"type":"integer"}});
+    let thing = serde_json::from_value(td).unwrap();
+    let document = ResolvedSemanticDocument::resolve(&thing, "p", 0).unwrap();
+    let (name, child) = document
+        .property()
+        .schema
+        .properties()
+        .unwrap()
+        .next()
+        .unwrap();
+    assert_eq!(name, "actual");
+    assert_eq!(child.facts().declared_type, Some("integer"));
+}
+
+#[test]
+fn common_literal_and_schema_work_share_the_resolver_envelope() {
+    let mut td = source();
+    td["properties"]["p"]["const"] = json!(vec![Value::Null; RESOLUTION_WORK as usize]);
+    let thing = serde_json::from_value(td).unwrap();
+    let (result, used) = ResolvedSemanticDocument::resolve_metered(&thing, "p", 0);
+    assert!(matches!(result, Err(SemanticError::Limit)));
+    assert_eq!(used, RESOLUTION_WORK);
+}
+
+#[test]
+fn uniform_and_single_tuple_items_keep_their_meaning_through_td_serde() {
+    for (items, expected) in [
+        (json!({"type":"integer"}), SchemaItemsMode::Uniform),
+        (json!([{"type":"integer"}]), SchemaItemsMode::Tuple),
+    ] {
+        let mut td = source();
+        td["properties"]["p"]["type"] = json!("array");
+        td["properties"]["p"]["items"] = items.clone();
+        let thing: Thing = serde_json::from_value(td).unwrap();
+        assert_eq!(
+            serde_json::to_value(&thing).unwrap()["properties"]["p"]["items"],
+            items
+        );
+        let document = ResolvedSemanticDocument::resolve(&thing, "p", 0).unwrap();
+        assert_eq!(document.property().schema.items_mode(), Some(expected));
+        assert_eq!(
+            document
+                .property()
+                .schema
+                .items()
+                .unwrap()
+                .next()
+                .unwrap()
+                .facts()
+                .declared_type,
+            Some("integer")
+        );
+    }
+}
+
+#[test]
+fn unsupported_generic_schema_children_are_not_disguised_as_absent() {
+    let mut td = source();
+    td["properties"]["p"]["items"] = json!({"type":"integer"});
+    let thing = serde_json::from_value(td).unwrap();
+    assert!(matches!(
+        ResolvedSemanticDocument::resolve(&thing, "p", 0),
+        Err(SemanticError::UnsupportedDependency)
+    ));
 }
 
 #[test]
