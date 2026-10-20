@@ -1083,7 +1083,7 @@ id = "WP-600-HTTP-PRODUCER-PROPERTY-READ"
 work_package = "WP-600"
 sequence = 610
 status = "planned"
-admission_status = "candidate"
+admission_status = "admitted"
 impact_status = "current"
 depends_on = ["WP-600-HTTP-CONSUMER-PROPERTY-READ"]
 depends_on_packages = ["WP-000"]
@@ -1161,7 +1161,7 @@ pre_implementation_checks = [
     "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --features async",
     "git diff --check",
 ]
-admission_review = "pending-independent-exact-revision-review"
+admission_review = "github-pr:216#pullrequestreview-5583560319"
 completion_evidence_keys = [
     "producer-semantic-coverage", "producer-install-ownership", "http-producer-property-read",
     "http-consumer-producer-loop", "producer-resource-retirement", "producer-regression-conformance",

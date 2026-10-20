@@ -1,10 +1,11 @@
-# Host HTTP Producer Property Read: admission candidate
+# Host HTTP Producer Property Read: implementation admission
 
 Design revision 5.1; tranche `WP-600-HTTP-PRODUCER-PROPERTY-READ`.
 [index.toml](index.toml) owns admission state, dependencies, paths, checks and
-completion keys. **Independent exact-revision admission is pending.** This PR
-contains contracts and executable prechecks only; passing diagnostics is not
-permission to implement. No gate, package or milestone is closed.
+completion keys. **Implementation admission is accepted** by the
+[independent PR #216 review](https://github.com/yushun1990/clinkz-wot/pull/216#pullrequestreview-5583560319)
+at `90abeb1564b6da1e0d2001c5c2c3b587b48eb465`. Production implementation and
+completion evidence remain outstanding. No gate, package or milestone is closed.
 
 ## Decision and alternatives
 
@@ -37,7 +38,7 @@ was closed without merging; its observations must be rechecked on current code.
 ## Evidence and blockers in the existing path
 
 The reconstruction baseline is master `17f22b6170856a822fb77afe427c3532cf23e295`.
-These are source defects to remove inside the proposed implementation, not
+These are source defects to remove inside the admitted implementation, not
 unimplemented predecessor contracts being counted as complete:
 
 | Source evidence | Consequence / executable discriminator |
