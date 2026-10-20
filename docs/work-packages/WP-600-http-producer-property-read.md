@@ -194,12 +194,22 @@ owned programs/program references beyond `Copy`, independent preparation and
 driver construction, shared native infrastructure leases, common Host/static
 semantics and consistent optional-id/Property-key handling across roles.
 
+The reworked candidate now demonstrates the
+[definition/bind boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-definition-and-instance-boundary)
+and [shared Producer topology](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary).
+It places preparation contracts in Planning and resolved input views in TD,
+with no TD dependency in execution-only Core. It requires one reusable program
+owner independent of instance accounts, actual compiler/runtime policy checks,
+and separately owned native progress/retirement. Multiple route leases preserve
+Engine routing/publication/permits; a route's stop cannot close sibling service.
+The UDP sketch does not execute this HTTP admission or qualify its SDK/disposal.
+
 These are **proposals**, not newly admitted Producer capabilities or exceptions.
 The recorded accepted scope, dependencies, strict limits, six completion keys
 and final-root obligations remain unchanged. The whole-description and actual
-HTTP loop evidence are still outstanding. Owner direction review and independent
-architectural review must settle the proposed scope/contract amendment before
-source work implements it. This adds no package gate, status transition or
+HTTP loop evidence are still outstanding. Independent architectural review must
+settle the proposed scope/contract amendment before source work implements it.
+This adds no package gate, status transition or
 universal shared-session requirement to the current admission.
 
 ## Preconditions and impact

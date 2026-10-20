@@ -54,13 +54,26 @@ shared WoT meaning; Planning would retain selection, native compiler coordinatio
 and Producer coverage. Fixed execution would consume prepared entries without
 requiring TD, Planning or Discovery in its normal dependency graph.
 
-The preferred target is to slim existing Core into small execution contracts,
-moving shared operation values out of TD and preparation/legacy orchestration
-out of Core deliberately. This reverses affected edges rather than adding a
-cycle. A new Contracts crate or separate Host/embedded packages is not selected
-without evidence that the smaller arrangement is insufficient. A Binding can
-offer an optional preparation facet and an execution facet over the same native
-program type; their compatibility/pairing remains checked.
+The selected candidate reverses the TD/Core edge: Core depends only on
+Foundation, TD on Core/Foundation, and Planning on TD/Core/Foundation. **All**
+Core -> TD edges must first disappear, including legacy APIs/security helpers.
+Shared operation vocabulary moves to Core; TD retains its document encoding
+wrappers and all resolved semantic trees/loans. Public compiler contracts,
+selected-coordinate input wrappers and compiler erasure move to Planning.
+They cannot remain in Core behind a feature without restoring the dependency.
+
+Runtime program types live in the Binding's base module, and source-free common
+execution envelopes live in Core. Optional Binding preparation implements
+Planning traits over those same native types. Execution-only Servient and
+Bindings depend on Core, with no TD/Planning dependency; preparation composition
+and actual compiler/executor registration pairing happen above Core. Neither
+Planning nor Servient imports concrete Bindings. A new Contracts crate or separate
+Host/embedded packages is unnecessary for this demonstrated graph.
+
+The [five-crate sketch](../../tools/architecture-fixtures/review08-boundaries/README.md)
+compiles the runtime and preparation graphs separately. It tests proposed
+interfaces, not migration of the current production dependencies. The full
+ownership/type placement and rejected cyclic alternatives are in Review 08.
 
 Role, dynamic preparation, `std`, async syntax, thread mobility, atomics and
 storage/failure policy would be separate capabilities. Shared execution kernels

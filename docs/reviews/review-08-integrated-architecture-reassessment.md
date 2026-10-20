@@ -1,7 +1,7 @@
 # Architecture Review 08: Preparation, Programs, Instances, and Protocol Infrastructure
 
 - Date: 2026-10-20
-- Status: completed independent assessment; proposed direction pending Owner review and independent architectural acceptance
+- Status: reworked architecture candidate with constructibility evidence; pending independent architectural acceptance
 - Reviewed source and authority: [`700cfdb1ccb03fabd8e27fdc27b2f2109a362d9a`](https://github.com/yushun1990/clinkz-wot/tree/700cfdb1ccb03fabd8e27fdc27b2f2109a362d9a), active v5.1 including the accepted Host HTTP Producer admission
 
 This report preserves an independent reassessment from project goals, source,
@@ -9,9 +9,11 @@ accepted contracts and executable counterexamples. It is **non-normative**.
 The proposed amendments linked below are also non-normative: they change no
 requirement, API/state/resource schema, implementation admission, gate, package
 or milestone status. Production implementation is outside this submission.
-Owner direction review and fresh independent architectural review precede any
-execution of this proposal; this is the boundary of this reassessment, not a
-new project-wide approval process.
+The original assessment is retained below. This revision answers an independent
+critique of its dependency, reuse and shared-Producer boundaries. It selects a
+concrete candidate and supplies small executable sketches; it is not independent
+acceptance of its own corrections. Fresh architectural review and deliberate
+authority/scope migration precede production implementation.
 
 ## Conclusion
 
@@ -84,8 +86,47 @@ codecs remain selected capabilities. Retire the builder's implicit Directory,
 competing legacy TD-at-call-time execution, and obsolete compiler utility path;
 do not preserve them as fallbacks for migrated capabilities.
 
-Exact package/feature edits are a later reviewed migration, not selected public
-types in this report. The proposed structural projection is in
+The selected dependency direction is now explicit. In this adjacency list,
+`A -> B` means **A depends on B**; optional preparation is an upward facet,
+never a feature adding TD/Planning to Core:
+
+```text
+Core                  -> Foundation
+TD                    -> Core, Foundation
+Planning              -> TD, Core, Foundation
+Binding runtime       -> Core, its native SDK
+Binding / prepare     -> Binding runtime, Planning, TD
+Servient execution    -> Core
+Servient / prepare    -> Servient execution, Planning, TD
+application           -> selected Servient, Bindings, Discovery, codecs, platform
+```
+
+The critical reversal is **TD -> Core**, after removing every Core -> TD edge.
+This is a replacement of the current DAG, not an extra edge in it. Core cannot
+retain `ResolvedBindingInput`, compiler authoring/erasure or legacy TD-dependent
+client/security helpers under an optional feature. Compiler and runtime bundle
+pairing is assembled above Core. Neither Planning nor Servient depends on a
+concrete Binding; generic associated types connect them at the application.
+
+| Public contract/data | Selected defining owner and reason |
+| --- | --- |
+| Operation vocabulary, identities, payload/result and authorization/lifecycle contracts | Core; TD can use these without Core importing a document. TD owns its Serde wrapper/conversions for Core operation values, avoiding an orphan trait implementation or a parser dependency in Core. |
+| Typed documents, resolved effective operations/security/URI facts, schema/context/extension trees and their paid loans | TD; this retains one semantic kernel. A resolved view is not a runtime record. |
+| Selected-coordinate compiler input borrowing TD views; open compiler trait, pure cursors, outcomes, bounds and Host compiler erasure | Planning; a third-party preparation facet implements it. Moving the current public compiler contracts out of Core is necessary, not deferred placement. |
+| Source-free common execution facts and generic owned definition/entry envelopes | Core; compiled validation facts do not contain `td::DataSchema`, a semantic arena or a source loan. Boolean result shape is the sketch's entire supported projection, not a replacement schema language. |
+| Native program and typed operand representations, including compiler/executor mapping compatibility | Binding runtime module; the optional compiler produces this same type. No native type is defined by Planning or mentioned by Core. |
+| Runtime registration/executor contract and private live instance/route records | Core contracts / Servient records; no compiler trait object is retained in an execution-only registration. Preparation captures and checks the real paired registration separately. |
+
+The isolated [five-crate sketch](../../tools/architecture-fixtures/review08-boundaries/README.md)
+compiles the critical Core/TD/Planning/Binding edges in distinct packages, using
+language primitives in place of Foundation and std UDP in place of a native SDK.
+It has no production crate dependency. Binding's
+default runtime and Engine each have only Core as a normal dependency. Enabling
+Binding preparation adds Planning/TD without changing Core's graph. Core, TD
+and Planning sketches also compile on Cortex-M0 without pointer atomics. This
+establishes feasibility of the proposed interfaces, not extraction or portability
+of today's production Core. Exact public names, feature defaults, all legacy
+removals and API/schema migration remain later reviewed changes. The projection is in
 [module boundaries](../architecture/20-module-boundaries.md#proposed-preparationexecution-separation-review-08).
 
 ### Programs, instance context and live authority
@@ -118,6 +159,64 @@ retained physical bytes. Independent TD inputs still require validation; total
 startup is not O(K). Interning after compiling each instance does not establish
 reduced compilation. Persisted data would need a separate bounded format,
 dependency/trust check and fresh installation; it cannot serialize authority.
+
+#### Constructed definition and instance boundary
+
+Select **explicit prepare-once / checked-bind-many**, with the compiler
+declaring which inputs are definition dependencies and which are operands.
+This corrects the earlier suggestion that a checked context alone could supply
+reuse: there must be a callable binding boundary and a surviving program owner.
+The sketch's minimal preparation interface is in
+[Planning](../../tools/architecture-fixtures/review08-boundaries/planning/src/lib.rs):
+
+```rust,ignore
+trait ReadCompiler {
+    type Program: 'static;  // owned native data, not necessarily Copy/Send
+    type Operands: 'static;
+    type Cursor: 'static;
+    fn start(&self, definition: &td::ResolvedRead<'_>) -> Self::Cursor;
+    fn step(&self, cursor: Self::Cursor, credits: &mut u8)
+        -> Step<Self::Cursor, Self::Program>;
+    fn bind(&self, program: &Self::Program, instance: &td::ResolvedInstance<'_>)
+        -> Result<Self::Operands, BindError>;
+}
+```
+
+The sketch's two-step native compiler produces a non-`Copy` boxed prefix plus
+captured Boolean encoding policy. `bind` compares actual common/native dependencies
+and policy, validates the suffix operand, and builds only an owned endpoint key.
+It never calls `start`/`step`. The test destroys definition input and compiler,
+then executes two instances with different operands and different Engine grants:
+**one start, one completed compilation, two installed routes, one native socket**.
+Changed dependencies, illegal operands, a different preparation policy and a
+same-Rust-type/different-runtime-policy substitution all refuse before effects.
+The type pairing alone is insufficient to establish configuration compatibility.
+
+An explicit instantiation is not a claim that a second complete TD is equivalent.
+For independent TDs, TD validation and dependency comparison must still run;
+changed schema, effective security semantics, mapping policy or non-operand
+target facts require refusal or a separately prepared definition. A selected
+security association/credential may vary only within the definition's declared
+operand contract. Current authorization always belongs to the Engine and is
+checked independently per instance and again before accepting work; a program,
+source id, parameter match or program reference grants no rights.
+
+The ownership path is `definition owner -> immutable native program`, with each
+instance/accepted call retaining a program lease plus its own operands and live
+generation. The sketch uses `Rc` as a single-thread storage adapter: stopping A
+cannot destroy B's backing, and an A reply retains the definition after both
+routes stop. A weak reference and destructor counter show final program release
+exactly once. This is explicit sharing, with no registry, lookup cache or interning.
+Host thread-safe and caller-owned static adapters must enforce the same ownership
+relations without making `Rc` or `Arc` a universal representation.
+
+For funded production storage, the definition owner must retain its **original
+allocation/account owner independently of the first instance**. Charge immutable
+backing once there and charge each instance/call reference and operand at its
+actual owner; release the backing charge only after physical destruction. Merely
+cloning an `Arc` out of A's current per-instance account and returning A's allowance
+at close is invalid. The sketch proves reference/drop ordering, not numeric
+admission, original-account reconciliation or a qualified allocator.
 
 [The lifecycle proposal](../architecture/30-compiled-plan-lifecycle.md#proposed-program-and-instance-lifetimes-review-08)
 and [Planning amendment](../spec/planning.md#proposed-program-and-compilation-amendment-review-08)
@@ -202,6 +301,68 @@ projections rather than requiring the full schema in every runtime record.
 The proposed observable contracts are in
 [Binding SPI](../spec/binding-spi.md#proposed-role-and-infrastructure-amendment-review-08).
 
+#### Constructed shared Producer boundary
+
+The shared socket experiment requires a correction to **route-scoped progress**:
+native ingress/retirement must have a separately owned progress domain. A shared
+listener cannot require a permit for an arbitrarily chosen Thing before it can
+discover the native request's destination. Retain route-scoped semantic acceptance
+and response ownership; do not equate them with exclusive native-driver ownership.
+
+The [external Binding runtime](../../tools/architecture-fixtures/review08-boundaries/binding/src/lib.rs)
+owns one real loopback UDP socket and surfaces bounded, untrusted observations
+containing a canonical native endpoint key and response peer. There is no handler
+callback or semantic route table inside it. The
+[Engine sketch](../../tools/architecture-fixtures/review08-boundaries/engine/src/lib.rs)
+owns the endpoint-key -> route-generation -> handler index. Keys are opaque to
+the Engine; protocol parsing/canonicalization stays in the Binding. Native
+demultiplexing may implement an Engine-installed index mechanically, but cannot
+choose semantic ownership or grant publication/acceptance itself.
+
+The construction is:
+
+1. Check operand/program/runtime compatibility, current per-instance authorization,
+   route collision and capacities before acquiring native participation. A route
+   retains any partial installation owner on failure; no failed route publishes.
+2. Install independent route leases into the same physical owner. Ready routes
+   retain read-only gates; only the Engine keeps the captured authority root.
+   Publication changes the selected ready group without callback/yield. This
+   proves a local single-thread boundary, not production concurrent publication.
+3. Perform bounded native I/O without a route permit. When routing an observation,
+   the Engine captures its issuer gate and exact route generation. Deferred observations keep
+   that decision; they are never looked up again by endpoint key after slot reuse.
+4. Recheck serving state, generation and current authorization. Lend a non-`Clone`
+   permit scoped to this accept call. The Binding checks real issuer identity,
+   exact route/generation and native observation owner/key, and returns a unique
+   delivery. Only the Engine selects/invokes the handler. A newly created authority
+   with identical numeric ids cannot impersonate the captured root. Neither root
+   nor publication mutation capability enters the Binding.
+5. Stop A by revoking its gate/removing Engine routing before releasing A's route
+   participation. B still receives and answers over the same socket. Already
+   accepted A work retains its own response/program/native leases and may settle;
+   it cannot authorize another incoming request.
+6. The final route release begins retirement and rejects new attachments. Native
+   observations, outstanding replies and SDK jobs/callbacks also count as users.
+   The complete physical owner remains pollable on Pending/error until all are
+   terminal; then it closes the socket exactly once. Extra inert owner handles
+   do not prevent retirement. Infrastructure retirement is not program retirement.
+
+Executable negatives cover prepublication/revoked admission, another issuer's
+permit, cross-route permits, old-generation permits, buffered input after slot
+reuse and send failure retaining the complete reply. Program release and socket
+release have separate assertions. The native job is a manually held lifetime
+token; it demonstrates the retirement condition, not a real asynchronous SDK
+callback implementation. UDP supplies actual I/O, not HTTP/broker conformance.
+
+The socket/retirement state has one physical owner; each route, observation,
+response and job owns a bounded participation token. Production must fund this
+owner and its eventual close destination before native acquisition, independently
+of whichever route starts first. A route completion cannot release shared backing
+or count as final native shutdown. The sketch's counters are ownership evidence,
+not resource-schema measurements. A genuinely asynchronous SDK still needs a
+funded retained closer and qualified final-root successor; a tombstone or last
+`Arc` drop is insufficient. That API and SDK qualification remain unselected.
+
 ### Reassessment of the accepted HTTP Producer admission
 
 Keep its whole-description coverage, source-free entry, retained setup/close
@@ -229,18 +390,23 @@ review must decide the amendment before execution follows it.
 | Repair only current methods and coverage, then freeze the current SPI | Necessary local repairs, but leave demonstrated compiler/TD extensibility and environment coupling unresolved. They can make the narrow path safe without completing the architecture. |
 | Preserve mandatory logical plans, per-generation content ownership, all-bounds barriers and four setup phases universally | Existing evidence proves useful invariants through these mechanisms. It does not establish their necessity or acceptable authoring cost across different protocols/environments. |
 | Move all TD interpretation/selection/dispatch into Bindings | Duplicates shared defaults, security and selection; weakens truthful advertisement and dispatch authority. Reject. |
+| Keep public compiler traits in Core while making TD depend on Core | Core's resolved TD inputs immediately create Core -> TD -> Core. Reject. Move compiler traits/erasure and selected wrappers to Planning; keep TD's resolved views in TD. |
+| Move the entire semantic tree into Core, or make TD depend on Planning | The former drags document/schema/preparation representation into the execution base; the latter cycles Planning -> TD -> Planning. Reject. Core stores only compiled execution facts. |
+| Leave Core -> TD and place compilers in Planning | Acyclic and a credible narrower repair; retains TD on every fixed runtime path. Prefer the demonstrated reversal for the stated execution-only goal; it requires explicit legacy/security/API migration, not a feature alias. |
 | Universal protocol IR/VM, extension-criticality framework or Engine session manager | Adds an unproved representation/policy framework. Native typed programs plus explicit owners provide the needed separation without selecting it. Reject for this target. |
 | Split Host and embedded runtimes, or add a Contracts crate immediately | Credible if actual dependency/backend evidence requires it. First separate capabilities and slim Core; avoid duplicating semantic algorithms. |
-| Shared immutable program references, checked instance context and separate native infrastructure owners | Selected proposed direction. Requires the concrete ownership and I/O experiments below before architecture closure. |
+| Deduplicate completed instance artifacts or share an instance generation as the program identity | Still repeats compilation or couples independent authority/reclamation. Reject as the prepare-once capability; explicit bind and independent program ownership solve the demonstrated case. |
+| Poll one shared listener exclusively through one route's driver/permit, or add a universal Engine session manager | The former can block sibling traffic/retirement when its route stops; the latter unnecessarily centralizes native protocol policy. Select Binding-owned infrastructure progress with Engine-owned semantic routing and per-route permits. |
+| Shared immutable program references, checked instance context and separate native infrastructure owners | Selected, now constructed by the narrow five-crate/UDP sketch. Production funding, concurrent publication, async SDK retirement and other operation/profile evidence remain independent obligations. |
 
 ## Change boundary and accepted authority
 
 | Existing authority | Proposed change; accepted guarantee to retain |
 | --- | --- |
-| Module boundary / Core API ownership | Separate preparation dependencies from execution; retain one defining owner and acyclic graph. Move shared values deliberately, with no feature-unification backflow. |
+| Module boundary / Core API ownership (`CRATE-DEPS-001`) | Reverse TD/Core only after removing Core's TD/legacy edges; compiler contracts/erasure move to Planning, resolved semantic loans stay TD-owned. Change exact public ownership/feature projections before source migration. |
 | ADR-0008 and Planning's mandatory two-level/per-generation representation | Permit minimal execution entries and separately owned reusable content; retain source-free output, selection identity, publication, leases and final physical reclamation. The accepted Host Producer subset already makes a narrower exception. |
 | Planning compiler eligibility and all-bounds ordering | Admit external owned/resumable jobs through generic pairing; permit funded incremental pure construction with reviewed error precedence and rollback. |
-| Binding/Servient lifecycle and Host Producer admission | Generalize retained owners and infrastructure leases; retain permit-gated dispatch, first cause, late results, complete transfer and truthful terminal state. |
+| Binding/Servient lifecycle and Host Producer admission | Separate native infrastructure progress/retirement from route semantic progress, permit shared leases, and pin deferred routing decisions. Retain private publication, permit-gated dispatch, first cause, late results, complete transfer and truthful terminal state. |
 | Resource interpretation and Host/static contracts | Generalize ownership/disposal policy across roles without omitting Engine backing, weakening strict profiles or relabeling old measurements. |
 | TD/security and interaction guarantees | Preserve extension data separately from execution support; keep runtime authorization mandatory; remove source-id/key availability assumptions deliberately. Sealing remains distinct from schema validation. |
 | Work packages, state/API/resource matrices and evidence | Update affected projections only in a later accepted migration. Renew changed carrier/cost/trace evidence; preserve unrelated scoped evidence. No gate or package transition follows from this report. |
@@ -267,18 +433,16 @@ need their own evidence. Runtime code loading/hot unload remain outside v1 goals
 HTTPS/security remains a release requirement. Schema validation needs an explicit
 capability/enforcement policy before claiming payload conformance.
 
-Recommended sequence after Owner direction review:
+Recommended sequence after this rework:
 
 1. Independently review the integrated direction, then reconcile the affected
    accepted contracts and exact implementation scope. Avoid a new global gate
    or repeated current-state summaries.
-2. Before freezing public APIs, run a bounded prototype: an external owned and
-   resumable compiler; two independently owned instances using one definition
-   with different operands; shared native infrastructure whose first logical
-   stop preserves the second; and Host/static execution of common semantic
-   rules. Use actual I/O for infrastructure claims and a session/broker-shaped
-   contrast before claiming protocol-shape neutrality. This is not a requirement
-   to complete another production Binding first.
+2. Review the bounded prototype retained here, including its negative probes and
+   limits. Renew production storage/account and static execution evidence when
+   migrating the actual contracts; a miniaturized stand-in cannot establish those.
+   Require an actual session/broker-shaped contrast before claiming general
+   protocol-shape neutrality. No second production Binding is required here.
 3. Implement the real public HTTP Consumer-to-Producer loop under the accepted
    corrections, including zero-effects refusal, source destruction, partial
    installation, cancellation, saturation and final-owner retirement. Qualify
@@ -293,9 +457,10 @@ refusal, native failure and exhaustion cannot publish partial authority.
 
 ## Reproduction and validation boundary
 
-Assessment environment: Linux x86_64, Rust 1.95.0. The source observations and
-executed baseline checks below refer to `700cfdb1`; this PR adds only proposed
-text and diagnostics. PR-head checks belong to the PR's validation record.
+Original assessment environment: Linux x86_64, Rust 1.95.0. The source observations
+and executed baseline checks below refer to `700cfdb1`. The rework adds proposed
+text, diagnostics and an isolated sketch workspace; production code is unchanged.
+PR-head checks belong to the PR's validation record.
 No full workspace, real embedded execution, general interoperability, completed
 HTTP Producer or architecture-closure result is inferred.
 
@@ -334,3 +499,9 @@ cargo check --locked --offline -p clinkz-wot-core --no-default-features --target
 It fails with `E0432` on `alloc::sync::Arc` in base Core modules and consequent
 type errors. Cortex-M4 compilation is separate evidence and proves no board fit.
 The required GitHub `validation` status checks diff hygiene only.
+
+The constructibility rework ran on Linux x86_64, Rust 1.99.0. Reproduction commands
+and exact evidence limits are in the
+[sketch README](../../tools/architecture-fixtures/review08-boundaries/README.md).
+The new tests exercise the proposed interfaces, not production contracts; the
+original four diagnostics remain observations of unchanged production behavior.

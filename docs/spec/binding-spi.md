@@ -205,6 +205,14 @@ Protocol vocabulary and its defaults are Binding-owned. TD semantics, candidate
 selection and handler authority remain outside the Binding. Compilation is pure;
 its output contains no live native resources, credentials or handlers.
 
+Review 08 makes the defining owners explicit: compiler authoring/erasure and
+selected input wrappers move to Planning, resolved views remain TD-owned, and
+runtime program/executor types stay in the Binding's base module. Complete
+pairing is checked by preparation composition over the actual runtime registration;
+an execution-only Core registration does not retain a compiler or depend on TD.
+The [candidate dependency graph](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary)
+replaces Core -> TD rather than adding TD -> Core alongside it.
+
 Delete exact-type admission, private Consumer adapter eligibility and the
 source-known `ConsumerCompilerSupport` descriptor from the required path. Remove
 `ResolvedTargetCompiler` as Core's mandatory lowering; retire it or retain a
@@ -239,9 +247,12 @@ wrapper, identity, lease and cleanup destination throughout.
 Servient atomically publishes complete local dispatch authority after coverage
 and capacity checks, and closes it before draining. Bindings may progress
 bounded native ingress/control traffic before publication but may not dispatch
-handlers. A registration/session driver may multiplex endpoints and return
-route-attributed semantic events with owned reply opportunities. Native shared
-sessions have explicit last-user/callback retirement; one route's cancellation
+handlers. A registration/session driver may multiplex endpoints and surface
+bounded native observations/opaque endpoint keys. Engine-owned indexing assigns
+the semantic route generation; a borrowed route permit gates acceptance and the
+owned reply opportunity. Deferred decisions cannot retarget by key after route
+reuse. Native shared sessions have explicit last-user/callback retirement;
+one route's cancellation
 cannot retire a sibling's resources. Consumer calls retain owned progress,
 first-cause cancellation, late-result validation and terminal disposal. Protocol
 I/O and correlation remain Binding-owned; selection, authorization and dispatch
@@ -2335,6 +2346,22 @@ logical stop releases its participation; it cannot close infrastructure used by
 another role/instance. One actual physical owner funds shared backing, with
 separately bounded references and last-user retirement including jobs/callbacks.
 This selects no universal Engine session manager or allocator.
+
+The [constructed shared-Producer boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
+separates native infrastructure progress from route-scoped semantic acceptance.
+The Engine owns the canonical-key -> route-generation -> handler index, current
+authorization and publication root. The Binding owns native key extraction,
+buffering and physical infrastructure; it receives only read-only route gates
+and nonretained issuer/route/generation-scoped permits. Independent route close
+revokes Engine authority before releasing native participation. Accepted work
+retains its program/reply/native leases and cannot authorize fresh ingress.
+
+Last-route close starts retirement but is insufficient for completion: pending
+observations, replies and jobs/callbacks remain native users. One physical owner
+and funded close destination survive Pending/error until final retirement; inert
+root references are not users. The loopback UDP sketch exercises this ordering
+and rejects foreign/cross-route/stale permits and queued generation substitution.
+Its native callback token is a lifetime model, not an async SDK qualification.
 
 Permit-gated semantic acceptance and handler dispatch can coexist with bounded
 native I/O/buffering outside a route poll. A Binding still receives no direct

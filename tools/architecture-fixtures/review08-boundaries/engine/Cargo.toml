@@ -1,0 +1,13 @@
+[package]
+name = "review08-engine"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+review08-core = { path = "../core" }
+
+[dev-dependencies]
+review08-td = { path = "../td" }
+review08-planning = { path = "../planning" }
+review08-third-party-binding = { path = "../binding", features = ["prepare"] }

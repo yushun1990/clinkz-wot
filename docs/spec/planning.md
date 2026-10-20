@@ -2095,6 +2095,15 @@ qualified layout, indirect-backing, work and cleanup contracts. Inline atomic
 and caller-owned static adapters remain useful supported subsets. Preparation
 facets need not remain runtime dependencies after installation.
 
+The candidate places public compiler traits, typed cursor/outcome contracts,
+Host compiler erasure and selected input wrappers in Planning. The wrappers
+borrow **TD-owned** resolved semantic views; Core has neither TD nor compiler
+dependencies. Native program/operand types stay in the Binding's runtime module,
+and generic source-free execution envelopes stay in Core. Optional preparation
+pairs them to the actual runtime registration above Core. The executable graph
+and rejected alternatives are in
+[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary).
+
 The proposed output is a minimal executable entry referencing native program
 data and any shared common definition, with checked instance context and current
 runtime authority kept separate. A persistent two-level logical representation
@@ -2117,9 +2126,23 @@ prepared-data installer would need trusted provenance, compatibility and current
 target admission; no existing validation proof becomes a serializable image.
 
 Reuse initially means explicit definition preparation and checked instance
-binding, not automatic cache identity. Evidence must separate definition work
-from per-input validation and per-instance installation, reject incompatible
-dependencies before effects, and preserve another user's backing through drain.
+binding, not automatic cache identity. The compiler provides a distinct
+`bind(program, resolved_instance)` callback over declared operands. It may validate
+and construct per-instance data but must not invoke definition compilation again.
+Planning checks common dependencies; the Binding checks native dependencies,
+operand constraints and captured mapping policy. Runtime installation also
+checks the actual compiler/executor policy, beyond Rust type equality. Each
+instance receives fresh current authorization and live generation from Servient.
+
+Definition dependencies include any schema, effective security interpretation,
+target/template or policy not explicitly declared as an operand. A mismatch
+requires refusal or another prepared definition. Independent input validation
+still runs; identical source names/configuration tags do not prove equivalence.
+Evidence separates definition work from validation/bind/install and retains the
+definition's original backing/account owner independently of any instance.
+The [focused sketch](../../tools/architecture-fixtures/review08-boundaries/README.md)
+demonstrates one compilation for two installed instances, source destruction and
+last-user release. It supplies no production resource/admission evidence.
 The existing publication/lease/reclaim requirements and compiler eligibility
 remain unchanged until independently accepted authority and scope migration.
 

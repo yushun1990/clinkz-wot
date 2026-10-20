@@ -63,6 +63,16 @@ a listener/session that another instance or role uses. Infrastructure retirement
 and executor shutdown would follow their actual owners, not Thing count or a
 semantic result's acknowledgement.
 
+The [constructed shared Producer case](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
+requires native infrastructure progress independent of any one route permit.
+Servient still indexes opaque native keys to semantic routes/handlers, pins a
+deferred routing decision to its generation, and lends each acceptance permit
+only after current publication/authorization checks. Stopping A removes its
+routing and revokes its gate before releasing its native participation; B and
+already accepted A replies retain their own leases. Final native retirement
+waits for all route/observation/reply/job users at the physical owner, with its
+close owner still retained. No last-reference count substitutes for that test.
+
 Host and static forms would share lifecycle decisions and checks through common
 kernels/views, with different physical records and progress mechanisms. Fixed
 execution would not require dynamic preparation or an implicit Directory. Any
@@ -323,11 +333,11 @@ and machine-readable artifacts before implementation resumes.
 
 ## Host Producer admission subset
 
-For the [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md),
+For the accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md),
 Building privately resolves/compiles and checks complete advertised coverage.
 The [endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
 then supplies Installing -> LocallyReady -> Serving -> Closing -> Closed.
 Publication is the existing Engine-only local linearization; Closing disables
-new permits before native teardown. This candidate replaces phase-specific Host
-orchestration only after independent admission; it does not change static
+new permits before native teardown. Its recorded scope replaces phase-specific
+Host orchestration; implementation remains outstanding. It does not change static
 representation or silently broaden earlier gate acceptance.
