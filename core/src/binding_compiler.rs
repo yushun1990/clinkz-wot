@@ -476,6 +476,10 @@ pub trait BindingCompilerExtension {
 /// numeric declarations and safe erasure cannot prove their behavior. Native
 /// private backing follows the selected Host policy. Strict Embedded compilers
 /// retain their separate incremental storage/work contract.
+///
+/// This is a restricted adapter, not the target general compiler SPI. Generic
+/// `BindingCompilerExtension` erasure supports owned artifacts and resumable
+/// jobs, but those generic registrations cannot enter Consumer planning yet.
 #[cfg(feature = "std")]
 pub trait HostSemanticCompiler: Send + Sync + 'static {
     /// This first Host slice stores source-free inline native instructions.
@@ -516,7 +520,9 @@ impl<C: HostSemanticCompiler> BindingCompilerExtension for SemanticCompilerAdapt
         self.0.compatibility()
     }
     fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
-        self.check(input)?;
+        // This adapter's bounds depend only on captured types/configuration.
+        // Mapping inspection waits for the coordinate's prepared semantics.
+        self.check_identity(input)?;
         Ok(BindingCompilerBounds::new(
             BindingArtifactFootprint::new(1, size_of::<C::Artifact>() as u64),
             size_of::<SemanticCompilerCursor>() as u64,
@@ -567,12 +573,18 @@ impl<C: HostSemanticCompiler> BindingCompilerExtension for SemanticCompilerAdapt
 }
 #[cfg(feature = "std")]
 impl<C: HostSemanticCompiler> SemanticCompilerAdapter<C> {
-    fn check(&self, input: &BindingCompilerInput<'_>) -> CoreResult<()> {
+    fn check_identity(&self, input: &BindingCompilerInput<'_>) -> CoreResult<()> {
         if input.role() != BindingArtifactRole::ConsumerCall
             || input.candidate().configuration() != self.0.configuration().configuration()
             || input.candidate().compatibility() != self.0.compatibility()
-            || input.resolved().is_none()
         {
+            return Err(resolved_target_error(input));
+        }
+        Ok(())
+    }
+    fn check(&self, input: &BindingCompilerInput<'_>) -> CoreResult<()> {
+        self.check_identity(input)?;
+        if input.resolved().is_none() {
             return Err(resolved_target_error(input));
         }
         Ok(())

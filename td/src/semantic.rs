@@ -140,7 +140,9 @@ impl<'a> SemanticNode<'a> {
     }
 }
 
-/// Temporary preparation data. Every scalar borrows the admitted immutable TD;
+/// Temporary semantic closure of one Form, its property, Thing and effective
+/// security definitions. Other Forms/properties are not present. Every scalar
+/// borrows the admitted immutable TD;
 /// artifacts must copy the native instructions they need before this is freed.
 pub struct ResolvedSemanticDocument<'a> {
     nodes: Vec<Node<'a>>,
@@ -172,14 +174,39 @@ impl<'a> ResolvedSemanticDocument<'a> {
             additional_responses: form.additional_responses.is_some(),
         })
     }
-    pub(crate) fn resolve(thing: &'a Thing) -> Result<Self, SemanticError> {
-        let mut resolver = Resolver {
-            document: Self {
-                nodes: buffer(NODES)?,
-                scopes: buffer(SCOPES)?,
+    #[cfg(test)]
+    pub(crate) fn resolve(
+        thing: &'a Thing,
+        property: &str,
+        index: u32,
+    ) -> Result<Self, SemanticError> {
+        Self::resolve_metered(thing, property, index).0
+    }
+    pub(crate) fn resolve_metered(
+        thing: &'a Thing,
+        property: &str,
+        index: u32,
+    ) -> (Result<Self, SemanticError>, u64) {
+        let mut resolver = match (buffer(NODES), buffer(SCOPES)) {
+            (Ok(nodes), Ok(scopes)) => Resolver {
+                document: Self { nodes, scopes },
+                fuel: RESOLUTION_WORK,
             },
-            fuel: RESOLUTION_WORK,
+            _ => return (Err(SemanticError::Allocation), 0),
         };
+        let result = resolver.prepare(thing, property, index);
+        let work = RESOLUTION_WORK - resolver.fuel;
+        (result.map(|()| resolver.document), work)
+    }
+}
+impl<'a> Resolver<'a> {
+    fn prepare(
+        &mut self,
+        thing: &'a Thing,
+        selected_property: &str,
+        selected_form: u32,
+    ) -> Result<(), SemanticError> {
+        let resolver = self;
         let mut context = ActiveContext::new("https://www.w3.org/2019/wot/td#");
         for entry in thing.context.admission_entries() {
             resolver.pay(1)?;
@@ -224,68 +251,78 @@ impl<'a> ResolvedSemanticDocument<'a> {
             resolver.finish(list);
             resolver.finish(root);
         }
-        if let Some(properties) = &thing.properties {
-            for (name, property) in properties {
-                resolver.pay(name.len() as u64 + 1)?;
-                let schema = property._schema.context();
-                let mut context = root_context;
-                context.vocab = "https://www.w3.org/2019/wot/json-schema#";
-                let context = resolver.local(context, &schema._extra_fields)?;
+        let (name, property) = thing
+            .properties
+            .as_ref()
+            .and_then(|properties| properties.get_key_value(selected_property))
+            .ok_or(SemanticError::UnsupportedContext)?;
+        resolver.pay(name.len() as u64 + 1)?;
+        let schema = property._schema.context();
+        let mut context = root_context;
+        context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+        let context = resolver.local(context, &schema._extra_fields)?;
+        resolver.scope(
+            SemanticScope::Property(name),
+            &schema._extra_fields,
+            schema._metadata.tags.as_deref(),
+            context,
+        )?;
+        let root = resolver.document.scopes.last().unwrap().root;
+        resolver.schema_children(&property._schema, context, 0)?;
+        resolver.finish(root);
+        let index = selected_form;
+        let form = property
+            ._interaction
+            .forms
+            .get(index as usize)
+            .ok_or(SemanticError::UnsupportedContext)?;
+        let mut form_context = context;
+        form_context.vocab = "https://www.w3.org/2019/wot/hypermedia#";
+        let form_context = resolver.local(form_context, &form._extra_fields)?;
+        resolver.scope(
+            SemanticScope::Form {
+                property: name,
+                index,
+            },
+            &form._extra_fields,
+            None,
+            form_context,
+        )?;
+        resolver.document.scopes.last_mut().unwrap().form = Some(form);
+        if let Some(response) = &form.response {
+            let context = resolver.local(form_context, &response._extra_fields)?;
+            resolver.scope(
+                SemanticScope::Response {
+                    property: name,
+                    index,
+                },
+                &response._extra_fields,
+                None,
+                context,
+            )?;
+        }
+        if let Some(responses) = &form.additional_responses {
+            for (response_index, response) in responses.iter().enumerate() {
+                let context = resolver.local(form_context, &response._extra_fields)?;
                 resolver.scope(
-                    SemanticScope::Property(name),
-                    &schema._extra_fields,
-                    schema._metadata.tags.as_deref(),
+                    SemanticScope::AdditionalResponse {
+                        property: name,
+                        form: index,
+                        index: response_index as u32,
+                    },
+                    &response._extra_fields,
+                    None,
                     context,
                 )?;
-                let root = resolver.document.scopes.last().unwrap().root;
-                resolver.schema_children(&property._schema, context, 0)?;
-                resolver.finish(root);
-                for (index, form) in property._interaction.forms.iter().enumerate() {
-                    let index = u32::try_from(index).map_err(|_| SemanticError::Limit)?;
-                    let mut form_context = context;
-                    form_context.vocab = "https://www.w3.org/2019/wot/hypermedia#";
-                    let form_context = resolver.local(form_context, &form._extra_fields)?;
-                    resolver.scope(
-                        SemanticScope::Form {
-                            property: name,
-                            index,
-                        },
-                        &form._extra_fields,
-                        None,
-                        form_context,
-                    )?;
-                    resolver.document.scopes.last_mut().unwrap().form = Some(form);
-                    if let Some(response) = &form.response {
-                        let context = resolver.local(form_context, &response._extra_fields)?;
-                        resolver.scope(
-                            SemanticScope::Response {
-                                property: name,
-                                index,
-                            },
-                            &response._extra_fields,
-                            None,
-                            context,
-                        )?;
-                    }
-                    if let Some(responses) = &form.additional_responses {
-                        for (response_index, response) in responses.iter().enumerate() {
-                            let context = resolver.local(form_context, &response._extra_fields)?;
-                            resolver.scope(
-                                SemanticScope::AdditionalResponse {
-                                    property: name,
-                                    form: index,
-                                    index: response_index as u32,
-                                },
-                                &response._extra_fields,
-                                None,
-                                context,
-                            )?;
-                        }
-                    }
-                }
             }
         }
-        for (name, security) in &thing.security_definitions {
+        let security_names = form.security.as_ref().unwrap_or(&thing.security);
+        for name in security_names {
+            resolver.pay(name.len() as u64 + 1)?;
+            let security = thing
+                .security_definitions
+                .get(name)
+                .ok_or(SemanticError::UnsupportedContext)?;
             let security = crate::validate::basic_typed::security_context(security);
             let mut context = root_context;
             context.vocab = "https://www.w3.org/2019/wot/security#";
@@ -297,7 +334,7 @@ impl<'a> ResolvedSemanticDocument<'a> {
                 context,
             )?;
         }
-        Ok(resolver.document)
+        Ok(())
     }
 }
 
@@ -428,6 +465,7 @@ impl<'a> Resolver<'a> {
         self.pay(key.len() as u64 + 1)?;
         if key == "@vocab" {
             let vocab = value.as_str().ok_or(SemanticError::UnsupportedContext)?;
+            self.pay(vocab.len() as u64)?;
             if !vocab.contains(':') {
                 return Err(SemanticError::UnsupportedContext);
             }

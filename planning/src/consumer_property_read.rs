@@ -1150,7 +1150,6 @@ impl<A: 'static> Data<A> {
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Phase {
     Initialize,
-    Resolve,
     Preflight,
     Waiting,
     Root,
@@ -1607,50 +1606,8 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                     )
                     .ok_or_else(unavailable)?;
                 guard.commit();
-                self.phase = if self.registration.support().uses_semantics() {
-                    Phase::Resolve
-                } else {
-                    Phase::Preflight
-                };
+                self.phase = Phase::Preflight;
                 self.td.as_ref().unwrap().id().ok_or_else(invalid)?;
-            }
-            Phase::Resolve => {
-                #[cfg(feature = "std")]
-                {
-                    use clinkz_wot_td::{ValidatedSemanticError as E, semantic::SemanticError};
-                    // TD charges this atomic pass against step and source lifetime;
-                    // the arena backing is reserved in fixed_charge already.
-                    let Some(semantics) =
-                        self.td
-                            .as_mut()
-                            .unwrap()
-                            .resolve_extensions(budget)
-                            .map_err(|e| match e {
-                                E::Admission(cause) => td_error(cause),
-                                E::Resolution(SemanticError::Allocation) => {
-                                    CoreError::Backpressure(context())
-                                }
-                                E::Resolution(SemanticError::Limit) => {
-                                    CoreError::UnsupportedOperation(context().with_redacted_cause(
-                                        331,
-                                        "semantic input exceeds Host envelope",
-                                    ))
-                                }
-                                E::Resolution(SemanticError::UnsupportedContext) => {
-                                    CoreError::UnsupportedOperation(context().with_redacted_cause(
-                                        329,
-                                        "unsupported local semantic context",
-                                    ))
-                                }
-                            })?
-                    else {
-                        return Ok(Advance::Pending);
-                    };
-                    self.semantics = Some(semantics);
-                    self.phase = Phase::Preflight;
-                }
-                #[cfg(not(feature = "std"))]
-                return Err(invariant());
             }
             Phase::Preflight => {
                 match self
@@ -1946,8 +1903,11 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                 {
                     return Err(invariant());
                 }
-                // No more semantic queries; destruction is fixed/prepaid TD work.
-                self.td = None;
+                // Native compilers still need one semantic closure per coordinate.
+                // The immutable TD loan is released before draft publication.
+                if !self.registration.support().uses_semantics() {
+                    self.td = None;
+                }
                 self.phase = Phase::Bounds;
                 self.position = 0;
                 if self.census.forms != 0 {
@@ -2170,6 +2130,30 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
             self.position = 0;
             return Ok(());
         }
+        #[cfg(feature = "std")]
+        if self.registration.support().uses_semantics() && self.semantics.is_none() {
+            use clinkz_wot_td::{ValidatedSemanticError as E, semantic::SemanticError};
+            let plan = d.coordinates[self.position].plan.as_ref().unwrap();
+            match self.td.as_mut().unwrap().resolve_extensions(
+                plan.property_name(),
+                plan.form_index(),
+                budget,
+            ) {
+                Ok(Some(semantics)) => self.semantics = Some(semantics),
+                Ok(None) => return Ok(()),
+                Err(E::Admission(cause)) => return Err(td_error(cause)),
+                Err(E::Resolution(SemanticError::Allocation)) => {
+                    return Err(CoreError::Backpressure(context()));
+                }
+                Err(E::Resolution(SemanticError::Limit | SemanticError::UnsupportedContext)) => {
+                    // Preparation profile/capacity refusal applies to this
+                    // coordinate. It is not a whole-TD WoT validity judgment.
+                    d.coordinates[self.position].unsupported = true;
+                    self.position += 1;
+                    return Ok(());
+                }
+            }
+        }
         let support = self.registration.support();
         if self.cursor.is_none() {
             if !d.compile.debit(
@@ -2278,8 +2262,7 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                     c.backing_bytes = 0;
                     c.unsupported = true;
                     d.footprint.artifact_bytes -= self.host_backing;
-                    self.position += 1;
-                    self.compiler_remaining = 0;
+                    self.finish_coordinate();
                     return Ok(());
                 }
                 self.cursor = Some(cursor);
@@ -2302,11 +2285,18 @@ impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
                     }
                 };
                 c.artifact = ArtifactOwner::Ready(envelope);
-                self.position += 1;
-                self.compiler_remaining = 0;
+                self.finish_coordinate();
             }
         }
         Ok(())
+    }
+    fn finish_coordinate(&mut self) {
+        #[cfg(feature = "std")]
+        {
+            self.semantics = None;
+        }
+        self.position += 1;
+        self.compiler_remaining = 0;
     }
     fn seal(&mut self, budget: &mut WorkBudget) -> CoreResult<Advance> {
         let d = self.root.as_mut().unwrap().data_mut();

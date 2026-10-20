@@ -431,11 +431,15 @@ Unknown annotations survive; unknown vendor semantics and Profiles are not claim
 
 Required focused evidence is the production HTTP suite (including raw TCP default/
 explicit method, scoped alias, header, annotation invariance, unsupported Form and
-strict-selection cases), TD semantic-tree/refusal tests, the existing Core/
+strict-selection cases, independent Form preparation failures and a 24-property/
+48-Form document), TD semantic-tree/refusal/backing/work tests, the existing Core/
 Planning/Servient lifecycle/resource regressions and portable compile checks.
 The downstream request/reply compiler/executor exercises independent authoring
 through the same production path without an Engine protocol case; it is not a
-second real transport or arbitrary-protocol conformance proof. Exact commands and
+second real transport or arbitrary-protocol conformance proof. A separate
+non-`Copy`, 64-KiB, 512-step compiler demonstrates generic erasure ownership and
+the still-closed Consumer admission for owned/resumable compilers. That wider
+compiler SPI remains unfinished. Exact commands and
 revisions belong in the implementation PR. No package/gate/milestone closure or
 strict Embedded HTTP backend follows. Production HTTP Producer and the public
 Consumer-to-Producer loop remain the next product boundary.

@@ -76,7 +76,7 @@ fn artifact(
         .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 100_000));
     let semantics = proof
         .into_property_read()
-        .resolve_extensions(&mut resolution_work)
+        .resolve_extensions("a", 0, &mut resolution_work)
         .unwrap()
         .unwrap();
     let input = BindingCompilerInput::new(plan, candidate(id), BindingArtifactRole::ConsumerCall)

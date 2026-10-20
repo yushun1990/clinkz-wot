@@ -86,8 +86,15 @@ Profiles are preserved without Profile/extension conformance claims; this slice
 implements no activated Profile. The resolver is explicitly a bounded local-context
 subset, not general JSON-LD: see
 [its exact input/capacity/credit limits](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending).
-In particular its atomic resolution step needs 65,536 `DocumentNodes` credits.
-The public example and test budget supplies that credit.
+Each eligible Form requires an atomic reservation of 65,536 `DocumentNodes`
+credits; unused fuel is returned and actual work remains charged to the original
+TD lifetime. One bounded semantic closure is live at a time. Sibling Forms cannot
+exhaust its arena or impose unsupported local contexts. Shared root/property
+restrictions can still make all affected Forms unavailable; this is an adapter
+interoperability limit, not TD invalidity. The public example supplies that credit.
+The production tests include 24 properties/48 Forms and actual repeated HTTP I/O.
+The public native compiler adapter still requires `Copy` inline artifacts and one
+atomic compile callback; general owned/resumable Consumer compilation is unfinished.
 
 Native method/header interpretation is private to this package. The Engine filters
 Forms by declared scheme and effective WoT operation/security and owns publication,

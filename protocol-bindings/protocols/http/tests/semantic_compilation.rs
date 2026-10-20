@@ -30,7 +30,7 @@ fn consume_source(value: Value) -> Engine<impl Fn() -> (Option<CleanupOutcome>, 
     let thing = serde_json::from_value(value).unwrap();
     let handle = match runtime
         .consume(&thing, &mut work(), |build| {
-            for _ in 0..10000 {
+            for _ in 0..300_000 {
                 build.step(&mut work());
                 if build.is_finished() {
                     return;
@@ -63,6 +63,93 @@ fn close<O>(
             .iter()
             .all(|account| account.used() == 0)
     );
+}
+
+#[test]
+fn independent_forms_do_not_share_semantic_preparation_failures() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let target = format!("http://{}/a", listener.local_addr().unwrap());
+    let peer = std::thread::spawn(move || {
+        for _ in 0..3 {
+            let (mut socket, _) = listener.accept().unwrap();
+            assert!(request(&mut socket).starts_with("GET /a HTTP/1.1\r\n"));
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n7").unwrap();
+            assert_retired(&mut socket);
+        }
+    });
+    recipe().block_on(async {
+        for variant in 0..3 {
+            let mut td = source(json!([
+                {"href":target},
+                {"href":"mqtt://example.org/topic"}
+            ]));
+            let other = &mut td["properties"]["a"]["forms"][1];
+            match variant {
+                // Valid JSON-LD syntax outside this resolver's supported profile.
+                0 => {
+                    other["@context"] =
+                        json!({"labels":{"@id":"urn:labels:", "@container":"@set"}});
+                    other["labels"] = json!(["one", "two"]);
+                }
+                1 => other["urn:many:values"] = json!(vec![0; 256]),
+                // The same restriction on an HTTP candidate must not hide its sibling.
+                _ => {
+                    other["href"] = json!("http://127.0.0.1:9/unsupported");
+                    other["@context"] = json!({"@base":"https://example.org/"});
+                }
+            }
+            let (runtime, handle, observer, parent) = consume_source(td);
+            let mut call = handle
+                .read_property("a", InteractionOptions::new(), &mut work())
+                .unwrap();
+            assert!(take(&mut call).await.is_ok());
+            drop(call);
+            close(runtime, handle, observer, parent);
+        }
+    });
+    peer.join().unwrap();
+}
+
+#[test]
+fn multi_property_multi_form_td_is_not_limited_by_one_shared_semantic_arena() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let target = format!("http://{}/value", listener.local_addr().unwrap());
+    let peer = std::thread::spawn(move || {
+        for index in 0..24 {
+            let (mut socket, _) = listener.accept().unwrap();
+            let method = if index % 2 == 0 { "GET" } else { "POST" };
+            assert!(request(&mut socket).starts_with(&format!("{method} /value HTTP/1.1\r\n")));
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n7").unwrap();
+            assert_retired(&mut socket);
+        }
+    });
+    recipe().block_on(async {
+        let mut td = source(json!([]));
+        td["properties"] = json!({});
+        for index in 0..24 {
+            td["properties"][format!("p{index:02}")] = json!({
+                "type":"number", "urn:unit:":"Celsius",
+                "forms":[
+                    {"href":target, "htv:methodName":"GET", "urn:label:":"primary"},
+                    {"href":target, "htv:methodName":"POST", "urn:label:":"secondary"}
+                ]
+            });
+        }
+        let (runtime, handle, observer, parent) = consume_source(td);
+        for index in 0..24 {
+            let mut call = handle
+                .read_property(
+                    &format!("p{index:02}"),
+                    InteractionOptions::new().with_form_index(index % 2),
+                    &mut work(),
+                )
+                .unwrap();
+            assert!(take(&mut call).await.is_ok());
+            drop(call);
+        }
+        close(runtime, handle, observer, parent);
+    });
+    peer.join().unwrap();
 }
 
 #[test]
@@ -257,19 +344,28 @@ fn failed_resolution_or_unsupported_security_reclaims_the_original_accounts() {
         )
         .unwrap_or_else(|_| panic!("runtime"));
         let thing = serde_json::from_value(td).unwrap();
-        assert!(
-            runtime
-                .consume(&thing, &mut work(), |build| {
-                    for _ in 0..10000 {
-                        build.step(&mut work());
-                        if build.is_finished() {
-                            return;
-                        }
-                    }
-                    panic!("failed build stalled");
-                })
-                .is_err()
-        );
+        let result = runtime.consume(&thing, &mut work(), |build| {
+            for _ in 0..10000 {
+                build.step(&mut work());
+                if build.is_finished() {
+                    return;
+                }
+            }
+            panic!("failed build stalled");
+        });
+        if variant == 1 {
+            assert!(result.is_err(), "security refusal must abort admission");
+        } else {
+            let StartStatus::Ready(handle) = result.unwrap() else {
+                panic!("publication");
+            };
+            assert!(
+                handle
+                    .read_property("a", InteractionOptions::new(), &mut work())
+                    .is_err()
+            );
+            drop(handle);
+        }
         drop(thing);
         shutdown(&runtime);
         drop(runtime);
@@ -489,6 +585,169 @@ mod reply_bus {
                 },
             }))
         }
+    }
+
+    #[test]
+    fn owned_incremental_compiler_fits_generic_erasure_but_not_consumer_admission() {
+        // Counterexample to general compiler openness: variable-sized owned
+        // instructions, a destructor, and 512 independently budgeted steps.
+        const CHUNKS: usize = 512;
+        struct OwnedProgram {
+            bytes: Vec<u8>,
+            dropped: Arc<AtomicUsize>,
+        }
+        impl Drop for OwnedProgram {
+            fn drop(&mut self) {
+                self.dropped.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        struct OwnedCompiler(Arc<AtomicUsize>);
+        impl BindingCompilerExtension for OwnedCompiler {
+            type Cursor = Vec<u8>;
+            type Artifact = OwnedProgram;
+            fn compatibility(&self) -> BindingArtifactCompatibility {
+                COMPAT
+            }
+            fn bounds(&self, _: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+                Ok(BindingCompilerBounds::new(
+                    BindingArtifactFootprint::new(
+                        1,
+                        (size_of::<OwnedProgram>() + CHUNKS * 128) as u64,
+                    ),
+                    (size_of::<Vec<u8>>() + CHUNKS * 128) as u64,
+                    128,
+                    WorkBudget::new().with_remaining(WorkClass::BindingPolls, CHUNKS as u64),
+                ))
+            }
+            fn start(&self, _: &BindingCompilerInput<'_>) -> CoreResult<Vec<u8>> {
+                Ok(Vec::with_capacity(CHUNKS * 128))
+            }
+            fn step(
+                &self,
+                _: &BindingCompilerInput<'_>,
+                mut cursor: Vec<u8>,
+                budget: &mut WorkBudget,
+            ) -> BindingCompilerStep<Vec<u8>, OwnedProgram> {
+                if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+                    return BindingCompilerStep::Pending(cursor);
+                }
+                cursor.extend_from_slice(&[7; 128]);
+                if cursor.len() < CHUNKS * 128 {
+                    return BindingCompilerStep::Pending(cursor);
+                }
+                let footprint = (size_of::<OwnedProgram>() + cursor.capacity()) as u64;
+                BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
+                    COMPAT,
+                    BindingArtifactFootprint::new(1, footprint),
+                    OwnedProgram {
+                        bytes: cursor,
+                        dropped: self.0.clone(),
+                    },
+                )))
+            }
+            fn abort(&self, _: Vec<u8>) {}
+        }
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let config = ConsumerBindingConfiguration::for_semantic_host(
+            64,
+            BindingConfigurationDigest::new([92; 32]),
+            COMPAT,
+            4096,
+            16,
+        )
+        .unwrap();
+        let owner =
+            HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+                BindingRegistrationIdentity::new(
+                    BindingId::new(902),
+                    BindingGeneration::INITIAL,
+                    config.configuration(),
+                    COMPAT,
+                    902,
+                ),
+                BindingExecutionSupport::host_erased(),
+                HostBindingCompilerRegistration::try_new(OwnedCompiler(dropped.clone()))
+                    .unwrap_or_else(|_| panic!("generic capture")),
+                Box::new(Client(config)),
+                BindingResourceDeclarations::new(
+                    BindingLifetimeFootprint::new(3, 1024),
+                    BindingLifetimeFootprint::new(16, 8192),
+                )
+                .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
+                .with_consumer_result_limits(4096, 16),
+                BindingStatusPolicy::new(2, 17),
+            ))
+            .unwrap_or_else(|_| panic!("complete owner"));
+        let owner = owner
+            .try_into_consumer_compiler()
+            .err()
+            .expect("generic owned compiler is structurally excluded from Consumer planning")
+            .into_input();
+        let plan = LogicalInteractionPlan::try_property_read(
+            PlanId::new(SlotIndex::new(0), Generation::INITIAL),
+            ThingId::from("urn:owned"),
+            "a".into(),
+            0,
+            "replybus:temperature".into(),
+            Some("application/json".into()),
+            None,
+        )
+        .unwrap();
+        let id = owner.identity();
+        let input = BindingCompilerInput::new(
+            &plan,
+            BindingCandidate::new(
+                id.binding_id(),
+                id.binding_generation(),
+                id.configuration(),
+                COMPAT,
+                902,
+                0,
+            ),
+            BindingArtifactRole::ConsumerCall,
+        );
+        let compiler = owner.compiler();
+        assert_eq!(
+            compiler
+                .bounds(&input)
+                .unwrap()
+                .work()
+                .remaining(WorkClass::BindingPolls),
+            CHUNKS as u64
+        );
+        let mut cursor = compiler.start(&input).unwrap();
+        for index in 0..CHUNKS {
+            cursor = match compiler.step(&input, cursor, &mut WorkBudget::new()) {
+                BindingCompilerStep::Pending(cursor) => cursor,
+                _ => panic!("zero credit progressed"),
+            };
+            let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
+            match compiler.step(&input, cursor, &mut budget) {
+                BindingCompilerStep::Pending(next) => {
+                    assert!(index + 1 < CHUNKS);
+                    cursor = next;
+                }
+                BindingCompilerStep::Complete(output) => {
+                    assert_eq!(index + 1, CHUNKS);
+                    assert_eq!(budget.remaining(WorkClass::BindingPolls), 0);
+                    assert_eq!(
+                        output
+                            .artifact()
+                            .try_payload::<OwnedProgram>(COMPAT)
+                            .unwrap()
+                            .bytes
+                            .len(),
+                        CHUNKS * 128
+                    );
+                    drop(output);
+                    assert_eq!(dropped.load(Ordering::Relaxed), 1);
+                    return;
+                }
+                _ => panic!("incremental compilation failed"),
+            }
+            assert_eq!(budget.remaining(WorkClass::BindingPolls), 0);
+        }
+        panic!("compiler did not complete");
     }
     #[test]
     fn third_party_request_reply_compiler_and_executor_use_the_same_production_path() {

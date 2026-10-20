@@ -1279,12 +1279,22 @@ remains valid for its original scope; changed carrier costs require successor co
 
 #### Host semantic Form dispatch
 
-For `HostSemanticCompiler`, preparation resolves TD extensions once into a bounded
-temporary borrowed arena after Basic validation. Engine capacity for both arena
-buffers is reserved before allocation, and its full resolution/cleanup credit is
-paid before the atomic Host pass. The arena survives all bounds and compilation
-callbacks, then is destroyed before publication. It never enters runtime plans or
-outbound requests. The original TD loan remains valid until preparation ends.
+For `HostSemanticCompiler`, preparation resolves a semantic closure for each
+scheme-eligible Form immediately before native start. The closure contains Thing,
+the selected property's schema, that Form and its responses, and its effective
+security definitions. Other properties/Forms/unused security definitions are not
+visited by this pass. Basic TD validation and common security constraints still
+apply to the complete input. This replaces whole-document semantic preparation:
+a valid MQTT Form's unsupported local context or its large annotation must not
+make an independent HTTP Form unavailable.
+
+Engine capacity for one pair of arena buffers is reserved before allocation and
+reused as a temporary allowance across coordinates. Type/configuration-based
+bounds are collected before any compiler starts; they do not inspect extensions.
+The selected closure survives that coordinate's start/step callbacks, then is
+released. Only one closure is live; none enters published plans or requests. TD
+reserves the atomic work maximum, then settles only actual lookup/node/byte work
+and returns unused credit. All actual work consumes the original TD lifetime.
 
 Coarse scheme declarations supplied by the captured Binding filter effective
 readable Forms before materialization. Planning contains no protocol enum or
@@ -1293,9 +1303,13 @@ exactly-one-NoSec constraint and engine authority remain common. The bounded
 aggregate still captures one complete registration; arbitrary multi-registration
 discovery and automatic same-protocol competition are not implemented.
 
-Native `UnsupportedOperation` produces an unavailable coordinate, releases its
-compiler slot and allows another supported Form to remain usable. Other failures
-abort the transaction. Default selection chooses the first supported coordinate;
+A semantic profile/capacity refusal or native `UnsupportedOperation` makes only
+the affected coordinate unavailable. A live compiler slot is released when
+present. A shared Thing/property context restriction can affect every Form in
+that scope; this remains a resolver-profile limitation, not TD invalidity or a
+W3C prohibition. Basic invalidity, security refusal, allocation failure and
+exhaustion of the original TD work lifetime still abort the transaction.
+Default selection chooses the first supported coordinate;
 a strict Form index cannot fall through to another Form. Scheme-excluded Forms
 are unavailable to that registration. No fallback occurs after native effects.
 An unsupported coordinate creates no request or I/O, and retained negative

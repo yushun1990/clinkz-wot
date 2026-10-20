@@ -187,7 +187,8 @@ constitute a new engine semantic capability. A healthy supported mapping must
 complete; a restriction that rejects all such Forms does not satisfy the target.
 
 The legacy/static Consumer path fails that target. The Host semantic subset
-below replaces its required closed lowering without claiming the remaining
+below replaces its required closed lowering for bounded atomic inline artifacts;
+it does not satisfy general owned/resumable compiler openness or the remaining
 endpoint/lifecycle migration. Static capture checks the actual
 `ResolvedTargetCompiler` type; Host capture requires its private supported
 adapter, rejecting generic erasure of even the same compiler. Planning's
@@ -282,8 +283,9 @@ authoring compile-testable without waiting for the WP-300 execution API.
 
 ### Host semantic Consumer compilation
 
-`HostSemanticCompiler` is the public, independently authorable Host Property Read
-lowering contract. `HostBindingCompilerRegistration::try_new_semantic` pairs it
+`HostSemanticCompiler` is a public, independently authorable, restricted Host
+Property Read lowering adapter. It is not the target general compiler SPI.
+`HostBindingCompilerRegistration::try_new_semantic` pairs it
 with the existing typed-slot erasure adapter; a complete registration pairs that
 component with its actual client, compatibility and immutable configuration.
 `ConsumerBindingConfiguration::for_semantic_host` versions the native format,
@@ -299,9 +301,20 @@ Unknown semantic data may remain uninterpreted without claiming its behavior or
 Profile conformance. No generic vocabulary inventory, must-understand marker or
 same-protocol score is inferred from that data.
 
-This first Host contract admits one atomic callback over the bounded TD input and
-an inline `Copy + Send + Sync + 'static` artifact. It does not claim support for
-arbitrary allocating compile jobs. Core derives cursor/output/adapter/slot Layouts
+This adapter admits one atomic callback over a bounded Form semantic closure and
+an inline `Copy + Send + Sync + 'static` artifact. Third-party Consumer compilers
+are structurally forced through these restrictions; there is no generally open
+Consumer path alongside it. `BindingCompilerExtension` and generic Host erasure
+can carry non-`Copy` owned artifacts and incremental jobs, but generic captures
+cannot obtain Consumer planning support. The executable counterexample builds a
+64-KiB owned instruction buffer over 512 paid steps through generic erasure, then
+demonstrates
+Consumer capture refusal and exact artifact destruction. General owned/resumable
+Consumer compilation remains unfinished; the request/reply fixture does not prove
+that target. Removing `Copy` alone would not supply retained-memory accounting,
+cleanup funding or resumable progress for that path.
+
+Core derives cursor/output/adapter/slot Layouts
 from the actual Rust types, acquires the slot before native start, and keeps it
 through completion/failure. Native callback work is prepaid in `BindingPolls`;
 the HTTP implementation uses one atomic callback unit over its declared finite
@@ -313,8 +326,10 @@ numeric work declaration cannot prove arbitrary linked code's behavior.
 
 The TD resolver's exact supported context subset, caps and atomic credit are owned
 by [TD admission](../work-packages/WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending).
-It resolves once per preparation and releases its temporary arena before a draft
-can publish. HTTP uses this path in production. The downstream request/reply
+It resolves each eligible Form's scope before native start and releases that
+closure before the next coordinate. Bounds remain type/configuration-based and
+are checked before any compiler starts. No semantic arena survives publication.
+HTTP uses this path in production. The downstream request/reply
 fixture authors another protocol shape through the same complete registration;
 it establishes construction/execution compatibility, not a real bus backend or
 arbitrary-protocol conformance. Host evidence grants no Embedded callback,

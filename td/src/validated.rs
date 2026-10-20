@@ -2649,12 +2649,16 @@ pub enum ValidatedSemanticError {
 }
 
 impl<'td> ValidatedPropertyReadCursor<'td> {
-    /// Resolves the supported local extension context once for Host compilation.
-    /// Charges step credit and this TD owner's nonrenewable work lifetime.
+    /// Resolves one Form's semantic closure for Host compilation. This does not
+    /// visit other properties, Forms or unused security definitions.
+    /// Reserves the atomic maximum against step/source credit, then returns the
+    /// unused reservation. Actual work and cleanup remain nonrenewable.
     /// The caller reserves the exact temporary arena capacity before this call.
     #[cfg(feature = "std")]
     pub fn resolve_extensions(
         &mut self,
+        property: &str,
+        form_index: u32,
         budget: &mut WorkBudget,
     ) -> Result<Option<crate::semantic::ResolvedSemanticDocument<'td>>, ValidatedSemanticError>
     {
@@ -2671,9 +2675,20 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
         {
             return Ok(None);
         }
-        crate::semantic::ResolvedSemanticDocument::resolve(self.owner.thing)
-            .map(Some)
-            .map_err(ValidatedSemanticError::Resolution)
+        let (result, used) = crate::semantic::ResolvedSemanticDocument::resolve_metered(
+            self.owner.thing,
+            property,
+            form_index,
+        );
+        let unused = crate::semantic::RESOLUTION_WORK - used;
+        // Return only unspent credit from the reservation above, including on
+        // refusal. Fresh step budgets cannot replenish actual source work.
+        budget.set_remaining(
+            W::DocumentNodes,
+            budget.remaining(W::DocumentNodes) + unused,
+        );
+        self.owner.remaining += unused;
+        result.map(Some).map_err(ValidatedSemanticError::Resolution)
     }
     pub fn id(&self) -> Option<&str> {
         self.owner.thing.id.as_ref().map(|id| id.as_str())
