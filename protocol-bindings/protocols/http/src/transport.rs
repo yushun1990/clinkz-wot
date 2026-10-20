@@ -200,7 +200,11 @@ impl AsyncWrite for Ingress {
     }
 }
 
-pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> CoreResult<Vec<u8>> {
+pub(super) async fn exchange(
+    target: Target,
+    instructions: HttpArtifact,
+    allowance: Arc<AtomicUsize>,
+) -> CoreResult<Vec<u8>> {
     let socket = TcpStream::connect(target.address).await.map_err(|_| {
         // Socket/process/network availability is not a captured ingress or
         // concurrency limit. Keep returned I/O failure structured even when
@@ -227,12 +231,21 @@ pub(super) async fn exchange(target: Target, allowance: Arc<AtomicUsize>) -> Cor
         .handshake::<_, Empty<Bytes>>(io)
         .await
         .map_err(|_| error(605, "HTTP handshake failed"))?;
-    let request = hyper::Request::builder()
-        .method("GET")
+    let mut request = hyper::Request::builder()
+        .method(instructions.method())
         .uri(target.uri.path_and_query().map_or("/", |v| v.as_str()))
         .header("host", target.uri.authority().unwrap().as_str())
-        .header("accept", "application/json")
-        .header("connection", "close")
+        .header("connection", "close");
+    if !instructions
+        .headers()
+        .any(|(n, _)| n.eq_ignore_ascii_case("accept"))
+    {
+        request = request.header("accept", "application/json");
+    }
+    for (name, value) in instructions.headers() {
+        request = request.header(name, value);
+    }
+    let request = request
         .body(Empty::<Bytes>::new())
         .map_err(|_| error(605, "HTTP request failed"))?;
     let operation = async {

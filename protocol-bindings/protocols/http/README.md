@@ -3,8 +3,9 @@
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
 `ConsumerPropertyReadRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
 permits cleartext IP access; `try_consumer_registration` constructs one complete,
-restricted Consumer-only registration without I/O. The closed compiler accepts
-metadata-free default GET / NoSec / effective `application/json` Forms.
+Consumer-only registration without I/O. Its native compiler implements the
+bounded NoSec / effective `application/json` Property Read mapping below from
+TD-resolved semantic input, through the existing public Consumer lifecycle.
 
 The binding supports HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
 chunked and close-delimited bodies. One registration admits one call, including
@@ -59,21 +60,53 @@ excluding the terminating CRLF; the counter never resets between chunks.
 Being below the wire limit alone does not guarantee that another limit permits
 a particular framing shape. There is no drain or reconnect after rejection.
 
+## Supported native compilation
+
+The HTTP Binding supplies the default GET for `readproperty`; explicit
+`htv:methodName` overrides it. GET, POST, PUT, PATCH and DELETE are supported as
+bodyless read requests. Unsupported methods, wrong value types, duplicate expanded
+instructions, explicit nulls and unsupported standardized HTTP terms yield an
+unavailable Form, never a silent default GET. A strict Form choice cannot fall
+through; another supported Form remains usable under default selection.
+
+`htv:headers` supports at most eight entries and 1024 total name/value bytes,
+with string `htv:fieldName` and `htv:fieldValue`. Header syntax is validated before
+publication. Host, authentication/cookie, connection, upgrade and framing/encoding
+headers cannot override this slice's target, NoSec or transport constraints.
+Explicit Accept must equal `application/json` and may occur once. The default
+Accept is emitted once. Primary `response.contentType` may explicitly be JSON and
+`htv:statusCodeValue` may explicitly be 200; other response codes/media, additional
+responses, coding, scopes and subprotocols remain unsupported.
+
+Root/Property/Form/nested-schema/response/security extensions and semantic class
+annotations arrive in TD's bounded resolved tree. Aliases and supported scoped
+contexts are resolved by TD, not reparsed by HTTP. Labels, SAREF types and unrelated
+vendor annotations do not change the request. Unknown semantics and advertised
+Profiles are preserved without Profile/extension conformance claims; this slice
+implements no activated Profile. The resolver is explicitly a bounded local-context
+subset, not general JSON-LD: see
+[its exact input/capacity/credit limits](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending).
+In particular its atomic resolution step needs 65,536 `DocumentNodes` credits.
+The public example and test budget supplies that credit.
+
+Native method/header interpretation is private to this package. The Engine filters
+Forms by declared scheme and effective WoT operation/security and owns publication,
+plans, call resources and cleanup. No same-protocol scoring or Engine vocabulary
+switch is involved. This package currently provides Client execution only; a later
+independently enabled Server role may share the mapping code. Production Producer
+routing and the public bidirectional loop remain the immediate frontier.
+
 ## Identity, buffering and ownership
 
-The actual private encoding is `clinkz-http-ip-v5\0` followed by the exact ASCII
-policy in `src/lib.rs::PRIVATE_POLICY`. It captures pinned SDK versions/features,
-parser comparisons, extension and wire/read limits, declaration/discard/override
-behavior, advertisement, concurrency/growth, retirement/disposal and endpoint
-restrictions. V5 additionally captures connect I/O failure as
-`DeploymentFailure`: socket/process/network availability is distinct from a
-captured protocol limit. Parser policy and SDK settings retain accepted v4
-behavior. The existing checked restricted configuration derives from its
-SHA-256, preserving shared encodings, schema 2 and result limits. Support, client,
-compiler, complete registration, selected artifact and diagnostics agree.
-Historical v1/v3/v4 and unrestricted configurations cannot substitute in either
-direction; the tests recover original owners/requests and verify no connection.
-A captured registration or old artifact is never relabeled to enable v5.
+The private encoding is `clinkz-http-ip-v6\0` followed by the exact ASCII policy
+in `src/lib.rs::PRIVATE_POLICY`. V6 includes the native read mapping and bounded
+request-header policy. The separate native configuration digest includes its
+artifact compatibility, target capacity and result limits. Client, compiler,
+complete registration, selected artifact and diagnostics agree. Historical private
+policies cannot substitute in either direction; identity tests recover original
+owners/requests and verify no connection. The parser, response ingress, connect
+failure classification and disposal policies retain their prior qualified scope.
+No old artifact is relabeled as the native HTTP program.
 
 The wire counter and per-callback credit never refill by parser phase. The fixed
 8192-byte raw head, 4096-byte read scratch and fallibly reserved 4096-byte body

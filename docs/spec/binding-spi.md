@@ -155,7 +155,8 @@ handler dispatch, status, and cleanup ownership. A concrete binding owns only:
 
 A binding does not own the Servient registry, plan-set lifecycle, application
 handles, cross-binding fairness, global emission coordination, a universal
-subscription queue, W3C defaulting, or Directory service behavior.
+subscription queue, common WoT defaulting, or Directory service behavior.
+Protocol mapping defaults, such as HTTP's default method, belong to the Binding.
 
 For every capability claimed in both profiles, `clinkz-wot-core` owns one
 representation-independent binding transition kernel and one versioned
@@ -174,8 +175,8 @@ permission to detach semantic ownership into an unregistered task.
 This section records the replacement proposal in
 [0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution)
 for independent architecture review. It does not activate a new SPI or admit
-production edits. The detailed current contracts below remain implementation
-authority pending deliberate supersession. Retaining them during review is not
+production edits outside the [Host compilation subset](#host-semantic-consumer-compilation).
+The detailed contracts below retain their stated representation scopes. Retaining them during review is not
 an architectural recommendation to preserve them.
 
 **Target:** a third party can supply both lowering and execution for an already
@@ -185,7 +186,9 @@ Servient. New wire instructions for an existing operation do not by themselves
 constitute a new engine semantic capability. A healthy supported mapping must
 complete; a restriction that rejects all such Forms does not satisfy the target.
 
-The present Consumer path fails that target. Static capture checks the actual
+The legacy/static Consumer path fails that target. The Host semantic subset
+below replaces its required closed lowering without claiming the remaining
+endpoint/lifecycle migration. Static capture checks the actual
 `ResolvedTargetCompiler` type; Host capture requires its private supported
 adapter, rejecting generic erasure of even the same compiler. Planning's
 registration trait is sealed around checked complete owners. Producer compiler
@@ -277,7 +280,57 @@ by `ServientBuilder`. Their only purpose is to carry the exact compiler
 contract into the later complete bundle and to make independent third-party
 authoring compile-testable without waiting for the WP-300 execution API.
 
+### Host semantic Consumer compilation
+
+`HostSemanticCompiler` is the public, independently authorable Host Property Read
+lowering contract. `HostBindingCompilerRegistration::try_new_semantic` pairs it
+with the existing typed-slot erasure adapter; a complete registration pairs that
+component with its actual client, compatibility and immutable configuration.
+`ConsumerBindingConfiguration::for_semantic_host` versions the native format,
+private policy, target capacity and result backing independently of the legacy
+copy helper. The target capacity is Binding policy, not a universal 64-byte limit.
+
+The native `compile` callback receives `ResolvedBindingInput`: effective WoT
+operation/target/media, original affordance/Form coordinate, and TD's resolved
+scoped extension tree. It receives no raw TD/context, handler, credentials or live
+resource. Protocol vocabulary, explicit native instructions, native defaults and
+private vendor extensions are interpreted inside the Binding. Compilation is pure.
+Unknown semantic data may remain uninterpreted without claiming its behavior or
+Profile conformance. No generic vocabulary inventory, must-understand marker or
+same-protocol score is inferred from that data.
+
+This first Host contract admits one atomic callback over the bounded TD input and
+an inline `Copy + Send + Sync + 'static` artifact. It does not claim support for
+arbitrary allocating compile jobs. Core derives cursor/output/adapter/slot Layouts
+from the actual Rust types, acquires the slot before native start, and keeps it
+through completion/failure. Native callback work is prepaid in `BindingPolls`;
+the HTTP implementation uses one atomic callback unit over its declared finite
+node/header envelope, plus one erasure unit. Zero/short credit performs no native
+progress. Failed native compilation retains its cursor until explicit abort.
+Engine artifact identity, footprint checking, result sealing and cleanup funding
+remain enforced. Source qualification is still required: an open safe trait and
+numeric work declaration cannot prove arbitrary linked code's behavior.
+
+The TD resolver's exact supported context subset, caps and atomic credit are owned
+by [TD admission](../work-packages/WP-100-consumer-validated-thing-admission.md#host-resolved-extension-lending).
+It resolves once per preparation and releases its temporary arena before a draft
+can publish. HTTP uses this path in production. The downstream request/reply
+fixture authors another protocol shape through the same complete registration;
+it establishes construction/execution compatibility, not a real bus backend or
+arbitrary-protocol conformance. Host evidence grants no Embedded callback,
+allocation, atomics or hardware guarantee.
+
+This section supersedes closed exact-compiler eligibility for this Host path only.
+The remaining open endpoint/lifecycle proposals above are unimplemented. Runtime
+plan containers remain for current engine selection, security, lease and cleanup
+invariants; native compilers are not required to understand those containers.
+
 ### Closed Consumer compiler support
+
+The following is the retained legacy/static contract and its historical evidence.
+Its closed eligibility does not constrain the Host semantic path above. The
+production HTTP registration no longer uses `ResolvedTargetCompiler` or the
+metadata-free default-JSON rejection shortcut.
 
 The [HTTP admission amendment](../work-packages/WP-600-http-property-read-target.md#paid-metadata-and-protocol-neutral-compiler-amendment)
 proposes one opt-in default-JSON restriction on this same closed primitive, with

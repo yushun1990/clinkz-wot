@@ -947,3 +947,39 @@ must prove the strict value/field/Number/date contract, first-allocation source
 accounting, complete decoding/work/cancellation/discard/release and shared TD
 semantics before Directory/Discovery or release claims rely on external runtime
 JSON. Ordinary parsing followed by borrowing cannot satisfy that capability.
+
+## Host resolved extension lending
+
+The Host semantic Consumer path adds `ResolvedSemanticDocument` and
+`ValidatedPropertyReadCursor::resolve_extensions`. Planning invokes it only after
+Basic admission, with one prepaid atomic pass of 65,536 `DocumentNodes` units and
+two prepaid buffer-release units. The implementation also enforces an independent
+65,536-unit lookup/byte fuel limit, 128 tree nodes, 32 scope records and depth 16.
+A caller must supply the atomic credit in one step; smaller repeated steps do not
+begin this pass. TD itself enforces step credit and its original nonrenewable
+validation/semantic work lifetime; repeated calls cannot refill that lifetime.
+The exact two arena Layouts are reserved before allocation, are
+fallible, and contain only borrowed scalars/indices with bounded destruction.
+Preparation accounts for them as temporary capacity until release before publish.
+The original immutable Thing loan remains live; runtime output retains none of it.
+
+The supported subset resolves the standard TD context prefixes, absolute local
+prefixes, term aliases, local/property/Form and term-scoped object contexts,
+`@vocab`, and absolute/compact IRI values with `@id`/`@vocab` coercion. It retains
+unknown predicates, class identities, structured arrays/objects, nulls and empty
+values at Thing, Property/root-schema, Form, primary/additional response and
+security-definition scope, including nested payload-schema extension structure.
+Standard Form overrides are exposed separately as resolved facts. Profile URIs
+remain advertisements, not proof that a profile is activated or implemented.
+
+This is not full JSON-LD expansion or a new ingestion contract. Unprepared remote
+extension contexts, relative identifier coercion, context reset/base/propagation,
+type-scoped contexts, keyword/IRI-key aliases, containers, reverse properties,
+datatype/language coercions and chained compact-prefix/vocabulary definitions are unsupported rather than partially
+interpreted. Core TD aliases and lexical distinctions already collapsed by the
+existing typed serde model are not recovered. No Binding receives raw TD/context
+or reparses JSON-LD. Supporting more context syntax belongs here, not in a Binding.
+The supported prefix rules follow the [JSON-LD 1.1 algorithms](https://www.w3.org/TR/json-ld11-api/#create-term-definition).
+The subset/cap refusal is an explicit interoperability limit, not a W3C prohibition
+or evidence of arbitrary-TD/protocol conformance. Existing strict Embedded lending
+is unchanged and does not allocate this Host arena.

@@ -56,6 +56,29 @@ fn input() -> Thing {
       }
     }"#).unwrap()
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn host_resolution_charges_step_credit_and_the_original_td_work_lifetime() {
+    use clinkz_wot_td::{ValidatedSemanticError, semantic::RESOLUTION_WORK};
+    let thing = input();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(R::DocumentValidationWorkUnitsMax, Some(2 * RESOLUTION_WORK)));
+    let mut cursor = proof(&thing, &limits).into_property_read();
+    assert!(
+        cursor
+            .resolve_extensions(&mut WorkBudget::new())
+            .unwrap()
+            .is_none()
+    );
+    let mut work = budget(RESOLUTION_WORK);
+    let document = cursor.resolve_extensions(&mut work).unwrap().unwrap();
+    assert_eq!(work.remaining(W::DocumentNodes), 0);
+    drop(document);
+    assert!(matches!(cursor.resolve_extensions(&mut budget(1_000_000)),
+        Err(ValidatedSemanticError::Admission(Cause::Limit(limit)))
+            if limit.kind() == R::DocumentValidationWorkUnitsMax));
+}
 #[derive(Debug, PartialEq)]
 enum Fact {
     Property(u32, String),

@@ -39,7 +39,48 @@ fn artifact(
 ) -> BindingArtifactEnvelope<HostBindingArtifact> {
     let id = owner.identity();
     let compiler = owner.compiler();
-    let input = BindingCompilerInput::new(plan, candidate(id), BindingArtifactRole::ConsumerCall);
+    let thing: clinkz_wot_td::thing::Thing = serde_json::from_value(serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"identity", "id":"urn:http-identity",
+        "security":["none"], "securityDefinitions":{"none":{"scheme":"nosec"}},
+        "properties":{"a":{"forms":[{"href":plan.resolved_target()}]}}
+    })).unwrap();
+    let config =
+        clinkz_wot_td::ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS)
+            .unwrap();
+    let mut cursor = clinkz_wot_td::ValidatedThingCursor::from_thing(
+        &thing,
+        &config,
+        AdmissionLedger::new(
+            SlotIndex::new(1),
+            Generation::INITIAL,
+            0,
+            8 << 20,
+            0,
+            0,
+            0,
+            0,
+        ),
+    );
+    let proof = loop {
+        let mut budget = WorkClass::ALL
+            .into_iter()
+            .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 100_000));
+        match cursor.step(&mut budget, false) {
+            clinkz_wot_td::ValidatedThingProgress::Pending(next) => cursor = next,
+            clinkz_wot_td::ValidatedThingProgress::Complete(proof) => break proof,
+            _ => panic!("TD admission failed"),
+        }
+    };
+    let mut resolution_work = WorkClass::ALL
+        .into_iter()
+        .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 100_000));
+    let semantics = proof
+        .into_property_read()
+        .resolve_extensions(&mut resolution_work)
+        .unwrap()
+        .unwrap();
+    let input = BindingCompilerInput::new(plan, candidate(id), BindingArtifactRole::ConsumerCall)
+        .with_semantics(&semantics);
     let mut cursor = compiler.start(&input).unwrap();
     loop {
         match compiler.step(&input, cursor, &mut work()) {
@@ -73,20 +114,16 @@ fn request(artifact: &BindingArtifactEnvelope<HostBindingArtifact>) -> OutboundR
     .unwrap()
 }
 fn config(private: [u8; 32], restricted: bool) -> HttpConsumerConfig {
-    let c = ConsumerBindingConfiguration::try_new(
-        BindingResourceContract::ConsumerOwnedHostV2,
-        64,
-        BindingConfigurationDigest::new(private),
-        BODY,
-        MEDIA,
-    )
-    .unwrap();
+    assert!(restricted);
     HttpConsumerConfig {
-        configuration: if restricted {
-            c.with_default_json_forms().unwrap()
-        } else {
-            c
-        },
+        configuration: ConsumerBindingConfiguration::for_semantic_host(
+            64,
+            BindingConfigurationDigest::new(private),
+            COMPATIBILITY,
+            BODY,
+            MEDIA,
+        )
+        .unwrap(),
     }
 }
 fn digest(hex: &str) -> [u8; 32] {
@@ -94,14 +131,15 @@ fn digest(hex: &str) -> [u8; 32] {
 }
 
 #[test]
-fn v5_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
+fn v6_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
     let current = HttpConsumerConfig::for_cleartext_ip().unwrap();
     let captured = registration(current, BindingGeneration::INITIAL);
     assert_eq!(
         captured.support().consumer_configuration(),
         Some(current.configuration)
     );
-    assert!(current.configuration.requires_default_json_forms());
+    assert!(!current.configuration.requires_default_json_forms());
+    assert!(captured.support().uses_semantics());
     let owner = captured.into_registration();
     assert_eq!(
         owner.identity().configuration(),
@@ -119,7 +157,7 @@ fn v5_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
         artifact.identity().configuration(),
         current.configuration.configuration()
     );
-    // No runtime is entered. Reaching the actual client rejects with the v5
+    // No runtime is entered. Reaching the actual client rejects with the v6
     // diagnostic before raw acceptance, never opening a connection.
     let rejection = owner
         .start_consumer_property_read(request(&artifact), &artifact)
@@ -140,17 +178,17 @@ fn v5_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
         BindingConfigurationDigest::new(PRIVATE)
     );
     println!(
-        "v5 private={:02x?} configuration={:02x?}",
+        "v6 private={:02x?} configuration={:02x?}",
         PRIVATE,
         current.configuration.configuration().as_bytes()
     );
 }
 
 #[test]
-fn historical_and_unrestricted_configuration_and_artifact_substitution_reject_before_io() {
+fn historical_policy_operand_configuration_and_artifact_substitution_reject_before_io() {
     let current = HttpConsumerConfig::for_cleartext_ip().unwrap();
-    // Exact historical v1, rejected fork v3 and accepted stock v4 encodings, independently hashed.
-    // These owners are identity fixtures only; they do not run old transports.
+    // Historical private-policy operands, rehashed under the new native format.
+    // These owners exercise identity substitution, not old native executors.
     let historical = [
         config(
             digest("0abd19e612b06697f1b4f7a562dd8715c25146fe6e6165d166db4e01db361a4f"),
@@ -164,7 +202,6 @@ fn historical_and_unrestricted_configuration_and_artifact_substitution_reject_be
             digest("ea559362386b3f8682d4fade93ea0e3099e9682cc32783034b0504df03cf52c2"),
             true,
         ),
-        config(PRIVATE, false),
     ];
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -217,10 +254,7 @@ fn historical_and_unrestricted_configuration_and_artifact_substitution_reject_be
             let input = HostConsumerBindingRegistrationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::try_new_consumer(
-                    ResolvedTargetCompiler::new_owned(actual.configuration),
-                )
-                .unwrap(),
+                HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(actual)).unwrap(),
                 client,
                 BindingResourceDeclarations::new(
                     BindingLifetimeFootprint::new(3, 1024),
@@ -242,10 +276,7 @@ fn historical_and_unrestricted_configuration_and_artifact_substitution_reject_be
             let input = HostConsumerBindingRegistrationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::try_new_consumer(
-                    ResolvedTargetCompiler::new_owned(foreign.configuration),
-                )
-                .unwrap(),
+                HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(foreign)).unwrap(),
                 Box::new(Client {
                     config: actual,
                     busy: Arc::new(AtomicBool::new(false)),

@@ -1017,9 +1017,11 @@ api_items = [
     "ConsumerBindingConfiguration", "consumer_binding_configuration_with_default_json_forms",
     "consumer_binding_configuration_requires_default_json_forms",
     "ResolvedTargetCompiler", "ConsumerCompilerSupport", "ConsumerCompilerRegistration",
+    "HostSemanticCompiler", "ResolvedBindingInput", "ResolvedSemanticDocument", "SemanticNode",
 ]
 state_machines = ["consumer-td-semantic-lending", "compiled-plan-set", "in-flight"]
 resource_changes = [
+    "Native Host compilation amendment (WP-600 target): public inline semantic compiler, TD temporary resolved arena, generic scheme/Form dispatch and native HTTP artifact; the original completed tranche/evidence remains scoped to its former mapping pending independent acceptance of this amendment.",
     "One paid TD DocumentNodes scalar before Ready, no source work on replay; owned optional scalar in logical plan, no added backing allocation or WorkClass.",
     "Opt-in closed-consumer-default-json-forms-v1 binding key derived from original v1 key; unrestricted and strict vectors, resource schema 2, complete-policy encoding and all 196 numeric defaults preserved.",
     "Renew concrete TD/plan/config/compiler/support/Host-slot and aggregate Layout/work/rollback measurements; no old byte result silently inherited by changed carriers.",
@@ -1030,7 +1032,8 @@ resource_changes = [
 old_api_removals = []
 performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-CS-020", "PERF-CS-021"]
 implementation_paths = [
-    "td/src/validated.rs", "td/src/lib.rs", "td/tests/validated_admission.rs",
+    "td/src/validated.rs", "td/src/lib.rs", "td/src/semantic.rs", "td/src/semantic_tests.rs",
+    "td/src/components/context.rs", "td/tests/validated_admission.rs",
     "td/tests/validated_lending.rs", "td/tests/builder_extension_fields_test.rs",
     "td/tests/runtime/src/scenarios.rs", "td/tests/runtime/README.md",
     "core/src/plan.rs", "core/src/binding_compiler.rs", "core/src/lib.rs",

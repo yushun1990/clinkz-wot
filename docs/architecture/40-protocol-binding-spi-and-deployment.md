@@ -21,6 +21,25 @@ role or run on every platform; capabilities and evidence must name their actual
 intersection. [WP-600](../work-packages/WP-600-protocol-bindings.md) owns the
 production sequence without adding a global gate.
 
+The Engine owns common WoT semantics, Form selection, authorization constraints,
+publication and lifecycle/resource authority. A protocol package owns its native
+mapping, native defaults, compilation, transport and vendor interpretation. Its
+Client and Server roles may be enabled independently and share private mapping
+code. A declared mapping must honor applicable explicit instructions and defaults;
+unrelated annotations do not invalidate it. Unknown values remain preserved,
+without an assertion that their behavior is implemented. Additional instances or
+implementations are explicit deployment choices; automatic same-protocol
+vocabulary scoring and a generic extension criticality classifier are not core
+features. This responsibility model follows TD 1.1's separation of context
+extensions and protocol mappings, not a W3C requirement about Rust packaging.
+
+The bounded [Host semantic compilation contract](../spec/binding-spi.md#host-semantic-consumer-compilation)
+implements the first compilation-boundary migration through actual HTTP Consumer
+execution. Legacy static compilers and runtime plan/lease records remain for their
+separately exercised ownership and selection responsibilities. They are not the
+native compiler's public semantic input. HTTP Producer routing and the public
+Consumer-to-Producer loop remain the immediate product frontier.
+
 The [replacement proposal in 0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution)
 finds the current closed Consumer compiler and lossy compiler input structurally
 incompatible with independent third-party lowering for supported WoT semantics.
@@ -29,10 +48,10 @@ and one owned endpoint driver in place of mandatory public native setup phases.
 [Planning](../spec/planning.md#proposed-replacement-of-the-compilation-boundary)
 and [Binding SPI](../spec/binding-spi.md#proposed-open-lowering-and-execution-boundary)
 record the proposed boundary. This is a candidate for independent review and
-cross-domain authority migration, not activation of a replacement SPI. Current
-source/admission contracts, package/gate states and release requirements remain
-in force until explicitly migrated. Their temporary authority is not a reason
-to preserve the design. No production implementation is admitted by this PR.
+cross-domain authority migration for the remaining endpoint/lifecycle proposals.
+The Host compilation subset is superseded by the scoped contract above. No
+endpoint-driver rewrite, broad gate closure or arbitrary-protocol conformance
+claim follows from that subset.
 
 `build.rs` is not a binding discovery or dependency mechanism. Cargo resolves
 Rust dependencies before build scripts run; recursively invoking Cargo would

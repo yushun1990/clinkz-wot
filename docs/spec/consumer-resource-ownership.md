@@ -5,7 +5,10 @@ Status: accepted successor contract under ADR-0023 and ADR-0013 for
 that tranche's recorded scope. Existing `StrictV1` registrations retain their
 contract and evidence scope; no existing footprint is implicitly converted.
 The active 65/31/121 dispositions and TD typed-input interpretation revision 2
-do not change.
+do not change. The later [native Host compiler amendment](#native-host-compiler-configuration)
+supersedes this document's closed-lowering-only restriction for that representation;
+its original configuration vectors and strict/static evidence remain historical
+for their exact scope.
 
 This file owns the accepted detailed contract and API delta. The
 [schema overlay](../resource-contracts/consumer-ownership-v2.toml) owns its exact
@@ -422,3 +425,17 @@ The implementation must export sufficient fixed diagnostic/configuration identit
 from the checked policy; it may choose private helper decomposition. Changing
 these public semantics, weakening backing checks or discovering an omitted
 storage owner returns to scoped review before changed source proceeds.
+
+### Native Host compiler configuration
+
+The [Host semantic compilation amendment](binding-spi.md#host-semantic-consumer-compilation)
+adds `ConsumerBindingConfiguration::for_semantic_host`. Its distinct
+`clinkz-native-consumer-configuration-v1` encoding hashes native compatibility,
+private policy, Binding target capacity and result body/media limits. It selects
+`ConsumerOwnedHostV2` and the std cell; it does not derive behavior or identity
+from the legacy target-copy format. `with_default_json_forms` cannot relabel this
+configuration. The complete registration still checks the actual client/config/
+compiler/executor pairing. Generic concrete Layouts replace exact-type admission
+for this representation, with the same engine reservations, result seal and
+cleanup authority. Existing strict/owned legacy configuration vectors and all
+resource schema defaults retain their original values and scope.

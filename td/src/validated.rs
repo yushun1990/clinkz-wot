@@ -2640,7 +2640,41 @@ impl<'td> ValidatedThing<'td> {
         }
     }
 }
+/// Admission/work refusal is distinct from unsupported extension resolution.
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub enum ValidatedSemanticError {
+    Admission(ValidatedThingCause),
+    Resolution(crate::semantic::SemanticError),
+}
+
 impl<'td> ValidatedPropertyReadCursor<'td> {
+    /// Resolves the supported local extension context once for Host compilation.
+    /// Charges step credit and this TD owner's nonrenewable work lifetime.
+    /// The caller reserves the exact temporary arena capacity before this call.
+    #[cfg(feature = "std")]
+    pub fn resolve_extensions(
+        &mut self,
+        budget: &mut WorkBudget,
+    ) -> Result<Option<crate::semantic::ResolvedSemanticDocument<'td>>, ValidatedSemanticError>
+    {
+        if !self
+            .owner
+            .pay(
+                budget,
+                &[
+                    (W::DocumentNodes, crate::semantic::RESOLUTION_WORK),
+                    (W::CleanupItems, 2),
+                ],
+            )
+            .map_err(ValidatedSemanticError::Admission)?
+        {
+            return Ok(None);
+        }
+        crate::semantic::ResolvedSemanticDocument::resolve(self.owner.thing)
+            .map(Some)
+            .map_err(ValidatedSemanticError::Resolution)
+    }
     pub fn id(&self) -> Option<&str> {
         self.owner.thing.id.as_ref().map(|id| id.as_str())
     }

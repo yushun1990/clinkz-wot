@@ -1,6 +1,6 @@
 //! Optional Host HTTP/1.1 Consumer Property Read binding.
 //!
-//! This first slice supports cleartext IP literals, default JSON GET, status
+//! This slice supports cleartext IP literals, compiled JSON reads, status
 //! 200, fixed-length/chunked/close-delimited responses and bounded discarded
 //! trailers. See README.md for deployment and qualification limits.
 use clinkz_wot_core::*;
@@ -15,19 +15,21 @@ use std::{
     },
     task::{Context, Poll},
 };
+mod compiler;
 #[cfg(test)]
 mod identity_tests;
 mod transport;
+use compiler::{COMPATIBILITY, HttpArtifact, HttpCompiler};
 
 const BODY: u64 = 4096;
 const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v5\0",
+    "clinkz-http-ip-v6\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
-    "GET;NoSec;200;json-exact;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
+    "GET-default;explicit-GET,POST,PUT,PATCH,DELETE;header8/1024;NoSec;200;json-exact;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
     "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
     "fresh;concurrency1-until-release;header32/8192inclusive;body4096;",
     "trailer32/8192exclusive-duplicates-count;hyper-cumulative-extensions<16384;",
@@ -53,14 +55,13 @@ impl HttpConsumerConfig {
     /// Construction does not inspect a runtime or perform I/O.
     pub fn for_cleartext_ip() -> CoreResult<Self> {
         Ok(Self {
-            configuration: ConsumerBindingConfiguration::try_new(
-                BindingResourceContract::ConsumerOwnedHostV2,
+            configuration: ConsumerBindingConfiguration::for_semantic_host(
                 64,
                 BindingConfigurationDigest::new(PRIVATE),
+                COMPATIBILITY,
                 BODY,
                 MEDIA,
-            )?
-            .with_default_json_forms()?,
+            )?,
         })
     }
 }
@@ -154,7 +155,7 @@ struct Client {
 type Exchange = Pin<Box<dyn Future<Output = CoreResult<Vec<u8>>> + Send>>;
 struct Call {
     request: Option<OutboundRequest>,
-    target: Option<Target>,
+    target: Option<(Target, HttpArtifact)>,
     handle: tokio::runtime::Handle,
     future: Option<Exchange>,
     allowance: Arc<AtomicUsize>,
@@ -173,7 +174,7 @@ impl binding::ClientBinding for Client {
         Some(self.config.configuration)
     }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        ResolvedTargetCompiler::new_owned(self.config.configuration).compatibility()
+        COMPATIBILITY
     }
     fn invoke(
         &self,
@@ -193,8 +194,8 @@ impl binding::ClientBinding for Client {
         }
         let target = artifact
             .artifact()
-            .try_payload::<ResolvedTargetArtifact>(self.artifact_compatibility())
-            .and_then(|a| Target::parse(a.target()).ok());
+            .try_payload::<HttpArtifact>(COMPATIBILITY)
+            .and_then(|a| Some((Target::parse(a.target()).ok()?, *a)));
         let Some(target) = target else {
             return Err(reject(
                 request,
@@ -279,11 +280,12 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
         }
         self.allowance.store(4096, Ordering::Relaxed);
         if self.future.is_none() {
-            let Some(target) = self.target.take() else {
+            let Some((target, instructions)) = self.target.take() else {
                 return Poll::Ready(Err(error(602, "HTTP call already retired")));
             };
             self.future = Some(Box::pin(transport::exchange(
                 target,
+                instructions,
                 self.allowance.clone(),
             )));
         }
@@ -349,11 +351,11 @@ pub fn try_consumer_registration(
     binding_generation: BindingGeneration,
     diagnostic_ordinal: u32,
 ) -> CoreResult<ConsumerCompilerRegistration<HostConsumerBindingRegistration>> {
-    let compiler = ResolvedTargetCompiler::new_owned(config.configuration);
+    let compiler = HttpCompiler(config);
     let identity = BindingRegistrationIdentity::new(
         binding_id,
         binding_generation,
-        compiler.configuration(),
+        config.configuration.configuration(),
         compiler.compatibility(),
         diagnostic_ordinal,
     );
@@ -364,7 +366,7 @@ pub fn try_consumer_registration(
     .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
     .with_consumer_result_limits(BODY, MEDIA)
     .with_transient(BindingTransientFootprint::new(16384));
-    let compiler = HostBindingCompilerRegistration::try_new_consumer(compiler)
+    let compiler = HostBindingCompilerRegistration::try_new_semantic(compiler)
         .map_err(|e| e.error().error().clone())?;
     HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
         identity,
@@ -388,7 +390,11 @@ mod qualification {
     #[test]
     fn concrete_layouts_and_ip_target_eligibility() {
         let target = Target::parse("http://127.0.0.1/a").unwrap();
-        let future = transport::exchange(target, Arc::new(AtomicUsize::new(0)));
+        let future = transport::exchange(
+            target,
+            HttpArtifact::default(),
+            Arc::new(AtomicUsize::new(0)),
+        );
         println!(
             "Call={}/{} Client={}/{} Target={}/{} exchange={}/{}",
             size_of::<Call>(),
