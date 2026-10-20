@@ -1370,6 +1370,111 @@ atomically moving `HostBindingCallBox<T, C>` into the acknowledged owner. A
 rejected handoff returns the complete envelope to manual ownership and is not
 observable as pending cleanup.
 
+## Host Producer endpoint contract
+
+The [Host HTTP Producer admission candidate](../work-packages/WP-600-http-producer-property-read.md)
+proposes this replacement for the Host Producer Property Read path, pending
+independent ADR-0013 admission. It supersedes public Host phase-specific setup,
+readiness, activation, commit and their recovery families **on that path only**.
+The older sections below remain the implemented/static and historical evidence
+contract, not an alternative fallback for new Host exposure.
+
+`HostProducerBinding` is a public, independently implementable Producer-only
+paired contract. It has associated `Artifact: Copy + Send + Sync + 'static` and
+`Driver: ProducerEndpointDriver`, immutable configuration/capability/resource
+metadata, a fixed bounded `COMPILE_WORK`, pure `compile(ResolvedProducerInput)`
+and pure recoverable `create_driver(ProducerInstallInput<Artifact>)`. Producer
+registration requires neither a dummy client nor a Consumer support token.
+`HostBindingRegistrationInput::try_producer` captures that pair through generic
+Core erasure, actual Layout/alignment and one immutable registration identity.
+Constructor allocation refusal returns original author input. No native effect
+is permitted during bounds, compile, registration or driver construction.
+The first native effect belongs to a funded install poll. Inline atomic Producer
+artifacts do not reopen general owned/resumable Consumer admission.
+
+`ProducerInstallInput<A>` moves the immutable native artifact and exact captured
+route/registration/instance authority into its single driver owner. The wrapper
+prevents replacement/downcast substitution and pairs every response opportunity
+with that route. Generic concrete Layouts plus wrapper/indirect backing and
+construction overlap determine funding; a numeric self-report is not proof of
+callback termination or an exemption from executable qualification.
+
+`ProducerEndpointDriver` has bounded pinned mutable polling operations:
+
+| Operation | Contract |
+| --- | --- |
+| `poll_install(cx, budget) -> Poll<CoreResult<()>>` | Installing to LocallyReady. Pending or Err retains the same driver and every partial resource. Err starts close, never consumes the owner. No request/event/handler acceptance. |
+| `poll_accept(permit: RouteActivationPermit, cx, budget) -> Poll<CoreResult<RouteAcceptEvent>>` | Available only while Serving. Consumes one existing short borrowed, non-cloneable permit; returned request owns the existing `RouteResponseOpportunity`. A native service callback cannot invoke application handlers. |
+| `deliver_response(RouteInboundResponse)` | Reuses recoverable owned response-delivery calls: refusal returns the entire response/opportunity; accepted calls retain their generation and native destination through settlement/cancel. |
+| `poll_close(cx, budget) -> Poll<CoreResult<()>>` | Closing from any nonterminal state. Pending/Err retains the same driver; only Ok certifies no live local listener, socket, native future or driver-owned callback obligation. Transfer uses an acknowledged complete driver owner; refusal keeps the original. |
+
+Servient records first failure/cancellation/deadline cause outside the driver,
+closes new permits before Closing, and retains the driver until actual close or
+acknowledged transfer. A close error is not authority to drop a live owner.
+Engine cleanup deadlines may report pending/residual state while an addressable
+owner remains. Private native setup substates do not create public stage guards.
+The response call and driver must jointly retain any outstanding connection
+lease; no reference cycle or endpoint drop can orphan a response opportunity.
+
+The semantic lifecycle is `Installing -> LocallyReady -> Serving -> Closing ->
+Closed`, with Installing/LocallyReady failures going to Closing. Local readiness
+means the endpoint can obey the gate, not successful external discovery. Servient
+publishes the immutable entry and registry in one nonfallible transition after
+all coverage/capacity/readiness checks; no Binding callback runs at publication.
+It mints existing borrowed route permits from private generation authority.
+Readiness/commit do not replace the permit. Late events cannot reopen that gate.
+
+`BindingResourceContract::ProducerOwnedHostV2` is the Host Producer interpretation
+of ADR-0023 ownership: original Engine accounts fund actual controlled backing
+until release; Binding-private SDK policy/growth/disposal and deployment baseline
+are explicit separate owners. Existing schema-2 fields/default limits are reused,
+not relaxed. No Consumer-only admission validator, output seal or StrictV1
+transitive maximum is relabeled. Controlled construction and cleanup/status
+funding precede effects; finite SDK-local disposal allocations are qualified
+separately. Static/no-std StrictV1 paths retain their own representation and tests.
+
+On final Host root loss there may be no caller to poll close. Therefore this
+first scope admits only drivers whose finite local destruction retires all
+listener/socket/future/callback owners synchronously, without network handshake,
+blocking join, new job or required peer progress. Engine accounts outlive that
+destruction. Ordinary async close may return Pending, but its remaining local
+objects must satisfy the same last-owner rule. An SDK requiring later progress
+is outside this scope until an owned successor is specified and reviewed.
+The ProducerOwnedHostV2 scoped override permits qualified finite SDK-local
+allocation during disposal, including final-root disposal; Engine cancellation,
+status and handoff remain prebacked. The general nonallocating final-root text
+in the shared-infrastructure section does not assert transitive StrictV1 for
+this Producer policy. Actual allocation and local FD retirement must be measured
+before completion; Drop by itself is not evidence of those properties.
+
+The accepted `consumer-ownership-v2.toml` overlay stays Consumer-only. This
+Producer contract reuses ADR-0023's ownership rule and the unchanged numeric
+schema, not Consumer policy identities or automatic role applicability:
+
+| Existing field family | Producer interpretation |
+| --- | --- |
+| admission temporary/peak/largest-allocation, compiled-runtime and engine-live bytes | Actual controlled entry/build/driver/wrapper backing, indirect Engine backing and live overlap; acquire before construction, retain through rollback/release. |
+| host-binding-call bytes and binding-slot-state bytes | Complete erased driver and accepted response-delivery carrier plus Engine-owned backing; no transitive SDK ceiling. No readiness carrier is invented. |
+| binding poll temporary and cancellation buffer bytes | Startup-funded Engine mediation scratch and conservative accepted-owner cancellation allowance; private parser/SDK scratch has a separately qualified policy. |
+| binding ingress items/bytes, in-flight response and handler slot/state counts | Fund before accepting/copying the single native request, creating the unique response opportunity or dispatching the handler. Saturation cannot consume cleanup capacity. |
+| cleanup records/transfer bytes and drain work/deadline limits | Prebacked original-account complete-driver/delivery destination, context and status; rejected transfer retains the original owner; local SDK references stay alive until retired. |
+
+The registration declares one endpoint/connection and fixed request/output byte
+maxima. Target/name/media copies, native reply bridge and response ownership
+must be physically counted once each at their actual owner, including overlap;
+no Consumer result allowance is silently reused. Producer configuration has a
+fresh role/version identity containing those limits, disposal policy, actual
+compiler/driver metadata, listen address and SDK versions/features. The native
+HTTP artifact has Producer-role compatibility distinct from Consumer artifacts;
+old/new, wrong-role and wrong-registration substitution reject before effects.
+Exact encoding bytes/layout results belong to implemented completion evidence.
+
+For the first scope, each endpoint exclusively owns its listener/connection;
+there is no shared session to retire. Registration creates no listener and its
+last root cannot leave a detached worker. Any later shared-listener/session
+extension must define last-user/callback retirement and sibling progress before
+it is admitted. Close never promises to undo remote observations.
+
 ## Server route SPI
 
 ### Route identities and guards

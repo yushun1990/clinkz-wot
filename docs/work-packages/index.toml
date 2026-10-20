@@ -1076,3 +1076,94 @@ completion_evidence_keys = [
     "http-authoring-feature-conformance",
 ]
 completion_evidence_path = "docs/evidence/WP-600-http-consumer-property-read.toml"
+
+
+[[tranche]]
+id = "WP-600-HTTP-PRODUCER-PROPERTY-READ"
+work_package = "WP-600"
+sequence = 610
+status = "planned"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = ["WP-600-HTTP-CONSUMER-PROPERTY-READ"]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "DOC-RUNTIME-001", "DOC-RUNTIME-002", "DOC-RUNTIME-003",
+    "ADMIT-MEM-001", "ADMIT-TXN-001", "API-RESOURCE-001", "API-SECURITY-001", "API-TYPES-001",
+    "RES-LIMIT-001", "RES-LIMIT-002", "RES-LIMIT-003",
+    "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001",
+    "PLAN-COST-001", "PLAN-COST-003", "PLAN-BOUND-001", "PLAN-ARTIFACT-001", "PLAN-SET-001",
+    "FORM-OWNER-001", "FORM-COVERAGE-001", "HANDLER-API-001", "HANDLER-STORAGE-001",
+    "BIND-REG-001", "BIND-ROUTE-001", "BIND-MEM-001", "BIND-IO-001", "BIND-OUT-001", "BIND-DELIVERY-001",
+    "BIND-CALL-CANCEL-001", "BIND-HOST-CANCEL-001", "API-PAYLOAD-001",
+    "LIFE-EXPOSE-001", "LIFE-EXPOSE-002", "LIFE-EXPOSE-003",
+    "STATE-EXPOSE-001", "STATE-BIND-001", "STATE-INFLIGHT-001", "CONCUR-LIN-001",
+    "CLEANUP-RECORD-001", "HANDLE-DROP-001", "HOST-ASYNC-001",
+    "ERR-TAXONOMY-001", "ERR-RETRY-001", "TIME-001", "CRATE-DEPS-001", "FEATURE-MATRIX-001",
+]
+owner_packages = ["clinkz-wot-td", "clinkz-wot-core", "clinkz-wot-planning", "clinkz-wot-servient", "clinkz-wot-binding-http"]
+feature_cells = ["std", "no-default", "async-no-std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0008-compiled-plan-lifecycle.org", "docs/ADRs/0010-server-route-lifecycle.org",
+    "docs/ADRs/0012-serving-activation-permit.org",
+    "docs/ADRs/0022-first-production-binding-and-runtime-environments.org",
+    "docs/ADRs/0023-resource-ownership-and-policy-boundaries.org",
+    "docs/spec/planning.md", "docs/spec/binding-spi.md", "docs/spec/runtime-safety.md",
+    "docs/spec/foundation.md", "docs/spec/interaction-core.md",
+    "docs/architecture/30-compiled-plan-lifecycle.md",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/api-ownership.csv", "docs/state-machines.toml", "docs/requirements.csv",
+    "docs/resource-contracts/consumer-ownership-v2.toml", "docs/resource-limits.csv",
+    "docs/performance/gateway.toml", "docs/performance/constrained.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "docs/work-packages/WP-600-http-producer-property-read.md",
+    "docs/work-packages/WP-600-protocol-bindings.md", "docs/work-packages/index.toml",
+]
+api_items = [
+    "ResolvedProducerInput", "ProducerExecutionEntry", "HostProducerBinding",
+    "ProducerEndpointDriver", "ProducerInstallInput", "host_registration_try_producer",
+    "BindingResourceContract", "HandlerContext", "RouteActivationPermit",
+    "RouteResponseOpportunity", "RouteInboundResponse",
+]
+state_machines = ["host-producer-endpoint"]
+resource_changes = [
+    "Single instance-owned immutable entry; TD-resolved facts and complete advertised coverage before install; source loans end before first effect. No separate replaceable plan-set generation or required persistent logical plan on this Host path.",
+    "Actual generic paired compiler/artifact/driver Layouts, wrapper/indirect backing, construction/rollback/response overlap and original-account cleanup funding before effects. Initial Copy inline atomic Producer compiler only; no general Consumer compiler readmission.",
+    "ProducerOwnedHostV2 role-specific ADR-0023 ownership interpretation; unchanged numeric schema, Consumer-only schema-2 overlay/identities retained: Engine-controlled backing retained to release, Binding-private Hyper/Tokio growth/disposal policy measured separately, deployment baseline explicit. Consumer seals and transitive StrictV1 not relabeled; no global numeric defaults change.",
+    "One listener, one accepted connection/request/response slot per exposure. Head 16 fields/8192 raw bytes inclusive, 4096 read bytes per funded poll, bodyless request, JSON response <=4096 bytes, target <=64 UTF-8 bytes, caller-clock deadlines and no detached driver.",
+]
+old_api_removals = [
+    "Host Producer Property Read use of first-leaf PropertyReadPlanCompiler and mandatory LogicalInteractionPlan/independent PlanSetGeneration; retain static and Consumer scopes with their declared evidence",
+    "Host Property Read prepare/readiness/activate/commit public phase/recovery families replaced by one retained driver on the existing public expose path; no fallback or phase-shaped HTTP adapter",
+]
+performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-GW-030", "PERF-GW-031", "PERF-GW-032", "PERF-CS-020", "PERF-CS-021", "PERF-CS-022", "PERF-CS-023"]
+implementation_paths = [
+    "td/src/validated.rs", "td/src/semantic.rs", "td/src/semantic/facts.rs", "td/src/lib.rs",
+    "td/tests/validated_lending.rs", "td/tests/validated_admission.rs",
+    "core/src/binding.rs", "core/src/binding_compiler.rs", "core/src/plan.rs", "core/src/lib.rs",
+    "core/src/handler.rs", "core/src/thing.rs", "core/src/response.rs", "core/src/serving_activation.rs",
+    "core/tests", "planning/src/property_read.rs", "planning/src/lib.rs", "planning/tests",
+    "servient/src/property_read.rs", "servient/src/servient.rs", "servient/src/lib.rs", "servient/tests",
+    "protocol-bindings/protocols/http", "Cargo.toml", "Cargo.lock",
+    "tools/architecture-fixtures/property-read-binding", "tools/architecture-fixtures/property-read-runner",
+    "docs/api-ownership.csv", "docs/state-machines.toml",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --locked --offline -p clinkz-wot-property-read-architecture-runner --lib --test producer_admission -- --test-threads=1 --nocapture",
+    "cargo test --locked --offline -p clinkz-wot-binding-http -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_lending --test builder_extension_fields_test",
+    "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support --test consumer_property_read_binding",
+    "cargo test --locked --offline -p clinkz-wot-servient --test property_read --test consumer_property_read -- --test-threads=1",
+    "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features",
+    "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --features async",
+    "git diff --check",
+]
+admission_review = "pending-independent-exact-revision-review"
+completion_evidence_keys = [
+    "producer-semantic-coverage", "producer-install-ownership", "http-producer-property-read",
+    "http-consumer-producer-loop", "producer-resource-retirement", "producer-regression-conformance",
+]
+completion_evidence_path = "docs/evidence/WP-600-http-producer-property-read.toml"

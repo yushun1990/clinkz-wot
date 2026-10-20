@@ -100,3 +100,13 @@ does not mutate or invalidate an existing handle in place.
   lifecycle belongs to the aggregate owner and would increase hot-path state.
 - Invalidating existing handles after a builder-level registration change was
   rejected because v1 has no runtime registration-change transaction.
+
+* Scoped Host Producer replacement candidate
+
+The ADR-0013 Host HTTP Producer candidate in
+[[file:../work-packages/WP-600-http-producer-property-read.md][WP-600]] proposes the
+[[file:../spec/planning.md#host-producer-property-read-entry][single-entry contract]]
+in place of a mandatory persistent two-level plan and independent plan-set
+generation for that immutable single-instance scope. Ownership, source-free
+execution and lease retirement are retained. Other scopes are unchanged; this
+addendum activates only with independent tranche admission, not this proposal.

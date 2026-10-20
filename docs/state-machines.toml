@@ -8140,3 +8140,133 @@ linearization = "Only after complete cleanup handoff/terminal disposition, no li
 cancellation = "first-cause-preserved"
 outcome = "terminal"
 retryability = "terminal"
+
+
+# ADR-0013 Host Producer candidate; not an implemented/accepted transition claim.
+[[machine]]
+id = "host-producer-endpoint"
+requirements = ["STATE-EXPOSE-001", "STATE-BIND-001", "ADMIT-TXN-001", "BIND-MEM-001", "HANDLE-DROP-001"]
+initial = "Installing"
+states = ["Installing", "LocallyReady", "Serving", "Closing", "Closed"]
+terminal = ["Closed"]
+required_events = ["Installing:install_error", "Installing:cancel", "LocallyReady:publish", "LocallyReady:cancel", "Serving:stop", "Closing:close_error", "Closing:transfer_refused", "Closing:released"]
+entry_contract = "Complete whole-description coverage, source-free entry, paired registration and all Engine/cleanup funding precede construction and the first native effect. Driver construction is pure."
+publication_contract = "LocallyReady plus exact live instance/registration generation and final cancellation check atomically publishes entry and registry; no Binding callback. Only the private Serving record issues borrowed route permits."
+close_contract = "Stop permits before close; first cause immutable; same driver and outstanding response leases stay owned on Pending/Err/refused transfer. Closed certifies actual local resource retirement, never absence of remote observation."
+
+[[machine.transition]]
+from = "Installing"
+event = "progress"
+to = "Installing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Retain same funded driver and partial native state"
+outcome = "pending"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Installing"
+event = "ready"
+to = "LocallyReady"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Native endpoint can obey closed gate; no semantic acceptance"
+outcome = "locally-ready"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "install_error"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Retain failed driver and every partial resource; fix first cause"
+outcome = "close-required"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Installing"
+event = "cancel"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Fix cancellation cause and retain driver"
+outcome = "close-required"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "LocallyReady"
+event = "publish"
+to = "Serving"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Atomic Engine publication after final coverage/capacity/generation/cancel checks"
+outcome = "published"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "LocallyReady"
+event = "cancel"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Cancellation wins before publication; retain unpublished endpoint"
+outcome = "close-required"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Serving"
+event = "accept"
+to = "Serving"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Validate and consume short unique route permit; retain response opportunity lease"
+outcome = "one-event"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Serving"
+event = "stop"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Close new permits before native close; retain existing response owners"
+outcome = "close-required"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Closing"
+event = "progress"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Retain driver and response owners under funded close progress"
+outcome = "pending"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Closing"
+event = "close_error"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Report error without releasing live driver or replacing first cause"
+outcome = "retained-error"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Closing"
+event = "transfer_refused"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Original owner remains addressable; no unowned task tail"
+outcome = "retained-owner"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Closing"
+event = "transfer_accepted"
+to = "Closing"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "Acknowledged cleanup destination owns the complete unchanged driver"
+outcome = "owned-pending"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Closing"
+event = "released"
+to = "Closed"
+owner = "Servient endpoint owner or acknowledged cleanup successor"
+linearization = "All listener/socket/future/response leases retired; release original accounts"
+outcome = "closed"
+retryability = "terminal"

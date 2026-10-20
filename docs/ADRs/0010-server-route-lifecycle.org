@@ -120,3 +120,14 @@ the binding SPI specification and its API/state projections.
   cannot prove cleanup after ownership has been lost.
 - Direct self-driving dispatch was rejected because it bypasses Servient's
   admission, handler, fairness, observability, and cleanup transactions.
+
+* Scoped Host Producer replacement candidate
+
+The ADR-0013 [[file:../work-packages/WP-600-http-producer-property-read.md][Host HTTP
+Producer candidate]] proposes the
+[[file:../spec/binding-spi.md#host-producer-endpoint-contract][retained endpoint driver]]
+as the replacement for Host Property Read phase-specific public owners. One
+driver retains partial installation, errors, cancellation and close; native
+phases stay private. Route attribution, funded cleanup and Engine dispatch
+authority remain. Static and other scopes retain this ADR. The replacement
+activates only after independent tranche admission.

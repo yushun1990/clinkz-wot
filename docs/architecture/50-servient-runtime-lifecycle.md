@@ -297,3 +297,14 @@ diagnostic output, not lifecycle state.
 
 Exact APIs, states, limits, and workloads are closed in domain specifications
 and machine-readable artifacts before implementation resumes.
+
+## Host Producer admission subset
+
+For the [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md),
+Building privately resolves/compiles and checks complete advertised coverage.
+The [endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
+then supplies Installing -> LocallyReady -> Serving -> Closing -> Closed.
+Publication is the existing Engine-only local linearization; Closing disables
+new permits before native teardown. This candidate replaces phase-specific Host
+orchestration only after independent admission; it does not change static
+representation or silently broaden earlier gate acceptance.
