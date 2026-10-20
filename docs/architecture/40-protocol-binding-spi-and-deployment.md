@@ -4,6 +4,12 @@ ADR-0023's accepted [Consumer resource migration](../spec/consumer-resource-owne
 specifies the registration/resource/disposal delta for the admitted successor.
 Existing strict registrations retain their current contracts.
 
+[Review 08](../reviews/review-08-integrated-architecture-reassessment.md) proposes
+an integrated revision beyond the accepted scoped migrations. Its
+[role/infrastructure amendment](../spec/binding-spi.md#proposed-role-and-infrastructure-amendment-review-08)
+is non-normative review material. It neither activates a universal replacement
+SPI nor generalizes the accepted HTTP Producer limits to other roles/platforms.
+
 ## V1 integration model
 
 A Protocol Binding is an ordinary Rust crate compiled into the application or

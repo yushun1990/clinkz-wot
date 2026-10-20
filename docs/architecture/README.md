@@ -2,6 +2,13 @@
 
 Status: active v5.1 authority.
 
+[Architecture Review 08](../reviews/review-08-integrated-architecture-reassessment.md)
+is a completed non-normative reassessment of preparation, reusable programs,
+instance authority and protocol infrastructure. The sections explicitly marked
+as its proposals in the existing owners below are review material, not active
+v5.1 amendments or implementation admission. The current invariants and scoped
+accepted Host Producer contract remain binding pending deliberate migration.
+
 This directory defines the concise architecture backbone for `clinkz-wot`.
 It explains the engine from core invariants to edge integration. Detailed API
 schemas, state transitions, resource limits, and workloads must project this

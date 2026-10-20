@@ -1873,10 +1873,10 @@ side-effect free.
 
 ## Host Producer Property Read entry
 
-The ADR-0013 [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
-proposes this bounded replacement for Host Producer Property Read. It takes
-implementation authority only after independent admission; existing source is
-not claimed conforming. Other roles and static representations retain their
+The accepted ADR-0013 [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
+selects this bounded replacement for Host Producer Property Read. Its recorded
+admission grants only that implementation scope; existing source is not claimed
+conforming. Other roles and static representations retain their
 stated contracts. This section is the scoped replacement of the mandatory
 persistent logical-plan part of `PLAN-COST-001` and separate plan-set identity
 in `PLAN-SET-001`: one immutable entry is owned by one produced instance, with
@@ -2083,6 +2083,45 @@ The correction does not implement form contribution, capability indexing, a
 collision table, Servient capacity reservation, route lifecycle, or protocol
 I/O. It supplies the previously missing immutable value at the existing legal
 compiler/artifact boundary.
+
+## Proposed program and compilation amendment (Review 08)
+
+**Non-normative proposal, not an amendment to the active requirements above.**
+[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#open-compilation-without-a-universal-mechanism)
+recommends open compiler/executor pairing over native program types instead of
+concrete compiler recognition or eligibility limited to `Copy`/atomic lowering.
+Owned immutable programs and resumable pure Host jobs would be admissible under
+qualified layout, indirect-backing, work and cleanup contracts. Inline atomic
+and caller-owned static adapters remain useful supported subsets. Preparation
+facets need not remain runtime dependencies after installation.
+
+The proposed output is a minimal executable entry referencing native program
+data and any shared common definition, with checked instance context and current
+runtime authority kept separate. A persistent two-level logical representation
+or independently versioned Plan Set would be required only where its capability
+needs it. This challenges the general representation in `PLAN-COST-001` and
+`PLAN-SET-001`; it does not supersede either outside an already admitted scope.
+
+Review 08 also recommends replacing the universal all-bounds-before-any-start
+barrier with funded incremental pure construction where useful. Capacity would
+precede acquisition, provisional output would remain rollback-owned, and all
+required semantic/coverage/capacity checks would precede effects/publication.
+Sequencing, first failure, error precedence and rollback costs require explicit
+review. Current all-bounds ordering remains active until that migration.
+
+Consumer unsupported-alternative selection and whole-description Producer
+coverage remain different algorithms. Resource/construction failure is not
+unsupported mapping or permission for fallback after effects. Extension
+preservation does not certify execution support or authorization. A fixed
+prepared-data installer would need trusted provenance, compatibility and current
+target admission; no existing validation proof becomes a serializable image.
+
+Reuse initially means explicit definition preparation and checked instance
+binding, not automatic cache identity. Evidence must separate definition work
+from per-input validation and per-instance installation, reject incompatible
+dependencies before effects, and preserve another user's backing through drain.
+The existing publication/lease/reclaim requirements and compiler eligibility
+remain unchanged until independently accepted authority and scope migration.
 
 ## API roles
 

@@ -44,6 +44,34 @@ only the umbrella is expected to compose every selected public crate.
 | Codec crate | Bounded codecs and incremental state | Decoded/encoded payloads | Runtime or transport policy |
 | Umbrella crate | Feature composition and deliberate re-exports | Application import surface | Runtime behavior or duplicate definitions |
 
+## Proposed preparation/execution separation (Review 08)
+
+**Non-normative proposal; the dependency graph and responsibility map above
+remain active.** [Review 08](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary)
+recommends separating preparation dependencies from the execution base.
+TD/semantic preparation would retain document validation, name resolution and
+shared WoT meaning; Planning would retain selection, native compiler coordination
+and Producer coverage. Fixed execution would consume prepared entries without
+requiring TD, Planning or Discovery in its normal dependency graph.
+
+The preferred target is to slim existing Core into small execution contracts,
+moving shared operation values out of TD and preparation/legacy orchestration
+out of Core deliberately. This reverses affected edges rather than adding a
+cycle. A new Contracts crate or separate Host/embedded packages is not selected
+without evidence that the smaller arrangement is insufficient. A Binding can
+offer an optional preparation facet and an execution facet over the same native
+program type; their compatibility/pairing remains checked.
+
+Role, dynamic preparation, `std`, async syntax, thread mobility, atomics and
+storage/failure policy would be separate capabilities. Shared execution kernels
+can observe borrowed views while Host and static storage differ. No feature
+silently changes globally named payload semantics. Retiring legacy runtime
+entry points, the implicit Directory and obsolete compiler utility path belongs
+to the proposed migration, not this documentation change.
+
+This proposal requires reviewed API/dependency and work-package projections;
+it grants no new target, runtime construction or embedded-production claim.
+
 ## Core internal boundaries
 
 Core separates at least:

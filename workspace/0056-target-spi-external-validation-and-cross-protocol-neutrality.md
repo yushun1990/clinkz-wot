@@ -2,6 +2,14 @@
 
 Status: DISCUSSING
 
+The completed [integrated Review 08](../docs/reviews/review-08-integrated-architecture-reassessment.md)
+reassesses this topic together with reusable programs, capability/environment
+boundaries and infrastructure ownership at `700cfdb1`. It recommends separating
+those responsibilities before freezing a general SPI. Its proposed projections
+are marked in the existing architecture/specification owners; they neither
+activate the earlier broad replacement nor alter accepted Producer admission.
+This topic remains DISCUSSING pending the integrated direction review.
+
 Kind: owner-raised architecture investigation
 
 Priority: HIGH

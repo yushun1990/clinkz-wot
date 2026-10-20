@@ -52,6 +52,29 @@ adapt that kernel; they do not independently compute generation validity,
 terminal class, cleanup ownership, retry classification, or semantic resource
 deltas.
 
+## Proposed instance and infrastructure separation (Review 08)
+
+**Non-normative proposal; the accepted lifecycle rules below remain active.**
+[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#infrastructure-ownership-and-resource-policy)
+recommends keeping instance dispatch/publication and logical operation drain in
+Servient, while calls/routes may lease separately owned protocol infrastructure.
+One instance's closure would retire its rights and participation without closing
+a listener/session that another instance or role uses. Infrastructure retirement
+and executor shutdown would follow their actual owners, not Thing count or a
+semantic result's acknowledgement.
+
+Host and static forms would share lifecycle decisions and checks through common
+kernels/views, with different physical records and progress mechanisms. Fixed
+execution would not require dynamic preparation or an implicit Directory. Any
+removal of independent Plan Set lifetime follows the reviewed capability and
+[proposed program/instance boundary](30-compiled-plan-lifecycle.md#proposed-program-and-instance-lifetimes-review-08),
+with current generation/lease checks retained until deliberate replacement.
+
+No cleanup status substitutes for a live owner, and no asynchronous retirement
+successor is introduced here. Its actual construction, refusal, root-loss,
+funding and terminal evidence must be reviewed with the Binding contract before
+implementation. This proposal does not relax current last-root obligations.
+
 ## Produced Thing lifecycle
 
 ```text

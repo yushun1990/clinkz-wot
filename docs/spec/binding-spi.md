@@ -1372,9 +1372,10 @@ observable as pending cleanup.
 
 ## Host Producer endpoint contract
 
-The [Host HTTP Producer admission candidate](../work-packages/WP-600-http-producer-property-read.md)
-proposes this replacement for the Host Producer Property Read path, pending
-independent ADR-0013 admission. It supersedes public Host phase-specific setup,
+The accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
+selects this replacement for the Host Producer Property Read path within its
+recorded ADR-0013 scope. Production implementation remains outstanding. It
+supersedes public Host phase-specific setup,
 readiness, activation, commit and their recovery families **on that path only**.
 The older sections below remain the implemented/static and historical evidence
 contract, not an alternative fallback for new Host exposure.
@@ -2316,6 +2317,45 @@ Zero never means unbounded. A disabled capability cannot be started. A
 declaration or actual footprint overrun is a binding contract violation and is
 reported before accepting new work where possible; already accepted ownership
 still follows cleanup and residual rules.
+
+## Proposed role and infrastructure amendment (Review 08)
+
+**Non-normative proposal; current registration, disposal and accepted Host
+Producer contracts remain active.** [Review 08](../reviews/review-08-integrated-architecture-reassessment.md#infrastructure-ownership-and-resource-policy)
+recommends role-specific execution contracts over compatible native programs,
+with optional preparation facets and generic pairing. `Copy`, one atomic compile
+callback and per-exposure listener ownership would remain adapter limits, rather
+than universal Binding eligibility. The accepted single-driver Host Producer
+scope does not already provide this generalization.
+
+Calls and route drivers would be able to retain leases into separately owned
+Binding infrastructure. Logical Things/subscriptions, programs, broker
+registrations, connections and listeners need not have equal counts. Independent
+logical stop releases its participation; it cannot close infrastructure used by
+another role/instance. One actual physical owner funds shared backing, with
+separately bounded references and last-user retirement including jobs/callbacks.
+This selects no universal Engine session manager or allocator.
+
+Permit-gated semantic acceptance and handler dispatch can coexist with bounded
+native I/O/buffering outside a route poll. A Binding still receives no direct
+handler-dispatch capability. Installation/close state retains every partial
+owner. Call settlement, lease release, infrastructure retirement and executor
+shutdown remain distinct observable boundaries. Pending/failed asynchronous
+retirement retains its addressable owner; root loss needs qualified local
+disposal or an acknowledged successor. Residual status cannot release surviving
+local resources or claim remote rollback.
+
+Generalize ADR-0023's ownership-scoped policy across roles without omitting
+Engine-held native/indirect backing or weakening stronger static profiles.
+Binding-native limits and deployment OOM/runtime failure remain explicit.
+Operation-specific resource variants are candidates for replacement by coherent
+policy axes, not permission to relabel existing strict/Consumer declarations.
+Applicable profiles must qualify their actual storage, progress and disposal.
+
+Any revision needs compatible Planning/Servient, API, state, resource and scope
+projections plus actual shared-infrastructure I/O and retirement evidence. The
+current lack of asynchronous registration retirement is a supported-SDK limit,
+not proof that every SDK should meet synchronous final-root retirement.
 
 ## Wake, deadlines, and fairness
 
