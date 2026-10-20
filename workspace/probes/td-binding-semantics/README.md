@@ -5,11 +5,6 @@ This directory is outside the Cargo workspace and all production dependency and
 gate paths. It can be removed after the investigation. It is not a replacement
 SPI implementation, TD validator, network runtime or embedded qualification.
 
-The [Engine-owned matching follow-up](../../0056-target-spi-external-validation-and-cross-protocol-neutrality.md#engine-owned-capability-matching-follow-up)
-challenges #211's conservative extension policy using the same semantic interface.
-Its proposed contract supersedes the class-only recommendation for further
-investigation; both earlier models/tests remain executable comparison evidence.
-
 `AnnotationProfile` is a **historical allowlist experiment**, not a recommended
 application API. The [responsibility reassessment](../../0056-target-spi-external-validation-and-cross-protocol-neutrality.md#responsibility-reassessment-without-application-allowlists)
 compares a common descriptive-class contract with explicit operational profiles
@@ -17,8 +12,8 @@ and records its compatibility limits. Applications must not classify unfamiliar
 terms or maintain domain-class lists.
 The [standard-profile counterexample](../../0056-target-spi-external-validation-and-cross-protocol-neutrality.md#standard-thingprofile-advertisement-activation-and-coverage)
 separates `Thing.profile` advertisement, trusted interpretation, native support
-and Engine selection. At #211, annotation interoperability covered class
-assertions; unfamiliar annotation predicates still failed in that path.
+and Engine selection. Annotation interoperability here covers class assertions;
+unfamiliar annotation predicates still fail.
 
 From this directory, with Python 3.12:
 
@@ -28,11 +23,10 @@ python3 -m venv /tmp/clinkz-semantic-probe
 /tmp/clinkz-semantic-probe/bin/python -m unittest -v
 ```
 
-Only dependency installation uses the external network. Tests use the checked-in TD
+Only dependency installation uses the network. Tests use the checked-in TD
 context and explicitly supplied test contexts; the document loader refuses all
-other URLs. One matching test uses a temporary standard-library HTTP server on
-loopback to capture native requests. No credentials or external services are used.
-The analysis used Python 3.12.14 and the pinned dependencies. Reproduction revisions and executed
+other URLs. No credentials or external services are used. The analysis used
+Python 3.12.14 and the pinned dependencies. Reproduction revisions and executed
 checks belong in the investigation PR.
 
 | File | Responsibility |
@@ -44,8 +38,6 @@ checks belong in the investigation PR.
 | `test_probe.py` | Positive examples and intentional counterexamples, including one passing test that **proves information loss**. |
 | `test_role_contract.py` | Four A/B counterexamples using a shared descriptive-class rule and an explicitly selected parent-context dialect; no role registry/framework. |
 | `test_profile_boundary.py` | Five cases using standard `Thing.profile`, a locally supplied HTTP Basic read-slice interpreter and generic coverage checking before selection; also preserves the non-class annotation refusal counterexample. |
-| `matching.py` | Alternative generic Engine matcher: fixed requirements, coarse capabilities, pure compilation, deterministic preferences and Producer assignments. No native vocabulary interpretation. |
-| `test_matching.py` | Package-owned example requirement derivation, two HTTP implementations and MQTT role-specific compilation, plus matching/coverage falsifiers and a loopback HTTP request check. |
 
 The HTTP and MQTT lowerers are 40 and 49 physical lines respectively,
 including imports, comments and blank lines.
@@ -111,8 +103,8 @@ a manifest system merely to test it. Shared profile activation/composition and
 production Rust helper ergonomics remain unverified. These test-only policies
 select no target registration API or production default.
 
-At PR #211, five standard-profile/annotation cases brought the total to **32**.
-The original resolver retains `profile` as `td:followsProfile`; the HTTP lowerer rejects it.
+Five standard-profile/annotation cases bring the total to **32**. The original
+resolver retains `profile` as `td:followsProfile`; the HTTP lowerer rejects it.
 The added test-only preparation retains advertised URI values separately and
 calls an explicitly supplied local interpreter before any Binding runs. That
 interpreter applies only the HTTP Basic draft's read request/response rule.
@@ -167,37 +159,3 @@ identifies the stronger contract and remaining evidence needed before adoption.
 It is included solely to make resolution reproducible offline. Copyright W3C;
 see the [W3C Software and Document License](https://www.w3.org/copyright/software-license-2023/).
 PyLD is an external dependency under its own license; it is not vendored here.
-
-## Capability matching follow-up
-
-Run the new cases alone with the same environment:
-
-```sh
-/tmp/clinkz-semantic-probe/bin/python -m unittest -v test_matching
-```
-
-The full `python -m unittest -v` suite includes both competing paths. The new
-path fixes requirements before accessing registrations; compilers see the same
-`Interaction` data used in #211. The projection helper only adapts to the
-unchanged conservative lowerers; the complete resolved nodes remain available.
-Success promises all assigned native semantics without a separate coverage list.
-The explicit `requires` criticality term is fixture-owned, not a W3C standard or
-an approved extension API. All preparation code is a fixed, narrow execution
-contract, not a universal vocabulary inventory or application-maintained role map.
-
-The [investigation](../../0056-target-spi-external-validation-and-cross-protocol-neutrality.md#engine-owned-capability-matching-follow-up)
-owns the competing-model comparison, results, recommendation, information limits
-and authoring-cost assessment. Some passing tests deliberately expose failure
-of stronger claims: capability-derived requirements weaken an explicit method;
-matching alone admits colliding Producer routes; unknown undeclared obligations
-remain ambiguous. MQTT retained reads are Consumer-only in this example's
-handler model. Producer assignments use distinct HTTP/MQTT write definitions
-and perform no installation/publication. The HTTP Basic code still covers only
-its read request/response slice, including an extra MQTT path and an application
-requiring a Profile-compatible path. Shared provider strings do not certify
-security, codecs or complete Profile conformance.
-
-The added files import no new dependencies and change none of #211's resolver,
-interface or native lowerers. Loopback verifies HTTP method/path/Accept and the
-expected successful response status; it does not execute confirmation or MQTT,
-qualify a runtime, establish arbitrary-TD admission safety or select a Rust SPI.
