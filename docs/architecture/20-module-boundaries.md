@@ -44,6 +44,50 @@ only the umbrella is expected to compose every selected public crate.
 | Codec crate | Bounded codecs and incremental state | Decoded/encoded payloads | Runtime or transport policy |
 | Umbrella crate | Feature composition and deliberate re-exports | Application import surface | Runtime behavior or duplicate definitions |
 
+## Proposed preparation/execution separation (Review 08)
+
+**Non-normative proposal; the dependency graph and responsibility map above
+remain active.** [Review 08](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary)
+recommends separating preparation dependencies from the execution base.
+TD/semantic preparation would retain document validation, name resolution and
+shared WoT meaning; Planning would retain selection, native compiler coordination
+and Producer coverage. Fixed execution would consume prepared entries without
+requiring TD, Planning or Discovery in its normal dependency graph.
+
+The selected candidate reverses the TD/Core edge: Core depends only on
+Foundation, TD on Core/Foundation, and Planning on TD/Core/Foundation. **All**
+Core -> TD edges must first disappear, including legacy APIs/security helpers.
+Shared operation vocabulary moves to Core; TD retains its document encoding
+wrappers and all resolved semantic trees/loans. Public compiler contracts,
+selected-coordinate input wrappers and compiler erasure move to Planning.
+They cannot remain in Core behind a feature without restoring the dependency.
+Runtime storage/allocation, artifact compatibility and runtime erasure helpers
+stay below Planning even if today's `core::binding_compiler` module houses them;
+the split follows responsibility, not whole-file movement or upward re-exports.
+
+Runtime program types live in the Binding's base module, and source-free common
+execution envelopes live in Core. Optional Binding preparation implements
+Planning traits over those same native types. Execution-only Servient and
+Bindings depend on Core, with no TD/Planning dependency; preparation composition
+and actual compiler/executor registration pairing happen above Core. Neither
+Planning nor Servient imports concrete Bindings. A new Contracts crate or separate
+Host/embedded packages is unnecessary for this demonstrated graph.
+
+The [five-crate sketch](../../tools/architecture-fixtures/review08-boundaries/README.md)
+compiles the runtime and preparation graphs separately. It tests proposed
+interfaces, not migration of the current production dependencies. The full
+ownership/type placement and rejected cyclic alternatives are in Review 08.
+
+Role, dynamic preparation, `std`, async syntax, thread mobility, atomics and
+storage/failure policy would be separate capabilities. Shared execution kernels
+can observe borrowed views while Host and static storage differ. No feature
+silently changes globally named payload semantics. Retiring legacy runtime
+entry points, the implicit Directory and obsolete compiler utility path belongs
+to the proposed migration, not this documentation change.
+
+This proposal requires reviewed API/dependency and work-package projections;
+it grants no new target, runtime construction or embedded-production claim.
+
 ## Core internal boundaries
 
 Core separates at least:

@@ -2,6 +2,14 @@
 
 Status: DISCUSSING
 
+The completed [integrated Review 08](../docs/reviews/review-08-integrated-architecture-reassessment.md#programs-instance-context-and-live-authority)
+reassesses reuse with current compilation, role and infrastructure boundaries.
+It recommends separating definition content, checked instance context and live
+authority now, while deferring automatic caching/persistence until benefit and
+ownership are proved. Its review-first sequence challenges the older narrow-fix
+sequencing below without retrospectively changing accepted implementation or
+activating a shared-program contract. The topic remains DISCUSSING.
+
 ## Question and counterexample
 
 Does the current one-Plan-Set-per-produced/consumed-handle-generation contract

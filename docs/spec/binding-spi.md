@@ -205,6 +205,14 @@ Protocol vocabulary and its defaults are Binding-owned. TD semantics, candidate
 selection and handler authority remain outside the Binding. Compilation is pure;
 its output contains no live native resources, credentials or handlers.
 
+Review 08 makes the defining owners explicit: compiler authoring/erasure and
+selected input wrappers move to Planning, resolved views remain TD-owned, and
+runtime program/executor types stay in the Binding's base module. Complete
+pairing is checked by preparation composition over the actual runtime registration;
+an execution-only Core registration does not retain a compiler or depend on TD.
+The [candidate dependency graph](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary)
+replaces Core -> TD rather than adding TD -> Core alongside it.
+
 Delete exact-type admission, private Consumer adapter eligibility and the
 source-known `ConsumerCompilerSupport` descriptor from the required path. Remove
 `ResolvedTargetCompiler` as Core's mandatory lowering; retire it or retain a
@@ -239,10 +247,15 @@ wrapper, identity, lease and cleanup destination throughout.
 Servient atomically publishes complete local dispatch authority after coverage
 and capacity checks, and closes it before draining. Bindings may progress
 bounded native ingress/control traffic before publication but may not dispatch
-handlers. A registration/session driver may multiplex endpoints and return
-route-attributed semantic events with owned reply opportunities. Native shared
-sessions have explicit last-user/callback retirement; one route's cancellation
-cannot retire a sibling's resources. Consumer calls retain owned progress,
+handlers. A registration/session driver may match native observations against
+Engine-installed registrations and surface zero/many generation-pinned candidates
+with captures. Native matching stays Binding-owned; Engine validates each target's
+publication, current authorization and delivery capacity before lending a scoped
+permit. Equality-key lookup is an exclusive-unicast adapter, not a universal
+cardinality rule. Deferred candidates cannot retarget after route reuse. Native
+shared sessions have explicit last-user/callback retirement; polling does not
+grant retirement-initiation authority. One route's cancellation cannot retire
+a sibling's resources. Consumer calls retain owned progress,
 first-cause cancellation, late-result validation and terminal disposal. Protocol
 I/O and correlation remain Binding-owned; selection, authorization and dispatch
 remain engine-owned.
@@ -1372,9 +1385,10 @@ observable as pending cleanup.
 
 ## Host Producer endpoint contract
 
-The [Host HTTP Producer admission candidate](../work-packages/WP-600-http-producer-property-read.md)
-proposes this replacement for the Host Producer Property Read path, pending
-independent ADR-0013 admission. It supersedes public Host phase-specific setup,
+The accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
+selects this replacement for the Host Producer Property Read path within its
+recorded ADR-0013 scope. Production implementation remains outstanding. It
+supersedes public Host phase-specific setup,
 readiness, activation, commit and their recovery families **on that path only**.
 The older sections below remain the implemented/static and historical evidence
 contract, not an alternative fallback for new Host exposure.
@@ -2316,6 +2330,82 @@ Zero never means unbounded. A disabled capability cannot be started. A
 declaration or actual footprint overrun is a binding contract violation and is
 reported before accepting new work where possible; already accepted ownership
 still follows cleanup and residual rules.
+
+## Proposed role and infrastructure amendment (Review 08)
+
+**Non-normative proposal; current registration, disposal and accepted Host
+Producer contracts remain active.** [Review 08](../reviews/review-08-integrated-architecture-reassessment.md#infrastructure-ownership-and-resource-policy)
+recommends role-specific execution contracts over compatible native programs,
+with optional preparation facets and generic pairing. `Copy`, one atomic compile
+callback and per-exposure listener ownership would remain adapter limits, rather
+than universal Binding eligibility. The accepted single-driver Host Producer
+scope does not already provide this generalization.
+
+Calls and route drivers would be able to retain leases into separately owned
+Binding infrastructure. Logical Things/subscriptions, programs, broker
+registrations, connections and listeners need not have equal counts. Independent
+logical stop releases its participation; it cannot close infrastructure used by
+another role/instance. One actual physical owner funds shared backing, with
+separately bounded references and last-user retirement including jobs/callbacks.
+This selects no universal Engine session manager or allocator.
+
+The [constructed shared-Producer boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
+separates native infrastructure progress from route-scoped semantic acceptance.
+The Engine owns logical registration/generation -> handler indexing, current
+authorization and publication. Binding-owned native matching over Engine-installed
+selectors produces zero/many candidates, each carrying the exact read-only
+issuer/registration/generation token, bounded captures and packet ownership.
+Engine neither decodes patterns nor derives recipient count from native packet
+count. Each candidate independently needs current publication/authorization,
+recipient capacity and a scoped permit. Identical or overlapping native filters
+may retain separate logical owners; an exclusive endpoint adapter still rejects
+collisions. A fan-out event does not duplicate a one-shot response opportunity.
+
+Shared immutable packet backing is charged once, with bounded work, candidates,
+captures and references; exhaustion has an explicit disposition rather than
+silent recipient truncation. Each accepted recipient retains its own event and
+delivery capacity. Rejection, cancellation or saturation of A preserves B's
+eligibility. Deferred candidates keep their original token/captures and cannot
+retarget to replacements. Independent close revokes the Engine record before
+removing that exact native logical registration, without removing siblings of
+the same filter. Accepted work retains its original handler/program/native
+leases; protocol acknowledgement/correlation remains at its actual native owner.
+
+Last-route close starts retirement but is insufficient for completion: pending
+observations, replies and jobs/callbacks remain native users. One physical owner
+and funded close destination survive Pending/error until final retirement; inert
+root references are not users or shutdown authority. Only the final logical
+route/registration release initiates ordinary retirement internally. An early
+retirement poll preserves active ingress and attachment; polling progresses an already initiated
+close. Whole-infrastructure shutdown would require separate authority to first
+revoke/drain all dependents; no such shortcut is selected here.
+
+The UDP sketch exercises early-poll/sibling I/O and final observation/reply/job
+drain. The separate decoded-packet matcher exercises overlapping/identical filters,
+shared data, per-recipient delivery bounds and stale/foreign candidate rejection.
+It is no MQTT SDK, broker/QoS or long-lived WoT proof. The native callback token
+is a lifetime model, not an async SDK qualification.
+
+Permit-gated semantic acceptance and handler dispatch can coexist with bounded
+native I/O/buffering outside a route poll. A Binding still receives no direct
+handler-dispatch capability. Installation/close state retains every partial
+owner. Call settlement, lease release, infrastructure retirement and executor
+shutdown remain distinct observable boundaries. Pending/failed asynchronous
+retirement retains its addressable owner; root loss needs qualified local
+disposal or an acknowledged successor. Residual status cannot release surviving
+local resources or claim remote rollback.
+
+Generalize ADR-0023's ownership-scoped policy across roles without omitting
+Engine-held native/indirect backing or weakening stronger static profiles.
+Binding-native limits and deployment OOM/runtime failure remain explicit.
+Operation-specific resource variants are candidates for replacement by coherent
+policy axes, not permission to relabel existing strict/Consumer declarations.
+Applicable profiles must qualify their actual storage, progress and disposal.
+
+Any revision needs compatible Planning/Servient, API, state, resource and scope
+projections plus actual shared-infrastructure I/O and retirement evidence. The
+current lack of asynchronous registration retirement is a supported-SDK limit,
+not proof that every SDK should meet synchronous final-root retirement.
 
 ## Wake, deadlines, and fairness
 

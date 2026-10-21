@@ -4,6 +4,12 @@ ADR-0023's accepted [Consumer resource migration](../spec/consumer-resource-owne
 specifies the registration/resource/disposal delta for the admitted successor.
 Existing strict registrations retain their current contracts.
 
+[Review 08](../reviews/review-08-integrated-architecture-reassessment.md) proposes
+an integrated revision beyond the accepted scoped migrations. Its
+[role/infrastructure amendment](../spec/binding-spi.md#proposed-role-and-infrastructure-amendment-review-08)
+is non-normative review material. It neither activates a universal replacement
+SPI nor generalizes the accepted HTTP Producer limits to other roles/platforms.
+
 ## V1 integration model
 
 A Protocol Binding is an ordinary Rust crate compiled into the application or
@@ -312,9 +318,9 @@ source.
 
 ## Host Producer admission subset
 
-The [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
-proposes the [retained endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
+The accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
+selects the [retained endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
 in place of Host Property Read public phase families. Paired native compilation,
 Engine publication/dispatch, borrowed acceptance permits and retained close
 ownership are the boundary. Other roles/representations remain separate; the
-candidate neither activates code nor proves general protocol neutrality.
+admission does not itself implement code or prove general protocol neutrality.

@@ -190,8 +190,40 @@ bytes after reclamation.
 
 ## Host Producer admission subset
 
-The [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
-proposes the [single-entry Planning contract](../spec/planning.md#host-producer-property-read-entry)
+The accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
+selects the [single-entry Planning contract](../spec/planning.md#host-producer-property-read-entry)
 for its immutable one-instance scope. This replaces mandatory persistent logical
-plans and independently versioned plan-set ownership only in that scope, after
-independent admission. Other scopes and old evidence keep their stated limits.
+plans and independently versioned plan-set ownership only in that admitted
+scope. Production implementation remains outstanding. Other scopes and old
+evidence keep their stated limits.
+
+## Proposed program and instance lifetimes (Review 08)
+
+**Non-normative proposal; no generalization of the accepted Host subset is
+activated here.** [Review 08](../reviews/review-08-integrated-architecture-reassessment.md#programs-instance-context-and-live-authority)
+recommends distinguishing immutable program content, checked instance operands,
+current execution authority and live protocol infrastructure. A generation-bearing
+entry can reference separately owned immutable content; a generation is not a
+content-equivalence key. Closing one instance cannot reclaim another's data or
+native service, and shared backing has one funded physical owner.
+
+A Plan Set remains a useful collection. Its independent epoch/lifecycle would
+be required only when independently replaceable or retained sets need it;
+otherwise one instance owner suffices. A shared program lifetime remains
+distinct. Source id and Property spelling are provenance/lookup facts, not
+authority. The current separate generations and exact reference checks remain
+binding until an accepted migration replaces them.
+
+Explicit definition preparation plus checked instance binding is the first
+proposed reuse capability. It requires no cache, VM, persistence or general
+parameterization. Content equivalence and operand dependencies need evidence;
+source-input validation and instance admission still scale with their inputs.
+The [constructed boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-definition-and-instance-boundary)
+adds an explicit `bind(program, resolved_instance)` operation that does not invoke
+definition compilation. Common/native dependency and compiler/runtime policy
+changes refuse before effects; current instance authorization is separate.
+The definition's backing/account owner survives independently of the first
+instance, and each accepted call retains the data it can still access. Last-user
+program reclamation and native retirement are distinct. The sketch proves drop
+ordering, not production funding. Planning owns the corresponding
+[proposed construction amendment](../spec/planning.md#proposed-program-and-compilation-amendment-review-08).

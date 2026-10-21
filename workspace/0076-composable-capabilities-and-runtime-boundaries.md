@@ -2,6 +2,14 @@
 
 Status: DISCUSSING
 
+[Review 08](../docs/reviews/review-08-integrated-architecture-reassessment.md)
+provides the completed integrated reassessment at `700cfdb1`, including current
+dependency and non-atomic-target counterexamples. It recommends separating
+preparation/execution and infrastructure ownership, preferring a slimmed Core
+before adding a Contracts crate or Host/embedded package split. This is a new
+proposal for direction review, not migration or acceptance of the historical
+candidate below. The accepted bounded work retains its original scope.
+
 ## First production binding and environment decision migrated
 
 The bounded reassessment of first-binding priority, Host allocation failure and

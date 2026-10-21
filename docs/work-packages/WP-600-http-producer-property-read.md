@@ -184,6 +184,39 @@ accounts retained through that destruction. No network wait,
 blocking join or unowned task tail. Socket retirement is a local certificate,
 never proof that a peer observed nothing.
 
+## Review 08: proposed architectural amendment
+
+[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#reassessment-of-the-accepted-http-producer-admission)
+preserves the value of whole-description coverage, a source-free entry, one
+retained setup/close owner and Servient publication/permits. It recommends
+revising the generalization boundary before execution follows that direction:
+owned programs/program references beyond `Copy`, independent preparation and
+driver construction, shared native infrastructure leases, common Host/static
+semantics and consistent optional-id/Property-key handling across roles.
+
+The reworked candidate now demonstrates the
+[definition/bind boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-definition-and-instance-boundary)
+and [shared Producer topology](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary).
+It places preparation contracts in Planning and resolved input views in TD,
+with no TD dependency in execution-only Core. It requires one reusable program
+owner independent of instance accounts, actual compiler/runtime policy checks,
+and separately owned native progress/retirement. Multiple route leases preserve
+Engine routing/publication/permits; a route's stop cannot close sibling service.
+The shared-boundary correction permits Binding-owned native matching/captures
+with zero/many independently checked logical recipients; equality remains an
+exclusive-unicast adapter. Only final route participation release initiates ordinary
+retirement, with polling unable to disable a live sibling. The UDP and separate
+decoded-packet matching sketches neither execute this HTTP admission nor qualify
+its SDK/disposal, broker sessions or a long-lived WoT capability.
+
+These are **proposals**, not newly admitted Producer capabilities or exceptions.
+The recorded accepted scope, dependencies, strict limits, six completion keys
+and final-root obligations remain unchanged. The whole-description and actual
+HTTP loop evidence are still outstanding. Independent architectural review must
+settle the proposed scope/contract amendment before source work implements it.
+This adds no package gate, status transition or
+universal shared-session requirement to the current admission.
+
 ## Preconditions and impact
 
 Completed/current `WP-600-HTTP-CONSUMER-PROPERTY-READ` and its indexed transitive

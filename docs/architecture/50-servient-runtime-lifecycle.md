@@ -52,6 +52,50 @@ adapt that kernel; they do not independently compute generation validity,
 terminal class, cleanup ownership, retry classification, or semantic resource
 deltas.
 
+## Proposed instance and infrastructure separation (Review 08)
+
+**Non-normative proposal; the accepted lifecycle rules below remain active.**
+[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#infrastructure-ownership-and-resource-policy)
+recommends keeping instance dispatch/publication and logical operation drain in
+Servient, while calls/routes may lease separately owned protocol infrastructure.
+One instance's closure would retire its rights and participation without closing
+a listener/session that another instance or role uses. Infrastructure retirement
+and executor shutdown would follow their actual owners, not Thing count or a
+semantic result's acknowledgement.
+
+The [constructed shared Producer case](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
+requires native infrastructure progress independent of any one route permit.
+Binding owns native matching/captures over Engine-installed registrations and
+may return zero/many generation-pinned candidates. Servient owns the logical
+registration/generation -> handler index and checks each candidate's exact token,
+current publication/authorization and recipient capacity before lending its
+acceptance permit. Shared packet backing and per-recipient references/deliveries
+are independently bounded. Identical/overlapping filters do not collapse logical
+recipients; equality lookup remains an exclusive-unicast adapter.
+
+Stopping A revokes its gate before removing its exact native registration; B
+remains eligible even with the same filter. Deferred candidates retain their
+original generation/captures; accepted work retains its original handler/data.
+Final route-registration release initiates ordinary native retirement internally.
+Polling has no initiation authority and cannot suppress a live sibling's ingress
+or attachments. A whole-infrastructure shutdown would require separate authority
+to revoke/drain all dependents first. Retirement progress retains the physical
+owner until all route/observation/reply/job users drain. No reference count alone
+substitutes for those boundaries. The UDP and decoded-packet matching probes
+remain separate evidence, not broker or long-lived capability acceptance.
+
+Host and static forms would share lifecycle decisions and checks through common
+kernels/views, with different physical records and progress mechanisms. Fixed
+execution would not require dynamic preparation or an implicit Directory. Any
+removal of independent Plan Set lifetime follows the reviewed capability and
+[proposed program/instance boundary](30-compiled-plan-lifecycle.md#proposed-program-and-instance-lifetimes-review-08),
+with current generation/lease checks retained until deliberate replacement.
+
+No cleanup status substitutes for a live owner, and no asynchronous retirement
+successor is introduced here. Its actual construction, refusal, root-loss,
+funding and terminal evidence must be reviewed with the Binding contract before
+implementation. This proposal does not relax current last-root obligations.
+
 ## Produced Thing lifecycle
 
 ```text
@@ -300,11 +344,11 @@ and machine-readable artifacts before implementation resumes.
 
 ## Host Producer admission subset
 
-For the [Host HTTP Producer candidate](../work-packages/WP-600-http-producer-property-read.md),
+For the accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md),
 Building privately resolves/compiles and checks complete advertised coverage.
 The [endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
 then supplies Installing -> LocallyReady -> Serving -> Closing -> Closed.
 Publication is the existing Engine-only local linearization; Closing disables
-new permits before native teardown. This candidate replaces phase-specific Host
-orchestration only after independent admission; it does not change static
+new permits before native teardown. Its recorded scope replaces phase-specific
+Host orchestration; implementation remains outstanding. It does not change static
 representation or silently broaden earlier gate acceptance.
