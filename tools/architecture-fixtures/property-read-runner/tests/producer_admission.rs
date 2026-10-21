@@ -3,15 +3,15 @@
 #![cfg(feature = "std")]
 
 use clinkz_wot_core::{
-    BindingArtifactCompatibility, BindingCompilerBounds, BindingCompilerExtension,
-    BindingCompilerInput, BindingCompilerStep, CoreResult, HandlerContext, HandlerFootprint,
-    InteractionInput, InteractionOutput, LogicalInteractionPlan, Payload, PlanId,
-    PlanSetGeneration, ReadPropertyHandler, StaticBindingCompilerRegistration, StepStatus,
+    BindingArtifactCompatibility, CoreResult, HandlerContext, HandlerFootprint, InteractionInput,
+    InteractionOutput, LogicalInteractionPlan, Payload, PlanId, PlanSetGeneration,
+    ReadPropertyHandler, StepStatus,
 };
 use clinkz_wot_foundation::{
     GatewayDefaultV1, Generation, SlotIndex, StaticResourceProfile, WorkBudget, WorkClass,
 };
 use clinkz_wot_planning::{PlanBuildInput, PlanBuildStep, PlanCompiler, PropertyReadPlanCompiler};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_property_read_binding_fixture::{
     MockCompiler, host_property_read_fixture, static_property_read_fixture,
 };

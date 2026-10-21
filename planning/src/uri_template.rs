@@ -64,7 +64,7 @@ impl std::error::Error for TemplateExpandError {}
 ///
 /// ```
 /// # use std::collections::BTreeMap;
-/// # use clinkz_wot_protocol_bindings::expand_uri_template;
+/// # use clinkz_wot_planning::expand_uri_template;
 /// let mut vars = BTreeMap::new();
 /// vars.insert("thing".to_string(), "sensor-01".to_string());
 /// vars.insert("prop".to_string(), "temperature".to_string());

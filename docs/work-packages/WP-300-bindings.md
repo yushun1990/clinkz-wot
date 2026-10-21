@@ -424,7 +424,7 @@ Implement the frozen shared binding surface:
 - compiler-extension components from WP-200:
   `HostBindingCompilerRegistration` or
   `StaticBindingCompilerRegistration<B::Compiler>`, together with their
-  Core-owned artifact and compiler values; WP-300 consumes exactly one in a
+  Core runtime artifacts and Planning compiler values; WP-300 consumes exactly one in a
   complete bundle and must not redefine, erase, wrap, or separately implement
   the compiler/artifact SPI;
 - consume the WP-200 `CollectionSubscriptionCapability` unchanged when starting a root collection
@@ -465,8 +465,8 @@ Implement the frozen shared binding surface:
 Implement the frozen contribution and runtime surfaces:
 
 - `ServerFormContributor`, `AffordanceFormRequirement`, `FormContributionContext`,
-  `FormContribution`, `FormContributionCapability`, `EndpointReservationKey`, and
-  `CollisionDomainId`;
+  `FormContribution` and `FormContributionCapability` in Planning's preparation
+  surface; `EndpointReservationKey` and `CollisionDomainId` remain Core runtime values;
 - `SubscriptionState`; the application `Subscription` facade and private `SubscriptionRecord`
   belong to WP-400 Servient;
 - Preserve the orthogonality of `SubscriptionDriverEvent` fields: driver-slot lifecycle follows

@@ -94,7 +94,8 @@ advance the frontier safely.
    independent production-completion evidence preserved. Concrete HTTP SDKs
    have been selected and qualified for this Consumer scope. The existing
    WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
-2. Add the production HTTP Producer route/permit/response path and public
+2. Establish ADR-0024's real Preparation/Execution dependency and ownership
+   boundary, then add the production HTTP Producer route/permit/response path and public
    bidirectional loop, then HTTPS/trust/security evidence before production
    release. Keep this real integration ahead of unrelated broad binding work.
 3. Broaden one-shot Core, Planning, Binding, and Servient capabilities only

@@ -32,31 +32,34 @@ defines contract capture, complete-backing checks and the disposal-policy delta
 only for the admitted successor scope. It grants no eligibility to an existing
 registration or concrete SDK.
 
-`BIND-REG-001`: A Protocol Binding MUST enter one Servient through one complete,
-generation-bearing registration bundle that atomically associates its identity,
-configuration digest, capabilities, compiler extension, execution components,
-form contribution, resource declarations, ingress policy, status policy, and
-supported profile cells. Builder validation MUST reject an incomplete or
-inconsistent bundle before publication. V1 composition is startup-only.
+`BIND-REG-001`: A runtime registration MUST capture immutable identity,
+configuration, capabilities, execution components, resources, ingress/status and
+supported cells. It MUST NOT require TD data, compiler traits or compiler erasure.
+Planning preparation MUST capture and validate the actual paired runtime before
+publication; compiler/executor policy and format must match. Pairing refusal
+returns every original owner without native effects. V1 composition is startup
+only. Successful preparation MAY be consumed into runtime-only registration.
 
-`BIND-ROUTE-001`: Producer execution MUST be engine-orchestrated and
-route-scoped. Prepare, readiness, activation, commit, permit-gated accept,
-abort, shutdown, terminal reporting, and cleanup MUST identify one route
-generation, preserve every guard across fallible transitions, and expose
-exactly one accept poll and waker lease per serving committed route. Successful
-commit MUST return a distinct committed-closed guard and MUST NOT open request
-admission. In the Host representation, prepare creates one Core-owned carrier
-containing the complete `PrepareInput`, immutable lifetime footprint,
-generation identity, and one binding-private erased state allocation. Prepared,
-active, and committed guards are linear stage owners of that same carrier;
-stage succession MUST NOT accept replacement state, extract the state, change
-its concrete type, or drop it before terminal cleanup disposition. Public
-state access MUST be a type-checked shared pinned projection and MUST NOT expose
-`&mut S` or `Pin<&mut S>` for the complete state value. Accept polling MUST
-receive only a shared borrow of the committed guard and MUST NOT expose mutable
-whole-guard authority. A binding MUST NOT
-receive an application dispatch capability, call a handler from hidden work,
-or observe the Servient registry.
+`BIND-ROUTE-001`: Engine owns logical registrations, generation-to-handler lookup,
+current authorization, publication and independent bounded per-recipient
+acceptance. Binding owns native setup, matching/captures, I/O and infrastructure
+progress. Native matching MAY yield zero/many generation-pinned candidates,
+including overlapping/identical filters with separate logical recipients. Deferred
+candidates MUST NOT retarget; accepted work retains original handler/data.
+Each semantic acceptance requires current Engine authority and a short,
+nonretained permit. Binding MUST NOT receive dispatch/registry authority or call
+handlers from native callbacks. A stopped route cannot stop sibling progress.
+Final route-registration participation release initiates ordinary retirement;
+owner polling only progresses retirement already initiated. Jobs/replies retain
+the physical close owner through final drain. Whole-infrastructure shutdown
+requires separate revoke/drain authority.
+
+The existing exclusive route adapter retains its linear prepared/active/committed
+carrier, original input, footprint, generation, shared pinned state projection,
+closed commit and shared guard borrow until terminal cleanup. These protect the
+implemented adapter; they are not mandatory public native setup phases or a
+one-route/one-listener rule for the successor Producer. Equality matching is an
+exclusive-unicast subset, not the general native matching contract.
 
 `BIND-STORAGE-001`: A constrained binding MUST expose associated protocol state
 types and their maximum size, alignment, lifetime, and drop contract so the
@@ -170,112 +173,35 @@ All binding, provider, codec, contributor, and application callbacks run outside
 engine locks and constrained critical sections. Returning `Pending` never gives
 permission to detach semantic ownership into an unregistered task.
 
-## Proposed open lowering and execution boundary
+<a id="proposed-open-lowering-and-execution-boundary"></a>
+## Preparation and runtime registration
 
-This section records the replacement proposal in
-[0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution)
-for independent architecture review. It does not activate a new SPI or admit
-production edits outside the [Host compilation subset](#host-semantic-consumer-compilation).
-The detailed contracts below retain their stated representation scopes. Retaining them during review is not
-an architectural recommendation to preserve them.
+ADR-0024 adopts the owner boundary. Public compiler traits, selected-coordinate
+inputs, bounds/jobs/outcomes and compiler erasure live in Planning. TD owns the
+resolved semantic data they borrow. Native program/state types live in Binding
+runtime modules. Core owns completed artifact storage, executor traits and runtime
+registrations, with no TD/compiler dependency or upward compatibility export.
 
-**Target:** a third party can supply both lowering and execution for an already
-supported WoT capability through public generic contracts, without a protocol
-case, compiler whitelist entry or native lifecycle branch in Core, Planning or
-Servient. New wire instructions for an existing operation do not by themselves
-constitute a new engine semantic capability. A healthy supported mapping must
-complete; a restriction that rejects all such Forms does not satisfy the target.
+`PrepareClientBinding` / `PrepareServerBinding` are Planning-only static pairing
+facets over Core executors' `Artifact`. `StaticBindingPreparation` and
+`StaticConsumerBindingPreparation` pair typed compilers with validated Core
+registrations. Host preparation owners pair erased compilers and actual erased
+executors. Refusal preserves both original owners before effects. Preparation
+can be consumed via `into_execution`; the returned Core registration retains no
+compiler. Mutable whole-registration replacement is not exposed while paired.
 
-The legacy/static Consumer path fails that target. The Host semantic subset
-below replaces its required closed lowering for bounded atomic inline artifacts;
-it does not satisfy general owned/resumable compiler openness or the remaining
-endpoint/lifecycle migration. Static capture checks the actual
-`ResolvedTargetCompiler` type; Host capture requires its private supported
-adapter, rejecting generic erasure of even the same compiler. Planning's
-registration trait is sealed around checked complete owners. Producer compiler
-authoring is open, but its logical input discards necessary source distinctions
-and its public entry lacks whole-draft coverage. These are defects/restrictions
-to replace, not the definition of protocol independence.
-
-Select public role-specific compiler/executor contracts paired by a complete
-registration, with native associated artifact/state types and generic storage
-adapters. A compiler receives the bounded resolved semantic/source/context view
-specified in [Planning](planning.md#proposed-replacement-of-the-compilation-boundary).
-Protocol vocabulary and its defaults are Binding-owned. TD semantics, candidate
-selection and handler authority remain outside the Binding. Compilation is pure;
-its output contains no live native resources, credentials or handlers.
-
-Review 08 makes the defining owners explicit: compiler authoring/erasure and
-selected input wrappers move to Planning, resolved views remain TD-owned, and
-runtime program/executor types stay in the Binding's base module. Complete
-pairing is checked by preparation composition over the actual runtime registration;
-an execution-only Core registration does not retain a compiler or depend on TD.
-The [candidate dependency graph](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary)
-replaces Core -> TD rather than adding TD -> Core alongside it.
-
-Delete exact-type admission, private Consumer adapter eligibility and the
-source-known `ConsumerCompilerSupport` descriptor from the required path. Remove
-`ResolvedTargetCompiler` as Core's mandatory lowering; retire it or retain a
-literal-target helper only as optional Binding support. No compatibility marker,
-self-reported cost, or application assertion certifies conformance.
-
-Derive actual slot Layout/alignment and erasure overhead from generic concrete
-types. Supply explicit budgets and controlled storage during construction,
-progress and rollback, including work that today's unbudgeted bounds/start/abort
-callbacks perform. A Host adapter owns the complete typed compile job across
-Pending, failure and completion, retaining partial output on allocation refusal.
-Static composition admits independently authored compilers and application-owned
-enums with inline storage and no mandatory atomics. Neither path needs a
-Core-maintained list of implementations or a Binding-authored unsafe cast.
-
-Bounded callback/destructor behavior is an externally qualifiable conformance
-obligation of trusted linked code. The application can select a conforming
-third-party implementation without a Core source change or centrally issued
-support token. Engine-owned storage and provenance remain enforced. Types and
-numeric declarations cannot prove arbitrary native code terminates; a strict
-profile requires evidence for its actual implementation and input bounds. This
-preserves the behavioral guarantee rather than presenting openness as proof.
-
-Replace public prepare/readiness/activate/commit phase families with one owned
-endpoint installation driver. Its semantic lifecycle is Installing ->
-LocallyReady -> Serving -> Closing -> Closed; failed/cancelled installation
-retains the same owner for close. LocallyReady describes readiness to obey the
-local engine gate, not guaranteed remote reachability. Native substates,
-handshakes and partial recovery are Binding-private. The engine retains its
-wrapper, identity, lease and cleanup destination throughout.
-
-Servient atomically publishes complete local dispatch authority after coverage
-and capacity checks, and closes it before draining. Bindings may progress
-bounded native ingress/control traffic before publication but may not dispatch
-handlers. A registration/session driver may match native observations against
-Engine-installed registrations and surface zero/many generation-pinned candidates
-with captures. Native matching stays Binding-owned; Engine validates each target's
-publication, current authorization and delivery capacity before lending a scoped
-permit. Equality-key lookup is an exclusive-unicast adapter, not a universal
-cardinality rule. Deferred candidates cannot retarget after route reuse. Native
-shared sessions have explicit last-user/callback retirement; polling does not
-grant retirement-initiation authority. One route's cancellation cannot retire
-a sibling's resources. Consumer calls retain owned progress,
-first-cause cancellation, late-result validation and terminal disposal. Protocol
-I/O and correlation remain Binding-owned; selection, authorization and dispatch
-remain engine-owned.
-
-Stage-specific public owners are replaceable machinery. The essential contract
-is that every accepted resource and uncertain effect retains an accountable owner
-through failure, cancellation, transfer and retirement. Cleanup capacity must be
-funded before effects; Drop, timeout or a residual record cannot discharge live
-local work. Ownership-scoped resource policy applies to compiler carriers as well
-as runtime state. Host and static representations may differ physically.
-
-This proposal requires cross-domain authority, API/resource/state and work-package
-migration plus independent evidence before replacement source work. It establishes
-neither implemented openness, subscription support nor empirical protocol-shape
-neutrality. The complete alternatives, tradeoffs, rewrite boundary and falsifiers
-remain in 0056; no new topic, gate or production admission is created here.
+The implemented closed-target and atomic inline Host adapters retain their
+narrow resource eligibility. They do not define the general architecture or
+qualify arbitrary owned/resumable Consumer aggregate jobs. Successor Producer
+and reusable lowering must use qualified generic native programs and actual
+policy/dependency checks, without a compiler whitelist or Core protocol cases.
+Callback/destructor conformance remains an evidence obligation; numeric metadata
+or an open trait alone cannot prove it. No broad eligibility or completed shared
+infrastructure claim follows from this extraction.
 
 ## Constructible compiler components
 
-The compiler/artifact SPI is implemented once by WP-200 at the Core owner
+The compiler/artifact SPI is implemented once by WP-200 at the Planning owner
 specified in `docs/spec/planning.md`. This specification consumes, but does not
 redefine, that contract.
 
@@ -337,7 +263,7 @@ Consumer compilation remains unfinished; the request/reply fixture does not prov
 that target. Removing `Copy` alone would not supply retained-memory accounting,
 cleanup funding or resumable progress for that path.
 
-Core derives cursor/output/adapter/slot Layouts
+Planning derives cursor/output/adapter/slot Layouts
 from the actual Rust types, acquires the slot before native start, and keeps it
 through completion/failure. Native callback work is prepaid in `BindingPolls`;
 the HTTP implementation uses one atomic callback unit over its declared finite
@@ -410,9 +336,9 @@ Consumer lowering primitive, not arbitrary protocol compilers or Producer
 compilation.
 
 `ConsumerCompilerRegistration<R>` owns the original complete registration and
-its private support descriptor. Only Core can construct it, by consuming a
-validated complete Consumer-capable registration. Static capture checks the
-actual compiler type and configuration; Host capture requires Core's private
+its private support descriptor. Only Planning can construct it, by consuming a
+validated complete Consumer-capable preparation registration. Static capture checks the
+actual compiler type and configuration; Host capture requires Planning's private
 supported adapter kind and that same configuration. An ordinary generic Host
 adapter remains ineligible even when it wraps `ResolvedTargetCompiler`. Every
 registration identity field is preserved. Rejection returns the unchanged
@@ -426,7 +352,7 @@ impl ResolvedTargetCompiler {
     pub fn try_new(capacity: usize) -> CoreResult<Self>;
     pub fn configuration(&self) -> BindingConfigurationDigest;
 }
-impl<B: PollServerBinding> StaticBindingRegistration<B>
+impl<B: PollServerBinding> StaticBindingPreparation<B>
 where B::Compiler: 'static {
     pub fn try_into_consumer_compiler(self)
         -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>;
@@ -437,7 +363,7 @@ impl HostBindingCompilerRegistration {
         -> Result<Self, BindingInputRejection<ResolvedTargetCompiler>>;
 }
 #[cfg(feature = "std")]
-impl HostBindingRegistration {
+impl HostBindingPreparation {
     pub fn try_into_consumer_compiler(self)
         -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>;
 }
@@ -494,8 +420,8 @@ compatibility ID or implementation of an open trait cannot extend this set.
 
 ## Complete registration
 
-The installable units are `HostBindingRegistration` for erased host execution
-and `StaticBindingRegistration<B>` for a constrained binding implementation.
+The installable units are `HostBindingPreparation` for erased host execution
+and `StaticBindingPreparation<B>` for a constrained binding implementation.
 Each bundle contains one immutable registration identity with:
 
 - `BindingId`, `BindingGeneration`, and `BindingConfigurationDigest`;
@@ -596,7 +522,7 @@ Both complete registration representations expose the same keyed capability
 operations:
 
 ```rust
-impl HostBindingRegistration {
+impl HostBindingPreparation {
     pub fn try_with_collection_subscription_capability(
         self,
         operation: Operation,
@@ -609,7 +535,7 @@ impl HostBindingRegistration {
     ) -> Option<CollectionSubscriptionCapability>;
 }
 
-impl<B> StaticBindingRegistration<B> {
+impl<B> StaticBindingPreparation<B> {
     pub fn try_with_collection_subscription_capability(
         self,
         operation: Operation,
@@ -715,7 +641,7 @@ compiler, and server artifact-compatibility values, validate all declarations,
 and perform no protocol side effect. Any rejection returns the complete input:
 
 ```rust
-impl HostBindingRegistrationInput {
+impl HostBindingPreparationInput {
     pub fn new(
         identity: BindingRegistrationIdentity,
         capabilities: BindingRegistrationCapabilities,
@@ -728,16 +654,16 @@ impl HostBindingRegistrationInput {
     ) -> Self;
 }
 
-impl HostBindingRegistration {
+impl HostBindingPreparation {
     pub fn new(
-        input: HostBindingRegistrationInput,
+        input: HostBindingPreparationInput,
     ) -> Result<
         Self,
-        BindingInputRejection<HostBindingRegistrationInput>,
+        BindingInputRejection<HostBindingPreparationInput>,
     >;
 }
 
-impl<B> StaticBindingRegistrationInput<B>
+impl<B> StaticBindingPreparationInput<B>
 where
     B: PollServerBinding,
 {
@@ -753,15 +679,15 @@ where
     ) -> Self;
 }
 
-impl<B> StaticBindingRegistration<B>
+impl<B> StaticBindingPreparation<B>
 where
     B: PollServerBinding,
 {
     pub fn new(
-        input: StaticBindingRegistrationInput<B>,
+        input: StaticBindingPreparationInput<B>,
     ) -> Result<
         Self,
-        BindingInputRejection<StaticBindingRegistrationInput<B>>,
+        BindingInputRejection<StaticBindingPreparationInput<B>>,
     >;
 }
 ```
@@ -786,7 +712,7 @@ pending or later lifecycle method receives or may retain the artifact borrow:
 
 ```rust
 pub trait PollServerBinding {
-    type Compiler: BindingCompilerExtension;
+    type Artifact;
     type RouteState;
     type ReadinessState;
     type ResponseState;
@@ -800,7 +726,7 @@ pub trait PollServerBinding {
         &mut self,
         input: PrepareInput,
         artifact: &BindingArtifactEnvelope<
-            <Self::Compiler as BindingCompilerExtension>::Artifact,
+            Self::Artifact,
         >,
         route: &mut ServerRouteSlot<Self::RouteState>,
         budget: &mut WorkBudget,
@@ -1385,109 +1311,35 @@ observable as pending cleanup.
 
 ## Host Producer endpoint contract
 
-The accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
-selects this replacement for the Host Producer Property Read path within its
-recorded ADR-0013 scope. Production implementation remains outstanding. It
-supersedes public Host phase-specific setup,
-readiness, activation, commit and their recovery families **on that path only**.
-The older sections below remain the implemented/static and historical evidence
-contract, not an alternative fallback for new Host exposure.
+The successor Producer uses the preparation/runtime separation in ADR-0024.
+Planning owns semantic selection/coverage and open pure lowering. The Binding
+runtime defines owned native programs and checked operands. Core supplies
+source-free entry/identity and execution/cleanup values. A Producer registration
+must not require `Artifact: Copy`, atomic lowering, a compiler retained by its
+executor, dummy Consumer components or public prepared/active/committed native
+setup phases. An inline compiler remains a qualified subset only.
 
-`HostProducerBinding` is a public, independently implementable Producer-only
-paired contract. It has associated `Artifact: Copy + Send + Sync + 'static` and
-`Driver: ProducerEndpointDriver`, immutable configuration/capability/resource
-metadata, a fixed bounded `COMPILE_WORK`, pure `compile(ResolvedProducerInput)`
-and pure recoverable `create_driver(ProducerInstallInput<Artifact>)`. Producer
-registration requires neither a dummy client nor a Consumer support token.
-`HostBindingRegistrationInput::try_producer` captures that pair through generic
-Core erasure, actual Layout/alignment and one immutable registration identity.
-Constructor allocation refusal returns original author input. No native effect
-is permitted during bounds, compile, registration or driver construction.
-The first native effect belongs to a funded install poll. Inline atomic Producer
-artifacts do not reopen general owned/resumable Consumer admission.
+A funded immutable entry and instance context permit Binding-owned installation.
+The installation owner retains all partial setup and response obligations across
+Pending/failure/cancel/transfer. Servient publishes only after whole-description
+coverage, capacity and readiness; publication runs no fallible Binding callback.
+Native infrastructure may be separately shared. Logical permits do not confer
+physical shutdown authority. Native progress cannot synchronously await Engine
+dispatch or hold a handler; response opportunities retain their generation and
+original destination until settled/disposed.
 
-`ProducerInstallInput<A>` moves the immutable native artifact and exact captured
-route/registration/instance authority into its single driver owner. The wrapper
-prevents replacement/downcast substitution and pairs every response opportunity
-with that route. Generic concrete Layouts plus wrapper/indirect backing and
-construction overlap determine funding; a numeric self-report is not proof of
-callback termination or an exemption from executable qualification.
+First cause, closed ingress before publication/after cancellation, late results,
+complete-object transfer refusal, bounded progress and truthful terminal closure
+remain mandatory. Loss of an instance owner cannot free sibling program or
+infrastructure storage. Engine-controlled and Binding-owned backing are separately
+funded under their declared resource/disposal contracts; polling cannot initiate
+ordinary shared retirement before final registration release.
 
-`ProducerEndpointDriver` has bounded pinned mutable polling operations:
-
-| Operation | Contract |
-| --- | --- |
-| `poll_install(cx, budget) -> Poll<CoreResult<()>>` | Installing to LocallyReady. Pending or Err retains the same driver and every partial resource. Err starts close, never consumes the owner. No request/event/handler acceptance. |
-| `poll_accept(permit: RouteActivationPermit, cx, budget) -> Poll<CoreResult<RouteAcceptEvent>>` | Available only while Serving. Consumes one existing short borrowed, non-cloneable permit; returned request owns the existing `RouteResponseOpportunity`. A native service callback cannot invoke application handlers. |
-| `deliver_response(RouteInboundResponse)` | Reuses recoverable owned response-delivery calls: refusal returns the entire response/opportunity; accepted calls retain their generation and native destination through settlement/cancel. |
-| `poll_close(cx, budget) -> Poll<CoreResult<()>>` | Closing from any nonterminal state. Pending/Err retains the same driver; only Ok certifies no live local listener, socket, native future or driver-owned callback obligation. Transfer uses an acknowledged complete driver owner; refusal keeps the original. |
-
-Servient records first failure/cancellation/deadline cause outside the driver,
-closes new permits before Closing, and retains the driver until actual close or
-acknowledged transfer. A close error is not authority to drop a live owner.
-Engine cleanup deadlines may report pending/residual state while an addressable
-owner remains. Private native setup substates do not create public stage guards.
-The response call and driver must jointly retain any outstanding connection
-lease; no reference cycle or endpoint drop can orphan a response opportunity.
-
-The semantic lifecycle is `Installing -> LocallyReady -> Serving -> Closing ->
-Closed`, with Installing/LocallyReady failures going to Closing. Local readiness
-means the endpoint can obey the gate, not successful external discovery. Servient
-publishes the immutable entry and registry in one nonfallible transition after
-all coverage/capacity/readiness checks; no Binding callback runs at publication.
-It mints existing borrowed route permits from private generation authority.
-Readiness/commit do not replace the permit. Late events cannot reopen that gate.
-
-`BindingResourceContract::ProducerOwnedHostV2` is the Host Producer interpretation
-of ADR-0023 ownership: original Engine accounts fund actual controlled backing
-until release; Binding-private SDK policy/growth/disposal and deployment baseline
-are explicit separate owners. Existing schema-2 fields/default limits are reused,
-not relaxed. No Consumer-only admission validator, output seal or StrictV1
-transitive maximum is relabeled. Controlled construction and cleanup/status
-funding precede effects; finite SDK-local disposal allocations are qualified
-separately. Static/no-std StrictV1 paths retain their own representation and tests.
-
-On final Host root loss there may be no caller to poll close. Therefore this
-first scope admits only drivers whose finite local destruction retires all
-listener/socket/future/callback owners synchronously, without network handshake,
-blocking join, new job or required peer progress. Engine accounts outlive that
-destruction. Ordinary async close may return Pending, but its remaining local
-objects must satisfy the same last-owner rule. An SDK requiring later progress
-is outside this scope until an owned successor is specified and reviewed.
-The ProducerOwnedHostV2 scoped override permits qualified finite SDK-local
-allocation during disposal, including final-root disposal; Engine cancellation,
-status and handoff remain prebacked. The general nonallocating final-root text
-in the shared-infrastructure section does not assert transitive StrictV1 for
-this Producer policy. Actual allocation and local FD retirement must be measured
-before completion; Drop by itself is not evidence of those properties.
-
-The accepted `consumer-ownership-v2.toml` overlay stays Consumer-only. This
-Producer contract reuses ADR-0023's ownership rule and the unchanged numeric
-schema, not Consumer policy identities or automatic role applicability:
-
-| Existing field family | Producer interpretation |
-| --- | --- |
-| admission temporary/peak/largest-allocation, compiled-runtime and engine-live bytes | Actual controlled entry/build/driver/wrapper backing, indirect Engine backing and live overlap; acquire before construction, retain through rollback/release. |
-| host-binding-call bytes and binding-slot-state bytes | Complete erased driver and accepted response-delivery carrier plus Engine-owned backing; no transitive SDK ceiling. No readiness carrier is invented. |
-| binding poll temporary and cancellation buffer bytes | Startup-funded Engine mediation scratch and conservative accepted-owner cancellation allowance; private parser/SDK scratch has a separately qualified policy. |
-| binding ingress items/bytes, in-flight response and handler slot/state counts | Fund before accepting/copying the single native request, creating the unique response opportunity or dispatching the handler. Saturation cannot consume cleanup capacity. |
-| cleanup records/transfer bytes and drain work/deadline limits | Prebacked original-account complete-driver/delivery destination, context and status; rejected transfer retains the original owner; local SDK references stay alive until retired. |
-
-The registration declares one endpoint/connection and fixed request/output byte
-maxima. Target/name/media copies, native reply bridge and response ownership
-must be physically counted once each at their actual owner, including overlap;
-no Consumer result allowance is silently reused. Producer configuration has a
-fresh role/version identity containing those limits, disposal policy, actual
-compiler/driver metadata, listen address and SDK versions/features. The native
-HTTP artifact has Producer-role compatibility distinct from Consumer artifacts;
-old/new, wrong-role and wrong-registration substitution reject before effects.
-Exact encoding bytes/layout results belong to implemented completion evidence.
-
-For the first scope, each endpoint exclusively owns its listener/connection;
-there is no shared session to retire. Registration creates no listener and its
-last root cannot leave a detached worker. Any later shared-listener/session
-extension must define last-user/callback retirement and sibling progress before
-it is admitted. Close never promises to undo remote observations.
+Exact successor Rust driver types are to be implemented with their matching TD
+Producer lending/coverage, not emulated through the old Host stage guards.
+[WP-600](../work-packages/WP-600-http-producer-property-read.md) owns the actual
+HTTP loop and six completion obligations. This extraction implements neither
+that loop nor general shared-native matching/retirement.
 
 ## Server route SPI
 
@@ -1875,7 +1727,7 @@ component, but it is not the installed runtime projection. A validated Host
 bundle exposes instead:
 
 ```rust
-impl HostBindingRegistration {
+impl HostBindingPreparation {
     pub fn start_consumer_property_read(
         &self,
         request: OutboundRequest,
@@ -1939,10 +1791,10 @@ impl<S> StaticConsumerPropertyReadSlot<S> {
     pub const fn is_vacant(&self) -> bool;
 }
 
-impl<S, C> StaticBindingRegistration<StaticBindingComponents<S, C>>
+impl<S, C> StaticBindingPreparation<StaticBindingComponents<S, C>>
 where
     S: PollServerBinding,
-    C: PollClientBinding<Compiler = S::Compiler>,
+    C: PollClientBinding<Artifact = S::Artifact>,
 {
     pub fn start_consumer_property_read(
         &mut self,
@@ -2014,7 +1866,7 @@ The binding maps wire status and metadata; Core then checks the selected call,
 compiled primary Property Read response, and output shape before application
 delivery. Transport success is not automatically WoT success. Protocol retry
 remains binding-local and never reselects a form or repeats application
-behavior. `HostBindingRegistration::client()`,
+behavior. `HostBindingPreparation::client()`,
 `StaticBindingComponents::client()`, and
 `StaticBindingComponents::client_mut()` are removed. The Host `server()` and
 static Producer server projections remain available.
@@ -2331,81 +2183,20 @@ declaration or actual footprint overrun is a binding contract violation and is
 reported before accepting new work where possible; already accepted ownership
 still follows cleanup and residual rules.
 
-## Proposed role and infrastructure amendment (Review 08)
+<a id="proposed-role-and-infrastructure-amendment-review-08"></a>
+## Role and infrastructure boundary
 
-**Non-normative proposal; current registration, disposal and accepted Host
-Producer contracts remain active.** [Review 08](../reviews/review-08-integrated-architecture-reassessment.md#infrastructure-ownership-and-resource-policy)
-recommends role-specific execution contracts over compatible native programs,
-with optional preparation facets and generic pairing. `Copy`, one atomic compile
-callback and per-exposure listener ownership would remain adapter limits, rather
-than universal Binding eligibility. The accepted single-driver Host Producer
-scope does not already provide this generalization.
+The active route requirement above adopts Review 08's separation. Shared packet
+backing has one bounded physical owner; each candidate/delivery/reference has
+separate admitted bounds and independent authorization/cancellation. Binding
+owns native patterns and captures over Engine-installed logical registrations;
+Engine does not parse protocol filters. Source/generation/configuration checks
+precede effects. Neither sharing nor a numeric format identity grants authority.
 
-Calls and route drivers would be able to retain leases into separately owned
-Binding infrastructure. Logical Things/subscriptions, programs, broker
-registrations, connections and listeners need not have equal counts. Independent
-logical stop releases its participation; it cannot close infrastructure used by
-another role/instance. One actual physical owner funds shared backing, with
-separately bounded references and last-user retirement including jobs/callbacks.
-This selects no universal Engine session manager or allocator.
-
-The [constructed shared-Producer boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
-separates native infrastructure progress from route-scoped semantic acceptance.
-The Engine owns logical registration/generation -> handler indexing, current
-authorization and publication. Binding-owned native matching over Engine-installed
-selectors produces zero/many candidates, each carrying the exact read-only
-issuer/registration/generation token, bounded captures and packet ownership.
-Engine neither decodes patterns nor derives recipient count from native packet
-count. Each candidate independently needs current publication/authorization,
-recipient capacity and a scoped permit. Identical or overlapping native filters
-may retain separate logical owners; an exclusive endpoint adapter still rejects
-collisions. A fan-out event does not duplicate a one-shot response opportunity.
-
-Shared immutable packet backing is charged once, with bounded work, candidates,
-captures and references; exhaustion has an explicit disposition rather than
-silent recipient truncation. Each accepted recipient retains its own event and
-delivery capacity. Rejection, cancellation or saturation of A preserves B's
-eligibility. Deferred candidates keep their original token/captures and cannot
-retarget to replacements. Independent close revokes the Engine record before
-removing that exact native logical registration, without removing siblings of
-the same filter. Accepted work retains its original handler/program/native
-leases; protocol acknowledgement/correlation remains at its actual native owner.
-
-Last-route close starts retirement but is insufficient for completion: pending
-observations, replies and jobs/callbacks remain native users. One physical owner
-and funded close destination survive Pending/error until final retirement; inert
-root references are not users or shutdown authority. Only the final logical
-route/registration release initiates ordinary retirement internally. An early
-retirement poll preserves active ingress and attachment; polling progresses an already initiated
-close. Whole-infrastructure shutdown would require separate authority to first
-revoke/drain all dependents; no such shortcut is selected here.
-
-The UDP sketch exercises early-poll/sibling I/O and final observation/reply/job
-drain. The separate decoded-packet matcher exercises overlapping/identical filters,
-shared data, per-recipient delivery bounds and stale/foreign candidate rejection.
-It is no MQTT SDK, broker/QoS or long-lived WoT proof. The native callback token
-is a lifetime model, not an async SDK qualification.
-
-Permit-gated semantic acceptance and handler dispatch can coexist with bounded
-native I/O/buffering outside a route poll. A Binding still receives no direct
-handler-dispatch capability. Installation/close state retains every partial
-owner. Call settlement, lease release, infrastructure retirement and executor
-shutdown remain distinct observable boundaries. Pending/failed asynchronous
-retirement retains its addressable owner; root loss needs qualified local
-disposal or an acknowledged successor. Residual status cannot release surviving
-local resources or claim remote rollback.
-
-Generalize ADR-0023's ownership-scoped policy across roles without omitting
-Engine-held native/indirect backing or weakening stronger static profiles.
-Binding-native limits and deployment OOM/runtime failure remain explicit.
-Operation-specific resource variants are candidates for replacement by coherent
-policy axes, not permission to relabel existing strict/Consumer declarations.
-Applicable profiles must qualify their actual storage, progress and disposal.
-
-Any revision needs compatible Planning/Servient, API, state, resource and scope
-projections plus actual shared-infrastructure I/O and retirement evidence. The
-current lack of asynchronous registration retirement is a supported-SDK limit,
-not proof that every SDK should meet synchronous final-root retirement.
+Host and static adapters retain common semantics with distinct storage/progress
+and failure policy. A shared native owner is not an Engine session manager.
+The first production dependency cut supplies no multi-recipient protocol proof;
+reuse and shared async retirement require their actual ownership/resource tests.
 
 ## Wake, deadlines, and fairness
 

@@ -6,6 +6,7 @@ extern crate std;
 use clinkz_wot_consumer_property_read_binding_fixture::StaticClient;
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_servient::consumer_property_read::*;
 use clinkz_wot_td::thing::Thing;
 use core::{
@@ -200,7 +201,7 @@ pub static STATIC_RUNTIME_LAYOUTS: [[usize; 2]; 8] = [
         StaticConsumerPropertyReadSlot<clinkz_wot_consumer_property_read_binding_fixture::State>,
     >(),
     layout::<clinkz_wot_consumer_property_read_binding_fixture::State>(),
-    layout::<ConsumerCompilerRegistration<StaticConsumerBindingRegistration<StaticClient>>>(),
+    layout::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>>(),
     layout::<OutboundRequest>(),
     layout::<CoreResult<InteractionOutput>>(),
     layout::<(

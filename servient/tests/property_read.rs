@@ -2,13 +2,15 @@ mod support;
 
 use core::task::Context;
 
-use clinkz_wot_core::{
-    CoreResult, Deadline, PollServerBinding, ReadPropertyHandler, StaticBindingRegistration,
-    StaticHandlerRegistration, StepStatus, ThingSlotId,
-};
 #[cfg(feature = "std")]
-use clinkz_wot_core::{HandlerFootprint, HostBindingRegistration};
+use clinkz_wot_core::HandlerFootprint;
+use clinkz_wot_core::{
+    CoreResult, Deadline, ReadPropertyHandler, StaticHandlerRegistration, StepStatus, ThingSlotId,
+};
 use clinkz_wot_foundation::{ResourceLimits, WorkBudget};
+#[cfg(feature = "std")]
+use clinkz_wot_planning::HostBindingPreparation;
+use clinkz_wot_planning::StaticBindingPreparation;
 use clinkz_wot_servient::{StaticServient, StaticServientBuilder};
 use clinkz_wot_td::thing::Thing;
 
@@ -20,11 +22,11 @@ pub fn build_static_property_read<'h, B, H>(
     thing_slot: ThingSlotId,
     limits: ResourceLimits,
     deadline: Deadline,
-    binding: StaticBindingRegistration<B>,
+    binding: StaticBindingPreparation<B>,
     handler: StaticHandlerRegistration<'h, H>,
 ) -> CoreResult<impl StaticServient + 'h>
 where
-    B: PollServerBinding + 'h,
+    B: PrepareServerBinding + 'h,
     H: ReadPropertyHandler + 'h,
 {
     StaticServientBuilder::new(td, thing_slot, limits, deadline)
@@ -56,7 +58,7 @@ use clinkz_wot_servient::{ExposedThingHandle, Servient, ServientBuilder, Servien
 #[cfg(feature = "std")]
 pub fn build_host_property_read(
     limits: ResourceLimits,
-    binding: HostBindingRegistration,
+    binding: HostBindingPreparation,
 ) -> ServientResult<Servient> {
     ServientBuilder::new()
         .resource_limits(limits)
@@ -315,3 +317,5 @@ mod tests {
         assert_eq!(probe.artifact_drops(), 1);
     }
 }
+
+use clinkz_wot_planning::PrepareServerBinding;

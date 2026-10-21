@@ -7,7 +7,7 @@ use clinkz_wot_planning::{
 };
 use std::sync::{Mutex, MutexGuard};
 
-type Registration = ConsumerCompilerRegistration<HostConsumerBindingRegistration>;
+type Registration = ConsumerCompilerRegistration<HostConsumerBindingPreparation>;
 #[derive(Clone)]
 struct HostParent(Arc<Mutex<[ResourceAccount; N]>>);
 impl Parent for HostParent {
@@ -1529,7 +1529,7 @@ mod tests {
             Layout::new::<StaticConsumerPropertyReadSlot<State>>(),
             Layout::new::<State>(),
             Layout::new::<
-                ConsumerCompilerRegistration<StaticConsumerBindingRegistration<StaticClient>>,
+                ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>,
             >(),
             Layout::new::<Draft<ResolvedTargetArtifact>>(),
             Layout::new::<Rollback<ResolvedTargetArtifact>>(),

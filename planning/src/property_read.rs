@@ -3,18 +3,20 @@
 use alloc::{boxed::Box, vec};
 use core::convert::TryFrom;
 
+use crate::{
+    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerStep,
+    StaticBindingCompilerRegistration,
+};
+#[cfg(feature = "std")]
+use crate::{HostBindingCompilerCursor, HostBindingCompilerRegistration};
+#[cfg(feature = "std")]
+use clinkz_wot_core::HostBindingArtifact;
 use clinkz_wot_core::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef, BindingArtifactRole,
-    BindingCandidate, BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput,
-    BindingCompilerStep, BindingConfigurationDigest, BindingGeneration, BindingId,
+    BindingCandidate, BindingConfigurationDigest, BindingGeneration, BindingId,
     BindingRegistrationIdentity, CoreError, CoreResult, ErrorContext, ErrorPhase,
-    InteractionOptions, LogicalInteractionPlan, PlanId, RetryClass,
-    StaticBindingCompilerRegistration, ThingId,
-};
-#[cfg(feature = "std")]
-use clinkz_wot_core::{
-    HostBindingArtifact, HostBindingCompilerCursor, HostBindingCompilerRegistration,
+    InteractionOptions, LogicalInteractionPlan, PlanId, RetryClass, ThingId,
 };
 use clinkz_wot_foundation::{SlotIndex, WorkBudget, WorkClass};
 use clinkz_wot_td::{
@@ -148,7 +150,7 @@ enum PropertyReadBuildState<C, A> {
 /// state.
 ///
 /// ```compile_fail
-/// use clinkz_wot_planning::PropertyReadBuildCursor;
+/// use crate::PropertyReadBuildCursor;
 /// fn inspect<C, A>(cursor: PropertyReadBuildCursor<C, A>) {
 ///     let _ = cursor.state;
 /// }
@@ -732,11 +734,12 @@ fn compiler_contract_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::BindingCompilerOutput;
     use clinkz_wot_core::binding::BindingRouteKey;
     use clinkz_wot_core::{
-        BindingCompilerOutput, BindingLifetimeFootprint, BindingRegistrationIdentity,
-        CollisionDomainId, EndpointReservationKey, InteractionOptions, Payload, PlanSetGeneration,
-        PrepareInput, RouteReservationIdentity, SelectionFailureReason,
+        BindingLifetimeFootprint, BindingRegistrationIdentity, CollisionDomainId,
+        EndpointReservationKey, InteractionOptions, Payload, PlanSetGeneration, PrepareInput,
+        RouteReservationIdentity, SelectionFailureReason,
     };
     use clinkz_wot_foundation::Generation;
     use clinkz_wot_td::{

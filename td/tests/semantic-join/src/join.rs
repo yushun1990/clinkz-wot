@@ -1,11 +1,13 @@
 use alloc::{alloc::alloc, boxed::Box};
 use clinkz_wot_core::{
     BindingArtifactEnvelope, BindingArtifactIdentity, BindingArtifactRole, BindingCandidate,
-    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerStep,
     LogicalInteractionPlan, PlanId, PlanSetGeneration, ThingId,
 };
 use clinkz_wot_foundation::{
     AdmissionLedger, Generation, ResourceKind, SlotIndex, WorkBudget, WorkClass as W,
+};
+use clinkz_wot_planning::{
+    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerStep,
 };
 use clinkz_wot_property_read_binding_fixture::{MockArtifact, MockCompiler, MockCompilerCursor};
 use clinkz_wot_td::{

@@ -2,7 +2,7 @@
 
 use alloc::boxed::Box;
 
-use clinkz_wot_td::data_type::Operation;
+use crate::Operation;
 
 use crate::{
     BindingConfigurationDigest, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,

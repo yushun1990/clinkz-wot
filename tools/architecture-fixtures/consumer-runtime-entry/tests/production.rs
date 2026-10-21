@@ -9,6 +9,7 @@ use clinkz_wot_foundation::{
     StaticResourceProfile, WorkBudget, WorkClass as W,
 };
 use clinkz_wot_planning::*;
+use clinkz_wot_planning::*;
 use clinkz_wot_td::{
     ValidatedThing, ValidatedThingAdmissionConfig, ValidatedThingCursor, ValidatedThingProgress,
     thing::Thing,
@@ -974,8 +975,8 @@ fn static_client_only_aggregate_executes_after_source_destruction_and_explicitly
     assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
     println!(
         "static: registration={:?}, checked={:?}, slot={:?}, raw_state={:?}, retained_output={}, output_peak={}, largest={}, requests={}",
-        Layout::new::<StaticConsumerBindingRegistration<Client>>(),
-        Layout::new::<ConsumerCompilerRegistration<StaticConsumerBindingRegistration<Client>>>(),
+        Layout::new::<StaticConsumerBindingPreparation<Client>>(),
+        Layout::new::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>(),
         Layout::new::<StaticConsumerPropertyReadSlot<State>>(),
         Layout::new::<State>(),
         memory.live,
@@ -1077,8 +1078,8 @@ fn host_client_only_aggregate_executes_after_source_destruction_and_explicitly_r
     assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
     println!(
         "Host: registration={:?}, checked={:?}, client={:?}, adapter={:?}, provisioning_bytes={}, output_bytes={}, output_peak={}, largest={}, requests={}",
-        Layout::new::<HostConsumerBindingRegistration>(),
-        Layout::new::<ConsumerCompilerRegistration<HostConsumerBindingRegistration>>(),
+        Layout::new::<HostConsumerBindingPreparation>(),
+        Layout::new::<ConsumerCompilerRegistration<HostConsumerBindingPreparation>>(),
         Layout::new::<Client>(),
         Layout::new::<ResolvedTargetCompiler>(),
         provision.live,

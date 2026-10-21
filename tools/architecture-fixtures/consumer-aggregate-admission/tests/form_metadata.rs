@@ -1,14 +1,14 @@
 //! Production paid TD facts and closed compiler eligibility, without HTTP I/O.
 use clinkz_wot_core::{
-    BindingArtifactRole, BindingCandidate, BindingCompilerExtension, BindingCompilerInput,
-    BindingConfigurationDigest, BindingGeneration, BindingId, BindingResourceContract,
-    ConsumerBindingConfiguration, CoreError, LogicalInteractionPlan, PlanId,
-    ResolvedTargetCompiler, ThingId,
+    BindingArtifactRole, BindingCandidate, BindingConfigurationDigest, BindingGeneration,
+    BindingId, BindingResourceContract, ConsumerBindingConfiguration, CoreError,
+    LogicalInteractionPlan, PlanId, ThingId,
 };
 use clinkz_wot_foundation::{
     AdmissionLedger, GatewayDefaultV1, Generation, SlotIndex, StaticResourceProfile, WorkBudget,
     WorkClass as W,
 };
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_td::{
     ValidatedPropertyReadEvent as Event, ValidatedPropertyReadStep as Step,
     ValidatedThingAdmissionConfig, ValidatedThingCursor, ValidatedThingProgress as Progress,

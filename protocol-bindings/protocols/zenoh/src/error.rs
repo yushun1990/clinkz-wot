@@ -1,7 +1,7 @@
 use alloc::string::String;
 use core::fmt;
 
-use clinkz_wot_protocol_bindings::BindingError;
+use clinkz_wot_planning::BindingError;
 use clinkz_wot_td::data_type::ResolveFormHrefError;
 
 /// Result type used by the zenoh protocol binding.

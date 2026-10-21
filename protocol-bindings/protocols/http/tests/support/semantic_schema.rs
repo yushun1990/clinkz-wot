@@ -308,7 +308,7 @@ mod standard_schema {
                 let compiled = Arc::new(AtomicUsize::new(0));
                 let config = ConsumerBindingConfiguration::for_semantic_host(64, BindingConfigurationDigest::new([93;32]), COMPAT,4096,16).unwrap();
                 let compiler = HostBindingCompilerRegistration::try_new_semantic(SchemaCompiler { base:Compiler { config, compiled:compiled.clone() }, security_seen:security_seen.clone() }).unwrap_or_else(|_| panic!("capture"));
-                let owner = HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+                let owner = HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
                     BindingRegistrationIdentity::new(BindingId::new(903), BindingGeneration::INITIAL, config.configuration(),COMPAT,903),
                     BindingExecutionSupport::host_erased(), compiler, Box::new(SchemaClient { config, seen:seen.clone() }),
                     BindingResourceDeclarations::new(BindingLifetimeFootprint::new(3,1024),BindingLifetimeFootprint::new(16,8192))

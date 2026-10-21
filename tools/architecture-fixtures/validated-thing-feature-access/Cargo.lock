@@ -46,6 +46,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-core"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-foundation",
+ "critical-section",
+ "sha2-const-stable",
+]
+
+[[package]]
 name = "clinkz-wot-foundation"
 version = "0.1.0"
 
@@ -53,6 +62,7 @@ version = "0.1.0"
 name = "clinkz-wot-td"
 version = "0.1.0"
 dependencies = [
+ "clinkz-wot-core",
  "clinkz-wot-foundation",
  "fluent-uri",
  "serde",
@@ -60,6 +70,12 @@ dependencies = [
  "serde_with",
  "time",
 ]
+
+[[package]]
+name = "critical-section"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "darling"
@@ -225,9 +241,9 @@ checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "portable-atomic-util"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2a106d1259c23fac8e543272398ae0e3c0b8d33c88ed73d0cc71b0f1d902618"
+checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
 dependencies = [
  "portable-atomic",
 ]
@@ -347,6 +363,12 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "sha2-const-stable"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f179d4e11094a893b82fff208f74d448a7512f99f5a0acbd5c679b705f83ed9"
 
 [[package]]
 name = "strsim"

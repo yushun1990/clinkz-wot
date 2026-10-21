@@ -3,6 +3,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(any(test, feature = "std"))]
+extern crate std;
 
 use alloc::vec::Vec;
 
@@ -22,7 +24,9 @@ pub use property_read::{
     PropertyReadBuildCursor, PropertyReadPlanCompiler, select_consumer_property_read,
 };
 
+#[cfg(feature = "validated-thing")]
 mod consumer_property_read;
+#[cfg(feature = "validated-thing")]
 pub use consumer_property_read::{
     ConsumerPropertyReadBuild, ConsumerPropertyReadBuildConfig, ConsumerPropertyReadBuildStep,
     ConsumerPropertyReadCleanupSlot, ConsumerPropertyReadDraft, ConsumerPropertyReadPreflight,
@@ -31,6 +35,7 @@ pub use consumer_property_read::{
     build_consumer_property_read_aggregate, select_consumer_property_read_aggregate,
 };
 #[cfg(feature = "std")]
+#[cfg(feature = "validated-thing")]
 pub use consumer_property_read::{
     ConsumerPropertyReadOwnedOutput, ConsumerPropertyReadOwnedRollback,
 };
@@ -184,3 +189,18 @@ pub trait PlanCompiler<R: ?Sized> {
     /// Consumes pure in-memory build state.
     fn abort(&self, cursor: Self::Cursor);
 }
+
+pub mod binding_compiler;
+pub mod binding_registration;
+pub use binding_compiler::*;
+pub use binding_registration::*;
+
+// Preparation-only helpers retained for the deferred Zenoh mapping probe.
+pub mod error;
+pub mod error_status;
+pub mod form;
+pub mod uri_template;
+pub use error::{BindingError, BindingResult};
+pub use error_status::error_status;
+pub use form::*;
+pub use uri_template::{TemplateExpandError, expand_uri_template, expand_uri_template_strict};

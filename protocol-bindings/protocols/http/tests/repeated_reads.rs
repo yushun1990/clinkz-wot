@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! Separate process: process-wide FD observations must not race other tests.
 include!("support/application.rs");
 use std::sync::mpsc;

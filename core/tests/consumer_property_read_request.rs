@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use clinkz_wot_core::Operation;
 use clinkz_wot_core::{
     ActionInvocationRef, BindingArtifactCompatibility, BindingArtifactIdentity, BindingArtifactRef,
     BindingArtifactRole, BindingConfigurationDigest, BindingGeneration, BindingId,
@@ -11,7 +12,6 @@ use clinkz_wot_foundation::{
     ClockId, GatewayDefaultV1, Generation, MonotonicInstant, ResourceKind, SlotIndex,
     StaticResourceProfile,
 };
-use clinkz_wot_td::data_type::Operation;
 
 const COMPATIBILITY: BindingArtifactCompatibility = BindingArtifactCompatibility::new([7; 16]);
 const BINDING_ID: BindingId = BindingId::new(11);

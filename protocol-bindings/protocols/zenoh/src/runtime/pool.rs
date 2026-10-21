@@ -7,13 +7,13 @@
 //!
 //! Available only with the `zenoh` feature.
 
+use crate::ZenohSubscriptionLease;
 use alloc::{boxed::Box, format, string::String, sync::Arc};
 
 use std::collections::HashMap;
 
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass, Subscription,
-    SubscriptionGuard,
 };
 use zenoh::Wait;
 
@@ -162,7 +162,7 @@ impl ZenohTransport for ZenohSessionPool {
     fn open_subscription(
         &self,
         request: ZenohTransportRequest,
-    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+    ) -> CoreResult<(Subscription, Box<dyn ZenohSubscriptionLease>)> {
         let transport = self.get_or_open(&request.plan)?;
         transport.open_subscription(request)
     }

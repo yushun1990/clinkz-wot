@@ -184,6 +184,13 @@ schema/contract migration and independent readmission. HTTP remains the first
 production protocol; SDK selection/qualification belongs to its implementation
 tranche. Neither a shared manager nor removal of engine admission is selected.
 
+[ADR-0024](docs/ADRs/0024-preparation-and-execution-boundary.org) adopts the
+Preparation/Execution boundary from integrated Review 08. The module owner
+replaces the TD/Core edge and compiler placement. Planning and Binding owners
+separate reusable content, instance authority and native infrastructure. Existing
+strict/narrow evidence keeps its original scope; this is no gate closure or
+production reusable/shared-infrastructure claim.
+
 ## Architectural Decision Lifecycle
 
 Architecture questions normally progress through:

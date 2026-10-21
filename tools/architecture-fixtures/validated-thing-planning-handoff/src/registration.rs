@@ -1,19 +1,23 @@
 //! A complete existing static registration, with execution deliberately inert.
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::WorkBudget;
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_property_read_binding_fixture::{ManualMockBinding, MockArtifact, MockCompiler};
 use core::task::{Context, Poll};
 
 pub type Registration =
-    StaticBindingRegistration<StaticBindingComponents<ManualMockBinding, InertClient>>;
+    StaticBindingPreparation<StaticBindingComponents<ManualMockBinding, InertClient>>;
 
 // No TD-derived value or borrow can enter this separately retained owner.
 pub struct InertClient {
     compatibility: BindingArtifactCompatibility,
 }
 
-impl PollClientBinding for InertClient {
+impl clinkz_wot_planning::PrepareClientBinding for InertClient {
     type Compiler = MockCompiler;
+}
+impl PollClientBinding for InertClient {
+    type Artifact = <MockCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = ();
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.compatibility
@@ -70,7 +74,7 @@ pub fn registration() -> Registration {
         compatibility,
         0,
     );
-    let input = StaticBindingRegistrationInput::producer_and_consumer_property_read(
+    let input = StaticBindingPreparationInput::producer_and_consumer_property_read(
         identity,
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(MockCompiler::new(compatibility)),
@@ -85,7 +89,7 @@ pub fn registration() -> Registration {
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(2, 128),
     );
-    match StaticBindingRegistration::producer_and_consumer_property_read(input) {
+    match StaticBindingPreparation::producer_and_consumer_property_read(input) {
         Ok(registration) => registration,
         Err(_) => panic!("complete Consumer-capable fixture registration must validate"),
     }

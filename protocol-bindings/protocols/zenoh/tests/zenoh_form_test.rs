@@ -1,16 +1,9 @@
 #![cfg(feature = "async")]
 
-use std::sync::Arc;
-
-use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, ClientBinding, CoreResult, ErrorPhase, InteractionInput,
-    InteractionOutput, Payload, RetryClass, SelectionFailureReason,
-};
-use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
+use clinkz_wot_planning::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_protocol_bindings_zenoh::{
     CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZenohBindingError,
-    ZenohBindingTransport, ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
-    extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form, is_zenoh_form_target,
+    ZenohOperationKind, extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form_target,
     plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
     plan_zenoh_operation, zenoh_operation_kind,
 };
@@ -22,84 +15,6 @@ use clinkz_wot_td::{
     thing::Thing,
 };
 use serde_json::json;
-
-#[cfg(feature = "zenoh")]
-use clinkz_wot_protocol_bindings_zenoh::SharedZenohTransport;
-
-struct RecordingZenohTransport;
-
-impl ZenohTransport for RecordingZenohTransport {
-    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        assert_eq!(request.plan.kind, ZenohOperationKind::Put);
-        assert_eq!(request.plan.key_expr, "things/lamp/status");
-        assert_eq!(
-            request.plan.metadata.content_type.as_deref(),
-            Some("application/json")
-        );
-        assert_eq!(
-            request
-                .payload
-                .as_ref()
-                .map(|payload| payload.body.as_ref()),
-            Some(&b"on"[..])
-        );
-        assert_eq!(
-            request.parameters.get("source").map(String::as_str),
-            Some("test")
-        );
-
-        Ok(InteractionOutput::with_data(Payload::new(
-            b"accepted".to_vec(),
-            "text/plain",
-        )))
-    }
-}
-
-#[cfg(feature = "zenoh")]
-#[derive(Default)]
-struct CountingZenohTransport {
-    calls: std::sync::atomic::AtomicUsize,
-}
-
-#[cfg(feature = "zenoh")]
-impl ZenohTransport for CountingZenohTransport {
-    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        let count = self
-            .calls
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-            .saturating_add(1);
-        Ok(InteractionOutput::with_data(Payload::new(
-            format!("{}:{}", count, request.plan.key_expr).into_bytes(),
-            "text/plain",
-        )))
-    }
-}
-
-#[tokio::test]
-async fn supports_forms_with_zenoh_href() {
-    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
-        .build()
-        .unwrap();
-    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
-
-    assert!(is_zenoh_form(&form));
-    assert!(binding.supports(&form, Operation::ReadProperty));
-}
-
-#[tokio::test]
-async fn supports_forms_with_relative_href_and_zenoh_base() {
-    let form = Form::read_property("properties/status").build().unwrap();
-    let thing = Thing::builder("Lamp")
-        .base("zenoh://clinkz/things/lamp/")
-        .nosec()
-        .build()
-        .unwrap();
-    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
-
-    assert!(!is_zenoh_form(&form));
-    assert!(!binding.supports(&form, Operation::ReadProperty));
-    assert!(binding.supports_with_thing(&thing, &form, Operation::ReadProperty));
-}
 
 #[tokio::test]
 async fn extracts_key_expression_from_zenoh_href() {
@@ -207,135 +122,6 @@ async fn includes_metadata_in_operation_plan() {
         Some("application/json")
     );
     assert_eq!(plan.metadata.qos.as_deref(), Some("express"));
-}
-
-#[tokio::test]
-async fn runtime_binding_delegates_planned_operation_to_transport() {
-    let form = Form::write_property("zenoh://clinkz/things/lamp/status")
-        .content_type("application/json")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .form(form.clone())
-        .build()
-        .unwrap();
-    let thing = Thing::builder("Lamp")
-        .nosec()
-        .property("status", property)
-        .build()
-        .unwrap();
-    let mut input = InteractionInput::with_data(Payload::new(b"on".to_vec(), "application/json"));
-    input.uri_variables.insert("source".into(), "test".into());
-    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
-
-    let output = binding
-        .invoke(BindingRequest {
-            thing: Arc::new(thing.clone()),
-            target: AffordanceTarget::Property("status".into()),
-            operation: Operation::WriteProperty,
-            form: Arc::new(form.clone()),
-            input,
-            applied_security: Default::default(),
-        })
-        .await
-        .unwrap();
-
-    assert_eq!(output.into_data().unwrap().body.as_ref(), b"accepted");
-}
-
-#[cfg(feature = "zenoh")]
-#[tokio::test]
-async fn shared_transport_reuses_underlying_runtime_state() {
-    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .form(form.clone())
-        .build()
-        .unwrap();
-    let thing = Thing::builder("Lamp")
-        .nosec()
-        .property("status", property)
-        .build()
-        .unwrap();
-    let shared = SharedZenohTransport::new(CountingZenohTransport::default());
-    let first_binding = ZenohBindingTransport::with_transport(shared.clone());
-    let second_binding = ZenohBindingTransport::with_transport(shared.clone());
-
-    let first = first_binding
-        .invoke(BindingRequest {
-            thing: Arc::new(thing.clone()),
-            target: AffordanceTarget::Property("status".into()),
-            operation: Operation::ReadProperty,
-            form: Arc::new(form.clone()),
-            input: InteractionInput::empty(),
-            applied_security: Default::default(),
-        })
-        .await
-        .unwrap();
-    let second = second_binding
-        .invoke(BindingRequest {
-            thing: Arc::new(thing.clone()),
-            target: AffordanceTarget::Property("status".into()),
-            operation: Operation::ReadProperty,
-            form: Arc::new(form.clone()),
-            input: InteractionInput::empty(),
-            applied_security: Default::default(),
-        })
-        .await
-        .unwrap();
-
-    assert_eq!(
-        first.into_data().unwrap().body.as_ref(),
-        b"1:things/lamp/status"
-    );
-    assert_eq!(
-        second.into_data().unwrap().body.as_ref(),
-        b"2:things/lamp/status"
-    );
-    assert_eq!(
-        shared
-            .inner()
-            .calls
-            .load(std::sync::atomic::Ordering::SeqCst),
-        2
-    );
-}
-
-#[tokio::test]
-async fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
-    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .form(form.clone())
-        .build()
-        .unwrap();
-    let thing = Thing::builder("Lamp")
-        .nosec()
-        .property("status", property)
-        .build()
-        .unwrap();
-    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
-
-    let err = binding
-        .invoke(BindingRequest {
-            thing: Arc::new(thing.clone()),
-            target: AffordanceTarget::Property("status".into()),
-            operation: Operation::WriteProperty,
-            form: Arc::new(form.clone()),
-            input: InteractionInput::empty(),
-            applied_security: Default::default(),
-        })
-        .await
-        .unwrap_err();
-
-    assert_eq!(
-        err.selection_reason(),
-        Some(SelectionFailureReason::StrictSelectionMismatch),
-    );
-    assert_eq!(err.context().phase(), ErrorPhase::Selection);
-    assert_eq!(err.retry_class(), RetryClass::Never);
 }
 
 #[tokio::test]
@@ -581,42 +367,6 @@ async fn rejects_relative_href_when_base_is_invalid() {
 }
 
 #[tokio::test]
-async fn runtime_binding_reports_selection_failure_for_unresolvable_target() {
-    let form = Form::read_property("properties/status").build().unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .form(form.clone())
-        .build()
-        .unwrap();
-    let thing = Thing::builder("Lamp")
-        .base("https://example.com/{tenant}/")
-        .nosec()
-        .property("status", property)
-        .build()
-        .unwrap();
-    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
-
-    let err = binding
-        .invoke(BindingRequest {
-            thing: Arc::new(thing.clone()),
-            target: AffordanceTarget::Property("status".into()),
-            operation: Operation::ReadProperty,
-            form: Arc::new(form.clone()),
-            input: InteractionInput::empty(),
-            applied_security: Default::default(),
-        })
-        .await
-        .unwrap_err();
-
-    assert_eq!(
-        err.selection_reason(),
-        Some(SelectionFailureReason::TargetResolutionFailed),
-    );
-    assert_eq!(err.context().phase(), ErrorPhase::Selection);
-    assert_eq!(err.retry_class(), RetryClass::Never);
-    assert!(err.context().redacted_cause().is_none());
-}
-
-#[tokio::test]
 async fn plans_operations_from_clinkz_extension_fixture() {
     let thing: Thing = serde_json::from_str(include_str!(
         "../../../../td/tests/fixtures/clinkz-extension-defaults.td.jsonld"
@@ -697,7 +447,7 @@ async fn reports_selection_error_when_affordance_has_no_zenoh_form() {
 
     assert_eq!(
         err,
-        ZenohBindingError::Shared(clinkz_wot_protocol_bindings::BindingError::CallerFilterMismatch(
+        ZenohBindingError::Shared(clinkz_wot_planning::BindingError::CallerFilterMismatch(
             "No form matches FormSelectionCriteria { operation: ReadProperty, content_type: None, subprotocol: None } after applying caller filter".into()
         ))
     );
@@ -782,17 +532,4 @@ async fn maps_bulk_wot_operations_to_zenoh_operation_kinds() {
         zenoh_operation_kind(Operation::QueryAllActions),
         ZenohOperationKind::Query
     );
-}
-
-#[tokio::test]
-async fn does_not_support_unknown_operations_when_restricted() {
-    let form = Form::write_property("zenoh://clinkz/things/lamp/status")
-        .build()
-        .unwrap();
-    let binding = ZenohBindingTransport::with_transport_and_supported_operations(
-        RecordingZenohTransport,
-        [Operation::ReadProperty],
-    );
-
-    assert!(!binding.supports(&form, Operation::WriteProperty));
 }

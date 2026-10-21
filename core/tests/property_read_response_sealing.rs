@@ -1,3 +1,4 @@
+use clinkz_wot_core::Operation;
 use clinkz_wot_core::binding::BindingRouteKey;
 use clinkz_wot_core::{
     ActionInvocationRef, BindingGeneration, BindingId, BindingResponseMetadata, CollisionDomainId,
@@ -7,7 +8,6 @@ use clinkz_wot_core::{
     RouteResponseOpportunity,
 };
 use clinkz_wot_foundation::{Generation, SlotIndex};
-use clinkz_wot_td::data_type::Operation;
 
 fn route() -> BindingRouteKey {
     BindingRouteKey::new(

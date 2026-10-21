@@ -5,6 +5,7 @@ use std::any::Any;
 
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{AdmissionLedger, ResourceKind, WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 
 use crate::{
     CheckedRegistration, Representation,

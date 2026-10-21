@@ -18,6 +18,7 @@ use clinkz_wot_foundation::{
     AdmissionLedger, Generation, MonotonicInstant, ResourceAccount, ResourceKind as K,
     ResourceLimits, ResourceProfileId, RuntimeClock, SlotIndex, WorkBudget, WorkClass as W,
 };
+use clinkz_wot_planning::*;
 use clinkz_wot_planning::{
     ConsumerPropertyReadBuild as PlanningBuild, ConsumerPropertyReadBuildConfig,
     ConsumerPropertyReadBuildStep as PlanningStep, ConsumerPropertyReadCleanupSlot as PlanRoot,
@@ -165,6 +166,7 @@ fn stamp_resource(
     }
     error
 }
+// Provenance used by complete-policy identity encoding, not eligibility.
 const fn compilation_cell() -> &'static str {
     if cfg!(feature = "std") {
         "std"
@@ -448,10 +450,10 @@ impl ConsumerPropertyReadPolicy {
             return Err(self.resource_error(unsupported(), ResourceFailureDomain::EngineCapacity));
         }
         if self.contract != BindingResourceContract::StrictV1 {
-            if r.support()
-                .consumer_configuration()
-                .is_none_or(|c| c.compilation_cell() != compilation_cell())
-            {
+            // The captured policy was checked against the actual compiler and
+            // executor in Planning. Cargo features unify independently across
+            // packages; a local syntax label is not a storage/environment test.
+            if r.support().consumer_configuration().is_none() {
                 return Err(
                     self.resource_error(unsupported(), ResourceFailureDomain::EngineCapacity)
                 );
@@ -1432,11 +1434,11 @@ impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env,
     }
 }
 
-type StaticRegistration<C> = ConsumerCompilerRegistration<StaticConsumerBindingRegistration<C>>;
-type Artifact<C> = <<C as PollClientBinding>::Compiler as BindingCompilerExtension>::Artifact;
+type StaticRegistration<C> = ConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>;
+type Artifact<C> = <<C as PrepareClientBinding>::Compiler as BindingCompilerExtension>::Artifact;
 
 /// Caller-owned build adapter; it cannot outlive its `consume` progress scope.
-pub struct StaticConsumerPropertyReadBuild<'td, 'env, 'capacity, C: PollClientBinding>
+pub struct StaticConsumerPropertyReadBuild<'td, 'env, 'capacity, C: PrepareClientBinding>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,
@@ -1445,7 +1447,7 @@ where
     cancelled: bool,
     error: &'env mut Option<CoreError>,
 }
-impl<C: PollClientBinding> StaticConsumerPropertyReadBuild<'_, '_, '_, C>
+impl<C: PrepareClientBinding> StaticConsumerPropertyReadBuild<'_, '_, '_, C>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,

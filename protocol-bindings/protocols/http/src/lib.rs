@@ -15,11 +15,15 @@ use std::{
     },
     task::{Context, Poll},
 };
+#[cfg(feature = "prepare")]
 mod compiler;
-#[cfg(test)]
+#[cfg(all(test, feature = "prepare"))]
 mod identity_tests;
+mod program;
 mod transport;
-use compiler::{COMPATIBILITY, HttpArtifact, HttpCompiler};
+#[cfg(feature = "prepare")]
+use compiler::HttpCompiler;
+use program::{COMPATIBILITY, HttpArtifact};
 
 const BODY: u64 = 4096;
 const MEDIA: u64 = 16;
@@ -343,20 +347,18 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     }
 }
 
-/// Creates one complete restricted Consumer-only registration, without I/O.
-/// Use with an application-owned Tokio runtime with its I/O driver enabled.
-pub fn try_consumer_registration(
+/// Creates the runtime registration without a TD parser or compiler.
+pub fn try_consumer_execution(
     config: HttpConsumerConfig,
     binding_id: BindingId,
     binding_generation: BindingGeneration,
     diagnostic_ordinal: u32,
-) -> CoreResult<ConsumerCompilerRegistration<HostConsumerBindingRegistration>> {
-    let compiler = HttpCompiler(config);
+) -> CoreResult<HostConsumerBindingRegistration> {
     let identity = BindingRegistrationIdentity::new(
         binding_id,
         binding_generation,
         config.configuration.configuration(),
-        compiler.compatibility(),
+        COMPATIBILITY,
         diagnostic_ordinal,
     );
     let resources = BindingResourceDeclarations::new(
@@ -366,12 +368,9 @@ pub fn try_consumer_registration(
     .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
     .with_consumer_result_limits(BODY, MEDIA)
     .with_transient(BindingTransientFootprint::new(16384));
-    let compiler = HostBindingCompilerRegistration::try_new_semantic(compiler)
-        .map_err(|e| e.error().error().clone())?;
     HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
         identity,
         BindingExecutionSupport::host_erased(),
-        compiler,
         Box::new(Client {
             config,
             busy: Arc::new(AtomicBool::new(false)),
@@ -379,9 +378,29 @@ pub fn try_consumer_registration(
         resources,
         BindingStatusPolicy::new(2, 17),
     ))
-    .map_err(|e| e.error().error().clone())?
-    .try_into_consumer_compiler()
     .map_err(|e| e.error().error().clone())
+}
+/// Pairs optional preparation with the exact runtime policy before any effects.
+#[cfg(feature = "prepare")]
+pub fn try_consumer_registration(
+    config: HttpConsumerConfig,
+    binding_id: BindingId,
+    binding_generation: BindingGeneration,
+    diagnostic_ordinal: u32,
+) -> CoreResult<
+    clinkz_wot_planning::ConsumerCompilerRegistration<
+        clinkz_wot_planning::HostConsumerBindingPreparation,
+    >,
+> {
+    use clinkz_wot_planning::*;
+    let compiler = HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(config))
+        .map_err(|e| e.error().error().clone())?;
+    let runtime =
+        try_consumer_execution(config, binding_id, binding_generation, diagnostic_ordinal)?;
+    HostConsumerBindingPreparation::try_pair(runtime, compiler)
+        .map_err(|e| e.error().error().clone())?
+        .try_into_consumer_compiler()
+        .map_err(|e| e.error().error().clone())
 }
 
 #[cfg(test)]

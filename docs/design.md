@@ -194,3 +194,11 @@ future capability under ADR-0020. The 65/31/121 requirement dispositions and pri
 production evidence are preserved. Implementation admission and its evidence
 boundary are owned by [the TD admission record](work-packages/WP-100-consumer-validated-thing-admission.md)
 and [work-package index](work-packages/index.toml).
+
+ADR-0024 adopts the preparation/execution migration within the same active
+requirement set. Core has no TD/Planning dependency; TD owns document encoding
+and semantic loans; Planning owns compiler contracts/erasure and actual executor
+pairing. The registered module and Planning/Binding owners define reusable
+content, instance authority and native infrastructure. Legacy TD-at-call-time
+execution and implicit Directory are withdrawn. This dependency extraction grants
+no reusable-program/shared-infrastructure, gate, milestone or release acceptance.

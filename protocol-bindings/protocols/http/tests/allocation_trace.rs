@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! Allocation observations for the real public path. No allocator replacement
 //! or null injection is attempted inside unqualified infallible SDK operations.
 use std::{

@@ -5,89 +5,47 @@ Status: active v5.1 authority.
 ## Target dependency direction
 
 ```text
-foundation <- td
-foundation + td <- core
-foundation + td + core <- planning <- concrete Protocol Bindings
-foundation + td + core <- discovery
-foundation + td + core + planning + discovery <- servient
-core <- codec crates
-selected public crates <- clinkz-wot umbrella
+Core execution        -> Foundation
+TD                    -> Core, Foundation
+Planning              -> TD, Core, Foundation
+Binding runtime       -> Core, native SDK
+Binding / prepare     -> Binding runtime, Planning, TD
+Servient execution    -> Core
+Servient / prepare    -> execution, Planning, TD
+application           -> selected capabilities, Discovery, codecs, platform
 ```
 
-The v5.0 target carries forward the planned rename of the current shared
-`clinkz-wot-protocol-bindings` compiler crate to `clinkz-wot-planning`.
-Planning is not a protocol implementation, and its crate name must not suggest
-that it owns binding execution. Concrete Protocol Binding crates remain
-separate dependencies of the application or umbrella crate, never of Servient.
+`CRATE-DEPS-001`: The graph MUST be acyclic. Core MUST have no normal or optional
+TD/Planning/Discovery/concrete-Binding dependency or upward re-export. TD owns
+its document encoding of Core operation vocabulary. Planning owns compiler
+contracts, selected inputs, pure jobs and compiler erasure; TD owns the resolved
+semantic trees and paid loans they borrow. Runtime allocation, artifact storage,
+format compatibility, executor registration and result checks remain in Core.
+Native executable types MUST be defined by the Binding runtime, not Planning.
+Optional preparation MUST produce those same native types and capture/check the
+actual executor policy before effects. No concrete Binding becomes a Servient
+dependency. Only application/umbrella composition selects all capabilities.
 
-`CRATE-DEPS-001`: The dependency graph MUST remain acyclic and directed from
-Foundation to TD/Core, from TD/Core to Planning and Discovery, and from those
-protocol-neutral layers to Servient composition. Codec crates depend on Core;
-concrete Protocol Bindings depend on Planning/Core contracts but MUST NOT
-become Servient dependencies merely to implement an SPI. Lower layers MUST NOT
-gain an optional higher-layer policy through feature unification. Foundation
-owns no TD/runtime/protocol vocabulary; Core owns no Servient, Discovery, or
-concrete protocol; Discovery owns no Directory service or storage backend; and
-only the umbrella is expected to compose every selected public crate.
+[ADR-0024](../ADRs/0024-preparation-and-execution-boundary.org) records the change.
+The first production extraction establishes Core -> Foundation, TD -> Core,
+Planning compiler ownership and HTTP's optional `prepare` feature. The current
+Servient package still composes preparation and execution: its Consumer retained
+output/rollback types and Producer build state name Planning. A future execution-
+only Servient feature must first separate those physical output/reclaim owners;
+a feature alias cannot remove that dependency. This limitation does not license
+an upward Core edge or claim the full target graph is already extracted.
 
-## Responsibility map
+The old `clinkz-wot-protocol-bindings` utility crate and TD-at-call-time
+ClientBinding/ServerBinding/Dispatch facade are removed. Deferred Zenoh native
+transport and preparation helpers retain their scoped evidence, without a
+legacy dispatch entry. The umbrella names Planning directly. Servient does not
+construct an implicit Directory or supply a legacy fallback.
 
-| Layer | Owns | Produces | Must not own |
-| --- | --- | --- | --- |
-| `clinkz-wot-foundation` | Resource reservations, work budgets, monotonic time, generations, profile-independent accounting | Bounded primitive values | TD vocabulary, interaction semantics, plans, registries, queues, protocol behavior |
-| `clinkz-wot-td` | Lossless TD/TM models, builders, Serde, one Basic/default/security semantic kernel, bounded typed inspection, trusted semantic lending and URI values | Lifetime-bearing validation proofs and paid semantic loans | Form/binding selection, runtime caches, transport behavior |
-| `clinkz-wot-core` | Protocol-neutral IDs, errors, payloads, handlers, security/codec contracts, immutable plan values, binding SPI values/traits, lifecycle outcomes | Semantic values and execution contracts | Application handles, plan compiler algorithms, global schedulers, universal subscription queues, protocol I/O |
-| `clinkz-wot-planning` | Candidate/Form selection from TD-owned semantic inputs, capability indexes, logical-plan construction, binding compiler coordination, URI-template compilation | Admitted-plan build output | TD Basic/default/security reinterpretation, binding execution, Servient registries, runtime queues, concrete protocol I/O |
-| `clinkz-wot-servient` | Application facade, registration snapshot, plan-set ownership, admission, handler/security orchestration, route lifecycle, scheduling, cleanup, status | Produced/consumed handles and runtime events | Protocol syntax, transport I/O, TD reparsing, implicit Directory service |
-| `clinkz-wot-discovery` | Discovery/Directory client values, sessions, watches, publisher client, source envelopes | Source-bearing TD documents and client progress | Directory service, storage backend, server query/redaction policy, endpoint hosting |
-| Concrete binding crate | Compiler extension, capability declaration, protocol route/client artifacts, I/O, correlation, native flow control/multiplexing, auth extraction, cleanup | Complete binding registration bundle | Servient registry, handlers, shared TD defaulting, cross-binding scheduling, hidden unbounded tasks |
-| Codec crate | Bounded codecs and incremental state | Decoded/encoded payloads | Runtime or transport policy |
-| Umbrella crate | Feature composition and deliberate re-exports | Application import surface | Runtime behavior or duplicate definitions |
+Host/static storage, std, async syntax, thread mobility, pointer atomics and
+resource/disposal policy remain distinct capabilities. No Contracts crate,
+platform-wide allocator/reactor or split runtime packages are selected.
 
-## Proposed preparation/execution separation (Review 08)
-
-**Non-normative proposal; the dependency graph and responsibility map above
-remain active.** [Review 08](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary)
-recommends separating preparation dependencies from the execution base.
-TD/semantic preparation would retain document validation, name resolution and
-shared WoT meaning; Planning would retain selection, native compiler coordination
-and Producer coverage. Fixed execution would consume prepared entries without
-requiring TD, Planning or Discovery in its normal dependency graph.
-
-The selected candidate reverses the TD/Core edge: Core depends only on
-Foundation, TD on Core/Foundation, and Planning on TD/Core/Foundation. **All**
-Core -> TD edges must first disappear, including legacy APIs/security helpers.
-Shared operation vocabulary moves to Core; TD retains its document encoding
-wrappers and all resolved semantic trees/loans. Public compiler contracts,
-selected-coordinate input wrappers and compiler erasure move to Planning.
-They cannot remain in Core behind a feature without restoring the dependency.
-Runtime storage/allocation, artifact compatibility and runtime erasure helpers
-stay below Planning even if today's `core::binding_compiler` module houses them;
-the split follows responsibility, not whole-file movement or upward re-exports.
-
-Runtime program types live in the Binding's base module, and source-free common
-execution envelopes live in Core. Optional Binding preparation implements
-Planning traits over those same native types. Execution-only Servient and
-Bindings depend on Core, with no TD/Planning dependency; preparation composition
-and actual compiler/executor registration pairing happen above Core. Neither
-Planning nor Servient imports concrete Bindings. A new Contracts crate or separate
-Host/embedded packages is unnecessary for this demonstrated graph.
-
-The [five-crate sketch](../../tools/architecture-fixtures/review08-boundaries/README.md)
-compiles the runtime and preparation graphs separately. It tests proposed
-interfaces, not migration of the current production dependencies. The full
-ownership/type placement and rejected cyclic alternatives are in Review 08.
-
-Role, dynamic preparation, `std`, async syntax, thread mobility, atomics and
-storage/failure policy would be separate capabilities. Shared execution kernels
-can observe borrowed views while Host and static storage differ. No feature
-silently changes globally named payload semantics. Retiring legacy runtime
-entry points, the implicit Directory and obsolete compiler utility path belongs
-to the proposed migration, not this documentation change.
-
-This proposal requires reviewed API/dependency and work-package projections;
-it grants no new target, runtime construction or embedded-production claim.
-
+<a id="proposed-preparationexecution-separation-review-08"></a>
 ## Core internal boundaries
 
 Core separates at least:
@@ -107,13 +65,14 @@ publication, and application streams.
 ## Planning boundaries
 
 Planning receives a validated document view, immutable policy, resource budget,
-and complete binding registration snapshot. It may call side-effect-free
+and checked preparation registration snapshot. It may call side-effect-free
 capability and compiler-extension methods. It returns values and admitted
 footprints; it never opens a route, sends a request, or retains a Servient
 handle.
 
-Logical plans share protocol-neutral work across candidates. Binding artifacts
-contain only protocol-specific data that cannot be shared. A binding compiler
+Logical plans share protocol-neutral work across candidates. Native programs contain protocol-specific instructions and may be shared under
+explicit ownership and accounting; instance entries retain current authority and
+varying operands. A binding compiler
 does not receive authority to reinterpret W3C defaults, choose a different
 operation, or access credentials.
 
@@ -204,3 +163,17 @@ TD, planning values, core semantics, constrained binding contracts, and static
 Servient abstractions support `no_std + alloc`. Filesystem, sockets, threads,
 processes, dynamic libraries, and executor ownership remain in concrete host
 adapters or higher deployment layers.
+
+Operation vocabulary is available without pointer atomics. The current Core
+execution representations require pointer atomics and expose no runtime API on
+other targets; TD tooling uses the vocabulary independently. Cortex-M0 TD checks
+therefore do not establish no-atomic Core/Planning/Servient execution. The latter
+remains a separate unresolved representation task; qualified static execution
+continues to name its actual target (currently Cortex-M4 compilation evidence).
+
+Planning's `validated-thing` capability selects the borrowed Consumer aggregate
+and explicitly activates TD's matching capability. Generic compiler authoring,
+resolved semantic inputs and registration pairing do not implicitly activate
+that loan/precision surface. The default Planning product includes it; Servient
+selects it explicitly. Compiler-only Binding/probe dependencies may omit it.
+This preserves TD's independently checked capability and Serde feature boundary.

@@ -33,6 +33,14 @@ fn main() {
         "#[cfg(feature = \"validated-thing\")]\nmod validated;\n",
         "",
     );
+    lib = lib.replace(
+        "#[cfg(all(feature = \"validated-thing\", feature = \"std\"))]\npub use validated::ValidatedSemanticError;\n",
+        "",
+    );
+    // Native semantic preparation is outside this historical rule projection;
+    // production TD tests exercise it against the real Basic kernel. Its new
+    // private dependencies must not pull a second, truncated kernel into here.
+    lib = lib.replace("#[cfg(feature = \"std\")]\npub mod semantic;\n", "");
     let start = lib
         .find("#[cfg(feature = \"validated-thing\")]\npub use validated::{")
         .unwrap();

@@ -8,11 +8,12 @@ use std::{
 };
 
 use clinkz_wot_core::{
-    BindingArtifactCompatibility, BindingArtifactRole, BindingCandidate, BindingCompilerExtension,
-    BindingCompilerInput, BindingCompilerStep, BindingConfigurationDigest, BindingGeneration,
-    BindingId, HostBindingCompilerRegistration, LogicalInteractionPlan, PlanId, ThingId,
+    BindingArtifactCompatibility, BindingArtifactRole, BindingCandidate,
+    BindingConfigurationDigest, BindingGeneration, BindingId, LogicalInteractionPlan, PlanId,
+    ThingId,
 };
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_property_read_binding_fixture::{MockArtifact, MockCompiler, MockCompilerCursor};
 
 // Single-threaded binary. No formatting, allocation or fallible injection inside

@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! Deterministic clock/peer ordering over the actual SDK and public Runtime.
 #![allow(dead_code)] // The shared application also supplies wall-clock helpers.
 include!("support/application.rs");

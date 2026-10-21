@@ -3,6 +3,7 @@
 
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{ResourceKind, ResourceReservation, WorkBudget};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_td::{ValidatedPropertyReadCursor, ValidatedThing};
 use core::alloc::Layout;
 
@@ -14,7 +15,7 @@ mod private {
 /// An open compiler/component does not satisfy this bound:
 /// ```compile_fail
 /// use consumer_aggregate_admission_probe::Registration;
-/// use clinkz_wot_core::ResolvedTargetCompiler;
+/// use clinkz_wot_planning::ResolvedTargetCompiler;
 /// fn eligible<R: Registration>(_: &R) {}
 /// eligible(&ResolvedTargetCompiler::try_new(64).unwrap());
 /// ```
@@ -34,16 +35,16 @@ pub trait Registration: private::Sealed {
     fn abort(&self, cursor: Self::Cursor);
 }
 
-impl<B: PollServerBinding> private::Sealed
-    for ConsumerCompilerRegistration<StaticBindingRegistration<B>>
+impl<B: PrepareServerBinding> private::Sealed
+    for ConsumerCompilerRegistration<StaticBindingPreparation<B>>
 where
     B::Compiler: 'static,
     <B::Compiler as BindingCompilerExtension>::Artifact: 'static,
 {
 }
 
-impl<B: PollServerBinding> Registration
-    for ConsumerCompilerRegistration<StaticBindingRegistration<B>>
+impl<B: PrepareServerBinding> Registration
+    for ConsumerCompilerRegistration<StaticBindingPreparation<B>>
 where
     B::Compiler: 'static,
     <B::Compiler as BindingCompilerExtension>::Artifact: 'static,
@@ -79,9 +80,9 @@ where
 }
 
 #[cfg(feature = "std")]
-impl private::Sealed for ConsumerCompilerRegistration<HostBindingRegistration> {}
+impl private::Sealed for ConsumerCompilerRegistration<HostBindingPreparation> {}
 #[cfg(feature = "std")]
-impl Registration for ConsumerCompilerRegistration<HostBindingRegistration> {
+impl Registration for ConsumerCompilerRegistration<HostBindingPreparation> {
     type Cursor = HostBindingCompilerCursor;
     type Artifact = HostBindingArtifact;
     fn identity(&self) -> BindingRegistrationIdentity {

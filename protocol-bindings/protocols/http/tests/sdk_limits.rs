@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! Minimal pinned-SDK counterexamples, deliberately separate from production
 //! acceptance tests in real_peer. No alternate parser or binding is supplied.
 use bytes::Bytes;

@@ -1,0 +1,94 @@
+#+title: ADR-0024: Preparation and execution boundary
+#+date: 2026-10-21
+#+status: Accepted
+
+* Decision and scope
+
+Adopt the integrated direction examined in Review 08 after PR #218, with the
+first production migration restricted to the dependency and compiler boundary.
+This is the cross-domain rationale; exact behavior belongs to the registered
+module, Planning and Binding owners. It changes no gate or milestone status.
+
+Core is the execution-contract layer and must not depend on TD or Planning,
+including optional features and compatibility re-exports. TD depends on Core;
+TD owns document encoding and resolved semantic loans. Planning owns compiler
+traits, selected-coordinate inputs, cursors, outcomes, costs and compiler
+erasure. Concrete Binding base modules define native executable types; optional
+preparation produces those same types. Core retains runtime artifact envelopes,
+compatibility, fallible storage acquisition, executor registration, result seals
+and ownership/cancellation/cleanup contracts. Compiler recognition cannot run
+from Core. Planning's borrowed Consumer aggregate is an explicit =validated-thing=
+capability; generic compiler authoring must not activate TD loans/precision merely
+through linking. Servient selects the borrowed pipeline explicitly. A runtime registration need not retain a compiler.
+
+Preparation captures the actual executor and pairs format/configuration/policy
+before effects. A format tag or Rust type alone cannot establish equivalence or
+authorization. Current instance authority and generation stay Engine owned.
+Independent crates' Cargo syntax labels cannot gate otherwise compatible typed
+static execution. Replace the local Core/Servient cell-equality check with actual
+paired policy, execution representation, Layout and quota checks. Captured labels
+and existing encodings remain provenance; incompatible policies still refuse.
+Host erasure and static associated types implement the same semantic boundary;
+thread mobility, atomics, async syntax and deployment failure policy are separate
+capabilities. Operation vocabulary is available on targets without pointer atomics so TD
+preparation does not inherit the old runtime's Arc restriction. Current Core
+execution APIs require pointer atomics and are absent elsewhere. This migration
+does not claim no-atomic execution or static HTTP.
+
+The target permits native owned immutable programs and explicit prepare-once /
+checked-bind-many, with definition dependencies distinguished from operands.
+Shared physical program ownership and original accounts must outlive each user;
+instance cancellation/drain must preserve siblings. There is no automatic cache,
+persistence format, content identity or common VM. The existing inline and
+closed-target adapters retain only their measured subset; they are not the
+eligibility rule for successor Producer or reusable compilation.
+
+Binding owns native infrastructure, matching/captures and native progress.
+Engine owns installed logical registrations, current authority, generation-to-
+handler lookup, publication and separate bounded acceptance per candidate.
+A native observation can have zero or many pinned logical recipients; equal
+filters need not denote one recipient. Equality lookup remains a narrow unicast
+adapter. Final route participation release initiates ordinary retirement;
+polling a shared owner can only progress retirement already initiated. Packet
+backing, delivery references and jobs/replies have separate bounded ownership.
+A route's stop cannot close sibling service. Whole-infrastructure shutdown needs
+separate revocation/drain authority and is not selected by a polling handle.
+
+* Migration and rejected alternatives
+
+Remove the legacy TD-at-call-time client/server/dispatch path, built-in TD-shaped
+security providers and implicit Directory composition rather than moving them
+behind a Core feature or preserving a target fallback. Their broad interactions
+have no accepted source-free replacement and are withdrawn, not claimed migrated.
+Keep runtime principal/auth/scope values and the target Property Read invariants.
+Retire the obsolete protocol utility crate; remaining deferred Zenoh preparation
+helpers name Planning explicitly. Its native transport probe is retained; its
+old direct-dispatch facade is withdrawn.
+
+A facade-only compiler move would leave cyclic ownership and force runtime
+compilers. A new Contracts crate, split Host/Static runtimes, duplicated TD
+semantics and a universal Engine infrastructure manager are unnecessary for this
+cut. Moving the whole compiler file is also wrong: completed runtime storage and
+fallible allocation must remain usable below Planning.
+
+The first production slice reverses the real Core/TD dependency, extracts
+compiler authoring/erasure and checked preparation pairing, supplies runtime-only
+registrations and optional HTTP preparation, and migrates actual callers. It
+preserves the existing numeric limits, source-free requests, first cause, permits,
+late results, complete-object transfer, result seals and final-account release.
+Representation-dependent measurements must be rerun, never relabeled.
+
+The HTTP Producer loop is dependent on these concrete public type/dependency
+changes. Its successor implementation must add TD-owned whole-description
+Producer lending/coverage, checked owned entry construction and Binding-owned
+installation/native progress before opening ingress. The current first-leaf
+Producer path remains regression evidence only and cannot serve HTTP as a
+fallback. The old Copy/atomic/one-listener SPI must not be implemented and then
+adapted into the selected boundary. No extra architecture investigation or
+acceptance gate is introduced. HTTPS/security remains a release obligation.
+
+Reusable production programs, independently funded shared backing, native
+multi-recipient delivery and shared async retirement need their own executable
+production evidence before those capabilities are advertised. Review 08 sketches
+are feasibility evidence; this dependency cut does not promote them to product
+acceptance.

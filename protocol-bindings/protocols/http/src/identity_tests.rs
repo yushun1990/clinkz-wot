@@ -1,5 +1,6 @@
 //! Historical policy operands are fixed digests, never replacement behavior.
 use super::*;
+use clinkz_wot_planning::*;
 
 fn work() -> WorkBudget {
     WorkBudget::new().with_remaining(WorkClass::BindingPolls, 10000)
@@ -7,7 +8,7 @@ fn work() -> WorkBudget {
 fn registration(
     config: HttpConsumerConfig,
     generation: BindingGeneration,
-) -> ConsumerCompilerRegistration<HostConsumerBindingRegistration> {
+) -> ConsumerCompilerRegistration<HostConsumerBindingPreparation> {
     try_consumer_registration(config, BindingId::new(600), generation, 600).unwrap()
 }
 fn plan(target: String) -> LogicalInteractionPlan {
@@ -34,7 +35,7 @@ fn candidate(id: BindingRegistrationIdentity) -> BindingCandidate {
     )
 }
 fn artifact(
-    owner: &HostConsumerBindingRegistration,
+    owner: &HostConsumerBindingPreparation,
     plan: &LogicalInteractionPlan,
 ) -> BindingArtifactEnvelope<HostBindingArtifact> {
     let id = owner.identity();
@@ -131,6 +132,77 @@ fn digest(hex: &str) -> [u8; 32] {
 }
 
 #[test]
+fn prepared_http_program_executes_after_all_preparation_owners_are_dropped() {
+    use std::io::{Read, Write};
+    use std::time::{Duration, Instant};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let preparation = registration(
+        HttpConsumerConfig::for_cleartext_ip().unwrap(),
+        BindingGeneration::INITIAL,
+    )
+    .into_registration();
+    let plan = plan(format!("http://{}/a", listener.local_addr().unwrap()));
+    // The helper returns only the completed native program; its Thing,
+    // admission cursor, semantic loan and compiler cursor have all ended.
+    let program = artifact(&preparation, &plan);
+    let execution = preparation.into_execution();
+    drop(plan);
+
+    let peer =
+        std::thread::spawn(move || {
+            let end = Instant::now() + Duration::from_secs(5);
+            let mut socket = loop {
+                match listener.accept() {
+                    Ok((socket, _)) => break socket,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < end, "runtime did not connect");
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    Err(e) => panic!("accept: {e}"),
+                }
+            };
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut head = Vec::new();
+            while !head.ends_with(b"\r\n\r\n") {
+                let mut byte = [0];
+                assert_eq!(socket.read(&mut byte).unwrap(), 1);
+                head.push(byte[0]);
+                assert!(head.len() < 2048);
+            }
+            assert!(head.starts_with(b"GET /a HTTP/1.1\r\n"));
+            socket.write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n7",
+        ).unwrap();
+            assert_eq!(socket.read(&mut [0]).unwrap(), 0);
+        });
+
+    tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let mut call = execution
+                .start_consumer_property_read(request(&program), &program)
+                .unwrap();
+            drop(program);
+            let output = tokio::time::timeout(
+                Duration::from_secs(5),
+                std::future::poll_fn(|cx| call.as_pin_mut().poll_result(cx, &mut work())),
+            )
+            .await
+            .expect("source-free native call stalled")
+            .unwrap();
+            assert_eq!(&*output.data().unwrap().body, b"7");
+        });
+    peer.join().unwrap();
+}
+
+#[test]
 fn v6_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
     let current = HttpConsumerConfig::for_cleartext_ip().unwrap();
     let captured = registration(current, BindingGeneration::INITIAL);
@@ -150,7 +222,7 @@ fn v6_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
         input.client().consumer_configuration(),
         Some(current.configuration)
     );
-    let owner = HostConsumerBindingRegistration::new(input).unwrap_or_else(|_| panic!());
+    let owner = HostConsumerBindingPreparation::new(input).unwrap_or_else(|_| panic!());
     let plan = plan("http://127.0.0.1:1/a".into());
     let artifact = artifact(&owner, &plan);
     assert_eq!(
@@ -251,7 +323,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
                 busy: Arc::new(AtomicBool::new(false)),
             });
             let ptr = &*client as *const Client;
-            let input = HostConsumerBindingRegistrationInput::new(
+            let input = HostConsumerBindingPreparationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
                 HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(actual)).unwrap(),
@@ -264,7 +336,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
                 .with_consumer_result_limits(BODY, MEDIA),
                 BindingStatusPolicy::new(2, 17),
             );
-            let rejected = HostConsumerBindingRegistration::new(input).err().unwrap();
+            let rejected = HostConsumerBindingPreparation::new(input).err().unwrap();
             assert_eq!(
                 rejected.input().client() as *const dyn binding::ClientBinding as *const (),
                 ptr.cast()
@@ -273,7 +345,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
                 rejected.input().client().consumer_configuration(),
                 Some(foreign.configuration)
             );
-            let input = HostConsumerBindingRegistrationInput::new(
+            let input = HostConsumerBindingPreparationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
                 HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(foreign)).unwrap(),
@@ -289,7 +361,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
                 .with_consumer_result_limits(BODY, MEDIA),
                 BindingStatusPolicy::new(2, 17),
             );
-            let owner = HostConsumerBindingRegistration::new(input).unwrap_or_else(|_| panic!());
+            let owner = HostConsumerBindingPreparation::new(input).unwrap_or_else(|_| panic!());
             let rejected = owner
                 .try_into_consumer_compiler()
                 .err()

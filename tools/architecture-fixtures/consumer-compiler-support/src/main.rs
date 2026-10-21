@@ -3,6 +3,7 @@ use clinkz_wot_core::*;
 use clinkz_wot_foundation::{
     AdmissionLedger, Generation, ResourceKind, SlotIndex, WorkBudget, WorkClass,
 };
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use consumer_compiler_support_probe::*;
 use std::{
     alloc::{GlobalAlloc, Layout, System},

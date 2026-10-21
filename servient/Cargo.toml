@@ -9,61 +9,35 @@ result_large_err = "allow"
 
 [dependencies]
 clinkz-wot-core = { path = "../core", default-features = false }
-clinkz-wot-discovery = { path = "../discovery", default-features = false }
 clinkz-wot-foundation = { path = "../foundation", default-features = false }
-clinkz-wot-planning = { path = "../planning", default-features = false }
-clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core", default-features = false }
-clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh", default-features = false, optional = true }
+clinkz-wot-planning = { path = "../planning", default-features = false, features = ["validated-thing"] }
 clinkz-wot-td = { path = "../td", default-features = false }
-log = { version = "0.4", default-features = false }
-serde_json = { workspace = true }
-async-trait = { workspace = true, optional = true }
-futures-util = { workspace = true, optional = true }
 
 [dev-dependencies]
+serde_json = { version = "1" }
 clinkz-wot-consumer-property-read-binding-fixture = { path = "../tools/architecture-fixtures/consumer-property-read-binding", default-features = false }
 clinkz-wot-codec-cbor = { path = "../codecs/cbor" }
 clinkz-wot-property-read-binding-fixture = { path = "../tools/architecture-fixtures/property-read-binding" }
-serde_json = { version = "1" }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [features]
 default = ["std"]
-## The Servient's std surface (ServientBuilder, host conveniences) is async,
-## so `std` implies `async`.
+## Host storage and explicit manual progress; independent of async syntax.
 std = [
-    "async",
     "clinkz-wot-core/std",
-    "clinkz-wot-discovery/std",
     "clinkz-wot-foundation/std",
     "clinkz-wot-planning/std",
-    "clinkz-wot-protocol-bindings/std",
     "clinkz-wot-td/std",
     "clinkz-wot-consumer-property-read-binding-fixture/std",
 ]
-## Native-async Servient surface (consume/produce handles, async handler
-## setters, async local dispatch). Driving is binding-owned; the Servient
-## itself exposes only `Dispatch::serve_request` for bindings to call.
-##
-## This feature is the *async syntax surface* only (async-trait +
-## futures-util): no_std-reachable. The tokio runtime is NOT pulled in here;
-## it arrives via the `std` feature (host conveniences) or dev-dependencies
-## (tests). See AGENTS.md / docs/design.md.
+## Forwards the optional async syntax capability of composed neutral layers.
 async = [
-    "dep:async-trait",
-    "dep:futures-util",
     "clinkz-wot-core/async",
-    "clinkz-wot-discovery/async",
     "clinkz-wot-foundation/async",
     "clinkz-wot-planning/async",
-]
-test-zenoh = [
-    "dep:clinkz-wot-protocol-bindings-zenoh",
-    "clinkz-wot-protocol-bindings-zenoh/zenoh",
 ]
 ## Experimental TD 2.0 data-model surface (`ActionAffordance.synchronous`).
 ## Forwards to the data-model gate.
 td2-preview = [
     "clinkz-wot-td/td2-preview",
-    "clinkz-wot-core/td2-preview",
 ]

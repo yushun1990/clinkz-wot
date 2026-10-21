@@ -5,12 +5,11 @@ use std::{mem, sync::atomic::AtomicUsize};
 use clinkz_wot_core::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRole, BindingCandidate,
-    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerFailure, BindingCompilerInput,
-    BindingCompilerOutput, BindingCompilerStep, CoreError, CoreResult, ErrorContext, ErrorPhase,
-    HostBindingCompilerRegistration, LogicalInteractionPlan, PlanSetGeneration, RetryClass,
-    StaticBindingCompilerRegistration,
+    CoreError, CoreResult, ErrorContext, ErrorPhase, LogicalInteractionPlan, PlanSetGeneration,
+    RetryClass,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 
 use super::{Requests, SeqCst, layout, observe};
 

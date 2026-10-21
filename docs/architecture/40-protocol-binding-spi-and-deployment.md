@@ -4,11 +4,11 @@ ADR-0023's accepted [Consumer resource migration](../spec/consumer-resource-owne
 specifies the registration/resource/disposal delta for the admitted successor.
 Existing strict registrations retain their current contracts.
 
-[Review 08](../reviews/review-08-integrated-architecture-reassessment.md) proposes
-an integrated revision beyond the accepted scoped migrations. Its
-[role/infrastructure amendment](../spec/binding-spi.md#proposed-role-and-infrastructure-amendment-review-08)
-is non-normative review material. It neither activates a universal replacement
-SPI nor generalizes the accepted HTTP Producer limits to other roles/platforms.
+ADR-0024 adopts the preparation/runtime boundary. Planning pairs optional
+compilers with actual Core runtime registrations. Native program types belong to
+Binding runtime modules; HTTP's `prepare` facet is optional. The revised Binding
+SPI owns native progress/matching and independent Engine recipient acceptance.
+The old Host Producer Copy/atomic/per-exposure physical owner is superseded.
 
 ## V1 integration model
 
@@ -97,11 +97,11 @@ side-effect-free support queries, and compiles only a candidate already resolved
 by the shared planner. It cannot access a Servient, handler, credential, socket,
 or executor.
 
-Compiler artifacts are scoped to the complete bundle generation. An execution
+Execution uses generation-qualified entries; shared program content has a separate lifetime. An execution
 half rejects a plan reference from another generation or configuration.
 
 WP-200 supplies constructible compiler components before the complete bundle:
-Core safely erases the host form, while an application-closed enum keeps the
+Planning safely erases the host compiler, while an application-closed enum keeps the
 static form typed. These components are independently authorable and testable
 but have no builder installation operation. WP-300 consumes one component into
 the complete bundle and does not redefine its compiler, cursor, artifact,

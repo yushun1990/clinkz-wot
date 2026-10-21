@@ -1735,7 +1735,7 @@ fn host_actual_provisioning_build_call_and_final_root_measurements() {
         layout::<ConsumerPropertyReadHandle>(),
         layout::<ConsumerPropertyReadCall>(),
         layout::<HostConsumerPropertyReadBuild<'static, 'static>>(),
-        layout::<ConsumerCompilerRegistration<HostConsumerBindingRegistration>>(),
+        layout::<ConsumerCompilerRegistration<HostConsumerBindingPreparation>>(),
         layout::<HostBindingCallBox<CoreResult<InteractionOutput>>>(),
         layout::<
             Result<

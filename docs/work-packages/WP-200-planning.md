@@ -12,8 +12,9 @@ across `clinkz-wot-core` and `clinkz-wot-planning`. Migrate the current
 form resolution, capability pruning, bounded candidate ordering, URI-template compilation, and
 binding-compiler coordination out of interaction hot paths.
 
-Core owns immutable protocol-neutral plan values and the portable binding-compiler extension and
-artifact SPI. `clinkz-wot-planning` owns the shared plan compiler, capability indexes,
+Core owns immutable protocol-neutral plan values and the runtime artifact and execution SPI.
+`clinkz-wot-planning` owns the binding-compiler extension, checked preparation pairing,
+shared plan compiler, capability indexes,
 form/operation/security resolution algorithms, URI-template helpers, and resumable build cursor.
 The output of this package is complete immutable material for one unpublished Frozen plan-set
 draft. WP-400 owns the Servient record and every Building, Frozen, Published, Draining, Failed,
@@ -50,13 +51,12 @@ runtime TD reads, identical static and host semantics, and explicit exclusions
 from broad planning. Owning-crate tests cover both authoring profiles and the
 owned output lifetime.
 
-One associated-type Core contract serves both forms: an application-closed
-compiler/cursor/artifact enum keeps constrained storage typed, while Core owns
-safe host erasure and returns the complete erased cursor or artifact unchanged
-on mismatch. WP-200 is the sole implementation owner of those Core components
-and Planning coordination. WP-300 consumes one component only when it later
-builds the complete installable registration; it does not implement a second
-compiler/artifact SPI.
+One associated-type Planning compiler contract serves both forms: an application-
+closed compiler/cursor/artifact enum keeps constrained storage typed. Planning
+owns compiler/cursor erasure; Core owns completed runtime storage. Mismatch
+returns the complete cursor or artifact unchanged. WP-200 owns compiler authoring
+and pairing with the validated Core runtime registration. WP-300 defines execution
+semantics and never implements a second compiler/artifact SPI.
 
 
 ## v5.1 Consumer Property Read entry slice
@@ -417,7 +417,7 @@ Implement the frozen core-owned values:
   `BindingCompilerOutput`, `BindingCompilerFailure`, `BindingCompilerStep`,
   and `BindingCompilerExtension` for the portable, side-effect-free compiler
   and opaque artifact contract;
-- `clinkz_wot_core::StaticBindingCompilerRegistration<C>` in every feature
+- `clinkz_wot_planning::StaticBindingCompilerRegistration<C>` in every feature
   cell and `HostBindingCompilerRegistration`, `HostBindingCompilerCursor`, and
   `HostBindingArtifact` under `std`; these are constructible compiler
   components but are never independently installable;
@@ -485,7 +485,7 @@ static and host erasure, and exposes it through the validated artifact envelope.
 The concrete compiler remains the only protocol canonicalization owner;
 Planning retains but never derives or interprets the value.
 
-Implementation ownership remains in `core/src/binding_compiler.rs` and
+Implementation ownership remains in `planning/src/binding_compiler.rs` and
 `planning/src/property_read.rs`. The external WP-300 mock compiler in Servient
 tests exercises the real output-to-`PrepareInput` path. Form contribution,
 capability indexes, collision tables, Servient lifecycle, production
@@ -578,7 +578,7 @@ technical invariants:
   comparison, and proof that a later snapshot does not mutate or scan existing plan sets;
 - `compiled-plan-set-draft` for bounded resumable construction, exact immutable material and
   footprint, and transfer of one unpublished Frozen draft without Servient lifecycle state;
-- `binding-compiler-extension` for a third-party core-owned compiler extension, deterministic
+- `binding-compiler-extension` for a third-party Planning-owned compiler extension, deterministic
   bounded artifacts, identity mismatch rejection, and absence of protocol side effects;
 - `property-read-producer-route-projection` for a real complete WP-300
   registration whose borrowed compiler projection produces a real
@@ -641,8 +641,8 @@ dependency.
 ## Completion Conditions
 
 - Every WP-200 ownership item exists at its frozen package and public path in all applicable
-  feature cells; core owns the portable compiler/artifact SPI, and the planning crate contains no
-  binding execution trait or Servient registration.
+  feature cells; Planning owns compiler authoring and preparation pairing, Core owns runtime
+  artifact/execution contracts, and Planning contains no binding execution trait or Servient registration.
 - Plan fixtures cover root and affordance forms, multiple forms, relative targets, strict form
   selection, ordered fallback under the frozen typed policy, inherited/form
   security, bounded skipped-candidate diagnostics, and structured selection
@@ -655,9 +655,52 @@ dependency.
 - Capability probes are pruned by generation-bearing indexes, wildcard work is admitted, and
   the 1/8/32 scaling and maximum-profile workloads emit schema-valid results.
 - Compiler steps are deterministic, bounded, resumable, and nonblocking across unrelated keys;
-  the WP-200 fixtures drive the core compiler SPI without protocol side effects, while WP-400
+  the WP-200 fixtures drive the Planning compiler SPI without protocol side effects, while WP-400
   owns single-flight publication and reclamation evidence.
 - All obsolete public selector views, per-call TD scans, execution-trait ownership leaks, and
   eager global invalidation scans listed above are removed.
 - Source inspection proves planning has no dependency on either the legacy handler surface or the
   future WP-300 `ProducerEmission` implementation boundary.
+
+## Preparation/Execution migration
+
+ADR-0024 adopts the integrated Review 08 direction. The Project Owner explicitly
+directed a coupled authoritative-contract and first production implementation
+candidate after #218, to be submitted without merge for independent review.
+`WP-200-PREPARATION-EXECUTION-BOUNDARY` owns this cross-package extraction. Its
+candidate state records that the exact implementation has not passed independent
+acceptance; it is not a new architecture investigation or extra governance stage.
+
+The coherent slice removes all Core -> TD/Planning edges, moves operation
+vocabulary to Core with TD-local document encoding, places compiler inputs/jobs/
+erasure/pairing in Planning, and keeps actual runtime storage/result/cancellation
+contracts in Core. Static executor traits name native Artifact rather than
+Compiler. Preparation can be consumed into runtime registration and HTTP can
+build without its optional preparation facet. Retire TD-at-call-time dispatch,
+legacy public handles/security providers, implicit Directory and the obsolete
+utility crate; unmatched interactions are withdrawn pending qualified target
+replacements, not represented as migrated. Preserve the native Zenoh probe and
+all relevant target negative oracles.
+
+The exact boundary is falsified by an upward Core dependency, a compiler needed
+by runtime registration, source/compiler retention needed for accepted execution,
+a mismatched actual executor reaching effects, or a resource/permit/result/
+cleanup regression. Existing numerical profiles and gate statuses are unchanged.
+Historical accepted evidence retains its original revision and narrower claim;
+current gate commands follow the moved test owners. Fresh results belong to this
+candidate's evidence and independent review.
+
+Servient still composes Planning-owned output/rollback and Producer build owners.
+An execution-only Servient package facet requires extracting those complete
+physical/reclaim owners first. That concrete dependency is not solved by an
+empty Cargo feature. Reusable definition/bind implementation and shared native
+matching/retirement also remain unproved; this extraction creates their proper
+placement without claiming their production guarantees.
+
+The mixed-feature regression exposed the previous Core/Servient local cell
+comparison as an implementation assumption. This slice deliberately replaces
+that predicate under the revised resource owner: actual paired policy, static
+representation, Layout and quotas remain mandatory. Captured cell metadata and
+all key encodings are unchanged. The old mixed-label refusal evidence keeps its
+historical scope and is superseded for this predicate; the current positive
+checks zero native starts, retained funding and exact final release.

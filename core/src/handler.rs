@@ -1,4 +1,4 @@
-use clinkz_wot_td::data_type::Operation;
+use crate::Operation;
 
 use crate::{
     AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
@@ -226,7 +226,7 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 /// ```compile_fail
 /// use clinkz_wot_core::{AffordanceTarget, HandlerContext, PlanId, ThingId, ThingSlotId};
 /// use clinkz_wot_foundation::{Generation, SlotIndex};
-/// use clinkz_wot_td::data_type::Operation;
+/// use crate::Operation;
 /// let thing_id = ThingId::from("urn:thing:private");
 /// let target = AffordanceTarget::Thing;
 /// let _ = HandlerContext {
@@ -243,7 +243,7 @@ pub struct HandlerContext<'a> {
     thing_id: &'a ThingId,
     thing_slot: ThingSlotId,
     target: &'a AffordanceTarget,
-    operation: clinkz_wot_td::data_type::Operation,
+    operation: crate::Operation,
     plan_id: PlanId,
     binding: Option<(BindingId, BindingGeneration)>,
 }
@@ -254,7 +254,7 @@ impl<'a> HandlerContext<'a> {
         thing_id: &'a ThingId,
         thing_slot: ThingSlotId,
         target: &'a AffordanceTarget,
-        operation: clinkz_wot_td::data_type::Operation,
+        operation: crate::Operation,
         plan_id: PlanId,
         binding: Option<(BindingId, BindingGeneration)>,
     ) -> CoreResult<Self> {
@@ -325,7 +325,7 @@ impl<'a> HandlerContext<'a> {
     }
 
     /// Returns the operation selected by the compiled plan.
-    pub const fn operation(self) -> clinkz_wot_td::data_type::Operation {
+    pub const fn operation(self) -> crate::Operation {
         self.operation
     }
 

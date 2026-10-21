@@ -41,7 +41,7 @@ impl Drop for Report<'_> {
 /// Caller-owned typed root. All runtime work is driven by short mutable
 /// borrows. `C::RequestState` stays inside the actual Core slot until terminal
 /// acknowledgement or recorded residual followed by destruction of that slot.
-pub struct StaticConsumerPropertyReadRuntime<'a, C: PollClientBinding>
+pub struct StaticConsumerPropertyReadRuntime<'a, C: PrepareClientBinding>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,
@@ -60,7 +60,7 @@ where
     nonce: u64,
     terminal_work: WorkBudget,
 }
-impl<'a, C: PollClientBinding> StaticConsumerPropertyReadRuntime<'a, C>
+impl<'a, C: PrepareClientBinding> StaticConsumerPropertyReadRuntime<'a, C>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,
@@ -778,7 +778,7 @@ where
         StartStatus::Ready(outcome)
     }
 }
-impl<C: PollClientBinding> Drop for StaticConsumerPropertyReadRuntime<'_, C>
+impl<C: PrepareClientBinding> Drop for StaticConsumerPropertyReadRuntime<'_, C>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,
@@ -818,7 +818,7 @@ where
         drop(self.provision.take());
     }
 }
-struct Scope<'r, 'a, C: PollClientBinding>
+struct Scope<'r, 'a, C: PrepareClientBinding>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,
@@ -826,7 +826,7 @@ where
     runtime: &'r mut StaticConsumerPropertyReadRuntime<'a, C>,
     completed: bool,
 }
-impl<C: PollClientBinding> Scope<'_, '_, C>
+impl<C: PrepareClientBinding> Scope<'_, '_, C>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,
@@ -849,7 +849,7 @@ where
         self.completed = true;
     }
 }
-impl<C: PollClientBinding> Drop for Scope<'_, '_, C>
+impl<C: PrepareClientBinding> Drop for Scope<'_, '_, C>
 where
     C::Compiler: 'static,
     Artifact<C>: 'static,
@@ -866,9 +866,9 @@ struct InstallPermit;
 // mutation. Move the unchanged complete registration into execution, then
 // recapture its closed compiler support. Capture allocates and calls no client.
 // RAII preserves the owner even if a caller's progress adapter unwinds.
-fn with_registration<C: PollClientBinding, T>(
+fn with_registration<C: PrepareClientBinding, T>(
     destination: &mut Option<StaticRegistration<C>>,
-    f: impl FnOnce(&mut StaticConsumerBindingRegistration<C>) -> T,
+    f: impl FnOnce(&mut StaticConsumerBindingPreparation<C>) -> T,
 ) -> T
 where
     C::Compiler: 'static,
@@ -880,14 +880,14 @@ where
     };
     f(execution.raw.as_mut().unwrap())
 }
-struct Execution<'a, C: PollClientBinding>
+struct Execution<'a, C: PrepareClientBinding>
 where
     C::Compiler: 'static,
 {
     destination: &'a mut Option<StaticRegistration<C>>,
-    raw: Option<StaticConsumerBindingRegistration<C>>,
+    raw: Option<StaticConsumerBindingPreparation<C>>,
 }
-impl<C: PollClientBinding> Drop for Execution<'_, C>
+impl<C: PrepareClientBinding> Drop for Execution<'_, C>
 where
     C::Compiler: 'static,
 {
@@ -901,3 +901,5 @@ where
         );
     }
 }
+
+use clinkz_wot_planning::PrepareClientBinding;

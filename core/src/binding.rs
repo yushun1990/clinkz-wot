@@ -15,9 +15,12 @@ use core::pin::Pin;
 #[cfg(feature = "std")]
 use std::any::Any;
 
+use crate::Operation;
 use clinkz_wot_foundation::{Generation, WorkBudget};
-use clinkz_wot_td::data_type::Operation;
 
+use crate::ConsumerBindingConfiguration;
+#[cfg(feature = "std")]
+use crate::HostBindingArtifact;
 use crate::response::ConsumerResultSeal;
 use crate::{
     AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope, BindingArtifactRef,
@@ -26,12 +29,6 @@ use crate::{
     InteractionInput, InteractionOutput, InteractionStatus, OutboundRequest, PlanId,
     PlanSetGeneration, ResponsePayloadRole, RetryClass, StartStatus, ThingId,
 };
-use crate::{
-    BindingCompilerExtension, ConsumerBindingConfiguration, ConsumerCompilerSupport,
-    ResolvedTargetCompiler, StaticBindingCompilerRegistration,
-};
-#[cfg(feature = "std")]
-use crate::{HostBindingArtifact, HostBindingCompilerRegistration};
 
 // ---------------------------------------------------------------------------
 // Registration and bounded-resource declarations
@@ -1840,8 +1837,8 @@ impl RouteActivationPermit<'_> {
 /// fact needed by pending work must be derived into the owned request state.
 /// Subscription associated state and methods are deliberately absent.
 pub trait PollClientBinding {
-    /// Compiler paired atomically with this client.
-    type Compiler: BindingCompilerExtension;
+    /// Source-free native program consumed by this client.
+    type Artifact;
     /// Binding-private state for one accepted request.
     type RequestState;
 
@@ -1861,7 +1858,7 @@ pub trait PollClientBinding {
     fn start_request(
         &mut self,
         request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
         slot: &mut ClientRequestSlot<Self::RequestState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>;
@@ -1900,8 +1897,8 @@ pub trait PollClientBinding {
 
 /// Application-static, manually progressed server binding contract.
 pub trait PollServerBinding {
-    /// Compiler paired atomically with this server.
-    type Compiler: BindingCompilerExtension;
+    /// Source-free native program consumed by this server.
+    type Artifact;
     /// Binding-private route lifecycle state.
     type RouteState;
     /// Binding-private readiness state.
@@ -1923,7 +1920,7 @@ pub trait PollServerBinding {
     fn start_prepare(
         &mut self,
         input: PrepareInput,
-        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
         route: &mut ServerRouteSlot<Self::RouteState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>>;
@@ -2099,7 +2096,7 @@ pub trait PollServerBinding {
     ) -> CoreResult<()>;
 }
 
-/// Typed Producer server and Consumer client sharing one compiler universe.
+/// Typed Producer server and Consumer client sharing one native artifact type.
 ///
 /// An installed registration may expose this value through its Producer
 /// projection, but the private Consumer half has no raw execution accessor:
@@ -2111,7 +2108,7 @@ pub trait PollServerBinding {
 /// #     registration: &mut StaticBindingRegistration<StaticBindingComponents<S, C>>,
 /// # ) where
 /// #     S: PollServerBinding,
-/// #     C: PollClientBinding<Compiler = S::Compiler>,
+/// #     C: PollClientBinding<Artifact = S::Artifact>,
 /// # {
 /// let _raw_client = registration.server_mut().client_mut();
 /// # }
@@ -2136,9 +2133,9 @@ impl<S, C> StaticBindingComponents<S, C> {
 impl<S, C> PollServerBinding for StaticBindingComponents<S, C>
 where
     S: PollServerBinding,
-    C: PollClientBinding<Compiler = S::Compiler>,
+    C: PollClientBinding<Artifact = S::Artifact>,
 {
-    type Compiler = S::Compiler;
+    type Artifact = S::Artifact;
     type RouteState = S::RouteState;
     type ReadinessState = S::ReadinessState;
     type ResponseState = S::ResponseState;
@@ -2162,7 +2159,7 @@ where
     fn start_prepare(
         &mut self,
         input: PrepareInput,
-        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
         route: &mut ServerRouteSlot<Self::RouteState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>> {
@@ -2371,7 +2368,6 @@ where
     identity: BindingRegistrationIdentity,
     capabilities: BindingRegistrationCapabilities,
     execution: BindingExecutionSupport,
-    compiler: StaticBindingCompilerRegistration<B::Compiler>,
     server: B,
     resources: BindingResourceDeclarations,
     ingress: BindingIngressPolicy,
@@ -2388,7 +2384,6 @@ where
         identity: BindingRegistrationIdentity,
         capabilities: BindingRegistrationCapabilities,
         execution: BindingExecutionSupport,
-        compiler: StaticBindingCompilerRegistration<B::Compiler>,
         server: B,
         resources: BindingResourceDeclarations,
         ingress: BindingIngressPolicy,
@@ -2398,7 +2393,6 @@ where
             identity,
             capabilities,
             execution,
-            compiler,
             server,
             resources,
             ingress,
@@ -2411,11 +2405,6 @@ where
         self.identity
     }
 
-    /// Borrows the typed compiler component.
-    pub const fn compiler(&self) -> &StaticBindingCompilerRegistration<B::Compiler> {
-        &self.compiler
-    }
-
     /// Borrows the static server component.
     pub const fn server(&self) -> &B {
         &self.server
@@ -2425,14 +2414,13 @@ where
 impl<S, C> StaticBindingRegistrationInput<StaticBindingComponents<S, C>>
 where
     S: PollServerBinding,
-    C: PollClientBinding<Compiler = S::Compiler>,
+    C: PollClientBinding<Artifact = S::Artifact>,
 {
     /// Assembles one dual-role Property Read input without protocol work.
     #[allow(clippy::too_many_arguments)]
     pub const fn producer_and_consumer_property_read(
         identity: BindingRegistrationIdentity,
         execution: BindingExecutionSupport,
-        compiler: StaticBindingCompilerRegistration<S::Compiler>,
         components: StaticBindingComponents<S, C>,
         resources: BindingResourceDeclarations,
         ingress: BindingIngressPolicy,
@@ -2442,7 +2430,6 @@ where
             identity,
             capabilities: BindingRegistrationCapabilities::producer_and_consumer_property_read(),
             execution,
-            compiler,
             server: components,
             resources,
             ingress,
@@ -2459,77 +2446,11 @@ where
     input: StaticBindingRegistrationInput<B>,
 }
 
-/// One complete registration and Core-issued closed Consumer support.
-///
-/// Borrowing the registration's compiler keeps the complete owner alive. The
-/// descriptor is metadata, not a certificate that can be paired with another
-/// owner. Only consuming capture below can construct this carrier.
-///
-/// ```compile_fail
-/// # use clinkz_wot_core::{ConsumerCompilerRegistration, ConsumerCompilerSupport};
-/// let forged = ConsumerCompilerRegistration { registration: (), support: unsafe { core::mem::zeroed::<ConsumerCompilerSupport>() } };
-/// ```
-///
-/// ```compile_fail
-/// # use clinkz_wot_core::ConsumerCompilerRegistration;
-/// # fn reuse<R>(checked: ConsumerCompilerRegistration<R>) {
-/// let original = checked.into_registration();
-/// let reused = checked.support();
-/// # }
-/// ```
-#[derive(Debug)]
-pub struct ConsumerCompilerRegistration<R> {
-    registration: R,
-    support: ConsumerCompilerSupport,
-}
-
-impl<R> ConsumerCompilerRegistration<R> {
-    /// Borrows the original validated complete registration.
-    pub const fn registration(&self) -> &R {
-        &self.registration
-    }
-    /// Borrows its read-only, source-owned support descriptor.
-    pub const fn support(&self) -> &ConsumerCompilerSupport {
-        &self.support
-    }
-    /// Consumes support and returns the original complete registration.
-    pub fn into_registration(self) -> R {
-        self.registration
-    }
-}
-
-impl<B: PollServerBinding> StaticBindingRegistration<B>
-where
-    B::Compiler: 'static,
-{
-    /// Captures only the actual closed compiler and its checked configuration.
-    /// Rejection returns the unchanged complete owner, without a callback.
-    pub fn try_into_consumer_compiler(
-        self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
-        if let Some(support) = static_consumer_support(
-            self.identity(),
-            self.execution(),
-            self.capabilities(),
-            &self.input.compiler,
-            self.input.resources,
-            None,
-        ) {
-            return Ok(ConsumerCompilerRegistration {
-                registration: self,
-                support,
-            });
-        }
-        let error = registration_error(self.identity(), 323);
-        Err(BindingInputRejection::new(self, error))
-    }
-}
-
 impl<B> StaticBindingRegistration<B>
 where
     B: PollServerBinding,
 {
-    /// Validates the complete compiler/server/declaration bundle atomically.
+    /// Validates the complete executor/declaration bundle atomically.
     pub fn new(
         input: StaticBindingRegistrationInput<B>,
     ) -> Result<Self, BindingInputRejection<StaticBindingRegistrationInput<B>>> {
@@ -2541,7 +2462,6 @@ where
             ));
         }
         let expected = identity.artifact_compatibility();
-        let compiler_compatibility = input.compiler.compiler().compatibility();
         let server_compatibility = input.server.artifact_compatibility();
         let layouts_fit = input
             .server
@@ -2559,7 +2479,6 @@ where
         let valid = input.capabilities.supports_producer_property_read()
             && !input.capabilities.supports_consumer_property_read()
             && input.execution.supports_application_static()
-            && expected == compiler_compatibility
             && expected == server_compatibility
             && input.resources.is_valid()
             && layouts_fit
@@ -2584,11 +2503,6 @@ where
     /// Returns execution-representation metadata.
     pub const fn execution(&self) -> BindingExecutionSupport {
         self.input.execution
-    }
-
-    /// Borrows the compiler component.
-    pub const fn compiler(&self) -> &StaticBindingCompilerRegistration<B::Compiler> {
-        &self.input.compiler
     }
 
     /// Borrows the server component.
@@ -2676,9 +2590,9 @@ fn reject_consumer_request(
 impl<S, C> StaticBindingRegistration<StaticBindingComponents<S, C>>
 where
     S: PollServerBinding,
-    C: PollClientBinding<Compiler = S::Compiler>,
+    C: PollClientBinding<Artifact = S::Artifact>,
 {
-    /// Validates one complete dual-role compiler/server/client bundle atomically.
+    /// Validates one complete dual-role server/client bundle atomically.
     pub fn producer_and_consumer_property_read(
         input: StaticBindingRegistrationInput<StaticBindingComponents<S, C>>,
     ) -> Result<
@@ -2695,7 +2609,6 @@ where
             ));
         }
         let expected = identity.artifact_compatibility();
-        let compiler_compatibility = input.compiler.compiler().compatibility();
         let server_compatibility = input.server.server.artifact_compatibility();
         let client_compatibility = input.server.client.artifact_compatibility();
         let server_layouts_fit = input
@@ -2722,7 +2635,6 @@ where
         let valid = input.capabilities.supports_producer_property_read()
             && input.capabilities.supports_consumer_property_read()
             && input.execution.supports_application_static()
-            && expected == compiler_compatibility
             && expected == server_compatibility
             && expected == client_compatibility
             && input.resources.is_valid()
@@ -2740,7 +2652,7 @@ where
     pub fn start_consumer_property_read(
         &mut self,
         request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<<S::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<S::Artifact>,
         slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
@@ -2809,7 +2721,7 @@ fn start_static_consumer_property_read<C: PollClientBinding>(
     resources: BindingResourceDeclarations,
     client: &mut C,
     request: OutboundRequest,
-    artifact: &BindingArtifactEnvelope<<C::Compiler as BindingCompilerExtension>::Artifact>,
+    artifact: &BindingArtifactEnvelope<C::Artifact>,
     slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
     budget: &mut WorkBudget,
 ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>> {
@@ -3365,7 +3277,7 @@ where
     where
         B: HostBindingCall<T, C>,
     {
-        crate::binding_compiler::try_box(call).map(|call| Self(Box::into_pin(call)))
+        crate::artifact::try_box(call).map(|call| Self(Box::into_pin(call)))
     }
 
     /// Returns the unique pinned call borrow used for progress.
@@ -3785,7 +3697,6 @@ pub struct HostBindingRegistrationInput {
     identity: BindingRegistrationIdentity,
     capabilities: BindingRegistrationCapabilities,
     execution: BindingExecutionSupport,
-    compiler: HostBindingCompilerRegistration,
     server: Box<dyn RouteServerBinding>,
     client: Option<Box<dyn ClientBinding>>,
     resources: BindingResourceDeclarations,
@@ -3801,7 +3712,6 @@ impl HostBindingRegistrationInput {
         identity: BindingRegistrationIdentity,
         capabilities: BindingRegistrationCapabilities,
         execution: BindingExecutionSupport,
-        compiler: HostBindingCompilerRegistration,
         server: Box<dyn RouteServerBinding>,
         resources: BindingResourceDeclarations,
         ingress: BindingIngressPolicy,
@@ -3811,7 +3721,6 @@ impl HostBindingRegistrationInput {
             identity,
             capabilities,
             execution,
-            compiler,
             server,
             client: None,
             resources,
@@ -3825,11 +3734,6 @@ impl HostBindingRegistrationInput {
         self.identity
     }
 
-    /// Borrows the host compiler component.
-    pub const fn compiler(&self) -> &HostBindingCompilerRegistration {
-        &self.compiler
-    }
-
     /// Borrows the route-scoped host server component.
     pub fn server(&self) -> &dyn RouteServerBinding {
         &*self.server
@@ -3840,7 +3744,6 @@ impl HostBindingRegistrationInput {
     pub fn producer_and_consumer_property_read(
         identity: BindingRegistrationIdentity,
         execution: BindingExecutionSupport,
-        compiler: HostBindingCompilerRegistration,
         server: Box<dyn RouteServerBinding>,
         client: Box<dyn ClientBinding>,
         resources: BindingResourceDeclarations,
@@ -3851,7 +3754,6 @@ impl HostBindingRegistrationInput {
             identity,
             capabilities: BindingRegistrationCapabilities::producer_and_consumer_property_read(),
             execution,
-            compiler,
             server,
             client: Some(client),
             resources,
@@ -3879,29 +3781,7 @@ pub struct HostBindingRegistration {
 
 #[cfg(feature = "std")]
 impl HostBindingRegistration {
-    /// Captures only Core's fallible supported Host adapter and actual config.
-    /// Generic erasure confers no support, even for the closed compiler type.
-    pub fn try_into_consumer_compiler(
-        self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
-        if let Some(support) = host_consumer_support(
-            self.identity(),
-            self.execution(),
-            self.capabilities(),
-            &self.input.compiler,
-            self.input.resources,
-            None,
-        ) {
-            return Ok(ConsumerCompilerRegistration {
-                registration: self,
-                support,
-            });
-        }
-        let error = registration_error(self.identity(), 323);
-        Err(BindingInputRejection::new(self, error))
-    }
-
-    /// Validates compiler/server identity and every narrow declaration.
+    /// Validates server identity and every narrow declaration.
     pub fn new(
         input: HostBindingRegistrationInput,
     ) -> Result<Self, BindingInputRejection<HostBindingRegistrationInput>> {
@@ -3928,7 +3808,6 @@ impl HostBindingRegistration {
         };
         let valid = input.capabilities.supports_producer_property_read()
             && input.execution.supports_host_erased()
-            && expected == input.compiler.compatibility()
             && expected == input.server.artifact_compatibility()
             && client_valid
             && input.resources.is_valid()
@@ -3953,11 +3832,6 @@ impl HostBindingRegistration {
     /// Returns execution-representation metadata.
     pub const fn execution(&self) -> BindingExecutionSupport {
         self.input.execution
-    }
-
-    /// Borrows the host compiler component.
-    pub const fn compiler(&self) -> &HostBindingCompilerRegistration {
-        &self.input.compiler
     }
 
     /// Borrows the route-scoped host server component.
@@ -4032,12 +3906,12 @@ fn start_host_consumer_property_read(
     );
     let seal = ConsumerResultSeal::from_request(&request, resources.consumer_result_limits());
     let mut envelope =
-        match crate::binding_compiler::try_box(HostConsumerCallEnvelope { disposition: None }) {
+        match crate::artifact::try_box(HostConsumerCallEnvelope { disposition: None }) {
             Ok(envelope) => envelope,
             Err(_) => {
                 let error = BindingOperationalError::new(CoreError::Backpressure(
                     ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
-                        .with_operation(clinkz_wot_td::data_type::Operation::ReadProperty)
+                        .with_operation(crate::Operation::ReadProperty)
                         .with_plan(request.plan_id())
                         .with_binding(request.binding_id(), request.binding_generation())
                         .with_redacted_cause(314, "Host Consumer call backing unavailable"),
@@ -4093,59 +3967,10 @@ fn consumer_metadata_matches(
     }
 }
 
-fn static_consumer_support<C: BindingCompilerExtension + 'static>(
-    identity: BindingRegistrationIdentity,
-    execution: BindingExecutionSupport,
-    capabilities: BindingRegistrationCapabilities,
-    compiler: &StaticBindingCompilerRegistration<C>,
-    resources: BindingResourceDeclarations,
-    client: Option<ConsumerBindingConfiguration>,
-) -> Option<ConsumerCompilerSupport> {
-    let actual =
-        (compiler.compiler() as &dyn core::any::Any).downcast_ref::<ResolvedTargetCompiler>();
-    if capabilities.supports_consumer_property_read()
-        && execution.supports_application_static()
-        && let Some(actual) = actual
-        && identity.configuration() == actual.configuration()
-        && consumer_metadata_matches(identity, resources, client)
-        && actual.support(false).consumer_configuration() == client
-        && identity.artifact_compatibility()
-            == crate::binding_compiler::resolved_target_compatibility()
-    {
-        Some(actual.support(false))
-    } else {
-        None
-    }
-}
-
-#[cfg(feature = "std")]
-fn host_consumer_support(
-    identity: BindingRegistrationIdentity,
-    execution: BindingExecutionSupport,
-    capabilities: BindingRegistrationCapabilities,
-    compiler: &HostBindingCompilerRegistration,
-    resources: BindingResourceDeclarations,
-    client: Option<ConsumerBindingConfiguration>,
-) -> Option<ConsumerCompilerSupport> {
-    if capabilities.supports_consumer_property_read()
-        && execution.supports_host_erased()
-        && let Some(support) = compiler.consumer_support()
-        && identity.configuration() == support.configuration()
-        && consumer_metadata_matches(identity, resources, client)
-        && support.consumer_configuration() == client
-        && identity.artifact_compatibility() == support.compatibility()
-    {
-        Some(support)
-    } else {
-        None
-    }
-}
-
 /// Recoverable author input for a complete Consumer-only static registration.
 pub struct StaticConsumerBindingRegistrationInput<C: PollClientBinding> {
     identity: BindingRegistrationIdentity,
     execution: BindingExecutionSupport,
-    compiler: StaticBindingCompilerRegistration<C::Compiler>,
     client: C,
     resources: BindingResourceDeclarations,
     status: BindingStatusPolicy,
@@ -4155,7 +3980,6 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistrationInput<C> {
     pub const fn new(
         identity: BindingRegistrationIdentity,
         execution: BindingExecutionSupport,
-        compiler: StaticBindingCompilerRegistration<C::Compiler>,
         client: C,
         resources: BindingResourceDeclarations,
         status: BindingStatusPolicy,
@@ -4163,7 +3987,6 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistrationInput<C> {
         Self {
             identity,
             execution,
-            compiler,
             client,
             resources,
             status,
@@ -4173,10 +3996,7 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistrationInput<C> {
     pub const fn identity(&self) -> BindingRegistrationIdentity {
         self.identity
     }
-    /// Borrows the authoring compiler.
-    pub const fn compiler(&self) -> &StaticBindingCompilerRegistration<C::Compiler> {
-        &self.compiler
-    }
+
     /// Borrows the authoring client, before installation or after recovery.
     pub const fn client(&self) -> &C {
         &self.client
@@ -4201,7 +4021,12 @@ pub struct StaticConsumerBindingRegistration<C: PollClientBinding> {
     input: StaticConsumerBindingRegistrationInput<C>,
 }
 impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
-    /// Validates compiler/client compatibility and the complete retained slot.
+    /// Immutable policy of the captured executor.
+    pub fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        self.input.client.consumer_configuration()
+    }
+
+    /// Validates client compatibility and the complete retained slot.
     /// Rejection preserves the exact complete input without protocol work.
     pub fn new(
         input: StaticConsumerBindingRegistrationInput<C>,
@@ -4218,14 +4043,12 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
             ));
         }
         let expected = identity.artifact_compatibility();
-        let compiler_compatibility = input.compiler.compiler().compatibility();
         let client_compatibility = input.client.artifact_compatibility();
         let slot_fits = complete_static_consumer_slot_fits::<C::RequestState>(
             input.client.request_state_layout(),
             input.resources,
         );
         if !(input.execution.supports_application_static()
-            && expected == compiler_compatibility
             && expected == client_compatibility
             && input.resources.is_valid()
             && slot_fits)
@@ -4249,10 +4072,7 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
     pub const fn execution(&self) -> BindingExecutionSupport {
         self.input.execution
     }
-    /// Borrows the compiler while retaining the complete owner.
-    pub const fn compiler(&self) -> &StaticBindingCompilerRegistration<C::Compiler> {
-        &self.input.compiler
-    }
+
     /// Returns the validated declarations, without charging nonexistent owners.
     pub const fn resources(&self) -> BindingResourceDeclarations {
         self.input.resources
@@ -4270,7 +4090,7 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
     pub fn start_consumer_property_read(
         &mut self,
         request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<<C::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<C::Artifact>,
         slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
@@ -4332,39 +4152,11 @@ impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
         acknowledge_static_consumer_property_read(&mut self.input.client, slot)
     }
 }
-impl<C: PollClientBinding> StaticConsumerBindingRegistration<C>
-where
-    C::Compiler: 'static,
-{
-    /// Consumes the exact complete owner to capture Core's closed support.
-    /// Generic native compiler validity alone does not confer aggregate support.
-    pub fn try_into_consumer_compiler(
-        self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
-        if let Some(support) = static_consumer_support(
-            self.identity(),
-            self.execution(),
-            self.capabilities(),
-            &self.input.compiler,
-            self.input.resources,
-            self.input.client.consumer_configuration(),
-        ) {
-            return Ok(ConsumerCompilerRegistration {
-                registration: self,
-                support,
-            });
-        }
-        let error = registration_error(self.identity(), 323);
-        Err(BindingInputRejection::new(self, error))
-    }
-}
-
 #[cfg(feature = "std")]
 /// Recoverable author input for a complete Consumer-only Host registration.
 pub struct HostConsumerBindingRegistrationInput {
     identity: BindingRegistrationIdentity,
     execution: BindingExecutionSupport,
-    compiler: HostBindingCompilerRegistration,
     client: Box<dyn ClientBinding>,
     resources: BindingResourceDeclarations,
     status: BindingStatusPolicy,
@@ -4375,7 +4167,6 @@ impl HostConsumerBindingRegistrationInput {
     pub fn new(
         identity: BindingRegistrationIdentity,
         execution: BindingExecutionSupport,
-        compiler: HostBindingCompilerRegistration,
         client: Box<dyn ClientBinding>,
         resources: BindingResourceDeclarations,
         status: BindingStatusPolicy,
@@ -4383,7 +4174,6 @@ impl HostConsumerBindingRegistrationInput {
         Self {
             identity,
             execution,
-            compiler,
             client,
             resources,
             status,
@@ -4393,10 +4183,7 @@ impl HostConsumerBindingRegistrationInput {
     pub const fn identity(&self) -> BindingRegistrationIdentity {
         self.identity
     }
-    /// Borrows the authoring compiler.
-    pub const fn compiler(&self) -> &HostBindingCompilerRegistration {
-        &self.compiler
-    }
+
     /// Borrows the authoring client, before installation or after recovery.
     pub fn client(&self) -> &dyn ClientBinding {
         &*self.client
@@ -4423,7 +4210,12 @@ pub struct HostConsumerBindingRegistration {
 }
 #[cfg(feature = "std")]
 impl HostConsumerBindingRegistration {
-    /// Validates the selected cell, compiler/client identity and declarations.
+    /// Immutable policy of the captured executor.
+    pub fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
+        self.input.client.consumer_configuration()
+    }
+
+    /// Validates the selected cell, client identity and declarations.
     pub fn new(
         input: HostConsumerBindingRegistrationInput,
     ) -> Result<Self, BindingInputRejection<HostConsumerBindingRegistrationInput>> {
@@ -4439,10 +4231,8 @@ impl HostConsumerBindingRegistration {
             ));
         }
         let expected = identity.artifact_compatibility();
-        let compiler_compatibility = input.compiler.compatibility();
         let client_compatibility = input.client.artifact_compatibility();
         if !(input.execution.supports_host_erased()
-            && expected == compiler_compatibility
             && expected == client_compatibility
             && input.resources.is_valid())
         {
@@ -4465,10 +4255,7 @@ impl HostConsumerBindingRegistration {
     pub const fn execution(&self) -> BindingExecutionSupport {
         self.input.execution
     }
-    /// Borrows the compiler while retaining the complete owner.
-    pub const fn compiler(&self) -> &HostBindingCompilerRegistration {
-        &self.input.compiler
-    }
+
     /// Returns the validated declarations, without charging nonexistent owners.
     pub const fn resources(&self) -> BindingResourceDeclarations {
         self.input.resources
@@ -4481,26 +4268,7 @@ impl HostConsumerBindingRegistration {
     pub fn into_input(self) -> HostConsumerBindingRegistrationInput {
         self.input
     }
-    /// Consumes only Core's supported fallible adapter and actual configuration.
-    pub fn try_into_consumer_compiler(
-        self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
-        if let Some(support) = host_consumer_support(
-            self.identity(),
-            self.execution(),
-            self.capabilities(),
-            &self.input.compiler,
-            self.input.resources,
-            self.input.client.consumer_configuration(),
-        ) {
-            return Ok(ConsumerCompilerRegistration {
-                registration: self,
-                support,
-            });
-        }
-        let error = registration_error(self.identity(), 323);
-        Err(BindingInputRejection::new(self, error))
-    }
+
     /// Starts an installed Consumer call through the shared Core seal/decorator.
     pub fn start_consumer_property_read(
         &self,

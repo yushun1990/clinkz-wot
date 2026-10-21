@@ -12,7 +12,6 @@ members = [
     "discovery",
     "foundation",
     "planning",
-    "protocol-bindings/core",
     "protocol-bindings/protocols/zenoh",
     "protocol-bindings/protocols/http",
     "servient",

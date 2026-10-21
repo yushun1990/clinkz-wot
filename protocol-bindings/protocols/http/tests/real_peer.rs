@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 include!("support/application.rs");
 use std::sync::mpsc;
 async fn take_woken(call: &mut ConsumerPropertyReadCall) -> CoreResult<InteractionOutput> {

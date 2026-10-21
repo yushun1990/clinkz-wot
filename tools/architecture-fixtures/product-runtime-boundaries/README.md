@@ -1,5 +1,10 @@
 # Product/runtime boundary experiments
 
+ADR-0024 retires this source-layout comparison as current evidence. Reproduce its
+historical result at the recorded baseline below; its generated source seams
+predate the production compiler/runtime extraction. No measurement or shape claim
+from this experiment is carried forward to the successor boundary.
+
 Non-production investigation evidence for
 [workspace topic 0076](../../../workspace/0076-composable-capabilities-and-runtime-boundaries.md).
 This isolated Cargo workspace is not part of the production dependency graph.

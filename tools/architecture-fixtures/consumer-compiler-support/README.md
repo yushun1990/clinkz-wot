@@ -5,7 +5,7 @@ This isolated, non-publishable crate retains the construction model for
 and the [admitted Core precursor](../../../docs/work-packages/WP-200-consumer-compiler-support-admission.md).
 Its library and `witness` binary are historical model evidence. The
 [`production` integration tests](tests/production.rs) reuse
-[Core's external completion tests](../../../core/tests/consumer_compiler_support.rs)
+[Core's external completion tests](../../../planning/tests/consumer_compiler_support.rs)
 against this isolated dependency graph. Those tests construct the actual public
 typed and supported Host complete registrations and production compiler. No
 manifest or root dependency change is needed.

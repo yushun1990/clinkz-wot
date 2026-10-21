@@ -1,3 +1,4 @@
+use crate::core::data_type::operation::{DocumentOperation, OperationListRef};
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use fluent_uri::ParseError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -15,7 +16,7 @@ struct StringListField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<Strin
 
 #[serde_as]
 #[derive(Deserialize)]
-struct OperationListField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<Operation>>);
+struct OperationListField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<DocumentOperation>>);
 
 /// A form can be viewed as a statement of "To perform an operation type
 /// operation on form context, make a request method request to submission
@@ -91,7 +92,8 @@ impl<'de> Deserialize<'de> for Form {
         let additional_responses = crate::flat::take(&mut map, "additionalResponses")?;
         let subprotocol = crate::flat::take(&mut map, "subprotocol")?;
         let op = crate::flat::take::<OperationListField, D::Error>(&mut map, "op")?
-            .and_then(|field| field.0);
+            .and_then(|field| field.0)
+            .map(|ops| ops.into_iter().map(|op| op.0).collect());
         Ok(Form {
             href,
             content_type,
@@ -134,7 +136,7 @@ impl Serialize for Form {
             map.serialize_entry("subprotocol", subprotocol)?;
         }
         if let Some(op) = &self.op {
-            map.serialize_entry("op", &crate::flat::OneOrManyRef(op))?;
+            map.serialize_entry("op", &OperationListRef(op))?;
         }
         for (key, value) in &self._extra_fields {
             map.serialize_entry(key, value)?;

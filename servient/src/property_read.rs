@@ -7,22 +7,22 @@ use core::task::{Context, Poll};
 use clinkz_wot_core::binding::BindingRouteKey;
 use clinkz_wot_core::{
     AffordanceTarget, BindingArtifactEnvelope, BindingArtifactRef, BindingArtifactRole,
-    BindingCallSettlement, BindingCancellationDisposition, BindingCompilerExtension,
-    BindingDeliveryOutcome, BindingIngressPolicy, BindingLifetimeFootprint,
-    BindingOperationalError, BindingRegistrationIdentity, BindingResourceDeclarations,
-    BindingStateLayout, BindingStatusPolicy, CleanupOperation, CleanupPhaseContext, CleanupRecord,
-    CleanupReservation, CleanupSlotId, CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase,
-    HandlerContext, HandlerFootprint, LogicalInteractionPlan, PendingWork, PendingWorkClass,
-    PlanId, PlanSetGeneration, PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass,
-    RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome, RouteCleanupOutcome,
-    RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome,
-    RouteReadinessSlot, RouteTerminal, ServerResponseSlot, ServerRouteSlot,
-    ServingActivationAuthority, StartStatus, StaticBindingRegistration, StaticHandlerRegistration,
-    StepStatus, ThingId, ThingSlotId,
+    BindingCallSettlement, BindingCancellationDisposition, BindingDeliveryOutcome,
+    BindingIngressPolicy, BindingLifetimeFootprint, BindingOperationalError,
+    BindingRegistrationIdentity, BindingResourceDeclarations, BindingStateLayout,
+    BindingStatusPolicy, CleanupOperation, CleanupPhaseContext, CleanupRecord, CleanupReservation,
+    CleanupSlotId, CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, HandlerContext,
+    HandlerFootprint, LogicalInteractionPlan, PendingWork, PendingWorkClass, PlanId,
+    PlanSetGeneration, PrepareInput, ReadPropertyHandler, RetryClass, RouteAcceptEvent,
+    RouteAcceptLease, RouteActivationOutcome, RouteCleanupOutcome, RouteCommitOutcome,
+    RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
+    RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority, StartStatus,
+    StaticHandlerRegistration, StepStatus, ThingId, ThingSlotId,
 };
 use clinkz_wot_foundation::{
     ResourceAccount, ResourceKind, ResourceLimits, SlotIndex, WorkBudget, WorkClass,
 };
+use clinkz_wot_planning::{BindingCompilerExtension, StaticBindingPreparation};
 use clinkz_wot_planning::{
     PlanBuildOutput, PlanBuildStep, PlanCompiler, PropertyReadBuildCursor, PropertyReadPlanCompiler,
 };
@@ -32,10 +32,11 @@ use clinkz_wot_td::{data_type::Operation, thing::Thing};
 use clinkz_wot_core::{
     CleanupHandle, CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
     CleanupTransferTarget, HostActiveRouteGuard, HostBindingArtifact, HostBindingCallBox,
-    HostBindingCompilerCursor, HostBindingRegistration, HostCommittedRouteGuard,
-    HostPreparedRouteGuard, HostRouteCleanupSuccessor, HostShutdownRouteGuard, RouteAbortInput,
-    RouteCleanupSuccessor, RouteShutdownInput,
+    HostCommittedRouteGuard, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
+    HostShutdownRouteGuard, RouteAbortInput, RouteCleanupSuccessor, RouteShutdownInput,
 };
+#[cfg(feature = "std")]
+use clinkz_wot_planning::{HostBindingCompilerCursor, HostBindingPreparation};
 
 /// Read-only exposure lifecycle view.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -110,10 +111,10 @@ where
 impl<H> StaticServientBuilder<(), H> {
     pub fn binding_registration<B>(
         self,
-        binding: StaticBindingRegistration<B>,
-    ) -> StaticServientBuilder<StaticBindingRegistration<B>, H>
+        binding: StaticBindingPreparation<B>,
+    ) -> StaticServientBuilder<StaticBindingPreparation<B>, H>
     where
-        B: PollServerBinding,
+        B: PrepareServerBinding,
     {
         StaticServientBuilder {
             td: self.td,
@@ -148,9 +149,9 @@ where
     }
 }
 
-impl<'h, B, H> StaticServientBuilder<StaticBindingRegistration<B>, StaticHandlerRegistration<'h, H>>
+impl<'h, B, H> StaticServientBuilder<StaticBindingPreparation<B>, StaticHandlerRegistration<'h, H>>
 where
-    B: PollServerBinding + 'h,
+    B: PrepareServerBinding + 'h,
     H: ReadPropertyHandler + 'h,
 {
     pub fn build(self) -> CoreResult<impl StaticServient + 'h> {
@@ -1163,11 +1164,12 @@ fn progress(class: PendingWorkClass) -> StepStatus<()> {
 }
 
 type StaticCursor<B> = PropertyReadBuildCursor<
-    <<B as PollServerBinding>::Compiler as BindingCompilerExtension>::Cursor,
-    <<B as PollServerBinding>::Compiler as BindingCompilerExtension>::Artifact,
+    <<B as PrepareServerBinding>::Compiler as BindingCompilerExtension>::Cursor,
+    <<B as PrepareServerBinding>::Compiler as BindingCompilerExtension>::Artifact,
 >;
 
-type StaticArtifact<B> = <<B as PollServerBinding>::Compiler as BindingCompilerExtension>::Artifact;
+type StaticArtifact<B> =
+    <<B as PrepareServerBinding>::Compiler as BindingCompilerExtension>::Artifact;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum StaticRoutePhase {
@@ -1191,7 +1193,7 @@ enum StaticRoutePhase {
     Closed,
 }
 
-struct StaticRouteStorage<B: PollServerBinding> {
+struct StaticRouteStorage<B: PrepareServerBinding> {
     phase: StaticRoutePhase,
     route: ServerRouteSlot<B::RouteState>,
     readiness: RouteReadinessSlot<B::ReadinessState>,
@@ -1200,13 +1202,13 @@ struct StaticRouteStorage<B: PollServerBinding> {
 
 struct StaticPropertyReadServient<'h, B, H>
 where
-    B: PollServerBinding,
+    B: PrepareServerBinding,
     H: ReadPropertyHandler,
 {
     td: Option<Thing>,
     thing_slot: ThingSlotId,
     limits: ResourceLimits,
-    registration: StaticBindingRegistration<B>,
+    registration: StaticBindingPreparation<B>,
     handler: StaticHandlerRegistration<'h, H>,
     handler_name: Box<str>,
     expose: ExposeState,
@@ -1224,14 +1226,14 @@ where
 
 impl<'h, B, H> StaticPropertyReadServient<'h, B, H>
 where
-    B: PollServerBinding,
+    B: PrepareServerBinding,
     H: ReadPropertyHandler,
 {
     fn new(
         td: Thing,
         thing_slot: ThingSlotId,
         limits: ResourceLimits,
-        registration: StaticBindingRegistration<B>,
+        registration: StaticBindingPreparation<B>,
         handler: StaticHandlerRegistration<'h, H>,
         handler_name: Box<str>,
         admission: AdmissionReservations,
@@ -1853,7 +1855,7 @@ where
 
 impl<B, H> StaticServient for StaticPropertyReadServient<'_, B, H>
 where
-    B: PollServerBinding,
+    B: PrepareServerBinding,
     H: ReadPropertyHandler,
 {
     fn begin_destroy(&mut self) -> CoreResult<()> {
@@ -2481,12 +2483,12 @@ enum HostRouteState {
 #[cfg(feature = "std")]
 pub(crate) struct HostPropertyReadConfig {
     limits: ResourceLimits,
-    registration: HostBindingRegistration,
+    registration: HostBindingPreparation,
 }
 
 #[cfg(feature = "std")]
 impl HostPropertyReadConfig {
-    pub(crate) fn new(limits: ResourceLimits, registration: HostBindingRegistration) -> Self {
+    pub(crate) fn new(limits: ResourceLimits, registration: HostBindingPreparation) -> Self {
         Self {
             limits,
             registration,
@@ -2499,7 +2501,7 @@ struct HostPropertyReadRuntime {
     td: Option<Thing>,
     thing_slot: ThingSlotId,
     limits: ResourceLimits,
-    registration: HostBindingRegistration,
+    registration: HostBindingPreparation,
     handler: Option<PropertyReadHandlerRecord>,
     expose: ExposeState,
     plan_set: CompiledPlanSetRecord<HostBindingArtifact>,
@@ -4775,3 +4777,5 @@ mod tests {
         );
     }
 }
+
+use clinkz_wot_planning::PrepareServerBinding;

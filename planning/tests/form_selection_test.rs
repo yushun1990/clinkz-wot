@@ -1,5 +1,5 @@
 use clinkz_wot_core::AffordanceKind;
-use clinkz_wot_protocol_bindings::{
+use clinkz_wot_planning::{
     AffordanceRef, BindingError, FormSelectionCriteria, resolve_form_target,
     resolve_selected_affordance_form_security, select_affordance_form,
     select_affordance_form_with_criteria, select_affordance_form_with_filter, select_form,
