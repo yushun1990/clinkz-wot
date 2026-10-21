@@ -65,13 +65,24 @@ semantic result's acknowledgement.
 
 The [constructed shared Producer case](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
 requires native infrastructure progress independent of any one route permit.
-Servient still indexes opaque native keys to semantic routes/handlers, pins a
-deferred routing decision to its generation, and lends each acceptance permit
-only after current publication/authorization checks. Stopping A removes its
-routing and revokes its gate before releasing its native participation; B and
-already accepted A replies retain their own leases. Final native retirement
-waits for all route/observation/reply/job users at the physical owner, with its
-close owner still retained. No last-reference count substitutes for that test.
+Binding owns native matching/captures over Engine-installed registrations and
+may return zero/many generation-pinned candidates. Servient owns the logical
+registration/generation -> handler index and checks each candidate's exact token,
+current publication/authorization and recipient capacity before lending its
+acceptance permit. Shared packet backing and per-recipient references/deliveries
+are independently bounded. Identical/overlapping filters do not collapse logical
+recipients; equality lookup remains an exclusive-unicast adapter.
+
+Stopping A revokes its gate before removing its exact native registration; B
+remains eligible even with the same filter. Deferred candidates retain their
+original generation/captures; accepted work retains its original handler/data.
+Final route-registration release initiates ordinary native retirement internally.
+Polling has no initiation authority and cannot suppress a live sibling's ingress
+or attachments. A whole-infrastructure shutdown would require separate authority
+to revoke/drain all dependents first. Retirement progress retains the physical
+owner until all route/observation/reply/job users drain. No reference count alone
+substitutes for those boundaries. The UDP and decoded-packet matching probes
+remain separate evidence, not broker or long-lived capability acceptance.
 
 Host and static forms would share lifecycle decisions and checks through common
 kernels/views, with different physical records and progress mechanisms. Fixed

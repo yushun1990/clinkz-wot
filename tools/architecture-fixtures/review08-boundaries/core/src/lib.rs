@@ -28,7 +28,7 @@ pub struct Bound<P, O> {
     pub operands: O,
 }
 
-/// Engine treats a binding's canonical native selector as an opaque key.
+/// Exact-unicast adapter key, not the general native matching/cardinality model.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Endpoint(pub Box<str>);
 
@@ -98,6 +98,26 @@ impl AcceptPermit<'_> {
             && self.gate.serving.get()
             && target.serving.get()
     }
+}
+
+impl Gate {
+    /// Identity projection only; neither method grants publication or permits.
+    pub fn route_id(&self) -> RouteId {
+        self.route
+    }
+    pub fn same_registration(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.issuer, &other.issuer)
+            && self.route == other.route
+            && Rc::ptr_eq(&self.serving, &other.serving)
+    }
+}
+
+/// Matching experiment only: Binding supplies a pinned recipient plus captures;
+/// Engine checks current authority/capacity before lending the acceptance permit.
+pub trait MatchedCandidate: Sized {
+    type Event;
+    fn registration(&self) -> &Gate;
+    fn accept(self, permit: AcceptPermit<'_>) -> Result<Self::Event, Self>;
 }
 
 pub trait ObservedRead {

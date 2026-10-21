@@ -411,3 +411,72 @@ fn engine_does_not_retarget_buffered_input_to_a_reused_slot() {
     drop(unaccepted);
     assert_eq!(owner.poll_retire(), Poll::Ready(()));
 }
+
+#[test]
+fn early_retirement_poll_preserves_sibling_ingress_and_attachment() {
+    let counts = Rc::new(Counts::default());
+    let compiler = Compiler(counts.clone(), MappingPolicy::TextBoolean);
+    let definition = definition(&compiler);
+    let owner = NativeOwner::new(counts.clone());
+    let clone = owner.clone();
+    let mut engine = Engine::<Route>::default();
+    engine.grant(10, endpoint("sensor/a"));
+    engine.grant(20, endpoint("sensor/b"));
+    let a = engine
+        .install(
+            1,
+            10,
+            owner.route(bound(&compiler, &definition, "a")),
+            || true,
+        )
+        .ok()
+        .unwrap();
+    let b = engine
+        .install(
+            2,
+            20,
+            owner.route(bound(&compiler, &definition, "b")),
+            || false,
+        )
+        .ok()
+        .unwrap();
+    assert!(engine.publish(&[a, b]));
+    assert!(engine.stop(a));
+    assert_eq!(owner.users(), (1, 0, 0, 0));
+    assert_eq!(clone.poll_retire(), Poll::Pending);
+    let socket = client();
+    let mut first = engine
+        .accept(observe(&owner, &socket, b"sensor/b"))
+        .unwrap();
+    assert_eq!(first.poll_reply(), Ok(true));
+    assert_eq!(reply(&socket), b"false");
+    let replacement = engine
+        .install(
+            1,
+            10,
+            owner.route(bound(&compiler, &definition, "a")),
+            || true,
+        )
+        .ok()
+        .unwrap();
+    assert!(engine.publish(&[replacement]));
+    assert!(engine.stop(replacement));
+    assert_eq!(clone.poll_retire(), Poll::Pending);
+    let mut last = engine
+        .accept(observe(&owner, &socket, b"sensor/b"))
+        .unwrap();
+    let unaccepted = observe(&owner, &socket, b"sensor/b");
+    let callback = owner.hold_native_job();
+    assert!(engine.stop(b));
+    assert_eq!(owner.users(), (0, 1, 1, 1));
+    assert_eq!(clone.poll_retire(), Poll::Pending);
+    drop(unaccepted);
+    assert_eq!(clone.poll_retire(), Poll::Pending);
+    assert_eq!(last.poll_reply(), Ok(true));
+    assert_eq!(reply(&socket), b"false");
+    assert_eq!(clone.poll_retire(), Poll::Pending);
+    drop(callback);
+    assert_eq!(clone.poll_retire(), Poll::Ready(()));
+    assert_eq!(owner.poll_retire(), Poll::Ready(()));
+    assert_eq!((counts.opens.get(), counts.closes.get()), (1, 1));
+}

@@ -1,4 +1,6 @@
-//! Test-sized, single-thread Engine. Native selectors stay opaque here.
+//! Exact-unicast, single-thread Engine adapter. The matching companion keeps
+//! native pattern interpretation outside Engine and admits multiple recipients.
+pub mod matching;
 use review08_core::*;
 use std::collections::{BTreeMap, BTreeSet};
 

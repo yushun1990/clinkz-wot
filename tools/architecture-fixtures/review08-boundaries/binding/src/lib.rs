@@ -1,5 +1,6 @@
 //! Non-production native datagram sketch. ONE socket, at most two Producer routes.
 //! No handler capability, compiler dependency in runtime builds, or worker thread.
+pub mod matching;
 #[cfg(feature = "prepare")]
 pub mod prepare;
 
@@ -132,11 +133,13 @@ impl NativeOwner {
     pub fn fail_next_reply(&self) {
         self.0.borrow_mut().fail_send = true;
     }
-    /// Pending keeps this same physical owner addressable. No detached closer.
+    /// Progress only: last-route release initiates retirement. A clone cannot
+    /// turn an active infrastructure into a closing one by polling it.
     pub fn poll_retire(&self) -> Poll<()> {
         let mut native = self.0.borrow_mut();
-        native.retiring = true;
-        if native.routes + native.observations + native.deliveries + native.jobs != 0 {
+        if !native.retiring
+            || native.routes + native.observations + native.deliveries + native.jobs != 0
+        {
             return Poll::Pending;
         }
         if native.socket.take().is_some() {

@@ -247,13 +247,15 @@ wrapper, identity, lease and cleanup destination throughout.
 Servient atomically publishes complete local dispatch authority after coverage
 and capacity checks, and closes it before draining. Bindings may progress
 bounded native ingress/control traffic before publication but may not dispatch
-handlers. A registration/session driver may multiplex endpoints and surface
-bounded native observations/opaque endpoint keys. Engine-owned indexing assigns
-the semantic route generation; a borrowed route permit gates acceptance and the
-owned reply opportunity. Deferred decisions cannot retarget by key after route
-reuse. Native shared sessions have explicit last-user/callback retirement;
-one route's cancellation
-cannot retire a sibling's resources. Consumer calls retain owned progress,
+handlers. A registration/session driver may match native observations against
+Engine-installed registrations and surface zero/many generation-pinned candidates
+with captures. Native matching stays Binding-owned; Engine validates each target's
+publication, current authorization and delivery capacity before lending a scoped
+permit. Equality-key lookup is an exclusive-unicast adapter, not a universal
+cardinality rule. Deferred candidates cannot retarget after route reuse. Native
+shared sessions have explicit last-user/callback retirement; polling does not
+grant retirement-initiation authority. One route's cancellation cannot retire
+a sibling's resources. Consumer calls retain owned progress,
 first-cause cancellation, late-result validation and terminal disposal. Protocol
 I/O and correlation remain Binding-owned; selection, authorization and dispatch
 remain engine-owned.
@@ -2349,19 +2351,40 @@ This selects no universal Engine session manager or allocator.
 
 The [constructed shared-Producer boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
 separates native infrastructure progress from route-scoped semantic acceptance.
-The Engine owns the canonical-key -> route-generation -> handler index, current
-authorization and publication root. The Binding owns native key extraction,
-buffering and physical infrastructure; it receives only read-only route gates
-and nonretained issuer/route/generation-scoped permits. Independent route close
-revokes Engine authority before releasing native participation. Accepted work
-retains its program/reply/native leases and cannot authorize fresh ingress.
+The Engine owns logical registration/generation -> handler indexing, current
+authorization and publication. Binding-owned native matching over Engine-installed
+selectors produces zero/many candidates, each carrying the exact read-only
+issuer/registration/generation token, bounded captures and packet ownership.
+Engine neither decodes patterns nor derives recipient count from native packet
+count. Each candidate independently needs current publication/authorization,
+recipient capacity and a scoped permit. Identical or overlapping native filters
+may retain separate logical owners; an exclusive endpoint adapter still rejects
+collisions. A fan-out event does not duplicate a one-shot response opportunity.
+
+Shared immutable packet backing is charged once, with bounded work, candidates,
+captures and references; exhaustion has an explicit disposition rather than
+silent recipient truncation. Each accepted recipient retains its own event and
+delivery capacity. Rejection, cancellation or saturation of A preserves B's
+eligibility. Deferred candidates keep their original token/captures and cannot
+retarget to replacements. Independent close revokes the Engine record before
+removing that exact native logical registration, without removing siblings of
+the same filter. Accepted work retains its original handler/program/native
+leases; protocol acknowledgement/correlation remains at its actual native owner.
 
 Last-route close starts retirement but is insufficient for completion: pending
 observations, replies and jobs/callbacks remain native users. One physical owner
 and funded close destination survive Pending/error until final retirement; inert
-root references are not users. The loopback UDP sketch exercises this ordering
-and rejects foreign/cross-route/stale permits and queued generation substitution.
-Its native callback token is a lifetime model, not an async SDK qualification.
+root references are not users or shutdown authority. Only the final logical
+route/registration release initiates ordinary retirement internally. An early
+retirement poll preserves active ingress and attachment; polling progresses an already initiated
+close. Whole-infrastructure shutdown would require separate authority to first
+revoke/drain all dependents; no such shortcut is selected here.
+
+The UDP sketch exercises early-poll/sibling I/O and final observation/reply/job
+drain. The separate decoded-packet matcher exercises overlapping/identical filters,
+shared data, per-recipient delivery bounds and stale/foreign candidate rejection.
+It is no MQTT SDK, broker/QoS or long-lived WoT proof. The native callback token
+is a lifetime model, not an async SDK qualification.
 
 Permit-gated semantic acceptance and handler dispatch can coexist with bounded
 native I/O/buffering outside a route poll. A Binding still receives no direct

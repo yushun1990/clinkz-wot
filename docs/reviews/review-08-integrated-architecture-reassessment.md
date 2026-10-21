@@ -1,6 +1,6 @@
 # Architecture Review 08: Preparation, Programs, Instances, and Protocol Infrastructure
 
-- Date: 2026-10-20
+- Date: 2026-10-20; review corrections 2026-10-21
 - Status: reworked architecture candidate with constructibility evidence; pending independent architectural acceptance
 - Reviewed source and authority: [`700cfdb1ccb03fabd8e27fdc27b2f2109a362d9a`](https://github.com/yushun1990/clinkz-wot/tree/700cfdb1ccb03fabd8e27fdc27b2f2109a362d9a), active v5.1 including the accepted Host HTTP Producer admission
 
@@ -107,6 +107,13 @@ retain `ResolvedBindingInput`, compiler authoring/erasure or legacy TD-dependent
 client/security helpers under an optional feature. Compiler and runtime bundle
 pairing is assembled above Core. Neither Planning nor Servient depends on a
 concrete Binding; generic associated types connect them at the application.
+
+This split follows responsibility, not today's file names. Runtime call
+allocation, artifact compatibility and runtime erasure/storage helpers remain
+below Planning even where they currently live in `core::binding_compiler`.
+Compiler authoring/coordination moves upward. Core cannot re-export Planning to
+preserve an old compiler path: that would restore the cycle. Registration
+eligibility must also stop calling concrete compiler recognition from Core.
 
 | Public contract/data | Selected defining owner and reason |
 | --- | --- |
@@ -309,50 +316,103 @@ listener cannot require a permit for an arbitrarily chosen Thing before it can
 discover the native request's destination. Retain route-scoped semantic acceptance
 and response ownership; do not equate them with exclusive native-driver ownership.
 
-The [external Binding runtime](../../tools/architecture-fixtures/review08-boundaries/binding/src/lib.rs)
-owns one real loopback UDP socket and surfaces bounded, untrusted observations
-containing a canonical native endpoint key and response peer. There is no handler
-callback or semantic route table inside it. The
-[Engine sketch](../../tools/architecture-fixtures/review08-boundaries/engine/src/lib.rs)
-owns the endpoint-key -> route-generation -> handler index. Keys are opaque to
-the Engine; protocol parsing/canonicalization stays in the Binding. Native
-demultiplexing may implement an Engine-installed index mechanically, but cannot
-choose semantic ownership or grant publication/acceptance itself.
+The first rework incorrectly generalized the UDP adapter's equality-key -> one
+recipient index. Native matching is a relation: overlapping or identical filters
+can identify multiple independently authorized logical recipients. MQTT 3.1.1
+allows overlapping subscriptions to be represented by one incoming packet;
+its topic filter matching belongs to the protocol implementation. Logical
+fan-out cannot be inferred from packet multiplicity.
+[MQTT 3.1.1 §§3.3.5, 4.7](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html).
+
+The selected boundary is now **Binding-owned native matching over Engine-installed
+registrations -> zero/many generation-pinned candidates and captures -> independent
+Engine acceptance/dispatch**. The Engine owns the logical registration/generation
+to handler table, current authorization and publication root. The Binding owns
+native selectors/patterns, matching, capture extraction and native observation
+storage. It receives read-only registration tokens minted from the actual Engine
+records. A candidate carries that exact issuer/registration/generation, captured
+native facts and a lease on its immutable packet. Matching grants no authority;
+the Engine neither decodes patterns nor lets a Binding choose an authorized handler.
+
+The [UDP Binding](../../tools/architecture-fixtures/review08-boundaries/binding/src/lib.rs)
+and [exact-unicast Engine adapter](../../tools/architecture-fixtures/review08-boundaries/engine/src/lib.rs)
+still demonstrate two routes sharing actual I/O. Equality lookup and unique-key
+collision refusal are valid for that adapter's exclusive endpoints. They are
+not required by the general matching boundary or by logical subscriptions.
+Identical native filters may share a physical registration while retaining
+distinct logical tokens, grants, deliveries and stop semantics. A capability
+must declare its exclusivity/multiplicity; this does not authorize cloning a
+one-shot response opportunity into several requests.
 
 The construction is:
 
 1. Check operand/program/runtime compatibility, current per-instance authorization,
-   route collision and capacities before acquiring native participation. A route
-   retains any partial installation owner on failure; no failed route publishes.
-2. Install independent route leases into the same physical owner. Ready routes
-   retain read-only gates; only the Engine keeps the captured authority root.
+   native collision/sharing semantics and capacities before effects. Install the
+   Engine-minted logical tokens alongside Binding-owned native selectors; one
+   filter need not mean one logical registration. A failed/partial installation
+   retains its owner and cannot publish.
+2. Install independent participation leases into the same physical owner. Ready
+   routes retain read-only gates; only the Engine keeps the captured authority root.
    Publication changes the selected ready group without callback/yield. This
    proves a local single-thread boundary, not production concurrent publication.
-3. Perform bounded native I/O without a route permit. When routing an observation,
-   the Engine captures its issuer gate and exact route generation. Deferred observations keep
-   that decision; they are never looked up again by endpoint key after slot reuse.
-4. Recheck serving state, generation and current authorization. Lend a non-`Clone`
-   permit scoped to this accept call. The Binding checks real issuer identity,
-   exact route/generation and native observation owner/key, and returns a unique
-   delivery. Only the Engine selects/invokes the handler. A newly created authority
-   with identical numeric ids cannot impersonate the captured root. Neither root
-   nor publication mutation capability enters the Binding.
-5. Stop A by revoking its gate/removing Engine routing before releasing A's route
-   participation. B still receives and answers over the same socket. Already
-   accepted A work retains its own response/program/native leases and may settle;
-   it cannot authorize another incoming request.
-6. The final route release begins retirement and rejects new attachments. Native
-   observations, outstanding replies and SDK jobs/callbacks also count as users.
-   The complete physical owner remains pollable on Pending/error until all are
-   terminal; then it closes the socket exactly once. Extra inert owner handles
-   do not prevent retirement. Infrastructure retirement is not program retirement.
+3. Perform bounded native I/O/matching without a route permit. Enumerate all
+   matching logical registrations within declared work, candidate and capture
+   bounds. Retain one physical packet backing with separately bounded recipient
+   references. Overflow has an explicit refusal/backpressure disposition; do not
+   silently truncate recipients or substitute an unbounded broadcast.
+4. For **each** candidate, recheck exact issuer/record/generation, publication,
+   current authorization (including applicable captured facts) and that recipient's
+   delivery capacity. Lend a non-`Clone` permit scoped to this accept. The Binding
+   checks the captured token and returns this recipient's owned event/reply.
+   Only the Engine selects/invokes its handler. Refusal/cancellation of A cannot
+   consume B's participation or copy of the shared data. A newly created authority
+   with identical numeric ids cannot impersonate the captured root.
+5. A deferred candidate keeps its original token and captures; it is never matched
+   again to a successor by filter/key after slot reuse. Stop A by revoking/removing
+   its Engine record before removing its exact native logical registration.
+   B remains eligible even with the same native filter. Already accepted A work
+   retains its original handler/program/native data through settlement; it cannot
+   authorize fresh ingress. Native acknowledgement/correlation stays at its actual
+   Binding owner, not one acknowledgement per logical recipient.
+6. **Only final route participation release initiates ordinary retirement internally.**
+   A clone's `poll_retire` only progresses an already initiated retirement; an
+   early poll returns Pending without changing ingress or attachment state.
+   Observations, replies and SDK jobs/callbacks keep the retiring physical owner
+   alive until terminal, then it closes once. Whole-infrastructure shutdown would
+   require separate authority to revoke/drain all dependents first; this candidate
+   adds no such bypass. Inert root handles are not users or shutdown authority.
 
 Executable negatives cover prepublication/revoked admission, another issuer's
 permit, cross-route permits, old-generation permits, buffered input after slot
-reuse and send failure retaining the complete reply. Program release and socket
-release have separate assertions. The native job is a manually held lifetime
-token; it demonstrates the retirement condition, not a real asynchronous SDK
-callback implementation. UDP supplies actual I/O, not HTTP/broker conformance.
+reuse and send failure retaining the complete reply. The reviewer reproduced an
+early poll suppressing B's ingress despite its live route. The retained UDP
+regression failed before the correction, then passed with B still receiving,
+replying and admitting a replacement sibling after that poll. Final observation,
+reply and job drain still precede exactly one socket close.
+
+The companion [Binding matcher](../../tools/architecture-fixtures/review08-boundaries/binding/src/matching.rs)
+and [Engine recipient dispatcher](../../tools/architecture-fixtures/review08-boundaries/engine/src/matching.rs)
+construct the relation without a protocol case in Engine. Two tests exercise
+`meters/+/watts` with `meters/m1/#`, and identical `meters/+/watts` filters, over
+one decoded packet. Captures, zero/many candidates, shared backing, independent
+revocation/cancellation/removal, foreign issuer rejection and queued generation
+replacement are checked. A one-event credit for A does not block B using the
+second packet backing; aggregate exhaustion reports backpressure. Accepted A
+work retains its old handler through replacement. Limits are two registrations,
+two packet backings, at most two candidates per packet, four topic levels and
+32-byte topic/payload bounds; captures are bounded by those inputs.
+The probe's current grants are simple principal/slot pairs; authorization over
+captured semantic facts remains a production security obligation.
+
+These are **separate** evidence pieces: UDP supplies real exact-unicast I/O and
+retirement, while the matching probe injects bounded decoded packet data. It
+implements no MQTT wire protocol, broker session, acknowledgement/QoS, subscription
+installation/retirement, or WoT `ObserveProperty` lifecycle. There is no combined
+MQTT/SDK or general protocol-neutrality claim. The native job is a manually held
+lifetime token. The compiler's step-credit probe does not establish funded
+construction: start/bind/finish can allocate. Predebit for bounds/start/bind/step/
+abort/erasure, owner-preserving failures, bounded cleanup and original-account
+reconciliation remain mandatory future work.
 
 The socket/retirement state has one physical owner; each route, observation,
 response and job owns a bounded participation token. Production must fund this
@@ -397,7 +457,9 @@ review must decide the amendment before execution follows it.
 | Split Host and embedded runtimes, or add a Contracts crate immediately | Credible if actual dependency/backend evidence requires it. First separate capabilities and slim Core; avoid duplicating semantic algorithms. |
 | Deduplicate completed instance artifacts or share an instance generation as the program identity | Still repeats compilation or couples independent authority/reclamation. Reject as the prepare-once capability; explicit bind and independent program ownership solve the demonstrated case. |
 | Poll one shared listener exclusively through one route's driver/permit, or add a universal Engine session manager | The former can block sibling traffic/retirement when its route stops; the latter unnecessarily centralizes native protocol policy. Select Binding-owned infrastructure progress with Engine-owned semantic routing and per-route permits. |
-| Shared immutable program references, checked instance context and separate native infrastructure owners | Selected, now constructed by the narrow five-crate/UDP sketch. Production funding, concurrent publication, async SDK retirement and other operation/profile evidence remain independent obligations. |
+| Require one equality-key recipient, or decode native patterns in Engine | The former loses overlapping/identical-filter logical recipients; the latter moves protocol semantics into Engine. Keep equality as an exclusive-unicast adapter; select bounded Binding matching/captures plus separate Engine acceptance per pinned logical token. |
+| Let any participation handle initiate retirement by polling | Can disable an authorized sibling before its lease drains. Reject. Final route release initiates ordinary retirement; polling grants progress only. An explicit whole-infrastructure shutdown would need separate authority. |
+| Shared immutable program references, checked instance context and separate native infrastructure owners | Selected, constructed by the narrow five-crate/UDP and decoded-packet matching sketches. Production funding, concurrent publication, async SDK retirement and other operation/profile evidence remain independent obligations. |
 
 ## Change boundary and accepted authority
 
@@ -406,7 +468,7 @@ review must decide the amendment before execution follows it.
 | Module boundary / Core API ownership (`CRATE-DEPS-001`) | Reverse TD/Core only after removing Core's TD/legacy edges; compiler contracts/erasure move to Planning, resolved semantic loans stay TD-owned. Change exact public ownership/feature projections before source migration. |
 | ADR-0008 and Planning's mandatory two-level/per-generation representation | Permit minimal execution entries and separately owned reusable content; retain source-free output, selection identity, publication, leases and final physical reclamation. The accepted Host Producer subset already makes a narrower exception. |
 | Planning compiler eligibility and all-bounds ordering | Admit external owned/resumable jobs through generic pairing; permit funded incremental pure construction with reviewed error precedence and rollback. |
-| Binding/Servient lifecycle and Host Producer admission | Separate native infrastructure progress/retirement from route semantic progress, permit shared leases, and pin deferred routing decisions. Retain private publication, permit-gated dispatch, first cause, late results, complete transfer and truthful terminal state. |
+| Binding/Servient lifecycle and Host Producer admission | Permit bounded native matching/captures over Engine-installed registrations and independent acceptance per pinned candidate. Separate native progress, per-recipient delivery and retirement authority; keep exclusive route adapters. Retain private publication, first cause, late results, complete transfer and truthful terminal state. |
 | Resource interpretation and Host/static contracts | Generalize ownership/disposal policy across roles without omitting Engine backing, weakening strict profiles or relabeling old measurements. |
 | TD/security and interaction guarantees | Preserve extension data separately from execution support; keep runtime authorization mandatory; remove source-id/key availability assumptions deliberately. Sealing remains distinct from schema validation. |
 | Work packages, state/API/resource matrices and evidence | Update affected projections only in a later accepted migration. Renew changed carrier/cost/trace evidence; preserve unrelated scoped evidence. No gate or package transition follows from this report. |

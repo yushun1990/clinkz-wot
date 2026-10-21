@@ -61,6 +61,9 @@ Shared operation vocabulary moves to Core; TD retains its document encoding
 wrappers and all resolved semantic trees/loans. Public compiler contracts,
 selected-coordinate input wrappers and compiler erasure move to Planning.
 They cannot remain in Core behind a feature without restoring the dependency.
+Runtime storage/allocation, artifact compatibility and runtime erasure helpers
+stay below Planning even if today's `core::binding_compiler` module houses them;
+the split follows responsibility, not whole-file movement or upward re-exports.
 
 Runtime program types live in the Binding's base module, and source-free common
 execution envelopes live in Core. Optional Binding preparation implements

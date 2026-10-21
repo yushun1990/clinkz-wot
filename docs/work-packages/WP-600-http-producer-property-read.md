@@ -202,7 +202,12 @@ with no TD dependency in execution-only Core. It requires one reusable program
 owner independent of instance accounts, actual compiler/runtime policy checks,
 and separately owned native progress/retirement. Multiple route leases preserve
 Engine routing/publication/permits; a route's stop cannot close sibling service.
-The UDP sketch does not execute this HTTP admission or qualify its SDK/disposal.
+The shared-boundary correction permits Binding-owned native matching/captures
+with zero/many independently checked logical recipients; equality remains an
+exclusive-unicast adapter. Only final route participation release initiates ordinary
+retirement, with polling unable to disable a live sibling. The UDP and separate
+decoded-packet matching sketches neither execute this HTTP admission nor qualify
+its SDK/disposal, broker sessions or a long-lived WoT capability.
 
 These are **proposals**, not newly admitted Producer capabilities or exceptions.
 The recorded accepted scope, dependencies, strict limits, six completion keys
