@@ -149,10 +149,17 @@ enum PropertyReadBuildState<C, A> {
 /// Callers may retain and return the cursor, but cannot inspect or forge its
 /// state.
 ///
-/// ```compile_fail
-/// use crate::PropertyReadBuildCursor;
+/// ```compile_fail,E0616
+/// use clinkz_wot_planning::PropertyReadBuildCursor;
 /// fn inspect<C, A>(cursor: PropertyReadBuildCursor<C, A>) {
 ///     let _ = cursor.state;
+/// }
+/// ```
+/// An external caller can still retain or return the opaque cursor:
+/// ```
+/// use clinkz_wot_planning::PropertyReadBuildCursor;
+/// fn retain<C, A>(cursor: PropertyReadBuildCursor<C, A>) -> PropertyReadBuildCursor<C, A> {
+///     cursor
 /// }
 /// ```
 #[derive(Debug, Eq, PartialEq)]
