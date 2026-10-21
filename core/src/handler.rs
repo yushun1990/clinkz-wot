@@ -223,10 +223,9 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 /// require_hash::<HandlerContext<'static>>();
 /// ```
 ///
-/// ```compile_fail
-/// use clinkz_wot_core::{AffordanceTarget, HandlerContext, PlanId, ThingId, ThingSlotId};
+/// ```compile_fail,E0451
+/// use clinkz_wot_core::{AffordanceTarget, HandlerContext, Operation, PlanId, ThingId, ThingSlotId};
 /// use clinkz_wot_foundation::{Generation, SlotIndex};
-/// use crate::Operation;
 /// let thing_id = ThingId::from("urn:thing:private");
 /// let target = AffordanceTarget::Thing;
 /// let _ = HandlerContext {
@@ -237,6 +236,22 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 ///     plan_id: PlanId::new(SlotIndex::new(2), Generation::INITIAL),
 ///     binding: None,
 /// };
+/// ```
+/// The same public values can construct a context through its checked API:
+/// ```
+/// use clinkz_wot_core::{AffordanceTarget, HandlerContext, Operation, PlanId, ThingId, ThingSlotId};
+/// use clinkz_wot_foundation::{Generation, SlotIndex};
+/// let thing_id = ThingId::from("urn:thing:private");
+/// let target = AffordanceTarget::Thing;
+/// let context = HandlerContext::try_new(
+///     &thing_id,
+///     ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL),
+///     &target,
+///     Operation::ReadAllProperties,
+///     PlanId::new(SlotIndex::new(2), Generation::INITIAL),
+///     None,
+/// ).unwrap();
+/// assert_eq!(context.operation(), Operation::ReadAllProperties);
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HandlerContext<'a> {

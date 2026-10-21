@@ -68,7 +68,7 @@ test_commands = [
     "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_admission --test validated_lending",
     "cargo test --locked --offline -p clinkz-wot-planning --test consumer_property_read_binding --test consumer_compiler_support",
     "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing --test consumer_property_read_binding --test consumer_compiler_support",
-    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing,async --test consumer_property_read_binding --test consumer_compiler_support",
     "cargo test --locked --offline -p clinkz-wot-planning --lib",
     "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing --lib",
     "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing,async --lib",

@@ -596,7 +596,7 @@ pre_implementation_checks = [
     "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf",
     "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
     "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing --test consumer_property_read_binding",
-    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async --test consumer_property_read_binding",
+    "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing,async --test consumer_property_read_binding",
 ]
 admission_review = "github-pr:152#issuecomment-6120235799"
 completion_evidence_keys = ["consumer-only-registration"]
