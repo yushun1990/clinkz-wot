@@ -2,6 +2,14 @@
 #+date: 2026-07-19
 #+status: Accepted
 
+* Scoped supersession
+
+ADR-0024 supersedes the TD/Core dependency direction, compiler ownership and
+mandatory compiler retention in execution registrations. It also removes the
+mandatory physical two-level/per-instance compilation interpretation; instance
+authority, source-free execution, publication, leases and truthful reclamation
+remain. The text below records the original rationale within that boundary.
+
 * Context
 
 The v4.8 candidate required two-level logical and binding plans and prohibited

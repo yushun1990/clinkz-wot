@@ -3,6 +3,7 @@ use clinkz_wot_foundation::{
     AdmissionLedger, GatewayDefaultV1, Generation, ResourceAccount, ResourceKind, SlotIndex,
     StaticResourceProfile, WorkBudget, WorkClass as W,
 };
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_td::{
     ValidatedPropertyReadCursor, ValidatedPropertyReadEvent as Event,
     ValidatedPropertyReadStep as Step, ValidatedThing, ValidatedThingAdmissionConfig,

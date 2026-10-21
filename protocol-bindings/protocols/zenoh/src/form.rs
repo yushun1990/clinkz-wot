@@ -1,6 +1,6 @@
 use alloc::{format, string::String};
 
-use clinkz_wot_protocol_bindings::{
+use clinkz_wot_planning::{
     AffordanceRef, FormSelectionCriteria, resolve_form_target,
     select_affordance_form_selection_with_result_filter,
 };

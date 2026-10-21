@@ -6,6 +6,7 @@ use clinkz_wot_foundation::{
     AdmissionLedger, GatewayDefaultV1, Generation, ResourceAccount, ResourceKind as K, SlotIndex,
     StaticResourceProfile, WorkBudget, WorkClass,
 };
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_td::{
     ValidatedThingAdmissionConfig, ValidatedThingCursor, ValidatedThingProgress, thing::Thing,
 };
@@ -121,7 +122,7 @@ fn prepare() -> (
     ConsumerPropertyReadDraft<HostBindingArtifact>,
     ConsumerPropertyReadCleanupSlot<HostBindingArtifact>,
     ResourceAccount,
-    HostConsumerBindingRegistration,
+    HostConsumerBindingPreparation,
 ) {
     prepare_with_resources(production::resources())
 }
@@ -131,7 +132,7 @@ fn prepare_with_resources(
     ConsumerPropertyReadDraft<HostBindingArtifact>,
     ConsumerPropertyReadCleanupSlot<HostBindingArtifact>,
     ResourceAccount,
-    HostConsumerBindingRegistration,
+    HostConsumerBindingPreparation,
 ) {
     let source: Thing = serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"transfer","id":"urn:transfer","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},"properties":{"value":{"forms":[{"href":"https://peer.test/value"}]}}}"#).unwrap();
     let td_config =
@@ -154,7 +155,7 @@ fn prepare_with_resources(
         stats: Arc::new(Stats::default()),
     });
     let registration =
-        HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+        HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
             identity,
             BindingExecutionSupport::host_erased(),
             HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),

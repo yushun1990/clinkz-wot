@@ -7,38 +7,95 @@ discovering Things through replaceable Protocol Bindings. It provides a shared
 semantic core and application runtime without turning one transport, executor,
 or deployment topology into the WoT model itself.
 
-The architecture is derived from the WoT contract and explicit operational
-goals. Existing code is evidence about migration cost and defects, not design
-authority.
+This document is the single authoritative home for enduring product goals.
+Architecture and ADRs choose how to pursue them; `PLAN.md` bounds delivery;
+code, tests and scoped evidence establish current availability. None of those
+silently redefines the mission. Existing code is evidence about migration cost
+and defects, not the limit of the intended product.
+
+Changing a product goal requires an explicit Owner decision, presented with
+rationale and trade-offs. API removal, an accepted ADR, a v1 exclusion or a
+failed implementation attempt is not such a decision.
 
 ## Compatibility baseline
 
 - W3C WoT Thing Description 1.1 is the default compliance target.
-- Unknown extension associations survive ordinary round trips outside the
-  Value/RawValue re-interpretation cases defined by
-  [ADR-0020](../ADRs/0020-strict-json-value-decoding.org). Future strict ingestion uses
-  literal values; typed admission inspects the supplied immutable value directly.
-- `base` and relative form `href` values are resolved by one TD semantic authority.
+- Preserve unknown extension associations through document round trips.
+  [ADR-0020](../ADRs/0020-strict-json-value-decoding.org) specifies current
+  ordinary-serde Value/RawValue exceptions and future literal strict ingestion;
+  typed admission inspects its supplied immutable value. Those input contracts
+  do not justify rejecting arbitrary extension vocabularies as a product limit.
+- `base` and relative form `href` values retain consistent TD semantics across
+  bindings; the current architecture assigns resolution to TD.
 - Clinkz-specific metadata uses a Clinkz JSON-LD namespace and never masquerades
   as W3C vocabulary.
-- TD 2.0 additions remain behind `td2-preview` and do not change TD 1.1 behavior
-  when absent.
+- TD 2.0 preview additions do not change TD 1.1 behavior when absent; the current
+  Cargo gate is `td2-preview`.
 
 ## Goals
 
-The engine must provide:
+The enduring objectives are:
 
-- deterministic form, operation, security, and binding selection;
-- immutable precompiled plans on interaction hot paths;
-- protocol-neutral application APIs and core SPI values;
-- bounded memory, work, fan-out, cleanup, and diagnostics;
-- generation-safe replacement of handles and external resources;
-- explicit Producer exposure and destroy transactions;
-- pull-capable subscriptions and protocol-native collection operations;
-- host and constrained execution profiles with equivalent outcomes;
-- a simple third-party Protocol Binding integration path; and
-- executable conformance and performance evidence before implementation
-  tranches are admitted.
+- **Produce and consume Things:** expose application capabilities and interact
+  with remote Things through Properties, Actions and Events. This includes
+  Property read/write/observation, Action invocation and its described
+  query/cancellation lifecycle, Event emission/subscription/unsubscription,
+  and described collection operations.
+- **Discover Things:** find Things and retrieve their descriptions, including
+  interaction with Directory services as a client. Removing implicit Directory
+  composition does not remove discovery from the product.
+- **Secure interactions:** apply TD-described security and application policy,
+  including authentication, authorization, credentials, scopes and transport
+  trust where applicable. Unsupported selected security must refuse rather
+  than silently downgrade. Preserving extension security data is distinct from
+  being able to execute that scheme.
+- **Preserve interoperability and extensibility:** provide protocol-neutral
+  application semantics, deterministic and explainable form/operation/security/
+  binding selection, and a practical third-party binding integration path.
+  One transport's request shape must not define the WoT interaction model.
+- **Support long-lived and collection interactions:** provide controllable
+  observation/subscription, flow control, cancellation and terminal cleanup,
+  and preserve protocol-native collection capabilities where available.
+- **Make resource and lifecycle behavior dependable:** bound memory, work,
+  fan-out, cleanup and diagnostics; keep activation, teardown and replacement
+  under explicit ownership; prevent stale handles or late results from
+  affecting a successor. Measure useful interaction performance on real workloads.
+- **Serve host and constrained/embedded applications:** preserve equivalent
+  WoT semantics for supported interactions while allowing different storage,
+  progress, capacities and protocol backends. Host-first delivery does not
+  withdraw embedded execution as an objective.
+- **Make capability claims truthful:** identify unsupported combinations and
+  validate interoperability, conformance, resource and performance claims with
+  evidence appropriate to the advertised capability and environment.
+
+These are capability-family objectives, not a claim that every binding or
+device implements every operation, security scheme or deployment combination.
+
+## Architectural decisions serving the goals
+
+Immutable precompiled plans, generation-bearing handles, explicit exposure/
+destroy transactions, pull-capable subscription drivers and native collection
+lowering are current architectural means. Their accepted contracts remain
+binding until deliberately changed; they are not permanent product requirements
+for those Rust representations or mechanisms. An alternative must preserve the
+product outcomes and undergo the existing architecture change process.
+
+Likewise, executable evidence before tranche admission is an implementation
+policy owned by [project governance](../../PROJECT_GOVERNANCE.md), not an
+additional WoT capability. The context, profile and deployment choices below
+describe the current architecture. Detailed ownership belongs to the
+[module](20-module-boundaries.md), [Planning](30-compiled-plan-lifecycle.md),
+[Binding](40-protocol-binding-spi-and-deployment.md) and
+[Servient](50-servient-runtime-lifecycle.md) contracts.
+
+## v1 delivery scope
+
+[PLAN.md](../../PLAN.md) owns release scope and ordering. It selects Host
+HTTP/1.1, the public Producer/Consumer loop and HTTPS/security qualification,
+with portable shared layers and client-side Directory/Discovery work. Zenoh/
+pico production and real embedded protocol/hardware qualification are deferred
+separately. This scope neither reduces the goals above to Property Read nor
+grants completion of the remaining interaction families.
 
 ## Non-goals for v1
 
@@ -52,6 +109,38 @@ The following are deliberately outside the v1 engine contract:
 - a universal async executor or transport reactor;
 - hidden unbounded task, queue, cache, or retry ownership; and
 - transparent migration of a live handle to a new binding registration.
+
+These exclusions delimit v1, without deciding future product scope. The
+enduring resource and lifecycle goals still apply to later designs. In particular,
+excluding a Directory service does not exclude Directory clients, and excluding
+a durable broker in Core does not exclude bindings to broker/session protocols.
+
+## Implemented capabilities and migration claims
+
+Availability is established by public code and executed evidence, not by this
+goal list, operation enums, planned API rows or an accepted ADR. The
+[Preparation/Execution migration evidence](../evidence/WP-200-preparation-execution-boundary.toml)
+owns the exact retained, removed and unimplemented scope. It retains narrow
+Producer/Consumer Property Read paths; the concrete HTTP path is a Host,
+cleartext-IP, NoSec Consumer slice. Broad legacy Action/Event, write and
+subscription facades have no claimed replacement in that migration.
+[Discovery](../../discovery/src/lib.rs) remains separately available; removal
+of Servient convenience methods does not complete the
+[target Directory client contract](../work-packages/WP-500-discovery.md).
+
+Deleting legacy Producer/Consumer, Action/Event, subscription, discovery,
+security or embedded-related APIs withdraws those API implementations and any
+unmatched current availability, not the corresponding enduring objectives.
+Deleted tests are not evidence of migrated capability. The current pointer-
+atomic requirement for Core execution is a representation gap, not a decision
+to exclude devices without atomics; portable TD/tooling compilation is not
+embedded runtime qualification. Runtime principal/auth/scope values alone do
+not establish authentication or HTTPS support.
+
+[Review 08's diagnostics](../reviews/review-08-integrated-architecture-reassessment.md#findings-and-evidence-classification)
+also identify semantic/mapping and extension-security limitations in existing
+code. They remain gaps against the goals; they cannot redefine interoperability
+or security as whatever the current implementation accepts.
 
 ## System context
 

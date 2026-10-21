@@ -44,7 +44,7 @@ unimplemented predecessor contracts being counted as complete:
 | Source evidence | Consequence / executable discriminator |
 | --- | --- |
 | `planning/src/property_read.rs::property_read_plan` returns from the first read-looking Form and uses `None => true`; TD's `effective_form_operations` handles read/write/write-only defaults. | Default write-only reaches a read handler; default read/write and extra Forms/properties are incompletely covered. |
-| The same module constructs `BindingCompilerInput::new` without `with_semantics`; `core/src/binding_compiler.rs::SemanticCompilerAdapter::check_identity` accepts only `ConsumerCall`. | Current Producer compiler callbacks observe `resolved() == None`; #214 cannot simply be registered as a server compiler. |
+| The same module constructs `BindingCompilerInput::new` without `with_semantics`; `planning/src/binding_compiler.rs::SemanticCompilerAdapter::check_identity` accepts only `ConsumerCall`. | Current Producer compiler callbacks observe `resolved() == None`; #214 cannot simply be registered as a server compiler. |
 | Static and Host `servient/src/property_read.rs::step_planning` check only `derived.target` against `handler_name` before freezing and preparing. | Twelve Basic-valid mutations produce equal plans and reach one preparation/handler/response in the public Host mock path. This demonstrates missing admission, not an HTTP authentication exploit. |
 | `core/src/binding.rs` rejects non-`StrictV1` Producer declarations; Consumer's Host-owned policy is role-specific. | Do not present transitive nonallocating StrictV1 as qualified for Hyper/Tokio. The scoped Host Producer ownership contract below is required. |
 | `servient/src/property_read.rs::HostRouteState` and the Host lifecycle calls in `core/src/binding.rs` repeat phase-specific recovery owners. | Simplification motivation, not a demonstrated native impossibility. Replace the families while preserving owner, permit, first cause and close obligations. |
@@ -136,13 +136,13 @@ Consumer registration/consume/select/read executes the opposite end of the loop.
 The build privately validates the whole TD, enumerates advertised operations,
 checks coverage and resolves/lower its sole supported coordinate. It reserves
 entry, driver, ingress, response and cleanup capacity before installation.
-The first driver poll may bind/listen, which is externally visible. Closed-gate
+The first funded native installation poll may bind/listen, which is externally visible. Closed-gate
 connections receive bounded backpressure or closure, never a semantic event or
 handler call. Local readiness promises serviceability under the permit, not
 remote reachability. Publication does no fallible Binding callback.
 
-One exposure owns one listener, one accepted connection, one bounded request
-slot and one response opportunity. Hyper parses/framing; its service callback
+The first HTTP loop may use one listener, accepted connection, bounded request
+slot and response opportunity. These are adapter limits, not instance cardinality. Hyper parses/framing; its service callback
 only bridges native request/reply state. Servient selects/invokes the handler
 and applies the existing Core handler-result shape seal; media and byte bounds
 are checked before delivery. Application handlers remain responsible for data
@@ -172,9 +172,11 @@ remain Consumer-only; the Binding SPI owns the Producer field-family mapping
 and fresh role/configuration identity. No transitive StrictV1 claim, new global
 resource defaults or borrowing Consumer seals. Host process OOM/abort stays a
 deployment failure under ADR-0023. Partial-install failure and last root loss
-use the same driver close owner; no shared manager exists in this scope.
+use the same driver close owner; no universal shared manager is selected.
 
-Close stops permits before closing listener/connection. Cancel/timeout preserves
+Close revokes this instance's permits and releases its native participation.
+Shared infrastructure closes only after final registration release and complete
+drain, preserving sibling service. Cancel/timeout preserves
 the first cause; late requests, handler outcomes and delivery completions retain
 their exact generation/response slot until disposed. A refused cleanup transfer
 leaves the original owner live. Finite SDK-local disposal may allocate under the
@@ -184,38 +186,30 @@ accounts retained through that destruction. No network wait,
 blocking join or unowned task tail. Socket retirement is a local certificate,
 never proof that a peer observed nothing.
 
-## Review 08: proposed architectural amendment
+## Architectural dependency and revised execution boundary
 
-[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#reassessment-of-the-accepted-http-producer-admission)
-preserves the value of whole-description coverage, a source-free entry, one
-retained setup/close owner and Servient publication/permits. It recommends
-revising the generalization boundary before execution follows that direction:
-owned programs/program references beyond `Copy`, independent preparation and
-driver construction, shared native infrastructure leases, common Host/static
-semantics and consistent optional-id/Property-key handling across roles.
+ADR-0024 adopts the Preparation/Execution separation. Implement this HTTP loop
+against Planning-owned preparation and Core runtime registrations after the
+production dependency extraction. TD must first lend whole-description Producer
+semantics/coverage; Planning must check every advertised operation/handler before
+install. Those are concrete source dependencies inside this HTTP tranche, not
+another architecture investigation, proposal or global gate.
 
-The reworked candidate now demonstrates the
-[definition/bind boundary](../reviews/review-08-integrated-architecture-reassessment.md#constructed-definition-and-instance-boundary)
-and [shared Producer topology](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary).
-It places preparation contracts in Planning and resolved input views in TD,
-with no TD dependency in execution-only Core. It requires one reusable program
-owner independent of instance accounts, actual compiler/runtime policy checks,
-and separately owned native progress/retirement. Multiple route leases preserve
-Engine routing/publication/permits; a route's stop cannot close sibling service.
-The shared-boundary correction permits Binding-owned native matching/captures
-with zero/many independently checked logical recipients; equality remains an
-exclusive-unicast adapter. Only final route participation release initiates ordinary
-retirement, with polling unable to disable a live sibling. The UDP and separate
-decoded-packet matching sketches neither execute this HTTP admission nor qualify
-its SDK/disposal, broker sessions or a long-lived WoT capability.
+The old `HostProducerBinding` Copy/atomic pair and mandatory one-exposure/one-
+listener driver shape are superseded. Native owned program types live in Binding
+runtime; optional Planning preparation pairs actual policy and may bind checked
+instance operands. No universal Copy, per-instance recompilation, or public
+native setup phases. A narrow single-route loop remains useful evidence but
+must not impose physical cardinality. Binding owns native infrastructure and
+matching/progress, Engine owns logical lookup, publication, current per-candidate
+authority and response/cleanup bookkeeping. Shared retirement begins only after
+final registration participation release; polling cannot disable siblings.
 
-These are **proposals**, not newly admitted Producer capabilities or exceptions.
-The recorded accepted scope, dependencies, strict limits, six completion keys
-and final-root obligations remain unchanged. The whole-description and actual
-HTTP loop evidence are still outstanding. Independent architectural review must
-settle the proposed scope/contract amendment before source work implements it.
-This adds no package gate, status transition or
-universal shared-session requirement to the current admission.
+Production shared program funding/reuse, shared matching/retirement and static
+execution remain separate claims needing actual evidence. The dependency cut
+implements none of the HTTP Producer loop. Preserve all six completion keys,
+limits, zero-effects coverage refusal, partial-install ownership, source Drop,
+cancel/late results, last-root disposal and HTTPS/security release obligation.
 
 ## Preconditions and impact
 
@@ -260,3 +254,9 @@ refusal, artifact/executor pairing, the one-driver failure/permit/response bridg
 role-specific Host accounting and source-free public composition. Native-only
 prechecks cannot accept those production claims. A discovered missing boundary
 returns to this same ADR-0013 record before production changes continue.
+
+The current `HostBindingPreparation` wraps the retained exclusive staged adapter.
+Its constructor and the current builder parameter do not prescribe the HTTP
+successor's native driver shape. This tranche may replace that Producer pairing
+and builder surface with the selected installation/infrastructure owners; it
+must not add a phase adapter solely to satisfy the superseded signature.

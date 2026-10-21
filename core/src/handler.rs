@@ -1,4 +1,4 @@
-use clinkz_wot_td::data_type::Operation;
+use crate::Operation;
 
 use crate::{
     AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
@@ -223,10 +223,9 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 /// require_hash::<HandlerContext<'static>>();
 /// ```
 ///
-/// ```compile_fail
-/// use clinkz_wot_core::{AffordanceTarget, HandlerContext, PlanId, ThingId, ThingSlotId};
+/// ```compile_fail,E0451
+/// use clinkz_wot_core::{AffordanceTarget, HandlerContext, Operation, PlanId, ThingId, ThingSlotId};
 /// use clinkz_wot_foundation::{Generation, SlotIndex};
-/// use clinkz_wot_td::data_type::Operation;
 /// let thing_id = ThingId::from("urn:thing:private");
 /// let target = AffordanceTarget::Thing;
 /// let _ = HandlerContext {
@@ -238,12 +237,28 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 ///     binding: None,
 /// };
 /// ```
+/// The same public values can construct a context through its checked API:
+/// ```
+/// use clinkz_wot_core::{AffordanceTarget, HandlerContext, Operation, PlanId, ThingId, ThingSlotId};
+/// use clinkz_wot_foundation::{Generation, SlotIndex};
+/// let thing_id = ThingId::from("urn:thing:private");
+/// let target = AffordanceTarget::Thing;
+/// let context = HandlerContext::try_new(
+///     &thing_id,
+///     ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL),
+///     &target,
+///     Operation::ReadAllProperties,
+///     PlanId::new(SlotIndex::new(2), Generation::INITIAL),
+///     None,
+/// ).unwrap();
+/// assert_eq!(context.operation(), Operation::ReadAllProperties);
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HandlerContext<'a> {
     thing_id: &'a ThingId,
     thing_slot: ThingSlotId,
     target: &'a AffordanceTarget,
-    operation: clinkz_wot_td::data_type::Operation,
+    operation: crate::Operation,
     plan_id: PlanId,
     binding: Option<(BindingId, BindingGeneration)>,
 }
@@ -254,7 +269,7 @@ impl<'a> HandlerContext<'a> {
         thing_id: &'a ThingId,
         thing_slot: ThingSlotId,
         target: &'a AffordanceTarget,
-        operation: clinkz_wot_td::data_type::Operation,
+        operation: crate::Operation,
         plan_id: PlanId,
         binding: Option<(BindingId, BindingGeneration)>,
     ) -> CoreResult<Self> {
@@ -325,7 +340,7 @@ impl<'a> HandlerContext<'a> {
     }
 
     /// Returns the operation selected by the compiled plan.
-    pub const fn operation(self) -> clinkz_wot_td::data_type::Operation {
+    pub const fn operation(self) -> crate::Operation {
         self.operation
     }
 

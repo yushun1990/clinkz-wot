@@ -311,6 +311,18 @@ matrix. Promoting owned measurements into release performance requires its own
 versioned manifest/fixture/result-schema projection before that claim.
 No latency, hard RAM, allocator-metadata or whole-device claim follows here.
 
+## Preparation/Execution boundary correction
+
+ADR-0024 supersedes the local Core/Servient feature-cell equality predicate in
+this admission's compilation-cell amendment. Captured metadata/key encodings
+remain unchanged; qualification uses the actual paired compiler/executor,
+execution representation, Layout and quotas. The old mixed-label refusal
+observation is historical; its successor static positive retains funding and
+proves exact final release. The bounded source/contract extraction is owned by
+`WP-200-PREPARATION-EXECUTION-BOUNDARY`, with independent review outstanding.
+This does not replace any other mismatch, resource, cancellation or cleanup
+obligation, nor reclassify historical measurements as successor evidence.
+
 ## Remaining blocks
 
 Production migration is admitted only within the registered scope above, following

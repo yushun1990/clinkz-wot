@@ -3,6 +3,7 @@ use core::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 
 pub const COMPATIBILITY: BindingArtifactCompatibility =
     BindingArtifactCompatibility::new([0x61; 16]);

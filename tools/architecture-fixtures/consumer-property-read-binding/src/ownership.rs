@@ -184,8 +184,12 @@ pub struct SecondClient {
     output: Option<InteractionOutput>,
     stats: Arc<Stats>,
 }
-impl PollClientBinding for SecondClient {
+impl clinkz_wot_planning::PrepareClientBinding for SecondClient {
     type Compiler = ResolvedTargetCompiler;
+}
+impl PollClientBinding for SecondClient {
+    type Artifact =
+        <ResolvedTargetCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = State;
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
         Some(self.policy.configuration())
@@ -263,7 +267,7 @@ impl PollClientBinding for SecondClient {
 pub fn second_registration(
     policy: OwnedPolicy,
     output: InteractionOutput,
-) -> ConsumerCompilerRegistration<StaticConsumerBindingRegistration<SecondClient>> {
+) -> ConsumerCompilerRegistration<StaticConsumerBindingPreparation<SecondClient>> {
     let mut policy = policy;
     let c = policy.configuration();
     let mut private = *c.private_policy().as_bytes();
@@ -290,7 +294,7 @@ pub fn second_registration(
     let resources = resources()
         .with_resource_contract(c.resource_contract())
         .with_consumer_result_limits(c.result_limits().0, c.result_limits().1);
-    StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+    StaticConsumerBindingPreparation::new(StaticConsumerBindingPreparationInput::new(
         id,
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(compiler),

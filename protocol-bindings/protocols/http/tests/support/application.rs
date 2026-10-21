@@ -2,6 +2,8 @@
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
+#[allow(unused_imports)] // Semantic compiler suites share this application include.
+use clinkz_wot_planning::*;
 use clinkz_wot_servient::consumer_property_read::*;
 use std::{
     io::{Read, Write},

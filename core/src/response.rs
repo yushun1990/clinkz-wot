@@ -1,6 +1,6 @@
 //! Core-owned validation of untrusted binding-origin interaction output.
 
-use clinkz_wot_td::data_type::Operation;
+use crate::Operation;
 
 use crate::{
     BindingArtifactRef, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
@@ -38,7 +38,7 @@ pub(crate) struct ConsumerResultSeal {
 // Arc<[u8]> owns two atomic counters followed by the complete byte slice.
 // Layout::extend/pad_to_align includes the tail padding and rejects lengths
 // exceeding isize::MAX. Media Strings retain their full capacities.
-pub(crate) fn consumer_result_backing(body: u64, media: u64) -> Option<u64> {
+pub fn consumer_result_backing(body: u64, media: u64) -> Option<u64> {
     use core::alloc::Layout;
     if body == 0 || media == 0 {
         return None;
@@ -157,10 +157,10 @@ pub(crate) fn validate_property_read_binding_output(
 mod tests {
     use alloc::vec::Vec;
 
+    use crate::Operation;
     use clinkz_wot_foundation::{
         GatewayDefaultV1, Generation, ResourceKind, SlotIndex, StaticResourceProfile,
     };
-    use clinkz_wot_td::data_type::Operation;
 
     use super::validate_property_read_binding_output;
     use crate::{

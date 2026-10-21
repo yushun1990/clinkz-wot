@@ -399,8 +399,8 @@ implementation_paths = [
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
     "cargo test --workspace --locked",
-    "cargo check --locked -p clinkz-wot-planning --no-default-features",
-    "cargo check --locked -p clinkz-wot-planning --no-default-features --features async",
+    "cargo check --locked -p clinkz-wot-planning --no-default-features --features validated-thing",
+    "cargo check --locked -p clinkz-wot-planning --no-default-features --features validated-thing,async",
     "cargo check --locked -p clinkz-wot-planning",
 ]
 admission_review = "github-pr:50"
@@ -444,7 +444,7 @@ state_machines = []
 resource_changes = ["No schema/profile/WorkClass change; closed compiler costs and representation-specific actual slot/owner Layouts are known before callbacks, with binding payload counted once and held physical backing distinct from logical allowance"]
 old_api_removals = []
 performance_workloads = []
-implementation_paths = ["core/src/binding_compiler.rs", "core/src/binding.rs", "core/src/lib.rs"]
+implementation_paths = ["planning/src/binding_compiler.rs", "core/src/binding.rs", "core/src/lib.rs"]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
     "cargo run --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --bin witness",
@@ -526,8 +526,8 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features",
     "cargo test --locked --offline --manifest-path td/tests/semantic-join/Cargo.toml --no-default-features --features async",
     "cargo check --locked --offline -p clinkz-wot-planning",
-    "cargo check --locked --offline -p clinkz-wot-planning --no-default-features",
-    "cargo check --locked --offline -p clinkz-wot-planning --no-default-features --features async",
+    "cargo check --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing",
+    "cargo check --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing,async",
 ]
 admission_review = "github-pr:148#issuecomment-6108374621"
 completion_evidence_keys = ["consumer-property-read-aggregate"]
@@ -595,8 +595,8 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async",
     "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --target thumbv7em-none-eabihf",
     "cargo check --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --target thumbv7em-none-eabihf",
-    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --test consumer_property_read_binding",
-    "cargo test --locked --offline -p clinkz-wot-core --no-default-features --features async --test consumer_property_read_binding",
+    "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing --test consumer_property_read_binding",
+    "cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing,async --test consumer_property_read_binding",
 ]
 admission_review = "github-pr:152#issuecomment-6120235799"
 completion_evidence_keys = ["consumer-only-registration"]
@@ -772,10 +772,10 @@ state_machines = []
 resource_changes = ["One fixed maximum Core envelope replaces the branch-specific wrapper allocation before raw invocation; account actual tag/vacant/raw-owner/seal/error Layout and transient overlap once. No profile/schema/WorkClass change or arbitrary client boundedness claim."]
 old_api_removals = []
 performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028"]
-implementation_paths = ["core/src/binding.rs", "core/src/binding_compiler.rs"]
+implementation_paths = ["core/src/binding.rs", "planning/src/binding_compiler.rs"]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
-    "cargo +stable test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo +stable test --locked --offline -p clinkz-wot-planning --test consumer_property_read_binding --test consumer_compiler_support",
     "cargo +stable test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --test construction host_core_backing_recovers_but_infallible_raw_construction_still_aborts -- --nocapture",
     "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --baseline",
     "python3 tools/architecture-fixtures/consumer-runtime-entry/probes/run_host_call_candidate.py --alternative preallocated",
@@ -857,7 +857,7 @@ implementation_paths = [
 ]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
-    "cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-planning --test consumer_property_read_binding --test consumer_compiler_support",
     "cargo test --locked --offline -p clinkz-wot-servient --test property_read",
     "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test property_read",
     "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test property_read",
@@ -932,10 +932,10 @@ resource_changes = [
 old_api_removals = []
 performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-CS-020", "PERF-CS-021"]
 implementation_paths = [
-    "core/src/binding.rs", "core/src/binding_compiler.rs", "core/src/response.rs",
+    "core/src/binding.rs", "planning/src/binding_compiler.rs", "core/src/response.rs",
     "core/src/error.rs", "core/src/lib.rs", "core/Cargo.toml",
-    "core/tests/consumer_compiler_support.rs", "core/tests/consumer_property_read_request.rs",
-    "core/tests/consumer_property_read_binding.rs", "core/tests/consumer_property_read_binding",
+    "planning/tests/consumer_compiler_support.rs", "core/tests/consumer_property_read_request.rs",
+    "planning/tests/consumer_property_read_binding.rs", "planning/tests/consumer_property_read_binding",
     "servient/src/consumer_property_read.rs", "servient/src/consumer_property_read",
     "servient/src/lib.rs", "servient/tests/consumer_property_read.rs",
     "servient/tests/consumer_property_read", "servient/Cargo.toml", "Cargo.lock",
@@ -955,7 +955,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --test resource_ownership_candidate",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml --no-default-features --features async --test resource_ownership_candidate",
     "cargo test --locked --offline -p clinkz-wot-foundation",
-    "cargo test --locked --offline -p clinkz-wot-core --test consumer_property_read_binding --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-planning --test consumer_property_read_binding --test consumer_compiler_support",
     "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1",
     "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test consumer_property_read -- --test-threads=1",
     "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test consumer_property_read -- --test-threads=1",
@@ -1038,9 +1038,9 @@ implementation_paths = [
     "td/src/components/context.rs", "td/tests/validated_admission.rs",
     "td/tests/validated_lending.rs", "td/tests/builder_extension_fields_test.rs",
     "td/tests/runtime/src/scenarios.rs", "td/tests/runtime/README.md",
-    "core/src/plan.rs", "core/src/binding_compiler.rs", "core/src/lib.rs",
-    "core/tests/consumer_compiler_support.rs", "core/tests/consumer_property_read_request.rs",
-    "core/tests/consumer_property_read_binding.rs", "core/tests/consumer_property_read_binding",
+    "core/src/plan.rs", "planning/src/binding_compiler.rs", "core/src/lib.rs",
+    "planning/tests/consumer_compiler_support.rs", "core/tests/consumer_property_read_request.rs",
+    "planning/tests/consumer_property_read_binding.rs", "planning/tests/consumer_property_read_binding",
     "servient/tests/consumer_property_read.rs", "servient/tests/consumer_property_read",
     "planning/src/consumer_property_read.rs", "planning/tests/support/consumer_property_read.rs",
     "protocol-bindings/protocols/http", "Cargo.toml", "Cargo.lock",
@@ -1056,7 +1056,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --test form_metadata --test aggregate",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml --no-default-features --features async --test form_metadata --test aggregate",
     "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_lending --test builder_extension_fields_test",
-    "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support",
+    "cargo test --locked --offline -p clinkz-wot-planning --test consumer_compiler_support",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features",
     "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml --no-default-features --features async",
@@ -1122,17 +1122,17 @@ authoritative_artifacts = [
     "docs/work-packages/WP-600-protocol-bindings.md", "docs/work-packages/index.toml",
 ]
 api_items = [
-    "ResolvedProducerInput", "ProducerExecutionEntry", "HostProducerBinding",
-    "ProducerEndpointDriver", "ProducerInstallInput", "host_registration_try_producer",
+    "ResolvedProducerInput", "ProducerExecutionEntry",
+    "BindingCompilerExtension",
     "BindingResourceContract", "HandlerContext", "RouteActivationPermit",
     "RouteResponseOpportunity", "RouteInboundResponse",
 ]
 state_machines = ["host-producer-endpoint"]
 resource_changes = [
     "Single instance-owned immutable entry; TD-resolved facts and complete advertised coverage before install; source loans end before first effect. No separate replaceable plan-set generation or required persistent logical plan on this Host path.",
-    "Actual generic paired compiler/artifact/driver Layouts, wrapper/indirect backing, construction/rollback/response overlap and original-account cleanup funding before effects. Initial Copy inline atomic Producer compiler only; no general Consumer compiler readmission.",
+    "Actual generic paired compiler/artifact/driver Layouts, wrapper/indirect backing, construction/rollback/response overlap and original-account cleanup funding before effects. Owned native programs and optional Planning preparation; inline atomic lowering is only a supported subset. Actual compiler/executor policy and declared operand dependencies precede effects.",
     "ProducerOwnedHostV2 role-specific ADR-0023 ownership interpretation; unchanged numeric schema, Consumer-only schema-2 overlay/identities retained: Engine-controlled backing retained to release, Binding-private Hyper/Tokio growth/disposal policy measured separately, deployment baseline explicit. Consumer seals and transitive StrictV1 not relabeled; no global numeric defaults change.",
-    "One listener, one accepted connection/request/response slot per exposure. Head 16 fields/8192 raw bytes inclusive, 4096 read bytes per funded poll, bodyless request, JSON response <=4096 bytes, target <=64 UTF-8 bytes, caller-clock deadlines and no detached driver.",
+    "The first HTTP loop may use one listener and one accepted connection/request/response slot; this is not an instance-to-infrastructure cardinality rule. Head 16 fields/8192 raw bytes inclusive, 4096 read bytes per funded poll, bodyless request, JSON response <=4096 bytes, target <=64 UTF-8 bytes, caller-clock deadlines and no detached driver.",
 ]
 old_api_removals = [
     "Host Producer Property Read use of first-leaf PropertyReadPlanCompiler and mandatory LogicalInteractionPlan/independent PlanSetGeneration; retain static and Consumer scopes with their declared evidence",
@@ -1142,7 +1142,7 @@ performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-0
 implementation_paths = [
     "td/src/validated.rs", "td/src/semantic.rs", "td/src/semantic/facts.rs", "td/src/lib.rs",
     "td/tests/validated_lending.rs", "td/tests/validated_admission.rs",
-    "core/src/binding.rs", "core/src/binding_compiler.rs", "core/src/plan.rs", "core/src/lib.rs",
+    "core/src/binding.rs", "planning/src/binding_compiler.rs", "core/src/plan.rs", "core/src/lib.rs",
     "core/src/handler.rs", "core/src/thing.rs", "core/src/response.rs", "core/src/serving_activation.rs",
     "core/tests", "planning/src/property_read.rs", "planning/src/lib.rs", "planning/tests",
     "servient/src/property_read.rs", "servient/src/servient.rs", "servient/src/lib.rs", "servient/tests",
@@ -1155,7 +1155,7 @@ pre_implementation_checks = [
     "cargo test --locked --offline -p clinkz-wot-property-read-architecture-runner --lib --test producer_admission -- --test-threads=1 --nocapture",
     "cargo test --locked --offline -p clinkz-wot-binding-http -- --test-threads=1",
     "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_lending --test builder_extension_fields_test",
-    "cargo test --locked --offline -p clinkz-wot-core --test consumer_compiler_support --test consumer_property_read_binding",
+    "cargo test --locked --offline -p clinkz-wot-planning --test consumer_compiler_support --test consumer_property_read_binding",
     "cargo test --locked --offline -p clinkz-wot-servient --test property_read --test consumer_property_read -- --test-threads=1",
     "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features",
     "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --features async",
@@ -1167,3 +1167,27 @@ completion_evidence_keys = [
     "http-consumer-producer-loop", "producer-resource-retirement", "producer-regression-conformance",
 ]
 completion_evidence_path = "docs/evidence/WP-600-http-producer-property-read.toml"
+
+[[tranche]]
+id = "WP-200-PREPARATION-EXECUTION-BOUNDARY"
+work_package = "WP-200"
+sequence = 620
+status = "in-progress"
+admission_status = "candidate"
+impact_status = "current"
+depends_on = ["WP-600-HTTP-CONSUMER-PROPERTY-READ"]
+depends_on_packages = ["WP-000"]
+requirements = ["CRATE-DEPS-001", "API-TYPES-001", "PLAN-ARTIFACT-001", "PLAN-SET-001", "PLAN-COST-001", "BIND-REG-001", "BIND-STORAGE-001", "BIND-MEM-001", "API-PAYLOAD-001", "ADMIT-MEM-001", "CONSTRAINED-OWN-001"]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-td", "clinkz-wot-planning", "clinkz-wot-servient", "clinkz-wot-binding-http"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = ["docs/ADRs/0024-preparation-and-execution-boundary.org", "docs/architecture/20-module-boundaries.md", "docs/spec/planning.md", "docs/spec/binding-spi.md", "docs/spec/consumer-resource-ownership.md", "docs/api-ownership.csv", "docs/work-packages/WP-200-planning.md", "docs/work-packages/WP-600-http-producer-property-read.md", "docs/work-packages/index.toml"]
+api_items = ["Operation", "HostArtifactStorage", "BindingCompilerExtension", "BindingCompilerInput", "PrepareClientBinding", "PrepareServerBinding", "HostConsumerBindingPreparation", "StaticConsumerBindingPreparation"]
+state_machines = []
+resource_changes = ["Move compiler authoring/erasure and support costs to Planning; retain completed runtime storage and fallible allocation in Core. Preserve numeric limits, original accounts and all result/cancellation/transfer invariants. Independent Cargo syntax labels do not replace actual policy/representation/Layout qualification. Rerun changed owner/transport Layout and three-cell resource regressions; historical measurements are not successor acceptance."]
+old_api_removals = ["Core compiler APIs and Core-to-TD dependency; no upward feature or re-export", "TD-at-call-time client/server/dispatch, legacy handles and implicit Directory", "Obsolete protocol utility crate; deferred Zenoh native transport and preparation helpers remain without direct handler dispatch"]
+performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-CS-020", "PERF-CS-021"]
+implementation_paths = ["core", "td", "planning", "servient", "protocol-bindings", "clinkz-wot", "tools/architecture-fixtures", "Cargo.toml", "Cargo.lock"]
+pre_implementation_checks = ["tools/check-design-artifacts.sh", "cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient", "cargo test --locked --offline -p clinkz-wot-binding-http", "cargo check --locked --offline -p clinkz-wot-binding-http --no-default-features", "cargo tree --locked --offline -p clinkz-wot-core -e normal"]
+admission_review = "docs/work-packages/WP-200-planning.md#preparationexecution-migration"
+completion_evidence_keys = ["runtime-dependency-cut", "compiler-policy-pairing", "source-and-compiler-destruction", "static-host-resource-lifecycle-regressions", "legacy-retirement"]
+completion_evidence_path = "docs/evidence/WP-200-preparation-execution-boundary.toml"

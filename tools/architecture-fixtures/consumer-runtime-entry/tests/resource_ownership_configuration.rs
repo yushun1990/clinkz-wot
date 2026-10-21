@@ -4,6 +4,7 @@
 //! owned registration, supply a binding-key encoding, or prove schema-2 support.
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use consumer_runtime_entry_probe::production::{self, Client, Stats};
 use std::sync::{Arc, atomic::Ordering};
 
@@ -180,7 +181,7 @@ fn static_capture_rejects_a_distinguishing_key_and_recovers_the_complete_owner()
     let id = identity(&c);
     let stats = Arc::new(Stats::default());
     let registration =
-        StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+        StaticConsumerBindingPreparation::new(StaticConsumerBindingPreparationInput::new(
             id,
             BindingExecutionSupport::application_static(),
             StaticBindingCompilerRegistration::new(c),
@@ -241,7 +242,7 @@ fn host_capture_and_supported_adapter_reject_a_distinguishing_binding_key() {
         Err(CoreError::Validation(_))
     ));
     let stats = Arc::new(Stats::default());
-    let input = HostConsumerBindingRegistrationInput::new(
+    let input = HostConsumerBindingPreparationInput::new(
         id,
         BindingExecutionSupport::host_erased(),
         compiler,
@@ -253,7 +254,7 @@ fn host_capture_and_supported_adapter_reject_a_distinguishing_binding_key() {
         BindingStatusPolicy::new(2, 17),
     );
     let original_client = input.client() as *const dyn binding::ClientBinding as *const () as usize;
-    let registration = HostConsumerBindingRegistration::new(input)
+    let registration = HostConsumerBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("complete Host registration"));
     let rejected = match registration.try_into_consumer_compiler() {
         Err(e) => e,

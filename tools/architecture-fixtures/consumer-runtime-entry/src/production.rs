@@ -5,6 +5,7 @@ use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use core::{
     sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
@@ -57,8 +58,12 @@ fn error() -> BindingOperationalError {
         RetryClass::Never,
     )))
 }
-impl PollClientBinding for Client {
+impl clinkz_wot_planning::PrepareClientBinding for Client {
     type Compiler = ResolvedTargetCompiler;
+}
+impl PollClientBinding for Client {
+    type Artifact =
+        <ResolvedTargetCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = State;
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.compatibility
@@ -227,9 +232,9 @@ pub fn identity(c: &ResolvedTargetCompiler) -> BindingRegistrationIdentity {
 pub fn static_registration(
     c: ResolvedTargetCompiler,
     stats: Arc<Stats>,
-) -> ConsumerCompilerRegistration<StaticConsumerBindingRegistration<Client>> {
+) -> ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>> {
     let compatibility = c.compatibility();
-    let input = StaticConsumerBindingRegistrationInput::new(
+    let input = StaticConsumerBindingPreparationInput::new(
         identity(&c),
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(c),
@@ -240,7 +245,7 @@ pub fn static_registration(
         resources(),
         BindingStatusPolicy::new(2, 17),
     );
-    StaticConsumerBindingRegistration::new(input)
+    StaticConsumerBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("static registration"))
         .try_into_consumer_compiler()
         .unwrap_or_else(|_| panic!("static capture"))
@@ -249,9 +254,9 @@ pub fn static_registration(
 pub fn host_registration(
     c: ResolvedTargetCompiler,
     stats: Arc<Stats>,
-) -> ConsumerCompilerRegistration<HostConsumerBindingRegistration> {
+) -> ConsumerCompilerRegistration<HostConsumerBindingPreparation> {
     let compatibility = c.compatibility();
-    let input = HostConsumerBindingRegistrationInput::new(
+    let input = HostConsumerBindingPreparationInput::new(
         identity(&c),
         BindingExecutionSupport::host_erased(),
         HostBindingCompilerRegistration::try_new_consumer(c).unwrap(),
@@ -262,7 +267,7 @@ pub fn host_registration(
         resources(),
         BindingStatusPolicy::new(2, 17),
     );
-    HostConsumerBindingRegistration::new(input)
+    HostConsumerBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("Host registration"))
         .try_into_consumer_compiler()
         .unwrap_or_else(|_| panic!("Host capture"))
@@ -271,9 +276,9 @@ pub fn host_registration(
 // Normal-library compilation checks the actual adapters in both ARM cells.
 fn aggregate_eligible<R: clinkz_wot_planning::ConsumerPropertyReadRegistration>() {}
 pub fn check_normal_graph() {
-    aggregate_eligible::<ConsumerCompilerRegistration<StaticConsumerBindingRegistration<Client>>>();
+    aggregate_eligible::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>();
     #[cfg(feature = "std")]
-    aggregate_eligible::<ConsumerCompilerRegistration<HostConsumerBindingRegistration>>();
+    aggregate_eligible::<ConsumerCompilerRegistration<HostConsumerBindingPreparation>>();
 }
 
 const fn layout<T>() -> [usize; 2] {
@@ -285,8 +290,8 @@ const fn layout<T>() -> [usize; 2] {
 // compiler, support, owned configuration and fixed diagnostic context.
 #[used]
 pub static CONSUMER_ONLY_STATIC_LAYOUTS: [[usize; 2]; 12] = [
-    layout::<StaticConsumerBindingRegistration<Client>>(),
-    layout::<ConsumerCompilerRegistration<StaticConsumerBindingRegistration<Client>>>(),
+    layout::<StaticConsumerBindingPreparation<Client>>(),
+    layout::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>(),
     layout::<StaticConsumerPropertyReadSlot<State>>(),
     layout::<State>(),
     layout::<Client>(),

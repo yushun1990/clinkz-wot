@@ -9,8 +9,6 @@ result_large_err = "allow"
 
 [dependencies]
 clinkz-wot-foundation = { path = "../foundation", default-features = false }
-clinkz-wot-td = { path = "../td", default-features = false }
-async-trait = { workspace = true, optional = true }
 async-channel = { version = "2", optional = true, default-features = false }
 critical-section = { version = "1", default-features = false }
 sha2-const-stable = "0.1.0"
@@ -26,17 +24,10 @@ default = ["std"]
 # Host runtime: std `RwLock` backend for `WotLock`, std error impls, std-only
 # dep flags. Deliberately orthogonal to `async` — `std` alone gives the lock
 # backend without pulling the async syntax surface or any executor.
-std = ["clinkz-wot-foundation/std", "clinkz-wot-td/std", "critical-section/std"]
-# Async *syntax surface* (async-trait + futures-core + the async-channel
-# fan-in primitive). no_std-reachable; pulls no executor/runtime. The fan-in
-# channel (`async-channel`) is an async primitive paired with `Dispatch`, so
-# it lives here rather than under `std`.
+std = ["clinkz-wot-foundation/std", "critical-section/std"]
+# Optional event stream syntax and bounded fan-in; no executor is selected.
 async = [
     "clinkz-wot-foundation/async",
-    "dep:async-trait",
     "dep:futures-core",
     "dep:async-channel",
 ]
-## Experimental TD 2.0 data-model surface (`ActionAffordance.synchronous`).
-## Forwards to the `clinkz-wot-td` data model gate.
-td2-preview = ["clinkz-wot-td/td2-preview"]

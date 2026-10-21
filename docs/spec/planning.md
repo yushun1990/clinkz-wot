@@ -21,12 +21,11 @@ inactive until a later planning-domain entry review re-adopts or replaces them.
 
 ## Normative requirements
 
-`PLAN-COST-001`: Planning MUST use a two-level representation in which one
-protocol-neutral logical plan is compiled once per effective form and operation
-and shared by its binding candidates; a binding plan reference MUST contain
-only binding identity, static capability results, an artifact reference, and
-binding-specific data that cannot be shared, never a duplicate full logical
-plan.
+`PLAN-COST-001`: Planning MUST share protocol-neutral semantic work across
+binding candidates. A persistent two-level logical/binding representation is
+optional: minimal source-free execution entries MAY reference separately owned
+immutable definitions. It MUST NOT duplicate full logical data merely for each
+candidate or equate instance identity with program content identity.
 
 Historical v4.9 clause (`PLAN-COST-002`, inactive): A profile MAY choose eager, lazy, or hybrid compilation only
 for eligible binding artifacts; the choice MUST preserve candidate order,
@@ -62,19 +61,24 @@ candidate at most once and share one `provider_probes_per_interaction_max`
 budget across all examined candidates, while strict selection MAY narrow but
 MUST NOT bypass either bound.
 
-`PLAN-SET-001`: Each produced or consumed handle generation MUST have one
-Servient-owned aggregate compiled-plan-set record that alone owns lifecycle,
-publication, pins, operation leases, lazy slots, cursors, and accounting;
-publication MUST be atomic, draining MUST reject new pins while preserving old
-leases, and incremental reclamation MUST reach zero retained plan/artifact
-bytes only after every generation-bearing owner is terminal.
+`PLAN-SET-001`: Servient MUST own each instance's publication, current
+authority, generation, pins/operation leases, draining and accounting. A Plan Set
+MAY collect entries and requires its own generation only when independently
+replaceable or retained. Shared immutable definitions require a distinct funded
+physical owner and admitted references; closing one instance MUST NOT reclaim
+another's data. Reclamation follows actual final physical release. Existing
+Consumer separate generations remain checked until deliberately migrated.
 
-`PLAN-ARTIFACT-001`: Every protocol-specific planning artifact MUST be produced
-by the compiler extension atomically associated with the candidate's complete
-binding registration, remain immutable and generation checked, fit
-pre-admitted final/cursor/temporary/work bounds, be eager for Producer use or
-use the bounded Consumer lazy lifecycle, and contain no execution state,
-credential, handler, external resource, or cleanup obligation.
+`PLAN-ARTIFACT-001`: Planning MUST pair the actual compiler and executor's
+format/configuration/policy before effects. Native programs MUST be immutable,
+source-free, fit funded final/cursor/temporary/work bounds, and contain no live
+credential, handler, external resource or cleanup obligation. Producer coverage
+and all required semantics/capacity MUST be established before effects and
+publication. Qualified incremental pure construction MAY acquire capacity before
+each step, retaining rollback ownership; it need not establish all native bounds
+before any pure start. Existing Consumer all-bounds/error ordering remains its
+exercised subset until its evidence is renewed. Runtime generation and authority
+checks belong to each admitted entry, not to shared program content.
 
 `FORM-FINALIZE-001`: A server registration MAY provide one bounded,
 deterministic, local, nonblocking, side-effect-free form contributor; planning
@@ -171,8 +175,8 @@ The ownership split is exact:
 | Owner | Planning responsibility |
 | --- | --- |
 | `clinkz-wot-td` | Lossless TD/TM data, validation, and pure W3C default rules |
-| `clinkz-wot-core` | Protocol-neutral immutable plan identities and values, binding capability and compiler-extension SPI values, and generation-bearing plan references |
-| `clinkz-wot-planning` | Selection over TD-owned effective forms/targets/security, capability indexes, logical-plan construction, URI-template compilation, compiler coordination, deterministic ordering, and admitted build output |
+| `clinkz-wot-core` | Protocol-neutral immutable plan identities and values, binding capability/runtime artifact SPI values, and generation-bearing plan references |
+| `clinkz-wot-planning` | Compiler authoring/erasure and preparation pairing, selection over TD-owned effective forms/targets/security, capability indexes, logical-plan construction, URI-template compilation, compiler coordination, deterministic ordering, and admitted build output |
 | Concrete binding crate | Its capability declaration, compiler-extension implementation, and opaque protocol-specific artifact payload |
 | `clinkz-wot-servient` | Build transaction, capacity reservation, plan-set record, publication, pins, lazy-slot state, draining, and reclamation |
 
@@ -819,12 +823,13 @@ typed through `BindingArtifactEnvelope<AppArtifact>`.
 
 ### Host compiler representation
 
-Under `std`, Core alone provides safe cursor and artifact erasure:
+Under `std`, Planning provides compiler/cursor erasure and Core provides completed
+runtime artifact storage:
 
 ```rust
-pub struct HostBindingCompilerCursor { /* Core-private erasure */ }
+pub struct HostBindingCompilerCursor { /* Planning-private erasure */ }
 pub struct HostBindingArtifact { /* Core-private erasure */ }
-pub struct HostBindingCompilerRegistration { /* Core-private erasure */ }
+pub struct HostBindingCompilerRegistration { /* Planning-private erasure */ }
 
 impl HostBindingCompilerRegistration {
     pub fn new<C>(compiler: C) -> Self
@@ -883,7 +888,8 @@ impl HostBindingArtifact {
 }
 ```
 
-Core implements erasure with safe standard-library type inspection. A cursor
+Planning implements compiler/cursor erasure and Core implements completed artifact
+access with safe standard-library type inspection. A cursor
 type mismatch makes `step` return `Failed` with the original erased cursor;
 `abort` returns `Err(original_cursor)`. Compatibility or payload-type mismatch
 returns `None` for borrowed access and `Err(original_artifact)` for consuming
@@ -917,11 +923,12 @@ arbitrary callbacks, destructors or complete generic compiler admission.
 `HostBindingCompilerRegistration` and
 `StaticBindingCompilerRegistration<C>` are constructible component values, not
 Servient installation units. WP-200 implements them and the contract above.
-WP-300 later consumes exactly one matching component into each complete
-`HostBindingRegistration` or `StaticBindingRegistration<B>`. Only that complete
-bundle can enter `ServientBuilder`, preserving atomic identity, capability,
-compiler, artifact, and execution validation without making WP-200 wait for
-the WP-300 execution API.
+Planning consumes one matching component and a Core runtime registration into
+`HostBindingPreparation` or `StaticBindingPreparation<B>` (and the Consumer-only
+equivalents). The current `ServientBuilder` accepts this complete preparation
+bundle. `into_execution` releases its compiler and returns the validated Core
+runtime registration. Actual identity, capability, native format and policy are
+checked before effects; a runtime registration never requires a compiler.
 
 Compiler input is a read-only view containing only:
 
@@ -1038,12 +1045,15 @@ before logical plans are frozen.
 
 ### Contributor contract
 
-A server registration may supply one deterministic `ServerFormContributor`
+A preparation registration may supply one deterministic `ServerFormContributor`
 and a bounded `FormContributionCapability`. The contributor receives only the
 binding-independent draft view, matching bounded affordance requirements, and
 an immutable contribution context. It returns generated forms associated with
 their exact targets, generated security definitions and JSON-LD context terms,
 and canonical endpoint reservation identities for the forms it generates.
+The contributor and document contribution values belong to Planning's preparation
+surface; runtime Core owns only the source-free endpoint reservation identity.
+These broad contribution APIs remain unimplemented.
 Application-supplied forms instead obtain their canonical reservation identity
 from the selected Producer-route compiler output. If a generated form is also
 compiled, the compiler result must equal the contributor's identity before the
@@ -1255,7 +1265,8 @@ selection, complete preflight, all bounds before any start, owned immutable
 output, qualified identities, monotonic work, whole-transaction failure and
 bounded terminal ownership. Concrete binding compilers lower resolved inputs
 into protocol artifacts; they do not repeat TD semantics or select candidates.
-Core owns safe Host erasure. Allocation, storage Layouts, cursor transport and
+Planning owns safe Host compiler/cursor erasure; Core owns completed artifact
+storage. Allocation, storage Layouts, cursor transport and
 destruction primitives are supported per preparation representation. Servient
 owns policy capture, parent/global capacity pairing and publication. Sharing
 the Planning program requires none of a common allocator implementation,
@@ -1373,7 +1384,7 @@ helper modules are implementation mechanics):
 ```rust
 pub trait ConsumerPropertyReadRegistration: private::Sealed {
     type Artifact: 'static;
-    // Projection from Core's checked ConsumerCompilerRegistration<R>, which
+    // Projection from Planning's checked ConsumerCompilerRegistration<R>, which
     // retains the complete Host/static registration and its closed support.
 }
 pub struct ConsumerPropertyReadBuildConfig { /* checked fixed Planning projection */ }
@@ -1437,7 +1448,7 @@ selected preparation representation/configuration before any aggregate compiler 
 Bounds/start/step/abort primitive costs, cursor/temporary storage, allocation
 behavior and artifact destruction are part of that support. A limits projection,
 compatibility identifier or complete-registration validity alone is not a support
-attestation. [Core's closed support contract](binding-spi.md#closed-consumer-compiler-support)
+attestation. [Planning's closed support contract](binding-spi.md#closed-consumer-compiler-support)
 owns the consuming complete-owner construction, actual immutable compiler
 configuration and selected Host adapter. The original eligible implementation is
 the fixed resolved-target copy primitive. The Host semantic contract above
@@ -1448,7 +1459,7 @@ existing build signature takes the checked owner as `R`; its limits-only config
 does not mint support. No downstream trusted proof factory or installable
 compiler-only component is introduced by this requirement.
 No concrete protocol dependency or unsafe type identification enters Planning.
-Binding authors still use the existing complete Core registration SPI.
+Binding authors still use the Planning preparation pair and Core execution registration.
 
 The additive [Consumer-only registration precursor](../work-packages/WP-300-consumer-only-registration-admission.md)
 extends this sealed adapter to checked complete static/Host Consumer-only owners.
@@ -1915,8 +1926,9 @@ the actual captured registration and route. `ThingSlotId` is live local authorit
 optional TD id is provenance. Existing `HandlerContext::thing_id()` uses the
 source id when present and an explicitly local generated id otherwise; authority
 checks always use slot/generation. The published source is not assigned that id.
-Empty TD-valid Property keys require no sentinel encoding. Entry lifetime,
-physical backing and account ownership follow the instance owner. Compiler input
+Empty TD-valid Property keys require no sentinel encoding. The entry's own backing, checked operands and accounts follow its instance.
+Referenced immutable programs retain a distinct physical/account owner until
+all users drain. Compiler input
 never needs a persistent `LogicalInteractionPlan` or native resource.
 
 A privately completed entry plus exact complete-coverage result permits driver
@@ -1972,95 +1984,29 @@ pending preparation and every later route phase use only binding-owned bounded
 runtime state. A fixture-created logical plan, artifact, or preparation
 substitute is not evidence for this contract.
 
-### Proposed replacement of the compilation boundary
+<a id="proposed-replacement-of-the-compilation-boundary"></a>
+### Selected native compilation boundary
 
-This is the proposed architecture replacement from
-[0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution),
-subject to independent review and later authority migration. It does not admit
-production work or silently change the implemented contracts above. The earlier
-PR #206 choice of narrow Producer preflight with closed Consumer lowering is
-superseded as the target design.
+ADR-0024 adopts the separation. TD supplies bounded effective operations,
+security, schema/response, URI and context/extension loans. Planning selects
+Consumer alternatives deterministically and checks whole-description Producer
+coverage. Binding performs native lowering without raw-TD defaults, handler
+access, credential access or I/O. Lossless metadata preservation is not proof of
+execution support. Unsupported advertised Producer behavior refuses before
+effects; an unsupported Consumer alternative need not hide another supported
+alternative. Explicit selection does not silently fall back.
 
-Select compilation from bounded resolved views into small immutable execution
-entries, with public Binding-owned lowering for each supported role. Do not
-require `LogicalInteractionPlan` to survive as a universal compiler input or
-persisted per-coordinate object. Required engine selection/validation/dispatch
-facts and opaque native artifacts may be stored once at their actual owners.
-The public data shape must follow information and runtime needs, not today's
-fixture projections.
+Minimal source-free executable entries may reference owned native definitions
+and checked operands. Preparation ends every source/semantic loan before runtime
+installation. Capacity precedes acquisition and rollback retains partial pure
+construction. Producer semantics/coverage and runtime/cleanup funding precede
+native effects and publication. Shared definition ownership and instance grants
+are distinct. The program-definition contract below owns checked reuse.
 
-TD owns Basic validity, operation defaulting, security inheritance and generic
-URI meaning. The selected compiler receives those effective facts and bounded
-access to all relevant Form/affordance/root/schema/response/security metadata,
-including extension values and namespace/context identity. Source views may be
-borrowed during preparation; completed runtime output retains no source loan or
-complete lossless TD. Preserve absence versus explicit-empty/value distinctions.
-A generic bounded value/context interface carries new protocol vocabulary without
-new Core fields. No automatic remote context loading is required.
-
-Binding compilation interprets protocol vocabulary and protocol-specific defaults,
-without repeating TD defaults, selecting another Form, obtaining credentials or
-starting I/O. A metadata-presence boolean is sufficient only to reject a narrow
-unsupported case; it cannot replace the contents needed for useful lowering.
-Target capacity, media and native instruction support are Binding/profile
-capabilities, not restrictions imposed by a universal Core target-copy compiler.
-
-Planning enumerates and ranks candidates deterministically, connects supported
-security/codec choices, and records supported-artifact, candidate-unsupported or
-failure outcomes. A supported Consumer alternative can remain usable when
-another Form is unsupported. Strict explicit selection still reports that
-selected alternative's failure; no silent post-effect fallback follows.
-
-Every advertised Producer operation/Form must have matching route and handler/
-security coverage. Reject unsupported or unclassified advertised behavior before
-native route effects and publication. Do not freeze the first successful read
-leaf as evidence for the whole draft. TD-defaulted write-only is not a read;
-TD-defaulted read/write advertises more than read-only. A partial-description API
-would need to construct the reduced advertised TD explicitly before exposure;
-the initial target requires complete coverage of the submitted description.
-
-Build privately with controlled capacity acquired before growth and complete
-funded rollback. Sequential candidate reservation/compilation under aggregate
-caps is sufficient when failure preserves the transaction. A global all-bounds-
-before-any-start barrier and separate whole-draft preflight are optional
-mechanisms for particular availability/cost promises. All promised runtime and
-cleanup capacity, selection and Producer coverage must be settled before native
-effects/publication. Keep compilation pure and preserve input/partial output on
-allocation refusal, cancellation or callback failure.
-
-Compile jobs, artifacts and storage adapters must support independent external
-implementations. Replace sealed exact-compiler eligibility with the generic
-Binding contract and actual-layout/budgeted storage boundary described in
-[Binding SPI](binding-spi.md#proposed-open-lowering-and-execution-boundary).
-Conforming callback work and destruction still require evidence; neither a
-self-reported budget nor an open trait proves them. Finite caps may permit a paid
-atomic operation; incremental work is required where actual bounds demand it.
-
-Separate live instance/registration/generation authority from immutable artifact
-content. Typed composition or generic erasure must keep each artifact paired
-with its actual executor and role. Do not infer content equivalence from
-configuration/generation tags. This introduces no cache, persistent program,
-mandatory deduplication or universal bytecode.
-
-The private build transfers its complete execution table into one published
-instance-generation owner. Draining and leases govern reclamation. Do not require
-an independently versioned plan-set manager when the table cannot change apart
-from its instance. Reused call/route slots retain appropriate stale-use checks.
-Use eager compilation first; lazy/negative caching is an optional optimization,
-not an admission prerequisite for protocol independence.
-
-Local instance/slot identity does not require a source TD `id`; keep the optional
-source identity for its semantic/provenance use. Support affordance keys admitted
-by the TD kernel without inheriting the current logical-plan constructor's
-nonempty-name restriction. Neither prerequisite is an ownership invariant.
-
-The rewrite intersects TD semantic lending, Core compilation/storage, Planning,
-and both Servient roots. The source contracts, evidence obligations and affected
-requirements must be migrated explicitly before implementation. #204's Producer
-counterexamples remain mandatory regressions, but a narrow rejection preflight
-alone cannot close the independent-lowering goal. Existing route and Consumer
-proofs retain only their original implementation scope until replacement evidence
-is independently accepted.
+The current closed Consumer all-bounds and inline Host eligibility remain
+measured subsets. General qualified owned/resumable lowering, shared production
+backing and reusable programs remain implementation work; no sketch is promoted
+to resource/authorization evidence by this extraction.
 
 ## Property Read route-reservation projection
 
@@ -2084,67 +2030,41 @@ collision table, Servient capacity reservation, route lifecycle, or protocol
 I/O. It supplies the previously missing immutable value at the existing legal
 compiler/artifact boundary.
 
-## Proposed program and compilation amendment (Review 08)
+<a id="proposed-program-and-compilation-amendment-review-08"></a>
+## Preparation capabilities
 
-**Non-normative proposal, not an amendment to the active requirements above.**
-[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#open-compilation-without-a-universal-mechanism)
-recommends open compiler/executor pairing over native program types instead of
-concrete compiler recognition or eligibility limited to `Copy`/atomic lowering.
-Owned immutable programs and resumable pure Host jobs would be admissible under
-qualified layout, indirect-backing, work and cleanup contracts. Inline atomic
-and caller-owned static adapters remain useful supported subsets. Preparation
-facets need not remain runtime dependencies after installation.
+Generic compiler authoring and preparation registration are available without
+activating the borrowed Consumer aggregate. Planning's `validated-thing` feature
+selects that aggregate and forwards TD's explicit capability; the default
+Planning product includes it and Servient requests it explicitly. A compiler-only
+dependency must not implicitly activate TD loans or `arbitrary_precision` merely
+to implement the native compiler contract. Syntax and capability are separate.
 
-The candidate places public compiler traits, typed cursor/outcome contracts,
-Host compiler erasure and selected input wrappers in Planning. The wrappers
-borrow **TD-owned** resolved semantic views; Core has neither TD nor compiler
-dependencies. Native program/operand types stay in the Binding's runtime module,
-and generic source-free execution envelopes stay in Core. Optional preparation
-pairs them to the actual runtime registration above Core. The executable graph
-and rejected alternatives are in
-[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#responsibility-and-dependency-boundary).
+## Program definitions and checked instance binding
 
-The proposed output is a minimal executable entry referencing native program
-data and any shared common definition, with checked instance context and current
-runtime authority kept separate. A persistent two-level logical representation
-or independently versioned Plan Set would be required only where its capability
-needs it. This challenges the general representation in `PLAN-COST-001` and
-`PLAN-SET-001`; it does not supersede either outside an already admitted scope.
+ADR-0024 adopts explicit definition preparation and checked binding as the reuse
+boundary. Compiler dependencies include common/native schema, effective security,
+template/mapping and policy facts except declared operands. `bind` must validate
+those dependencies and operands without restarting definition compilation.
+Independent TD inputs still undergo validation. Changed dependencies or actual
+compiler/executor policy refuse before effects or require a new definition.
+A program reference, source name or matching Rust type grants no authority.
 
-Review 08 also recommends replacing the universal all-bounds-before-any-start
-barrier with funded incremental pure construction where useful. Capacity would
-precede acquisition, provisional output would remain rollback-owned, and all
-required semantic/coverage/capacity checks would precede effects/publication.
-Sequencing, first failure, error precedence and rollback costs require explicit
-review. Current all-bounds ordering remains active until that migration.
+Planning owns `BindingCompilerExtension`, selected-coordinate inputs, cursors,
+steps, bounds and Host compiler erasure. `ResolvedBindingInput` borrows TD-owned
+semantic views. Core owns runtime artifact envelopes, fallible allocation and
+completed erased storage through `HostArtifactStorage`; it does not own compiler
+APIs. Native program types are defined in Binding runtime modules. Optional
+preparation registrations pair actual executors and can be consumed into Core
+runtime registrations, dropping their compiler. No upward compatibility export
+is permitted. The inline Host semantic adapter and closed target-copy helper
+retain only their bounded existing support, not a universal eligibility rule.
 
-Consumer unsupported-alternative selection and whole-description Producer
-coverage remain different algorithms. Resource/construction failure is not
-unsupported mapping or permission for fallback after effects. Extension
-preservation does not certify execution support or authorization. A fixed
-prepared-data installer would need trusted provenance, compatibility and current
-target admission; no existing validation proof becomes a serializable image.
-
-Reuse initially means explicit definition preparation and checked instance
-binding, not automatic cache identity. The compiler provides a distinct
-`bind(program, resolved_instance)` callback over declared operands. It may validate
-and construct per-instance data but must not invoke definition compilation again.
-Planning checks common dependencies; the Binding checks native dependencies,
-operand constraints and captured mapping policy. Runtime installation also
-checks the actual compiler/executor policy, beyond Rust type equality. Each
-instance receives fresh current authorization and live generation from Servient.
-
-Definition dependencies include any schema, effective security interpretation,
-target/template or policy not explicitly declared as an operand. A mismatch
-requires refusal or another prepared definition. Independent input validation
-still runs; identical source names/configuration tags do not prove equivalence.
-Evidence separates definition work from validation/bind/install and retains the
-definition's original backing/account owner independently of any instance.
-The [focused sketch](../../tools/architecture-fixtures/review08-boundaries/README.md)
-demonstrates one compilation for two installed instances, source destruction and
-last-user release. It supplies no production resource/admission evidence.
-The existing publication/lease/reclaim requirements and compiler eligibility
-remain unchanged until independently accepted authority and scope migration.
+Definition backing/accounts survive independently of the first instance. Accepted
+work retains its data through drain, and final release occurs once. No cache,
+automatic equivalence, persistence or VM is admitted. Production reuse remains
+unimplemented by this dependency migration; the Review 08 sketches do not prove
+its physical funding or throughput.
 
 ## API roles
 
@@ -2155,17 +2075,18 @@ project these roles without moving their behavior to another crate:
 | --- | --- | --- |
 | `LogicalInteractionPlan`, `BindingCandidate`, `BindingPlanRef`, `InboundBindingPlan` | `clinkz-wot-core` | Immutable protocol-neutral plan and execution-reference values |
 | Semantic plan, source, target, binding, artifact, and plan-set generation ids | `clinkz-wot-core` | Static distinctions and stale-reference rejection; they may contain the foundation-owned generic `Generation` primitive without exposing it as an interchangeable semantic id |
-| Binding compiler input, artifact envelope/ref, compatibility identity, footprint, outcome, and compiler-extension trait | `clinkz-wot-core` binding SPI | Portable contract between shared planning and one complete registration |
+| Artifact envelope/ref, compatibility identity and footprint | `clinkz-wot-core` runtime SPI | Source-free data consumed by execution |
+| Binding compiler input, outcome and compiler-extension trait | `clinkz-wot-planning` | Pure native preparation paired with the actual runtime registration |
 | `CapabilityIndex`, `PlanCompiler`, `PlanBuildInput`, `PlanBuildOutput`, build cursor, `CompiledUriTemplate`, and `ResolvedFormTarget` | `clinkz-wot-planning` | Shared deterministic planning algorithms and resumable build surface |
 | `PropertyReadPlanCompiler` and opaque `PropertyReadBuildCursor` | `clinkz-wot-planning` | Exact bounded Producer-route projection from one complete registration identity/compiler view; no arbitrary role construction |
 | `CandidateFallbackPolicy`, `CandidateSkipReason`, `CandidateSkipDiagnostic`, and `CandidateSelectionDiagnostics` | `clinkz-wot-planning` | Immutable Consumer fallback policy plus bounded, typed pre-execution selection diagnostics |
-| `ServerFormContributor` and form-contribution values | `clinkz-wot-core` binding SPI | Side-effect-free Producer form finalization input/output |
+| `ServerFormContributor` and form-contribution values | `clinkz-wot-planning` preparation SPI | Side-effect-free Producer form finalization input/output; unimplemented |
 | Compiled plan-set record, plan-set lease, lazy-artifact slot, compiler lease, and reclaim cursor | `clinkz-wot-servient` | Aggregate lifecycle and mutable runtime ownership; these records are not binding APIs |
 | Concrete artifact payload and compiler-extension implementation | Concrete binding crate | Protocol-specific immutable planning data |
 
-The complete registration bundle atomically pairs the compiler extension with
-its capability and execution registrations. The binding SPI specification owns
-that bundle's exact construction API. Planning consumes its immutable
+The complete preparation bundle pairs the compiler extension with a validated
+Core runtime registration. The Binding SPI specification owns its construction
+semantics; Planning owns the preparation API. Planning consumes its immutable
 projection and does not define client calls, route guards, request acceptance,
 responses, subscriptions, emissions, or cleanup APIs.
 

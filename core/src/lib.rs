@@ -1,3 +1,9 @@
+//! Protocol-neutral vocabulary and execution contracts.
+//!
+//! Operation vocabulary is available without pointer atomics. The current
+//! execution representations require pointer atomics; their APIs are absent on
+//! targets without that capability. TD tooling can use the vocabulary without
+//! inheriting an Arc requirement. This is not a no-atomic execution claim.
 #![no_std]
 
 #[cfg(any(feature = "std", test))]
@@ -5,25 +11,51 @@ extern crate std;
 
 extern crate alloc;
 
+#[cfg(target_has_atomic = "ptr")]
+pub mod artifact;
+#[cfg(target_has_atomic = "ptr")]
 pub mod binding;
-pub mod binding_compiler;
+#[cfg(target_has_atomic = "ptr")]
 pub mod deadline;
+#[cfg(target_has_atomic = "ptr")]
 pub mod error;
+#[cfg(target_has_atomic = "ptr")]
 pub mod event;
+#[cfg(target_has_atomic = "ptr")]
 pub mod handler;
+#[cfg(target_has_atomic = "ptr")]
 pub mod identity;
-pub mod inbound;
+#[cfg(target_has_atomic = "ptr")]
 pub mod interaction;
+pub mod operation;
+#[cfg(target_has_atomic = "ptr")]
 pub mod outbound;
+#[cfg(target_has_atomic = "ptr")]
 pub mod payload;
+#[cfg(target_has_atomic = "ptr")]
 pub mod plan;
+#[cfg(target_has_atomic = "ptr")]
 mod response;
+#[cfg(target_has_atomic = "ptr")]
 pub mod security;
+#[cfg(target_has_atomic = "ptr")]
 pub mod status;
+#[cfg(target_has_atomic = "ptr")]
 pub mod sync;
+#[cfg(target_has_atomic = "ptr")]
 pub mod thing;
-pub mod transport;
 
+#[cfg(target_has_atomic = "ptr")]
+pub use artifact::{
+    BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
+    BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,
+    BindingArtifactRejection, BindingArtifactRejectionReason, BindingArtifactRole,
+    ConsumerBindingConfiguration,
+};
+#[cfg(feature = "std")]
+#[cfg(target_has_atomic = "ptr")]
+pub use artifact::{HostArtifactStorage, HostBindingArtifact};
+#[cfg(target_has_atomic = "ptr")]
 pub use binding::{
     BindingCallSettlement, BindingCancellationDisposition, BindingDeliveryOutcome,
     BindingExecutionSupport, BindingIngressLimits, BindingIngressPolicy, BindingInputRejection,
@@ -31,97 +63,77 @@ pub use binding::{
     BindingRegistrationIdentity, BindingResourceContract, BindingResourceDeclarations,
     BindingStateLayout, BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext,
     CleanupReservation, CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
-    CleanupTransferTarget, ClientRequestSlot, CollisionDomainId, ConsumerCompilerRegistration,
-    EndpointReservationKey, NoCleanupSuccessor, PollClientBinding, PollServerBinding, PrepareInput,
-    RouteAcceptClaim, RouteAcceptClaimError, RouteAcceptEvent, RouteAcceptLease,
-    RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome, RouteCleanupSuccessor,
-    RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility,
-    RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity,
-    RouteResponseOpportunity, RouteTerminal, ServerResponseSlot, ServerRouteSlot,
-    ServingActivationAuthority, StaticBindingComponents, StaticBindingRegistration,
-    StaticBindingRegistrationInput, StaticConsumerBindingRegistration,
-    StaticConsumerBindingRegistrationInput, StaticConsumerPropertyReadSlot,
+    CleanupTransferTarget, ClientRequestSlot, CollisionDomainId, EndpointReservationKey,
+    NoCleanupSuccessor, PollClientBinding, PollServerBinding, PrepareInput, RouteAcceptClaim,
+    RouteAcceptClaimError, RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome,
+    RouteActivationPermit, RouteCleanupOutcome, RouteCleanupSuccessor, RouteCommitOutcome,
+    RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility, RoutePrepareOutcome,
+    RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity, RouteResponseOpportunity,
+    RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority,
+    StaticBindingComponents, StaticBindingRegistration, StaticBindingRegistrationInput,
+    StaticConsumerBindingRegistration, StaticConsumerBindingRegistrationInput,
+    StaticConsumerPropertyReadSlot, StaticServerProgress,
 };
 #[cfg(feature = "std")]
+#[cfg(target_has_atomic = "ptr")]
 pub use binding::{
     HostActiveRouteGuard, HostBindingCall, HostBindingCallBox, HostBindingRegistration,
     HostBindingRegistrationInput, HostCommittedRouteGuard, HostConsumerBindingRegistration,
     HostConsumerBindingRegistrationInput, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
     HostShutdownRouteGuard, RouteAbortInput, RouteServerBinding, RouteShutdownInput,
 };
-pub use binding_compiler::{
-    BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
-    BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,
-    BindingArtifactRejection, BindingArtifactRejectionReason, BindingArtifactRole,
-    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerFailure, BindingCompilerInput,
-    BindingCompilerOutput, BindingCompilerStep, ConsumerBindingConfiguration,
-    ConsumerCompilerSupport, ResolvedTargetArtifact, ResolvedTargetCompiler,
-    ResolvedTargetCompilerCursor, StaticBindingCompilerRegistration,
-};
-#[cfg(feature = "std")]
-pub use binding_compiler::{
-    HostBindingArtifact, HostBindingCompilerCursor, HostBindingCompilerRegistration,
-    HostSemanticCompiler, ResolvedBindingInput,
-};
+#[cfg(target_has_atomic = "ptr")]
 pub use deadline::Deadline;
+#[cfg(target_has_atomic = "ptr")]
 pub use error::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, ResourceFailureDomain, RetryClass,
     SecurityFailureReason, SelectionFailureReason,
 };
 #[cfg(feature = "async")]
+#[cfg(target_has_atomic = "ptr")]
 pub use event::EventStream;
+#[cfg(target_has_atomic = "ptr")]
 pub use event::{
     DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,
     SubscriptionSender,
 };
+#[cfg(target_has_atomic = "ptr")]
 pub use handler::{
     CancellationView, HandlerContext, HandlerFootprint, HandlerStep, ReadPropertyHandler,
     StaticHandlerRegistration, SubscriptionAcceptance,
 };
+#[cfg(target_has_atomic = "ptr")]
 pub use identity::{
     ActionInvocationRef, ActiveRouteId, AffordanceSlotId, BindingConfigurationDigest,
     BindingGeneration, BindingId, BindingSlotId, CleanupSlotId, CorrelationId, HandlerSlotId,
     PlanId, PlanSetGeneration, PlanSlotId, PreparedRouteId, PreparedRouteKey, SubscriptionId,
     SubscriptionSlotId, ThingId, ThingSlotId,
 };
-#[cfg(feature = "async")]
-pub use inbound::Dispatch;
-pub use inbound::{
-    BindingContext, InboundDispatcher, InboundRequest, InboundResponse, ServerBinding,
-};
+#[cfg(target_has_atomic = "ptr")]
 pub use interaction::{
     AcceptHint, BindingResponseMetadata, InteractionInput, InteractionOptions, InteractionOutput,
     InteractionOutputMetadata, InteractionStatus, MediaType, ResponsePayloadRole,
     ResponseSelection,
 };
-#[cfg(feature = "async")]
-pub use outbound::{BindingRequest, ClientBinding};
-pub use outbound::{OutboundRequest, SubscriptionGuard};
+pub use operation::Operation;
+#[cfg(target_has_atomic = "ptr")]
+pub use outbound::OutboundRequest;
+#[cfg(target_has_atomic = "ptr")]
 pub use payload::{CodecInput, Payload, PayloadCodec};
+#[cfg(target_has_atomic = "ptr")]
 pub use plan::{BindingCandidate, LogicalInteractionPlan};
+#[cfg(target_has_atomic = "ptr")]
+pub use response::consumer_result_backing;
+#[cfg(target_has_atomic = "ptr")]
 pub use response::validate_untrusted_binding_output;
-pub use security::{
-    AuthMaterial, BasicSecurityProvider, BearerSecurityProvider, CredentialStore, Credentials,
-    InMemoryCredentialStore, NoSecurityProvider, Principal, PrincipalId, SecurityContext,
-    SecurityProvider, check_scopes,
-};
+#[cfg(target_has_atomic = "ptr")]
+pub use security::{AuthMaterial, Principal, PrincipalId, check_scopes};
+#[cfg(target_has_atomic = "ptr")]
 pub use status::{
     CleanupHandle, CleanupOperation, CleanupOutcome, CleanupRecord, PendingWork, PendingWorkClass,
     ProcessEvent, ProcessTerminal, StartStatus, StepStatus,
 };
+#[cfg(target_has_atomic = "ptr")]
 pub use sync::WotLock;
-pub use thing::{
-    ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceKind, AffordanceTarget,
-    CancelSlot, EventSubscribeHandler, EventUnsubscribeHandler, ExposedThing, InvokeSlot,
-    LocalThing, ObserveSlot, PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler,
-    PropertyWriteHandler, PushFn, QuerySlot, ReadSlot, SubscribeSlot, UnobserveSlot,
-    UnsubscribeSlot, WriteSlot,
-};
-#[cfg(feature = "async")]
-pub use thing::{
-    AsyncActionCancelHandler, AsyncActionHandler, AsyncActionQueryHandler,
-    AsyncEventSubscribeHandler, AsyncEventUnsubscribeHandler, AsyncPropertyObserveHandler,
-    AsyncPropertyReadHandler, AsyncPropertyUnobserveHandler, AsyncPropertyWriteHandler,
-    ConsumedThing,
-};
-pub use transport::{TransportAdapter, TransportRequest, TransportResponse};
+#[cfg(target_has_atomic = "ptr")]
+pub use thing::{AffordanceKind, AffordanceTarget};

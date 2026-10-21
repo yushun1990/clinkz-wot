@@ -16,17 +16,14 @@ use std::{
 use clinkz_wot_core::{
     AffordanceTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactRole, BindingCallSettlement,
-    BindingCancellationDisposition, BindingCompilerBounds, BindingCompilerExtension,
-    BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep, BindingConfigurationDigest,
-    BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
-    BindingIngressLimits, BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint,
-    BindingOperationalError, BindingRegistrationCapabilities, BindingRegistrationIdentity,
-    BindingResourceDeclarations, BindingStateLayout, BindingStatusPolicy,
-    BindingTransientFootprint, CleanupHandle, CleanupPhaseContext, CleanupRecord,
-    CollisionDomainId, CoreError, CoreResult, CorrelationId, Deadline, EndpointReservationKey,
-    ErrorContext, ErrorPhase, HandlerContext, HandlerFootprint, HandlerSlotId,
-    HostActiveRouteGuard, HostBindingArtifact, HostBindingCall, HostBindingCallBox,
-    HostBindingCompilerRegistration, HostBindingRegistration, HostBindingRegistrationInput,
+    BindingCancellationDisposition, BindingConfigurationDigest, BindingDeliveryOutcome,
+    BindingExecutionSupport, BindingGeneration, BindingId, BindingIngressLimits,
+    BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
+    BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
+    BindingStateLayout, BindingStatusPolicy, BindingTransientFootprint, CleanupHandle,
+    CleanupPhaseContext, CleanupRecord, CollisionDomainId, CoreError, CoreResult, CorrelationId,
+    Deadline, EndpointReservationKey, ErrorContext, ErrorPhase, HandlerContext, HandlerFootprint,
+    HandlerSlotId, HostActiveRouteGuard, HostBindingArtifact, HostBindingCall, HostBindingCallBox,
     HostCommittedRouteGuard, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
     HostShutdownRouteGuard, InteractionInput, InteractionOutput, NoCleanupSuccessor, Payload,
     PlanId, PlanSetGeneration, PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass,
@@ -34,12 +31,17 @@ use clinkz_wot_core::{
     RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility,
     RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity,
     RouteResponseOpportunity, RouteServerBinding, RouteShutdownInput, ServerResponseSlot,
-    ServerRouteSlot, StartStatus, StaticBindingCompilerRegistration, StaticBindingRegistration,
-    StaticBindingRegistrationInput, StaticHandlerRegistration, ThingSlotId,
+    ServerRouteSlot, StartStatus, StaticHandlerRegistration, ThingSlotId,
 };
 use clinkz_wot_foundation::{
     BenchmarkStaticReferenceV1, GatewayDefaultV1, Generation, SlotIndex, StaticResourceProfile,
     WorkBudget, WorkClass,
+};
+use clinkz_wot_planning::{
+    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput,
+    BindingCompilerStep, HostBindingCompilerRegistration, HostBindingPreparation,
+    HostBindingPreparationInput, StaticBindingCompilerRegistration, StaticBindingPreparation,
+    StaticBindingPreparationInput,
 };
 use clinkz_wot_protocol_bindings_zenoh::extract_zenoh_target_from_resolved_href;
 use clinkz_wot_servient::{
@@ -172,9 +174,9 @@ impl BindingCompilerExtension for ZenohRouteCompiler {
         let artifact = match self.compile(input) {
             Ok(artifact) => artifact,
             Err(error) => {
-                return BindingCompilerStep::Failed(clinkz_wot_core::BindingCompilerFailure::new(
-                    error, cursor,
-                ));
+                return BindingCompilerStep::Failed(
+                    clinkz_wot_planning::BindingCompilerFailure::new(error, cursor),
+                );
             }
         };
         let footprint = artifact.footprint();
@@ -627,8 +629,11 @@ impl StaticZenohServer {
     }
 }
 
-impl PollServerBinding for StaticZenohServer {
+impl clinkz_wot_planning::PrepareServerBinding for StaticZenohServer {
     type Compiler = ZenohRouteCompiler;
+}
+impl PollServerBinding for StaticZenohServer {
+    type Artifact = <ZenohRouteCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RouteState = ZenohRouteState;
     type ReadinessState = ZenohReadinessState;
     type ResponseState = ZenohResponseState;
@@ -1729,7 +1734,7 @@ fn registration(
     binding_id: BindingId,
     port: u16,
     fail_readiness: bool,
-) -> (StaticBindingRegistration<StaticZenohServer>, ProbeTelemetry) {
+) -> (StaticBindingPreparation<StaticZenohServer>, ProbeTelemetry) {
     let compatibility = BindingArtifactCompatibility::new([0x7a; 16]);
     let mut configuration = [0x31; 32];
     configuration[..2].copy_from_slice(&port.to_be_bytes());
@@ -1742,7 +1747,7 @@ fn registration(
     );
     let telemetry = ProbeTelemetry::default();
     let limits = BindingIngressLimits::new(1, 4096);
-    let input = StaticBindingRegistrationInput::new(
+    let input = StaticBindingPreparationInput::new(
         identity,
         BindingRegistrationCapabilities::producer_property_read(),
         BindingExecutionSupport::application_static(),
@@ -1764,7 +1769,7 @@ fn registration(
         ),
         BindingStatusPolicy::new(2, 256),
     );
-    let registration = StaticBindingRegistration::new(input)
+    let registration = StaticBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("real Zenoh probe registration must validate"));
     (registration, telemetry)
 }
@@ -1801,7 +1806,7 @@ fn host_registration(
     binding_id: BindingId,
     port: u16,
     fail_readiness: bool,
-) -> (HostBindingRegistration, ProbeTelemetry) {
+) -> (HostBindingPreparation, ProbeTelemetry) {
     let compatibility = BindingArtifactCompatibility::new([0x7a; 16]);
     let mut configuration = [0x31; 32];
     configuration[..2].copy_from_slice(&port.to_be_bytes());
@@ -1815,7 +1820,7 @@ fn host_registration(
     let telemetry = ProbeTelemetry::default();
     let limits = BindingIngressLimits::new(1, 4096);
     let response_io = Arc::new(Mutex::new(None));
-    let input = HostBindingRegistrationInput::new(
+    let input = HostBindingPreparationInput::new(
         identity,
         BindingRegistrationCapabilities::producer_property_read(),
         BindingExecutionSupport::host_erased(),
@@ -1837,7 +1842,7 @@ fn host_registration(
         ),
         BindingStatusPolicy::new(2, 256),
     );
-    let registration = HostBindingRegistration::new(input)
+    let registration = HostBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("real Zenoh Host probe registration must validate"));
     (registration, telemetry)
 }

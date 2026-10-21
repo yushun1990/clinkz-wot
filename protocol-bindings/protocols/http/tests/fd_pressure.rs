@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! RLIMIT_NOFILE is process-wide: lower it only in a disposable Linux child.
 #![cfg(target_os = "linux")]
 include!("support/application.rs");

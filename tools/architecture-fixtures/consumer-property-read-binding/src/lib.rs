@@ -14,6 +14,7 @@ extern crate std;
 use alloc::sync::Arc;
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{ClockId, MonotonicInstant, RuntimeClock, WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 #[cfg(feature = "std")]
 use core::pin::Pin;
 use core::{
@@ -361,8 +362,12 @@ impl Drop for StaticClient {
         self.stats.clients_destroyed.fetch_add(1, Ordering::SeqCst);
     }
 }
-impl PollClientBinding for StaticClient {
+impl clinkz_wot_planning::PrepareClientBinding for StaticClient {
     type Compiler = ResolvedTargetCompiler;
+}
+impl PollClientBinding for StaticClient {
+    type Artifact =
+        <ResolvedTargetCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = State;
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
         self.owned.as_ref().map(|p| p.configuration())
@@ -483,7 +488,7 @@ fn identity(c: &ResolvedTargetCompiler) -> BindingRegistrationIdentity {
 }
 pub fn static_registration(
     client: StaticClient,
-) -> ConsumerCompilerRegistration<StaticConsumerBindingRegistration<StaticClient>> {
+) -> ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>> {
     let owned = client.owned.as_ref().map(|p| p.configuration());
     let compiler = owned.map_or_else(
         || ResolvedTargetCompiler::try_new(64).unwrap(),
@@ -494,7 +499,7 @@ pub fn static_registration(
             .with_resource_contract(c.resource_contract())
             .with_consumer_result_limits(c.result_limits().0, c.result_limits().1)
     });
-    StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+    StaticConsumerBindingPreparation::new(StaticConsumerBindingPreparationInput::new(
         identity(&compiler),
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(compiler),
@@ -659,7 +664,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for State {
 #[cfg(feature = "std")]
 pub fn host_registration(
     client: HostClient,
-) -> ConsumerCompilerRegistration<HostConsumerBindingRegistration> {
+) -> ConsumerCompilerRegistration<HostConsumerBindingPreparation> {
     let owned = client.owned.as_ref().map(|p| p.configuration());
     let compiler = owned.map_or_else(
         || ResolvedTargetCompiler::try_new(64).unwrap(),
@@ -670,7 +675,7 @@ pub fn host_registration(
             .with_resource_contract(c.resource_contract())
             .with_consumer_result_limits(c.result_limits().0, c.result_limits().1)
     });
-    HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+    HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
         identity(&compiler),
         BindingExecutionSupport::host_erased(),
         HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),

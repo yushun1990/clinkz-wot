@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! Pinned native-server feasibility only. No Engine exposure, permission or
 //! production Producer implementation is supplied by this test.
 use bytes::Bytes;

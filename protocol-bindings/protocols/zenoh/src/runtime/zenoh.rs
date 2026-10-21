@@ -1,3 +1,4 @@
+use crate::ZenohSubscriptionLease;
 use alloc::{
     boxed::Box,
     string::{String, ToString},
@@ -8,7 +9,6 @@ use crate::ZenohTransportRequest;
 use crate::{ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohTransport};
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass, Subscription,
-    SubscriptionGuard,
 };
 use zenoh::{
     Wait, bytes::Encoding, handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample,
@@ -145,7 +145,7 @@ impl ZenohTransport for ZenohSessionTransport {
     fn open_subscription(
         &self,
         request: ZenohTransportRequest,
-    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+    ) -> CoreResult<(Subscription, Box<dyn ZenohSubscriptionLease>)> {
         if request.plan.kind != ZenohOperationKind::Subscribe {
             return Err(unsupported_operation());
         }
@@ -299,12 +299,12 @@ where
     }
 }
 
-/// [`SubscriptionGuard`] that undeclares a zenoh subscriber on close or drop.
+/// [`ZenohSubscriptionLease`] that undeclares a zenoh subscriber on close or drop.
 struct ZenohSubscriptionGuard {
     subscriber: Option<Box<dyn SubscriberHandle>>,
 }
 
-impl SubscriptionGuard for ZenohSubscriptionGuard {
+impl ZenohSubscriptionLease for ZenohSubscriptionGuard {
     fn close(mut self: Box<Self>) {
         if let Some(sub) = self.subscriber.take() {
             sub.undeclare_boxed();
@@ -321,7 +321,7 @@ impl SubscriptionGuard for ZenohSubscriptionGuard {
 /// background thread and `Drop` returns immediately.
 ///
 /// Callers that need deterministic, observable teardown should call
-/// [`ZenohSubscriptionGuard::close`] (via [`SubscriptionGuard::close`])
+/// [`ZenohSubscriptionGuard::close`] (via [`ZenohSubscriptionLease::close`])
 /// explicitly, which performs the undeclaration inline on the calling thread.
 impl Drop for ZenohSubscriptionGuard {
     fn drop(&mut self) {
@@ -432,7 +432,7 @@ where
     fn open_subscription(
         &self,
         request: ZenohTransportRequest,
-    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+    ) -> CoreResult<(Subscription, Box<dyn ZenohSubscriptionLease>)> {
         self.inner.open_subscription(request)
     }
 }

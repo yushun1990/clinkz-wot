@@ -12,35 +12,40 @@ use std::{
 use clinkz_wot_core::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef, BindingArtifactRole,
-    BindingCallSettlement, BindingCancellationDisposition, BindingCompilerBounds,
-    BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep,
-    BindingConfigurationDigest, BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration,
-    BindingId, BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint,
-    BindingOperationalError, BindingRegistrationCapabilities, BindingRegistrationIdentity,
-    BindingResourceDeclarations, BindingResponseMetadata, BindingStateLayout, BindingStatusPolicy,
-    BindingTransientFootprint, CleanupOperation, CleanupPhaseContext, CleanupReservation,
-    CleanupSlotId, CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, InteractionOutput,
-    InteractionOutputMetadata, InteractionStatus, NoCleanupSuccessor, OutboundRequest, Payload,
-    PlanId, PlanSetGeneration, PollClientBinding, PollServerBinding, PrepareInput,
-    ResponsePayloadRole, RetryClass, RouteAcceptEvent, RouteActivationOutcome,
-    RouteActivationPermit, RouteCleanupOutcome, RouteCommitOutcome, RouteInboundResponse,
-    RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot, ServerResponseSlot,
-    ServerRouteSlot, StartStatus, StaticBindingCompilerRegistration, StaticBindingComponents,
-    StaticBindingRegistration, StaticBindingRegistrationInput, StaticConsumerPropertyReadSlot,
-    ThingId,
+    BindingCallSettlement, BindingCancellationDisposition, BindingConfigurationDigest,
+    BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
+    BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
+    BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
+    BindingResponseMetadata, BindingStateLayout, BindingStatusPolicy, BindingTransientFootprint,
+    CleanupOperation, CleanupPhaseContext, CleanupReservation, CleanupSlotId, CoreError,
+    CoreResult, Deadline, ErrorContext, ErrorPhase, InteractionOutput, InteractionOutputMetadata,
+    InteractionStatus, NoCleanupSuccessor, OutboundRequest, Payload, PlanId, PlanSetGeneration,
+    PollClientBinding, PollServerBinding, PrepareInput, ResponsePayloadRole, RetryClass,
+    RouteAcceptEvent, RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome,
+    RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome,
+    RouteReadinessSlot, ServerResponseSlot, ServerRouteSlot, StartStatus, StaticBindingComponents,
+    StaticConsumerPropertyReadSlot, ThingId,
 };
 #[cfg(feature = "std")]
 use clinkz_wot_core::{
     CleanupHandle, CleanupRecord, CleanupTransferAcceptance, CleanupTransferEnvelope,
     CleanupTransferTarget, HostActiveRouteGuard, HostBindingArtifact, HostBindingCall,
-    HostBindingCallBox, HostBindingCompilerRegistration, HostBindingRegistration,
-    HostBindingRegistrationInput, HostCommittedRouteGuard, HostPreparedRouteGuard,
-    HostRouteCleanupSuccessor, LogicalInteractionPlan, RouteAbortInput, RouteServerBinding,
-    RouteShutdownInput, binding::ClientBinding as TargetClientBinding,
+    HostBindingCallBox, HostCommittedRouteGuard, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
+    LogicalInteractionPlan, RouteAbortInput, RouteServerBinding, RouteShutdownInput,
+    binding::ClientBinding as TargetClientBinding,
 };
 use clinkz_wot_foundation::{
     ClockId, GatewayDefaultV1, Generation, MonotonicInstant, ResourceKind, SlotIndex,
     StaticResourceProfile, WorkBudget, WorkClass,
+};
+use clinkz_wot_planning::{
+    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput,
+    BindingCompilerStep, StaticBindingCompilerRegistration, StaticBindingPreparation,
+    StaticBindingPreparationInput,
+};
+#[cfg(feature = "std")]
+use clinkz_wot_planning::{
+    HostBindingCompilerRegistration, HostBindingPreparation, HostBindingPreparationInput,
 };
 
 const COMPATIBILITY: BindingArtifactCompatibility = BindingArtifactCompatibility::new([41; 16]);
@@ -335,8 +340,11 @@ struct NoopServer {
     compatibility: BindingArtifactCompatibility,
 }
 
-impl PollServerBinding for NoopServer {
+impl clinkz_wot_planning::PrepareServerBinding for NoopServer {
     type Compiler = TestCompiler;
+}
+impl PollServerBinding for NoopServer {
+    type Artifact = <TestCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RouteState = ();
     type ReadinessState = ();
     type ResponseState = ();
@@ -672,8 +680,11 @@ impl StaticClient {
     }
 }
 
-impl PollClientBinding for StaticClient {
+impl clinkz_wot_planning::PrepareClientBinding for StaticClient {
     type Compiler = TestCompiler;
+}
+impl PollClientBinding for StaticClient {
+    type Artifact = <TestCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = StaticState;
 
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
@@ -954,8 +965,8 @@ fn host_client(
 }
 
 type TestStaticComponents = StaticBindingComponents<NoopServer, StaticClient>;
-type TestStaticRegistration = StaticBindingRegistration<TestStaticComponents>;
-type TestStaticRegistrationInput = StaticBindingRegistrationInput<TestStaticComponents>;
+type TestStaticRegistration = StaticBindingPreparation<TestStaticComponents>;
+type TestStaticRegistrationInput = StaticBindingPreparationInput<TestStaticComponents>;
 
 fn static_registration(client: StaticClient) -> TestStaticRegistration {
     static_registration_with(client, resources())
@@ -966,7 +977,7 @@ fn static_registration_with(
     client: StaticClient,
     resources: BindingResourceDeclarations,
 ) -> Result<TestStaticRegistration, BindingInputRejection<TestStaticRegistrationInput>> {
-    let input = StaticBindingRegistrationInput::producer_and_consumer_property_read(
+    let input = StaticBindingPreparationInput::producer_and_consumer_property_read(
         registration_identity(COMPATIBILITY),
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(TestCompiler),
@@ -980,7 +991,7 @@ fn static_registration_with(
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(1, 64),
     );
-    StaticBindingRegistration::producer_and_consumer_property_read(input)
+    StaticBindingPreparation::producer_and_consumer_property_read(input)
 }
 
 #[cfg(feature = "std")]
@@ -989,7 +1000,7 @@ fn host_registration(
     compatibility: BindingArtifactCompatibility,
     accepted: Arc<AtomicUsize>,
     side_effects: Arc<AtomicUsize>,
-) -> Result<HostBindingRegistration, BindingInputRejection<HostBindingRegistrationInput>> {
+) -> Result<HostBindingPreparation, BindingInputRejection<HostBindingPreparationInput>> {
     host_registration_with(
         mode,
         OutputKind::Valid,
@@ -1008,9 +1019,9 @@ fn host_registration_with(
     accepted: Arc<AtomicUsize>,
     side_effects: Arc<AtomicUsize>,
     resources: BindingResourceDeclarations,
-) -> Result<HostBindingRegistration, BindingInputRejection<HostBindingRegistrationInput>> {
-    HostBindingRegistration::new(
-        HostBindingRegistrationInput::producer_and_consumer_property_read(
+) -> Result<HostBindingPreparation, BindingInputRejection<HostBindingPreparationInput>> {
+    HostBindingPreparation::new(
+        HostBindingPreparationInput::producer_and_consumer_property_read(
             registration_identity(COMPATIBILITY),
             BindingExecutionSupport::host_erased(),
             HostBindingCompilerRegistration::new(TestCompiler),
@@ -1793,6 +1804,83 @@ fn host_cleanup_transfer_moves_or_returns_the_complete_sealed_call() {
 }
 
 #[test]
+fn server_progress_loans_cannot_swap_paired_consumers_or_pending_owners() {
+    let mut original = static_registration(StaticClient::new(StaticMode::Pending));
+    let mut other = static_registration(StaticClient::new(StaticMode::Reject));
+    let identity = original.identity();
+    let declarations = original.resources();
+    let artifact = static_artifact(64);
+    let mut slot = StaticConsumerPropertyReadSlot::new();
+
+    assert_eq!(
+        original
+            .start_consumer_property_read(
+                request(64),
+                &artifact,
+                &mut slot,
+                &mut binding_budget(1),
+            )
+            .unwrap(),
+        StartStatus::Pending
+    );
+    {
+        let mut first = original.server_mut();
+        let mut second = other.server_mut();
+        core::mem::swap(&mut first, &mut second);
+    }
+    assert_eq!(original.identity(), identity);
+    assert_eq!(original.resources(), declarations);
+    assert!(matches!(
+        original.poll_consumer_property_read(&mut context(), &mut slot, &mut binding_budget(1)),
+        Poll::Ready(Ok(_))
+    ));
+    original
+        .acknowledge_consumer_property_read(&mut slot)
+        .unwrap();
+    assert!(
+        other
+            .start_consumer_property_read(request(64), &artifact, &mut slot, &mut binding_budget(1))
+            .is_err()
+    );
+    assert!(slot.is_vacant());
+
+    // Compiler-free Core registrations keep the same nonreplaceable components.
+    let mut original = original.into_execution();
+    let mut other = other.into_execution();
+    assert_eq!(
+        original
+            .start_consumer_property_read(
+                request(64),
+                &artifact,
+                &mut slot,
+                &mut binding_budget(1),
+            )
+            .unwrap(),
+        StartStatus::Pending
+    );
+    {
+        let mut first = original.server_mut();
+        let mut second = other.server_mut();
+        core::mem::swap(&mut first, &mut second);
+    }
+    assert_eq!(original.identity(), identity);
+    assert_eq!(original.resources(), declarations);
+    assert!(matches!(
+        original.poll_consumer_property_read(&mut context(), &mut slot, &mut binding_budget(1)),
+        Poll::Ready(Ok(_))
+    ));
+    original
+        .acknowledge_consumer_property_read(&mut slot)
+        .unwrap();
+    assert!(
+        other
+            .start_consumer_property_read(request(64), &artifact, &mut slot, &mut binding_budget(1))
+            .is_err()
+    );
+    assert!(slot.is_vacant());
+}
+
+#[test]
 fn dual_registration_rejects_mismatch_and_oversized_request_state() {
     let other = BindingArtifactCompatibility::new([99; 16]);
     #[cfg(feature = "std")]
@@ -1808,7 +1896,7 @@ fn dual_registration_rejects_mismatch_and_oversized_request_state() {
 
     let mut client = StaticClient::new(StaticMode::Pending);
     client.compatibility = other;
-    let mismatch = StaticBindingRegistrationInput::producer_and_consumer_property_read(
+    let mismatch = StaticBindingPreparationInput::producer_and_consumer_property_read(
         registration_identity(COMPATIBILITY),
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(TestCompiler),
@@ -1822,11 +1910,11 @@ fn dual_registration_rejects_mismatch_and_oversized_request_state() {
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(1, 64),
     );
-    assert!(StaticBindingRegistration::producer_and_consumer_property_read(mismatch).is_err());
+    assert!(StaticBindingPreparation::producer_and_consumer_property_read(mismatch).is_err());
 
     let mut oversized = StaticClient::new(StaticMode::Pending);
     oversized.lifetime = BindingLifetimeFootprint::new(9, 2_049);
-    let oversized = StaticBindingRegistrationInput::producer_and_consumer_property_read(
+    let oversized = StaticBindingPreparationInput::producer_and_consumer_property_read(
         registration_identity(COMPATIBILITY),
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(TestCompiler),
@@ -1840,7 +1928,7 @@ fn dual_registration_rejects_mismatch_and_oversized_request_state() {
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(1, 64),
     );
-    assert!(StaticBindingRegistration::producer_and_consumer_property_read(oversized).is_err());
+    assert!(StaticBindingPreparation::producer_and_consumer_property_read(oversized).is_err());
 }
 
 #[test]
@@ -1887,7 +1975,7 @@ fn static_registration_accounts_complete_core_slot_and_transient_validation_work
 
 #[test]
 fn producer_only_registration_apis_remain_source_and_behavior_compatible() {
-    let static_input = StaticBindingRegistrationInput::new(
+    let static_input = StaticBindingPreparationInput::new(
         registration_identity(COMPATIBILITY),
         BindingRegistrationCapabilities::producer_property_read(),
         BindingExecutionSupport::application_static(),
@@ -1899,7 +1987,7 @@ fn producer_only_registration_apis_remain_source_and_behavior_compatible() {
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(1, 64),
     );
-    let static_registration = StaticBindingRegistration::new(static_input)
+    let static_registration = StaticBindingPreparation::new(static_input)
         .unwrap_or_else(|_| panic!("valid legacy Producer-only static registration"));
     assert!(
         !static_registration
@@ -1909,7 +1997,7 @@ fn producer_only_registration_apis_remain_source_and_behavior_compatible() {
 
     #[cfg(feature = "std")]
     {
-        let host_input = HostBindingRegistrationInput::new(
+        let host_input = HostBindingPreparationInput::new(
             registration_identity(COMPATIBILITY),
             BindingRegistrationCapabilities::producer_property_read(),
             BindingExecutionSupport::host_erased(),
@@ -1921,7 +2009,7 @@ fn producer_only_registration_apis_remain_source_and_behavior_compatible() {
             BindingIngressPolicy::hidden(),
             BindingStatusPolicy::new(1, 64),
         );
-        let host_registration = HostBindingRegistration::new(host_input)
+        let host_registration = HostBindingPreparation::new(host_input)
             .unwrap_or_else(|_| panic!("valid legacy Producer-only host registration"));
         assert!(
             !host_registration
@@ -1931,72 +2019,18 @@ fn producer_only_registration_apis_remain_source_and_behavior_compatible() {
     }
 }
 
-#[cfg(all(feature = "std", feature = "async"))]
-mod legacy_poison {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    use clinkz_wot_core::{
-        BindingRequest, ClientBinding, CoreResult, InteractionOutput, Subscription,
-        SubscriptionGuard,
-    };
-    use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
-
-    pub static LEGACY_CALLS: AtomicUsize = AtomicUsize::new(0);
-
-    pub struct PoisonLegacyClient;
-
-    #[async_trait::async_trait]
-    impl ClientBinding for PoisonLegacyClient {
-        fn supports(&self, _: &Form, _: Operation) -> bool {
-            LEGACY_CALLS.fetch_add(1, Ordering::SeqCst);
-            panic!("target path called legacy supports")
-        }
-
-        fn supports_with_thing(&self, _: &Thing, _: &Form, _: Operation) -> bool {
-            LEGACY_CALLS.fetch_add(1, Ordering::SeqCst);
-            panic!("target path called legacy supports_with_thing")
-        }
-
-        async fn invoke(&self, _: BindingRequest) -> CoreResult<InteractionOutput> {
-            LEGACY_CALLS.fetch_add(1, Ordering::SeqCst);
-            panic!("target path called legacy async invoke")
-        }
-
-        async fn subscribe(
-            &self,
-            _: BindingRequest,
-        ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
-            LEGACY_CALLS.fetch_add(1, Ordering::SeqCst);
-            panic!("target path called legacy subscribe")
-        }
-    }
-}
-
-#[cfg(all(feature = "std", feature = "async"))]
-#[test]
-fn target_host_path_succeeds_with_every_legacy_client_entry_poisoned() {
-    use legacy_poison::{LEGACY_CALLS, PoisonLegacyClient};
-
-    let _poison = PoisonLegacyClient;
-    let accepted = Arc::new(AtomicUsize::new(0));
-    let side_effects = Arc::new(AtomicUsize::new(0));
-    let registration = host_registration(HostMode::Result, COMPATIBILITY, accepted, side_effects)
-        .unwrap_or_else(|_| panic!("valid target host registration"));
-    let artifact = host_artifact(73);
-    let _call = registration
-        .start_consumer_property_read(request(73), &artifact)
-        .unwrap();
-    assert_eq!(LEGACY_CALLS.load(Ordering::SeqCst), 0);
-}
-
 // These clients implement no server trait. Every operation below enters through
 // the new complete production owner, never the raw authoring SPI.
 mod consumer_only {
     use super::*;
     #[cfg(feature = "std")]
-    use clinkz_wot_core::{HostConsumerBindingRegistration, HostConsumerBindingRegistrationInput};
-    use clinkz_wot_core::{
-        StaticConsumerBindingRegistration, StaticConsumerBindingRegistrationInput,
+    #[cfg(feature = "std")]
+    use clinkz_wot_planning::{
+        HostConsumerBindingPreparation, HostConsumerBindingPreparationInput,
+    };
+
+    use clinkz_wot_planning::{
+        StaticConsumerBindingPreparation, StaticConsumerBindingPreparationInput,
     };
 
     fn only_resources(
@@ -2011,10 +2045,8 @@ mod consumer_only {
             )
             .with_transient(transient)
     }
-    fn static_registration(
-        client: StaticClient,
-    ) -> StaticConsumerBindingRegistration<StaticClient> {
-        StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+    fn static_registration(client: StaticClient) -> StaticConsumerBindingPreparation<StaticClient> {
+        StaticConsumerBindingPreparation::new(StaticConsumerBindingPreparationInput::new(
             registration_identity(COMPATIBILITY),
             BindingExecutionSupport::application_static(),
             StaticBindingCompilerRegistration::new(TestCompiler),
@@ -2033,7 +2065,7 @@ mod consumer_only {
         output: OutputKind,
         bytes: u64,
     ) -> (
-        HostConsumerBindingRegistration,
+        HostConsumerBindingPreparation,
         Arc<AtomicUsize>,
         Arc<AtomicUsize>,
     ) {
@@ -2046,19 +2078,18 @@ mod consumer_only {
             accepted.clone(),
             effects.clone(),
         );
-        let owner =
-            HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
-                registration_identity(COMPATIBILITY),
-                BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::new(TestCompiler),
-                Box::new(client),
-                only_resources(
-                    BindingLifetimeFootprint::new(8, bytes),
-                    BindingTransientFootprint::new(0),
-                ),
-                BindingStatusPolicy::new(1, 64),
-            ))
-            .unwrap_or_else(|_| panic!("Consumer-only Host"));
+        let owner = HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
+            registration_identity(COMPATIBILITY),
+            BindingExecutionSupport::host_erased(),
+            HostBindingCompilerRegistration::new(TestCompiler),
+            Box::new(client),
+            only_resources(
+                BindingLifetimeFootprint::new(8, bytes),
+                BindingTransientFootprint::new(0),
+            ),
+            BindingStatusPolicy::new(1, 64),
+        ))
+        .unwrap_or_else(|_| panic!("Consumer-only Host"));
         (owner, accepted, effects)
     }
 
@@ -2076,7 +2107,7 @@ mod consumer_only {
             let mut client = StaticClient::new(StaticMode::Pending)
                 .with_transient(BindingTransientFootprint::new(7));
             client.calls = 71;
-            let input = StaticConsumerBindingRegistrationInput::new(
+            let input = StaticConsumerBindingPreparationInput::new(
                 registration_identity(COMPATIBILITY),
                 BindingExecutionSupport::application_static(),
                 StaticBindingCompilerRegistration::new(TestCompiler),
@@ -2087,7 +2118,7 @@ mod consumer_only {
                 ),
                 BindingStatusPolicy::new(1, 64),
             );
-            let returned = match StaticConsumerBindingRegistration::new(input) {
+            let returned = match StaticConsumerBindingPreparation::new(input) {
                 Ok(owner) => {
                     assert!(valid);
                     owner.into_input()
@@ -2137,7 +2168,7 @@ mod consumer_only {
             } else {
                 r
             };
-            let input = StaticConsumerBindingRegistrationInput::new(
+            let input = StaticConsumerBindingPreparationInput::new(
                 registration_identity(COMPATIBILITY),
                 execution,
                 StaticBindingCompilerRegistration::new(TestCompiler),
@@ -2145,7 +2176,7 @@ mod consumer_only {
                 r,
                 BindingStatusPolicy::new(1, 64),
             );
-            let rejected = StaticConsumerBindingRegistration::new(input)
+            let rejected = StaticConsumerBindingPreparation::new(input)
                 .err()
                 .expect("reject before execution")
                 .into_input();
@@ -2162,7 +2193,7 @@ mod consumer_only {
             } else {
                 registration_identity(COMPATIBILITY)
             };
-            let input = StaticConsumerBindingRegistrationInput::new(
+            let input = StaticConsumerBindingPreparationInput::new(
                 identity,
                 BindingExecutionSupport::application_static(),
                 StaticBindingCompilerRegistration::new(TestCompiler),
@@ -2170,7 +2201,7 @@ mod consumer_only {
                 resources(),
                 BindingStatusPolicy::new(1, 64),
             );
-            let rejected = StaticConsumerBindingRegistration::new(input)
+            let rejected = StaticConsumerBindingPreparation::new(input)
                 .err()
                 .expect("compatibility")
                 .into_input();
@@ -2542,8 +2573,7 @@ mod consumer_only {
     }
     #[cfg(all(feature = "std", feature = "async"))]
     #[test]
-    fn consumer_only_execution_ignores_poisoned_legacy_entries() {
-        let _poison = legacy_poison::PoisonLegacyClient;
+    fn consumer_only_execution_accepts_a_valid_result() {
         let (owner, _, _) = host_registration_with(HostMode::Result, OutputKind::Valid, 2048);
         let mut call = owner
             .start_consumer_property_read(request(72), &host_artifact(72))
@@ -2553,7 +2583,6 @@ mod consumer_only {
                 .poll_result(&mut context(), &mut binding_budget(1)),
             Poll::Ready(Ok(_))
         ));
-        assert_eq!(legacy_poison::LEGACY_CALLS.load(Ordering::SeqCst), 0);
     }
     #[cfg(feature = "std")]
     #[test]
@@ -2579,7 +2608,7 @@ mod consumer_only {
             } else {
                 resources()
             };
-            let input = HostConsumerBindingRegistrationInput::new(
+            let input = HostConsumerBindingPreparationInput::new(
                 identity,
                 if case == 2 {
                     BindingExecutionSupport::application_static()
@@ -2591,7 +2620,7 @@ mod consumer_only {
                 resources,
                 BindingStatusPolicy::new(1, 64),
             );
-            let returned = HostConsumerBindingRegistration::new(input)
+            let returned = HostConsumerBindingPreparation::new(input)
                 .err()
                 .expect("reject before protocol work")
                 .into_input();
@@ -2604,4 +2633,152 @@ mod consumer_only {
             assert_eq!(effects.load(Ordering::SeqCst), 0);
         }
     }
+}
+
+use clinkz_wot_planning::*;
+
+#[cfg(feature = "std")]
+#[test]
+fn execution_outlives_compiler_with_owned_native_program_and_keeps_result_seal() {
+    struct CountedCompiler(Arc<AtomicUsize>);
+    impl Drop for CountedCompiler {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    impl BindingCompilerExtension for CountedCompiler {
+        type Cursor = ();
+        type Artifact = TestArtifact; // owns Box<str>; deliberately not Copy.
+        fn compatibility(&self) -> BindingArtifactCompatibility {
+            COMPATIBILITY
+        }
+        fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+            TestCompiler.bounds(input)
+        }
+        fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<()> {
+            TestCompiler.start(input)
+        }
+        fn step(
+            &self,
+            input: &BindingCompilerInput<'_>,
+            cursor: (),
+            work: &mut WorkBudget,
+        ) -> BindingCompilerStep<(), TestArtifact> {
+            TestCompiler.step(input, cursor, work)
+        }
+        fn abort(&self, cursor: ()) {
+            TestCompiler.abort(cursor)
+        }
+    }
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let accepted = Arc::new(AtomicUsize::new(0));
+    let effects = Arc::new(AtomicUsize::new(0));
+    let preparation =
+        HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
+            registration_identity(COMPATIBILITY),
+            BindingExecutionSupport::host_erased(),
+            HostBindingCompilerRegistration::new(CountedCompiler(dropped.clone())),
+            Box::new(host_client(
+                HostMode::Result,
+                OutputKind::Valid,
+                COMPATIBILITY,
+                accepted.clone(),
+                effects.clone(),
+            )),
+            resources(),
+            BindingStatusPolicy::new(1, 64),
+        ))
+        .unwrap_or_else(|_| panic!("paired actual executor"));
+    let plan = LogicalInteractionPlan::try_property_read(
+        plan_id(73),
+        ThingId::from("urn:execution-boundary"),
+        Box::from("temperature"),
+        0,
+        Box::from("mock://sensor/temperature"),
+        Some(Box::from("application/json")),
+        None,
+    )
+    .unwrap();
+    let candidate = clinkz_wot_core::BindingCandidate::new(
+        BindingId::new(43),
+        BindingGeneration::INITIAL,
+        BindingConfigurationDigest::new([47; 32]),
+        COMPATIBILITY,
+        0,
+        0,
+    );
+    let input = BindingCompilerInput::new(&plan, candidate, BindingArtifactRole::ConsumerCall);
+    let cursor = preparation.compiler().start(&input).unwrap();
+    let BindingCompilerStep::Complete(output) =
+        preparation
+            .compiler()
+            .step(&input, cursor, &mut binding_budget(1))
+    else {
+        panic!("compile")
+    };
+    let artifact = BindingArtifactEnvelope::try_new(
+        artifact_identity(73),
+        BindingArtifactFootprint::new(1, 64),
+        output.into_artifact(),
+    )
+    .unwrap();
+    let runtime = preparation.into_execution();
+    drop(plan);
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
+    assert_eq!(effects.load(Ordering::SeqCst), 0);
+    let refused = runtime
+        .start_consumer_property_read(request(72), &artifact)
+        .unwrap_err();
+    assert_eq!(refused.into_input(), request(72));
+    assert_eq!(accepted.load(Ordering::SeqCst), 0);
+    let mut call = runtime
+        .start_consumer_property_read(request(73), &artifact)
+        .unwrap();
+    assert!(matches!(
+        call.as_pin_mut()
+            .poll_result(&mut context(), &mut binding_budget(0)),
+        Poll::Pending
+    ));
+    assert!(matches!(
+        call.as_pin_mut()
+            .poll_result(&mut context(), &mut binding_budget(1)),
+        Poll::Ready(Ok(_))
+    ));
+    assert_eq!(accepted.load(Ordering::SeqCst), 1);
+    assert_eq!(effects.load(Ordering::SeqCst), 1);
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn static_execution_registration_has_no_preparation_bound() {
+    fn install<C: PollClientBinding>(
+        client: C,
+    ) -> clinkz_wot_core::StaticConsumerBindingRegistration<C> {
+        clinkz_wot_core::StaticConsumerBindingRegistration::new(
+            clinkz_wot_core::StaticConsumerBindingRegistrationInput::new(
+                registration_identity(COMPATIBILITY),
+                BindingExecutionSupport::application_static(),
+                client,
+                resources(),
+                BindingStatusPolicy::new(1, 64),
+            ),
+        )
+        .unwrap_or_else(|_| panic!("runtime-only static registration"))
+    }
+    let mut runtime = install(StaticClient::new(StaticMode::Synchronous));
+    let mut slot = StaticConsumerPropertyReadSlot::new();
+    let artifact = static_artifact(73);
+    assert!(matches!(
+        runtime.start_consumer_property_read(
+            request(73),
+            &artifact,
+            &mut slot,
+            &mut binding_budget(1)
+        ),
+        Ok(StartStatus::Ready(Ok(_)))
+    ));
+    runtime
+        .acknowledge_consumer_property_read(&mut slot)
+        .unwrap();
+    assert!(slot.is_vacant());
 }

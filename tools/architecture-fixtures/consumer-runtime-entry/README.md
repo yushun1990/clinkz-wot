@@ -292,7 +292,7 @@ owns the exact source boundary, native allocation/transport/overlap measurements
 finite witness input and callback attestation, executed checks and outstanding
 independent acceptance. Tranche, gate and milestone state are unchanged.
 
-`core/tests/consumer_property_read_binding/call_construction.rs` exercises the
+`planning/tests/consumer_property_read_binding/call_construction.rs` exercises the
 actual public constructor and both complete Host registrations. It extends the
 historical discriminators with zero-sized, over-aligned and pinned owners, exact
 request recovery/release, both late-return paths and complete cleanup succession.

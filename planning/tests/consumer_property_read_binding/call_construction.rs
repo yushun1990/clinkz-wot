@@ -1,7 +1,9 @@
 //! Production construction evidence, reusing the existing real Core helpers.
 //! Observation is thread-local and fixed-size; no allocator/policy is exported.
 use super::*;
-use clinkz_wot_core::{HostConsumerBindingRegistration, HostConsumerBindingRegistrationInput};
+
+#[cfg(feature = "std")]
+use clinkz_wot_planning::{HostConsumerBindingPreparation, HostConsumerBindingPreparationInput};
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
@@ -308,8 +310,8 @@ impl TargetClientBinding for Client {
 
 // Test-only dispatch across the two unchanged complete public registrations.
 enum Owner {
-    Dual(HostBindingRegistration),
-    Consumer(HostConsumerBindingRegistration),
+    Dual(HostBindingPreparation),
+    Consumer(HostConsumerBindingPreparation),
 }
 impl Owner {
     fn start(
@@ -346,7 +348,7 @@ fn owner(
     let compiler = HostBindingCompilerRegistration::new(TestCompiler);
     let registration = if consumer_only {
         Owner::Consumer(
-            HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+            HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
                 registration_identity(COMPATIBILITY),
                 BindingExecutionSupport::host_erased(),
                 compiler,
@@ -358,8 +360,8 @@ fn owner(
         )
     } else {
         Owner::Dual(
-            HostBindingRegistration::new(
-                HostBindingRegistrationInput::producer_and_consumer_property_read(
+            HostBindingPreparation::new(
+                HostBindingPreparationInput::producer_and_consumer_property_read(
                     registration_identity(COMPATIBILITY),
                     BindingExecutionSupport::host_erased(),
                     compiler,

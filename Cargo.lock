@@ -295,16 +295,13 @@ dependencies = [
 name = "clinkz-wot"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "clinkz-wot-codec-cbor",
  "clinkz-wot-core",
  "clinkz-wot-discovery",
- "clinkz-wot-protocol-bindings",
+ "clinkz-wot-planning",
  "clinkz-wot-protocol-bindings-zenoh",
  "clinkz-wot-servient",
  "clinkz-wot-td",
- "futures-util",
- "tokio",
 ]
 
 [[package]]
@@ -342,6 +339,7 @@ version = "0.0.0"
 dependencies = [
  "clinkz-wot-core",
  "clinkz-wot-foundation",
+ "clinkz-wot-planning",
 ]
 
 [[package]]
@@ -362,9 +360,7 @@ name = "clinkz-wot-core"
 version = "0.1.0"
 dependencies = [
  "async-channel",
- "async-trait",
  "clinkz-wot-foundation",
- "clinkz-wot-td",
  "critical-section",
  "futures-core",
  "futures-util",
@@ -434,26 +430,16 @@ version = "0.1.0"
 dependencies = [
  "clinkz-wot-core",
  "clinkz-wot-foundation",
-]
-
-[[package]]
-name = "clinkz-wot-protocol-bindings"
-version = "0.1.0"
-dependencies = [
- "clinkz-wot-core",
- "clinkz-wot-foundation",
- "clinkz-wot-td",
+ "clinkz-wot-planning",
 ]
 
 [[package]]
 name = "clinkz-wot-protocol-bindings-zenoh"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
  "clinkz-wot-planning",
- "clinkz-wot-protocol-bindings",
  "clinkz-wot-servient",
  "clinkz-wot-td",
  "fluent-uri",
@@ -467,19 +453,13 @@ dependencies = [
 name = "clinkz-wot-servient"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "clinkz-wot-codec-cbor",
  "clinkz-wot-consumer-property-read-binding-fixture",
  "clinkz-wot-core",
- "clinkz-wot-discovery",
  "clinkz-wot-foundation",
  "clinkz-wot-planning",
  "clinkz-wot-property-read-binding-fixture",
- "clinkz-wot-protocol-bindings",
- "clinkz-wot-protocol-bindings-zenoh",
  "clinkz-wot-td",
- "futures-util",
- "log",
  "serde_json",
  "tokio",
 ]
@@ -488,6 +468,7 @@ dependencies = [
 name = "clinkz-wot-td"
 version = "0.1.0"
 dependencies = [
+ "clinkz-wot-core",
  "clinkz-wot-foundation",
  "fluent-uri",
  "serde",

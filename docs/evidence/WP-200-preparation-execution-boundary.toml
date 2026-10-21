@@ -1,0 +1,161 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-200"
+tranche = "WP-200-PREPARATION-EXECUTION-BOUNDARY"
+base_ref = "cec98b3950538d85d9bd1c1f1aee265d932a9782"
+implementation_ref = "2cef462193d7435de9765e7fc78f53454e38c7c1"
+verification_ref = "2cef462193d7435de9765e7fc78f53454e38c7c1"
+recorded_on = "2026-10-21"
+status = "candidate"
+execution_status = "passed"
+acceptance = "Independent acceptance of this exact migration remains required. No gate, milestone or predecessor completion status is changed."
+source_revision_rule = "All executable commands below were rerun against the production source at verification_ref, including the final HTTP native-program lifetime test. Subsequent evidence/registry-only commits do not relabel a production source change. Historical evidence files keep their original revisions and measurements."
+evidence_keys = [
+    "runtime-dependency-cut", "compiler-policy-pairing", "source-and-compiler-destruction",
+    "static-host-resource-lifecycle-regressions", "legacy-retirement",
+]
+
+[environment]
+rustc = "1.99.0 (b940084d7 2026-09-28)"
+cargo = "1.99.0 (5f94df478 2026-08-27)"
+host = "x86_64-unknown-linux-gnu"
+compile_targets = ["thumbv7em-none-eabihf", "thumbv6m-none-eabi"]
+network = "locked/offline Cargo"
+profile = "Cargo dev/test defaults; isolated source worktree and its own target directory"
+
+[scope]
+implemented = "TD-free Core runtime contracts; Core operation vocabulary and TD-local encoding; Planning compiler authoring/cursor erasure and checked preparation pairing; runtime-only registrations; native HTTP program defined below optional preparation; migrated actual target callers."
+withdrawn = "Legacy TD-at-call-time client/server/dispatch, old broad consumed/exposed handles and TD-shaped security providers, implicit Directory composition, obsolete protocol utility crate, Zenoh direct-dispatch facade and Form-pointer cache. Unmatched interactions lose their current API implementation; they are not claimed migrated. Enduring capability goals remain owned by docs/architecture/00-system-goals-and-context.md; this evidence changes no product goal or v1 completion obligation."
+preserved = "Source-free selected requests; exact actual compiler/client policy pairing; generation and native-format refusal; permits; first cause; cancellation/late-result seals; retained backing and complete-object transfer; exact recovery on refusal; original account funding until physical release."
+corrected_predicate = "Independent Core/Servient Cargo syntax labels no longer gate compatible static execution. Actual paired policy, representation, Layout and quotas remain mandatory. Provenance labels and all configuration/resource key encodings remain unchanged. The former mixed-label refusal is deliberately superseded, not presented as a passing old oracle."
+excluded = "Reusable bind-many implementation, shared native program funding, shared multi-recipient matching/retirement, HTTP Producer, static HTTP, broad semantic coverage, full SDK/release acceptance and no-atomic Core execution."
+remaining_dependencies = "Execution-only Servient needs extraction of complete Planning output/rollback/reclaim owners. HTTP Producer needs TD whole-description lending/coverage plus checked owned entry and Binding-owned native installation/infrastructure before ingress. Its retained exclusive staged constructor does not prescribe the successor. Review 08's existing HTTP semantic diagnostics are not claimed repaired."
+
+[[evidence]]
+key = "runtime-dependency-cut"
+result = "passed"
+assertions = "Core has no normal/optional TD or Planning dependency/re-export. HTTP normal runtime graph has neither TD, Planning nor Serde. Generic Planning authoring does not activate validated-thing/arbitrary_precision; explicit validated-thing activates both. Static runtime construction requires only PollClientBinding, not a preparation trait."
+fixtures = ["core/Cargo.toml", "planning/Cargo.toml", "protocol-bindings/protocols/http/Cargo.toml", "planning/tests/consumer_property_read_binding.rs", "protocol-bindings/protocols/http/tests/execution_only.rs"]
+
+[[evidence]]
+key = "compiler-policy-pairing"
+result = "passed"
+assertions = "Closed/static and semantic Host preparation capture the actual complete executor policy; mismatches return original owners before callbacks/I/O. Generic erasure preserves the native job on wrong compiler, failed step and abort. Completed Host storage releases exactly once. Preparation has no DerefMut escape permitting whole-registration substitution."
+fixtures = ["planning/tests/consumer_compiler_support.rs", "planning/tests/consumer_property_read_binding.rs", "planning/src/binding_registration.rs", "protocol-bindings/protocols/http/src/identity_tests.rs"]
+
+[[evidence]]
+key = "source-and-compiler-destruction"
+result = "passed"
+assertions = "Owned non-Copy native program executes through Core after its counted compiler is destroyed; wrong identity and zero credit retain the old negative oracles and successful output remains sealed. Real HTTP executes over raw TCP after TD, semantic loan, logical plan and preparation owner Drop; accepted call also outlives the completed program. Runtime-only HTTP rejects foreign native payload with matching metadata before any Tokio runtime/I/O. Existing aggregate source-Drop/read/reclaim tests pass."
+fixtures = ["planning/tests/consumer_property_read_binding.rs::execution_outlives_compiler_with_owned_native_program_and_keeps_result_seal", "protocol-bindings/protocols/http/src/identity_tests.rs::prepared_http_program_executes_after_all_preparation_owners_are_dropped", "protocol-bindings/protocols/http/tests/execution_only.rs", "servient/tests/consumer_property_read/ownership.rs"]
+
+[[evidence]]
+key = "static-host-resource-lifecycle-regressions"
+result = "passed"
+assertions = "Three syntax cells preserve original account ceilings, rollback, result backing, recoverable allocation refusal, first cause, cancellation, late normal and cleanup seals, cleanup transfer and final release. Mixed independently unified static execution constructs with zero allocations/native starts, retains its funding and returns original accounts to zero. HTTP peer, wire-bound, FD, repeated-read and retirement suites pass."
+fixtures = ["servient/tests/consumer_property_read", "planning/tests/consumer_compiler_support.rs", "core/tests/property_read_response_sealing.rs", "protocol-bindings/protocols/http/tests"]
+
+[[evidence]]
+key = "legacy-retirement"
+result = "passed"
+assertions = "The obsolete utility crate and dispatch facade are absent; no alternate legacy execution route replaces the selected contracts. Workspace/all-target checks and authority checks pass. Deferred Zenoh native transport/mapping and pico compile remain usable. Removed facade-only tests are not reported as migrated capability coverage."
+fixtures = ["Cargo.toml", "clinkz-wot/src/lib.rs", "servient/src/lib.rs", "protocol-bindings/protocols/zenoh/src/lib.rs", "protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs"]
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-td -p clinkz-wot-planning -p clinkz-wot-servient -p clinkz-wot-binding-http -p clinkz-wot-property-read-architecture-runner -p clinkz-wot-consumer-property-read-runtime-runner --features validated-thing -- --test-threads=1"
+result = "passed"
+scope = "All selected default unit/integration/compile-fail doc tests, including the new real HTTP program lifetime test."
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient -p clinkz-wot-property-read-architecture-runner -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features -- --test-threads=1"
+result = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient -p clinkz-wot-property-read-architecture-runner -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async -- --test-threads=1"
+result = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --target thumbv7em-none-eabihf"
+result = "passed"
+additional_command = "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --features async --target thumbv7em-none-eabihf"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-binding-http --no-default-features"
+result = "passed"
+scope = "Runtime-only native admission and transport unit tests; preparation suites are explicitly feature gated."
+
+[[verification]]
+command = "cargo check --workspace --all-targets --locked --offline"
+result = "passed"
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-planning --test consumer_compiler_support -- --test-threads=1 --nocapture"
+result = "passed"
+additional_command = "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read -- --test-threads=1 --nocapture"
+scope = "Fresh measured owners, allocation refusal, zero/short/exact/over account controls and final physical release; selected observations below."
+
+[[verification]]
+commands = [
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml -- --test-threads=1",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml -- --test-threads=1",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml -- --test-threads=1",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-admission/Cargo.toml -- --test-threads=1",
+    "cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml -- --test-threads=1",
+]
+result = "passed"
+scope = "Each listed command passed; CARGO_TARGET_DIR is the isolated worktree target directory. Historical projection fixtures retain their explicitly narrower source model; production TD/Planning tests verify the real current owners."
+
+[[verification]]
+command = "python3 tools/architecture-fixtures/consumer-borrowed-readmission/check_boundary.py --offline"
+result = "passed"
+scope = "32 exact feature cells plus 14 exact diagnostic compile negatives, including the ARM and precision capability boundaries. CARGO_TARGET_DIR is the isolated worktree target directory."
+
+[[verification]]
+command = "cargo test --locked --offline -p clinkz-wot-protocol-bindings-zenoh --features zenoh --test target_property_read_feedback_probe --test zenoh_form_test"
+result = "passed"
+scope = "Retained native backend probe and mapping tests; no withdrawn facade claim."
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-protocol-bindings-zenoh --no-default-features --features zenoh-pico"
+result = "passed"
+
+[[verification]]
+command = "cargo check --locked --offline -p clinkz-wot-td --no-default-features --target thumbv6m-none-eabi"
+result = "passed"
+additional_command = "cargo check --locked --offline -p clinkz-wot-td --no-default-features --features validated-thing --target thumbv6m-none-eabi"
+scope = "Vocabulary and TD semantic preparation on Cortex-M0. Core execution APIs remain absent without pointer atomics."
+
+[[verification]]
+commands = [
+    "cargo tree --locked --offline -p clinkz-wot-core --no-default-features -e normal -f '{p} [{f}]'",
+    "cargo tree --locked --offline -p clinkz-wot-binding-http --no-default-features -e normal -f '{p} [{f}]'",
+    "cargo tree --locked --offline -p clinkz-wot-planning --no-default-features -e normal -f '{p} [{f}]'",
+]
+result = "passed"
+additional_command = "cargo tree --locked --offline -p clinkz-wot-planning --no-default-features --features validated-thing -e normal -f '{p} [{f}]'"
+scope = "Inspect actual activated feature lists, including forwarded features; satisfy runtime-dependency-cut above."
+
+[[verification]]
+command = "CARGO_NET_OFFLINE=true tools/check-design-artifacts.sh"
+result = "passed"
+scope = "Authority/API/ADR/DAG/resource/legacy checks and all 66 existing performance contract fixture cases; not full performance or release acceptance."
+
+[[verification]]
+command = "git diff --check"
+result = "passed"
+
+[measurements]
+scope = "x86_64 dev/test observations from the named fixtures, not portable ABI or inherited acceptance. Numeric resource rows, key encodings and state-machine authority are unchanged. Each account pressure test remeasures its actual owner."
+host_restricted_adapter_layout = [120, 8]
+host_restricted_slot_layout = [152, 8]
+host_restricted_cursor_transport_layout = [24, 8]
+host_restricted_output_transport_layout = [104, 8]
+host_restricted_temporary_bytes = 1240
+owned_compiler_support_cursor_output_temporary_layouts = [[120, 8], [256, 8], [76, 4], [152, 8], [936, 8]]
+failed_slot_ledger_live_peak_largest = [7, 159, 152]
+owned_host_recoverable_provision_build_call_allocation_sites = [2, 37, 2]
+owned_static_real_planning = "author requests=20/live=592; capture requests=0; runtime requests=0; build requests=34/live=4875/peak=12459/largest=7552; terminal retained=0"
+whole_static_fixture = "Binding provisioning live=488/allocations=17; runtime provisioning allocations=0; build live=4771/peak=12355/largest=7552; call allocations=0; final retained=0; releases=54"
+original_parent_peaks_order = "The 20 original parent accounts in servient/tests/consumer_property_read/ownership.rs; unchanged fixture ordering."
+owned_static_original_parent_peaks = [93379, 68808, 93379, 4283, 76, 3, 195, 1, 1, 1, 3, 6240, 1, 1, 0, 1520, 128, 0, 0, 3104]
+owned_host_original_parent_peaks = [101435, 68808, 101435, 4595, 76, 3, 456, 1, 1, 1, 3, 7160, 1, 1, 3104, 0, 128, 1, 5448, 3104]

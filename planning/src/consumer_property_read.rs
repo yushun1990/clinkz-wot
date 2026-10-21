@@ -5,6 +5,7 @@
 //! installed under that root. Terminal handles share only this source-free
 //! block; their Drop returns its exclusive cleanup lease to the root.
 
+use crate::*;
 use alloc::{
     alloc::{alloc, dealloc},
     boxed::Box,
@@ -43,12 +44,16 @@ mod private {
     pub trait Sealed {}
 }
 
-/// Aggregate eligibility is issued only by Core's checked complete owner.
-/// ```compile_fail
-/// use clinkz_wot_planning::ConsumerPropertyReadRegistration;
-/// use clinkz_wot_core::ResolvedTargetCompiler;
+/// Aggregate eligibility is issued only by Planning's checked complete owner.
+/// ```compile_fail,E0277
+/// use clinkz_wot_planning::{ConsumerPropertyReadRegistration, ResolvedTargetCompiler};
 /// fn eligible<R: ConsumerPropertyReadRegistration>(_: &R) {}
 /// eligible(&ResolvedTargetCompiler::try_new(64).unwrap());
+/// ```
+/// The compiler itself remains constructible without aggregate eligibility:
+/// ```
+/// use clinkz_wot_planning::ResolvedTargetCompiler;
+/// let _compiler = ResolvedTargetCompiler::try_new(64).unwrap();
 /// ```
 pub trait ConsumerPropertyReadRegistration: private::Sealed {
     type Artifact: 'static;
@@ -73,15 +78,15 @@ pub trait ConsumerPropertyReadRegistration: private::Sealed {
     fn abort(&self, cursor: Self::Cursor);
 }
 
-impl<B: PollServerBinding> private::Sealed
-    for ConsumerCompilerRegistration<StaticBindingRegistration<B>>
+impl<B: PrepareServerBinding> private::Sealed
+    for ConsumerCompilerRegistration<StaticBindingPreparation<B>>
 where
     B::Compiler: 'static,
     <B::Compiler as BindingCompilerExtension>::Artifact: 'static,
 {
 }
-impl<B: PollServerBinding> ConsumerPropertyReadRegistration
-    for ConsumerCompilerRegistration<StaticBindingRegistration<B>>
+impl<B: PrepareServerBinding> ConsumerPropertyReadRegistration
+    for ConsumerCompilerRegistration<StaticBindingPreparation<B>>
 where
     B::Compiler: 'static,
     <B::Compiler as BindingCompilerExtension>::Artifact: 'static,
@@ -113,9 +118,9 @@ where
     }
 }
 #[cfg(feature = "std")]
-impl private::Sealed for ConsumerCompilerRegistration<HostBindingRegistration> {}
+impl private::Sealed for ConsumerCompilerRegistration<HostBindingPreparation> {}
 #[cfg(feature = "std")]
-impl ConsumerPropertyReadRegistration for ConsumerCompilerRegistration<HostBindingRegistration> {
+impl ConsumerPropertyReadRegistration for ConsumerCompilerRegistration<HostBindingPreparation> {
     type Artifact = HostBindingArtifact;
     type Cursor = HostBindingCompilerCursor;
     fn identity(&self) -> BindingRegistrationIdentity {
@@ -143,15 +148,15 @@ impl ConsumerPropertyReadRegistration for ConsumerCompilerRegistration<HostBindi
     }
 }
 
-impl<C: PollClientBinding> private::Sealed
-    for ConsumerCompilerRegistration<StaticConsumerBindingRegistration<C>>
+impl<C: PrepareClientBinding> private::Sealed
+    for ConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>
 where
     C::Compiler: 'static,
     <C::Compiler as BindingCompilerExtension>::Artifact: 'static,
 {
 }
-impl<C: PollClientBinding> ConsumerPropertyReadRegistration
-    for ConsumerCompilerRegistration<StaticConsumerBindingRegistration<C>>
+impl<C: PrepareClientBinding> ConsumerPropertyReadRegistration
+    for ConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>
 where
     C::Compiler: 'static,
     <C::Compiler as BindingCompilerExtension>::Artifact: 'static,
@@ -183,10 +188,10 @@ where
     }
 }
 #[cfg(feature = "std")]
-impl private::Sealed for ConsumerCompilerRegistration<HostConsumerBindingRegistration> {}
+impl private::Sealed for ConsumerCompilerRegistration<HostConsumerBindingPreparation> {}
 #[cfg(feature = "std")]
 impl ConsumerPropertyReadRegistration
-    for ConsumerCompilerRegistration<HostConsumerBindingRegistration>
+    for ConsumerCompilerRegistration<HostConsumerBindingPreparation>
 {
     type Artifact = HostBindingArtifact;
     type Cursor = HostBindingCompilerCursor;
@@ -851,26 +856,33 @@ impl<A: 'static> OwnedRoot<A> {
 ///
 /// The owner cannot be cloned, forged or shared, and a non-Send artifact keeps
 /// the complete graph local:
-/// ```compile_fail
-/// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
+/// ```compile_fail,E0277
+/// use clinkz_wot_planning::{ConsumerPropertyReadOwnedOutput, ResolvedTargetArtifact};
 /// fn cloneable<T: Clone>() {}
-/// cloneable::<ConsumerPropertyReadOwnedOutput<clinkz_wot_core::ResolvedTargetArtifact>>();
+/// cloneable::<ConsumerPropertyReadOwnedOutput<ResolvedTargetArtifact>>();
 /// ```
-/// ```compile_fail
-/// use clinkz_wot_core::ResolvedTargetArtifact;
-/// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
+/// ```compile_fail,E0451
+/// use clinkz_wot_planning::{ConsumerPropertyReadOwnedOutput, ResolvedTargetArtifact};
 /// let _ = ConsumerPropertyReadOwnedOutput::<ResolvedTargetArtifact> { root: todo!() };
 /// ```
-/// ```compile_fail
-/// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
+/// ```compile_fail,E0277
+/// use clinkz_wot_planning::{ConsumerPropertyReadOwnedOutput, ResolvedTargetArtifact};
 /// fn shared<T: Sync>() {}
-/// shared::<ConsumerPropertyReadOwnedOutput<clinkz_wot_core::ResolvedTargetArtifact>>();
+/// shared::<ConsumerPropertyReadOwnedOutput<ResolvedTargetArtifact>>();
 /// ```
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use clinkz_wot_planning::ConsumerPropertyReadOwnedOutput;
 /// use std::rc::Rc;
 /// fn movable<T: Send>() {}
 /// movable::<ConsumerPropertyReadOwnedOutput<Rc<()>>>();
+/// ```
+/// The same public types and a Send artifact are valid:
+/// ```
+/// use clinkz_wot_planning::{ConsumerPropertyReadOwnedOutput, ResolvedTargetArtifact};
+/// use std::rc::Rc;
+/// let _ = core::mem::size_of::<ConsumerPropertyReadOwnedOutput<Rc<()>>>();
+/// fn movable<T: Send>() {}
+/// movable::<ConsumerPropertyReadOwnedOutput<ResolvedTargetArtifact>>();
 /// ```
 #[cfg(feature = "std")]
 #[must_use = "retain the manual root and explicitly reclaim its output"]
@@ -921,16 +933,23 @@ impl<A: 'static> ConsumerPropertyReadOwnedOutput<A> {
 /// Has the same fixed credit, auto traits, cleanup-account retention and manual
 /// draining obligation as [`ConsumerPropertyReadOwnedOutput`]. Partial byte
 /// credit, lifetime allowances and first cause remain in the original backing.
-/// ```compile_fail
-/// use clinkz_wot_planning::ConsumerPropertyReadOwnedRollback;
+/// ```compile_fail,E0277
+/// use clinkz_wot_planning::{ConsumerPropertyReadOwnedRollback, ResolvedTargetArtifact};
 /// fn shared<T: Sync>() {}
-/// shared::<ConsumerPropertyReadOwnedRollback<clinkz_wot_core::ResolvedTargetArtifact>>();
+/// shared::<ConsumerPropertyReadOwnedRollback<ResolvedTargetArtifact>>();
 /// ```
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use clinkz_wot_planning::ConsumerPropertyReadOwnedRollback;
 /// use std::rc::Rc;
 /// fn movable<T: Send>() {}
 /// movable::<ConsumerPropertyReadOwnedRollback<Rc<()>>>();
+/// ```
+/// ```
+/// use clinkz_wot_planning::{ConsumerPropertyReadOwnedRollback, ResolvedTargetArtifact};
+/// use std::rc::Rc;
+/// let _ = core::mem::size_of::<ConsumerPropertyReadOwnedRollback<Rc<()>>>();
+/// fn movable<T: Send>() {}
+/// movable::<ConsumerPropertyReadOwnedRollback<ResolvedTargetArtifact>>();
 /// ```
 #[cfg(feature = "std")]
 #[must_use = "retain the manual root and explicitly drive rollback to terminal"]
@@ -1173,7 +1192,7 @@ struct Census {
 
 /// Unique consumed owner of the TD continuation and complete registration loan.
 /// Raw Thing input cannot substitute for TD admission:
-/// ```compile_fail
+/// ```compile_fail,E0308
 /// use clinkz_wot_planning::*;
 /// use clinkz_wot_core::PlanSetGeneration;
 /// use clinkz_wot_foundation::AdmissionLedger;
@@ -1186,7 +1205,7 @@ struct Census {
 /// }
 /// ```
 /// A suspended build retains its source loan:
-/// ```compile_fail
+/// ```compile_fail,E0505
 /// use clinkz_wot_planning::*;
 /// use clinkz_wot_core::PlanSetGeneration;
 /// use clinkz_wot_foundation::{AdmissionLedger, WorkBudget};
@@ -1207,7 +1226,7 @@ struct Census {
 /// }
 /// ```
 /// A suspended build retains its complete registration loan:
-/// ```compile_fail
+/// ```compile_fail,E0505
 /// use clinkz_wot_planning::*;
 /// use clinkz_wot_core::PlanSetGeneration;
 /// use clinkz_wot_foundation::AdmissionLedger;
@@ -1219,6 +1238,29 @@ struct Census {
 ///         PlanSetGeneration::INITIAL, ledger, slot);
 ///     drop(r);
 ///     drop(build);
+/// }
+/// ```
+/// A validated source and its registration can be used until the build is
+/// released; releasing the build first ends both loans:
+/// ```
+/// use clinkz_wot_planning::*;
+/// use clinkz_wot_core::PlanSetGeneration;
+/// use clinkz_wot_foundation::{AdmissionLedger, WorkBudget};
+/// use clinkz_wot_td::{thing::Thing, ValidatedThingAdmissionConfig,
+///     ValidatedThingCursor, ValidatedThingProgress};
+/// fn valid<R: ConsumerPropertyReadRegistration>(source: Thing, r: R,
+///     config: &ConsumerPropertyReadBuildConfig, td_config: &ValidatedThingAdmissionConfig,
+///     td_ledger: AdmissionLedger, ledger: AdmissionLedger,
+///     slot: &mut ConsumerPropertyReadCleanupSlot<R::Artifact>) {
+///     let proof = match ValidatedThingCursor::from_thing(&source, td_config, td_ledger)
+///         .step(&mut WorkBudget::new(), false) {
+///         ValidatedThingProgress::Complete(proof) => proof, _ => return,
+///     };
+///     let build = build_consumer_property_read_aggregate(proof, &r, config,
+///         PlanSetGeneration::INITIAL, ledger, slot);
+///     drop(build);
+///     drop(r);
+///     drop(source);
 /// }
 /// ```
 #[must_use]

@@ -5,6 +5,7 @@ use crate::compiler::{self, CAPACITY, COMPATIBILITY, Impostor, InlineCompiler, S
 use clinkz_wot_core::binding::ClientBinding;
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use core::{
     marker::PhantomData,
     task::{Context, Poll},
@@ -20,8 +21,11 @@ impl<C> Endpoint<C> {
     }
 }
 
-impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
+impl<C: BindingCompilerExtension> clinkz_wot_planning::PrepareServerBinding for Endpoint<C> {
     type Compiler = C;
+}
+impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
+    type Artifact = <C as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RouteState = ();
     type ReadinessState = ();
     type ResponseState = ();
@@ -40,7 +44,7 @@ impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
     fn start_prepare(
         &mut self,
         input: PrepareInput,
-        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
         route: &mut ServerRouteSlot<Self::RouteState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>> {
@@ -225,8 +229,11 @@ impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
     }
 }
 
-impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
+impl<C: BindingCompilerExtension> clinkz_wot_planning::PrepareClientBinding for Endpoint<C> {
     type Compiler = C;
+}
+impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
+    type Artifact = <C as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = ();
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.1
@@ -237,7 +244,7 @@ impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
     fn start_request(
         &mut self,
         request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
         slot: &mut ClientRequestSlot<Self::RequestState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
@@ -395,7 +402,7 @@ impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for Endpoint<C> {
     }
 }
 
-type Complete<C> = StaticBindingRegistration<StaticBindingComponents<Endpoint<C>, Endpoint<C>>>;
+type Complete<C> = StaticBindingPreparation<StaticBindingComponents<Endpoint<C>, Endpoint<C>>>;
 
 // Inert execution halves reused by the aggregate admission witness. These
 // factories capture production Core support; none of the model issuer below
@@ -404,22 +411,24 @@ pub fn production_static_registration(
     compiler: ResolvedTargetCompiler,
     identity: BindingRegistrationIdentity,
 ) -> ConsumerCompilerRegistration<
-    StaticBindingRegistration<impl PollServerBinding<Compiler = ResolvedTargetCompiler>>,
+    StaticBindingPreparation<
+        impl PrepareServerBinding<Compiler = ResolvedTargetCompiler, Artifact = ResolvedTargetArtifact>,
+    >,
 > {
     let compatibility = identity.artifact_compatibility();
-    let input = StaticBindingRegistrationInput::producer_and_consumer_property_read(
+    let input = StaticBindingPreparationInput::producer_and_consumer_property_read(
         identity,
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(compiler),
         StaticBindingComponents::new(
-            Endpoint::for_compatibility(compatibility),
-            Endpoint::for_compatibility(compatibility),
+            Endpoint::<ResolvedTargetCompiler>::for_compatibility(compatibility),
+            Endpoint::<ResolvedTargetCompiler>::for_compatibility(compatibility),
         ),
         resources(),
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(3, 5),
     );
-    StaticBindingRegistration::producer_and_consumer_property_read(input)
+    StaticBindingPreparation::producer_and_consumer_property_read(input)
         .unwrap_or_else(|_| panic!("production complete static registration"))
         .try_into_consumer_compiler()
         .unwrap_or_else(|_| panic!("production static support capture"))
@@ -429,11 +438,11 @@ pub fn production_static_registration(
 pub fn production_host_registration(
     compiler: ResolvedTargetCompiler,
     identity: BindingRegistrationIdentity,
-) -> ConsumerCompilerRegistration<HostBindingRegistration> {
+) -> ConsumerCompilerRegistration<HostBindingPreparation> {
     let compatibility = identity.artifact_compatibility();
     let compiler = HostBindingCompilerRegistration::try_new_consumer(compiler)
         .unwrap_or_else(|_| panic!("production supported Host adapter"));
-    let input = HostBindingRegistrationInput::producer_and_consumer_property_read(
+    let input = HostBindingPreparationInput::producer_and_consumer_property_read(
         identity,
         BindingExecutionSupport::host_erased(),
         compiler,
@@ -447,7 +456,7 @@ pub fn production_host_registration(
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(3, 5),
     );
-    HostBindingRegistration::new(input)
+    HostBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("production complete Host registration"))
         .try_into_consumer_compiler()
         .unwrap_or_else(|_| panic!("production Host support capture"))
@@ -457,7 +466,7 @@ enum Registration {
     Inline(Complete<InlineCompiler>),
     Impostor(Complete<Impostor>),
     #[cfg(feature = "std")]
-    LegacyHost(HostBindingRegistration),
+    LegacyHost(HostBindingPreparation),
 }
 
 /// Opaque complete bundle, constructed by this fixture's closed factory.
@@ -515,7 +524,7 @@ fn complete<C: BindingCompilerExtension>(
     capacity: usize,
     scenario: Scenario,
 ) -> Complete<C> {
-    let input = StaticBindingRegistrationInput::producer_and_consumer_property_read(
+    let input = StaticBindingPreparationInput::producer_and_consumer_property_read(
         identity(capacity, scenario),
         BindingExecutionSupport::application_static(),
         StaticBindingCompilerRegistration::new(compiler),
@@ -524,7 +533,7 @@ fn complete<C: BindingCompilerExtension>(
         BindingIngressPolicy::hidden(),
         BindingStatusPolicy::new(0, 0),
     );
-    StaticBindingRegistration::producer_and_consumer_property_read(input)
+    StaticBindingPreparation::producer_and_consumer_property_read(input)
         .unwrap_or_else(|_| panic!("complete fixture registration rejected"))
 }
 
@@ -549,7 +558,7 @@ pub fn unsupported_registration() -> CompleteRegistration {
     )))
 }
 pub fn producer_only_registration() -> CompleteRegistration {
-    let input = StaticBindingRegistrationInput::new(
+    let input = StaticBindingPreparationInput::new(
         identity(CAPACITY, Scenario::Success),
         BindingRegistrationCapabilities::producer_property_read(),
         BindingExecutionSupport::application_static(),
@@ -566,7 +575,7 @@ pub fn producer_only_registration() -> CompleteRegistration {
         BindingStatusPolicy::new(0, 0),
     );
     CompleteRegistration(Registration::Inline(
-        StaticBindingRegistration::new(input)
+        StaticBindingPreparation::new(input)
             .unwrap_or_else(|_| panic!("Producer-only input rejected")),
     ))
 }
@@ -584,7 +593,7 @@ pub fn mismatched_configuration_registration() -> CompleteRegistration {
 #[cfg(feature = "std")]
 pub fn legacy_host_registration() -> CompleteRegistration {
     use alloc::boxed::Box;
-    let input = HostBindingRegistrationInput::producer_and_consumer_property_read(
+    let input = HostBindingPreparationInput::producer_and_consumer_property_read(
         identity(CAPACITY, Scenario::Success),
         BindingExecutionSupport::host_erased(),
         HostBindingCompilerRegistration::new(InlineCompiler {
@@ -598,7 +607,7 @@ pub fn legacy_host_registration() -> CompleteRegistration {
         BindingStatusPolicy::new(0, 0),
     );
     CompleteRegistration(Registration::LegacyHost(
-        HostBindingRegistration::new(input)
+        HostBindingPreparation::new(input)
             .unwrap_or_else(|_| panic!("complete Host fixture registration rejected")),
     ))
 }

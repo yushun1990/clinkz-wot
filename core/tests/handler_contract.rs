@@ -2,6 +2,7 @@ use core::fmt;
 use std::cell::Cell;
 use std::rc::Rc;
 
+use clinkz_wot_core::Operation;
 use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, CancellationView, CoreError, CoreResult,
     ErrorPhase, HandlerContext, HandlerFootprint, HandlerSlotId, HandlerStep, InteractionInput,
@@ -9,7 +10,6 @@ use clinkz_wot_core::{
     StaticHandlerRegistration, SubscriptionAcceptance, ThingId, ThingSlotId,
 };
 use clinkz_wot_foundation::{Generation, SlotIndex};
-use clinkz_wot_td::data_type::Operation;
 
 fn thing_slot() -> ThingSlotId {
     ThingSlotId::new(SlotIndex::new(3), Generation::INITIAL)

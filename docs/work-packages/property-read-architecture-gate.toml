@@ -89,7 +89,7 @@ evidence = ["planning/src/property_read.rs", "servient/tests/property_read.rs"]
 id = "WP-200-PRODUCER-ROUTE-RESERVATION"
 owner_package = "WP-200"
 status = "covered"
-evidence = ["core/src/binding_compiler.rs", "planning/src/property_read.rs"]
+evidence = ["planning/src/binding_compiler.rs", "planning/src/property_read.rs"]
 
 [[dependency]]
 id = "WP-400-PROPERTY-READ-SERVIENT"

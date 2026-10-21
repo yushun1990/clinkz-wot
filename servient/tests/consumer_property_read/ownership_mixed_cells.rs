@@ -2,10 +2,11 @@ use super::*;
 
 // Cargo features unify per package, not per workspace. Servient's existing
 // dev graph supplies a real std Core while this library is built no-default
-// or async-no-std. The accepted contract requires matching compilation cells.
+// or async-no-std. Static execution is selected by its actual types and policy,
+// independently of those per-package syntax labels.
 #[cfg(not(feature = "std"))]
 #[test]
-fn owned_mixed_core_and_servient_cells_must_reject_before_clock_and_parent_mutation() {
+fn owned_static_execution_accepts_independently_unified_core_syntax_and_releases_its_accounts() {
     let private = BindingConfigurationDigest::new(core::array::from_fn(|i| i as u8));
     let core = ConsumerBindingConfiguration::try_new(
         BindingResourceContract::ConsumerOwnedV2,
@@ -34,7 +35,6 @@ fn owned_mixed_core_and_servient_cells_must_reject_before_clock_and_parent_mutat
     }
     let contract = BindingResourceContract::ConsumerOwnedV2;
     let policy = owned_policy(contract);
-    let key = policy.resource_identity();
     println!(
         "mixed-cell witness: Core=std; Servient={}; policy={}",
         if cfg!(feature = "async") {
@@ -57,7 +57,6 @@ fn owned_mixed_core_and_servient_cells_must_reject_before_clock_and_parent_mutat
     let captured = registration.support().consumer_configuration().unwrap();
     assert_eq!(captured.compilation_cell(), "std");
     assert_eq!(captured.configuration(), identity.configuration());
-    let report_before = report.0.get();
     observe(usize::MAX);
     let result = StaticConsumerPropertyReadRuntime::try_new(
         registration,
@@ -68,20 +67,10 @@ fn owned_mixed_core_and_servient_cells_must_reject_before_clock_and_parent_mutat
     );
     let allocations = trace().requests;
     disarm();
-    let rejected = result.is_err();
-    assert!(
-        rejected,
-        "owned provisioning accepted Core std metadata under a portable Servient policy; clock observations={}",
-        clock.0.get()
-    );
-    let rejection = result.err().unwrap();
-    assert_eq!(rejection.input().0.registration().identity(), identity);
-    assert_eq!(
-        rejection.error().error().context().resource_failure(),
-        Some((key, ResourceFailureDomain::EngineCapacity, None, None))
-    );
+    let (runtime, observer) =
+        result.unwrap_or_else(|e| panic!("qualified static owner: {:?}", e.error()));
     assert_eq!(allocations, 0);
-    assert_eq!(clock.0.get(), 0);
+    assert!(clock.0.get() > 0);
     for counter in [
         &stats.starts,
         &stats.polls,
@@ -91,13 +80,9 @@ fn owned_mixed_core_and_servient_cells_must_reject_before_clock_and_parent_mutat
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
     assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 0);
-    drop(rejection);
+    assert!(parent.borrow().iter().any(|a| a.used() > 0));
+    drop(runtime);
+    drop(observer);
     assert_eq!(stats.clients_destroyed.load(Ordering::SeqCst), 1);
-    assert_eq!(report.0.get(), report_before);
-    assert!(
-        parent
-            .borrow()
-            .iter()
-            .all(|a| a.used() == 0 && a.peak() == 0)
-    );
+    assert!(parent.borrow().iter().all(|a| a.used() == 0));
 }

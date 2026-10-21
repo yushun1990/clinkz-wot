@@ -6,38 +6,40 @@ extern crate alloc;
 pub mod production;
 
 use clinkz_wot_core::*;
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use core::mem::size_of;
 
 /// The existing Producer/dual-role static registration requires a server.
 /// A client alone uses the separate Consumer-only complete owner.
 /// ```compile_fail
-/// use clinkz_wot_core::{PollClientBinding, StaticBindingRegistration};
+/// use clinkz_wot_core::{PollClientBinding};
+/// use clinkz_wot_planning::{ StaticBindingPreparation};
 /// fn client_only<C: PollClientBinding>() {
-///     let _ = core::mem::size_of::<StaticBindingRegistration<C>>();
+///     let _ = core::mem::size_of::<StaticBindingPreparation<C>>();
 /// }
 /// ```
 /// The current draft is local even if the concrete artifact is thread safe.
 /// ```compile_fail
-/// use clinkz_wot_core::ResolvedTargetArtifact;
+/// use clinkz_wot_planning::ResolvedTargetArtifact;
 /// use clinkz_wot_planning::ConsumerPropertyReadDraft;
 /// fn shared<T: Send + Sync>() {}
 /// shared::<ConsumerPropertyReadDraft<ResolvedTargetArtifact>>();
 /// ```
 /// ```compile_fail
-/// use clinkz_wot_core::ResolvedTargetArtifact;
+/// use clinkz_wot_planning::ResolvedTargetArtifact;
 /// use clinkz_wot_planning::ConsumerPropertyReadDraft;
 /// fn shared<T: Sync>() {}
 /// shared::<ConsumerPropertyReadDraft<ResolvedTargetArtifact>>();
 /// ```
 /// Its cleanup destination and a detached cleanup lease are also local.
 /// ```compile_fail
-/// use clinkz_wot_core::ResolvedTargetArtifact;
+/// use clinkz_wot_planning::ResolvedTargetArtifact;
 /// use clinkz_wot_planning::ConsumerPropertyReadCleanupSlot;
 /// fn movable<T: Send>() {}
 /// movable::<ConsumerPropertyReadCleanupSlot<ResolvedTargetArtifact>>();
 /// ```
 /// ```compile_fail
-/// use clinkz_wot_core::ResolvedTargetArtifact;
+/// use clinkz_wot_planning::ResolvedTargetArtifact;
 /// use clinkz_wot_planning::ConsumerPropertyReadRollback;
 /// fn movable<T: Send>() {}
 /// movable::<ConsumerPropertyReadRollback<ResolvedTargetArtifact>>();
@@ -79,7 +81,7 @@ fn resources_fit(r: BindingResourceDeclarations) -> bool {
 
 /// A closed-compiler assembly model, rather than a replacement for the open
 /// authoring SPI. No server, ingress policy, TD, allocator or callback issuer.
-pub struct StaticInput<C: PollClientBinding<Compiler = ResolvedTargetCompiler>> {
+pub struct StaticInput<C: PrepareClientBinding<Compiler = ResolvedTargetCompiler>> {
     pub identity: BindingRegistrationIdentity,
     pub execution: BindingExecutionSupport,
     pub compiler: ResolvedTargetCompiler,
@@ -88,9 +90,9 @@ pub struct StaticInput<C: PollClientBinding<Compiler = ResolvedTargetCompiler>> 
     pub status: BindingStatusPolicy,
 }
 
-pub struct StaticOwner<C: PollClientBinding<Compiler = ResolvedTargetCompiler>>(StaticInput<C>);
+pub struct StaticOwner<C: PrepareClientBinding<Compiler = ResolvedTargetCompiler>>(StaticInput<C>);
 
-impl<C: PollClientBinding<Compiler = ResolvedTargetCompiler>> StaticOwner<C> {
+impl<C: PrepareClientBinding<Compiler = ResolvedTargetCompiler>> StaticOwner<C> {
     pub fn try_new(input: StaticInput<C>) -> Result<Self, (StaticInput<C>, Rejection)> {
         let error = if !input.execution.supports_application_static() {
             Some(Rejection::Cell)

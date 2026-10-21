@@ -6,6 +6,7 @@ use clinkz_wot_core::*;
 #[cfg(feature = "std")]
 use clinkz_wot_foundation::{AdmissionLedger, ResourceKind};
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_planning::*;
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
@@ -228,8 +229,11 @@ impl<C> Endpoint<C> {
     }
 }
 
-impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
+impl<C: BindingCompilerExtension> clinkz_wot_planning::PrepareServerBinding for Endpoint<C> {
     type Compiler = C;
+}
+impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
+    type Artifact = <C as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RouteState = ();
     type ReadinessState = ();
     type ResponseState = ();
@@ -248,7 +252,7 @@ impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
     fn start_prepare(
         &mut self,
         input: PrepareInput,
-        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
         route: &mut ServerRouteSlot<Self::RouteState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>> {
@@ -433,8 +437,11 @@ impl<C: BindingCompilerExtension> PollServerBinding for Endpoint<C> {
     }
 }
 
-impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
+impl<C: BindingCompilerExtension> clinkz_wot_planning::PrepareClientBinding for Endpoint<C> {
     type Compiler = C;
+}
+impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
+    type Artifact = <C as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = ();
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.compatibility
@@ -445,7 +452,7 @@ impl<C: BindingCompilerExtension> PollClientBinding for Endpoint<C> {
     fn start_request(
         &mut self,
         request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
         slot: &mut ClientRequestSlot<Self::RequestState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
@@ -1033,7 +1040,7 @@ fn resources() -> BindingResourceDeclarations {
         BindingLifetimeFootprint::new(8, 4096),
     )
 }
-type Complete<C> = StaticBindingRegistration<StaticBindingComponents<Endpoint<C>, Endpoint<C>>>;
+type Complete<C> = StaticBindingPreparation<StaticBindingComponents<Endpoint<C>, Endpoint<C>>>;
 fn static_registration<C: BindingCompilerExtension>(
     compiler: C,
     id: BindingRegistrationIdentity,
@@ -1043,7 +1050,7 @@ fn static_registration<C: BindingCompilerExtension>(
 ) -> Result<
     Complete<C>,
     BindingInputRejection<
-        StaticBindingRegistrationInput<StaticBindingComponents<Endpoint<C>, Endpoint<C>>>,
+        StaticBindingPreparationInput<StaticBindingComponents<Endpoint<C>, Endpoint<C>>>,
     >,
 > {
     let components = StaticBindingComponents::new(
@@ -1051,7 +1058,7 @@ fn static_registration<C: BindingCompilerExtension>(
         Endpoint::new(id.artifact_compatibility(), drops),
     );
     let input = if consumer {
-        StaticBindingRegistrationInput::producer_and_consumer_property_read(
+        StaticBindingPreparationInput::producer_and_consumer_property_read(
             id,
             execution,
             StaticBindingCompilerRegistration::new(compiler),
@@ -1061,7 +1068,7 @@ fn static_registration<C: BindingCompilerExtension>(
             BindingStatusPolicy::new(3, 5),
         )
     } else {
-        StaticBindingRegistrationInput::new(
+        StaticBindingPreparationInput::new(
             id,
             BindingRegistrationCapabilities::producer_property_read(),
             execution,
@@ -1073,9 +1080,9 @@ fn static_registration<C: BindingCompilerExtension>(
         )
     };
     if consumer {
-        StaticBindingRegistration::producer_and_consumer_property_read(input)
+        StaticBindingPreparation::producer_and_consumer_property_read(input)
     } else {
-        StaticBindingRegistration::new(input)
+        StaticBindingPreparation::new(input)
     }
 }
 fn typed(
@@ -1099,13 +1106,13 @@ fn host_registration(
     consumer: bool,
     execution: BindingExecutionSupport,
     drops: &Arc<AtomicUsize>,
-) -> Result<HostBindingRegistration, BindingInputRejection<HostBindingRegistrationInput>> {
+) -> Result<HostBindingPreparation, BindingInputRejection<HostBindingPreparationInput>> {
     let server = Box::new(Endpoint::<ResolvedTargetCompiler>::new(
         id.artifact_compatibility(),
         drops,
     ));
     let input = if consumer {
-        HostBindingRegistrationInput::producer_and_consumer_property_read(
+        HostBindingPreparationInput::producer_and_consumer_property_read(
             id,
             execution,
             compiler,
@@ -1119,7 +1126,7 @@ fn host_registration(
             BindingStatusPolicy::new(3, 5),
         )
     } else {
-        HostBindingRegistrationInput::new(
+        HostBindingPreparationInput::new(
             id,
             BindingRegistrationCapabilities::producer_property_read(),
             execution,
@@ -1130,14 +1137,14 @@ fn host_registration(
             BindingStatusPolicy::new(3, 5),
         )
     };
-    HostBindingRegistration::new(input)
+    HostBindingPreparation::new(input)
 }
 #[cfg(feature = "std")]
 fn host(
     compiler: ResolvedTargetCompiler,
     id: BindingRegistrationIdentity,
     drops: &Arc<AtomicUsize>,
-) -> HostBindingRegistration {
+) -> HostBindingPreparation {
     host_registration(
         HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),
         id,
@@ -2062,8 +2069,11 @@ mod consumer_only_support {
             }
         }
     }
-    impl<C: BindingCompilerExtension> PollClientBinding for CaptureClient<C> {
+    impl<C: BindingCompilerExtension> clinkz_wot_planning::PrepareClientBinding for CaptureClient<C> {
         type Compiler = C;
+    }
+    impl<C: BindingCompilerExtension> PollClientBinding for CaptureClient<C> {
+        type Artifact = <C as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
         type RequestState = ();
         fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
             self.owned
@@ -2077,9 +2087,7 @@ mod consumer_only_support {
         fn start_request(
             &mut self,
             request: OutboundRequest,
-            artifact: &BindingArtifactEnvelope<
-                <Self::Compiler as BindingCompilerExtension>::Artifact,
-            >,
+            artifact: &BindingArtifactEnvelope<Self::Artifact>,
             slot: &mut ClientRequestSlot<Self::RequestState>,
             budget: &mut WorkBudget,
         ) -> Result<
@@ -2151,8 +2159,8 @@ mod consumer_only_support {
         compiler: C,
         id: BindingRegistrationIdentity,
         drops: &Arc<AtomicUsize>,
-    ) -> StaticConsumerBindingRegistration<CaptureClient<C>> {
-        StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+    ) -> StaticConsumerBindingPreparation<CaptureClient<C>> {
+        StaticConsumerBindingPreparation::new(StaticConsumerBindingPreparationInput::new(
             id,
             BindingExecutionSupport::application_static(),
             StaticBindingCompilerRegistration::new(compiler),
@@ -2170,11 +2178,11 @@ mod consumer_only_support {
         execution: BindingExecutionSupport,
         drops: &Arc<AtomicUsize>,
     ) -> Result<
-        HostConsumerBindingRegistration,
-        BindingInputRejection<HostConsumerBindingRegistrationInput>,
+        HostConsumerBindingPreparation,
+        BindingInputRejection<HostConsumerBindingPreparationInput>,
     > {
         assert!(consumer);
-        HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
+        HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
             id,
             execution,
             compiler,
@@ -2191,7 +2199,7 @@ mod consumer_only_support {
         compiler: ResolvedTargetCompiler,
         id: BindingRegistrationIdentity,
         drops: &Arc<AtomicUsize>,
-    ) -> HostConsumerBindingRegistration {
+    ) -> HostConsumerBindingPreparation {
         host_registration(
             HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),
             id,
@@ -2520,7 +2528,7 @@ mod consumer_only_support {
                 CaptureClient::<ResolvedTargetCompiler>::new(id.artifact_compatibility(), &drops),
             );
             let pointer = &*client as *const dyn ClientBinding as *const ();
-            let input = HostConsumerBindingRegistrationInput::new(
+            let input = HostConsumerBindingPreparationInput::new(
                 id,
                 BindingExecutionSupport::host_erased(),
                 compiler,
@@ -2528,7 +2536,7 @@ mod consumer_only_support {
                 resources(),
                 BindingStatusPolicy::new(3, 5),
             );
-            let owner = HostConsumerBindingRegistration::new(input)
+            let owner = HostConsumerBindingPreparation::new(input)
                 .unwrap_or_else(|_| panic!("valid native declaration"));
             let before = drops.load(Ordering::SeqCst);
             let (rejected, trace) = observe(false, || {
@@ -2634,17 +2642,16 @@ mod consumer_only_support {
             .unwrap();
             let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
             client.owned = Some(actual);
-            let mut owner = StaticConsumerBindingRegistration::new(
-                StaticConsumerBindingRegistrationInput::new(
+            let mut owner =
+                StaticConsumerBindingPreparation::new(StaticConsumerBindingPreparationInput::new(
                     id,
                     BindingExecutionSupport::application_static(),
                     StaticBindingCompilerRegistration::new(compiler),
                     client,
                     owned_resources(actual),
                     BindingStatusPolicy::new(3, 5),
-                ),
-            )
-            .unwrap_or_else(|_| panic!());
+                ))
+                .unwrap_or_else(|_| panic!());
             let mut slot = StaticConsumerPropertyReadSlot::new();
             let (rejected, requests) = observe(false, || {
                 owner.start_consumer_property_read(request, &envelope, &mut slot, &mut work(100))
@@ -2665,8 +2672,8 @@ mod consumer_only_support {
                     &drops,
                 );
                 client.owned = Some(actual);
-                let owner = HostConsumerBindingRegistration::new(
-                    HostConsumerBindingRegistrationInput::new(
+                let owner =
+                    HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
                         id,
                         BindingExecutionSupport::host_erased(),
                         HostBindingCompilerRegistration::try_new_consumer(
@@ -2676,9 +2683,8 @@ mod consumer_only_support {
                         Box::new(client),
                         owned_resources(actual),
                         BindingStatusPolicy::new(3, 5),
-                    ),
-                )
-                .unwrap_or_else(|_| panic!());
+                    ))
+                    .unwrap_or_else(|_| panic!());
                 let foreign_compiler =
                     HostBindingCompilerRegistration::try_new_consumer(foreign_compiler).unwrap();
                 let cursor = foreign_compiler.start(&foreign_input).unwrap();
@@ -2741,7 +2747,7 @@ mod consumer_only_support {
                 let id = identity(&compiler, 7);
                 let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
                 client.owned = client_config;
-                let input = StaticConsumerBindingRegistrationInput::new(
+                let input = StaticConsumerBindingPreparationInput::new(
                     id,
                     BindingExecutionSupport::application_static(),
                     StaticBindingCompilerRegistration::new(compiler),
@@ -2750,7 +2756,7 @@ mod consumer_only_support {
                     BindingStatusPolicy::new(3, 5),
                 );
                 let (result, requests) =
-                    observe(false, || StaticConsumerBindingRegistration::new(input));
+                    observe(false, || StaticConsumerBindingPreparation::new(input));
                 no_requests(requests);
                 let returned = result
                     .err()
@@ -2765,7 +2771,7 @@ mod consumer_only_support {
             let mut client = CaptureClient::new(id.artifact_compatibility(), &drops);
             client.owned = Some(actual);
             let (owner, requests) = observe(false, || {
-                StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
+                StaticConsumerBindingPreparation::new(StaticConsumerBindingPreparationInput::new(
                     id,
                     BindingExecutionSupport::application_static(),
                     StaticBindingCompilerRegistration::new(compiler),
@@ -2851,7 +2857,7 @@ mod consumer_only_support {
                 });
                 let client: Box<dyn ClientBinding> = Box::new(client);
                 let pointer = &*client as *const dyn ClientBinding as *const ();
-                let input = HostConsumerBindingRegistrationInput::new(
+                let input = HostConsumerBindingPreparationInput::new(
                     id,
                     BindingExecutionSupport::host_erased(),
                     adapter,
@@ -2860,7 +2866,7 @@ mod consumer_only_support {
                     BindingStatusPolicy::new(3, 5),
                 );
                 let (owner, requests) =
-                    observe(false, || HostConsumerBindingRegistration::new(input));
+                    observe(false, || HostConsumerBindingPreparation::new(input));
                 no_requests(requests);
                 if !match_client {
                     let input = owner.err().expect("mismatch").into_input();

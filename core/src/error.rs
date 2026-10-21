@@ -1,8 +1,8 @@
 use core::fmt;
 use core::time::Duration;
 
+use crate::Operation;
 use clinkz_wot_foundation::{Generation, ResourceKind, SlotIndex};
-use clinkz_wot_td::data_type::Operation;
 
 use crate::identity::{
     AffordanceSlotId, BindingGeneration, BindingId, CorrelationId, PlanId, ThingSlotId,
@@ -539,8 +539,8 @@ mod tests {
     use alloc::format;
     use core::mem::size_of;
 
+    use crate::Operation;
     use clinkz_wot_foundation::{Generation, ResourceKind, SlotIndex};
-    use clinkz_wot_td::data_type::Operation;
 
     use super::{
         CoreError, ErrorContext, ErrorPhase, REDACTED_CAUSE_CAPACITY, RetryClass,

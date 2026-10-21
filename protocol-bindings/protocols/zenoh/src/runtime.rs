@@ -1,15 +1,15 @@
+#[cfg(feature = "zenoh")]
+pub mod pool;
 mod selector;
 #[cfg(feature = "zenoh")]
 pub mod zenoh;
-#[cfg(feature = "zenoh")]
-pub mod pool;
 #[cfg(feature = "zenoh-pico")]
 pub mod zenoh_pico;
 
 #[cfg(feature = "zenoh")]
-pub use zenoh::{SharedZenohTransport, ZenohSessionTransport, ZenohSubscription};
+pub use pool::{DefaultSessionPolicy, ZenohSessionPolicy, ZenohSessionPool};
 #[cfg(feature = "zenoh")]
-pub use pool::{DefaultSessionPolicy, ZenohSessionPool, ZenohSessionPolicy};
+pub use zenoh::{SharedZenohTransport, ZenohSessionTransport, ZenohSubscription};
 #[cfg(feature = "zenoh-pico")]
 pub use zenoh_pico::{
     ZenohPicoError, ZenohPicoErrorKind, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport,

@@ -52,49 +52,30 @@ adapt that kernel; they do not independently compute generation validity,
 terminal class, cleanup ownership, retry classification, or semantic resource
 deltas.
 
-## Proposed instance and infrastructure separation (Review 08)
+<a id="proposed-instance-and-infrastructure-separation-review-08"></a>
+## Instance and infrastructure separation
 
-**Non-normative proposal; the accepted lifecycle rules below remain active.**
-[Review 08](../reviews/review-08-integrated-architecture-reassessment.md#infrastructure-ownership-and-resource-policy)
-recommends keeping instance dispatch/publication and logical operation drain in
-Servient, while calls/routes may lease separately owned protocol infrastructure.
-One instance's closure would retire its rights and participation without closing
-a listener/session that another instance or role uses. Infrastructure retirement
-and executor shutdown would follow their actual owners, not Thing count or a
-semantic result's acknowledgement.
+ADR-0024 adopts the distinction: Servient owns instance publication, current
+logical authorization, generation-to-handler lookup, cancellation and drain.
+Binding owns native matching/captures and infrastructure progress over installed
+logical registrations. Each zero/many candidate remains generation pinned and
+receives independent current acceptance; overlapping or identical filters do not
+collapse recipients. Shared packets and per-recipient deliveries have separate
+bounds. Deferred candidates cannot retarget; accepted work keeps original data.
 
-The [constructed shared Producer case](../reviews/review-08-integrated-architecture-reassessment.md#constructed-shared-producer-boundary)
-requires native infrastructure progress independent of any one route permit.
-Binding owns native matching/captures over Engine-installed registrations and
-may return zero/many generation-pinned candidates. Servient owns the logical
-registration/generation -> handler index and checks each candidate's exact token,
-current publication/authorization and recipient capacity before lending its
-acceptance permit. Shared packet backing and per-recipient references/deliveries
-are independently bounded. Identical/overlapping filters do not collapse logical
-recipients; equality lookup remains an exclusive-unicast adapter.
+One instance's close revokes its gate/participation without closing sibling
+service. Final route-registration release initiates ordinary native retirement;
+owner polling only progresses retirement already initiated. Replies/jobs and
+observations retain the physical closer to final drain. Whole-infrastructure
+shutdown needs separate revoke/drain authority. Semantic acknowledgement,
+physical retirement and executor shutdown are distinct boundaries.
 
-Stopping A revokes its gate before removing its exact native registration; B
-remains eligible even with the same filter. Deferred candidates retain their
-original generation/captures; accepted work retains its original handler/data.
-Final route-registration release initiates ordinary native retirement internally.
-Polling has no initiation authority and cannot suppress a live sibling's ingress
-or attachments. A whole-infrastructure shutdown would require separate authority
-to revoke/drain all dependents first. Retirement progress retains the physical
-owner until all route/observation/reply/job users drain. No reference count alone
-substitutes for those boundaries. The UDP and decoded-packet matching probes
-remain separate evidence, not broker or long-lived capability acceptance.
-
-Host and static forms would share lifecycle decisions and checks through common
-kernels/views, with different physical records and progress mechanisms. Fixed
-execution would not require dynamic preparation or an implicit Directory. Any
-removal of independent Plan Set lifetime follows the reviewed capability and
-[proposed program/instance boundary](30-compiled-plan-lifecycle.md#proposed-program-and-instance-lifetimes-review-08),
-with current generation/lease checks retained until deliberate replacement.
-
-No cleanup status substitutes for a live owner, and no asynchronous retirement
-successor is introduced here. Its actual construction, refusal, root-loss,
-funding and terminal evidence must be reviewed with the Binding contract before
-implementation. This proposal does not relax current last-root obligations.
+Host/static forms keep common semantic checks with different storage/progress
+and explicit disposal policy. Existing narrow adapters retain their generation,
+permit and last-root obligations. This extraction implements no shared native
+retirement successor or reusable production backing. The current Servient still
+composes Planning-owned output/reclaim/build types; their extraction is the
+concrete prerequisite for a genuinely execution-only Servient feature.
 
 ## Produced Thing lifecycle
 

@@ -1,3 +1,4 @@
+use crate::core::data_type::operation::{DocumentOperation, OperationListRef};
 use alloc::{
     collections::BTreeMap,
     format,
@@ -34,9 +35,7 @@ struct StringListField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<Strin
 /// Deserialize adapter for one-or-many operation lists (`op`).
 #[serde_as]
 #[derive(Deserialize)]
-struct OperationListField(
-    #[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<crate::data_type::Operation>>,
-);
+struct OperationListField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<DocumentOperation>>);
 
 /// Deserialize adapter for one-or-many profile URIs.
 #[serde_as]
@@ -260,7 +259,8 @@ impl<'de> Deserialize<'de> for ThingModelForm {
         let additional_responses = crate::flat::take(&mut map, "additionalResponses")?;
         let subprotocol = crate::flat::take(&mut map, "subprotocol")?;
         let op = crate::flat::take::<OperationListField, D::Error>(&mut map, "op")?
-            .and_then(|field| field.0);
+            .and_then(|field| field.0)
+            .map(|ops| ops.into_iter().map(|op| op.0).collect());
         Ok(ThingModelForm {
             href,
             content_type,
@@ -305,7 +305,7 @@ impl Serialize for ThingModelForm {
             map.serialize_entry("subprotocol", subprotocol)?;
         }
         if let Some(op) = &self.op {
-            map.serialize_entry("op", &crate::flat::OneOrManyRef(op))?;
+            map.serialize_entry("op", &OperationListRef(op))?;
         }
         for (key, value) in &self._extra_fields {
             map.serialize_entry(key, value)?;

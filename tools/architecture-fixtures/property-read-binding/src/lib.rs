@@ -18,21 +18,20 @@ use core::{
 use clinkz_wot_core::{
     AffordanceTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactRole, BindingCallSettlement,
-    BindingCancellationDisposition, BindingCompilerBounds, BindingCompilerExtension,
-    BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep, BindingConfigurationDigest,
-    BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
-    BindingIngressLimits, BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint,
-    BindingOperationalError, BindingRegistrationCapabilities, BindingRegistrationIdentity,
-    BindingResourceDeclarations, BindingStateLayout, BindingStatusPolicy, CleanupPhaseContext,
-    CollisionDomainId, CoreError, CorrelationId, EndpointReservationKey, ErrorContext, ErrorPhase,
-    InteractionInput, NoCleanupSuccessor, PollServerBinding, PrepareInput, RetryClass,
-    RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome, RouteCommitOutcome,
-    RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility, RoutePrepareOutcome,
-    RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity, RouteTerminal,
-    ServerResponseSlot, ServerRouteSlot, StaticBindingCompilerRegistration,
-    StaticBindingRegistration, StaticBindingRegistrationInput,
+    BindingCancellationDisposition, BindingConfigurationDigest, BindingDeliveryOutcome,
+    BindingExecutionSupport, BindingGeneration, BindingId, BindingIngressLimits,
+    BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
+    BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
+    BindingStateLayout, BindingStatusPolicy, CleanupPhaseContext, CollisionDomainId, CoreError,
+    CorrelationId, EndpointReservationKey, ErrorContext, ErrorPhase, InteractionInput,
+    NoCleanupSuccessor, PollServerBinding, PrepareInput, RetryClass, RouteActivationOutcome,
+    RouteActivationPermit, RouteCleanupOutcome, RouteCommitOutcome, RouteInboundRequest,
+    RouteInboundResponse, RoutePreparationVisibility, RoutePrepareOutcome, RouteReadinessOutcome,
+    RouteReadinessSlot, RouteReservationIdentity, RouteTerminal, ServerResponseSlot,
+    ServerRouteSlot,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 
 const FIXTURE_INGRESS_ITEMS: u32 = 1;
 const FIXTURE_INGRESS_BYTES: u64 = 1_024;
@@ -663,8 +662,11 @@ impl ManualMockBinding {
     }
 }
 
-impl PollServerBinding for ManualMockBinding {
+impl clinkz_wot_planning::PrepareServerBinding for ManualMockBinding {
     type Compiler = MockCompiler;
+}
+impl PollServerBinding for ManualMockBinding {
+    type Artifact = <MockCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RouteState = MockRouteState;
     type ReadinessState = MockReadinessState;
     type ResponseState = MockResponseState;
@@ -1124,10 +1126,10 @@ pub fn static_registration(
     status: BindingStatusPolicy,
     external_readiness_polls: u8,
 ) -> Result<
-    StaticBindingRegistration<ManualMockBinding>,
-    BindingInputRejection<StaticBindingRegistrationInput<ManualMockBinding>>,
+    StaticBindingPreparation<ManualMockBinding>,
+    BindingInputRejection<StaticBindingPreparationInput<ManualMockBinding>>,
 > {
-    StaticBindingRegistration::new(StaticBindingRegistrationInput::new(
+    StaticBindingPreparation::new(StaticBindingPreparationInput::new(
         identity,
         capabilities,
         execution,
@@ -1142,7 +1144,7 @@ pub fn static_registration(
 /// Builds the complete no-default registration and deterministic I/O probe
 /// used by the Servient runtime contract.
 pub fn static_property_read_fixture() -> (
-    StaticBindingRegistration<ManualMockBinding>,
+    StaticBindingPreparation<ManualMockBinding>,
     StaticPropertyReadProbe,
 ) {
     static_property_read_fixture_with_readiness(false)
@@ -1151,7 +1153,7 @@ pub fn static_property_read_fixture() -> (
 /// Builds a no-default registration whose prepared route fails readiness and
 /// therefore must be returned intact to the explicit abort path.
 pub fn static_property_read_readiness_failure_fixture() -> (
-    StaticBindingRegistration<ManualMockBinding>,
+    StaticBindingPreparation<ManualMockBinding>,
     StaticPropertyReadProbe,
 ) {
     static_property_read_fixture_with_readiness(true)
@@ -1160,7 +1162,7 @@ pub fn static_property_read_readiness_failure_fixture() -> (
 fn static_property_read_fixture_with_readiness(
     fail_readiness: bool,
 ) -> (
-    StaticBindingRegistration<ManualMockBinding>,
+    StaticBindingPreparation<ManualMockBinding>,
     StaticPropertyReadProbe,
 ) {
     let compatibility = BindingArtifactCompatibility::new([0x41; 16]);
@@ -1173,7 +1175,7 @@ fn static_property_read_fixture_with_readiness(
     );
     let state = Rc::new(RefCell::new(StaticProbeState::default()));
     let artifact_drops = Arc::new(AtomicU32::new(0));
-    let input = StaticBindingRegistrationInput::new(
+    let input = StaticBindingPreparationInput::new(
         identity,
         BindingRegistrationCapabilities::producer_property_read(),
         BindingExecutionSupport::application_static(),
@@ -1189,7 +1191,7 @@ fn static_property_read_fixture_with_readiness(
         fixture_ingress_policy(),
         BindingStatusPolicy::new(2, 128),
     );
-    let registration = match StaticBindingRegistration::new(input) {
+    let registration = match StaticBindingPreparation::new(input) {
         Ok(registration) => registration,
         Err(_) => panic!("complete static mock registration was rejected"),
     };
@@ -1334,7 +1336,6 @@ mod host_fixture {
         BindingStatusPolicy, CleanupOperation, CleanupPhaseContext, CleanupSlotId,
         CleanupTransferRequest, CoreError, CorrelationId, Deadline, ErrorContext, ErrorPhase,
         HostActiveRouteGuard, HostBindingArtifact, HostBindingCall, HostBindingCallBox,
-        HostBindingCompilerRegistration, HostBindingRegistration, HostBindingRegistrationInput,
         HostCommittedRouteGuard, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
         InteractionInput, NoCleanupSuccessor, PrepareInput, RetryClass, RouteAbortInput,
         RouteActivationOutcome, RouteCleanupOutcome, RouteCommitOutcome, RouteInboundRequest,
@@ -1342,6 +1343,10 @@ mod host_fixture {
         RouteShutdownInput, RouteTerminal, StartStatus, WotLock,
     };
     use clinkz_wot_foundation::{WorkBudget, WorkClass};
+    #[cfg(feature = "std")]
+    use clinkz_wot_planning::{
+        HostBindingCompilerRegistration, HostBindingPreparation, HostBindingPreparationInput,
+    };
 
     use super::{
         DeliveredResponseEvidence, FIXTURE_INGRESS_BYTES, IngressAccounting, MOCK_PHASE_COUNT,
@@ -3249,7 +3254,7 @@ mod host_fixture {
 
     /// Builds the complete host-erased mock registration and its independent
     /// deterministic I/O probe.
-    pub fn host_property_read_fixture() -> (HostBindingRegistration, HostPropertyReadProbe) {
+    pub fn host_property_read_fixture() -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             false, false, false, false, false, false, false, false, false,
         )
@@ -3258,7 +3263,7 @@ mod host_fixture {
     /// Rejects readiness and the first abort-constructor attempt while
     /// returning both complete inputs to the Servient cleanup owner.
     pub fn host_property_read_readiness_rejection_fixture()
-    -> (HostBindingRegistration, HostPropertyReadProbe) {
+    -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             true, true, false, false, false, false, false, false, false,
         )
@@ -3267,7 +3272,7 @@ mod host_fixture {
     /// Rejects the first shutdown-constructor attempt while returning the
     /// complete committed guard and cleanup phase for a later retry.
     pub fn host_property_read_shutdown_rejection_fixture()
-    -> (HostBindingRegistration, HostPropertyReadProbe) {
+    -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             false, false, true, false, false, false, false, false, false,
         )
@@ -3275,7 +3280,7 @@ mod host_fixture {
 
     /// Returns an activation call whose truthful footprint exceeds registration admission.
     pub fn host_property_read_oversized_activation_fixture()
-    -> (HostBindingRegistration, HostPropertyReadProbe) {
+    -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             false, false, false, true, false, false, false, false, false,
         )
@@ -3283,7 +3288,7 @@ mod host_fixture {
 
     /// Returns an oversized shutdown call that must settle through cancellation.
     pub fn host_property_read_oversized_shutdown_fixture()
-    -> (HostBindingRegistration, HostPropertyReadProbe) {
+    -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             false, false, false, false, true, false, false, false, false,
         )
@@ -3291,7 +3296,7 @@ mod host_fixture {
 
     /// Transfers an in-progress activation cancellation to the admitted named owner.
     pub fn host_property_read_activation_transfer_fixture()
-    -> (HostBindingRegistration, HostPropertyReadProbe) {
+    -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             false, false, false, false, false, true, false, false, false,
         )
@@ -3299,7 +3304,7 @@ mod host_fixture {
 
     /// Fails one delivery-cancellation identity check, then transfers the same context.
     pub fn host_property_read_delivery_error_transfer_fixture()
-    -> (HostBindingRegistration, HostPropertyReadProbe) {
+    -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             false, false, false, false, false, false, true, true, false,
         )
@@ -3307,7 +3312,7 @@ mod host_fixture {
 
     /// Transfers cancellation of an oversized cleanup call through the named owner.
     pub fn host_property_read_cleanup_transfer_fixture()
-    -> (HostBindingRegistration, HostPropertyReadProbe) {
+    -> (HostBindingPreparation, HostPropertyReadProbe) {
         host_property_read_fixture_with_rejections(
             false, false, false, false, true, false, false, false, true,
         )
@@ -3323,7 +3328,7 @@ mod host_fixture {
         delivery_cancel_identity_error_once: bool,
         transfer_delivery: bool,
         transfer_cleanup: bool,
-    ) -> (HostBindingRegistration, HostPropertyReadProbe) {
+    ) -> (HostBindingPreparation, HostPropertyReadProbe) {
         let compatibility = BindingArtifactCompatibility::new([0x41; 16]);
         let identity = BindingRegistrationIdentity::new(
             BindingId::new(7),
@@ -3340,7 +3345,7 @@ mod host_fixture {
         let artifact_drops = Arc::new(AtomicU32::new(0));
         let route_state_drops = Arc::new(AtomicU32::new(0));
         let response_io = Arc::new(Mutex::new(None));
-        let input = HostBindingRegistrationInput::new(
+        let input = HostBindingPreparationInput::new(
             identity,
             BindingRegistrationCapabilities::producer_property_read(),
             BindingExecutionSupport::host_erased(),
@@ -3364,7 +3369,7 @@ mod host_fixture {
             super::fixture_ingress_policy(),
             BindingStatusPolicy::new(2, 128),
         );
-        let registration = match HostBindingRegistration::new(input) {
+        let registration = match HostBindingPreparation::new(input) {
             Ok(registration) => registration,
             Err(_) => panic!("complete host mock registration was rejected"),
         };

@@ -130,7 +130,7 @@ validator, complete owners and reusable fallible compiler allocation primitive.
 The Planning ownership bridge is complete but disjoint; no change to it is needed.
 
 Production scope is only `core/src/binding.rs` and the private allocator-helper
-visibility in `core/src/binding_compiler.rs`. Tests may extend the existing Core
+visibility in `planning/src/binding_compiler.rs`. Tests may extend the existing Core
 Consumer binding/support tests and runtime-entry fixture. No crate/dependency/
 feature manifest, Core export, Foundation, TD, Planning, Servient, protocol,
 Producer implementation or legacy path change is permitted. Implementation

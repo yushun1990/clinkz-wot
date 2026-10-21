@@ -7,6 +7,7 @@ publish = false
 [workspace]
 
 [dependencies]
+clinkz-wot-planning = { path = "../../../planning", default-features = false }
 clinkz-wot-core = { path = "../../../core" }
 clinkz-wot-foundation = { path = "../../../foundation" }
 clinkz-wot-property-read-binding-fixture = { path = "../property-read-binding" }

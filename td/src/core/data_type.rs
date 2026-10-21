@@ -20,14 +20,14 @@ use alloc::{collections::BTreeMap, string::String};
 use crate::validate::Validate;
 
 pub mod metadata;
-pub mod operation;
+pub(crate) mod operation;
 pub mod response;
 pub mod uri;
 pub mod version;
 
 pub(crate) use metadata::METADATA_KEYS;
 pub use metadata::{Metadata, MetadataHelper, MultiLanguage};
-pub use operation::Operation;
+pub use operation::{DocumentOperation, Operation};
 pub use response::{AdditionalExpectedResponse, ExpectedResponse};
 pub use uri::{
     AbsoluteUri, BaseUri, FormHref, ResolveFormHrefError, ResolvedFormHref, UriReference,

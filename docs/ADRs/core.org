@@ -32,6 +32,8 @@ they do not claim that the current implementation already conforms.
 - [[file:0022-first-production-binding-and-runtime-environments.org][ADR-0022: First Production Binding and Runtime Environments]]
 - [[file:0023-resource-ownership-and-policy-boundaries.org][ADR-0023: Resource Ownership and Policy Boundaries]]
 
+- [[file:0024-preparation-and-execution-boundary.org][ADR-0024: Preparation and execution boundary]]
+
 * Review record
 
 The original implementation deviations are recorded in

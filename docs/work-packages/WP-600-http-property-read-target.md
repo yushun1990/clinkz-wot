@@ -71,7 +71,7 @@ table as new permission.
 | Owner | Exact change |
 | --- | --- |
 | TD / WP-100 | `td/src/validated.rs`: one paid scalar on existing semantic lending. Necessary exports only in `td/src/lib.rs`. Preserve ordinary Form construction, round trips and Basic validation. |
-| Core compiler/plan / WP-200 | `core/src/plan.rs`, `core/src/binding_compiler.rs`, necessary `core/src/lib.rs` exports: scalar carrier and opt-in closed restriction below. No open compiler attestation or new artifact/callback family. |
+| Core compiler/plan / WP-200 | `core/src/plan.rs`, `planning/src/binding_compiler.rs`, necessary `core/src/lib.rs` exports: scalar carrier and opt-in closed restriction below. No open compiler attestation or new artifact/callback family. |
 | Planning / WP-200 | `planning/src/consumer_property_read.rs`: carry the scalar through existing preflight/materialization. Preserve all-bounds-before-start, source-free output and rollback. No protocol branch or raw TD access. |
 | HTTP / WP-600 | Create `protocol-bindings/protocols/http/{Cargo.toml,src/,tests/,examples/}` as `clinkz-wot-binding-http`. Core/Foundation are normal shared dependencies; TD/Planning/Servient are test/example dependencies. SDK/runtime dependencies remain private to this crate. |
 | Runtime / WP-400 | Use existing public Host provision/consume/read/cancel/drain/cleanup. No production Servient or Foundation changes. A demonstrated insufficiency requires a reproducer and scoped readmission. |
@@ -90,7 +90,7 @@ entry limits below, and
 binding_generation: BindingGeneration, diagnostic_ordinal: u32)
 -> CoreResult<ConsumerCompilerRegistration<HostConsumerBindingRegistration>>`.
 The explicit cleartext constructor is the permission boundary. Capture actual
-configuration in the complete client/compiler bundle using Core's supported
+configuration in the complete client/compiler bundle using Planning's supported
 Host adapter and restricted closed compiler. Its private-policy identity covers
 actual wire/read/parser limits, URI/status/media restrictions and selected SDK
 configuration; it is neither a caller-supplied final binding key nor an assertion

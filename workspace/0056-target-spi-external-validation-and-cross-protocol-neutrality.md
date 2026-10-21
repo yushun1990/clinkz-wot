@@ -2,6 +2,12 @@
 
 Status: DISCUSSING
 
+ADR-0024 migrates the preparation/execution, definition/instance and native
+infrastructure direction into active authority. The first source extraction is
+scoped to dependency/compiler ownership; production reuse, funding and shared
+retirement remain unproved. Earlier sequencing below is history where it
+conflicts with that decision. It does not block the dependency extraction.
+
 The completed [integrated Review 08](../docs/reviews/review-08-integrated-architecture-reassessment.md)
 reassesses this topic together with reusable programs, capability/environment
 boundaries and infrastructure ownership at `700cfdb1`. It recommends separating

@@ -280,29 +280,29 @@ client, callback, compiler, lease or destructor attestation authority. Both
 getters perform bounded, allocation-free metadata work without clock, parent
 access or operational callbacks.
 
-At the start of owned `ConsumerPropertyReadPolicy::qualify`, obtain the captured
-configuration through that support projection and compare its cell with
-Servient's **own** feature-selected cell. Use the same private Servient cell
-projection for this comparison and complete-policy encoding. Missing or
-different owned metadata rejects with the original complete input and fixed
-policy context before clock/input observation, allocation, parent mutation or
-operational callbacks. Reconstructing a configuration would run Core's feature
-selection again and cannot establish Servient's cell. Strict eligibility is
-unchanged; no policy-key or binding-key translation is permitted.
+ADR-0024 supersedes equality with Servient's local Cargo feature label.
+Cargo unifies features per package; a static executor remains usable when an
+independent preparation or Binding dependency enables Core's std/async surface.
+The captured cell remains immutable source/evidence metadata and stays in the
+existing encodings. It is not a live environment or authorization token.
 
-Keep the existing mixed-cell production negatives. Completion requires zero
-clock/allocation/callback observations, unchanged parent totals/peaks and exact
-input/client recovery on rejection. Core native and supported Host capture must
-project the actual configuration; strict support must return `None`. Matching
-portable positives use the existing normal-library downstream runner's matching
-dependency graph, while Servient's mixed dev graph remains the negative control.
-Relocate affected positives within the admitted fixtures if necessary; do not
-ignore the negative or add a substitute runtime/compiler. Run all three Consumer
-cells and both existing ARM compile cells, and renew the affected layouts and
-failure measurements required by the admission impact table. ARM remains
-compilation/layout evidence only. Independent readmission and completion review
-are separate; neither the accepted scope nor passing tests reaffirms predecessors
-or changes gate verdicts.
+Owned qualification requires the actual configuration from Planning's private
+complete-pair support. Core runtime registration and Planning pairing check the
+actual client/compiler configuration, role and format. Servient checks the
+selected execution representation, declared/actual Layout and all numeric
+storage/work/result/cleanup bounds before effects. Missing metadata or an actual
+incompatible contract/configuration/representation still refuses with every
+original owner and zero protocol effects. Comparing independent crates' local
+feature labels cannot replace these checks. No label override, metadata
+translation, profile reinterpretation or numeric schema change is introduced.
+
+The former mixed-label negative is superseded by static construction under a
+std Core dependency, zero native starts, complete retained funding and exactly
+one final client/account release. Preserve the actual mismatched policy, stale
+configuration, wrong role/format, capacity, cancellation and transfer negatives.
+Run both static syntax cells and qualified Host tests against their actual
+compiled graph. Cortex-M4 compilation remains distinct from no-atomic execution
+and real device evidence.
 
 ## Backing and ownership rules
 
@@ -411,15 +411,15 @@ No generic binding-policy trait or central manager is introduced.
 | Core `BindingResourceDeclarations` | Add captured contract and `with_resource_contract(self, BindingResourceContract) -> Self`, plus `resource_contract(&self) -> BindingResourceContract`. Existing constructors select `StrictV1`. Add `with_consumer_result_limits(self, body_bytes: u64, media_capacity: u64) -> Self` and `consumer_result_limits(&self) -> Option<(u64, u64)>`. An owned complete registration requires explicit supported result limits and rejects unsupported role/cell or inconsistent metadata. Concrete private policy is part of its existing binding configuration, not an engine allocator interface. |
 | Core `ConsumerBindingConfiguration` | Add the checked immutable `Clone + Copy + Debug + Eq + PartialEq` value above. `try_new(contract: BindingResourceContract, target_capacity: usize, private_policy: BindingConfigurationDigest, body_bytes: u64, media_capacity: u64) -> CoreResult<Self>`; getters `resource_contract(&self)`, `target_capacity(&self)`, `private_policy(&self)`, `result_limits(&self)` return those operands, and `configuration(&self) -> BindingConfigurationDigest` returns the derived key. No public fields or unchecked/default constructor. |
 | Core `ConsumerBindingConfiguration::compilation_cell` — cell amendment | Public `const fn compilation_cell(&self) -> &'static str`; exactly the three captured singleton-cell spellings specified above. |
-| Core `ConsumerCompilerSupport::consumer_configuration` — cell amendment | Public `const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>`; passive projection of actual closed support, `None` for strict. |
-| Core `ResolvedTargetCompiler`, `ConsumerCompilerSupport`, supported Host adapter | Add `ResolvedTargetCompiler::new_owned(ConsumerBindingConfiguration) -> Self`. Preserve strict constructor/key, compatibility, cursor/artifact types, target-copy algorithm and paid work. Capture and forward the actual immutable configuration through support. Remeasure the compiler/support/adapter, cursor/output/temporary and aggregate owners; strict source compatibility does not promise unchanged Layout. |
-| Core `PollClientBinding`, Host `ClientBinding`, complete Consumer-only constructors/capture | Add `consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>` with default `None`. Validate the actual owner's immutable metadata as specified above, without new execution or mutable-client escape. Existing complete signatures and exact recovery stay. Generic compiler/Host erasure remains ineligible for closed support. |
+| Planning `ConsumerCompilerSupport::consumer_configuration` — cell amendment | Public `const fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>`; passive projection of actual closed support, `None` for strict. |
+| Planning `ResolvedTargetCompiler`, `ConsumerCompilerSupport`, supported Host adapter | Add `ResolvedTargetCompiler::new_owned(ConsumerBindingConfiguration) -> Self`. Preserve strict constructor/key, compatibility, cursor/artifact types, target-copy algorithm and paid work. Capture and forward the actual immutable configuration through support. Remeasure the compiler/support/adapter, cursor/output/temporary and aggregate owners; strict source compatibility does not promise unchanged Layout. |
+| Core `PollClientBinding`, Host `ClientBinding`, runtime constructors; Planning preparation capture | Add `consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>` with default `None`. Validate the actual owner's immutable metadata as specified above, without new execution or mutable-client escape. Existing complete signatures and exact recovery stay. Generic compiler/Host erasure remains ineligible for closed support. |
 | Core `BindingLifetimeFootprint`, `BindingTransientFootprint`, `BindingStateLayout` | Keep constructors/getters. Their interpreted scope is fixed by the captured contract, not by an untagged footprint alone. Owned retained items count engine-held owners; retained bytes include full concrete backing above. Static size/alignment/drop checks stay. |
 | Core installed Consumer constructor/normal and late seals | Capture the admitted result-backing bound with the existing selected seal; check full backing as well as existing semantic validity before retention. Preserve recoverable raw construction, accepted-overrun owner and allocation-free seal installation. No raw installed-client escape or replacement envelope. |
 | Core `ResourceFailureDomain`, `ErrorContext` | Add the fixed enum `EngineCapacity`, `BindingPolicy`, `DeploymentFailure`; extend context with an optional resource-identity key/domain and effective local/parent `(SlotIndex, Generation)` coordinates. Add `with_resource_failure(identity, domain, local, parent) -> Self` and `resource_failure(&self)` returning the same optional fixed tuple. Existing contexts default to absent. Keep error categories/retry/first-cause rules and bounded private-policy cause keys; account the larger complete error/accepted-overrun envelope. |
-| Servient `ConsumerPropertyReadPolicy` | Existing `try_new` remains strict. Add `try_new_owned(contract, profile_origin: ResourceProfileId, ...existing try_new operands...) -> CoreResult<Self>`; reject `StrictV1` here. Expose `resource_contract`, `resource_identity`, `profile_origin` and borrowed `resource_limits`. Compute `resource_identity` from all independent constructor operands under the complete-policy encoding above, including controlled registration/call/input/result/work/timeout/scratch settings. Provisioning verifies the matching registration contract/cell and that its result limits fit the policy before effects. Servient stamps fixed resource-failure context with this complete policy key. |
+| Servient `ConsumerPropertyReadPolicy` | Existing `try_new` remains strict. Add `try_new_owned(contract, profile_origin: ResourceProfileId, ...existing try_new operands...) -> CoreResult<Self>`; reject `StrictV1` here. Expose `resource_contract`, `resource_identity`, `profile_origin` and borrowed `resource_limits`. Compute `resource_identity` from all independent constructor operands under the complete-policy encoding above, including controlled registration/call/input/result/work/timeout/scratch settings. Provisioning verifies the actual paired registration contract/execution representation and that its layouts/result limits fit the policy before effects; independently unified Cargo feature labels need not be equal. Servient stamps fixed resource-failure context with this complete policy key. |
 | Servient Host/static roots, reads, calls, cleanup | Keep signatures, manual ownership, real parent bank and complete-object transfer. Interpret only an explicitly owned policy through the new rules. No async retirement API. |
-| TD / Planning public API | Unchanged; regenerate affected layout evidence if captured Core metadata changes size. Neither compiler support nor typed proof grants binding/runtime eligibility. |
+| TD / Planning public API | No further resource-specific delta beyond ADR-0024's compiler relocation; regenerate affected layout evidence if captured metadata changes size. Neither compiler support nor typed proof grants binding/runtime eligibility. |
 
 The implementation must export sufficient fixed diagnostic/configuration identity
 from the checked policy; it may choose private helper decomposition. Changing

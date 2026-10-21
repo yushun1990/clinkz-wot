@@ -90,8 +90,8 @@ Permitted production paths:
   private shared mediation/capture mechanics;
 - `planning/src/consumer_property_read.rs`, only for the two sealed adapters.
 
-Focused tests may extend `core/tests/consumer_property_read_binding.rs`,
-`core/tests/consumer_compiler_support.rs` and the existing isolated compiler,
+Focused tests may extend `planning/tests/consumer_property_read_binding.rs`,
+`planning/tests/consumer_compiler_support.rs` and the existing isolated compiler,
 aggregate and runtime-entry fixtures. No production manifests, legacy paths,
 Servient facade, resource schema, WorkClass, state machine or protocol code change.
 If ordinary helper extraction cannot retain the existing semantics inside this

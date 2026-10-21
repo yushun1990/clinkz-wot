@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! A downstream crate exercising public production preparation and raw TCP I/O.
 #![allow(dead_code)] // Shared application/peer helpers also serve other suites.
 include!("support/application.rs");
@@ -869,28 +870,27 @@ mod reply_bus {
             16,
         )
         .unwrap();
-        let owner =
-            HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
-                BindingRegistrationIdentity::new(
-                    BindingId::new(902),
-                    BindingGeneration::INITIAL,
-                    config.configuration(),
-                    COMPAT,
-                    902,
-                ),
-                BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::try_new(OwnedCompiler(dropped.clone()))
-                    .unwrap_or_else(|_| panic!("generic capture")),
-                Box::new(Client(config)),
-                BindingResourceDeclarations::new(
-                    BindingLifetimeFootprint::new(3, 1024),
-                    BindingLifetimeFootprint::new(16, 8192),
-                )
-                .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
-                .with_consumer_result_limits(4096, 16),
-                BindingStatusPolicy::new(2, 17),
-            ))
-            .unwrap_or_else(|_| panic!("complete owner"));
+        let owner = HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
+            BindingRegistrationIdentity::new(
+                BindingId::new(902),
+                BindingGeneration::INITIAL,
+                config.configuration(),
+                COMPAT,
+                902,
+            ),
+            BindingExecutionSupport::host_erased(),
+            HostBindingCompilerRegistration::try_new(OwnedCompiler(dropped.clone()))
+                .unwrap_or_else(|_| panic!("generic capture")),
+            Box::new(Client(config)),
+            BindingResourceDeclarations::new(
+                BindingLifetimeFootprint::new(3, 1024),
+                BindingLifetimeFootprint::new(16, 8192),
+            )
+            .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
+            .with_consumer_result_limits(4096, 16),
+            BindingStatusPolicy::new(2, 17),
+        ))
+        .unwrap_or_else(|_| panic!("complete owner"));
         let owner = owner
             .try_into_consumer_compiler()
             .err()
@@ -989,29 +989,28 @@ mod reply_bus {
             compiled: compiled.clone(),
         })
         .unwrap_or_else(|_| panic!("compiler capture"));
-        let owner =
-            HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
-                BindingRegistrationIdentity::new(
-                    BindingId::new(901),
-                    BindingGeneration::INITIAL,
-                    config.configuration(),
-                    COMPAT,
-                    901,
-                ),
-                BindingExecutionSupport::host_erased(),
-                compiler,
-                Box::new(Client(config)),
-                BindingResourceDeclarations::new(
-                    BindingLifetimeFootprint::new(3, 1024),
-                    BindingLifetimeFootprint::new(16, 8192),
-                )
-                .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
-                .with_consumer_result_limits(4096, 16),
-                BindingStatusPolicy::new(2, 17),
-            ))
-            .unwrap_or_else(|_| panic!("complete owner capture"))
-            .try_into_consumer_compiler()
-            .unwrap_or_else(|_| panic!("open compiler capture"));
+        let owner = HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
+            BindingRegistrationIdentity::new(
+                BindingId::new(901),
+                BindingGeneration::INITIAL,
+                config.configuration(),
+                COMPAT,
+                901,
+            ),
+            BindingExecutionSupport::host_erased(),
+            compiler,
+            Box::new(Client(config)),
+            BindingResourceDeclarations::new(
+                BindingLifetimeFootprint::new(3, 1024),
+                BindingLifetimeFootprint::new(16, 8192),
+            )
+            .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
+            .with_consumer_result_limits(4096, 16),
+            BindingStatusPolicy::new(2, 17),
+        ))
+        .unwrap_or_else(|_| panic!("complete owner capture"))
+        .try_into_consumer_compiler()
+        .unwrap_or_else(|_| panic!("open compiler capture"));
         let policy = policy();
         let parent = Arc::new(Mutex::new(policy.parent_accounts()));
         let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(

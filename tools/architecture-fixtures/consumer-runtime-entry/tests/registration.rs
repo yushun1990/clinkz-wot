@@ -1,4 +1,5 @@
 use clinkz_wot_core::*;
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use consumer_runtime_entry_probe::{Rejection, StaticInput, StaticOwner};
 use std::{
     cell::Cell,
@@ -17,8 +18,12 @@ impl<const N: usize> Drop for Client<'_, N> {
         self.drops.set(self.drops.get() + 1);
     }
 }
-impl<const N: usize> PollClientBinding for Client<'_, N> {
+impl<const N: usize> clinkz_wot_planning::PrepareClientBinding for Client<'_, N> {
     type Compiler = ResolvedTargetCompiler;
+}
+impl<const N: usize> PollClientBinding for Client<'_, N> {
+    type Artifact =
+        <ResolvedTargetCompiler as clinkz_wot_planning::BindingCompilerExtension>::Artifact;
     type RequestState = [u8; N];
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.compatibility

@@ -1,3 +1,4 @@
+#![cfg(feature = "prepare")]
 //! Non-production diagnostics retained from Architecture Review 08.
 //!
 //! These assert reviewed limitations or narrow evidence boundaries, not desired

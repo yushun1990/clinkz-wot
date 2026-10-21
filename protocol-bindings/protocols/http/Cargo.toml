@@ -7,7 +7,8 @@ edition.workspace = true
 result_large_err = "allow"
 
 [dependencies]
-clinkz-wot-td = { path = "../../../td" }
+clinkz-wot-td = { path = "../../../td", optional = true }
+clinkz-wot-planning = { path = "../../../planning", optional = true, default-features = false, features = ["std"] }
 clinkz-wot-core = { path = "../../../core" }
 clinkz-wot-foundation = { path = "../../../foundation" }
 hyper = { version = "=1.12.0", default-features = false, features = ["client", "http1"] }
@@ -25,3 +26,11 @@ clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }
 serde_json = { workspace = true, features = ["std"] }
 tokio = { version = "=1.52.3", default-features = false, features = ["net", "rt", "time"] }
+
+[features]
+default = ["prepare"]
+prepare = ["dep:clinkz-wot-planning", "dep:clinkz-wot-td"]
+
+[[example]]
+name = "read_property"
+required-features = ["prepare"]

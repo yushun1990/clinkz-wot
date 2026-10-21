@@ -2,6 +2,7 @@ use clinkz_wot_consumer_property_read_binding_fixture as binding;
 use clinkz_wot_consumer_property_read_binding_fixture::{Clock, Mode, StaticClient, Stats};
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
+use clinkz_wot_planning::*;
 use clinkz_wot_servient::{CompiledPlanSetState, consumer_property_read::*};
 use std::{
     alloc::{GlobalAlloc, Layout, System},

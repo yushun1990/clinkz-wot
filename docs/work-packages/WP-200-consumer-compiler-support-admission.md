@@ -4,6 +4,10 @@ Admission was granted under ADR-0013, design revision v5.1. The
 [work-package index](index.toml) owns current completion state; the
 [completion evidence](../evidence/WP-200-consumer-compiler-support.toml) records
 independent production acceptance. The original admission basis follows.
+ADR-0024 relocates compiler authoring/support and preparation capture to Planning;
+Core retains completed runtime artifacts and execution. Paths below follow that
+relocation; the original admission's exclusions remain historical scope, not a
+prohibition on this separately authorized dependency migration.
 The separate admission transition accepts the
 [independent scoped review on PR #144](https://github.com/yushun1990/clinkz-wot/pull/144#issuecomment-6097700130)
 of exact candidate head `c64ab912ba48aff4b61460d25fcfdc0a88a3ab91` against base
@@ -15,7 +19,7 @@ The production obligations below are preserved as the admitted completion contra
 
 `WP-200-CONSUMER-COMPILER-SUPPORT` admits the narrow compiler precursor needed
 by the paired Consumer aggregate. Its registered owner is WP-200, which already
-owns Core's compiler/artifact SPI. The exact behavioral/API owner is
+owns Planning's compiler and Core's runtime artifact SPI. The exact behavioral/API owner is
 [Binding SPI: closed Consumer support](../spec/binding-spi.md#closed-consumer-compiler-support).
 Planning owns its later use and whole-aggregate barriers; this record does not
 repeat that specification.
@@ -25,7 +29,7 @@ registrations validate declarations, not arbitrary callbacks or actual compiler
 configuration. Current Host erasure also allocates after consuming the native
 cursor, when the existing failure shape cannot retain a completed payload.
 
-The selected scope is one closed Core-owned resolved-target copy primitive,
+The selected scope is one closed Planning-owned resolved-target copy primitive,
 immutable checked configuration, support attached to the complete registration,
 and a supported Host adapter holding one fallibly acquired cursor/output slot.
 The copy primitive performs no protocol or TD interpretation. It is deliberately
@@ -66,14 +70,14 @@ does not consume or reinterpret a Thing or its validation proof.
 
 Production paths are exactly:
 
-- `core/src/binding_compiler.rs`: closed copy primitive, immutable configuration,
+- `planning/src/binding_compiler.rs`: closed copy primitive, immutable configuration,
   private support issuance, fixed support descriptor and supported Host slot path;
-- `core/src/binding.rs`: consuming support capture from existing complete Host and
+- `planning/src/binding_registration.rs`: consuming support capture from complete Host and
   static registrations, with ownership-preserving rejection; and
-- `core/src/lib.rs`: their necessary exports.
+- `planning/src/lib.rs`: their necessary preparation exports.
 
 Focused completion tests may be added at
-`core/tests/consumer_compiler_support.rs` and the existing external
+`planning/tests/consumer_compiler_support.rs` and the existing external
 [construction fixture](../../tools/architecture-fixtures/consumer-compiler-support/README.md).
 No manifest, Foundation, TD, Planning, Servient, concrete protocol, workflow or
 legacy API change is admitted. In particular, there is no allocator argument on

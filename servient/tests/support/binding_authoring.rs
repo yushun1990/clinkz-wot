@@ -7,15 +7,13 @@ use super::property_read_binding::{MockArtifact, MockCompiler};
 use clinkz_wot_core::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef, BindingArtifactRole,
-    BindingCallSettlement, BindingCandidate, BindingCompilerBounds, BindingCompilerExtension,
-    BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep, BindingConfigurationDigest,
-    BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
-    BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
+    BindingCallSettlement, BindingCandidate, BindingConfigurationDigest, BindingDeliveryOutcome,
+    BindingExecutionSupport, BindingGeneration, BindingId, BindingIngressPolicy,
+    BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
     BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
     BindingStatusPolicy, CleanupPhaseContext, CollisionDomainId, CoreError, Deadline,
     EndpointReservationKey, ErrorContext, ErrorPhase, HostActiveRouteGuard, HostBindingArtifact,
-    HostBindingCall, HostBindingCallBox, HostBindingCompilerRegistration, HostBindingRegistration,
-    HostBindingRegistrationInput, HostCommittedRouteGuard, HostPreparedRouteGuard,
+    HostBindingCall, HostBindingCallBox, HostCommittedRouteGuard, HostPreparedRouteGuard,
     HostRouteCleanupSuccessor, HostShutdownRouteGuard, LogicalInteractionPlan, PlanId,
     PlanSetGeneration, PrepareInput, RetryClass, RouteAbortInput, RouteActivationOutcome,
     RouteCleanupOutcome, RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome,
@@ -23,6 +21,11 @@ use clinkz_wot_core::{
     ThingId,
 };
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_planning::{
+    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput,
+    BindingCompilerStep, HostBindingCompilerRegistration, HostBindingPreparation,
+    HostBindingPreparationInput,
+};
 
 struct ReadyCall<T, C> {
     value: Option<T>,
@@ -344,8 +347,8 @@ fn host_registration(
     ingress: BindingIngressPolicy,
     status: BindingStatusPolicy,
     external_readiness: bool,
-) -> Result<HostBindingRegistration, BindingInputRejection<HostBindingRegistrationInput>> {
-    HostBindingRegistration::new(HostBindingRegistrationInput::new(
+) -> Result<HostBindingPreparation, BindingInputRejection<HostBindingPreparationInput>> {
+    HostBindingPreparation::new(HostBindingPreparationInput::new(
         identity,
         capabilities,
         execution,

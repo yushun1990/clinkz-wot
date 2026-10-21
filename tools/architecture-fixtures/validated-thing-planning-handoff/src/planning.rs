@@ -2,11 +2,12 @@
 use alloc::{boxed::Box, vec::Vec};
 use clinkz_wot_core::{
     BindingArtifactEnvelope, BindingArtifactIdentity, BindingArtifactRef, BindingArtifactRole,
-    BindingCandidate, BindingCompilerExtension, BindingCompilerInput, BindingCompilerStep,
-    BindingRegistrationIdentity, LogicalInteractionPlan, PlanId, PlanSetGeneration, ThingId,
+    BindingCandidate, BindingRegistrationIdentity, LogicalInteractionPlan, PlanId,
+    PlanSetGeneration, ThingId,
 };
 use clinkz_wot_foundation::{Generation, SlotIndex};
 use clinkz_wot_planning::PlanBuildOutput;
+use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
 use clinkz_wot_property_read_binding_fixture::MockArtifact;
 
 use crate::{Operation, Registration, ValidatedFormHref, ValidatedThingView};
