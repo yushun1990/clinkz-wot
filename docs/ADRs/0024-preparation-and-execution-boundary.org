@@ -60,6 +60,12 @@ Remove the legacy TD-at-call-time client/server/dispatch path, built-in TD-shape
 security providers and implicit Directory composition rather than moving them
 behind a Core feature or preserving a target fallback. Their broad interactions
 have no accepted source-free replacement and are withdrawn, not claimed migrated.
+This withdrawal concerns current APIs and unmatched implementation availability,
+not the enduring WoT capabilities in the
+[[file:../architecture/00-system-goals-and-context.md][system goals]]. Producer/Consumer, Action/Event, observation/subscription,
+discovery, security and constrained/embedded objectives remain. This ADR makes
+no Owner product-goal decision and does not reduce v1 obligations to the retained
+Property Read slice.
 Keep runtime principal/auth/scope values and the target Property Read invariants.
 Retire the obsolete protocol utility crate; remaining deferred Zenoh preparation
 helpers name Planning explicitly. Its native transport probe is retained; its

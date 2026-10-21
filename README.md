@@ -8,7 +8,7 @@
 [![W3C WoT](https://img.shields.io/badge/W3C-Web%20of%20Things-005A9C)](https://www.w3.org/WoT/)
 [![Project Status](https://img.shields.io/badge/status-early%20development-yellow)](#project-status)
 
-[Vision](#vision) ·
+[Goals](docs/architecture/00-system-goals-and-context.md) ·
 [Architecture](#architecture) ·
 [Repository](#repository-structure) ·
 [Development Method](#development-method) ·
@@ -153,9 +153,11 @@ Protocol Bindings extend the runtime with protocol capabilities.
             Servient Runtime
 ```
 
-Current implementation:
-
-- Zenoh Binding
+The current concrete production slice is
+[Host HTTP Consumer Property Read](protocol-bindings/protocols/http/README.md),
+with an explicit cleartext-IP / NoSec envelope. Zenoh retains scoped native
+transport and architecture probes; its legacy direct-dispatch facade is retired.
+Neither establishes general operation or protocol parity.
 
 ---
 
@@ -163,10 +165,10 @@ Current implementation:
 
 | Target | Status |
 | --- | --- |
-| Standard Rust environments | Supported |
-| Async runtime integration | Supported |
-| `no_std + alloc` | Supported |
-| Embedded execution model | In development |
+| Host | Narrow Property Read paths; concrete binding limits apply |
+| Async syntax | Optional; does not select an executor |
+| `no_std + alloc` | Scoped portable layers and static execution; Core execution requires pointer atomics |
+| Embedded production | Requires separate backend, workload and hardware qualification |
 
 ---
 
@@ -174,12 +176,13 @@ Current implementation:
 
 `clinkz-wot` is under active architectural development.
 
-Current focus:
-
-- Servient lifecycle refinement
-- Protocol Binding SPI stabilization
-- Immutable plan execution model
-- Zenoh integration
+The [system goals](docs/architecture/00-system-goals-and-context.md) own the
+enduring mission, [PLAN.md](PLAN.md) owns v1 delivery scope, and code/tests plus
+registered evidence establish current capabilities. Removing legacy APIs does
+not remove their corresponding product objectives. The
+[migration evidence](docs/evidence/WP-200-preparation-execution-boundary.toml)
+distinguishes retained Property Read behavior from withdrawn API implementations
+and capabilities still awaiting replacements.
 
 ---
 

@@ -54,6 +54,11 @@ The following rules apply to every profile and implementation strategy:
 
 ## Normative hierarchy
 
+The [system goals](00-system-goals-and-context.md) separately own enduring
+product objectives. The hierarchy below resolves architectural authority;
+accepted ADRs and scoped requirement sets do not withdraw product goals or
+turn unimplemented capabilities into permanent exclusions.
+
 The authority order is:
 
 1. `ARCHITECTURE_GOVERNANCE.md` controls technical convergence and change.
