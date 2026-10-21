@@ -13,11 +13,12 @@ use clinkz_wot_core::{
     BindingStatusPolicy, CleanupOperation, CleanupPhaseContext, CleanupRecord, CleanupReservation,
     CleanupSlotId, CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, HandlerContext,
     HandlerFootprint, LogicalInteractionPlan, PendingWork, PendingWorkClass, PlanId,
-    PlanSetGeneration, PrepareInput, ReadPropertyHandler, RetryClass, RouteAcceptEvent,
-    RouteAcceptLease, RouteActivationOutcome, RouteCleanupOutcome, RouteCommitOutcome,
-    RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
-    RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority, StartStatus,
-    StaticHandlerRegistration, StepStatus, ThingId, ThingSlotId,
+    PlanSetGeneration, PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass,
+    RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome, RouteCleanupOutcome,
+    RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome,
+    RouteReadinessSlot, RouteTerminal, ServerResponseSlot, ServerRouteSlot,
+    ServingActivationAuthority, StartStatus, StaticHandlerRegistration, StepStatus, ThingId,
+    ThingSlotId,
 };
 use clinkz_wot_foundation::{
     ResourceAccount, ResourceKind, ResourceLimits, SlotIndex, WorkBudget, WorkClass,

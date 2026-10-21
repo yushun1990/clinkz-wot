@@ -2360,6 +2360,240 @@ where
     }
 }
 
+/// Scoped, statically dispatched progress loan of a validated server.
+///
+/// Its private reference cannot be extracted or replaced. Swapping these loans
+/// never swaps the registered executors, including a private Consumer component.
+pub struct StaticServerProgress<'a, B: PollServerBinding> {
+    server: &'a mut B,
+}
+
+impl<B: PollServerBinding> PollServerBinding for StaticServerProgress<'_, B> {
+    type Artifact = B::Artifact;
+    type RouteState = B::RouteState;
+    type ReadinessState = B::ReadinessState;
+    type ResponseState = B::ResponseState;
+
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
+        self.server.artifact_compatibility()
+    }
+
+    fn route_state_layout(&self) -> BindingStateLayout {
+        self.server.route_state_layout()
+    }
+
+    fn readiness_state_layout(&self) -> BindingStateLayout {
+        self.server.readiness_state_layout()
+    }
+
+    fn response_state_layout(&self) -> BindingStateLayout {
+        self.server.response_state_layout()
+    }
+
+    fn start_prepare(
+        &mut self,
+        input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<Self::Artifact>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>> {
+        self.server.start_prepare(input, artifact, route, budget)
+    }
+
+    fn poll_prepare(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RoutePrepareOutcome<()>> {
+        self.server.poll_prepare(cx, route, budget)
+    }
+
+    fn poll_cancel_prepare(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RoutePrepareOutcome<()>, ()>>> {
+        self.server.poll_cancel_prepare(cx, cleanup, route, budget)
+    }
+
+    fn start_readiness(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteReadinessOutcome<()>> {
+        self.server.start_readiness(route, readiness, budget)
+    }
+
+    fn poll_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteReadinessOutcome<()>> {
+        self.server.poll_readiness(cx, route, readiness, budget)
+    }
+
+    fn poll_cancel_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RouteReadinessOutcome<()>, ()>>> {
+        self.server
+            .poll_cancel_readiness(cx, cleanup, route, readiness, budget)
+    }
+
+    fn start_activate(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteActivationOutcome<(), ()>> {
+        self.server.start_activate(route, budget)
+    }
+
+    fn poll_activate(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteActivationOutcome<(), ()>> {
+        self.server.poll_activate(cx, route, budget)
+    }
+
+    fn poll_cancel_activate(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RouteActivationOutcome<(), ()>, ()>>> {
+        self.server.poll_cancel_activate(cx, cleanup, route, budget)
+    }
+
+    fn start_commit(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCommitOutcome<(), ()>> {
+        self.server.start_commit(route, budget)
+    }
+
+    fn poll_commit(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCommitOutcome<(), ()>> {
+        self.server.poll_commit(cx, route, budget)
+    }
+
+    fn poll_cancel_commit(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RouteCommitOutcome<(), ()>, ()>>> {
+        self.server.poll_cancel_commit(cx, cleanup, route, budget)
+    }
+
+    fn poll_accept(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        permit: RouteActivationPermit<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<RouteAcceptEvent>> {
+        self.server.poll_accept(cx, route, permit, budget)
+    }
+
+    fn start_abort(
+        &mut self,
+        cleanup: CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCleanupOutcome> {
+        self.server.start_abort(cleanup, route, budget)
+    }
+
+    fn poll_abort(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome> {
+        self.server.poll_abort(cx, route, budget)
+    }
+
+    fn start_shutdown(
+        &mut self,
+        cleanup: CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCleanupOutcome> {
+        self.server.start_shutdown(cleanup, route, budget)
+    }
+
+    fn poll_shutdown(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome> {
+        self.server.poll_shutdown(cx, route, budget)
+    }
+
+    fn acknowledge_route(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+    ) -> CoreResult<()> {
+        self.server.acknowledge_route(route)
+    }
+
+    fn start_response(
+        &mut self,
+        response: RouteInboundResponse,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Result<StartStatus<BindingDeliveryOutcome>, BindingInputRejection<RouteInboundResponse>>
+    {
+        self.server.start_response(response, slot, budget)
+    }
+
+    fn poll_response(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<BindingDeliveryOutcome> {
+        self.server.poll_response(cx, slot, budget)
+    }
+
+    fn poll_cancel_response(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<BindingDeliveryOutcome>>> {
+        self.server.poll_cancel_response(cx, cleanup, slot, budget)
+    }
+
+    fn acknowledge_response(
+        &mut self,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+    ) -> CoreResult<()> {
+        self.server.acknowledge_response(slot)
+    }
+}
+
 /// Complete recoverable author input for one static registration.
 pub struct StaticBindingRegistrationInput<B>
 where
@@ -2510,9 +2744,39 @@ where
         &self.input.server
     }
 
-    /// Mutably borrows the server component for manual progress.
-    pub fn server_mut(&mut self) -> &mut B {
-        &mut self.input.server
+    /// Lends only the server progress contract, without replaceable component access.
+    /// The scoped value retains static dispatch and the original associated types.
+    ///
+    /// A whole server cannot replace the checked executor:
+    /// ```compile_fail,E0308
+    /// # use clinkz_wot_core::{PollServerBinding, StaticBindingRegistration};
+    /// fn replace<B: PollServerBinding>(registration: &mut StaticBindingRegistration<B>, other: B) {
+    ///     core::mem::replace(registration.server_mut(), other);
+    /// }
+    /// ```
+    /// The private Consumer of a dual-role registration cannot be replaced either:
+    /// ```compile_fail,E0308
+    /// # use clinkz_wot_core::{PollClientBinding, PollServerBinding};
+    /// # use clinkz_wot_core::{StaticBindingComponents, StaticBindingRegistration};
+    /// fn replace<S, C>(
+    ///     registration: &mut StaticBindingRegistration<StaticBindingComponents<S, C>>,
+    ///     other: StaticBindingComponents<S, C>,
+    /// ) where S: PollServerBinding, C: PollClientBinding<Artifact = S::Artifact> {
+    ///     core::mem::replace(registration.server_mut(), other);
+    /// }
+    /// ```
+    /// Ordinary progress still uses the original native server contract:
+    /// ```
+    /// # use clinkz_wot_core::{PollServerBinding, StaticBindingRegistration};
+    /// fn progress<B: PollServerBinding>(registration: &mut StaticBindingRegistration<B>) {
+    ///     let server = registration.server_mut();
+    ///     let _ = server.artifact_compatibility();
+    /// }
+    /// ```
+    pub fn server_mut(&mut self) -> StaticServerProgress<'_, B> {
+        StaticServerProgress {
+            server: &mut self.input.server,
+        }
     }
 
     /// Returns the validated resource declarations.

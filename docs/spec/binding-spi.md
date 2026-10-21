@@ -39,6 +39,10 @@ Planning preparation MUST capture and validate the actual paired runtime before
 publication; compiler/executor policy and format must match. Pairing refusal
 returns every original owner without native effects. V1 composition is startup
 only. Successful preparation MAY be consumed into runtime-only registration.
+Static server progress lends `StaticServerProgress<'_, B>`, which implements
+`PollServerBinding` with the original native associated types. It MUST NOT expose a replaceable
+`&mut` executor or dual-role component bundle; replacing the scoped progress
+value only replaces a loan and cannot change either validated component.
 
 `BIND-ROUTE-001`: Engine owns logical registrations, generation-to-handler lookup,
 current authorization, publication and independent bounded per-recipient

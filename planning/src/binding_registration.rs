@@ -661,7 +661,33 @@ impl HostConsumerBindingPreparation {
 }
 
 impl<B: PrepareServerBinding> StaticBindingPreparation<B> {
-    pub fn server_mut(&mut self) -> &mut B {
+    /// Lends bounded server progress without exposing either paired executor.
+    ///
+    /// ```compile_fail,E0308
+    /// # use clinkz_wot_planning::{PrepareServerBinding, StaticBindingPreparation};
+    /// fn replace<B: PrepareServerBinding>(preparation: &mut StaticBindingPreparation<B>, other: B) {
+    ///     core::mem::replace(preparation.server_mut(), other);
+    /// }
+    /// ```
+    /// ```compile_fail,E0308
+    /// # use clinkz_wot_core::{PollClientBinding, StaticBindingComponents};
+    /// # use clinkz_wot_planning::{PrepareServerBinding, StaticBindingPreparation};
+    /// fn replace<S, C>(
+    ///     preparation: &mut StaticBindingPreparation<StaticBindingComponents<S, C>>,
+    ///     other: StaticBindingComponents<S, C>,
+    /// ) where S: PrepareServerBinding, C: PollClientBinding<Artifact = S::Artifact> {
+    ///     core::mem::replace(preparation.server_mut(), other);
+    /// }
+    /// ```
+    /// ```
+    /// # use clinkz_wot_core::PollServerBinding;
+    /// # use clinkz_wot_planning::{PrepareServerBinding, StaticBindingPreparation};
+    /// fn progress<B: PrepareServerBinding>(preparation: &mut StaticBindingPreparation<B>) {
+    ///     let server = preparation.server_mut();
+    ///     let _ = server.artifact_compatibility();
+    /// }
+    /// ```
+    pub fn server_mut(&mut self) -> StaticServerProgress<'_, B> {
         self.runtime.server_mut()
     }
 }

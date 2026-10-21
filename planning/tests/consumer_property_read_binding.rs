@@ -1804,6 +1804,83 @@ fn host_cleanup_transfer_moves_or_returns_the_complete_sealed_call() {
 }
 
 #[test]
+fn server_progress_loans_cannot_swap_paired_consumers_or_pending_owners() {
+    let mut original = static_registration(StaticClient::new(StaticMode::Pending));
+    let mut other = static_registration(StaticClient::new(StaticMode::Reject));
+    let identity = original.identity();
+    let declarations = original.resources();
+    let artifact = static_artifact(64);
+    let mut slot = StaticConsumerPropertyReadSlot::new();
+
+    assert_eq!(
+        original
+            .start_consumer_property_read(
+                request(64),
+                &artifact,
+                &mut slot,
+                &mut binding_budget(1),
+            )
+            .unwrap(),
+        StartStatus::Pending
+    );
+    {
+        let mut first = original.server_mut();
+        let mut second = other.server_mut();
+        core::mem::swap(&mut first, &mut second);
+    }
+    assert_eq!(original.identity(), identity);
+    assert_eq!(original.resources(), declarations);
+    assert!(matches!(
+        original.poll_consumer_property_read(&mut context(), &mut slot, &mut binding_budget(1)),
+        Poll::Ready(Ok(_))
+    ));
+    original
+        .acknowledge_consumer_property_read(&mut slot)
+        .unwrap();
+    assert!(
+        other
+            .start_consumer_property_read(request(64), &artifact, &mut slot, &mut binding_budget(1))
+            .is_err()
+    );
+    assert!(slot.is_vacant());
+
+    // Compiler-free Core registrations keep the same nonreplaceable components.
+    let mut original = original.into_execution();
+    let mut other = other.into_execution();
+    assert_eq!(
+        original
+            .start_consumer_property_read(
+                request(64),
+                &artifact,
+                &mut slot,
+                &mut binding_budget(1),
+            )
+            .unwrap(),
+        StartStatus::Pending
+    );
+    {
+        let mut first = original.server_mut();
+        let mut second = other.server_mut();
+        core::mem::swap(&mut first, &mut second);
+    }
+    assert_eq!(original.identity(), identity);
+    assert_eq!(original.resources(), declarations);
+    assert!(matches!(
+        original.poll_consumer_property_read(&mut context(), &mut slot, &mut binding_budget(1)),
+        Poll::Ready(Ok(_))
+    ));
+    original
+        .acknowledge_consumer_property_read(&mut slot)
+        .unwrap();
+    assert!(
+        other
+            .start_consumer_property_read(request(64), &artifact, &mut slot, &mut binding_budget(1))
+            .is_err()
+    );
+    assert!(slot.is_vacant());
+}
+
+#[test]
 fn dual_registration_rejects_mismatch_and_oversized_request_state() {
     let other = BindingArtifactCompatibility::new([99; 16]);
     #[cfg(feature = "std")]

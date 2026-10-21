@@ -72,7 +72,7 @@ pub use binding::{
     RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority,
     StaticBindingComponents, StaticBindingRegistration, StaticBindingRegistrationInput,
     StaticConsumerBindingRegistration, StaticConsumerBindingRegistrationInput,
-    StaticConsumerPropertyReadSlot,
+    StaticConsumerPropertyReadSlot, StaticServerProgress,
 };
 #[cfg(feature = "std")]
 #[cfg(target_has_atomic = "ptr")]
