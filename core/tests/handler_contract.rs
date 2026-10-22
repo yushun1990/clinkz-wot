@@ -153,11 +153,13 @@ fn handler_context_accepts_exactly_the_operation_target_matrix() {
             if kind == expected_target(operation) {
                 accepted += 1;
                 let context = result.expect("compatible operation and target");
-                assert_eq!(context.thing_id(), &thing_id);
+                assert_eq!(context.thing_id(), Some(&thing_id));
+                #[cfg(feature = "std")]
+                assert_eq!(context.producer_instance(), None);
                 assert_eq!(context.thing_slot(), thing_slot());
                 assert_eq!(context.target(), &target);
                 assert_eq!(context.operation(), operation);
-                assert_eq!(context.plan_id(), plan_id());
+                assert_eq!(context.plan_id(), Some(plan_id()));
                 assert_eq!(context.binding(), binding);
             } else {
                 rejected += 1;
@@ -217,4 +219,31 @@ fn synchronous_property_read_is_object_safe_and_has_no_thread_supertraits() {
         Ok(InteractionOutput::empty()),
     );
     assert_eq!(calls.get(), 1);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn native_producer_context_keeps_real_instance_without_source_or_plan_fiction() {
+    use clinkz_wot_core::producer::ProducerInstanceAuthority;
+    let authority = ProducerInstanceAuthority::try_new(thing_slot()).unwrap();
+    let binding = (BindingId::new(11), BindingGeneration::INITIAL);
+    let property = AffordanceTarget::Property("".into());
+    let context =
+        HandlerContext::for_producer_property_read(authority.key(), &property, binding).unwrap();
+    assert_eq!(context.producer_instance(), Some(authority.key()));
+    assert_eq!(context.thing_slot(), thing_slot());
+    assert_eq!(context.thing_id(), None);
+    assert_eq!(context.plan_id(), None);
+    assert_eq!(context.binding(), Some(binding));
+    assert_eq!(context.target().name(), Some(""));
+    for target in [
+        AffordanceTarget::Thing,
+        AffordanceTarget::Action("x".into()),
+        AffordanceTarget::Event("x".into()),
+    ] {
+        let error = HandlerContext::for_producer_property_read(authority.key(), &target, binding)
+            .unwrap_err();
+        assert_eq!(error.context().plan(), None);
+        assert!(matches!(error, CoreError::Validation(_)));
+    }
 }

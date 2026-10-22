@@ -65,7 +65,11 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                     format!("http://127.0.0.1:{port}/b"),
                     clock.clone(),
                 );
-                let baseline: Vec<_> = parent.lock().unwrap().iter().map(|a| a.used()).collect();
+                let baseline: Vec<_> = parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .map(|a| a.used())
+                    .collect();
                 let mut call = handle
                     .read_property(
                         "a",
@@ -75,8 +79,7 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                     .unwrap();
                 assert_ne!(
                     parent
-                        .lock()
-                        .unwrap()
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
                         .iter()
                         .map(|a| a.used())
                         .collect::<Vec<_>>(),
@@ -85,15 +88,20 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                 // Model an unrelated engine owner consuming every remaining
                 // parent unit after acceptance, including cleanup accounts.
                 // The admitted call must use its already backed destinations.
-                let pressure: [u64; 20] = {
-                    let mut accounts = parent.lock().unwrap();
-                    std::array::from_fn(|i| {
-                        let amount = accounts[i].limit() - accounts[i].used();
-                        accounts[i].try_reserve(amount).unwrap().commit();
-                        amount
+                let pressure: Vec<_> = parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .map(|account| {
+                        parent
+                            .reserve(account.kind(), account.limit() - account.used())
+                            .unwrap()
                     })
-                };
-                let held: Vec<_> = parent.lock().unwrap().iter().map(|a| a.used()).collect();
+                    .collect();
+                let held: Vec<_> = parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .map(|a| a.used())
+                    .collect();
                 let end = Instant::now() + Duration::from_secs(5);
                 loop {
                     call.step(&mut Context::from_waker(Waker::noop()), &mut work());
@@ -120,8 +128,7 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                     }
                     assert_eq!(
                         parent
-                            .lock()
-                            .unwrap()
+                            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
                             .iter()
                             .map(|a| a.used())
                             .collect::<Vec<_>>(),
@@ -150,8 +157,7 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                         );
                         assert_eq!(
                             parent
-                                .lock()
-                                .unwrap()
+                                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
                                 .iter()
                                 .map(|a| a.used())
                                 .collect::<Vec<_>>(),
@@ -203,13 +209,10 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                     retirement.recv_timeout(Duration::from_secs(5)).unwrap();
                 }
                 drop(call);
-                for (account, amount) in parent.lock().unwrap().iter_mut().zip(pressure) {
-                    assert!(account.release_committed(amount));
-                }
+                drop(pressure);
                 assert_eq!(
                     parent
-                        .lock()
-                        .unwrap()
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
                         .iter()
                         .map(|a| a.used())
                         .collect::<Vec<_>>(),
@@ -228,7 +231,12 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                 drop(runtime);
                 assert!(observer().0.unwrap().is_complete());
                 drop(observer);
-                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+                assert!(
+                    parent
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                        .iter()
+                        .all(|a| a.used() == 0)
+                );
             });
             peer.join().unwrap();
         }

@@ -18,7 +18,7 @@ mod tests {
     use serde_json::{Value, json};
     use std::{
         num::NonZeroU64,
-        sync::{Arc, Mutex},
+        sync::Arc,
         task::{Context, Waker},
     };
 
@@ -59,7 +59,12 @@ mod tests {
             65536,
         )
         .unwrap();
-        let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+        let parent = Arc::new(
+            clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                policy.parent_accounts(),
+            )
+            .unwrap(),
+        );
         let registration = try_consumer_registration(
             HttpConsumerConfig::for_cleartext_ip().unwrap(),
             BindingId::new(800),
@@ -108,7 +113,12 @@ mod tests {
         assert!(done);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
         supported
     }
 

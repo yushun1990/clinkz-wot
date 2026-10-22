@@ -1,7 +1,7 @@
-//! Source-free Producer installation contracts. These values carry no serving
-//! authority. Native installation and logical publication are separate events.
+//! Source-free Producer execution contracts. Native installation, current
+//! acceptance authority, and Core-sealed delivery have separate ownership.
 use crate::*;
-use alloc::boxed::Box;
+use alloc::sync::Arc;
 use core::task::{Context, Poll};
 
 /// Copyable identity is diagnostic/lookup data, never serving authority. A new
@@ -58,14 +58,14 @@ pub struct ProducerInstallPolicy {
 /// the owning instance. The capability cannot silently move to a fresh owner.
 pub struct ProducerHandlerRegistration<H: ReadPropertyHandler> {
     instance: ProducerInstanceKey,
-    property: Box<str>,
+    property: Arc<str>,
     handler: H,
     footprint: HandlerFootprint,
 }
 impl<H: ReadPropertyHandler> ProducerHandlerRegistration<H> {
     pub fn new(
         authority: &ProducerInstanceAuthority,
-        property: Box<str>,
+        property: Arc<str>,
         handler: H,
         footprint: HandlerFootprint,
     ) -> Self {
@@ -88,7 +88,7 @@ impl<H: ReadPropertyHandler> ProducerHandlerRegistration<H> {
     pub fn footprint(&self) -> HandlerFootprint {
         self.footprint
     }
-    pub fn into_parts(self) -> (ProducerInstanceKey, Box<str>, H, HandlerFootprint) {
+    pub fn into_parts(self) -> (ProducerInstanceKey, Arc<str>, H, HandlerFootprint) {
         (self.instance, self.property, self.handler, self.footprint)
     }
 }
@@ -100,20 +100,20 @@ impl<H: ReadPropertyHandler> ProducerHandlerRegistration<H> {
 pub struct ProducerExecutionEntry<P> {
     instance: ProducerInstanceKey,
     binding: BindingRegistrationIdentity,
-    property: Box<str>,
+    target: AffordanceTarget,
     program: P,
 }
 impl<P> ProducerExecutionEntry<P> {
     pub fn new(
         instance: ProducerInstanceKey,
         binding: BindingRegistrationIdentity,
-        property: Box<str>,
+        property: Arc<str>,
         program: P,
     ) -> Self {
         Self {
             instance,
             binding,
-            property,
+            target: AffordanceTarget::Property(property),
             program,
         }
     }
@@ -127,7 +127,10 @@ impl<P> ProducerExecutionEntry<P> {
         self.binding
     }
     pub fn property(&self) -> &str {
-        &self.property
+        self.target.name().unwrap()
+    }
+    pub fn target(&self) -> &AffordanceTarget {
+        &self.target
     }
     pub fn program(&self) -> &P {
         &self.program
@@ -142,10 +145,126 @@ impl<P> ProducerExecutionEntry<P> {
 /// shared infrastructure. Close releases only this participation. Pending and
 /// failure never surrender its resources. Drop must finish finite local
 /// disposal without network waits, tasks or a blocking join under the declared
-/// Host policy. No method accepts or dispatches a semantic request.
+/// Host policy. Only a current permit permits semantic acceptance; no native
+/// method dispatches an application handler.
 pub trait ProducerInstallation: Send + 'static {
     fn poll_install(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>>;
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>>;
+    /// A short permit authorizes only this candidate's semantic acceptance.
+    /// Native observation/matching may be shared by many installations. The
+    /// Binding retains correlation and physical reply ownership until delivery
+    /// or close; it cannot call an application handler.
+    fn poll_request(
+        &mut self,
+        _cx: &mut Context<'_>,
+        _permit: ProducerAcceptPermit<'_>,
+        _now: clinkz_wot_foundation::MonotonicInstant,
+        _timeout_ticks: u64,
+    ) -> Poll<CoreResult<ProducerRequest>> {
+        Poll::Pending
+    }
+    /// Borrows the original Core-sealed response. Pending never transfers or
+    /// releases it; the Engine retains it until terminal delivery or disposal
+    /// of this native participation. No request/response future is detached.
+    fn poll_response(
+        &mut self,
+        _cx: &mut Context<'_>,
+        _response: &ProducerResponse,
+        _now: clinkz_wot_foundation::MonotonicInstant,
+    ) -> Poll<CoreResult<()>> {
+        Poll::Pending
+    }
+    /// Passive clock-qualified deadline of any retained native request/reply.
+    fn request_deadline(&self) -> Deadline {
+        Deadline::NONE
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProducerServicePolicy {
+    pub response_body_bytes: u64,
+    pub response_media_capacity: u64,
+}
+
+/// Nonretained current-instance permission. Possession of a copied lookup key
+/// cannot construct it: its lifetime borrows the move-only authority.
+pub struct ProducerAcceptPermit<'a>(&'a ProducerInstanceAuthority);
+impl ProducerAcceptPermit<'_> {
+    pub fn instance(&self) -> ProducerInstanceKey {
+        self.0.key()
+    }
+}
+impl ProducerInstanceAuthority {
+    /// Engine publication lends this only while the instance is current and
+    /// Serving. Native installations never retain an authority reference.
+    pub fn accept_permit(&mut self) -> ProducerAcceptPermit<'_> {
+        ProducerAcceptPermit(self)
+    }
+}
+
+/// One native correlation pinned to a logical instance. There is no source TD
+/// identifier, independent plan-set identity, or transport payload for this
+/// narrow bodyless Property Read request.
+#[derive(Debug)]
+pub struct ProducerRequest {
+    instance: ProducerInstanceKey,
+    correlation: CorrelationId,
+}
+impl ProducerRequest {
+    pub fn new(instance: ProducerInstanceKey, correlation: CorrelationId) -> Self {
+        Self {
+            instance,
+            correlation,
+        }
+    }
+    pub fn instance(&self) -> ProducerInstanceKey {
+        self.instance
+    }
+    pub fn correlation(&self) -> CorrelationId {
+        self.correlation
+    }
+}
+
+/// Core-sealed, single-use reply opportunity. Bindings cannot create an
+/// unchecked success. The original request survives handler failure as well.
+pub struct ProducerResponse {
+    request: ProducerRequest,
+    result: CoreResult<InteractionOutput>,
+}
+impl ProducerResponse {
+    pub fn seal(
+        request: ProducerRequest,
+        result: CoreResult<InteractionOutput>,
+        body_limit: u64,
+        media_capacity: u64,
+    ) -> Self {
+        let result = result.and_then(|output| {
+            let valid = crate::response::property_read_handler_shape(&output)
+                && output.data().is_some_and(|p| {
+                    p.body.len() as u64 <= body_limit
+                        && p.content_type.capacity() as u64 <= media_capacity
+                        && p.content_coding
+                            .as_ref()
+                            .is_none_or(|c| c.capacity() as u64 <= media_capacity)
+                });
+            if valid {
+                Ok(output)
+            } else {
+                Err(CoreError::Validation(
+                    ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                        .with_thing(request.instance.slot())
+                        .with_correlation(request.correlation),
+                ))
+            }
+        });
+        Self { request, result }
+    }
+    pub fn request(&self) -> &ProducerRequest {
+        &self.request
+    }
+    pub fn result(&self) -> Result<&InteractionOutput, &CoreError> {
+        self.result.as_ref()
+    }
 }
 
 /// An actual captured executor, independently of optional preparation. Native
@@ -164,6 +283,9 @@ pub trait ProducerExecutor: Send + 'static {
     fn configuration_matches(&self, captured: &Self::Configuration) -> bool;
     fn identity(&self) -> BindingRegistrationIdentity;
     fn install_policy(&self) -> ProducerInstallPolicy;
+    fn service_policy(&self) -> Option<ProducerServicePolicy> {
+        None
+    }
     /// Pure validation of native operands and complete controlled backing
     /// against the captured policy. It must not perform native installation.
     fn check_program(&self, program: &Self::Program) -> CoreResult<()>;
@@ -183,9 +305,9 @@ pub struct ProducerExecutionRegistration<E: ProducerExecutor, H: ReadPropertyHan
     executor: E,
     configuration: E::Configuration,
     policy: ProducerInstallPolicy,
+    service: Option<ProducerServicePolicy>,
     entry: ProducerExecutionEntry<E::Program>,
     // Retained capability; installation cannot invoke it.
-    #[allow(dead_code)]
     handler: H,
     footprint: HandlerFootprint,
 }
@@ -194,6 +316,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler> ProducerExecutionRegistration<
         executor: E,
         configuration: E::Configuration,
         policy: ProducerInstallPolicy,
+        service: Option<ProducerServicePolicy>,
         entry: ProducerExecutionEntry<E::Program>,
         handler: H,
         footprint: HandlerFootprint,
@@ -202,6 +325,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler> ProducerExecutionRegistration<
             executor,
             configuration,
             policy,
+            service,
             entry,
             handler,
             footprint,
@@ -213,16 +337,23 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler> ProducerExecutionRegistration<
     pub fn footprint(&self) -> HandlerFootprint {
         self.footprint
     }
+    pub fn dispatch(&self, context: HandlerContext<'_>) -> CoreResult<InteractionOutput> {
+        self.handler.handle(context, &InteractionInput::default())
+    }
     pub fn configuration(&self) -> &E::Configuration {
         &self.configuration
     }
     pub fn install_policy(&self) -> ProducerInstallPolicy {
         self.policy
     }
+    pub fn service_policy(&self) -> Option<ProducerServicePolicy> {
+        self.service
+    }
     pub fn check_current(&self) -> CoreResult<()> {
         if !self.executor.configuration_matches(&self.configuration)
             || self.executor.identity() != self.entry.binding()
             || self.executor.install_policy() != self.policy
+            || self.executor.service_policy() != self.service
         {
             return Err(CoreError::Validation(
                 ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)

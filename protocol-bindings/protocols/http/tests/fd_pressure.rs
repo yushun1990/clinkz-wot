@@ -44,7 +44,7 @@ fn descriptor_pressure_recovers_input_and_accepted_call_then_reuses_runtime() {
     listener.set_nonblocking(true).unwrap();
     recipe().block_on(async {
         let (runtime, handle, observer, parent) = engine(port);
-        let baseline: Vec<_> = parent.lock().unwrap().iter().map(|a| a.used()).collect();
+        let baseline: Vec<_> = parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect();
         let fd_baseline = std::fs::read_dir("/proc/self/fd").unwrap().count();
         let files = exhaust();
         let rejected = handle.read_property("a", InteractionOptions::new().with_timeout(Duration::from_millis(321)), &mut work()).err().expect("probe must refuse EMFILE");
@@ -56,7 +56,7 @@ fn descriptor_pressure_recovers_input_and_accepted_call_then_reuses_runtime() {
         assert_eq!(error.error().context().resource_failure().unwrap().1, ResourceFailureDomain::DeploymentFailure);
         assert_eq!(error.error().context().plan(), Some(original.plan_id()));
         drop((options, original, error));
-        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
 
         let mut call = handle.read_property("a", InteractionOptions::new(), &mut work()).unwrap();
         let files = exhaust();
@@ -70,7 +70,7 @@ fn descriptor_pressure_recovers_input_and_accepted_call_then_reuses_runtime() {
         assert_eq!(error.context().binding(), Some((BindingId::new(600), BindingGeneration::INITIAL)));
         assert!(error.context().plan().is_some());
         drop(call);
-        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
         assert_eq!(std::fs::read_dir("/proc/self/fd").unwrap().count(), fd_baseline);
         assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock, "failed calls connected");
 
@@ -105,7 +105,7 @@ fn descriptor_pressure_recovers_input_and_accepted_call_then_reuses_runtime() {
         assert!(matches!(result, Err(CoreError::Cancelled(_))), "{result:?}");
         drop(cancelled);
         retirement.recv_timeout(Duration::from_secs(5)).unwrap();
-        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
         let mut retry = handle.read_property("b", InteractionOptions::new(), &mut work()).unwrap();
         assert_eq!(&*take(&mut retry).await.unwrap().data().unwrap().body, b"29");
         drop(retry);
@@ -117,11 +117,11 @@ fn descriptor_pressure_recovers_input_and_accepted_call_then_reuses_runtime() {
         assert_eq!(error.context().cause_code(), Some(604));
         assert_eq!(error.context().resource_failure().unwrap().1, ResourceFailureDomain::DeploymentFailure);
         drop(refused);
-        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
         drop(handle);
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
     });
 }

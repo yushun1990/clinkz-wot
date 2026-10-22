@@ -9,12 +9,31 @@ use std::sync::{Mutex, MutexGuard};
 
 type Registration = ConsumerCompilerRegistration<HostConsumerBindingPreparation>;
 #[derive(Clone)]
-struct HostParent(Arc<Mutex<[ResourceAccount; N]>>);
+struct HostParent(Arc<crate::host_accounts::HostResourceAccounts>);
 impl Parent for HostParent {
-    fn edit<T>(&self, f: impl FnOnce(&mut [ResourceAccount; N]) -> T) -> T {
-        f(&mut lock(&self.0))
+    fn snapshot(&self) -> [ResourceAccount; N] {
+        self.0.snapshot(KINDS)
+    }
+    fn reserve(&self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)> {
+        for i in 0..N {
+            if !self.0.try_reserve(KINDS[i], amount[i]) {
+                for j in 0..i {
+                    self.0.release(KINDS[j], amount[j]);
+                }
+                let a = self.0.account(KINDS[i]);
+                let (slot, generation) = self.0.coordinates(KINDS[i]);
+                return Some((i, slot, generation, a.limit(), a.used()));
+            }
+        }
+        None
+    }
+    fn release(&self, amount: [u64; N]) {
+        for (kind, n) in KINDS.into_iter().zip(amount) {
+            self.0.release(kind, n);
+        }
     }
 }
+
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -216,7 +235,7 @@ impl ConsumerPropertyReadRuntime {
         registration: Registration,
         policy: ConsumerPropertyReadPolicy,
         clock: Arc<dyn RuntimeClock + Send + Sync>,
-        parent: Arc<Mutex<[ResourceAccount; N]>>,
+        parent: Arc<crate::host_accounts::HostResourceAccounts>,
     ) -> Result<
         (
             Self,
@@ -226,7 +245,7 @@ impl ConsumerPropertyReadRuntime {
             Registration,
             ConsumerPropertyReadPolicy,
             Arc<dyn RuntimeClock + Send + Sync>,
-            Arc<Mutex<[ResourceAccount; N]>>,
+            Arc<crate::host_accounts::HostResourceAccounts>,
         )>,
     > {
         let supported = (|| {
@@ -1591,7 +1610,12 @@ mod tests {
                 65536,
             )
             .unwrap();
-            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let parent = Arc::new(
+                crate::host_accounts::HostResourceAccounts::try_from_accounts(
+                    policy.parent_accounts(),
+                )
+                .unwrap(),
+            );
             let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
                 registration,
                 policy,
@@ -1623,7 +1647,7 @@ mod tests {
                     g.charge.as_ref().unwrap().held[OUTPUT],
                 )
             };
-            let parent_used: [u64; N] = core::array::from_fn(|i| lock(&parent)[i].used());
+            let parent_used: [u64; N] = core::array::from_fn(|i| parent.snapshot(KINDS)[i].used());
             let mut stashed = None;
             {
                 let mut c = lock(&runtime.root.get().cell);
@@ -1668,7 +1692,7 @@ mod tests {
             }
             assert_eq!(address(&runtime.root), original_address);
             assert_eq!(
-                core::array::from_fn::<_, N, _>(|i| lock(&parent)[i].used()),
+                core::array::from_fn::<_, N, _>(|i| parent.snapshot(KINDS)[i].used()),
                 parent_used
             );
             let mut cx = Context::from_waker(std::task::Waker::noop());
@@ -1682,7 +1706,7 @@ mod tests {
             }
             drop(runtime);
             drop(observer);
-            assert!(lock(&parent).iter().all(|a| a.used() == 0));
+            assert!(parent.snapshot(KINDS).iter().all(|a| a.used() == 0));
         }
     }
 }

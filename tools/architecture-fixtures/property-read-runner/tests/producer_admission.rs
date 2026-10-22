@@ -1,21 +1,15 @@
-//! Admission diagnostics: these assert existing defects, not safe exposure.
-//! Retire/invert the defect assertions when the admitted replacement lands.
+//! Retained static planner diagnostics. The Host first-leaf expose path is
+//! removed; native Host coverage/refusal is exercised in HTTP preparation tests.
 #![cfg(feature = "std")]
 
 use clinkz_wot_core::{
-    BindingArtifactCompatibility, CoreResult, HandlerContext, HandlerFootprint, InteractionInput,
-    InteractionOutput, LogicalInteractionPlan, Payload, PlanId, PlanSetGeneration,
-    ReadPropertyHandler, StepStatus,
+    BindingArtifactCompatibility, CoreResult, LogicalInteractionPlan, PlanId, PlanSetGeneration,
 };
-use clinkz_wot_foundation::{
-    GatewayDefaultV1, Generation, SlotIndex, StaticResourceProfile, WorkBudget, WorkClass,
+use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_planning::{
+    PlanBuildInput, PlanBuildStep, PlanCompiler, PropertyReadPlanCompiler, binding_compiler::*,
 };
-use clinkz_wot_planning::{PlanBuildInput, PlanBuildStep, PlanCompiler, PropertyReadPlanCompiler};
-use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
-use clinkz_wot_property_read_binding_fixture::{
-    MockCompiler, host_property_read_fixture, static_property_read_fixture,
-};
-use clinkz_wot_servient::{Servient, ServientBuilder};
+use clinkz_wot_property_read_binding_fixture::{MockCompiler, static_property_read_fixture};
 use clinkz_wot_td::{
     data_type::Operation,
     td_defaults::{FormContext, effective_form_operations},
@@ -23,13 +17,6 @@ use clinkz_wot_td::{
     validate::Validate,
 };
 use serde_json::{Value, json};
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicU32, Ordering},
-    },
-    task::{Context, Waker},
-};
 
 fn document() -> Value {
     json!({"@context":["https://www.w3.org/2022/wot/td/v1.1",
@@ -103,32 +90,8 @@ fn plan(td: &Thing) -> LogicalInteractionPlan {
     panic!("planning did not finish")
 }
 
-struct Handler(Arc<AtomicU32>);
-impl ReadPropertyHandler for Handler {
-    fn handle(&self, _: HandlerContext<'_>, _: &InteractionInput) -> CoreResult<InteractionOutput> {
-        self.0.fetch_add(1, Ordering::SeqCst);
-        Ok(InteractionOutput::with_data(Payload::new(
-            b"42".to_vec(),
-            "application/json",
-        )))
-    }
-}
-fn drive(servient: &Servient) {
-    let mut cx = Context::from_waker(Waker::noop());
-    for _ in 0..64 {
-        let mut budget = WorkBudget::new()
-            .with_remaining(WorkClass::BindingPolls, 8)
-            .with_remaining(WorkClass::HandlerSteps, 1)
-            .with_remaining(WorkClass::CleanupItems, 8);
-        if matches!(servient.step(&mut cx, &mut budget), StepStatus::Idle) {
-            return;
-        }
-    }
-    panic!("lifecycle did not become idle")
-}
-
 #[test]
-fn current_producer_loses_semantics_and_exposes_only_first_advertised_route() {
+fn retained_static_planner_loses_semantics_and_selects_only_first_advertised_route() {
     let baseline: Thing = serde_json::from_value(document()).unwrap();
     let baseline_plan = plan(&baseline);
     for (label, field, value) in [
@@ -203,34 +166,6 @@ fn current_producer_loses_semantics_and_exposes_only_first_advertised_route() {
             baseline_plan,
             "{label}: compiler distinctions lost"
         );
-        let (registration, probe) = host_property_read_fixture();
-        let servient = ServientBuilder::new()
-            .resource_limits(GatewayDefaultV1::LIMITS.clone())
-            .binding_registration(registration)
-            .build()
-            .unwrap();
-        let exposed = servient.produce_td(td).unwrap();
-        let calls = Arc::new(AtomicU32::new(0));
-        exposed
-            .set_read_property_handler(
-                "level",
-                Handler(calls.clone()),
-                HandlerFootprint::new(1, 0, 0),
-            )
-            .unwrap();
-        exposed.begin_expose().unwrap();
-        drive(&servient);
-        assert_eq!(probe.preparation_side_effects(), 1, "{label}");
-        probe.enqueue_property_read("level", InteractionInput::empty());
-        drive(&servient);
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "{label}");
-        assert_eq!(probe.delivered_responses(), 1, "{label}");
-        exposed.begin_destroy().unwrap();
-        drive(&servient);
-        assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
-        assert_eq!(probe.route_state_drops(), 1);
-        println!(
-            "{label}: Basic-valid, semantic loan absent, equal plan, prepare=handler=response=1; cleanup complete"
-        );
+        println!("{label}: retained static compiler still loses semantic distinctions");
     }
 }

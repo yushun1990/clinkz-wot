@@ -980,13 +980,17 @@ fn owned_static_two_roots_private_pressure_preserves_unread_and_late_owners_then
 mod host_owned {
     use super::super::host::{build, shutdown};
     use super::*;
-    use std::sync::Mutex;
     #[test]
     fn restricted_host_consume_rejects_before_publication_then_retries_and_releases() {
         for mode in [Mode::Normal, Mode::LatePoll] {
             let contract = BindingResourceContract::ConsumerOwnedHostV2;
             let policy = owned_policy(contract);
-            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let parent = Arc::new(
+                clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                    policy.parent_accounts(),
+                )
+                .unwrap(),
+            );
             let stats = Arc::new(Stats::default());
             let registration = binding::host_registration(binding::HostClient::new_owned(
                 stats.clone(),
@@ -1070,22 +1074,37 @@ mod host_owned {
             drop(o);
             assert_eq!(stats.starts.load(Ordering::SeqCst), 2);
             assert_eq!(stats.states_destroyed.load(Ordering::SeqCst), 2);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
         }
     }
     #[test]
     fn owned_host_engine_local_rows_are_enforced_through_complete_production_calls() {
         let policy = owned_policy(BindingResourceContract::ConsumerOwnedV2);
         owned_engine_local_boundaries("Host", |limits| {
-            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let parent = Arc::new(
+                clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                    policy.parent_accounts(),
+                )
+                .unwrap(),
+            );
             let result = host_parent_probe(limits, &parent);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
             result
         });
     }
     fn host_parent_probe(
         limits: ResourceLimits,
-        parent: &Arc<Mutex<[ResourceAccount; ConsumerPropertyReadPolicy::PARENT_KINDS.len()]>>,
+        parent: &Arc<clinkz_wot_servient::host_accounts::HostResourceAccounts>,
     ) -> CoreResult<()> {
         let contract = BindingResourceContract::ConsumerOwnedV2;
         let policy = try_owned_policy_with_limits(contract, limits)?;
@@ -1133,10 +1152,17 @@ mod host_owned {
     #[test]
     fn owned_host_every_used_original_parent_has_zero_short_exact_and_over_controls() {
         let policy = owned_policy(BindingResourceContract::ConsumerOwnedV2);
-        let baseline = Arc::new(Mutex::new(policy.parent_accounts()));
+        let baseline = Arc::new(
+            clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                policy.parent_accounts(),
+            )
+            .unwrap(),
+        );
         host_parent_probe(GatewayDefaultV1::LIMITS.clone(), &baseline).unwrap();
         let peaks: [u64; ConsumerPropertyReadPolicy::PARENT_KINDS.len()] =
-            core::array::from_fn(|i| baseline.lock().unwrap()[i].peak());
+            core::array::from_fn(|i| {
+                baseline.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)[i].peak()
+            });
         for (i, required) in peaks.into_iter().enumerate().filter(|(_, n)| *n != 0) {
             let kind = ConsumerPropertyReadPolicy::PARENT_KINDS[i];
             let slot = SlotIndex::new(3000 + i as u32);
@@ -1144,7 +1170,12 @@ mod host_owned {
             for limit in [0, required - 1, required, required + 1] {
                 let mut bank = policy.parent_accounts();
                 bank[i] = ResourceAccount::new(slot, generation, kind, limit);
-                let bank = Arc::new(Mutex::new(bank));
+                let bank = Arc::new(
+                    clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                        bank,
+                    )
+                    .unwrap(),
+                );
                 let result = host_parent_probe(GatewayDefaultV1::LIMITS.clone(), &bank);
                 if limit < required {
                     let error = result.unwrap_err();
@@ -1161,8 +1192,12 @@ mod host_owned {
                 } else {
                     result.unwrap();
                 }
-                assert!(bank.lock().unwrap().iter().all(|a| a.used() == 0));
-                assert!(bank.lock().unwrap()[i].peak() <= limit);
+                assert!(
+                    bank.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                        .iter()
+                        .all(|a| a.used() == 0)
+                );
+                assert!(bank.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)[i].peak() <= limit);
             }
         }
         println!("owned Host original parent peaks={peaks:?}");
@@ -1205,7 +1240,12 @@ mod host_owned {
                 )
                 .unwrap();
                 let key = policy.resource_identity();
-                let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+                let parent = Arc::new(
+                    clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                        policy.parent_accounts(),
+                    )
+                    .unwrap(),
+                );
                 observe(usize::MAX);
                 let pool = pool();
                 let client = binding::HostClient::new_owned(
@@ -1265,7 +1305,12 @@ mod host_owned {
                         &provision.layouts[..provision.requests]
                     );
                 }
-                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+                assert!(
+                    parent
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                        .iter()
+                        .all(|a| a.used() == 0)
+                );
                 assert_eq!(trace().live, 0);
             }
         }
@@ -1275,7 +1320,12 @@ mod host_owned {
         let contract = BindingResourceContract::ConsumerOwnedV2;
         for fail in 0..2 {
             let policy = owned_policy(contract);
-            let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+            let parent = Arc::new(
+                clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                    policy.parent_accounts(),
+                )
+                .unwrap(),
+            );
             let clock: Arc<dyn RuntimeClock + Send + Sync> = Arc::new(Clock::default());
             let stats = Arc::new(Stats::default());
             let registration = binding::host_registration(binding::HostClient::new_owned(
@@ -1309,7 +1359,12 @@ mod host_owned {
             );
             drop(rejected);
             assert_eq!(trace().live, 0);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
         }
         let mut sites = 0;
         for fail in 0..256 {
@@ -1343,7 +1398,12 @@ mod host_owned {
             drop(o);
             assert_eq!(trace().live, 0);
             assert_eq!(stats.starts.load(Ordering::SeqCst), 0);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
             if fail >= requests {
                 break;
             }
@@ -1358,7 +1418,7 @@ mod host_owned {
     ) -> (
         ConsumerPropertyReadRuntime,
         impl Fn() -> (Option<CleanupOutcome>, [u64; 4]) + Send + Sync + 'static,
-        Arc<Mutex<[ResourceAccount; 20]>>,
+        Arc<clinkz_wot_servient::host_accounts::HostResourceAccounts>,
         Arc<PrivatePool>,
         Arc<Stats>,
     ) {
@@ -1370,7 +1430,12 @@ mod host_owned {
         let pool = pool();
         let stats = Arc::new(Stats::default());
         let policy = owned_policy(contract);
-        let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+        let parent = Arc::new(
+            clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                policy.parent_accounts(),
+            )
+            .unwrap(),
+        );
         let r = binding::host_registration(binding::HostClient::new_owned(
             stats.clone(),
             output,
@@ -1422,7 +1487,12 @@ mod host_owned {
                 shutdown(&r);
                 drop(r);
                 drop(o);
-                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+                assert!(
+                    parent
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                        .iter()
+                        .all(|a| a.used() == 0)
+                );
             }
         }
     }
@@ -1503,7 +1573,12 @@ mod host_owned {
             drop(r);
             drop(o);
             assert_eq!(trace().live, 0);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
         }
     }
     #[test]
@@ -1553,7 +1628,12 @@ mod host_owned {
         shutdown(&r);
         drop(r);
         drop(o);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     }
     #[test]
     fn owned_host_residual_and_engine_funding_precede_finite_allocating_disposal_and_supported_error()
@@ -1590,8 +1670,7 @@ mod host_owned {
             DROP_CHECK.with(|d| {
                 *d.borrow_mut() = Some(Arc::new(move || {
                     let funded = bank
-                        .lock()
-                        .unwrap()
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
                         .iter()
                         .find(|a| a.kind() == ResourceKind::HostBindingCallBytesGlobalMax)
                         .unwrap()
@@ -1628,7 +1707,12 @@ mod host_owned {
             );
             assert_eq!(pool.used(), 8);
             drop(o);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
             assert_eq!(trace().live, 0);
         }
     }

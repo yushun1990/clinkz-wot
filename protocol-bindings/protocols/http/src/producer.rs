@@ -26,7 +26,7 @@ impl HttpProducerConfig {
 /// Owned immutable native instructions, without a Copy/inline requirement on
 /// any shared compiler interface. This concrete first program is inline.
 /// Possession grants no installation, publication, dispatch or accept authority.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpProducerProgram {
     pub(super) address: SocketAddr,
     pub(super) target: [u8; 64],
@@ -63,8 +63,8 @@ use std::{
 };
 
 // Separate role identity: never borrow Consumer policy/seals or StrictV1's
-// transitive disposal claim. No semantic ingress/response SDK is installed yet.
-const INSTALL_POLICY: &[u8] = b"clinkz-http-producer-install-v1;std-TcpListener;loopback-nonzero-unscoped;exclusive-native-listener;no-accept;no-serving;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
+// transitive disposal claim. Native parser/reply backing remains Binding-owned.
+const INSTALL_POLICY: &[u8] = b"request-reply-v2;Hyper1.12.0-server-http1;httparse1.10.1;serde_json-IgnoredAny;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
 
 /// Runtime-only executor. It retains neither a compiler nor source TD.
 pub struct HttpProducerExecutor {
@@ -99,7 +99,7 @@ pub fn producer_execution(
             id,
             generation,
             BindingConfigurationDigest::new(digest),
-            BindingArtifactCompatibility::new(*b"http-prod-ins-v1"),
+            BindingArtifactCompatibility::new(*b"http-prod-rpl-v2"),
             ordinal,
         ),
     }
@@ -124,6 +124,12 @@ impl ProducerExecutor for HttpProducerExecutor {
             local_drop_work: 1,
         }
     }
+    fn service_policy(&self) -> Option<ProducerServicePolicy> {
+        Some(ProducerServicePolicy {
+            response_body_bytes: 4096,
+            response_media_capacity: 64,
+        })
+    }
     fn check_program(&self, program: &Self::Program) -> CoreResult<()> {
         // Inspect native operands, not a caller-supplied compatibility tag.
         if program.address != self.config.address
@@ -147,27 +153,37 @@ impl ProducerExecutor for HttpProducerExecutor {
             config: self.config,
             identity: self.identity,
             instance: entry.instance(),
+            instance_key: entry.instance_key(),
+            program: entry.program().clone(),
+            connection: None,
+            correlation: 0,
+            request_deadline: Deadline::NONE,
             listener: None,
             failed: None,
             closed: false,
         })
     }
 }
-/// Binding-owned native setup/retirement. This type deliberately exposes no
-/// accept, handler, response or publication operation. Closed-gate connections
-/// remain deployment/kernel state until local disposal closes the listener.
+/// Binding-owned native setup, request correlation, reply and retirement.
+/// Acceptance requires a borrowed permit. There is no publication or handler
+/// operation; closed-gate connections remain deployment/kernel state.
 pub struct HttpProducerInstallation {
     config: HttpProducerConfig,
     identity: BindingRegistrationIdentity,
     instance: ThingSlotId,
+    instance_key: ProducerInstanceKey,
+    program: HttpProducerProgram,
+    connection: Option<super::producer_transport::NativeConnection>,
+    correlation: u64,
+    request_deadline: Deadline,
     listener: Option<TcpListener>,
     failed: Option<CoreError>,
     closed: bool,
 }
 impl HttpProducerInstallation {
-    fn failure(&mut self) -> CoreError {
+    fn failure(&mut self, phase: ErrorPhase) -> CoreError {
         let error = CoreError::Binding(
-            ErrorContext::new(ErrorPhase::Prepare, RetryClass::Never)
+            ErrorContext::new(phase, RetryClass::Never)
                 .with_thing(self.instance)
                 .with_binding(
                     self.identity.binding_id(),
@@ -179,7 +195,7 @@ impl HttpProducerInstallation {
                     None,
                     None,
                 )
-                .with_redacted_cause(623, "HTTP Producer native installation failed"),
+                .with_redacted_cause(623, "HTTP Producer native operation failed"),
         );
         self.failed = Some(error.clone());
         error
@@ -196,31 +212,129 @@ impl ProducerInstallation for HttpProducerInstallation {
         if self.listener.is_some() {
             return Poll::Ready(Ok(()));
         }
-        let listener = match TcpListener::bind(self.config.address) {
-            Ok(listener) => listener,
-            Err(_) => return Poll::Ready(Err(self.failure())),
+        let socket = match socket2::Socket::new(
+            socket2::Domain::for_address(self.config.address),
+            socket2::Type::STREAM,
+            Some(socket2::Protocol::TCP),
+        ) {
+            Ok(socket) => socket,
+            Err(_) => return Poll::Ready(Err(self.failure(ErrorPhase::Prepare))),
         };
-        // Retain the native owner before any fallible post-bind configuration.
-        self.listener = Some(listener);
-        if self
-            .listener
-            .as_ref()
-            .unwrap()
-            .set_nonblocking(true)
-            .is_err()
-        {
-            return Poll::Ready(Err(self.failure()));
+        // Retain even an unbound native socket before fallible configuration.
+        self.listener = Some(socket.into());
+        let configured = (|| -> std::io::Result<()> {
+            let socket = socket2::SockRef::from(self.listener.as_ref().unwrap());
+            // Restart after our own closed connections enter TIME_WAIT. This
+            // does not enable SO_REUSEPORT or share a live listening endpoint.
+            socket.set_reuse_address(true)?;
+            socket.bind(&self.config.address.into())?;
+            socket.listen(128)?;
+            socket.set_nonblocking(true)
+        })();
+        if configured.is_err() {
+            return Poll::Ready(Err(self.failure(ErrorPhase::Prepare)));
         }
         Poll::Ready(Ok(()))
     }
+    fn poll_request(
+        &mut self,
+        cx: &mut Context<'_>,
+        permit: ProducerAcceptPermit<'_>,
+        now: clinkz_wot_foundation::MonotonicInstant,
+        timeout_ticks: u64,
+    ) -> Poll<CoreResult<ProducerRequest>> {
+        if permit.instance() != self.instance_key
+            || self.closed
+            || self.failed.is_some()
+            || timeout_ticks == 0
+        {
+            return Poll::Ready(Err(producer_unsupported()));
+        }
+        if self.connection.is_none() {
+            let deadline = match now.checked_add_ticks(timeout_ticks) {
+                Some(t) => Deadline::at(t),
+                None => return Poll::Ready(Err(producer_unsupported())),
+            };
+            let Some(listener) = &self.listener else {
+                return Poll::Ready(Err(producer_unsupported()));
+            };
+            match listener.accept() {
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Err(_) => return Poll::Ready(Err(self.failure(ErrorPhase::Binding))),
+                Ok((stream, _)) => {
+                    // The local socket is already owned, including configuration failure.
+                    if stream.set_nonblocking(true).is_err() {
+                        return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
+                    }
+                    let Some(next) = self.correlation.checked_add(1) else {
+                        return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
+                    };
+                    self.correlation = next;
+                    self.request_deadline = deadline;
+                    self.connection = Some(super::producer_transport::NativeConnection::new(
+                        stream,
+                        &self.program,
+                    ));
+                }
+            }
+        }
+        let connection = self.connection.as_mut().unwrap();
+        match connection.poll(cx) {
+            Poll::Ready(_) => {
+                // Malformed/unsupported/disconnected peers retire their socket;
+                // no semantic request escaped and the listener remains usable.
+                drop(self.connection.take());
+                self.request_deadline = Deadline::NONE;
+                Poll::Pending
+            }
+            Poll::Pending if connection.take_candidate() => Poll::Ready(Ok(ProducerRequest::new(
+                self.instance_key,
+                CorrelationId::new(self.correlation),
+            ))),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+    fn poll_response(
+        &mut self,
+        cx: &mut Context<'_>,
+        response: &ProducerResponse,
+        _now: clinkz_wot_foundation::MonotonicInstant,
+    ) -> Poll<CoreResult<()>> {
+        if response.request().instance() != self.instance_key
+            || response.request().correlation().get() != self.correlation
+            || self.connection.is_none()
+            || self.closed
+        {
+            return Poll::Ready(Err(producer_unsupported()));
+        }
+        let connection = self.connection.as_mut().unwrap();
+        connection.reply(response);
+        match connection.poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => {
+                drop(self.connection.take());
+                self.request_deadline = Deadline::NONE;
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(_)) => Poll::Ready(Err(self.failure(ErrorPhase::Binding))),
+        }
+    }
+    fn request_deadline(&self) -> Deadline {
+        self.request_deadline
+    }
     fn poll_close(&mut self, _cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
         self.closed = true;
+        drop(self.connection.take());
         drop(self.listener.take());
         Poll::Ready(Ok(()))
     }
 }
 impl Drop for HttpProducerInstallation {
     fn drop(&mut self) {
+        drop(self.connection.take());
         drop(self.listener.take());
     }
 }

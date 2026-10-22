@@ -229,11 +229,13 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 /// let thing_id = ThingId::from("urn:thing:private");
 /// let target = AffordanceTarget::Thing;
 /// let _ = HandlerContext {
-///     thing_id: &thing_id,
+///     thing_id: Some(&thing_id),
 ///     thing_slot: ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL),
 ///     target: &target,
 ///     operation: Operation::ReadAllProperties,
-///     plan_id: PlanId::new(SlotIndex::new(2), Generation::INITIAL),
+///     plan_id: Some(PlanId::new(SlotIndex::new(2), Generation::INITIAL)),
+///     #[cfg(feature = "std")]
+///     producer_instance: None,
 ///     binding: None,
 /// };
 /// ```
@@ -255,11 +257,13 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HandlerContext<'a> {
-    thing_id: &'a ThingId,
+    thing_id: Option<&'a ThingId>,
     thing_slot: ThingSlotId,
     target: &'a AffordanceTarget,
     operation: crate::Operation,
-    plan_id: PlanId,
+    plan_id: Option<PlanId>,
+    #[cfg(feature = "std")]
+    producer_instance: Option<crate::producer::ProducerInstanceKey>,
     binding: Option<(BindingId, BindingGeneration)>,
 }
 
@@ -315,17 +319,52 @@ impl<'a> HandlerContext<'a> {
         }
 
         Ok(Self {
-            thing_id,
+            thing_id: Some(thing_id),
             thing_slot,
             target,
             operation,
-            plan_id,
+            plan_id: Some(plan_id),
+            #[cfg(feature = "std")]
+            producer_instance: None,
             binding,
         })
     }
 
-    /// Returns the borrowed human-readable Thing identity.
-    pub const fn thing_id(self) -> &'a ThingId {
+    /// Creates a source-free native Producer Property Read context. Neither a
+    /// source Thing identifier nor an independent logical plan is invented.
+    #[cfg(feature = "std")]
+    pub fn for_producer_property_read(
+        instance: crate::producer::ProducerInstanceKey,
+        target: &'a AffordanceTarget,
+        binding: (BindingId, BindingGeneration),
+    ) -> CoreResult<Self> {
+        if !matches!(target, AffordanceTarget::Property(_)) {
+            return Err(CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                    .with_thing(instance.slot())
+                    .with_operation(Operation::ReadProperty)
+                    .with_binding(binding.0, binding.1),
+            ));
+        }
+        Ok(Self {
+            thing_id: None,
+            thing_slot: instance.slot(),
+            target,
+            operation: Operation::ReadProperty,
+            plan_id: None,
+            producer_instance: Some(instance),
+            binding: Some(binding),
+        })
+    }
+
+    /// Returns the actual native instance identity, when this is native dispatch.
+    #[cfg(feature = "std")]
+    pub const fn producer_instance(self) -> Option<crate::producer::ProducerInstanceKey> {
+        self.producer_instance
+    }
+
+    /// Returns the borrowed source Thing identity, if retained by this execution.
+    pub const fn thing_id(self) -> Option<&'a ThingId> {
         self.thing_id
     }
 
@@ -339,13 +378,13 @@ impl<'a> HandlerContext<'a> {
         self.target
     }
 
-    /// Returns the operation selected by the compiled plan.
+    /// Returns the operation selected during preparation.
     pub const fn operation(self) -> crate::Operation {
         self.operation
     }
 
-    /// Returns the immutable plan identity.
-    pub const fn plan_id(self) -> PlanId {
+    /// Returns an actual logical plan identity, if this execution has one.
+    pub const fn plan_id(self) -> Option<PlanId> {
         self.plan_id
     }
 

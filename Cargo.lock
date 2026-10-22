@@ -318,6 +318,7 @@ dependencies = [
  "httparse",
  "hyper",
  "hyper-util",
+ "serde",
  "serde_json",
  "sha2-const-stable",
  "socket2 0.6.4",

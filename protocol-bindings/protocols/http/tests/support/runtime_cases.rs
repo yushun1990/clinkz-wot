@@ -1,5 +1,5 @@
-fn parent_usage(parent: &Arc<Mutex<[ResourceAccount; 20]>>) -> [u64; 20] {
-    let accounts = parent.lock().unwrap();
+fn parent_usage(parent: &Arc<clinkz_wot_servient::host_accounts::HostResourceAccounts>) -> [u64; 20] {
+    let accounts = parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS);
     std::array::from_fn(|i| accounts[i].used())
 }
 

@@ -1342,10 +1342,14 @@ ordinary shared retirement before final registration release.
 Successor Rust driver types use matching TD Producer lending/coverage, not
 adapters through the old Host stage guards.
 [WP-600](../work-packages/WP-600-http-producer-property-read.md) owns the actual
-HTTP loop and six completion obligations. This extraction implements neither
-that loop nor general shared-native matching/retirement.
+HTTP loop and six completion obligations. The concrete HTTP loop now has an executable implementation candidate; general
+shared-native matching/retirement and independent completion acceptance remain
+separate obligations.
 
 ### Host Producer installation checkpoint
+
+The native serving extension below replaces the public staged Host facade.
+Installation-only executors still stop at InstalledClosed.
 
 Core's `ProducerExecutor` has associated owned native program, concrete
 configuration and `ProducerInstallation` types. The actual captured executor
@@ -1362,23 +1366,49 @@ and fallibly allocates one complete owner before any installation callback. It
 retains a Core execution registration, not a compiler, TD, semantic loan or
 logical plan-set.
 
-`Reserved -> Installing -> InstalledClosed` means construction then native
-setup completion. **InstalledClosed is not LocallyReady or Serving**: it makes
-no serviceability promise and issues no accept permit. The full endpoint state
-machine's publication/dispatch path still requires retained request correlation,
-reply opportunities, response sealing and their funding. The public staged Host
-facade is not called by this path and remains regression scope pending that
-replacement. No phase-shaped compatibility implementation is supplied.
+`Reserved -> Installing -> InstalledClosed` completes native setup without
+publication. An executor offering `ProducerServicePolicy` also promises the
+request/reply methods: `begin_expose(timeout_ticks)` requests local publication
+on the next step after readiness, or `begin_serving` publishes an already ready
+installation. This transition invokes no Binding callback. `Serving` lends a
+short `ProducerAcceptPermit` from the retained move-only instance authority.
+Copied slot/generation/incarnation keys cannot mint this permit. The runtime
+rechecks returned instance identity and nonempty correlation before dispatch.
+`Dispatching` and `Delivering` are busy substates of the published instance;
+only `Serving` accepts a fresh request. Cancellation/close revokes acceptance
+locally before attempting native cleanup.
 
-Every construction/install callback consumes `BindingPolls` first; every close
-callback consumes `CleanupItems` first. Zero credit invokes neither. Optional
-caller-clock installation deadlines, configuration drift, failure and cancellation
-enter Closing with an immutable first cause. Pending/failed close retains the
-same installation. Complete-object cleanup transfer uses the existing envelope;
-refusal leaves the original runtime intact. Last owner loss uses the separately
-prepaid finite local destruction allowance without a network wait, task tail or
-blocking join. Native participation is destroyed before its executor, program
-and handler, and the owner Box is freed before its original charges are released.
+The native installation retains one request/correlation/reply opportunity.
+Its callback can produce a candidate but cannot invoke an application handler.
+Servient dispatches the registered `ReadPropertyHandler`, then Core seals its
+result using the shared Property Read result-shape check and complete retained
+payload/media bounds. The move-only `ProducerResponse` keeps its original
+request on both success and failure. Native delivery borrows this response;
+Pending or failure cannot surrender it. After terminal delivery the response
+is dropped; on cancellation it survives until native participation is disposed.
+There is no detached request task or independently polled response owner.
+
+Construction/install/accept/delivery consume `BindingPolls`, dispatch consumes
+`HandlerSteps`, and close consumes `CleanupItems`, before callbacks. Zero credit
+invokes none. Caller-clock installation and native request deadlines, clock
+regression/domain mismatch, failure and cancellation enter Closing with an
+immutable first cause. The request deadline covers unfinished headers, stalled
+dispatch and pending delivery. Pending/failed close retains the same owner.
+Complete-object cleanup transfer uses the existing envelope; refusal leaves
+the original runtime intact. Last owner loss uses prepaid finite local
+destruction without a network wait, task tail or blocking join. Native
+participation dies before the program, handler and sealed response; the owner
+Box is freed before original charges are released.
+
+The exact property target is provisioned as `Arc<str>` before preparation,
+retained with its full allocation backing and borrowed by `HandlerContext`.
+This avoids copying the key per dispatch. Caller-retained aliases remain caller
+ownership. Native
+`HandlerContext` exposes no source ThingId or PlanId, and carries the actual
+`ProducerInstanceKey`. The optional source/plan accessors retain actual values
+for existing planned dispatch. No empty label or synthetic plan is used to
+satisfy an older constructor. This does not require a source TD id or forbid
+empty Property keys.
 
 The scoped `ProducerInstallPolicy` is the Producer-owned Host disposal
 interpretation under ADR-0023. It does not reuse Consumer schema-2 identity/seals
@@ -1387,7 +1417,7 @@ and captured-configuration backing; program and installation bytes cover their
 controlled indirect backing. Application handler declarations include at least
 the actual `H` Layout. Native/SDK resources follow the concrete Binding policy;
 process OOM/abort and native socket capacity are deployment assumptions. No
-global numeric defaults change. The installation-only field mapping is:
+global numeric defaults change. The installation and serving field mapping is:
 
 | Field family | Charged/checking boundary |
 | --- | --- |
@@ -1398,10 +1428,15 @@ global numeric defaults change. The installation-only field mapping is:
 | Cleanup | Complete retained owner/indirect overlap and prebacked inline close/status storage; no extra allocation is required to move the existing owner. |
 | Poll temporary | Executor's explicit per-callback/disposal declaration and original global account, overlapping the Engine live reservation. |
 | Largest contiguous allocation | Each actual owner/key block and declared largest indirect allocation, independently of aggregate retained totals. |
+| Request / response | One ingress item, pending handler and in-flight response; full bounded response Arc/body and both media capacities plus declared pending-handler backing are included in Engine live/slot/cleanup overlap. Each physical allocation is checked independently. |
+| Instance / registration | One logical Thing and one retained executor registration per root; this counts retained registrations, not native listeners. |
 | Durable status | One prebacked first-cause slot. After close, only inline terminal/status backing stays charged until root Drop. |
 
-The caller provisions `Arc<ProducerInstallationAccounts>` with immutable limits.
-Only move-only runtime charges can reserve/release its private counters. The
+The caller provisions `Arc<HostResourceAccounts>` with immutable limits and
+passes the same bank to public Consumer and Producer roots. The earlier
+`ProducerInstallationAccounts` name is an alias for this single authority.
+Private runtime charges and move-only application capacity leases reserve and
+release its counters; there is no public mutation or synchronization guard. The
 bank exposes allocation-free detached account snapshots, never a lock guard,
 mutable bank loan or callback under synchronization. Changing or retaining a
 snapshot cannot change the original charges or delay disposal. Individual
@@ -1420,13 +1455,30 @@ endpoint-address or one-instance/one-resource constraint. Polling cannot confer
 whole-infrastructure shutdown authority. Shared production matching/retirement
 remains a separate claim.
 
-HTTP's current installation is an exclusive nonzero loopback TCP listener.
-It retains the socket before fallible post-bind configuration and classifies
-native installation failures as its fresh Producer-policy DeploymentFailure.
-It never calls accept or installs a parser, semantic request slot or response
-owner; queued TCP connections are kernel/deployment state. Its native program
-and executor are available without the optional preparation feature. Native
-listener retirement is not evidence that a peer observed no connection.
+HTTP's first adapter owns an exclusive nonzero loopback listener and at most
+one accepted connection. Socket2 sets address reuse before bind so closed
+connections in TIME_WAIT do not prevent a fresh generation; it does not enable
+port sharing. The kernel listen backlog is 128, outside Engine ingress quota. Its std nonblocking socket, Hyper HTTP/1.1 connection,
+bridge future, parser/read-ahead and encoded reply are Binding-private. No Tokio
+reactor is needed for Producer progress. A short internal bridge lock has no
+external holder and never spans Engine dispatch or native polling. The public
+manual driver should pace polling; its wakeups are not an OS readiness reactor.
+HTTP limits are exact Host/path GET, one Host field, bodyless framing, 16 fields,
+8192 raw head bytes inclusive, 4096 read/write bytes per funded poll, no keepalive,
+pipelining, Expect or upgrade, JSON <=4096 bytes and media capacity <=64. JSON
+syntax is checked by the Binding; application TD schema conformity remains the
+handler's obligation. Invalid sealed output maps to fixed JSON `null`/500.
+
+Malformed/unsupported preacceptance requests retire their connection without
+dispatch and allow another peer. A deadline or postacceptance native failure
+closes the instance. Native errors retain the captured Producer-policy identity
+and DeploymentFailure attribution. Observed SDK allocation peaks are evidence
+for executed paths, not Engine quota values or universal transitive ceilings.
+The native program/executor remain available without optional preparation.
+Local socket disposal does not establish remote observation or TCP delivery;
+successful native delivery means local transport completion. HTTPS, shared
+production listener matching, asynchronous handlers and automatic scheduling
+remain unimplemented scope, not product restrictions.
 
 ## Server route SPI
 

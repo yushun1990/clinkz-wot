@@ -85,11 +85,24 @@ struct Probe {
     fail_install: AtomicBool,
     pending_close: AtomicBool,
     fail_close: AtomicBool,
+    serve: AtomicBool,
+    calls: AtomicUsize,
+    replies: AtomicUsize,
+    pending_reply: AtomicBool,
+    stale_key: Mutex<Option<ProducerInstanceKey>>,
 }
 struct Handler(Arc<Probe>);
 impl ReadPropertyHandler for Handler {
     fn handle(&self, _: HandlerContext<'_>, _: &InteractionInput) -> CoreResult<InteractionOutput> {
-        panic!("unpublished installation invoked a handler")
+        assert!(
+            self.0.serve.load(SeqCst),
+            "unpublished installation invoked a handler"
+        );
+        self.0.calls.fetch_add(1, SeqCst);
+        Ok(InteractionOutput::with_data(Payload::new(
+            b"7".as_slice(),
+            "application/json",
+        )))
     }
 }
 impl Drop for Handler {
@@ -146,6 +159,12 @@ impl ProducerExecutor for Executor {
             local_drop_work: 1,
         }
     }
+    fn service_policy(&self) -> Option<ProducerServicePolicy> {
+        self.0.serve.load(SeqCst).then_some(ProducerServicePolicy {
+            response_body_bytes: 64,
+            response_media_capacity: 32,
+        })
+    }
     fn check_program(&self, p: &Program) -> CoreResult<()> {
         if p.0 == b"native://device/value" {
             Ok(())
@@ -153,17 +172,24 @@ impl ProducerExecutor for Executor {
             Err(failure(1))
         }
     }
-    fn create_installation(&self, _: &ProducerExecutionEntry<Program>) -> CoreResult<Installation> {
+    fn create_installation(
+        &self,
+        entry: &ProducerExecutionEntry<Program>,
+    ) -> CoreResult<Installation> {
         self.0.created.fetch_add(1, SeqCst);
         Ok(Installation {
             p: self.0.clone(),
             live: false,
+            instance: entry.instance_key(),
+            offered: false,
         })
     }
 }
 struct Installation {
     p: Arc<Probe>,
     live: bool,
+    instance: ProducerInstanceKey,
+    offered: bool,
 }
 impl ProducerInstallation for Installation {
     fn poll_install(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<()>> {
@@ -179,6 +205,36 @@ impl ProducerInstallation for Installation {
             return Poll::Pending;
         }
         self.p.installed.fetch_add(1, SeqCst);
+        Poll::Ready(Ok(()))
+    }
+    fn poll_request(
+        &mut self,
+        _: &mut Context<'_>,
+        permit: ProducerAcceptPermit<'_>,
+        _: MonotonicInstant,
+        _: u64,
+    ) -> Poll<CoreResult<ProducerRequest>> {
+        assert_eq!(permit.instance(), self.instance);
+        if self.offered {
+            return Poll::Pending;
+        }
+        self.offered = true;
+        let key = self.p.stale_key.lock().unwrap().unwrap_or(self.instance);
+        Poll::Ready(Ok(ProducerRequest::new(key, CorrelationId::new(1))))
+    }
+    fn poll_response(
+        &mut self,
+        _: &mut Context<'_>,
+        response: &ProducerResponse,
+        _: MonotonicInstant,
+    ) -> Poll<CoreResult<()>> {
+        assert_eq!(response.request().instance(), self.instance);
+        assert_eq!(response.request().correlation(), CorrelationId::new(1));
+        assert_eq!(&*response.result().unwrap().data().unwrap().body, b"7");
+        if self.p.pending_reply.load(SeqCst) {
+            return Poll::Pending;
+        }
+        self.p.replies.fetch_add(1, SeqCst);
         Poll::Ready(Ok(()))
     }
     fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<()>> {
@@ -246,7 +302,11 @@ fn bank(limits: &ResourceLimits) -> Arc<ProducerInstallationAccounts> {
     Arc::new(producer_installation_accounts(limits))
 }
 fn empty(bank: &Arc<ProducerInstallationAccounts>) {
-    assert!(bank.snapshot().iter().all(|a| a.used() == 0));
+    assert!(
+        bank.snapshot(INSTALLATION_ACCOUNT_KINDS)
+            .iter()
+            .all(|a| a.used() == 0)
+    );
 }
 fn authority(instance: ThingSlotId) -> ProducerInstanceAuthority {
     ProducerInstanceAuthority::try_new(instance).unwrap()
@@ -308,7 +368,9 @@ fn source_compiler_and_id_are_absent_at_funded_installation() {
     assert_eq!(p.handler_dropped.load(SeqCst), 1);
     assert!(r.entry().is_none());
     assert!(
-        b.snapshot().iter().any(|a| a.used() > 0),
+        b.snapshot(INSTALLATION_ACCOUNT_KINDS)
+            .iter()
+            .any(|a| a.used() > 0),
         "terminal status still funded"
     );
     drop(r);
@@ -449,9 +511,12 @@ fn local_and_original_parent_limits_rollback_without_native_effects() {
         .unwrap();
     let b = bank(&parent_limits);
     let sibling = accepted(attempt(&p, limits.clone(), b.clone()));
-    let before = b.snapshot().map(|a| a.used());
+    let before = b.snapshot(INSTALLATION_ACCOUNT_KINDS).map(|a| a.used());
     assert!(attempt(&p, limits, b.clone()).is_err());
-    assert_eq!(b.snapshot().map(|a| a.used()), before);
+    assert_eq!(
+        b.snapshot(INSTALLATION_ACCOUNT_KINDS).map(|a| a.used()),
+        before
+    );
     drop(sibling);
     empty(&b);
     assert_eq!(p.created.load(SeqCst), 0);
@@ -740,7 +805,12 @@ fn concurrent_admissions_preserve_original_capacity_and_release_without_a_poller
                     );
                     let success = result.is_ok();
                     admitted.wait();
-                    assert!(parent.snapshot().iter().all(|a| a.used() <= a.limit()));
+                    assert!(
+                        parent
+                            .snapshot(INSTALLATION_ACCOUNT_KINDS)
+                            .iter()
+                            .all(|a| a.used() <= a.limit())
+                    );
                     drop(result); // includes partial-reservation rollback on refusal
                     success as usize
                 })
@@ -754,7 +824,7 @@ fn concurrent_admissions_preserve_original_capacity_and_release_without_a_poller
     assert_eq!(successes, 1);
     empty(&parent);
     let slots = parent
-        .snapshot()
+        .snapshot(INSTALLATION_ACCOUNT_KINDS)
         .into_iter()
         .find(|a| a.kind() == ResourceKind::HandlerSlotsGlobalMax)
         .unwrap();
@@ -785,13 +855,15 @@ mod last_root {
             }
             // Inspection has no guard on the bank. A caller can retain the
             // snapshot and even its own application mutex across disposal.
-            let mut snapshot = bank.snapshot();
+            let mut snapshot = bank.snapshot(INSTALLATION_ACCOUNT_KINDS);
             assert!(snapshot.iter().any(|a| a.used() > 0));
             for account in &mut snapshot {
                 assert!(account.release_committed(account.used()));
             }
             assert!(
-                bank.snapshot().iter().any(|a| a.used() > 0),
+                bank.snapshot(INSTALLATION_ACCOUNT_KINDS)
+                    .iter()
+                    .any(|a| a.used() > 0),
                 "copies cannot release original charges"
             );
             let application_lock = Mutex::new(bank.clone());
@@ -925,7 +997,7 @@ mod funding {
         }
     }
     fn used(bank: &Arc<ProducerInstallationAccounts>) -> [u64; 3] {
-        let bank = bank.snapshot();
+        let bank = bank.snapshot(INSTALLATION_ACCOUNT_KINDS);
         [
             ResourceKind::EngineLiveBytesGlobalMax,
             ResourceKind::CompiledRuntimeBytesGlobalMax,
@@ -1381,4 +1453,103 @@ mod funding {
         drop(runtime);
         empty(&b);
     }
+}
+
+#[test]
+fn native_serving_rejects_a_copied_old_instance_key_before_dispatch() {
+    let p = Arc::new(Probe::default());
+    p.serve.store(true, SeqCst);
+    let old = authority(instance(0));
+    *p.stale_key.lock().unwrap() = Some(old.key());
+    let (mut r, b) = runtime(&p);
+    assert_ne!(r.instance_key(), old.key());
+    r.begin_expose(100).unwrap();
+    for _ in 0..3 {
+        let _ = step(&mut r, 1);
+    }
+    assert_eq!(r.state(), ProducerInstallationState::Closing);
+    assert!(matches!(r.first_cause(), Some(CoreError::StaleHandle(_))));
+    assert_eq!(p.calls.load(SeqCst), 0);
+    r.cancel();
+    let _ = step(&mut r, 1);
+    assert!(matches!(r.first_cause(), Some(CoreError::StaleHandle(_))));
+    drop(r);
+    empty(&b);
+    assert_eq!(p.dropped.load(SeqCst), 1);
+}
+#[test]
+fn native_serving_cancellation_preserves_pending_request_and_reply_until_disposal() {
+    for before_dispatch in [true, false] {
+        let p = Arc::new(Probe::default());
+        p.serve.store(true, SeqCst);
+        p.pending_reply.store(true, SeqCst);
+        let (mut r, b) = runtime(&p);
+        r.begin_expose(100).unwrap();
+        for _ in 0..3 {
+            let _ = step(&mut r, 1);
+        }
+        assert_eq!(r.state(), ProducerInstallationState::Dispatching);
+        if !before_dispatch {
+            let _ = step(&mut r, 1);
+            assert_eq!(r.state(), ProducerInstallationState::Delivering);
+            assert!(step(&mut r, 1).is_pending());
+        }
+        r.cancel();
+        let cause = r.first_cause().unwrap().clone();
+        p.fail_close.store(true, SeqCst);
+        let _ = step(&mut r, 1);
+        assert_eq!(r.first_cause(), Some(&cause));
+        assert_eq!(p.live.load(SeqCst), 1);
+        assert!(b.account(ResourceKind::InFlightResponsesGlobalMax).used() > 0);
+        assert_eq!(p.calls.load(SeqCst), usize::from(!before_dispatch));
+        assert_eq!(p.replies.load(SeqCst), 0);
+        drop(r);
+        empty(&b);
+        assert_eq!(p.dropped.load(SeqCst), 1);
+        assert_eq!(p.handler_dropped.load(SeqCst), 1);
+    }
+}
+#[test]
+fn external_non_http_executor_uses_the_same_native_serving_dispatch_and_seal() {
+    let p = Arc::new(Probe::default());
+    p.serve.store(true, SeqCst);
+    let (mut r, b) = runtime(&p);
+    r.begin_expose(100).unwrap();
+    for _ in 0..7 {
+        let _ = step(&mut r, 1);
+    }
+    assert_eq!(p.calls.load(SeqCst), 1);
+    assert_eq!(p.replies.load(SeqCst), 1);
+    assert_eq!(r.state(), ProducerInstallationState::Serving);
+    drop(r);
+    empty(&b);
+}
+
+#[test]
+fn host_bank_rejects_duplicate_and_live_accounts_and_preserves_coordinates() {
+    use clinkz_wot_servient::host_accounts::HostResourceAccounts;
+    let kind = ResourceKind::CleanupItemsMax;
+    let make = || ResourceAccount::new(SlotIndex::new(91), Generation::INITIAL, kind, 3);
+    let duplicate = HostResourceAccounts::try_from_accounts([make(), make()])
+        .err()
+        .unwrap();
+    assert_eq!(duplicate[0].limit(), 3);
+    assert_eq!(duplicate[1].used(), 0);
+    let mut live = make();
+    live.try_reserve(2).unwrap().commit();
+    let [mut returned] = HostResourceAccounts::try_from_accounts([live])
+        .err()
+        .unwrap();
+    assert_eq!(returned.used(), 2);
+    assert!(returned.release_committed(2));
+    let bank = Arc::new(HostResourceAccounts::try_from_accounts([returned]).unwrap());
+    let owner = bank.account(kind).try_reserve(0).unwrap().owner();
+    assert_eq!(owner, (SlotIndex::new(91), Generation::INITIAL));
+    let lease = bank.reserve(kind, 2).unwrap();
+    assert!(bank.reserve(kind, 2).is_none());
+    assert_eq!(bank.account(kind).used(), 2);
+    assert_eq!(bank.account(ResourceKind::ThingsGlobalMax).limit(), 0);
+    drop(lease);
+    assert_eq!(bank.account(kind).used(), 0);
+    assert_eq!(bank.account(kind).peak(), 2);
 }

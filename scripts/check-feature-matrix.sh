@@ -31,16 +31,15 @@ echo "=== core ==="
 check "core default"            -p clinkz-wot-core
 check "core no-features"        -p clinkz-wot-core --no-default-features
 check "core async"              -p clinkz-wot-core --no-default-features --features async
-check "core td2-preview"        -p clinkz-wot-core --features td2-preview
 
 echo "=== planning ==="
 check "planning default"        -p clinkz-wot-planning
 check "planning no-features"    -p clinkz-wot-planning --no-default-features
 check "planning async"          -p clinkz-wot-planning --no-default-features --features async
 
-echo "=== protocol-bindings ==="
-check "pb default"              -p clinkz-wot-protocol-bindings
-check "pb no-features"          -p clinkz-wot-protocol-bindings --no-default-features
+echo "=== protocol-bindings-http ==="
+check "http preparation"        -p clinkz-wot-binding-http
+check "http execution-only"     -p clinkz-wot-binding-http --no-default-features
 
 echo "=== protocol-bindings-zenoh ==="
 check "zenoh default"           -p clinkz-wot-protocol-bindings-zenoh

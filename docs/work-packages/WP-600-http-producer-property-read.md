@@ -127,11 +127,13 @@ a complete Producer-only registration or its original author input. Neither
 constructor binds a socket or requires a dummy client. Configuration fixes the
 listen address, limits and disposal identity before compilation.
 
-Use `ServientBuilder::binding_registration` -> `produce_td` -> exact read-handler
-registration -> `begin_expose` -> caller-driven `Servient::step` -> Serving.
-After accepted replacement, these roots use the new Host Producer contract;
-they must not retain the unsafe first-leaf path as a fallback. Existing public
-Consumer registration/consume/select/read executes the opposite end of the loop.
+Use explicit whole-description preparation and exact handler registration,
+then `ServientBuilder::new(limits, shared_accounts).produce(prepared, authority,
+deadline)` -> `begin_expose` -> caller-driven `Servient::step` -> Serving.
+This replaces the staged `produce_td`/`ExposedThingHandle` facade; it retains
+neither a first-leaf fallback nor a phase adapter. Existing public Consumer
+registration/consume/select/read executes the opposite end of the loop using
+the same `HostResourceAccounts` capacity authority.
 
 The build privately validates the whole TD, enumerates advertised operations,
 checks coverage and resolves/lower its sole supported coordinate. It reserves
@@ -255,17 +257,21 @@ role-specific Host accounting and source-free public composition. Native-only
 prechecks cannot accept those production claims. A discovered missing boundary
 returns to this same ADR-0013 record before production changes continue.
 
-The current `HostBindingPreparation` wraps the retained exclusive staged adapter.
-Its constructor and the current builder parameter do not prescribe the HTTP
-successor's native driver shape. This tranche may replace that Producer pairing
-and builder surface with the selected installation/infrastructure owners; it
-must not add a phase adapter solely to satisfy the superseded signature.
-
-The typed installation checkpoint uses `ProducerBindingPreparation`, the Core
-execution registration and `ProducerInstallationRuntime` directly. Its exact
+The retained `HostBindingPreparation` is historical staged SPI evidence, not a
+public HTTP fallback. The successor uses `ProducerBindingPreparation`, Core's
+execution registration and the typed public Servient owner directly. The
 [ownership/resource boundary](../spec/binding-spi.md#host-producer-installation-checkpoint)
-ends at InstalledClosed, below publication/serviceability. It neither invokes
-nor replaces that staged facade. The remaining replacement dependency is the
-retained native request/correlation/reply owner, Core-sealed response delivery,
-and current-authority publication/dispatch integration; installation completion
-must not be used to infer those capabilities or any completion-key transition.
+now extends InstalledClosed through publication, native request correlation,
+registered dispatch and Core-sealed response delivery. Tests exercise an actual
+raw TCP peer, an external non-HTTP driver and the public Consumer over two
+source-free generations with repeated reads. These are author evidence for a
+serving implementation candidate, not independent acceptance of any key.
+
+The changed shared Host parent storage requires Consumer regression review.
+HTTP-private allocations/disposal require measured qualification separately
+from Engine funding. The synchronous handler, manual scheduling, single HTTP
+connection, source-free HandlerContext API and generic shared-infrastructure
+lease semantics require independent architectural challenge. HTTPS/security,
+production shared matching, asynchronous handlers, broader TD operations and
+release/deployment qualification remain outside this checkpoint. Preserve all
+six completion obligations and the existing admission status.

@@ -7,6 +7,29 @@ registration snapshots, plan sets, produced/consumed handles, route records,
 in-flight operations, subscription facades, emission coordination, cleanup
 records, and observable status. It does not own protocol syntax or I/O.
 
+## Native Host Property Read replacement
+
+For the admitted native Host Producer slice, the
+[Binding ownership contract](../spec/binding-spi.md#host-producer-installation-checkpoint)
+supersedes the staged Host builder/plan-set/route lifecycle described below.
+`ServientBuilder::new(limits, shared_accounts).produce(prepared, authority, deadline)`
+consumes completed whole-description preparation and the registered handler.
+The returned typed `Servient<E, H>` owns one logical instance, publication,
+current permits, dispatch, sealed response and retirement. `begin_expose` and
+manual `step` reach Serving only after readiness. No TD, compiler, mandatory
+logical plan or staged adapter survives into this owner. The former public
+`produce_td`, `ExposedThingHandle` and post-build handler mutation are withdrawn.
+The public Consumer runtime remains separately constructible and shares the
+same Host account authority.
+
+A typed single-instance root is the currently executable composition, not a
+universal Servient API or infrastructure cardinality constraint. Multiple roots
+may share capacity; a Binding installation may lease shared infrastructure.
+The first HTTP adapter chooses an exclusive listener. Broader registration sets,
+protocols, handlers and automatic scheduling remain product goals. Historical
+static/Consumer architecture evidence retains its exact scope; the removed Host
+staged tests do not transfer their prior acceptance to this successor.
+
 ## Construction
 
 `ServientBuilder` accepts complete registrations and explicit resource,

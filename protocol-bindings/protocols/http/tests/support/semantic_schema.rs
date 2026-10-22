@@ -314,7 +314,7 @@ mod standard_schema {
                     BindingResourceDeclarations::new(BindingLifetimeFootprint::new(3,1024),BindingLifetimeFootprint::new(16,8192))
                         .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2).with_consumer_result_limits(4096,16), BindingStatusPolicy::new(2,17)
                 )).unwrap_or_else(|_| panic!("registration")).try_into_consumer_compiler().unwrap_or_else(|_| panic!("admission"));
-                let policy = policy(); let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+                let policy = policy(); let parent = Arc::new(clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap());
                 let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(owner,policy,Arc::new(Clock(Instant::now())),parent.clone()).unwrap_or_else(|_| panic!("runtime"));
                 let mut td = source(json!([]));
                 td["securityDefinitions"]["none"]["description"] = json!("access");

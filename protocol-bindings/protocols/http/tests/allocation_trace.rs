@@ -126,7 +126,7 @@ fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
     let port = listener.local_addr().unwrap().port();
     recipe().block_on(async {
         let (runtime, handle, observer, parent) = engine(port);
-        let baseline: Vec<_> = parent.lock().unwrap().iter().map(|a| a.used()).collect();
+        let baseline: Vec<_> = parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect();
         // The final allocation in Client::invoke is HostBindingCallBox::try_new.
         // Measure this graph's actual Layout using an accepted, unpolled call;
         // the rejection's cause below independently checks the raw owner.
@@ -137,7 +137,7 @@ fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
         probe.cancel().unwrap();
         assert!(matches!(take(&mut probe).await, Err(CoreError::Cancelled(_))));
         drop(probe);
-        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
         println!("fallible raw-call allocation Layout={layout:?}");
         CALL_REFUSALS.with(|n| n.set(0));
         DENY_NEXT_CALL.with(|deny| deny.set(Some(layout)));
@@ -150,7 +150,7 @@ fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
         assert_eq!(error.error().context().plan(), Some(original.as_ref().unwrap().plan_id()));
         assert_eq!(error.error().context().resource_failure().unwrap().1, ResourceFailureDomain::DeploymentFailure);
         drop((options, original, error));
-        assert_eq!(parent.lock().unwrap().iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
         assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
         listener.set_nonblocking(false).unwrap();
         let peer = std::thread::spawn(move || {
@@ -167,7 +167,7 @@ fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
     });
 }
 
@@ -275,7 +275,12 @@ fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
             shutdown(&runtime);
             drop(runtime);
             drop(observer);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
         });
         peer.join().unwrap();
     }
@@ -319,14 +324,23 @@ fn public_path_allocation_observation_and_complete_release() {
         let output = take(&mut call).await.unwrap();
         assert_eq!(output.data().unwrap().content_type.capacity(), 16);
         let terminal = TRACE.with(|t| t.borrow().live);
-        let parent_peak: u64 = parent.lock().unwrap().iter().map(|a| a.peak()).sum();
+        let parent_peak: u64 = parent
+            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+            .iter()
+            .map(|a| a.peak())
+            .sum();
         drop(output);
         drop(call);
         drop(handle);
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
         (startup, accepted, terminal, parent_peak, accepted_layouts)
     });
     // Shared-runtime shutdown may initialize its thread-local parker; that
@@ -405,7 +419,7 @@ fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff(
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
     });
     peer.join().unwrap();
 }
@@ -490,7 +504,7 @@ fn stock_chunked_growth_overlap_and_incomplete_trailer_disposal_observations() {
                 pending_snapshot.live, if mode == "cancel-byte8191" { Some(snapshot.count - pending_snapshot.count) } else { None });
             println!("stock {mode} allocation size/counts: {:?}", snapshot.sizes.into_iter().filter(|(n,_)| *n != 0).collect::<Vec<_>>());
             drop(call); drop(handle); shutdown(&runtime); drop(runtime); drop(observer);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
         });
         drop(io_runtime);
         assert_eq!(

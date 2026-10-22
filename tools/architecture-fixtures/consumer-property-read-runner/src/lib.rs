@@ -6,7 +6,7 @@ extern crate std;
 use clinkz_wot_consumer_property_read_binding_fixture::StaticClient;
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
-use clinkz_wot_planning::{binding_compiler::*, binding_registration::*};
+use clinkz_wot_planning::binding_registration::*;
 use clinkz_wot_servient::consumer_property_read::*;
 use clinkz_wot_td::thing::Thing;
 use core::{
@@ -139,7 +139,12 @@ pub fn host_application(
     let contract = binding::ClientBinding::consumer_configuration(&client)
         .map_or(BindingResourceContract::StrictV1, |c| c.resource_contract());
     let policy = checked_policy(contract, GatewayDefaultV1::LIMITS.clone());
-    let parent = alloc::sync::Arc::new(std::sync::Mutex::new(policy.parent_accounts()));
+    let parent = alloc::sync::Arc::new(
+        clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+            policy.parent_accounts(),
+        )
+        .unwrap(),
+    );
     let registration = clinkz_wot_consumer_property_read_binding_fixture::host_registration(client);
     let (runtime, report) =
         ConsumerPropertyReadRuntime::try_new(registration, policy, clock, parent.clone())
@@ -182,7 +187,12 @@ pub fn host_application(
             drop(runtime);
             assert!(report().0.unwrap().is_complete());
             drop(report);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
             return Ok(statuses);
         }
     }
