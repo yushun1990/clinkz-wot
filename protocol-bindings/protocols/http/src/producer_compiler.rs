@@ -15,7 +15,9 @@ impl ProducerCompiler<HttpProducerExecutor> for HttpProducerConfig {
         self.compile_property_read(input, budget)
     }
 }
-/// Pure Producer-only registration. Both actual inputs survive pairing refusal.
+/// Pure Producer-only registration. All actual inputs survive pairing refusal.
+// Keep complete inputs inline: refusal must not require a new allocation.
+#[allow(clippy::type_complexity)]
 pub fn try_producer_registration(
     config: HttpProducerConfig,
     id: BindingId,
@@ -23,9 +25,13 @@ pub fn try_producer_registration(
     ordinal: u32,
 ) -> Result<
     ProducerBindingPreparation<HttpProducerConfig, HttpProducerExecutor>,
-    BindingInputRejection<(HttpProducerConfig, HttpProducerExecutor)>,
+    BindingInputRejection<(HttpProducerConfig, HttpProducerExecutor, HttpProducerConfig)>,
 > {
-    ProducerBindingPreparation::try_new(config, producer_execution(config, id, generation, ordinal))
+    ProducerBindingPreparation::try_new(
+        config,
+        producer_execution(config, id, generation, ordinal),
+        config,
+    )
 }
 use clinkz_wot_td::semantic::{
     SchemaView, SemanticName, SemanticNode, SemanticScope, SemanticValue, UriVariableScope,

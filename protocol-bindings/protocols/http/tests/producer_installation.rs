@@ -346,9 +346,10 @@ fn compiler_configuration_and_producer_policy_identity_are_checked_without_io() 
     drop(held);
     let e = producer_execution(b, BindingId::new(601), BindingGeneration::INITIAL, 0);
     let identity = e.identity();
-    let refused = ProducerBindingPreparation::try_new(a, e).err().unwrap();
-    let (c, e) = refused.into_input();
+    let refused = ProducerBindingPreparation::try_new(a, e, a).err().unwrap();
+    let (c, e, snapshot) = refused.into_input();
     assert_eq!(c, a);
+    assert_eq!(snapshot, a);
     assert!(e.configuration_matches(&b));
     assert_ne!(
         producer_execution(a, BindingId::new(601), BindingGeneration::INITIAL, 0)

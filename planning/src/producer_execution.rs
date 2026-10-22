@@ -9,8 +9,8 @@ use clinkz_wot_foundation::{WorkBudget, WorkClass};
 /// the complete concrete policy/operands, not merely a format or syntax tag.
 pub trait ProducerCompiler<E: ProducerExecutor> {
     /// Passive, allocation-free view of the complete concrete configuration.
-    /// Pair construction captures one owned clone; funded preparation rechecks
-    /// borrow this view instead of reconstructing the owned snapshot.
+    /// Pair construction checks a separately provisioned owned snapshot;
+    /// funded preparation rechecks borrow this view without reconstructing it.
     fn configuration(&self) -> &E::Configuration;
     fn compile(
         &self,
@@ -30,10 +30,19 @@ pub struct ProducerBindingPreparation<C, E: ProducerExecutor> {
 }
 
 impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, E> {
-    pub fn try_new(compiler: C, executor: E) -> Result<Self, BindingInputRejection<(C, E)>> {
-        let configuration = compiler.configuration().clone();
-        if !executor.configuration_matches(&configuration) {
-            return Err(refused((compiler, executor)));
+    /// Checks and moves the three caller-provisioned inputs, with no new
+    /// configuration allocation/copy. Refusal returns all of them unchanged.
+    /// Input provisioning is the caller's responsibility; retained configuration
+    /// backing still participates in the later funded runtime admission.
+    pub fn try_new(
+        compiler: C,
+        executor: E,
+        configuration: E::Configuration,
+    ) -> Result<Self, BindingInputRejection<(C, E, E::Configuration)>> {
+        if compiler.configuration() != &configuration
+            || !executor.configuration_matches(&configuration)
+        {
+            return Err(refused((compiler, executor, configuration)));
         }
         let identity = executor.identity();
         let policy = executor.install_policy();

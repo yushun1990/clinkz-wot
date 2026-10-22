@@ -1352,9 +1352,11 @@ configuration and `ProducerInstallation` types. The actual captured executor
 checks its native operands and constructs an installation without native
 effects. Configuration matching borrows the captured configuration; it and
 identity/policy queries and operand validation are passive and allocation-free,
-including before admission funding. Owned configuration snapshots are created
-only during pure preparation. Servient's `ProducerInstallationRuntime` consumes
-completed Planning preparation, consumes its exact unique instance authority,
+including before admission funding. The captured configuration is a
+caller-provisioned owned input, moved through pairing and runtime without a
+Clone requirement or an implicit duplicate buffer. Its controlled backing is
+still included in runtime admission. Servient's `ProducerInstallationRuntime`
+consumes completed Planning preparation, consumes its exact unique instance authority,
 reserves against the supplied local limits and original shared parent accounts,
 and fallibly allocates one complete owner before any installation callback. It
 retains a Core execution registration, not a compiler, TD, semantic loan or

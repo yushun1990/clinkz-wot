@@ -226,6 +226,7 @@ fn pair(p: &Arc<Probe>) -> ProducerBindingPreparation<Compiler, Executor> {
             config: p.policy.load(SeqCst),
         },
         Executor(p.clone()),
+        p.policy.load(SeqCst),
     ))
 }
 fn prepared(
@@ -323,11 +324,13 @@ fn actual_configuration_registered_key_and_current_instance_refuse_before_constr
             config: 1,
         },
         Executor(p.clone()),
+        1,
     )
     .err()
     .unwrap();
-    let (c, e) = refused.into_input();
+    let (c, e, snapshot) = refused.into_input();
     assert_eq!(c.config, 1);
+    assert_eq!(snapshot, 1);
     assert!(e.configuration_matches(&0));
     drop((c, e));
     let td = td();
@@ -657,6 +660,7 @@ fn two_logical_instances_can_retain_one_physical_native_owner() {
         let pair = accepted(ProducerBindingPreparation::try_new(
             SharedCompiler,
             SharedExecutor(physical.clone()),
+            (),
         ));
         let capability = ProducerHandlerRegistration::new(
             &authority,
@@ -929,14 +933,17 @@ mod funding {
         ]
         .map(|kind| bank.iter().find(|a| a.kind() == kind).unwrap().used())
     }
+    // Deliberately move-only: pairing and runtime must never need Clone.
+    #[derive(Eq, PartialEq)]
+    struct FundingConfiguration(Vec<u8>);
     struct FundingExecutor {
-        configuration: Vec<u8>,
+        configuration: FundingConfiguration,
         probe: Arc<FundingProbe>,
     }
-    struct FundingCompiler(Vec<u8>, Arc<FundingProbe>);
+    struct FundingCompiler(FundingConfiguration, Arc<FundingProbe>);
     struct FundingInstallation(Arc<FundingProbe>);
     impl ProducerCompiler<FundingExecutor> for FundingCompiler {
-        fn configuration(&self) -> &Vec<u8> {
+        fn configuration(&self) -> &FundingConfiguration {
             self.1.compiler_queries.fetch_add(1, SeqCst);
             &self.0
         }
@@ -950,10 +957,10 @@ mod funding {
         }
     }
     impl ProducerExecutor for FundingExecutor {
-        type Configuration = Vec<u8>;
+        type Configuration = FundingConfiguration;
         type Program = ();
         type Installation = FundingInstallation;
-        fn configuration_matches(&self, captured: &Vec<u8>) -> bool {
+        fn configuration_matches(&self, captured: &FundingConfiguration) -> bool {
             self.probe.executor_queries.fetch_add(1, SeqCst);
             self.configuration == *captured
         }
@@ -1019,11 +1026,12 @@ mod funding {
         let td = td();
         let mut admission = coverage(&td);
         let pair = accepted(ProducerBindingPreparation::try_new(
-            FundingCompiler(vec![7; SCRATCH], probe.clone()),
+            FundingCompiler(FundingConfiguration(vec![7; SCRATCH]), probe.clone()),
             FundingExecutor {
-                configuration: vec![7; SCRATCH],
+                configuration: FundingConfiguration(vec![7; SCRATCH]),
                 probe: probe.clone(),
             },
+            FundingConfiguration(vec![7; SCRATCH]),
         ));
         let prepared = accepted(pair.prepare_property_read(
             &mut admission,
@@ -1038,6 +1046,93 @@ mod funding {
     }
 
     #[test]
+    fn pairing_moves_provisioned_configuration_without_allocating_on_mismatch_or_zero_capacity() {
+        let generous = GatewayDefaultV1::LIMITS.clone();
+        let parent = bank(&generous);
+        let probe = FundingProbe::new(parent.clone());
+        let handler_probe = Arc::new(Probe::default());
+        for (compiler_value, executor_value) in [(9, 7), (7, 9), (9, 9), (7, 7)] {
+            let configuration = FundingConfiguration(vec![7u8; SCRATCH]);
+            let snapshot_pointer = configuration.0.as_ptr();
+            let compiler = FundingCompiler(
+                FundingConfiguration(vec![compiler_value; SCRATCH]),
+                probe.clone(),
+            );
+            let compiler_pointer = compiler.0.0.as_ptr();
+            let executor = FundingExecutor {
+                configuration: FundingConfiguration(vec![executor_value; SCRATCH]),
+                probe: probe.clone(),
+            };
+            let executor_pointer = executor.configuration.0.as_ptr();
+            let (result, count) = allocations(|| {
+                ProducerBindingPreparation::try_new(compiler, executor, configuration)
+            });
+            assert_eq!(
+                count, 0,
+                "pairing must not create an unfunded configuration clone"
+            );
+            if compiler_value != 7 || executor_value != 7 {
+                let refusal = result.err().expect("complete configuration mismatch");
+                assert!(matches!(refusal.error().error(), CoreError::Validation(_)));
+                let (compiler, executor, configuration) = refusal.into_input();
+                assert_eq!(compiler.0.0.as_ptr(), compiler_pointer);
+                assert_eq!(executor.configuration.0.as_ptr(), executor_pointer);
+                assert_eq!(configuration.0.as_ptr(), snapshot_pointer);
+            } else {
+                let authority = authority(instance(0));
+                let td = td();
+                let mut admission = coverage(&td);
+                let prepared = accepted(accepted(result).prepare_property_read(
+                    &mut admission,
+                    &authority,
+                    registered(&handler_probe, "", &authority),
+                    &mut work(1_000_000),
+                ));
+                assert_eq!(prepared.configuration().0.as_ptr(), snapshot_pointer);
+                let zero = generous
+                    .clone()
+                    .try_with_limit(ResourceKind::EngineLiveBytesGlobalMax, Some(0))
+                    .unwrap();
+                let (result, count) = allocations(|| {
+                    FundingRuntime::try_new(
+                        prepared,
+                        authority,
+                        zero,
+                        parent.clone(),
+                        Deadline::NONE,
+                    )
+                });
+                assert_eq!(
+                    count, 0,
+                    "zero-capacity runtime admission must not copy the snapshot"
+                );
+                let refusal = result.err().expect("zero live capacity");
+                assert!(matches!(
+                    refusal.error().error(),
+                    CoreError::LimitExceeded {
+                        resource: ResourceKind::EngineLiveBytesGlobalMax,
+                        limit: 0,
+                        ..
+                    }
+                ));
+                assert_eq!(
+                    refusal.input().0.configuration().0.as_ptr(),
+                    snapshot_pointer
+                );
+                assert_eq!(
+                    refusal.input().0.entry().instance_key(),
+                    refusal.input().1.key()
+                );
+                assert!(Arc::ptr_eq(&refusal.input().3, &parent));
+                assert_eq!(handler_probe.handler_dropped.load(SeqCst), 0);
+                drop(refusal);
+                assert_eq!(handler_probe.handler_dropped.load(SeqCst), 1);
+            }
+            empty(&parent);
+        }
+    }
+
+    #[test]
     fn zero_binding_credit_preparation_retries_keep_owned_configuration_without_allocating() {
         let generous = GatewayDefaultV1::LIMITS.clone();
         let parent = bank(&generous);
@@ -1045,19 +1140,20 @@ mod funding {
         let authority = authority(instance(0));
         let td = td();
         let mut admission = coverage(&td);
-        let configuration = vec![7u8; SCRATCH];
-        let (copy, control) = allocations(|| configuration.clone());
+        let configuration = FundingConfiguration(vec![7u8; SCRATCH]);
+        let (copy, control) = allocations(|| configuration.0.clone());
         assert_eq!(
             control, 1,
             "an owned configuration clone must be observable"
         );
         drop(copy);
         let mut pair = accepted(ProducerBindingPreparation::try_new(
-            FundingCompiler(configuration.clone(), probe.clone()),
+            FundingCompiler(FundingConfiguration(vec![7; SCRATCH]), probe.clone()),
             FundingExecutor {
-                configuration,
+                configuration: FundingConfiguration(vec![7; SCRATCH]),
                 probe: probe.clone(),
             },
+            configuration,
         ));
         let handler_probe = Arc::new(Probe::default());
         let mut handler = registered(&handler_probe, "", &authority);
@@ -1095,7 +1191,7 @@ mod funding {
             handler,
             &mut work(1_000_000),
         ));
-        assert_eq!(prepared.configuration().len(), SCRATCH);
+        assert_eq!(prepared.configuration().0.len(), SCRATCH);
         assert_eq!(prepared.entry().instance_key(), authority.key());
         assert_eq!(probe.compiler_queries.load(SeqCst), 1);
         assert_eq!(probe.executor_queries.load(SeqCst), 1);
@@ -1236,7 +1332,7 @@ mod funding {
         let b = bank(&generous);
         let probe = FundingProbe::new(b.clone());
         let (prepared, authority) = prepare(&probe);
-        let (copy, control) = allocations(|| prepared.configuration().clone());
+        let (copy, control) = allocations(|| prepared.configuration().0.clone());
         assert_eq!(
             control, 1,
             "the observer must see an owned configuration clone"
@@ -1262,7 +1358,7 @@ mod funding {
         );
         let refusal = result.err().expect("zero capacity refusal");
         assert_eq!(refusal.input().1.key(), key);
-        assert_eq!(refusal.input().0.configuration().len(), SCRATCH);
+        assert_eq!(refusal.input().0.configuration().0.len(), SCRATCH);
         empty(&b);
         let ((prepared, authority, _, original), _) = refusal.into_parts();
         let (result, count) = allocations(|| {

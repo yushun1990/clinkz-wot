@@ -152,11 +152,12 @@ pub trait ProducerInstallation: Send + 'static {
 /// types and complete typed configuration are paired, then `check_program`
 /// checks native operands; matching tags alone do not authorize execution.
 /// Configuration matching, identity/policy queries and operand validation run
-/// before funding: they must be passive and allocation-free. Only preparation
-/// obtains an owned configuration snapshot from the matching compiler.
+/// before funding: they must be passive and allocation-free. The captured
+/// configuration is caller-provisioned and moves through preparation/runtime
+/// ownership without requiring Clone or a duplicate buffer.
 pub trait ProducerExecutor: Send + 'static {
     type Program: Send + 'static;
-    type Configuration: Clone + Eq + Send + 'static;
+    type Configuration: Eq + Send + 'static;
     type Installation: ProducerInstallation;
     /// Compare the complete current configuration with the borrowed captured
     /// value without cloning it, allocating or performing native effects.

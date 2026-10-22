@@ -1957,7 +1957,13 @@ registered handler existence or installation authority.
 actual `ProducerExecutor`: associated native program type, complete concrete
 configuration equality, captured registration identity/policy and executor
 operand validation. The compiler lends a passive allocation-free configuration
-view; pair construction clones it once into the owned snapshot. Each preparation
+view. Pair construction accepts a separately caller-provisioned owned
+configuration, checks both compiler and executor against it, and moves it without
+allocating or duplicating its backing. Mismatch returns all three original
+inputs. No Clone or Copy requirement applies to the concrete configuration. This
+removes the implicit Planning-owned duplicate; it is not a startup-capacity
+exemption. Input provisioning remains the caller's responsibility, and retained configuration
+backing remains part of the subsequent funded runtime admission. Each preparation
 attempt consumes one `BindingPolls` credit before configuration/identity/policy
 queries or semantic lending. Its compiler recheck borrows that view, and the
 executor compares the captured value by passive, allocation-free
