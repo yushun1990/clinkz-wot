@@ -400,6 +400,25 @@ impl<'td> ValidatedProducerCursor<'td> {
             ));
         }
         let bytes = Document::capacity_bytes();
+        // Only backing owned by this TD continuation is temporary capacity.
+        // Retained upstream accounts still participate in aggregate live checks.
+        let frames = Layout::array::<Frame<'td>>(self.owner.stack.frames.capacity)
+            .expect("checked on acquisition")
+            .size() as u64;
+        let temporary = add(frames, self.scratch.capacity as u64, Phase::Semantics)
+            .and_then(|n| add(n, bytes, Phase::Semantics))
+            .and_then(|n| add(n, producer_inline_bytes(), Phase::Semantics))
+            .map_err(ValidatedSemanticError::Admission)?;
+        for kind in [
+            R::AdmissionTemporaryBytesPerOperationMax,
+            R::AdmissionTemporaryBytesGlobalMax,
+            R::PeakLiveBytesPerAdmissionMax,
+        ] {
+            self.owner
+                .policy
+                .check(kind, temporary, Phase::Semantics)
+                .map_err(ValidatedSemanticError::Admission)?;
+        }
         let live = add(
             self.owner.stack.ledger.live_bytes(),
             bytes,
@@ -408,9 +427,6 @@ impl<'td> ValidatedProducerCursor<'td> {
         .and_then(|n| add(n, producer_inline_bytes(), Phase::Semantics))
         .map_err(ValidatedSemanticError::Admission)?;
         for kind in [
-            R::AdmissionTemporaryBytesPerOperationMax,
-            R::AdmissionTemporaryBytesGlobalMax,
-            R::PeakLiveBytesPerAdmissionMax,
             R::AdmissionPeakLiveBytesGlobalMax,
             R::EngineLiveBytesGlobalMax,
         ] {
@@ -419,14 +435,16 @@ impl<'td> ValidatedProducerCursor<'td> {
                 .check(kind, live, Phase::Semantics)
                 .map_err(ValidatedSemanticError::Admission)?;
         }
-        self.owner
-            .policy
-            .check(
-                R::LargestContiguousAllocationBytesMax,
-                bytes,
-                Phase::Semantics,
-            )
-            .map_err(ValidatedSemanticError::Admission)?;
+        for layout in Document::allocation_layouts() {
+            self.owner
+                .policy
+                .check(
+                    R::LargestContiguousAllocationBytesMax,
+                    layout.size() as u64,
+                    Phase::Semantics,
+                )
+                .map_err(ValidatedSemanticError::Admission)?;
+        }
         let reservation = self
             .owner
             .stack
