@@ -241,16 +241,16 @@ fn prepared(
         &mut work(1_000_000),
     ))
 }
-fn bank(limits: &ResourceLimits) -> Arc<Mutex<ProducerInstallationAccounts>> {
-    Arc::new(Mutex::new(producer_installation_accounts(limits)))
+fn bank(limits: &ResourceLimits) -> Arc<ProducerInstallationAccounts> {
+    Arc::new(producer_installation_accounts(limits))
 }
-fn empty(bank: &Arc<Mutex<ProducerInstallationAccounts>>) {
-    assert!(bank.lock().unwrap().iter().all(|a| a.used() == 0));
+fn empty(bank: &Arc<ProducerInstallationAccounts>) {
+    assert!(bank.snapshot().iter().all(|a| a.used() == 0));
 }
 fn authority(instance: ThingSlotId) -> ProducerInstanceAuthority {
     ProducerInstanceAuthority::try_new(instance).unwrap()
 }
-fn runtime(p: &Arc<Probe>) -> (Runtime, Arc<Mutex<ProducerInstallationAccounts>>) {
+fn runtime(p: &Arc<Probe>) -> (Runtime, Arc<ProducerInstallationAccounts>) {
     let limits = GatewayDefaultV1::LIMITS.clone();
     let bank = bank(&limits);
     let authority = authority(instance(0));
@@ -307,7 +307,7 @@ fn source_compiler_and_id_are_absent_at_funded_installation() {
     assert_eq!(p.handler_dropped.load(SeqCst), 1);
     assert!(r.entry().is_none());
     assert!(
-        b.lock().unwrap().iter().any(|a| a.used() > 0),
+        b.snapshot().iter().any(|a| a.used() > 0),
         "terminal status still funded"
     );
     drop(r);
@@ -408,7 +408,7 @@ fn uncovered_draft_and_zero_preparation_credit_cannot_mint_a_completed_entry() {
 }
 #[test]
 fn local_and_original_parent_limits_rollback_without_native_effects() {
-    let attempt = |p: &Arc<Probe>, limits, b: Arc<Mutex<ProducerInstallationAccounts>>| {
+    let attempt = |p: &Arc<Probe>, limits, b: Arc<ProducerInstallationAccounts>| {
         let authority = authority(instance(0));
         Runtime::try_new(
             prepared(p, &authority),
@@ -437,23 +437,20 @@ fn local_and_original_parent_limits_rollback_without_native_effects() {
         empty(&b);
     }
     let limits = GatewayDefaultV1::LIMITS.clone();
-    let b = bank(&limits);
-    {
-        let mut bank = b.lock().unwrap();
-        let i = bank.len() - 1;
-        let n = bank[i].limit();
-        bank[i].try_reserve(n).unwrap().commit();
-    }
-    let before: Vec<_> = b.lock().unwrap().iter().map(|a| a.used()).collect();
+    let parent_limits = limits
+        .clone()
+        .try_with_limit(
+            ResourceKind::DurableStatusBytesGlobalMax,
+            Some(std::mem::size_of::<Option<CoreError>>() as u64),
+        )
+        .unwrap();
+    let b = bank(&parent_limits);
+    let sibling = accepted(attempt(&p, limits.clone(), b.clone()));
+    let before = b.snapshot().map(|a| a.used());
     assert!(attempt(&p, limits, b.clone()).is_err());
-    assert_eq!(
-        b.lock()
-            .unwrap()
-            .iter()
-            .map(|a| a.used())
-            .collect::<Vec<_>>(),
-        before
-    );
+    assert_eq!(b.snapshot().map(|a| a.used()), before);
+    drop(sibling);
+    empty(&b);
     assert_eq!(p.created.load(SeqCst), 0);
 }
 #[test]
@@ -701,6 +698,161 @@ fn two_logical_instances_can_retain_one_physical_native_owner() {
     empty(&b);
 }
 
+#[test]
+fn concurrent_admissions_preserve_original_capacity_and_release_without_a_poller() {
+    const OWNERS: usize = 8;
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .try_with_limit(ResourceKind::HandlerSlotsGlobalMax, Some(1))
+        .unwrap();
+    let parent = bank(&limits);
+    let start = Arc::new(std::sync::Barrier::new(OWNERS));
+    let admitted = Arc::new(std::sync::Barrier::new(OWNERS));
+    let p = Arc::new(Probe::default());
+    let inputs: Vec<_> = (0..OWNERS)
+        .map(|i| {
+            let authority = authority(instance(i as u32));
+            (prepared(&p, &authority), authority)
+        })
+        .collect();
+    let successes = std::thread::scope(|scope| {
+        let workers: Vec<_> = inputs
+            .into_iter()
+            .map(|(prepared, authority)| {
+                let parent = parent.clone();
+                let start = start.clone();
+                let admitted = admitted.clone();
+                let limits = limits.clone();
+                scope.spawn(move || {
+                    start.wait();
+                    let result = Runtime::try_new(
+                        prepared,
+                        authority,
+                        limits,
+                        parent.clone(),
+                        Deadline::NONE,
+                    );
+                    let success = result.is_ok();
+                    admitted.wait();
+                    assert!(parent.snapshot().iter().all(|a| a.used() <= a.limit()));
+                    drop(result); // includes partial-reservation rollback on refusal
+                    success as usize
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .map(|w| w.join().unwrap())
+            .sum::<usize>()
+    });
+    assert_eq!(successes, 1);
+    empty(&parent);
+    let slots = parent
+        .snapshot()
+        .into_iter()
+        .find(|a| a.kind() == ResourceKind::HandlerSlotsGlobalMax)
+        .unwrap();
+    assert_eq!(slots.peak(), 1);
+    assert_eq!(p.created.load(SeqCst), 0);
+}
+
+mod last_root {
+    use super::*;
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+
+    #[test]
+    fn parent_observation_cannot_block_reserved_or_closed_drop() {
+        const MODE: &str = "CLINKZ_PRODUCER_DROP_MODE";
+        const READY: &str = "CLINKZ_PRODUCER_DROP_READY";
+        if let Some(mode) = std::env::var_os(MODE) {
+            let p = Arc::new(Probe::default());
+            let (mut runtime, bank) = runtime(&p);
+            if mode == "closed" {
+                runtime.begin_close();
+                assert_eq!(
+                    step(&mut runtime, 1),
+                    Poll::Ready(ProducerInstallationState::Closed)
+                );
+            }
+            // Inspection has no guard on the bank. A caller can retain the
+            // snapshot and even its own application mutex across disposal.
+            let mut snapshot = bank.snapshot();
+            assert!(snapshot.iter().any(|a| a.used() > 0));
+            for account in &mut snapshot {
+                assert!(account.release_committed(account.used()));
+            }
+            assert!(
+                bank.snapshot().iter().any(|a| a.used() > 0),
+                "copies cannot release original charges"
+            );
+            let application_lock = Mutex::new(bank.clone());
+            let held = if mode == "unlocked" {
+                None
+            } else {
+                Some(application_lock.lock().unwrap())
+            };
+            // The parent starts its Drop watchdog only after this signal.
+            std::fs::write(std::env::var_os(READY).unwrap(), b"ready").unwrap();
+            drop(runtime);
+            empty(&bank);
+            drop(held);
+            return;
+        }
+
+        let mut outcomes = Vec::new();
+        for mode in ["unlocked", "reserved", "closed"] {
+            let directory = std::env::temp_dir().join(format!(
+                "clinkz-producer-drop-{}-{mode}",
+                std::process::id(),
+            ));
+            std::fs::create_dir(&directory).unwrap();
+            let ready = directory.join("ready");
+            let mut child = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "last_root::parent_observation_cannot_block_reserved_or_closed_drop",
+                    "--nocapture",
+                ])
+                .env(MODE, mode)
+                .env(READY, &ready)
+                .stdout(Stdio::null())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .unwrap();
+            let startup = Instant::now();
+            while !ready.exists() && startup.elapsed() < Duration::from_secs(15) {
+                if child.try_wait().unwrap().is_some() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let signalled = ready.exists();
+            let drop_started = Instant::now();
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break Some(status);
+                }
+                if !signalled || drop_started.elapsed() >= Duration::from_millis(1500) {
+                    child.kill().unwrap();
+                    child.wait().unwrap();
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            };
+            std::fs::remove_dir_all(directory).unwrap();
+            let success = signalled && status.is_some_and(|s| s.success());
+            eprintln!(
+                "{mode}: signalled={signalled}; Drop returned and accounts released={success}"
+            );
+            outcomes.push((mode, success));
+        }
+        assert!(outcomes.iter().all(|(_, success)| *success), "{outcomes:?}");
+    }
+}
+
 mod funding {
     use super::*;
     use std::{
@@ -737,13 +889,13 @@ mod funding {
     }
 
     struct FundingProbe {
-        bank: Arc<Mutex<ProducerInstallationAccounts>>,
+        bank: Arc<ProducerInstallationAccounts>,
         observed: Mutex<[u64; 3]>,
         pending_close: AtomicBool,
         fail_close: AtomicBool,
     }
     impl FundingProbe {
-        fn new(bank: Arc<Mutex<ProducerInstallationAccounts>>) -> Arc<Self> {
+        fn new(bank: Arc<ProducerInstallationAccounts>) -> Arc<Self> {
             Arc::new(Self {
                 bank,
                 observed: Mutex::new([0; 3]),
@@ -760,8 +912,8 @@ mod funding {
             drop(scratch);
         }
     }
-    fn used(bank: &Arc<Mutex<ProducerInstallationAccounts>>) -> [u64; 3] {
-        let bank = bank.lock().unwrap();
+    fn used(bank: &Arc<ProducerInstallationAccounts>) -> [u64; 3] {
+        let bank = bank.snapshot();
         [
             ResourceKind::EngineLiveBytesGlobalMax,
             ResourceKind::CompiledRuntimeBytesGlobalMax,
@@ -893,9 +1045,14 @@ mod funding {
         drop(runtime);
         empty(&b);
 
+        let sibling_probe = Arc::new(Probe::default());
+        let (sibling, sibling_bank) = super::runtime(&sibling_probe);
+        let sibling_live = used(&sibling_bank)[0];
+        drop(sibling);
+        empty(&sibling_bank);
         for original_parent in [false, true] {
             for available in [peak - 1, peak] {
-                let inherited = if original_parent { 17 } else { 0 };
+                let inherited = if original_parent { sibling_live } else { 0 };
                 let restricted = generous
                     .clone()
                     .try_with_limit(
@@ -908,10 +1065,19 @@ mod funding {
                 } else {
                     (restricted, bank(&generous))
                 };
-                b.lock().unwrap()[0]
-                    .try_reserve(inherited)
-                    .unwrap()
-                    .commit();
+                let sibling = if original_parent {
+                    let authority = super::authority(instance(1));
+                    Some(accepted(Runtime::try_new(
+                        super::prepared(&sibling_probe, &authority),
+                        authority,
+                        generous.clone(),
+                        b.clone(),
+                        Deadline::NONE,
+                    )))
+                } else {
+                    None
+                };
+                let baseline = used(&b);
                 let probe = FundingProbe::new(b.clone());
                 let (prepared, authority) = prepare(&probe);
                 let key = authority.key();
@@ -925,10 +1091,14 @@ mod funding {
                         resource: ResourceKind::EngineLiveBytesGlobalMax,
                         requested: Some(n), ..
                     } if *n == peak));
-                    assert_eq!(used(&b), [inherited, 0, 0]);
+                    assert_eq!(used(&b), baseline);
                 } else {
                     let mut runtime = accepted(result);
-                    let funded = [inherited + peak, retained, SCRATCH as u64];
+                    let funded = [
+                        inherited + peak,
+                        baseline[1] + retained,
+                        baseline[2] + SCRATCH as u64,
+                    ];
                     assert_eq!(used(&b), funded);
                     assert_eq!(
                         poll(&mut runtime),
@@ -967,14 +1137,14 @@ mod funding {
                         used(&b),
                         [
                             inherited + std::mem::size_of::<FundingRuntime>() as u64,
-                            0,
-                            0
+                            baseline[1],
+                            baseline[2]
                         ]
                     );
                     drop(runtime);
-                    assert_eq!(used(&b), [inherited, 0, 0]);
+                    assert_eq!(used(&b), baseline);
                 }
-                assert!(b.lock().unwrap()[0].release_committed(inherited));
+                drop(sibling);
                 empty(&b);
             }
         }

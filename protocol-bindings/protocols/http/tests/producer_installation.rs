@@ -30,7 +30,7 @@ std::thread_local! {
     static FAIL_SIZE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static OBSERVE_FREE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static FUNDED_AT_FREE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    static OBSERVED_BANK: std::cell::RefCell<Option<Arc<Mutex<ProducerInstallationAccounts>>>> = const { std::cell::RefCell::new(None) };
+    static OBSERVED_BANK: std::cell::RefCell<Option<Arc<ProducerInstallationAccounts>>> = const { std::cell::RefCell::new(None) };
 }
 // SAFETY: forwards the exact Layout/pointer to System; only an explicitly
 // selected allocation on this test thread is refused. Observation allocates
@@ -62,16 +62,10 @@ unsafe impl std::alloc::GlobalAlloc for AllocationObserver {
             .unwrap_or(false)
         {
             let funded = OBSERVED_BANK.with(|b| {
-                b.borrow()
-                    .as_ref()
-                    .unwrap()
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|a| {
-                        a.kind() == ResourceKind::BindingSlotStateBytesGlobalMax
-                            && a.used() >= layout.size() as u64
-                    })
+                b.borrow().as_ref().unwrap().snapshot().iter().any(|a| {
+                    a.kind() == ResourceKind::BindingSlotStateBytesGlobalMax
+                        && a.used() >= layout.size() as u64
+                })
             });
             FUNDED_AT_FREE.with(|f| f.set(funded));
         }
@@ -153,15 +147,13 @@ fn address() -> SocketAddr {
         .local_addr()
         .unwrap()
 }
-fn bank() -> Arc<Mutex<ProducerInstallationAccounts>> {
-    Arc::new(Mutex::new(producer_installation_accounts(
-        &GatewayDefaultV1::LIMITS,
-    )))
+fn bank() -> Arc<ProducerInstallationAccounts> {
+    Arc::new(producer_installation_accounts(&GatewayDefaultV1::LIMITS))
 }
 fn runtime(
     address: SocketAddr,
     generation: Generation,
-    bank: &Arc<Mutex<ProducerInstallationAccounts>>,
+    bank: &Arc<ProducerInstallationAccounts>,
 ) -> Runtime {
     let (prepared, authority) = prepare(address, generation);
     accepted(Runtime::try_new(
@@ -192,8 +184,8 @@ fn installed(r: &mut Runtime) {
 fn free(address: SocketAddr) {
     drop(TcpListener::bind(address).expect("native listener was retained"));
 }
-fn empty(b: &Arc<Mutex<ProducerInstallationAccounts>>) {
-    assert!(b.lock().unwrap().iter().all(|a| a.used() == 0));
+fn empty(b: &Arc<ProducerInstallationAccounts>) {
+    assert!(b.snapshot().iter().all(|a| a.used() == 0));
 }
 #[test]
 fn real_listener_stays_unpublished_then_paid_close_and_last_owner_drop_retire_it() {
@@ -286,12 +278,13 @@ fn occupied_port_is_a_scoped_deployment_failure_and_original_owner_drains() {
 fn parent_capacity_refusal_has_zero_native_effects_and_preserves_source_free_input() {
     let _serial = SERIAL.lock().unwrap();
     let address = address();
-    let b = bank();
-    {
-        let mut bank = b.lock().unwrap();
-        let n = bank[7].limit();
-        bank[7].try_reserve(n).unwrap().commit();
-    }
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .try_with_limit(ResourceKind::BindingRoutesGlobalMax, Some(1))
+        .unwrap();
+    let b = Arc::new(producer_installation_accounts(&limits));
+    let sibling = runtime(address, Generation::INITIAL.checked_next().unwrap(), &b);
+    let before = b.snapshot().map(|a| a.used());
     let (prepared, authority) = prepare(address, Generation::INITIAL);
     let refused = Runtime::try_new(
         prepared,
@@ -302,15 +295,13 @@ fn parent_capacity_refusal_has_zero_native_effects_and_preserves_source_free_inp
     )
     .err()
     .unwrap();
+    assert_eq!(b.snapshot().map(|a| a.used()), before);
     let ((prepared, authority, limits, original), _) = refused.into_parts();
     assert!(Arc::ptr_eq(&b, &original));
     assert_eq!(prepared.entry().program().listen_address(), address);
     free(address);
-    {
-        let mut bank = b.lock().unwrap();
-        let n = bank[7].used();
-        assert!(bank[7].release_committed(n));
-    }
+    drop(sibling);
+    empty(&b);
     let mut r = accepted(Runtime::try_new(
         prepared,
         authority,
@@ -403,7 +394,7 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
         "admission must allocate only the one fallible controlled owner"
     );
     {
-        let bank = b.lock().unwrap();
+        let bank = b.snapshot();
         assert_eq!(bank[4].used(), block as u64);
         assert_eq!(
             bank[0].used(),

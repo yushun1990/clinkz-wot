@@ -11,9 +11,9 @@ use clinkz_wot_planning::producer_execution::PreparedProducer;
 use core::{
     alloc::Layout,
     mem::size_of,
+    sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
 };
-use std::sync::Mutex;
 
 const KINDS: [K; 12] = [
     K::EngineLiveBytesGlobalMax,
@@ -30,41 +30,93 @@ const KINDS: [K; 12] = [
     K::DurableStatusBytesGlobalMax,
 ];
 /// Application-provisioned parent capacity, shared by all participating owners.
-/// The bank must not be replaced while a runtime holds charges against it.
-pub type ProducerInstallationAccounts = [ResourceAccount; 12];
+/// Limits are immutable and only funded runtime owners can change charges.
+/// Inspection returns detached snapshots, never a lock or mutable bank loan.
+///
+/// ```compile_fail,E0599
+/// use clinkz_wot_servient::producer_installation::ProducerInstallationAccounts;
+/// fn hold_parent(bank: &ProducerInstallationAccounts) {
+///     let _guard = bank.lock();
+/// }
+/// ```
+pub struct ProducerInstallationAccounts {
+    limits: [u64; 12],
+    used: [AtomicUsize; 12],
+    peak: [AtomicUsize; 12],
+}
 pub fn producer_installation_accounts(limits: &ResourceLimits) -> ProducerInstallationAccounts {
-    core::array::from_fn(|i| {
-        ResourceAccount::new(
-            SlotIndex::new(i as u32),
-            Generation::INITIAL,
-            KINDS[i],
-            limits.get(KINDS[i]).unwrap_or(0),
-        )
-    })
+    ProducerInstallationAccounts {
+        limits: core::array::from_fn(|i| limits.get(KINDS[i]).unwrap_or(0)),
+        used: core::array::from_fn(|_| AtomicUsize::new(0)),
+        peak: core::array::from_fn(|_| AtomicUsize::new(0)),
+    }
+}
+impl ProducerInstallationAccounts {
+    /// Allocation-free individual account observations, not a transaction or
+    /// reservation authority. Holding or mutating the copies cannot delay Drop
+    /// or change the original limits/charges. Concurrent admission/retirement
+    /// may occur between samples of different resource fields.
+    pub fn snapshot(&self) -> [ResourceAccount; 12] {
+        core::array::from_fn(|i| {
+            let used = self.used[i].load(Ordering::Acquire) as u64;
+            let peak = (self.peak[i].load(Ordering::Relaxed) as u64).max(used);
+            let mut account = ResourceAccount::new(
+                SlotIndex::new(i as u32),
+                Generation::INITIAL,
+                KINDS[i],
+                self.limits[i],
+            );
+            account.try_reserve(peak).expect("bounded peak").commit();
+            assert!(account.release_committed(peak - used));
+            account
+        })
+    }
+    fn try_reserve(&self, i: usize, amount: u64) -> bool {
+        // These are controlled resident bytes/items, so aggregate backing must
+        // fit the native address space. Do not require 64-bit target atomics.
+        let Ok(amount) = usize::try_from(amount) else {
+            return false;
+        };
+        match self.used[i].fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+            used.checked_add(amount)
+                .filter(|next| *next as u64 <= self.limits[i])
+        }) {
+            Ok(previous) => {
+                self.peak[i].fetch_max(previous + amount, Ordering::Relaxed);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+    fn release(&self, i: usize, amount: u64) {
+        if amount != 0 {
+            let amount = usize::try_from(amount).expect("original native-sized reservation");
+            // No mutex, callback, retry loop or deferred queue on disposal.
+            // Only the move-only charge holding these exact bytes can release
+            // them, after their physical owner has been destroyed.
+            let previous = self.used[i].fetch_sub(amount, Ordering::Release);
+            assert!(previous >= amount, "original Producer reservation");
+        }
+    }
 }
 
 struct Charge {
-    parent: Arc<Mutex<ProducerInstallationAccounts>>,
+    parent: Arc<ProducerInstallationAccounts>,
     held: [u64; 12],
 }
 impl Charge {
     fn retain_status(&mut self, bytes: u64, status: u64) {
         let keep = [bytes, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, status];
-        let mut bank = self.parent.lock().unwrap_or_else(|e| e.into_inner());
         for (i, remaining) in keep.into_iter().enumerate() {
-            assert!(bank[i].release_committed(self.held[i] - remaining));
+            self.parent.release(i, self.held[i] - remaining);
             self.held[i] = remaining;
         }
     }
 }
 impl Drop for Charge {
     fn drop(&mut self) {
-        let mut parent = self.parent.lock().unwrap_or_else(|e| e.into_inner());
         for (i, amount) in self.held.iter().copied().enumerate() {
-            assert!(
-                parent[i].release_committed(amount),
-                "original Producer reservation"
-            );
+            self.parent.release(i, amount);
         }
     }
 }
@@ -136,7 +188,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
         prepared: PreparedProducer<E, H>,
         authority: ProducerInstanceAuthority,
         limits: ResourceLimits,
-        parent: Arc<Mutex<ProducerInstallationAccounts>>,
+        parent: Arc<ProducerInstallationAccounts>,
         deadline: Deadline,
     ) -> Result<
         Self,
@@ -144,7 +196,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
             PreparedProducer<E, H>,
             ProducerInstanceAuthority,
             ResourceLimits,
-            Arc<Mutex<ProducerInstallationAccounts>>,
+            Arc<ProducerInstallationAccounts>,
         )>,
     > {
         let identity = prepared.entry().binding();
@@ -247,14 +299,10 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
             held: [0; 12],
         };
         let reserve = (|| -> CoreResult<()> {
-            let mut bank = parent.lock().unwrap_or_else(|e| e.into_inner());
             for i in 0..12 {
                 check(&limits, KINDS[i], amounts[i], quota_context)?;
-                if bank[i].kind() != KINDS[i] {
-                    return Err(invalid());
-                }
-                let limit = bank[i].limit();
-                let Some(reservation) = bank[i].try_reserve(amounts[i]) else {
+                let limit = parent.limits[i];
+                if !parent.try_reserve(i, amounts[i]) {
                     return Err(CoreError::LimitExceeded {
                         context: quota_context,
                         resource: KINDS[i],
@@ -262,8 +310,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                         requested: Some(amounts[i]),
                         observed: None,
                     });
-                };
-                reservation.commit();
+                }
                 charge.held[i] = amounts[i];
             }
             Ok(())

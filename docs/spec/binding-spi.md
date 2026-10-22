@@ -1356,9 +1356,9 @@ including before admission funding. Owned configuration snapshots are created
 only during pure preparation. Servient's `ProducerInstallationRuntime` consumes
 completed Planning preparation, consumes its exact unique instance authority,
 reserves against the supplied local limits and original shared parent accounts,
-and fallibly allocates one
-complete owner before any installation callback. It retains a Core execution
-registration, not a compiler, TD, semantic loan or logical plan-set.
+and fallibly allocates one complete owner before any installation callback. It
+retains a Core execution registration, not a compiler, TD, semantic loan or
+logical plan-set.
 
 `Reserved -> Installing -> InstalledClosed` means construction then native
 setup completion. **InstalledClosed is not LocallyReady or Serving**: it makes
@@ -1398,8 +1398,21 @@ global numeric defaults change. The installation-only field mapping is:
 | Largest contiguous allocation | Each actual owner/key block and declared largest indirect allocation, independently of aggregate retained totals. |
 | Durable status | One prebacked first-cause slot. After close, only inline terminal/status backing stays charged until root Drop. |
 
-The caller provisions the parent-account bank and must not replace it during
-loans. Separate banks confer separate capacity authority. Native participation
+The caller provisions `Arc<ProducerInstallationAccounts>` with immutable limits.
+Only move-only runtime charges can reserve/release its private counters. The
+bank exposes allocation-free detached account snapshots, never a lock guard,
+mutable bank loan or callback under synchronization. Changing or retaining a
+snapshot cannot change the original charges or delay disposal. Individual
+account samples may straddle concurrent admission/retirement; a snapshot is
+neither a coherent transaction nor reservation authority.
+
+Charge rollback, terminal reduction and final release perform a bounded number
+of pointer-width atomic subtractions, with no mutex, retry loop, deferred queue,
+allocation or poller. Native participation, registration and physical backing
+are destroyed before their charges are released. Reservations whose aggregate
+controlled backing cannot fit the native address space refuse as EngineCapacity;
+this adds no 64-bit atomic requirement or protocol-specific restriction.
+Separate banks confer separate capacity authority. Native participation
 may reference shared physical infrastructure; there is no generic listener,
 endpoint-address or one-instance/one-resource constraint. Polling cannot confer
 whole-infrastructure shutdown authority. Shared production matching/retirement
