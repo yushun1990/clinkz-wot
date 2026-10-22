@@ -1,13 +1,39 @@
 //! Optional pure preparation. HTTP instructions never enter Engine code.
 use super::{producer::*, *};
 use clinkz_wot_planning::ResolvedProducerInput;
+use clinkz_wot_planning::producer_execution::{ProducerBindingPreparation, ProducerCompiler};
+
+impl ProducerCompiler<HttpProducerExecutor> for HttpProducerConfig {
+    fn configuration(&self) -> HttpProducerConfig {
+        *self
+    }
+    fn compile(
+        &self,
+        input: ResolvedProducerInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<HttpProducerProgram>> {
+        self.compile_property_read(input, budget)
+    }
+}
+/// Pure Producer-only registration. Both actual inputs survive pairing refusal.
+pub fn try_producer_registration(
+    config: HttpProducerConfig,
+    id: BindingId,
+    generation: BindingGeneration,
+    ordinal: u32,
+) -> Result<
+    ProducerBindingPreparation<HttpProducerConfig, HttpProducerExecutor>,
+    BindingInputRejection<(HttpProducerConfig, HttpProducerExecutor)>,
+> {
+    ProducerBindingPreparation::try_new(config, producer_execution(config, id, generation, ordinal))
+}
 use clinkz_wot_td::semantic::{
     SchemaView, SemanticName, SemanticNode, SemanticScope, SemanticValue, UriVariableScope,
 };
 
 impl HttpProducerConfig {
     /// Lowers completely covered resolved input. Refusal never opens a socket.
-    /// This checkpoint supplies no registration/driver or runtime authority.
+    /// Native preparation alone supplies no runtime authority.
     pub fn compile_property_read(
         &self,
         input: ResolvedProducerInput<'_>,

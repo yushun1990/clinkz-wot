@@ -260,3 +260,12 @@ Its constructor and the current builder parameter do not prescribe the HTTP
 successor's native driver shape. This tranche may replace that Producer pairing
 and builder surface with the selected installation/infrastructure owners; it
 must not add a phase adapter solely to satisfy the superseded signature.
+
+The typed installation checkpoint uses `ProducerBindingPreparation`, the Core
+execution registration and `ProducerInstallationRuntime` directly. Its exact
+[ownership/resource boundary](../spec/binding-spi.md#host-producer-installation-checkpoint)
+ends at InstalledClosed, below publication/serviceability. It neither invokes
+nor replaces that staged facade. The remaining replacement dependency is the
+retained native request/correlation/reply owner, Core-sealed response delivery,
+and current-authority publication/dispatch integration; installation completion
+must not be used to infer those capabilities or any completion-key transition.

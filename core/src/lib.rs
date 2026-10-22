@@ -34,6 +34,8 @@ pub mod outbound;
 pub mod payload;
 #[cfg(target_has_atomic = "ptr")]
 pub mod plan;
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod producer;
 #[cfg(target_has_atomic = "ptr")]
 mod response;
 #[cfg(target_has_atomic = "ptr")]

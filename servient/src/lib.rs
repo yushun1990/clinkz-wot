@@ -7,6 +7,8 @@ extern crate alloc;
 
 pub mod consumer_property_read;
 mod error;
+#[cfg(feature = "std")]
+pub mod producer_installation;
 mod property_read;
 
 #[cfg(feature = "std")]

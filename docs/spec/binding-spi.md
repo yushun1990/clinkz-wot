@@ -1339,11 +1339,74 @@ infrastructure storage. Engine-controlled and Binding-owned backing are separate
 funded under their declared resource/disposal contracts; polling cannot initiate
 ordinary shared retirement before final registration release.
 
-Exact successor Rust driver types are to be implemented with their matching TD
-Producer lending/coverage, not emulated through the old Host stage guards.
+Successor Rust driver types use matching TD Producer lending/coverage, not
+adapters through the old Host stage guards.
 [WP-600](../work-packages/WP-600-http-producer-property-read.md) owns the actual
 HTTP loop and six completion obligations. This extraction implements neither
 that loop nor general shared-native matching/retirement.
+
+### Host Producer installation checkpoint
+
+Core's `ProducerExecutor` has associated owned native program, concrete
+configuration and `ProducerInstallation` types. The actual captured executor
+checks its native operands and constructs an installation without native
+effects. Servient's `ProducerInstallationRuntime` consumes completed Planning
+preparation, consumes its exact unique instance authority, reserves against the supplied
+local limits and original shared parent accounts, and fallibly allocates one
+complete owner before any installation callback. It retains a Core execution
+registration, not a compiler, TD, semantic loan or logical plan-set.
+
+`Reserved -> Installing -> InstalledClosed` means construction then native
+setup completion. **InstalledClosed is not LocallyReady or Serving**: it makes
+no serviceability promise and issues no accept permit. The full endpoint state
+machine's publication/dispatch path still requires retained request correlation,
+reply opportunities, response sealing and their funding. The public staged Host
+facade is not called by this path and remains regression scope pending that
+replacement. No phase-shaped compatibility implementation is supplied.
+
+Every construction/install callback consumes `BindingPolls` first; every close
+callback consumes `CleanupItems` first. Zero credit invokes neither. Optional
+caller-clock installation deadlines, configuration drift, failure and cancellation
+enter Closing with an immutable first cause. Pending/failed close retains the
+same installation. Complete-object cleanup transfer uses the existing envelope;
+refusal leaves the original runtime intact. Last owner loss uses the separately
+prepaid finite local destruction allowance without a network wait, task tail or
+blocking join. Native participation is destroyed before its executor, program
+and handler, and the owner Box is freed before its original charges are released.
+
+The scoped `ProducerInstallPolicy` is the Producer-owned Host disposal
+interpretation under ADR-0023. It does not reuse Consumer schema-2 identity/seals
+or relabel `StrictV1`. Its executor bytes include controlled indirect executor
+and captured-configuration backing; program and installation bytes cover their
+controlled indirect backing. Application handler declarations include at least
+the actual `H` Layout. Native/SDK resources follow the concrete Binding policy;
+process OOM/abort and native socket capacity are deployment assumptions. No
+global numeric defaults change. The installation-only field mapping is:
+
+| Field family | Charged/checking boundary |
+| --- | --- |
+| Engine live / compiled runtime | Actual generic owner Layout, inline runtime and complete controlled indirect maxima; local and original parent limits. |
+| Binding slot state | Actual generic boxed owner and its controlled indirect backing, including installation state. |
+| Artifact / handler state | Native entry/program/key and declared handler backing; one artifact, handler and logical route. |
+| Cleanup | Complete retained owner/indirect overlap and prebacked inline close/status storage; no extra allocation is required to move the existing owner. |
+| Poll temporary | Executor's explicit per-callback declaration and original global account. |
+| Largest contiguous allocation | Each actual owner/key block and declared largest indirect allocation, independently of aggregate retained totals. |
+| Durable status | One prebacked first-cause slot. After close, only inline terminal/status backing stays charged until root Drop. |
+
+The caller provisions the parent-account bank and must not replace it during
+loans. Separate banks confer separate capacity authority. Native participation
+may reference shared physical infrastructure; there is no generic listener,
+endpoint-address or one-instance/one-resource constraint. Polling cannot confer
+whole-infrastructure shutdown authority. Shared production matching/retirement
+remains a separate claim.
+
+HTTP's current installation is an exclusive nonzero loopback TCP listener.
+It retains the socket before fallible post-bind configuration and classifies
+native installation failures as its fresh Producer-policy DeploymentFailure.
+It never calls accept or installs a parser, semantic request slot or response
+owner; queued TCP connections are kernel/deployment state. Its native program
+and executor are available without the optional preparation feature. Native
+listener retirement is not evidence that a peer observed no connection.
 
 ## Server route SPI
 

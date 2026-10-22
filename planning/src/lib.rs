@@ -3,6 +3,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(all(feature = "std", feature = "validated-thing"))]
+pub mod producer_execution;
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
