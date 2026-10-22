@@ -97,6 +97,16 @@ pub enum SchemaItemsMode {
     Tuple,
 }
 impl<'a> SchemaView<'a> {
+    /// Declared scoped extensions and class assertions, excluding the typed
+    /// schema branches appended by TD. An extension alias cannot masquerade as
+    /// one of those branches. This query borrows already resolved nodes.
+    pub fn extension_semantics(self) -> impl Iterator<Item = SemanticNode<'a>> + 'a {
+        let context = self.0.nodes[self.0.index].schema.unwrap().context();
+        let count = context._extra_fields.len()
+            - usize::from(context._extra_fields.contains_key("@context"))
+            + usize::from(context._metadata.tags.is_some());
+        self.0.children().take(count)
+    }
     pub fn semantics(self) -> SemanticNode<'a> {
         self.0
     }

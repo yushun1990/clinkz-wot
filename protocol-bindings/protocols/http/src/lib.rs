@@ -19,7 +19,11 @@ use std::{
 mod compiler;
 #[cfg(all(test, feature = "prepare"))]
 mod identity_tests;
+mod producer;
 mod program;
+pub use producer::{HttpProducerConfig, HttpProducerProgram};
+#[cfg(feature = "prepare")]
+mod producer_compiler;
 mod transport;
 #[cfg(feature = "prepare")]
 use compiler::HttpCompiler;

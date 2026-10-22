@@ -249,3 +249,27 @@ independent exact-head completion acceptance remains required. No tranche,
 admission or gate transition follows from these tests. HTTPS/trust/security,
 Producer and embedded/hardware qualification retain their separate later
 boundaries; HTTPS/security remains a release requirement.
+
+## Producer semantic preparation
+
+`HttpProducerConfig::for_loopback` checks an application-supplied nonzero
+loopback address without I/O. With `prepare`, `compile_property_read` lowers
+Planning's completely covered `ResolvedProducerInput` into an owned
+`HttpProducerProgram`: GET, endpoint NoSec, JSON, primary status 200 and the
+exact configured authority/path/query. Default and local aliases, relative
+href, optional source id and empty Property keys are supported. Unknown scoped
+predicates, Profiles and unsupported security/response instructions refuse.
+The target limit of 64 bytes belongs to this HTTP adapter.
+
+The native program retains no source, arena, logical plan, handler or resource.
+It also carries no installation or publication authority. There is no Producer
+registration, listener, driver or public Consumer-to-Producer loop yet. Those
+must use the owned program through the admitted Core/Binding/Servient boundary;
+the old first-leaf/staged Producer path is not an HTTP fallback.
+
+Run the preparation regressions with:
+
+```sh
+cargo test --locked --offline -p clinkz-wot-binding-http --test producer_preparation
+cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test producer_lending
+```

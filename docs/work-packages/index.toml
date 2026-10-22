@@ -1140,21 +1140,21 @@ old_api_removals = [
 ]
 performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-029", "PERF-GW-030", "PERF-GW-031", "PERF-GW-032", "PERF-CS-020", "PERF-CS-021", "PERF-CS-022", "PERF-CS-023"]
 implementation_paths = [
-    "td/src/validated.rs", "td/src/semantic.rs", "td/src/semantic/facts.rs", "td/src/lib.rs",
-    "td/tests/validated_lending.rs", "td/tests/validated_admission.rs",
+    "td/src/validated.rs", "td/src/validated", "td/src/semantic.rs", "td/src/semantic/facts.rs", "td/src/lib.rs",
+    "td/tests/validated_lending.rs", "td/tests/validated_admission.rs", "td/tests/producer_lending.rs",
     "core/src/binding.rs", "planning/src/binding_compiler.rs", "core/src/plan.rs", "core/src/lib.rs",
     "core/src/handler.rs", "core/src/thing.rs", "core/src/response.rs", "core/src/serving_activation.rs",
-    "core/tests", "planning/src/property_read.rs", "planning/src/lib.rs", "planning/tests",
+    "core/tests", "planning/src/property_read.rs", "planning/src/producer_property_read.rs", "planning/src/lib.rs", "planning/tests",
     "servient/src/property_read.rs", "servient/src/servient.rs", "servient/src/lib.rs", "servient/tests",
     "protocol-bindings/protocols/http", "Cargo.toml", "Cargo.lock",
     "tools/architecture-fixtures/property-read-binding", "tools/architecture-fixtures/property-read-runner",
-    "docs/api-ownership.csv", "docs/state-machines.toml",
+    "docs/api-ownership.csv", "docs/state-machines.toml", "tools/check-api-ownership.sh",
 ]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
     "cargo test --locked --offline -p clinkz-wot-property-read-architecture-runner --lib --test producer_admission -- --test-threads=1 --nocapture",
     "cargo test --locked --offline -p clinkz-wot-binding-http -- --test-threads=1",
-    "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_lending --test builder_extension_fields_test",
+    "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_lending --test producer_lending --test builder_extension_fields_test",
     "cargo test --locked --offline -p clinkz-wot-planning --test consumer_compiler_support --test consumer_property_read_binding",
     "cargo test --locked --offline -p clinkz-wot-servient --test property_read --test consumer_property_read -- --test-threads=1",
     "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features",

@@ -2788,96 +2788,9 @@ impl<'td> ValidatedPropertyReadCursor<'td> {
         })
     }
     fn allocate_uri(&mut self) -> Result<(), Cause> {
-        // A fixed upper bound from already inspected lengths, including merge
-        // coexistence and the authority-less '/.' escape. Only the *finished*
-        // target is subject to the resolved-target ceiling: reducible paths
-        // may temporarily be longer, and must not be falsely rejected as URIs.
-        let bytes = add(
-            add(
-                self.owner
-                    .thing
-                    .base
-                    .as_ref()
-                    .map_or(0, |b| b.as_str().len()) as u64,
-                self.current_form().href.as_str().len() as u64,
-                Phase::Semantics,
-            )?,
-            4,
-            Phase::Semantics,
-        )?;
-        let capacity = usize::try_from(bytes).map_err(|_| arithmetic(Phase::Semantics))?;
-        let layout = Layout::array::<u8>(capacity).map_err(|_| arithmetic(Phase::Semantics))?;
-        if capacity <= self.scratch.capacity {
-            self.scratch.len = 0;
-            return Ok(());
-        }
-        // The previous target is no longer lent. Its block release was prepaid;
-        // release before the new acquisition, with no unnecessary copy/growth.
-        self.scratch.release(&mut self.owner.stack.ledger);
-        let retained = Layout::array::<Frame<'td>>(self.owner.stack.frames.capacity)
-            .unwrap()
-            .size() as u64;
-        let temporary = add(
-            add(retained, bytes, Phase::Semantics)?,
-            inline_bytes(),
-            Phase::Semantics,
-        )?;
-        for kind in [
-            R::AdmissionTemporaryBytesPerOperationMax,
-            R::AdmissionTemporaryBytesGlobalMax,
-            R::PeakLiveBytesPerAdmissionMax,
-        ] {
-            self.owner.policy.check(kind, temporary, Phase::Semantics)?;
-        }
-        let live = add(
-            add(
-                self.owner.stack.ledger.live_bytes(),
-                bytes,
-                Phase::Semantics,
-            )?,
-            inline_bytes(),
-            Phase::Semantics,
-        )?;
-        for kind in [
-            R::AdmissionPeakLiveBytesGlobalMax,
-            R::EngineLiveBytesGlobalMax,
-        ] {
-            self.owner.policy.check(kind, live, Phase::Semantics)?;
-        }
-        self.owner.policy.check(
-            R::LargestContiguousAllocationBytesMax,
-            bytes,
-            Phase::Semantics,
-        )?;
-        let reservation = self
-            .owner
-            .stack
-            .ledger
-            .try_reserve_temporary(R::AdmissionTemporaryBytesPerOperationMax, bytes)
-            .ok_or(Cause::Limit(ValidatedThingLimit {
-                kind: R::AdmissionTemporaryBytesPerOperationMax,
-                configured: self
-                    .owner
-                    .policy
-                    .get(R::AdmissionTemporaryBytesPerOperationMax),
-                observed: temporary,
-                phase: Phase::Semantics,
-            }))?;
-        let pointer = unsafe { alloc(layout) };
-        if pointer.is_null() {
-            return Err(Cause::Failed(ValidatedThingFailure {
-                kind: ValidatedThingFailureKind::AllocationFailed,
-                phase: Phase::Semantics,
-                requested_bytes: bytes,
-            }));
-        }
-        reservation.commit();
-        self.scratch = UriBlock {
-            pointer,
-            capacity,
-            len: 0,
-        };
-        Ok(())
+        let href = self.current_form().href.as_str();
+        self.owner
+            .allocate_uri_block(&mut self.scratch, href, inline_bytes())
     }
     fn tick_semantics(&mut self, budget: &mut WorkBudget) -> Result<(), Cause> {
         use LendingPhase as P;
@@ -3157,3 +3070,94 @@ struct Trace {
 #[cfg(test)]
 #[path = "../tests/support/validated_admission_private.rs"]
 mod tests;
+
+impl<'td> ValidatedThingCursor<'td> {
+    fn allocate_uri_block(
+        &mut self,
+        scratch: &mut UriBlock,
+        href: &str,
+        owner_bytes: u64,
+    ) -> Result<(), Cause> {
+        // A fixed upper bound from already inspected lengths, including merge
+        // coexistence and the authority-less '/.' escape. Only the *finished*
+        // target is subject to the resolved-target ceiling: reducible paths
+        // may temporarily be longer, and must not be falsely rejected as URIs.
+        let bytes = add(
+            add(
+                self.thing.base.as_ref().map_or(0, |b| b.as_str().len()) as u64,
+                href.len() as u64,
+                Phase::Semantics,
+            )?,
+            4,
+            Phase::Semantics,
+        )?;
+        let capacity = usize::try_from(bytes).map_err(|_| arithmetic(Phase::Semantics))?;
+        let layout = Layout::array::<u8>(capacity).map_err(|_| arithmetic(Phase::Semantics))?;
+        if capacity <= scratch.capacity {
+            scratch.len = 0;
+            return Ok(());
+        }
+        // The previous target is no longer lent. Its block release was prepaid;
+        // release before the new acquisition, with no unnecessary copy/growth.
+        scratch.release(&mut self.stack.ledger);
+        let retained = Layout::array::<Frame<'td>>(self.stack.frames.capacity)
+            .unwrap()
+            .size() as u64;
+        let temporary = add(
+            add(retained, bytes, Phase::Semantics)?,
+            owner_bytes,
+            Phase::Semantics,
+        )?;
+        for kind in [
+            R::AdmissionTemporaryBytesPerOperationMax,
+            R::AdmissionTemporaryBytesGlobalMax,
+            R::PeakLiveBytesPerAdmissionMax,
+        ] {
+            self.policy.check(kind, temporary, Phase::Semantics)?;
+        }
+        let live = add(
+            add(self.stack.ledger.live_bytes(), bytes, Phase::Semantics)?,
+            owner_bytes,
+            Phase::Semantics,
+        )?;
+        for kind in [
+            R::AdmissionPeakLiveBytesGlobalMax,
+            R::EngineLiveBytesGlobalMax,
+        ] {
+            self.policy.check(kind, live, Phase::Semantics)?;
+        }
+        self.policy.check(
+            R::LargestContiguousAllocationBytesMax,
+            bytes,
+            Phase::Semantics,
+        )?;
+        let reservation = self
+            .stack
+            .ledger
+            .try_reserve_temporary(R::AdmissionTemporaryBytesPerOperationMax, bytes)
+            .ok_or(Cause::Limit(ValidatedThingLimit {
+                kind: R::AdmissionTemporaryBytesPerOperationMax,
+                configured: self.policy.get(R::AdmissionTemporaryBytesPerOperationMax),
+                observed: temporary,
+                phase: Phase::Semantics,
+            }))?;
+        let pointer = unsafe { alloc(layout) };
+        if pointer.is_null() {
+            return Err(Cause::Failed(ValidatedThingFailure {
+                kind: ValidatedThingFailureKind::AllocationFailed,
+                phase: Phase::Semantics,
+                requested_bytes: bytes,
+            }));
+        }
+        reservation.commit();
+        *scratch = UriBlock {
+            pointer,
+            capacity,
+            len: 0,
+        };
+        Ok(())
+    }
+}
+
+mod producer;
+pub use producer::*;

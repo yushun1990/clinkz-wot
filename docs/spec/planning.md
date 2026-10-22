@@ -1938,6 +1938,25 @@ Neither a publicly constructible fact nor a configuration digest is a coverage
 certificate. Source loans end before install; source ownership, if requested for
 TD retrieval, is explicit and separate from runtime execution.
 
+The semantic preparation checkpoint uses `ValidatedThing::into_producer` to
+visit root, Property, Action and Event scopes and every Form. The TD continuation
+lends full effective operation sets, original empty declarations, inherited
+security and resolved targets using the original validation work/account owner.
+`ProducerPropertyReadAdmission` checks the entire draft and exact supplied
+handler key before `with_input` lends a `ResolvedProducerInput` to native
+lowering. Its initial single-Property/single-Form restriction is local to this
+adapter. The TD continuation itself does not filter by protocol or operation.
+The Host semantic arena remains charged to the original ledger until physical
+release, including refusal and callback unwinding.
+
+This checkpoint yields pure source-free native preparation data only. `Covered`
+certifies shape and key matching, not effective security, Binding support,
+registered handler existence or installation authority. It does not construct
+`ProducerExecutionEntry`, pair an executor, or enter Servient. The successor
+must capture actual registration/policy and handler capability, fund the entry
+and native driver, and replace the old staged Host path before installing.
+The first-leaf Producer projection below is not a fallback for this checkpoint.
+
 ## Property Read Producer-route projection
 
 The package-local Property Read plan slice initially completed a private

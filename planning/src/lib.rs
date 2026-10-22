@@ -204,3 +204,10 @@ pub use error::{BindingError, BindingResult};
 pub use error_status::error_status;
 pub use form::*;
 pub use uri_template::{TemplateExpandError, expand_uri_template, expand_uri_template_strict};
+
+#[cfg(all(feature = "std", feature = "validated-thing"))]
+mod producer_property_read;
+#[cfg(all(feature = "std", feature = "validated-thing"))]
+pub use producer_property_read::{
+    ProducerPropertyReadAdmission, ProducerPropertyReadStep, ResolvedProducerInput,
+};
