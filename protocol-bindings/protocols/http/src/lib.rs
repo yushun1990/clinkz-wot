@@ -21,9 +21,14 @@ mod compiler;
 mod identity_tests;
 mod producer;
 mod program;
-pub use producer::{HttpProducerConfig, HttpProducerProgram};
+pub use producer::{
+    HttpProducerConfig, HttpProducerExecutor, HttpProducerInstallation, HttpProducerProgram,
+    producer_execution,
+};
 #[cfg(feature = "prepare")]
 mod producer_compiler;
+#[cfg(feature = "prepare")]
+pub use producer_compiler::try_producer_registration;
 mod transport;
 #[cfg(feature = "prepare")]
 use compiler::HttpCompiler;

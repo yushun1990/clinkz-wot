@@ -1949,12 +1949,51 @@ adapter. The TD continuation itself does not filter by protocol or operation.
 The Host semantic arena remains charged to the original ledger until physical
 release, including refusal and callback unwinding.
 
-This checkpoint yields pure source-free native preparation data only. `Covered`
+The semantic continuation alone yields pure source-free native data. `Covered`
 certifies shape and key matching, not effective security, Binding support,
-registered handler existence or installation authority. It does not construct
-`ProducerExecutionEntry`, pair an executor, or enter Servient. The successor
-must capture actual registration/policy and handler capability, fund the entry
-and native driver, and replace the old staged Host path before installing.
+registered handler existence or installation authority.
+
+`ProducerBindingPreparation<C,E>` pairs an open `ProducerCompiler<E>` with the
+actual `ProducerExecutor`: associated native program type, complete concrete
+configuration equality, captured registration identity/policy and executor
+operand validation. The compiler lends a passive allocation-free configuration
+view. Pair construction accepts a separately caller-provisioned owned
+configuration, checks both compiler and executor against it, and moves it without
+allocating or duplicating its backing. Mismatch returns all three original
+inputs. No Clone or Copy requirement applies to the concrete configuration. This
+removes the implicit Planning-owned duplicate; it is not a startup-capacity
+exemption. Input provisioning remains the caller's responsibility, and retained configuration
+backing remains part of the subsequent funded runtime admission. Each preparation
+attempt consumes one `BindingPolls` credit before configuration/identity/policy
+queries or semantic lending. Its compiler recheck borrows that view, and the
+executor compares the captured value by passive, allocation-free
+`configuration_matches` queries, including before runtime funding. Zero-credit
+retries return the original pair/handler without queries, copies or semantic
+arena allocation; the compiler's lowering retains its own budget contract.
+It exposes no mutable executor loan. Only complete
+coverage plus the exact owned `ProducerHandlerRegistration<H>` can produce its
+privately constructed `PreparedProducer<E,H>`. Refusal returns the pair and
+registered capability. Insufficient credit returns them for retry. The Property
+key moves into the Core `ProducerExecutionEntry`; empty keys need no sentinel.
+Registration requires a `ProducerInstanceAuthority` borrow and retains its
+opaque incarnation key as well as `ThingSlotId`. The entry retains that same
+incarnation key. Runtime admission consumes the identical move-only authority;
+a fresh authority with copied slot/generation values cannot reuse an old entry.
+Incarnations refuse on counter exhaustion rather than wrapping. Keys are lookup
+data, not publication permits, source ids or physical program identities. This
+checkpoint does not use a source TD id at all.
+
+`PreparedProducer::into_execution` consumes the preparation proof into Core's
+source-free `ProducerExecutionRegistration`. Only the latter is retained during
+native execution. The compiler and all TD/arena loans end before runtime
+admission. Core data constructors are not coverage certificates: they cannot
+forge Planning's completed wrapper. Configuration/policy and native operands
+are rechecked before construction and installation. Inline/Copy programs and
+an independently replaceable logical plan-set remain unnecessary.
+
+The [installation contract](binding-spi.md#host-producer-installation-checkpoint)
+funds this entry and a closed native installation. It does not yet supply the
+request/response bridge or replace the public staged Host expose facade.
 The first-leaf Producer projection below is not a fallback for this checkpoint.
 
 ## Property Read Producer-route projection

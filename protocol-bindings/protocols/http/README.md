@@ -262,9 +262,19 @@ predicates, Profiles and unsupported security/response instructions refuse.
 The target limit of 64 bytes belongs to this HTTP adapter.
 
 The native program retains no source, arena, logical plan, handler or resource.
-It also carries no installation or publication authority. There is no Producer
-registration, listener, driver or public Consumer-to-Producer loop yet. Those
-must use the owned program through the admitted Core/Binding/Servient boundary;
+It also carries no installation or publication authority. `producer_execution`
+supplies a runtime-only executor; optional `try_producer_registration` pairs the
+actual executor with pure native preparation. The completed registered handler,
+program and local instance enter `ProducerInstallationRuntime`, which funds the
+retained owner before a real nonblocking listener is installed. No Tokio runtime
+or dummy Consumer is needed. Occupied-port/FD failure, cancellation and root
+loss retain/dispose the same owner and preserve original accounts.
+
+The resulting `InstalledClosed` state issues no accept permit or Serving state.
+There is no accept/parser/request/response bridge or public Consumer-to-Producer
+loop yet. This installation is a production checkpoint, not a usable HTTP
+service. Its next dependency is the funded retained request/reply bridge and
+Servient publication/dispatch on the replacement Host facade;
 the old first-leaf/staged Producer path is not an HTTP fallback.
 
 Run the preparation regressions with:
@@ -272,4 +282,6 @@ Run the preparation regressions with:
 ```sh
 cargo test --locked --offline -p clinkz-wot-binding-http --test producer_preparation
 cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test producer_lending
+cargo test --locked --offline -p clinkz-wot-binding-http --test producer_installation -- --test-threads=1
+cargo test --locked --offline -p clinkz-wot-servient --test producer_installation -- --test-threads=1
 ```

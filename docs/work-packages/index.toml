@@ -1122,7 +1122,9 @@ authoritative_artifacts = [
     "docs/work-packages/WP-600-protocol-bindings.md", "docs/work-packages/index.toml",
 ]
 api_items = [
-    "ResolvedProducerInput", "ProducerExecutionEntry",
+    "ResolvedProducerInput", "ProducerExecutionEntry", "ProducerExecutionRegistration",
+    "ProducerCompiler", "ProducerBindingPreparation", "PreparedProducer",
+    "ProducerExecutor", "ProducerInstallation", "ProducerInstallationRuntime",
     "BindingCompilerExtension",
     "BindingResourceContract", "HandlerContext", "RouteActivationPermit",
     "RouteResponseOpportunity", "RouteInboundResponse",
@@ -1142,6 +1144,7 @@ performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-GW-028", "PERF-GW-0
 implementation_paths = [
     "td/src/validated.rs", "td/src/validated", "td/src/semantic.rs", "td/src/semantic/facts.rs", "td/src/lib.rs",
     "td/tests/validated_lending.rs", "td/tests/validated_admission.rs", "td/tests/producer_lending.rs",
+    "core/src/producer.rs", "planning/src/producer_execution.rs", "servient/src/producer_installation.rs",
     "core/src/binding.rs", "planning/src/binding_compiler.rs", "core/src/plan.rs", "core/src/lib.rs",
     "core/src/handler.rs", "core/src/thing.rs", "core/src/response.rs", "core/src/serving_activation.rs",
     "core/tests", "planning/src/property_read.rs", "planning/src/producer_property_read.rs", "planning/src/lib.rs", "planning/tests",
