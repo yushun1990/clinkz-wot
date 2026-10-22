@@ -11,7 +11,9 @@ use crate::{
     thing::Thing,
 };
 use alloc::{alloc::alloc, collections::BTreeMap, string::String, vec::Vec};
-use core::{alloc::Layout, mem::size_of};
+use core::alloc::Layout;
+#[cfg(test)]
+use core::mem::size_of;
 use serde_json::{Map, Number, Value};
 
 mod facts;
@@ -173,7 +175,14 @@ struct Selected<'a> {
 }
 impl<'a> ResolvedSemanticDocument<'a> {
     pub const fn capacity_bytes() -> u64 {
-        (NODES * size_of::<Node<'a>>() + SCOPES * size_of::<Scope<'a>>()) as u64
+        let [nodes, scopes] = Self::allocation_layouts();
+        (nodes.size() + scopes.size()) as u64
+    }
+    pub(crate) const fn allocation_layouts() -> [Layout; 2] {
+        [
+            Layout::new::<[Node<'a>; NODES]>(),
+            Layout::new::<[Scope<'a>; SCOPES]>(),
+        ]
     }
     pub fn scope(&self, scope: SemanticScope<'_>) -> Option<SemanticNode<'_>> {
         self.scopes

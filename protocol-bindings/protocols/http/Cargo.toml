@@ -29,7 +29,7 @@ tokio = { version = "=1.52.3", default-features = false, features = ["net", "rt"
 
 [features]
 default = ["prepare"]
-prepare = ["dep:clinkz-wot-planning", "dep:clinkz-wot-td"]
+prepare = ["dep:clinkz-wot-planning", "dep:clinkz-wot-td", "clinkz-wot-planning/validated-thing"]
 
 [[example]]
 name = "read_property"

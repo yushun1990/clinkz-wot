@@ -143,8 +143,9 @@ pub use core::data_type::AbsoluteUri;
 pub use validated::ValidatedSemanticError;
 #[cfg(feature = "validated-thing")]
 pub use validated::{
-    ValidatedPropertyReadCursor, ValidatedPropertyReadEvent, ValidatedPropertyReadForm,
-    ValidatedPropertyReadStep, ValidatedTextSequence, ValidatedThing,
+    ValidatedProducerCursor, ValidatedProducerEvent, ValidatedProducerForm, ValidatedProducerScope,
+    ValidatedProducerStep, ValidatedPropertyReadCursor, ValidatedPropertyReadEvent,
+    ValidatedPropertyReadForm, ValidatedPropertyReadStep, ValidatedTextSequence, ValidatedThing,
     ValidatedThingAdmissionConfig, ValidatedThingCause, ValidatedThingConfigError,
     ValidatedThingConfigErrorKind, ValidatedThingCursor, ValidatedThingFailure,
     ValidatedThingFailureKind, ValidatedThingInvalid, ValidatedThingInvalidKind,
