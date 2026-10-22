@@ -358,7 +358,7 @@ fn compiler_configuration_and_producer_policy_identity_are_checked_without_io() 
     let refused = ProducerBindingPreparation::try_new(a, e).err().unwrap();
     let (c, e) = refused.into_input();
     assert_eq!(c, a);
-    assert_eq!(e.configuration(), b);
+    assert!(e.configuration_matches(&b));
     assert_ne!(
         producer_execution(a, BindingId::new(601), BindingGeneration::INITIAL, 0)
             .identity()
@@ -407,6 +407,10 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
         assert_eq!(bank[4].used(), block as u64);
         assert_eq!(
             bank[0].used(),
+            (block + std::mem::size_of::<Runtime>()) as u64 + 1024
+        );
+        assert_eq!(
+            bank[1].used(),
             (block + std::mem::size_of::<Runtime>()) as u64
         );
     }

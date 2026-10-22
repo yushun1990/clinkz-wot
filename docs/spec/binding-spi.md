@@ -1350,9 +1350,13 @@ that loop nor general shared-native matching/retirement.
 Core's `ProducerExecutor` has associated owned native program, concrete
 configuration and `ProducerInstallation` types. The actual captured executor
 checks its native operands and constructs an installation without native
-effects. Servient's `ProducerInstallationRuntime` consumes completed Planning
-preparation, consumes its exact unique instance authority, reserves against the supplied
-local limits and original shared parent accounts, and fallibly allocates one
+effects. Configuration matching borrows the captured configuration; it and
+identity/policy queries and operand validation are passive and allocation-free,
+including before admission funding. Owned configuration snapshots are created
+only during pure preparation. Servient's `ProducerInstallationRuntime` consumes
+completed Planning preparation, consumes its exact unique instance authority,
+reserves against the supplied local limits and original shared parent accounts,
+and fallibly allocates one
 complete owner before any installation callback. It retains a Core execution
 registration, not a compiler, TD, semantic loan or logical plan-set.
 
@@ -1385,11 +1389,12 @@ global numeric defaults change. The installation-only field mapping is:
 
 | Field family | Charged/checking boundary |
 | --- | --- |
-| Engine live / compiled runtime | Actual generic owner Layout, inline runtime and complete controlled indirect maxima; local and original parent limits. |
+| Engine live | Checked sum of actual generic owner Layout, inline runtime, complete retained controlled indirect maxima and additional callback/disposal temporary backing; local and original parent limits. The peak remains reserved through physical disposal. |
+| Compiled runtime | Actual generic owner Layout, inline runtime and complete retained controlled indirect maxima, separately from callback temporary backing. |
 | Binding slot state | Actual generic boxed owner and its controlled indirect backing, including installation state. |
 | Artifact / handler state | Native entry/program/key and declared handler backing; one artifact, handler and logical route. |
 | Cleanup | Complete retained owner/indirect overlap and prebacked inline close/status storage; no extra allocation is required to move the existing owner. |
-| Poll temporary | Executor's explicit per-callback declaration and original global account. |
+| Poll temporary | Executor's explicit per-callback/disposal declaration and original global account, overlapping the Engine live reservation. |
 | Largest contiguous allocation | Each actual owner/key block and declared largest indirect allocation, independently of aggregate retained totals. |
 | Durable status | One prebacked first-cause slot. After close, only inline terminal/status backing stays charged until root Drop. |
 

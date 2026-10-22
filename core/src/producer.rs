@@ -44,6 +44,9 @@ pub struct ProducerInstallPolicy {
     pub executor_bytes: u64,
     pub program_bytes: u64,
     pub installation_bytes: u64,
+    /// Maximum additional controlled backing during construction, polling or
+    /// finite local disposal, simultaneous with the retained owner. Reserved in
+    /// the Engine live peak as well as the callback-temporary account.
     pub temporary_bytes: u64,
     /// Largest single controlled indirect allocation, independently of sums.
     pub largest_indirect_allocation: u64,
@@ -148,11 +151,16 @@ pub trait ProducerInstallation: Send + 'static {
 /// An actual captured executor, independently of optional preparation. Native
 /// types and complete typed configuration are paired, then `check_program`
 /// checks native operands; matching tags alone do not authorize execution.
+/// Configuration matching, identity/policy queries and operand validation run
+/// before funding: they must be passive and allocation-free. Only preparation
+/// obtains an owned configuration snapshot from the matching compiler.
 pub trait ProducerExecutor: Send + 'static {
     type Program: Send + 'static;
     type Configuration: Clone + Eq + Send + 'static;
     type Installation: ProducerInstallation;
-    fn configuration(&self) -> Self::Configuration;
+    /// Compare the complete current configuration with the borrowed captured
+    /// value without cloning it, allocating or performing native effects.
+    fn configuration_matches(&self, captured: &Self::Configuration) -> bool;
     fn identity(&self) -> BindingRegistrationIdentity;
     fn install_policy(&self) -> ProducerInstallPolicy;
     /// Pure validation of native operands and complete controlled backing
@@ -211,7 +219,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler> ProducerExecutionRegistration<
         self.policy
     }
     pub fn check_current(&self) -> CoreResult<()> {
-        if self.executor.configuration() != self.configuration
+        if !self.executor.configuration_matches(&self.configuration)
             || self.executor.identity() != self.entry.binding()
             || self.executor.install_policy() != self.policy
         {

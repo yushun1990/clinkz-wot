@@ -124,8 +124,8 @@ impl ProducerExecutor for Executor {
     type Program = Program;
     type Configuration = usize;
     type Installation = Installation;
-    fn configuration(&self) -> usize {
-        self.0.policy.load(SeqCst)
+    fn configuration_matches(&self, captured: &usize) -> bool {
+        self.0.policy.load(SeqCst) == *captured
     }
     fn identity(&self) -> BindingRegistrationIdentity {
         BindingRegistrationIdentity::new(
@@ -328,7 +328,7 @@ fn actual_configuration_registered_key_and_current_instance_refuse_before_constr
     .unwrap();
     let (c, e) = refused.into_input();
     assert_eq!(c.config, 1);
-    assert_eq!(e.configuration(), 0);
+    assert!(e.configuration_matches(&0));
     drop((c, e));
     let td = td();
     let mut a = coverage(&td);
@@ -604,7 +604,9 @@ fn two_logical_instances_can_retain_one_physical_native_owner() {
         type Configuration = ();
         type Program = ();
         type Installation = SharedInstallation;
-        fn configuration(&self) {}
+        fn configuration_matches(&self, _: &()) -> bool {
+            true
+        }
         fn identity(&self) -> BindingRegistrationIdentity {
             BindingRegistrationIdentity::new(
                 BindingId::new(900),
@@ -697,4 +699,340 @@ fn two_logical_instances_can_retain_one_physical_native_owner() {
     drop(sibling);
     assert_eq!(closed.load(SeqCst), 1);
     empty(&b);
+}
+
+mod funding {
+    use super::*;
+    use std::{
+        alloc::{GlobalAlloc, Layout, System},
+        cell::Cell,
+    };
+
+    const SCRATCH: usize = 8192;
+    thread_local! {
+        static TRACE: Cell<bool> = const { Cell::new(false) };
+        static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
+    }
+    struct AllocationObserver;
+    // Forward every allocation unchanged; count only the opted-in test thread.
+    unsafe impl GlobalAlloc for AllocationObserver {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            if TRACE.try_with(Cell::get).unwrap_or(false) {
+                let _ = ALLOCATIONS.try_with(|n| n.set(n.get() + 1));
+            }
+            unsafe { System.alloc(layout) }
+        }
+        unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+            unsafe { System.dealloc(pointer, layout) }
+        }
+    }
+    #[global_allocator]
+    static ALLOCATOR: AllocationObserver = AllocationObserver;
+    fn allocations<T>(f: impl FnOnce() -> T) -> (T, usize) {
+        ALLOCATIONS.with(|n| n.set(0));
+        TRACE.with(|n| n.set(true));
+        let result = f();
+        TRACE.with(|n| n.set(false));
+        (result, ALLOCATIONS.with(Cell::get))
+    }
+
+    struct FundingProbe {
+        bank: Arc<Mutex<ProducerInstallationAccounts>>,
+        observed: Mutex<[u64; 3]>,
+        pending_close: AtomicBool,
+        fail_close: AtomicBool,
+    }
+    impl FundingProbe {
+        fn new(bank: Arc<Mutex<ProducerInstallationAccounts>>) -> Arc<Self> {
+            Arc::new(Self {
+                bank,
+                observed: Mutex::new([0; 3]),
+                pending_close: AtomicBool::new(false),
+                fail_close: AtomicBool::new(false),
+            })
+        }
+        fn scratch(&self) {
+            // Real declared controlled scratch, simultaneously live with the
+            // retained owner in install, close and finite local destruction.
+            let scratch = vec![0x5au8; SCRATCH];
+            std::hint::black_box(&scratch);
+            *self.observed.lock().unwrap() = used(&self.bank);
+            drop(scratch);
+        }
+    }
+    fn used(bank: &Arc<Mutex<ProducerInstallationAccounts>>) -> [u64; 3] {
+        let bank = bank.lock().unwrap();
+        [
+            ResourceKind::EngineLiveBytesGlobalMax,
+            ResourceKind::CompiledRuntimeBytesGlobalMax,
+            ResourceKind::BindingPollTemporaryBytesGlobalMax,
+        ]
+        .map(|kind| bank.iter().find(|a| a.kind() == kind).unwrap().used())
+    }
+    struct FundingExecutor {
+        configuration: Vec<u8>,
+        probe: Arc<FundingProbe>,
+    }
+    struct FundingCompiler(Vec<u8>);
+    struct FundingInstallation(Arc<FundingProbe>);
+    impl ProducerCompiler<FundingExecutor> for FundingCompiler {
+        fn configuration(&self) -> Vec<u8> {
+            self.0.clone()
+        }
+        fn compile(
+            &self,
+            _: ResolvedProducerInput<'_>,
+            _: &mut WorkBudget,
+        ) -> CoreResult<Option<()>> {
+            Ok(Some(()))
+        }
+    }
+    impl ProducerExecutor for FundingExecutor {
+        type Configuration = Vec<u8>;
+        type Program = ();
+        type Installation = FundingInstallation;
+        fn configuration_matches(&self, captured: &Vec<u8>) -> bool {
+            self.configuration == *captured
+        }
+        fn identity(&self) -> BindingRegistrationIdentity {
+            BindingRegistrationIdentity::new(
+                BindingId::new(901),
+                BindingGeneration::INITIAL,
+                BindingConfigurationDigest::new([2; 32]),
+                BindingArtifactCompatibility::new([2; 16]),
+                0,
+            )
+        }
+        fn install_policy(&self) -> ProducerInstallPolicy {
+            ProducerInstallPolicy {
+                // Both actual executor and captured configuration vectors.
+                executor_bytes: (2 * SCRATCH) as u64,
+                program_bytes: 0,
+                installation_bytes: 0,
+                temporary_bytes: SCRATCH as u64,
+                largest_indirect_allocation: SCRATCH as u64,
+                local_drop_work: 1,
+            }
+        }
+        fn check_program(&self, _: &()) -> CoreResult<()> {
+            Ok(())
+        }
+        fn create_installation(
+            &self,
+            _: &ProducerExecutionEntry<()>,
+        ) -> CoreResult<FundingInstallation> {
+            Ok(FundingInstallation(self.probe.clone()))
+        }
+    }
+    impl ProducerInstallation for FundingInstallation {
+        fn poll_install(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<()>> {
+            self.0.scratch();
+            Poll::Ready(Ok(()))
+        }
+        fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<()>> {
+            self.0.scratch();
+            if self.0.fail_close.load(SeqCst) {
+                Poll::Ready(Err(failure(3)))
+            } else if self.0.pending_close.load(SeqCst) {
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(()))
+            }
+        }
+    }
+    impl Drop for FundingInstallation {
+        fn drop(&mut self) {
+            self.0.scratch();
+        }
+    }
+    type FundingRuntime = ProducerInstallationRuntime<FundingExecutor, Handler>;
+    fn prepare(
+        probe: &Arc<FundingProbe>,
+    ) -> (
+        PreparedProducer<FundingExecutor, Handler>,
+        ProducerInstanceAuthority,
+    ) {
+        let authority = authority(instance(0));
+        let td = td();
+        let mut admission = coverage(&td);
+        let pair = accepted(ProducerBindingPreparation::try_new(
+            FundingCompiler(vec![7; SCRATCH]),
+            FundingExecutor {
+                configuration: vec![7; SCRATCH],
+                probe: probe.clone(),
+            },
+        ));
+        let prepared = accepted(pair.prepare_property_read(
+            &mut admission,
+            &authority,
+            registered(&Arc::new(Probe::default()), "", &authority),
+            &mut work(1_000_000),
+        ));
+        (prepared, authority)
+    }
+    fn poll(runtime: &mut FundingRuntime) -> Poll<ProducerInstallationState> {
+        runtime.step(&mut Context::from_waker(Waker::noop()), &mut work(1), now())
+    }
+
+    #[test]
+    fn controlled_scratch_participates_in_exact_local_and_original_parent_live_peak() {
+        let generous = GatewayDefaultV1::LIMITS.clone();
+        let b = bank(&generous);
+        let probe = FundingProbe::new(b.clone());
+        let (prepared, authority) = prepare(&probe);
+        let runtime = accepted(FundingRuntime::try_new(
+            prepared,
+            authority,
+            generous.clone(),
+            b.clone(),
+            Deadline::NONE,
+        ));
+        let retained = used(&b)[1];
+        let peak = retained.checked_add(SCRATCH as u64).unwrap();
+        assert_eq!(used(&b), [peak, retained, SCRATCH as u64]);
+        drop(runtime);
+        empty(&b);
+
+        for original_parent in [false, true] {
+            for available in [peak - 1, peak] {
+                let inherited = if original_parent { 17 } else { 0 };
+                let restricted = generous
+                    .clone()
+                    .try_with_limit(
+                        ResourceKind::EngineLiveBytesGlobalMax,
+                        Some(available + inherited),
+                    )
+                    .unwrap();
+                let (local, b) = if original_parent {
+                    (generous.clone(), bank(&restricted))
+                } else {
+                    (restricted, bank(&generous))
+                };
+                b.lock().unwrap()[0]
+                    .try_reserve(inherited)
+                    .unwrap()
+                    .commit();
+                let probe = FundingProbe::new(b.clone());
+                let (prepared, authority) = prepare(&probe);
+                let key = authority.key();
+                let result =
+                    FundingRuntime::try_new(prepared, authority, local, b.clone(), Deadline::NONE);
+                if available < peak {
+                    let refusal = result.err().expect("one below the simultaneous peak");
+                    assert_eq!(refusal.input().1.key(), key);
+                    assert!(Arc::ptr_eq(&refusal.input().3, &b));
+                    assert!(matches!(refusal.error().error(), CoreError::LimitExceeded {
+                        resource: ResourceKind::EngineLiveBytesGlobalMax,
+                        requested: Some(n), ..
+                    } if *n == peak));
+                    assert_eq!(used(&b), [inherited, 0, 0]);
+                } else {
+                    let mut runtime = accepted(result);
+                    let funded = [inherited + peak, retained, SCRATCH as u64];
+                    assert_eq!(used(&b), funded);
+                    assert_eq!(
+                        poll(&mut runtime),
+                        Poll::Ready(ProducerInstallationState::Installing)
+                    );
+                    assert_eq!(
+                        poll(&mut runtime),
+                        Poll::Ready(ProducerInstallationState::InstalledClosed)
+                    );
+                    assert_eq!(*probe.observed.lock().unwrap(), funded);
+                    runtime.cancel();
+                    probe.pending_close.store(true, SeqCst);
+                    assert!(poll(&mut runtime).is_pending());
+                    probe.pending_close.store(false, SeqCst);
+                    probe.fail_close.store(true, SeqCst);
+                    assert_eq!(
+                        poll(&mut runtime),
+                        Poll::Ready(ProducerInstallationState::Closing)
+                    );
+                    assert_eq!(used(&b), funded);
+                    assert!(matches!(
+                        runtime.first_cause(),
+                        Some(CoreError::Cancelled(_))
+                    ));
+                    probe.fail_close.store(false, SeqCst);
+                    assert_eq!(
+                        poll(&mut runtime),
+                        Poll::Ready(ProducerInstallationState::Closed)
+                    );
+                    assert_eq!(
+                        *probe.observed.lock().unwrap(),
+                        funded,
+                        "scratch in native Drop stays funded"
+                    );
+                    assert_eq!(
+                        used(&b),
+                        [
+                            inherited + std::mem::size_of::<FundingRuntime>() as u64,
+                            0,
+                            0
+                        ]
+                    );
+                    drop(runtime);
+                    assert_eq!(used(&b), [inherited, 0, 0]);
+                }
+                assert!(b.lock().unwrap()[0].release_committed(inherited));
+                empty(&b);
+            }
+        }
+    }
+
+    #[test]
+    fn allocating_configuration_is_not_cloned_before_zero_capacity_refusal_or_at_runtime() {
+        let generous = GatewayDefaultV1::LIMITS.clone();
+        let b = bank(&generous);
+        let probe = FundingProbe::new(b.clone());
+        let (prepared, authority) = prepare(&probe);
+        let (copy, control) = allocations(|| prepared.configuration().clone());
+        assert_eq!(
+            control, 1,
+            "the observer must see an owned configuration clone"
+        );
+        assert_eq!(copy.len(), SCRATCH);
+        drop(copy);
+        let zero = [
+            ResourceKind::EngineLiveBytesGlobalMax,
+            ResourceKind::BindingPollTemporaryBytesPerCallMax,
+            ResourceKind::BindingPollTemporaryBytesGlobalMax,
+        ]
+        .into_iter()
+        .fold(generous.clone(), |limits, kind| {
+            limits.try_with_limit(kind, Some(0)).unwrap()
+        });
+        let key = authority.key();
+        let (result, count) = allocations(|| {
+            FundingRuntime::try_new(prepared, authority, zero, b.clone(), Deadline::NONE)
+        });
+        assert_eq!(
+            count, 0,
+            "capacity refusal must not allocate a configuration snapshot"
+        );
+        let refusal = result.err().expect("zero capacity refusal");
+        assert_eq!(refusal.input().1.key(), key);
+        assert_eq!(refusal.input().0.configuration().len(), SCRATCH);
+        empty(&b);
+        let ((prepared, authority, _, original), _) = refusal.into_parts();
+        let (result, count) = allocations(|| {
+            FundingRuntime::try_new(prepared, authority, generous, original, Deadline::NONE)
+        });
+        assert_eq!(count, 1, "only the funded fallible owner is allocated");
+        let mut runtime = accepted(result);
+        let (state, count) = allocations(|| poll(&mut runtime));
+        assert_eq!(state, Poll::Ready(ProducerInstallationState::Installing));
+        assert_eq!(
+            count, 0,
+            "construction checks borrow the captured configuration"
+        );
+        let (state, count) = allocations(|| poll(&mut runtime));
+        assert_eq!(
+            state,
+            Poll::Ready(ProducerInstallationState::InstalledClosed)
+        );
+        assert_eq!(count, 1, "the only callback allocation is declared scratch");
+        drop(runtime);
+        empty(&b);
+    }
 }

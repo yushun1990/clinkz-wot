@@ -177,6 +177,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
             )?;
             let owned = add(size_of::<Owner<E, H>>() as u64, extra)?;
             let total = add(owned, size_of::<Self>() as u64)?;
+            let live_peak = add(total, p.temporary_bytes)?;
             let program = add(
                 add(
                     size_of::<ProducerExecutionEntry<E::Program>>() as u64,
@@ -215,7 +216,10 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                 check(&limits, kind, amount, quota_context)?;
             }
             Ok([
-                total,
+                // Temporary backing overlaps the retained owner even during
+                // cleanup/Drop. Keep this peak funded until physical disposal;
+                // compiled-runtime accounting covers only retained storage.
+                live_peak,
                 total,
                 program,
                 f.retained_bytes(),

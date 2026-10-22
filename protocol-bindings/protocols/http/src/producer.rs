@@ -108,8 +108,8 @@ impl ProducerExecutor for HttpProducerExecutor {
     type Configuration = HttpProducerConfig;
     type Program = HttpProducerProgram;
     type Installation = HttpProducerInstallation;
-    fn configuration(&self) -> Self::Configuration {
-        self.config
+    fn configuration_matches(&self, captured: &Self::Configuration) -> bool {
+        self.config == *captured
     }
     fn identity(&self) -> BindingRegistrationIdentity {
         self.identity

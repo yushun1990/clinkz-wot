@@ -8,6 +8,8 @@ use clinkz_wot_foundation::WorkBudget;
 /// Open native lowering for the matching executor type. Configuration means
 /// the complete concrete policy/operands, not merely a format or syntax tag.
 pub trait ProducerCompiler<E: ProducerExecutor> {
+    /// Owned snapshot captured during pure preparation. Runtime compares this
+    /// value passively through the executor, without requesting another copy.
     fn configuration(&self) -> E::Configuration;
     fn compile(
         &self,
@@ -28,8 +30,8 @@ pub struct ProducerBindingPreparation<C, E: ProducerExecutor> {
 
 impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, E> {
     pub fn try_new(compiler: C, executor: E) -> Result<Self, BindingInputRejection<(C, E)>> {
-        let configuration = executor.configuration();
-        if compiler.configuration() != configuration {
+        let configuration = compiler.configuration();
+        if !executor.configuration_matches(&configuration) {
             return Err(refused((compiler, executor)));
         }
         let identity = executor.identity();
@@ -56,7 +58,7 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
     ) -> Result<PreparedProducer<E, H>, BindingInputRejection<(Self, ProducerHandlerRegistration<H>)>>
     {
         if handler.instance_key() != authority.key()
-            || self.executor.configuration() != self.configuration
+            || !self.executor.configuration_matches(&self.configuration)
             || self.executor.identity() != self.identity
             || self.executor.install_policy() != self.policy
             || self.compiler.configuration() != self.configuration

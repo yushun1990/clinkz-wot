@@ -1956,7 +1956,10 @@ registered handler existence or installation authority.
 `ProducerBindingPreparation<C,E>` pairs an open `ProducerCompiler<E>` with the
 actual `ProducerExecutor`: associated native program type, complete concrete
 configuration equality, captured registration identity/policy and executor
-operand validation. It exposes no mutable executor loan. Only complete
+operand validation. The compiler supplies the owned configuration snapshot
+during pure preparation; the executor compares that captured value by passive,
+allocation-free `configuration_matches` queries, including before runtime
+funding. It exposes no mutable executor loan. Only complete
 coverage plus the exact owned `ProducerHandlerRegistration<H>` can produce its
 privately constructed `PreparedProducer<E,H>`. Refusal returns the pair and
 registered capability. Insufficient credit returns them for retry. The Property
