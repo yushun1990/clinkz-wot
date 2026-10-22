@@ -3,14 +3,15 @@
 #![allow(clippy::result_large_err)]
 use crate::{ProducerPropertyReadAdmission, ResolvedProducerInput};
 use clinkz_wot_core::{producer::*, *};
-use clinkz_wot_foundation::WorkBudget;
+use clinkz_wot_foundation::{WorkBudget, WorkClass};
 
 /// Open native lowering for the matching executor type. Configuration means
 /// the complete concrete policy/operands, not merely a format or syntax tag.
 pub trait ProducerCompiler<E: ProducerExecutor> {
-    /// Owned snapshot captured during pure preparation. Runtime compares this
-    /// value passively through the executor, without requesting another copy.
-    fn configuration(&self) -> E::Configuration;
+    /// Passive, allocation-free view of the complete concrete configuration.
+    /// Pair construction captures one owned clone; funded preparation rechecks
+    /// borrow this view instead of reconstructing the owned snapshot.
+    fn configuration(&self) -> &E::Configuration;
     fn compile(
         &self,
         input: ResolvedProducerInput<'_>,
@@ -30,7 +31,7 @@ pub struct ProducerBindingPreparation<C, E: ProducerExecutor> {
 
 impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, E> {
     pub fn try_new(compiler: C, executor: E) -> Result<Self, BindingInputRejection<(C, E)>> {
-        let configuration = compiler.configuration();
+        let configuration = compiler.configuration().clone();
         if !executor.configuration_matches(&configuration) {
             return Err(refused((compiler, executor)));
         }
@@ -48,6 +49,8 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
     /// Requires full draft coverage and the exact *registered* capability.
     /// On refusal the caller retains both actual inputs. Insufficient step
     /// credit likewise returns the pair and handler, with no installation.
+    /// One BindingPolls credit funds the passive pair rechecks before any
+    /// compiler/executor query or semantic loan; lowering uses its own budget.
     #[allow(clippy::type_complexity)]
     pub fn prepare_property_read<H: ReadPropertyHandler + Send + 'static>(
         self,
@@ -57,11 +60,19 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
         budget: &mut WorkBudget,
     ) -> Result<PreparedProducer<E, H>, BindingInputRejection<(Self, ProducerHandlerRegistration<H>)>>
     {
-        if handler.instance_key() != authority.key()
-            || !self.executor.configuration_matches(&self.configuration)
+        if handler.instance_key() != authority.key() {
+            return Err(refused((self, handler)));
+        }
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Err(BindingInputRejection::new(
+                (self, handler),
+                BindingOperationalError::new(CoreError::Backpressure(context())),
+            ));
+        }
+        if !self.executor.configuration_matches(&self.configuration)
             || self.executor.identity() != self.identity
             || self.executor.install_policy() != self.policy
-            || self.compiler.configuration() != self.configuration
+            || self.compiler.configuration() != &self.configuration
         {
             return Err(refused((self, handler)));
         }

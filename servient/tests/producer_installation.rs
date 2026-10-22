@@ -109,8 +109,8 @@ impl Drop for Compiler {
     }
 }
 impl ProducerCompiler<Executor> for Compiler {
-    fn configuration(&self) -> usize {
-        self.config
+    fn configuration(&self) -> &usize {
+        &self.config
     }
     fn compile(
         &self,
@@ -635,7 +635,9 @@ fn two_logical_instances_can_retain_one_physical_native_owner() {
     }
     struct SharedCompiler;
     impl ProducerCompiler<SharedExecutor> for SharedCompiler {
-        fn configuration(&self) {}
+        fn configuration(&self) -> &() {
+            &()
+        }
         fn compile(
             &self,
             _: ResolvedProducerInput<'_>,
@@ -893,6 +895,9 @@ mod funding {
         observed: Mutex<[u64; 3]>,
         pending_close: AtomicBool,
         fail_close: AtomicBool,
+        compiler_queries: AtomicUsize,
+        executor_queries: AtomicUsize,
+        compiler_calls: AtomicUsize,
     }
     impl FundingProbe {
         fn new(bank: Arc<ProducerInstallationAccounts>) -> Arc<Self> {
@@ -901,6 +906,9 @@ mod funding {
                 observed: Mutex::new([0; 3]),
                 pending_close: AtomicBool::new(false),
                 fail_close: AtomicBool::new(false),
+                compiler_queries: AtomicUsize::new(0),
+                executor_queries: AtomicUsize::new(0),
+                compiler_calls: AtomicUsize::new(0),
             })
         }
         fn scratch(&self) {
@@ -925,17 +933,19 @@ mod funding {
         configuration: Vec<u8>,
         probe: Arc<FundingProbe>,
     }
-    struct FundingCompiler(Vec<u8>);
+    struct FundingCompiler(Vec<u8>, Arc<FundingProbe>);
     struct FundingInstallation(Arc<FundingProbe>);
     impl ProducerCompiler<FundingExecutor> for FundingCompiler {
-        fn configuration(&self) -> Vec<u8> {
-            self.0.clone()
+        fn configuration(&self) -> &Vec<u8> {
+            self.1.compiler_queries.fetch_add(1, SeqCst);
+            &self.0
         }
         fn compile(
             &self,
             _: ResolvedProducerInput<'_>,
             _: &mut WorkBudget,
         ) -> CoreResult<Option<()>> {
+            self.1.compiler_calls.fetch_add(1, SeqCst);
             Ok(Some(()))
         }
     }
@@ -944,6 +954,7 @@ mod funding {
         type Program = ();
         type Installation = FundingInstallation;
         fn configuration_matches(&self, captured: &Vec<u8>) -> bool {
+            self.probe.executor_queries.fetch_add(1, SeqCst);
             self.configuration == *captured
         }
         fn identity(&self) -> BindingRegistrationIdentity {
@@ -1008,7 +1019,7 @@ mod funding {
         let td = td();
         let mut admission = coverage(&td);
         let pair = accepted(ProducerBindingPreparation::try_new(
-            FundingCompiler(vec![7; SCRATCH]),
+            FundingCompiler(vec![7; SCRATCH], probe.clone()),
             FundingExecutor {
                 configuration: vec![7; SCRATCH],
                 probe: probe.clone(),
@@ -1024,6 +1035,75 @@ mod funding {
     }
     fn poll(runtime: &mut FundingRuntime) -> Poll<ProducerInstallationState> {
         runtime.step(&mut Context::from_waker(Waker::noop()), &mut work(1), now())
+    }
+
+    #[test]
+    fn zero_binding_credit_preparation_retries_keep_owned_configuration_without_allocating() {
+        let generous = GatewayDefaultV1::LIMITS.clone();
+        let parent = bank(&generous);
+        let probe = FundingProbe::new(parent.clone());
+        let authority = authority(instance(0));
+        let td = td();
+        let mut admission = coverage(&td);
+        let configuration = vec![7u8; SCRATCH];
+        let (copy, control) = allocations(|| configuration.clone());
+        assert_eq!(
+            control, 1,
+            "an owned configuration clone must be observable"
+        );
+        drop(copy);
+        let mut pair = accepted(ProducerBindingPreparation::try_new(
+            FundingCompiler(configuration.clone(), probe.clone()),
+            FundingExecutor {
+                configuration,
+                probe: probe.clone(),
+            },
+        ));
+        let handler_probe = Arc::new(Probe::default());
+        let mut handler = registered(&handler_probe, "", &authority);
+        probe.compiler_queries.store(0, SeqCst);
+        probe.executor_queries.store(0, SeqCst);
+        for _ in 0..4 {
+            // Give TD traversal/allocation ample credit, isolating the absent
+            // BindingPolls allowance rather than exhausting every work class.
+            let mut budget = work(1_000_000).with_remaining(WorkClass::BindingPolls, 0);
+            let before = WorkClass::ALL.map(|class| budget.remaining(class));
+            let (result, count) = allocations(|| {
+                pair.prepare_property_read(&mut admission, &authority, handler, &mut budget)
+            });
+            assert_eq!(
+                count, 0,
+                "zero-credit retry must not clone compiler configuration"
+            );
+            assert_eq!(probe.compiler_queries.load(SeqCst), 0);
+            assert_eq!(probe.executor_queries.load(SeqCst), 0);
+            assert_eq!(probe.compiler_calls.load(SeqCst), 0);
+            let refusal = result.err().expect("insufficient BindingPolls credit");
+            assert!(matches!(
+                refusal.error().error(),
+                CoreError::Backpressure(_)
+            ));
+            assert_eq!(WorkClass::ALL.map(|class| budget.remaining(class)), before);
+            (pair, handler) = refusal.into_input();
+            assert_eq!(handler.instance_key(), authority.key());
+            assert_eq!(handler_probe.handler_dropped.load(SeqCst), 0);
+            empty(&parent);
+        }
+        let prepared = accepted(pair.prepare_property_read(
+            &mut admission,
+            &authority,
+            handler,
+            &mut work(1_000_000),
+        ));
+        assert_eq!(prepared.configuration().len(), SCRATCH);
+        assert_eq!(prepared.entry().instance_key(), authority.key());
+        assert_eq!(probe.compiler_queries.load(SeqCst), 1);
+        assert_eq!(probe.executor_queries.load(SeqCst), 1);
+        assert_eq!(probe.compiler_calls.load(SeqCst), 1);
+        assert_eq!(handler_probe.handler_dropped.load(SeqCst), 0);
+        drop(prepared);
+        assert_eq!(handler_probe.handler_dropped.load(SeqCst), 1);
+        empty(&parent);
     }
 
     #[test]

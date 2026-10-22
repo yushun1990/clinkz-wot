@@ -4,8 +4,8 @@ use clinkz_wot_planning::ResolvedProducerInput;
 use clinkz_wot_planning::producer_execution::{ProducerBindingPreparation, ProducerCompiler};
 
 impl ProducerCompiler<HttpProducerExecutor> for HttpProducerConfig {
-    fn configuration(&self) -> HttpProducerConfig {
-        *self
+    fn configuration(&self) -> &HttpProducerConfig {
+        self
     }
     fn compile(
         &self,
