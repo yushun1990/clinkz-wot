@@ -354,5 +354,11 @@ The [endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
 then supplies Installing -> LocallyReady -> Serving -> Closing -> Closed.
 Publication is the existing Engine-only local linearization; Closing disables
 new permits before native teardown. Its recorded scope replaces phase-specific
-Host orchestration; implementation remains outstanding. It does not change static
-representation or silently broaden earlier gate acceptance.
+Host orchestration. The implemented source-free public path uses
+`Reserved -> Installing -> InstalledClosed`, then publication and the
+`Serving`/`Dispatching`/`Delivering` substates through Closing and Closed.
+The typed root currently owns one registration and synchronous Property Read
+handler; this is not the eventual multi-Thing/multi-Binding composition boundary.
+It does not change static representation or silently broaden earlier gate
+acceptance. The tranche owns production completion evidence and its independent
+acceptance separately from the earlier mock gate.

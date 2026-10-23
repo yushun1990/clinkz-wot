@@ -1388,6 +1388,20 @@ Pending or failure cannot surrender it. After terminal delivery the response
 is dropped; on cancellation it survives until native participation is disposed.
 There is no detached request task or independently polled response owner.
 
+This associated-type family is the admitted single-route synchronous Property
+Read implementation, not the final generic Producer dispatch model.
+`ProducerRequest` has instance/correlation only; it cannot yet select among
+multiple registered routes or operations. Likewise the consuming typed public
+`ServientBuilder::produce` builds one registration/handler root, not a completed
+multi-Thing/multi-Binding Servient. These are current API availability limits, not
+limits on the [product goals](../architecture/00-system-goals-and-context.md) or
+ADR-0024's Engine-owned logical lookup and zero-or-many-recipient boundary.
+Expanding those capabilities requires actual dispatch/ownership evidence and may
+replace these pre-v1 representations directly. An Arc lease test proves sibling
+physical retention only, not production shared matching, fan-out, separate
+shared-program funding, or retirement scheduling. None is required to claim this
+single-route HTTP tranche complete.
+
 Construction/install/accept/delivery consume `BindingPolls`, dispatch consumes
 `HandlerSteps`, and close consumes `CleanupItems`, before callbacks. Zero credit
 invokes none. Caller-clock installation and native request deadlines, clock

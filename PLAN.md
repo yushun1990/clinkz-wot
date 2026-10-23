@@ -77,10 +77,11 @@ checkpoint is package evidence and is not another global architecture gate.
 
 The admitted `WP-600-HTTP-CONSUMER-PROPERTY-READ` tranche is complete at its
 independently accepted exact head. The WP-600 package remains planned in the
-work-package index. The production HTTP Producer route and public
-Consumer-to-Producer loop, followed by separate HTTPS/security evidence, remain
-on the critical path. Embedded qualification and v1 release readiness remain
-separate.
+work-package index. The source-free HTTP Producer route and public
+Consumer-to-Producer loop are implemented within their admitted single-route
+scope; independent tranche completion acceptance, followed by separate
+HTTPS/security evidence, remains on the critical path. Embedded qualification
+and v1 release readiness remain separate.
 
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
@@ -94,10 +95,11 @@ advance the frontier safely.
    independent production-completion evidence preserved. Concrete HTTP SDKs
    have been selected and qualified for this Consumer scope. The existing
    WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
-2. Establish ADR-0024's real Preparation/Execution dependency and ownership
-   boundary, then add the production HTTP Producer route/permit/response path and public
-   bidirectional loop, then HTTPS/trust/security evidence before production
-   release. Keep this real integration ahead of unrelated broad binding work.
+2. ADR-0024's dependency cut and the admitted HTTP Producer route/permit/response
+   path and public bidirectional loop are implemented. Close their scoped
+   completion evidence through independent acceptance, then establish
+   HTTPS/trust/security evidence before production release. Keep this real
+   integration ahead of unrelated broad binding work.
 3. Broaden one-shot Core, Planning, Binding, and Servient capabilities only
    through exact admitted tranches. Before broad subscription/emission work,
    complete the corresponding domain-entry review and one minimal

@@ -1919,13 +1919,15 @@ work, with explicit limit/dependency refusal. Do not reparse serialized TD or
 JSON-LD in Planning or the Binding. The existing 128-node/32-scope/depth-16,
 65,536-unit reservation is an initial Host resolver limit, not a WoT limit.
 
-`ProducerExecutionEntry<A>` owns only the Engine's immutable dispatch/validation
-facts (Property key, operation, media/response constraints and source coordinate)
-and the paired Binding's source-free native artifact. Private fields tie it to
-the actual captured registration and route. `ThingSlotId` is live local authority;
-optional TD id is provenance. Existing `HandlerContext::thing_id()` uses the
-source id when present and an explicitly local generated id otherwise; authority
-checks always use slot/generation. The published source is not assigned that id.
+`ProducerExecutionEntry<A>` owns the instance incarnation, captured Binding
+identity, Property key and paired source-free native program. The operation is
+fixed to Property Read by this adapter; response backing limits are captured in
+the execution registration's `ProducerServicePolicy`, not a retained source
+coordinate or logical plan. Private fields preserve these facts through runtime.
+`HandlerContext` borrows the exact target and exposes the actual local
+`ProducerInstanceKey`; source ThingId and PlanId are absent on this native path.
+Neither a generated source id nor a synthetic PlanId is invented. Optional
+source/plan identities remain available for existing planned/static dispatch.
 Empty TD-valid Property keys require no sentinel encoding. The entry's own backing, checked operands and accounts follow its instance.
 Referenced immutable programs retain a distinct physical/account owner until
 all users drain. Compiler input
@@ -1992,9 +1994,9 @@ are rechecked before construction and installation. Inline/Copy programs and
 an independently replaceable logical plan-set remain unnecessary.
 
 The [installation contract](binding-spi.md#host-producer-installation-checkpoint)
-funds this entry and a closed native installation. It does not yet supply the
-request/response bridge or replace the public staged Host expose facade.
-The first-leaf Producer projection below is not a fallback for this checkpoint.
+funds this entry, native installation, request/correlation and sealed-response
+bridge through the source-free public Servient owner. It replaces the staged Host
+expose facade. The first-leaf Producer projection below is not a fallback.
 
 ## Property Read Producer-route projection
 

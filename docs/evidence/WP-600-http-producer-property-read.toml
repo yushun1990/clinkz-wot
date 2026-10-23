@@ -1,0 +1,284 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-600"
+tranche = "WP-600-HTTP-PRODUCER-PROPERTY-READ"
+base_ref = "836141898809c6e4d8e95208f59dba033f1f8dd8"
+implementation_ref = "836141898809c6e4d8e95208f59dba033f1f8dd8"
+verification_ref = "9b7c2b634ff55e07cffbd029e78f2e9c17b2a9a9"
+recorded_on = "2026-10-23"
+status = "candidate"
+acceptance_status = "pending"
+assessment = "The admitted single-route Host HTTP Producer slice is ready for independent completion review after the evidence repairs below. No production-runtime defect was confirmed in this reconstruction. All six obligations are assessed individually; passing PR #222 review/tests alone was insufficient. This author assessment grants neither independent acceptance nor a tranche/gate/package/milestone transition."
+source_revision_rule = "Production executable code, manifests and lockfile equal base_ref. bcb7f7b adds test coverage and Core module documentation only; verification_ref then collapses one nested test-only if without changing its behavior. The 17 serving tests are rerun at that successor; earlier broad runs retain their actual bcb7f7b revision. Later documentation/evidence edits do not relabel executable changes. Verification rows distinguish newly executed results from historical accepted evidence. The final PR head, its complete diff and this candidate still require fresh independent review."
+authority_revision_rule = "Authority runs validate the submitted documentation tree. Source refs in verification rows identify executable production/fixtures, not a claim that new candidate documentation already existed at those earlier commits. The final documentation revision and required lightweight CI result are identified on the PR; no self-referential commit hash is embedded here."
+
+[environment]
+host = "x86_64-unknown-linux-gnu; Linux 7.2.11-200.fc44.x86_64"
+rustc = "1.95.0 (59807616e 2026-04-14)"
+cargo = "1.95.0 (f2d3ce0bd 2026-03-21)"
+lock_git_blob = "a258678d74c32e645797f77b4bc697ae084e51f3"
+dependencies = "Unchanged Cargo.lock: Hyper 1.12.0, httparse 1.10.1, socket2 0.6.4, bytes 1.11.1, serde_json 1.0.149, Tokio 1.52.3 for Consumer/runtime tests. Producer itself uses manually polled std nonblocking sockets, not a Tokio reactor."
+configuration = "Actual HttpProducerConfig::for_loopback values use application-provisioned nonzero loopback ports. Complete policy/configuration identity is producer.rs::INSTALL_POLICY plus IP family/octets/port at implementation_ref, compatibility http-prod-rpl-v2. Test ports vary; no artifact is reused across differing configurations. Binding 601/initial/ordinal 0 serves, Binding 602/initial/ordinal 0 consumes in the public loop."
+allocator = "System; existing fixed per-thread 256-block observer, no native task. Account snapshots and descriptor counts are separate observations. Engine/source provisioning and independent peer backing precede the named native measurements unless explicitly stated otherwise."
+measurement_profile = "Initial focused observations use Cargo default unoptimized test/debug profile in a newly created target directory. Values are observations of that build and executed path, not ABI, allocator-overhead, stack or opaque-SDK maxima."
+
+[reconstruction]
+authorities = [
+    "docs/work-packages/index.toml::WP-600-HTTP-PRODUCER-PROPERTY-READ",
+    "docs/work-packages/WP-600-http-producer-property-read.md#completion-evidence-and-independent-review",
+    "docs/ADRs/0024-preparation-and-execution-boundary.org",
+    "docs/spec/planning.md#host-producer-property-read-entry",
+    "docs/spec/binding-spi.md#host-producer-endpoint-contract",
+    "docs/architecture/00-system-goals-and-context.md",
+]
+prior_acceptance = [
+    "Producer implementation admission: github-pr:216#pullrequestreview-5583560319 at 90abeb1564b6da1e0d2001c5c2c3b587b48eb465; registration recorded by PR #217.",
+    "Preparation/Execution dependency migration: github-pr:219#pullrequestreview-5601540954 at 2a5a2492aeb19ce16b23e0cc1323a5fe817e2a44 accepts the bounded dependency/compiler extraction; its evidence file's older candidate prose is historical, not HTTP acceptance. Broader execution-only Servient remains unfinished.",
+    "Consumer completion: docs/evidence/WP-600-http-consumer-property-read.toml::completion_projection at db66ec1589036880d86624cf6d1270a91fccb85d, PR #202 review 5563367696. Later native compiler/parser amendments retain their own source-specific scope.",
+    "PR #222 independently accepts bd866ab609993c05023dab397dea6ce1b4f2ff29 as a serving implementation checkpoint, explicitly withholding all six completion keys. Its merged tree is implementation_ref. The retired Host gate evidence is not transferred to this successor.",
+]
+confirmed_evidence_defects = [
+    "The original successful public loop did not exercise Consumer-to-Producer cancellation/deadline/call/client/root loss and recovery; separate-side tests could not establish that composition.",
+    "The old native allocation mode labelled unread reply stopped in Delivering before poll_response. It observed an Engine-held response, not an SDK-encoded pending reply. The renamed mode preserves that useful narrower evidence; a new actual partial-write test supplies native delivery/disposal evidence.",
+    "Planning still described generated source handler identity and an installation-only bridge; package/README prose still called Producer unimplemented and Consumer incomplete. Current source contradicts those claims. Reconcile their owners without transferring historical acceptance or changing gate status.",
+]
+smallest_remedy = "Extend the existing production serving integration target, retain its independent raw peer, qualify actual partial native delivery and per-read native retention, and correct existing authoritative prose. No new runtime layer, checker, gate, shared listener manager or HTTPS dependency is needed."
+
+[[evidence]]
+key = "producer-semantic-coverage"
+execution_status = "passed"
+acceptance_status = "pending"
+sources = ["td/src/validated/producer.rs", "planning/src/producer_property_read.rs", "planning/src/producer_execution.rs", "protocol-bindings/protocols/http/src/producer_compiler.rs"]
+tests = [
+    "protocol-bindings/protocols/http/tests/producer_preparation.rs (all six cases)",
+    "td/tests/producer_lending.rs",
+    "servient/tests/producer_installation.rs::uncovered_draft_and_zero_preparation_credit_cannot_mint_a_completed_entry",
+    "servient/tests/producer_installation.rs::actual_configuration_registered_key_and_current_instance_refuse_before_construction",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs::public_consumer_and_producer_share_capacity_and_execute_two_source_free_generations",
+]
+observations = [
+    "TD enumerates root/Property/Action/Event scopes, every Form and full effective op/security sets. Planning rejects the entire unsupported shape, not just later readable leaves. Native lowering then checks mapping/security/extension support. All thirteen former lost-semantics cases now refuse the supported-draft boundary, plus extra actions/events/root Forms/empty declarations, headers, additional responses, scopes and subprotocols.",
+    "Default read-only and explicit readproperty with writable schema, inherited security overridden by endpoint NoSec, explicit/aliased GET/status 200, relative href, absent source id and empty Property key have positive controls. Wrong exact registered handler, copied fresh authority, listen mismatch and unsupported security/proxy refuse. Covered alone grants no installation certificate; PreparedProducer construction is private, and Servient consumes its exact move-only authority.",
+    "Compiler/TD/semantic loans end before execution; the public loop executes after both source descriptions have dropped. Unsupported draft/lowering cannot construct an installation or publish. No compiler path performs I/O or obtains a handler object. The concrete target-byte limit is tested exact/one-over and remains Binding-owned.",
+]
+limits = "One Property/one Form/effective readproperty only. Unhandled predicates and advertised Profiles are conservative HTTP Producer availability refusals, not W3C invalidity or permanent Engine vocabulary rules. General DataSchema result validation remains the application's existing obligation."
+
+[[evidence]]
+key = "producer-install-ownership"
+execution_status = "passed"
+acceptance_status = "pending"
+sources = ["core/src/producer.rs", "planning/src/producer_execution.rs", "servient/src/producer_installation.rs", "protocol-bindings/protocols/http/src/producer.rs"]
+tests = [
+    "servient/tests/producer_installation.rs (external non-HTTP owned non-Copy compiler/program/executor and all lifecycle/funding cases)",
+    "protocol-bindings/protocols/http/tests/producer_installation.rs (all eight cases)",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs::public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incarnation",
+]
+observations = [
+    "External non-HTTP author uses the same public pairing, completed preparation, funding, publication, request/response seal and dispatch. Compiler destruction is counted before runtime. Immediate/Pending install, policy/config mismatch, actual occupied port, supported fallible owner allocation and FD exhaustion preserve complete original input/owner and first cause.",
+    "Partial install failure, Pending/failed close, cancellation at all setup stages and publication/dispatch/delivery stages preserve the one installation. Zero credit invokes no native constructor/poll/handler/close. Cleanup-transfer refusal returns the complete original runtime. Finite final Drop releases partial native state before program/handler/response and before original accounts.",
+    "Copied old incarnation requests are rejected before dispatch. The installation's owned reply/future cannot produce an independently arriving setup/delivery result after disposal: there is no detached successor. Pending request/response ownership is exercised through failure/close, not replaced by a fabricated HTTP late-result mechanism. Existing shared Core normal/late sealing tests retain their separate regression scope.",
+]
+limits = "The two-instance Arc session test proves physical-owner retention and sibling isolation only. It does not qualify shared production matching/retirement. Accepted-transfer execution is not claimed for this narrow owner; required refused-transfer evidence remains executable."
+
+[[evidence]]
+key = "http-producer-property-read"
+execution_status = "passed"
+acceptance_status = "pending"
+sources = ["protocol-bindings/protocols/http/src/producer_transport.rs", "protocol-bindings/protocols/http/src/producer.rs", "servient/src/producer_installation.rs"]
+tests = ["protocol-bindings/protocols/http/tests/producer_serving.rs (raw-peer publication, framing, bounds, half-close, UTF-8/JSON, reset and repeated reads)"]
+observations = [
+    "An independent std TcpStream peer observes one HTTP/1.1 200/JSON reply and one registered handler invocation. Unpublished/zero-credit paths cannot accept/dispatch/respond successfully. HandlerSteps and BindingPolls are independent debits. The public two-generation loop additionally executes default GET and aliased explicit GET/status with relative hrefs on distinct exact paths/queries.",
+    "Wrong method/path/Host, duplicate Host, body/TE framing, pipelining, Expect and upgrade refuse without dispatch. Head byte 8192 and field 16 succeed; one over fails, including unfinished-input boundaries. Complete write-half-closed requests retain their reply, while incomplete EOF retires without dispatch and permits a fresh request.",
+    "Invalid Core shape, oversize body, malformed JSON and invalid UTF-8 at top-level/nested strings/keys never become successful JSON. Unfinished-head and accepted dispatch/reply deadlines close Serving; real peer-reset during reply closes authority and retains first cause. Local completion is not remote receipt.",
+]
+
+[[evidence]]
+key = "http-consumer-producer-loop"
+execution_status = "passed"
+acceptance_status = "pending"
+tests = [
+    "protocol-bindings/protocols/http/tests/producer_serving.rs::public_consumer_and_producer_share_capacity_and_execute_two_source_free_generations",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs::public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incarnation",
+]
+observations = [
+    "Production public Consumer registration/consume/read talks to production ServientBuilder::produce/begin_expose/step over TCP, with no legacy facade or raw-client substitution. The same nonzero address serves /first?g=1 -> 42 then /second?g=2 -> 43 in distinct authority incarnations. Each performs 100 reads after source/compiler destruction and restores all original shared-bank counters after every call.",
+    "Fourteen controlled orders cover explicit call cancellation, deadline-before-cancel, lost call ticket, final Consumer interests, Producer cancel/deadline/final root, each before and after handler dispatch. Consumer cancellation yields Cancelled, deadline-first remains TimedOut, and Producer loss is observed as a real Consumer transport error. A fresh Producer incarnation at the same endpoint returns 43; surviving Consumer handles are reused. All original accounts reach zero after final owners/report retire.",
+    "Losing only the Consumer runtime does not destroy retained call/handle interests. Losing all interests records residual remote disposition while physically retiring local ownership. HTTP cancellation cannot retract a received request or undo an invoked handler. Old handler/response owners do not contaminate the successor.",
+]
+
+[[evidence]]
+key = "producer-resource-retirement"
+execution_status = "passed"
+acceptance_status = "pending"
+tests = [
+    "protocol-bindings/protocols/http/tests/producer_installation.rs::measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_funding",
+    "protocol-bindings/protocols/http/tests/producer_installation.rs::serving_ingress_response_and_instance_quotas_refuse_before_native_effects",
+    "protocol-bindings/protocols/http/tests/producer_installation.rs::fd_pressure_remains_a_deployment_failure_and_releases_the_same_owner",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs::native_allocations_and_descriptors_retire_for_success_headers_and_pending_dispatch",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs::partially_written_native_reply_is_disposed_on_cancel_or_last_root_loss",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs::one_hundred_real_reads_and_distinct_instance_incarnations",
+    "servient/tests/producer_installation.rs::funding and last_root modules",
+]
+observations = [
+    "One fallibly allocated generic owner; key Arc header/tail/alignment, bounded response Arc/body and both media capacities, handler declaration, native-program/executor/configuration indirect declarations and simultaneous temporary backing are included in the original Engine live/cleanup reservation. Largest-allocation limits apply to physical blocks, not their sum. Physical deallocation is observed while still funded.",
+    "Local and original parent zero/one-short/exact checks cover ingress/pending handler/response, response backing, instance and registration counters. Shared Consumer/Producer cleanup saturation refuses with original input recovery. Concurrent admission, complete-object transfer refusal, unrelated sibling retention and external account observation cannot release or block original final charges.",
+    "Native connection owns socket/Hyper parser/bridge/reply future/encoded Bytes without a task. Actual 4096-byte read/write-per-poll gates, 16-field/8192-byte raw-head bound, one connection and 4096-byte JSON result bound are enforced. Parser read-ahead/allocator growth is measured for exact and one-over maximum heads, separately from Engine quota accounting.",
+    "The new partial-write case polls native delivery after dispatch: head plus 4096-byte body exceeds one write credit and remains Delivering with actual encoded native backing. Cancel with zero cleanup credit retains that backing and original charges; paid close or final-root Drop frees it, including descriptor retirement and immediate address reuse. The raw peer sees only a prefix of the response, not rollback.",
+    "All 200 raw-peer reads check zero tracked retained per-read allocations as well as stable Engine charges. The observer includes the independent exchange's temporary backing, which is dropped before each assertion. Fixed-thread tracing is not a process-global allocator proof.",
+]
+
+[resource_measurements]
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+owner_layout_bytes = 1440
+inline_runtime_bytes = 648
+owner_allocator_requests = 1
+response_backing_bytes = 4240
+engine_live_reservation_bytes = 7368
+accounting = "HTTP Handler in producer_installation.rs is zero-sized, empty key Arc backing is 16. Owner 1440 + runtime 648 + key 16 + response backing 4240 = 6344 retained; plus 1024 declared temporary = 7368 Engine live. Actual serving Handler has its own generic Layout, remeasured by production admission; the ZST measurement is not silently substituted for it."
+native_modes = "[allocation count, allocator-request live peak, tracked retained after local retirement]; native/handler allocation window starts before first accept, after source/owner provisioning and peer construction."
+native_small_success = [16, 26351, 0]
+native_unfinished_head_cancel = [6, 25592, 0]
+native_sealed_reply_before_first_delivery = [11, 25740, 0]
+native_maximum_16_field_8192_byte_head = [34, 29986, 0]
+native_8193_byte_head_refusal = [8, 25624, 0]
+partial_native_reply = [16, 34533, 0]
+partial_reply_pending_live_bytes = 30416
+final_root_drop_observation = "One initial unoptimized run observed 151.69 microseconds for direct final-root Drop with actual partial native delivery. The cancel/paid-close variant's final already-Closed root Drop was 9.903 microseconds and excludes the preceding close callback. Both returned synchronously with zero tracked native/handler blocks, original account release and listener/socket retirement. These samples are not time ceilings or release benchmarks."
+deployment_boundary = "Native parser/map/bridge/encoded-reply allocation and SDK finite local destruction are Binding-private. The 1024 temporary allowance is not a native-stack/SDK heap ceiling. Caller-provisioned bank/source/handler aliases, kernel queues/buffers, allocator overhead, native thread stacks and process OOM/abort remain explicit application/deployment assumptions. No universal SDK bound or hardware-fit claim."
+
+[[evidence]]
+key = "producer-regression-conformance"
+execution_status = "passed"
+acceptance_status = "pending"
+observations = [
+    "The registered checks, portable/static regressions, normal dependency inspection, workspace and performance-oracle results are recorded in verification rows at their actual source. A successful lightweight GitHub validation is diff hygiene only.",
+    "Unchanged static first-leaf admission diagnostics still reproduce their historical limitations; they are not HTTP conformance positives. PROPERTY-READ-ARCHITECTURE.md owns retired Host/surviving static evidence scope. No existing gate status is changed or inherited as successor Host acceptance.",
+]
+
+[independent_review]
+status = "required"
+boundary = "A fresh context must reconstruct the six obligations, inspect the complete base-to-final-head diff and actual production code, and independently assess whether this candidate suffices. Do not inherit this assessment as acceptance."
+focus = [
+    "Whole-description unsupported-operation/security/extension refusal and whether omission/default handling is truthful.",
+    "Actual compiler/executor/configuration pairing, source-free completed ownership, permit/correlation/result delivery and first cause.",
+    "Whether the public failure orders and actual partial-write destruction establish their claims; challenge false-positive oracles and account-versus-native retention.",
+    "Provisional single-root/Property-Read-only APIs versus the full product's multi-Thing/multi-Binding, Action/Event, observation/collection, security and embedded goals.",
+    "Authoritative-state corrections and historical gate evidence scope. Leave gate status under its independent owner; any necessary gate transition is separate from implementation/evidence changes.",
+]
+after_acceptance = "Only an independently authorized follow-up may record the exact acceptance reference and mark this tranche complete. HTTPS/security remains a separate release obligation; WP-600, milestones and gates do not close from this candidate."
+
+[limitations]
+intentional_current_limits = "Host/std cleartext HTTP/1.1 loopback IP, nonzero explicit endpoint, one synchronous Property Read/one Form/one accepted connection, manual progress, exact Host/path/query, NoSec/JSON/200. No keepalive/pipelining/body/Expect/upgrade or general DataSchema validation."
+unproven_future_capabilities = "General multi-route/operation/recipient dispatch, multi-Thing/multi-Binding Servient composition, checked bind-many/shared-program funding, production shared listener/session matching and retirement, asynchronous/long-lived/collection interactions, broad extension/Profile/security interoperability, embedded/no-atomic execution and execution-only Servient. These remain product objectives, not prohibitions derived from the narrow SPI."
+separate_qualification = "HTTPS/authentication/trust/security, non-loopback/DNS deployments, automatic scheduling, hardware/stack provisioning, broad performance baselines and v1 release readiness. No concrete dependency requires implementing them to close this tranche."
+
+[[verification]]
+name = "fetched-master-production-baseline"
+source_ref = "836141898809c6e4d8e95208f59dba033f1f8dd8"
+command = "CARGO_TARGET_DIR=/tmp/opencode/wp600-producer-review cargo test --locked --offline -p clinkz-wot-binding-http --test producer_serving --test producer_installation --test producer_preparation -- --test-threads=1 --nocapture"
+result = "passed"
+observation = "New target directory; 29 passed (15 serving, 8 installation, 6 preparation). Reproduces the existing useful evidence, without granting completion."
+
+[[verification]]
+name = "expanded-production-serving-evidence"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+command = "CARGO_TARGET_DIR=/tmp/opencode/wp600-producer-review cargo test --locked --offline -p clinkz-wot-binding-http --test producer_serving -- --test-threads=1 --nocapture"
+result = "passed"
+observation = "17 serving tests; includes 14 public failure orders, partial native-write cancel/root-loss, maximum-head allocator observations, 200 public loop reads and 200 raw retention-checked reads. Initial test-only compilation needed explicit Rust-2024 use<> on the report observer; production code was not changed."
+
+[[verification]]
+name = "portable-regressions"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+commands = [
+    "CARGO_TARGET_DIR=/tmp/opencode/wp600-producer-portable cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient -p clinkz-wot-property-read-architecture-runner --no-default-features -- --test-threads=1",
+    "CARGO_TARGET_DIR=/tmp/opencode/wp600-producer-portable cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient -p clinkz-wot-property-read-architecture-runner --no-default-features --features async -- --test-threads=1",
+]
+result = "passed"
+observation = "Both complete commands pass with their existing warnings and two ignored Core doc examples. The std-only Producer installation/HTTP target is absent here; static Producer/Consumer behavior is exercised. No embedded HTTP claim."
+
+[[verification]]
+name = "registered-default-prechecks"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+environment = "CARGO_TARGET_DIR=target/wp600-completion CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0"
+commands = [
+    "cargo test --locked --offline -p clinkz-wot-binding-http -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test validated_lending --test producer_lending --test builder_extension_fields_test",
+    "cargo test --locked --offline -p clinkz-wot-planning --test consumer_compiler_support --test consumer_property_read_binding",
+    "cargo test --locked --offline -p clinkz-wot-servient --test property_read --test consumer_property_read -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-property-read-architecture-runner --lib --test producer_admission -- --test-threads=1 --nocapture",
+]
+result = "passed"
+observation = "HTTP 93 (including 17 serving), TD 17, Planning 56, Servient 75 and retained static aggregate/diagnostic 8. The diagnostic succeeds by reproducing 13 static first-leaf limitations; it is not production HTTP conformance. External non-HTTP Producer installation's 19 tests also pass in the workspace."
+
+[[verification]]
+name = "workspace-and-all-targets"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+environment = "CARGO_TARGET_DIR=target/wp600-completion CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2"
+commands = [
+    "cargo test --locked --offline --workspace -- --test-threads=1",
+    "cargo check --locked --offline --workspace --all-targets",
+]
+result = "passed"
+observation = "792 passing test/doc-test results, 0 failed, 3 existing ignored doc examples; all-targets check passes. Initial full-debug workspace build in /tmp exceeded its 600-second timeout, and the resumed build then hit tmpfs disk quota compiling Zenoh before tests. Only this session's temporary Cargo targets were cleaned; the fresh disk-backed build with debug info disabled passes. No source/dependency change or skipped workspace member was used."
+
+[[verification]]
+name = "portable-compile-prechecks-and-execution-only-http"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+environment = "CARGO_TARGET_DIR=/tmp/opencode/wp600-producer-portable; Cargo default dev profile"
+commands = [
+    "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features",
+    "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --features async",
+    "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient --no-default-features --features async --target thumbv7em-none-eabihf",
+    "cargo check --locked --offline -p clinkz-wot-binding-http --no-default-features --lib",
+]
+result = "passed"
+observation = "All commands pass, retaining existing portable warnings. Together the earlier two portable test commands pass 597 results with 4 total ignored examples. Cortex-M4 results are compilation, not hardware execution; no static/embedded HTTP claim."
+
+[[verification]]
+name = "fresh-authority-and-performance-oracle"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+command = "CARGO_TARGET_DIR=/tmp/opencode/wp600-producer-authority CARGO_NET_OFFLINE=true tools/check-design-artifacts.sh"
+result = "passed"
+observation = "New target directory avoids the cached-checker problem found on PR #222. Current authority, state/DAG, API/ADR/Directory/legacy, 196 resource fields/3 profiles and 66 existing performance fixtures/cases pass. Performance-oracle validation is not transport throughput/latency qualification. Final documentation/evidence changes receive a separate renewal before submission."
+
+[[verification]]
+name = "normal-dependency-cut-and-formatting"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+commands = [
+    "cargo tree --locked --offline -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient -e normal",
+    "cargo tree --locked --offline -p clinkz-wot-binding-http --no-default-features -e normal",
+    "cargo fmt --all -- --check",
+    "git diff --check",
+]
+result = "passed"
+observation = "Neutral Engine normal dependencies contain no HTTP/Tokio; Core contains no TD/Planning; execution-only HTTP contains no TD/Planning. Unlike the older dependency-cut observation, runtime HTTP now intentionally includes Serde/serde_json for Producer JSON syntax/UTF-8 validation. This adds no upward dependency."
+
+[[verification]]
+name = "extra-strict-lint-diagnostic"
+source_ref = "bcb7f7b98c0435ad4c7d9bcf354e7c2b76fc947d"
+environment = "CARGO_TARGET_DIR=target/wp600-completion CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0"
+command = "cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets -- -D warnings"
+result = "failed"
+observation = "Rust 1.95 flags pre-existing collapsible_if in unchanged Consumer compiler.rs:126. Ordinary Clippy completes and also reports existing needless_borrow warnings in producer_preparation/producer_installation plus one newly added nested test condition. The introduced condition is corrected at verification_ref; baseline style warnings remain. No strict-Clippy success is claimed or suppressed. This optional lint diagnostic is not a registered semantic/resource precheck failure or production-runtime finding."
+
+[[verification]]
+name = "final-executable-fixture"
+source_ref = "9b7c2b634ff55e07cffbd029e78f2e9c17b2a9a9"
+environment = "CARGO_TARGET_DIR=target/wp600-completion CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0"
+command = "cargo test --locked --offline -p clinkz-wot-binding-http --test producer_serving -- --test-threads=1 --nocapture"
+result = "passed"
+observation = "All 17 serving cases pass after the test-only lint correction. Allocation counts/peaks/terminal zeros above reproduce unchanged; final-root partial-write Drop observed 49.154 microseconds and already-Closed root Drop 1.248 microseconds in this debug-info-disabled run. Earlier default-debug timing remains separately identified."
+
+[[verification]]
+name = "final-documentation-authority-and-hygiene"
+source_ref = "9b7c2b634ff55e07cffbd029e78f2e9c17b2a9a9"
+commands = [
+    "cargo clean -p clinkz-wot-design-check --target-dir /tmp/opencode/wp600-producer-authority",
+    "CARGO_TARGET_DIR=/tmp/opencode/wp600-producer-authority CARGO_NET_OFFLINE=true tools/check-design-artifacts.sh",
+    "CARGO_TARGET_DIR=target/wp600-completion CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 cargo clippy --locked --offline --no-deps -p clinkz-wot-binding-http --all-targets",
+    "cargo fmt --all -- --check",
+    "git diff --check",
+]
+result = "passed"
+observation = "Rebuilt the checker against the final candidate documentation; all authority/resource checks and 66 performance cases pass. Ordinary Clippy completes with only the previously identified unchanged-source warnings; the introduced test warning is gone. Candidate TOML parses and its six distinct passed-execution/pending-acceptance keys exactly match the tranche registry. Both existing gate manifests have zero diff. Final fetch still identifies base_ref as master."

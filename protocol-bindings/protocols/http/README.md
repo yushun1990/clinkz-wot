@@ -1,4 +1,4 @@
-# Host HTTP Consumer Property Read
+# Host HTTP Property Read
 
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
 `ConsumerPropertyReadRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
@@ -15,11 +15,12 @@ Nonempty URI variables and unsupported targets return the original request befor
 raw acceptance. No TD rescan, DNS, TLS, pool, redirect, retry, decompression,
 upgrade, background task or detached driver is involved.
 
-This implementation uses the existing admission restored after PR #199 and the
-accepted [parser-policy amendment](../../../docs/work-packages/WP-600-http-property-read-target.md#http-parser-policy-amendment).
-It is production progress submitted for independent review; the tranche remains
-in progress. Historical v1 refusal and the unmerged PR #197 fork are not evidence
-for the new stock SDK paths.
+The Consumer tranche is complete within its independently accepted scope; its
+[evidence](../../../docs/evidence/WP-600-http-consumer-property-read.toml)
+owns that exact boundary and subsequent amendments retain their own provenance.
+The [parser-policy amendment](../../../docs/work-packages/WP-600-http-property-read-target.md#http-parser-policy-amendment)
+defines the stock SDK envelope. Historical v1 refusal and the unmerged PR #197
+fork are not evidence for the new stock SDK paths.
 
 ## Framing policy
 
@@ -113,9 +114,8 @@ atomic compile callback; general owned/resumable Consumer compilation is unfinis
 Native method/header interpretation is private to this package. The Engine filters
 Forms by declared scheme and effective WoT operation/security and owns publication,
 plans, call resources and cleanup. No same-protocol scoring or Engine vocabulary
-switch is involved. This package currently provides Client execution only; a later
-independently enabled Server role may share the mapping code. Production Producer
-routing and the public bidirectional loop remain the immediate frontier.
+switch is involved. The separately registered Producer role and public loop are
+described below; Consumer and Producer support policies remain role-specific.
 
 ## Identity, buffering and ownership
 
@@ -241,14 +241,12 @@ ceiling. Samples qualify those executed paths and leave stack provisioning and
 stronger availability/fit to the deployment. Universal SDK ceilings are not a
 Host requirement.
 
-The std-only legacy Servient integration target now uses its matching feature
-gate. The full portable async suite passes, and all 12 legacy cases still run
-under default features. The existing evidence assesses the admitted Consumer
-scope as a completion candidate with no known contract or test-coverage blocker;
-independent exact-head completion acceptance remains required. No tranche,
-admission or gate transition follows from these tests. HTTPS/trust/security,
-Producer and embedded/hardware qualification retain their separate later
-boundaries; HTTPS/security remains a release requirement.
+The std-only Servient integration target uses its matching feature gate.
+Historical validation and the independently accepted Consumer completion retain
+their exact revisions in the evidence record. Current tests do not grant gate,
+package or release acceptance. Producer completion, HTTPS/trust/security and
+embedded/hardware qualification have separate boundaries; HTTPS/security remains
+a release requirement.
 
 ## Producer semantic preparation
 
@@ -314,6 +312,19 @@ prove that a peer observed the response. HTTPS, authentication, automatic
 scheduling, asynchronous handlers and shared HTTP listener matching remain
 future work. The usable bounded service is an implementation candidate requiring
 independent architecture and WP-600 completion acceptance.
+
+The [Producer completion candidate](../../../docs/evidence/WP-600-http-producer-property-read.toml)
+maps all six registered obligations to their actual tests and observations.
+The public loop covers two successive targets/results on the same listening
+address (default GET and aliased explicit GET/status, relative hrefs), 100 reads
+each after source destruction, and cancellation/deadline/call/client/Producer
+root loss before and after dispatch followed by a fresh successful exposure.
+Raw-peer tests separately observe disposal after the first native write of a
+4096-byte response, including its already observable prefix. Repeated raw reads
+check native retained allocations as well as Engine accounts; exact/one-over
+heads also have allocator/descriptor observations. The typed single-registration
+root and instance/correlation-only request are provisional narrow APIs, not a
+general multi-route/multi-operation Producer SPI or proof of shared matching.
 
 Run the preparation regressions with:
 
