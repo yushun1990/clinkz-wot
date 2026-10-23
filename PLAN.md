@@ -84,17 +84,22 @@ HTTPS/security evidence, remains on the critical path. Embedded qualification
 and v1 release readiness remain separate.
 
 Before extending the public Binding/Servient SPI into a general multi-route,
-multi-operation or long-lived execution surface, derive and independently
-challenge one coherent architecture from the enduring WoT goals, normative
-operation semantics, and contrasting native communication models. Existing
-single-route APIs, successful tests, architecture fixtures, and accepted narrow
-tranches are evidence and migration inputs, not a design template or reasons to
-preserve an inadequate abstraction. Separate logical operation/authority,
-compiled definition/checked instance, protocol-native matching/infrastructure,
-and delivery/lifecycle responsibilities without presupposing one universal trait,
-runtime manager, storage representation, or physical-resource cardinality.
-The accepted ADR-0024 dependency direction is a foundation, not completed
-general-SPI acceptance; revise its remaining assumptions deliberately if needed.
+multi-operation or long-lived execution surface, derive a coherent full-scope
+architecture from the established W3C WoT Architecture 1.1, Thing Description
+1.1, interaction/operation semantics, Binding vocabulary and extensibility
+model, and the product's enduring goals. WoT supplies the protocol-independent
+semantic foundation; ClinkZ must still design the Rust preparation/execution,
+application dispatch, native I/O, authorization, resource and lifetime boundaries.
+Work out coherent responsibilities and data flows for the WoT capability families
+before committing to their physical API representations. Deliberately leave
+implementation-level details open where the principles do not decide them.
+Existing single-route APIs, successful tests, fixtures, and accepted narrow
+tranches are implementation inputs, not reasons to preserve poor abstractions.
+ADR-0024's dependency direction is a starting point, not a completed general
+SPI. No finite collection of protocol examples establishes universal SPI
+compatibility. Implement useful concrete bindings against the reasoned design,
+correcting the architecture when actual engineering exposes a missing principle
+or a contradiction rather than demanding new cross-protocol proof gates.
 This architecture-first dependency adds no new gate and does not block separately
 qualified HTTP HTTPS/security work.
 
@@ -116,23 +121,24 @@ advance the frontier safely.
    HTTPS/trust/security is a separate v1 release obligation and may progress in
    parallel with general SPI design; do not freeze a one-route physical model
    as the general interface to deliver HTTPS.
-3. Before broad public Binding/Servient SPI expansion, design the complete
-   protocol-independent interaction and ownership boundary from WoT semantics
-   and meaningfully different native communication shapes: request/reply,
-   unsolicited input, subscriptions/streams, native matching and collection
-   delivery. Judge alternative responsibilities and executable data flows first;
-   challenge inherited assumptions, permit pre-v1 breaking replacement, and
-   reconcile accepted architecture only after a defensible design decision.
-   Do not use mock proofs, gate construction or prototype convenience as a
-   substitute for this design. Reuse the relevant existing architecture topics
-   and Review 08 rather than creating parallel governance artifacts.
-4. Following the design decision, implement a coherent production vertical
-   integration that exercises multi-route/multi-instance semantics and at least
-   one materially contrasting native interaction model. Use focused prototypes
-   only to resolve concrete design feasibility doubts; then verify actual
-   implemented matching, logical authority, independent cancellation, shared
-   physical retirement, and resource bounds. Do not widen the general SPI by
-   layering compatibility facades over the single-route HTTP adapter.
+3. Before broad public Binding/Servient SPI expansion, design a complete
+   conceptual architecture grounded primarily in W3C WoT Architecture 1.1 and
+   TD 1.1. Derive the semantic/physical responsibilities for Producer and
+   Consumer interactions, definitions versus logical instances, capability
+   selection and extension, native matching/I/O, dispatch, resource ownership,
+   and long-lived lifecycle. Use protocol knowledge to expose differences, not
+   a growing catalog of experiments as evidence of generality. Compare simpler
+   alternatives and explicitly accept that some physical details remain open.
+   Challenge inherited assumptions, allow pre-v1 breaking replacement, and
+   reconcile authoritative contracts after deciding the direction. Reuse
+   existing investigations and Review 08; create no new generality-proof gate.
+4. Implement the accepted architecture through useful real protocol bindings
+   and WoT operations as product work. Actual integration, tests and profiling
+   establish correctness and performance for the supported capabilities and
+   may reveal missing principles requiring revision; they do not prove
+   universal protocol coverage or act as prerequisites for architecture
+   acceptance. Avoid prototype-driven abstraction, protocol-shaped Core
+   branches and compatibility facades preserving a wrong single-route API.
 5. Broaden Core, Planning, Binding, and Servient capabilities in useful admitted
    slices. Resolve the long-lived domain entry and minimal `ObserveProperty`
    boundary before broad subscription/emission expansion. Reusable compiled
@@ -280,12 +286,14 @@ with borrowed typed state access and exact terminal release. The aggregate
 Property Read architecture gate has passed independent acceptance; broad WP-300
 exit remains open.
 
-Exit goals: one coherent general SPI responsibility and composition design,
-independently challenged against WoT semantics and contrasting protocol shapes;
-externally exercised authoring and execution boundaries; explicit profile
-applicability and resource costs; real lifecycle, failure, and cleanup evidence;
-no binding-owned application dispatch; and independently reviewed WP-300
-completion. Successful narrow-route proofs alone do not satisfy this goal.
+Exit goals: a coherent W3C WoT-derived general SPI architecture with explicit
+semantic/physical boundaries, extensibility rules, capability limits and
+independently reviewed trade-offs; practical authoring and execution through
+real binding implementations; explicit profile applicability and resource
+costs; real lifecycle, failure, and cleanup evidence for implemented
+capabilities; no binding-owned application dispatch; and independently
+reviewed WP-300 completion. No finite set of vertical implementations is a
+generality proof; successful narrow-route tests alone cannot close this goal.
 
 ## M5A — Servient Runtime and Application Lifecycle
 
