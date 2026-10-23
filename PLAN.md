@@ -83,6 +83,20 @@ scope; independent tranche completion acceptance, followed by separate
 HTTPS/security evidence, remains on the critical path. Embedded qualification
 and v1 release readiness remain separate.
 
+Before designing and implementing the successor general SPI, conduct a
+one-time repository cleanup of demonstrated obsolete code, unused public APIs,
+competing execution paths, dead crates/dependencies, historical prototypes,
+unneeded architecture fixtures, deprecated documentation and their registrations.
+Prefer direct deletion and internal caller migration over compatibility shims
+or indefinitely preserving old and new paths side by side. Preserve the
+enduring WoT capabilities and currently useful implementations; do not destroy
+active protocol/semantic functionality merely to reduce source count. Git
+history is the archive for superseded material. Keep the result buildable,
+supported examples working, and tests targeted at real current behavior.
+Treat this as ordinary engineering cleanup, not a new gate, evidence program
+or permanent migration framework. A successor SPI design may later replace
+currently active narrow representations without a compatibility obligation.
+
 Before extending the public Binding/Servient SPI into a general multi-route,
 multi-operation or long-lived execution surface, derive a coherent full-scope
 architecture from the established W3C WoT Architecture 1.1, Thing Description
@@ -121,7 +135,14 @@ advance the frontier safely.
    HTTPS/trust/security is a separate v1 release obligation and may progress in
    parallel with general SPI design; do not freeze a one-route physical model
    as the general interface to deliver HTTPS.
-3. Before broad public Binding/Servient SPI expansion, design a complete
+3. Remove obsolete runtime/API/documentation/prototype paths in a coordinated
+   repository cleanup before the general SPI redesign. Check genuine references,
+   replace or retire stale registrations and tests, preserve current useful
+   execution and WoT product goals, and leave no compatibility facade for
+   deleted behavior. The work is not complete merely because dead-code warnings
+   disappear; remove entire superseded abstractions and their ownership burden.
+   Do not add a new governance gate or a permanent cleanup support layer.
+4. Before broad public Binding/Servient SPI expansion, design a complete
    conceptual architecture grounded primarily in W3C WoT Architecture 1.1 and
    TD 1.1. Derive the semantic/physical responsibilities for Producer and
    Consumer interactions, definitions versus logical instances, capability
@@ -132,23 +153,23 @@ advance the frontier safely.
    Challenge inherited assumptions, allow pre-v1 breaking replacement, and
    reconcile authoritative contracts after deciding the direction. Reuse
    existing investigations and Review 08; create no new generality-proof gate.
-4. Implement the accepted architecture through useful real protocol bindings
+5. Implement the accepted architecture through useful real protocol bindings
    and WoT operations as product work. Actual integration, tests and profiling
    establish correctness and performance for the supported capabilities and
    may reveal missing principles requiring revision; they do not prove
    universal protocol coverage or act as prerequisites for architecture
    acceptance. Avoid prototype-driven abstraction, protocol-shaped Core
    branches and compatibility facades preserving a wrong single-route API.
-5. Broaden Core, Planning, Binding, and Servient capabilities in useful admitted
+6. Broaden Core, Planning, Binding, and Servient capabilities in useful admitted
    slices. Resolve the long-lived domain entry and minimal `ObserveProperty`
    boundary before broad subscription/emission expansion. Reusable compiled
    definitions and checked instance binding require real ownership/compatibility
    design; automatic caches and persistence are not prerequisites.
-6. Expand remaining capability families and Directory/Discovery with staged
+7. Expand remaining capability families and Directory/Discovery with staged
    legacy removal. WP-500 retains its WP-100 dependency and WP-600 its WP-300
    dependency. Optional Zenoh/pico production and real embedded qualification
    remain separate from Host HTTP delivery, without shrinking product goals.
-7. Join completed WP-400, WP-500, and WP-600 through WP-700 for final
+8. Join completed WP-400, WP-500, and WP-600 through WP-700 for final
    aggregation, absence, feature/conformance, and release evidence, then perform
    the v1 technical release review.
 
