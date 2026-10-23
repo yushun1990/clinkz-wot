@@ -1,5 +1,11 @@
 //! Source-free Producer execution contracts. Native installation, current
 //! acceptance authority, and Core-sealed delivery have separate ownership.
+//!
+//! The current entry/request/registration family implements the admitted Host
+//! single-route, synchronous Property Read slice. It is not a general multi-route
+//! dispatch representation: requests have no operation/recipient discriminator.
+//! This availability limit does not constrain future Engine composition, native
+//! multi-recipient matching, shared infrastructure, or other WoT operations.
 use crate::*;
 use alloc::sync::Arc;
 use core::task::{Context, Poll};

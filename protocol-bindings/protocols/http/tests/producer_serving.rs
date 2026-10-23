@@ -15,7 +15,7 @@ use std::{
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
     },
     task::{Context, Waker},
     time::{Duration, Instant},
@@ -116,6 +116,17 @@ fn server(
     body: &'static [u8],
     invalid: bool,
 ) -> Server {
+    let td: Thing = serde_json::from_value(serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"real Producer", "securityDefinitions":{"n":{"scheme":"nosec"}},"security":["n"], "properties":{"":{"type":"number","readOnly":true,"forms":[{"href":format!("http://{address}/value")} ]}}})).unwrap();
+    server_from_td(address, bank, calls, body, invalid, td)
+}
+fn server_from_td(
+    address: SocketAddr,
+    bank: Arc<HostResourceAccounts>,
+    calls: Arc<AtomicUsize>,
+    body: &'static [u8],
+    invalid: bool,
+    td: Thing,
+) -> Server {
     let authority = ProducerInstanceAuthority::try_new(ThingSlotId::new(
         SlotIndex::new(0),
         Generation::INITIAL,
@@ -123,7 +134,6 @@ fn server(
     .unwrap();
     // Missing source id and an empty Property name are both valid. All source
     // and compiler owners die before the public Servient first touches a socket.
-    let td: Thing = serde_json::from_value(serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"real Producer", "securityDefinitions":{"n":{"scheme":"nosec"}},"security":["n"], "properties":{"":{"type":"number","readOnly":true,"forms":[{"href":format!("http://{address}/value")} ]}}})).unwrap();
     let config = ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS).unwrap();
     let mut cursor = ValidatedThingCursor::from_thing(
         &td,
@@ -449,7 +459,17 @@ fn one_hundred_real_reads_and_distinct_instance_incarnations() {
         s.begin_expose(100).unwrap();
         let baseline = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
         for _ in 0..100 {
+            TRACE.with(|t| t.borrow_mut().enabled = true);
             assert!(exchange(&mut s, a, request(a).as_bytes()).ends_with(body));
+            let retained = TRACE.with(|t| {
+                let mut t = t.borrow_mut();
+                t.enabled = false;
+                t.live
+            });
+            assert_eq!(
+                retained, 0,
+                "per-read native backing grew behind stable Engine accounts"
+            );
             assert_eq!(
                 bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
                 baseline
@@ -634,9 +654,91 @@ fn consumer_policy() -> clinkz_wot_servient::consumer_property_read::ConsumerPro
     )
     .unwrap()
 }
+
+fn consumer(
+    target: &str,
+    bank: Arc<HostResourceAccounts>,
+    clock: Arc<dyn RuntimeClock + Send + Sync>,
+) -> (
+    clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime,
+    clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadHandle,
+    impl Fn() -> (Option<CleanupOutcome>, [u64; 4]) + use<>,
+) {
+    use clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime;
+    let registration = try_consumer_registration(
+        HttpConsumerConfig::for_cleartext_ip().unwrap(),
+        BindingId::new(602),
+        BindingGeneration::INITIAL,
+        0,
+    )
+    .unwrap();
+    let (client, report) = accepted(ConsumerPropertyReadRuntime::try_new(
+        registration,
+        consumer_policy(),
+        clock,
+        bank,
+    ));
+    let td: Thing = serde_json::from_value(serde_json::json!({
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "client", "id": "urn:test:consumer",
+        "securityDefinitions": {"n": {"scheme": "nosec"}}, "security": ["n"],
+        "properties": {"value": {"forms": [{"href": target}]}}
+    }))
+    .unwrap();
+    let handle = match client
+        .consume(&td, &mut work(1_000_000), |build| {
+            for _ in 0..10000 {
+                build.step(&mut work(1_000_000));
+                if build.is_finished() {
+                    return;
+                }
+            }
+            panic!("Consumer preparation stalled");
+        })
+        .unwrap()
+    {
+        StartStatus::Ready(handle) => handle,
+        _ => panic!("Consumer not installed"),
+    };
+    (client, handle, report)
+    // The Consumer TD and all semantic/build loans end before any call starts.
+}
+fn shutdown_consumer(
+    client: &clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime,
+) {
+    for _ in 0..10000 {
+        if let StartStatus::Ready(outcome) = client.shutdown(
+            &mut Context::from_waker(Waker::noop()),
+            &mut work(1_000_000),
+        ) {
+            assert!(outcome.is_complete());
+            return;
+        }
+    }
+    panic!("Consumer retirement stalled");
+}
+async fn public_result(
+    call: &mut clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadCall,
+    mut server: Option<&mut Server>,
+) -> CoreResult<InteractionOutput> {
+    let end = Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Some(s) = &mut server {
+            step(s, &mut work(1), 0);
+        }
+        call.step(
+            &mut Context::from_waker(Waker::noop()),
+            &mut work(1_000_000),
+        );
+        if let Some(result) = call.try_take(&mut work(1_000_000)).unwrap() {
+            return result;
+        }
+        assert!(Instant::now() < end, "public loop stalled");
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
 #[test]
 fn public_consumer_and_producer_share_capacity_and_execute_two_source_free_generations() {
-    use clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime;
     let executor = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
@@ -644,66 +746,36 @@ fn public_consumer_and_producer_share_capacity_and_execute_two_source_free_gener
         .unwrap();
     executor.block_on(async {
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
-        for body in [b"42".as_slice(), b"43".as_slice()] {
-            let a = address();
+        let a = address();
+        let mut previous = None;
+        for (path, body, explicit) in [("/first?g=1", b"42".as_slice(), false), ("/second?g=2", b"43".as_slice(), true)] {
             let calls = Arc::new(AtomicUsize::new(0));
-            let mut s = server(a, bank.clone(), calls.clone(), body, false);
+            let mut td = serde_json::json!({
+                "@context": ["https://www.w3.org/2022/wot/td/v1.1", {"method":"http://www.w3.org/2011/http#methodName", "status":"http://www.w3.org/2011/http#statusCodeValue"}],
+                "title": "Producer", "base": format!("http://{a}/base/"),
+                "securityDefinitions": {"n":{"scheme":"nosec"}}, "security":["n"],
+                "properties":{"":{"type":"number", "readOnly":true, "forms":[{"href":format!("..{path}")}]}}
+            });
+            if explicit {
+                td["properties"][""]["forms"][0]["method"] = "GET".into();
+                td["properties"][""]["forms"][0]["response"] = serde_json::json!({"contentType":"application/json", "status":200});
+            }
+            let mut s = server_from_td(a, bank.clone(), calls.clone(), body, false, serde_json::from_value(td).unwrap());
+            assert_ne!(Some(s.instance_key()), previous);
+            previous = Some(s.instance_key());
             installed(&mut s);
             s.begin_expose(30_000).unwrap();
-            let registration = try_consumer_registration(
-                HttpConsumerConfig::for_cleartext_ip().unwrap(),
-                BindingId::new(602),
-                BindingGeneration::INITIAL,
-                0,
-            )
-            .unwrap();
-            let (client, report) = accepted(ConsumerPropertyReadRuntime::try_new(
-                registration,
-                consumer_policy(),
-                Arc::new(Clock(Instant::now())),
+            let (client, handle, report) = consumer(
+                &format!("http://{a}{path}"),
                 bank.clone(),
-            ));
-            let td: Thing = serde_json::from_value(serde_json::json!({
-                "@context": "https://www.w3.org/2022/wot/td/v1.1",
-                "title": "client", "id": "urn:test:consumer",
-                "securityDefinitions": {"n": {"scheme": "nosec"}}, "security": ["n"],
-                "properties": {"value": {"forms": [{"href": format!("http://{a}/value")}]}}
-            }))
-            .unwrap();
-            let handle = match client
-                .consume(&td, &mut work(1_000_000), |build| {
-                    for _ in 0..10000 {
-                        build.step(&mut work(1_000_000));
-                        if build.is_finished() {
-                            return;
-                        }
-                    }
-                    panic!("Consumer preparation stalled");
-                })
-                .unwrap()
-            {
-                StartStatus::Ready(handle) => handle,
-                _ => panic!("Consumer not installed"),
-            };
-            drop(td);
+                Arc::new(Clock(Instant::now())),
+            );
             let baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
             for _ in 0..100 {
                 let mut call = handle
                     .read_property("value", InteractionOptions::new(), &mut work(1_000_000))
                     .unwrap();
-                let end = Instant::now() + Duration::from_secs(2);
-                let output = loop {
-                    step(&mut s, &mut work(1), 0);
-                    call.step(
-                        &mut Context::from_waker(Waker::noop()),
-                        &mut work(1_000_000),
-                    );
-                    if let Some(result) = call.try_take(&mut work(1_000_000)).unwrap() {
-                        break result.unwrap();
-                    }
-                    assert!(Instant::now() < end, "public loop stalled {:?}", s.state());
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                };
+                let output = public_result(&mut call, Some(&mut s)).await.unwrap();
                 assert_eq!(&*output.data().unwrap().body, body);
                 drop(output);
                 drop(call);
@@ -711,24 +783,326 @@ fn public_consumer_and_producer_share_capacity_and_execute_two_source_free_gener
             }
             assert_eq!(calls.load(Ordering::SeqCst), 100);
             drop(handle);
-            let mut retired = false;
-            for _ in 0..10000 {
-                if let StartStatus::Ready(outcome) = client.shutdown(
-                    &mut Context::from_waker(Waker::noop()),
-                    &mut work(1_000_000),
-                ) {
-                    assert!(outcome.is_complete());
-                    retired = true;
-                    break;
-                }
-            }
-            assert!(retired);
+            shutdown_consumer(&client);
             drop(client);
             drop(report);
             drop(s);
             empty(&bank);
         }
     });
+}
+
+struct ControlledClock(AtomicU64);
+impl RuntimeClock for ControlledClock {
+    fn now(&self) -> MonotonicInstant {
+        MonotonicInstant::new(ClockId::new(2), self.0.load(Ordering::SeqCst))
+    }
+    fn ticks_per_second(&self) -> std::num::NonZeroU64 {
+        std::num::NonZeroU64::new(1000).unwrap()
+    }
+}
+
+#[test]
+fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incarnation() {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .unwrap()
+        .block_on(async {
+            for mode in [
+                "call-cancel",
+                "call-deadline",
+                "call-drop",
+                "client-root-loss",
+                "producer-cancel",
+                "producer-deadline",
+                "producer-root-loss",
+            ] {
+                for dispatch in [false, true] {
+                    let a = address();
+                    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+                    let calls = Arc::new(AtomicUsize::new(0));
+                    let mut s = Some(server(a, bank.clone(), calls.clone(), b"42", false));
+                    let old_key = s.as_ref().unwrap().instance_key();
+                    installed(s.as_mut().unwrap());
+                    s.as_mut().unwrap().begin_expose(10).unwrap();
+                    let server_baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
+                    let clock = Arc::new(ControlledClock(AtomicU64::new(0)));
+                    let target = format!("http://{a}/value");
+                    let (client, handle, report) = consumer(&target, bank.clone(), clock.clone());
+                    let mut client = Some(client);
+                    let mut handle = Some(handle);
+                    let baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
+                    let mut call = Some(
+                        handle
+                            .as_ref()
+                            .unwrap()
+                            .read_property(
+                                "value",
+                                InteractionOptions::new().with_timeout(Duration::from_millis(10)),
+                                &mut work(1_000_000),
+                            )
+                            .unwrap(),
+                    );
+                    let end = Instant::now() + Duration::from_secs(2);
+                    loop {
+                        // Native acceptance is real HTTP. Withhold handler credit
+                        // so the peer never races an uncontrolled dispatch.
+                        step(
+                            s.as_mut().unwrap(),
+                            &mut WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1),
+                            0,
+                        );
+                        call.as_ref().unwrap().step(
+                            &mut Context::from_waker(Waker::noop()),
+                            &mut work(1_000_000),
+                        );
+                        if s.as_ref().unwrap().state() == State::Dispatching {
+                            break;
+                        }
+                        assert!(Instant::now() < end, "acceptance stalled: {mode}");
+                        tokio::time::sleep(Duration::from_millis(1)).await;
+                    }
+                    if dispatch {
+                        step(
+                            s.as_mut().unwrap(),
+                            &mut WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 1),
+                            0,
+                        );
+                        assert_eq!(s.as_ref().unwrap().state(), State::Delivering);
+                    }
+                    assert_eq!(calls.load(Ordering::SeqCst), usize::from(dispatch));
+                    match mode {
+                        "call-cancel" => call.as_ref().unwrap().cancel().unwrap(),
+                        "call-deadline" => {
+                            clock.0.store(10, Ordering::SeqCst);
+                            call.as_ref()
+                                .unwrap()
+                                .step(&mut Context::from_waker(Waker::noop()), &mut work(0));
+                            call.as_ref().unwrap().cancel().unwrap();
+                        }
+                        "call-drop" => drop(call.take()),
+                        "client-root-loss" => {
+                            // Each interest retains the real Consumer root. Losing
+                            // the public runtime alone is not final-owner loss.
+                            drop(client.take());
+                            assert_ne!(
+                                bank.snapshot(ResourceKind::ALL).map(|a| a.used()),
+                                server_baseline
+                            );
+                            drop(call.take());
+                            drop(handle.take());
+                            assert!(matches!(
+                                report().0,
+                                Some(CleanupOutcome::ResidualExternalState(_))
+                            ));
+                        }
+                        "producer-cancel" => s.as_mut().unwrap().cancel(),
+                        "producer-deadline" => {
+                            step(s.as_mut().unwrap(), &mut work(0), 10);
+                            assert!(matches!(
+                                s.as_ref().unwrap().first_cause(),
+                                Some(CoreError::TimedOut(_))
+                            ));
+                            s.as_mut().unwrap().cancel();
+                            assert!(matches!(
+                                s.as_ref().unwrap().first_cause(),
+                                Some(CoreError::TimedOut(_))
+                            ));
+                        }
+                        "producer-root-loss" => drop(s.take()),
+                        _ => unreachable!(),
+                    }
+                    if mode.starts_with("producer-")
+                        && let Some(s) = &mut s
+                    {
+                        step(
+                            s,
+                            &mut work(1),
+                            if mode == "producer-deadline" { 10 } else { 0 },
+                        );
+                        assert_eq!(s.state(), State::Closed);
+                    }
+                    if let Some(call) = &mut call {
+                        let result = public_result(call, None).await;
+                        match mode {
+                            "call-cancel" => assert!(
+                                matches!(result, Err(CoreError::Cancelled(_))),
+                                "{result:?}"
+                            ),
+                            "call-deadline" => {
+                                assert!(matches!(result, Err(CoreError::TimedOut(_))), "{result:?}")
+                            }
+                            _ => assert!(
+                                matches!(result, Err(CoreError::Binding(_))),
+                                "{mode}: {result:?}"
+                            ),
+                        }
+                    } else if mode == "call-drop" {
+                        // The manual root, not the lost call ticket, owns cleanup.
+                        loop {
+                            client.as_ref().unwrap().step(
+                                &mut Context::from_waker(Waker::noop()),
+                                &mut work(1_000_000),
+                            );
+                            if bank.snapshot(ResourceKind::ALL).map(|a| a.used()) == baseline {
+                                break;
+                            }
+                            assert!(Instant::now() < end, "call-loss cleanup stalled");
+                            tokio::time::sleep(Duration::from_millis(1)).await;
+                        }
+                    }
+                    drop(call);
+                    if !mode.starts_with("producer-") {
+                        // HTTP cancellation cannot retract a remote request or
+                        // undo a handler already invoked. No late delivery poll
+                        // is needed to retire this old native owner.
+                        assert_eq!(
+                            s.as_ref().unwrap().state(),
+                            if dispatch {
+                                State::Delivering
+                            } else {
+                                State::Dispatching
+                            }
+                        );
+                        s.as_mut().unwrap().cancel();
+                    }
+                    drop(s);
+                    assert_eq!(calls.load(Ordering::SeqCst), usize::from(dispatch));
+                    let mut fresh = server(a, bank.clone(), calls.clone(), b"43", false);
+                    assert_ne!(fresh.instance_key(), old_key);
+                    installed(&mut fresh);
+                    fresh.begin_expose(100).unwrap();
+                    if let Some(handle) = &handle {
+                        let before = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
+                        let mut retry = handle
+                            .read_property("value", InteractionOptions::new(), &mut work(1_000_000))
+                            .unwrap();
+                        let output = public_result(&mut retry, Some(&mut fresh)).await.unwrap();
+                        assert_eq!(&*output.data().unwrap().body, b"43");
+                        drop(output);
+                        drop(retry);
+                        assert_eq!(bank.snapshot(ResourceKind::ALL).map(|a| a.used()), before);
+                    } else {
+                        let (replacement, handle, observer) =
+                            consumer(&target, bank.clone(), clock);
+                        let mut retry = handle
+                            .read_property("value", InteractionOptions::new(), &mut work(1_000_000))
+                            .unwrap();
+                        assert_eq!(
+                            &*public_result(&mut retry, Some(&mut fresh))
+                                .await
+                                .unwrap()
+                                .data()
+                                .unwrap()
+                                .body,
+                            b"43"
+                        );
+                        drop(retry);
+                        drop(handle);
+                        shutdown_consumer(&replacement);
+                        drop(replacement);
+                        drop(observer);
+                    }
+                    assert_eq!(calls.load(Ordering::SeqCst), usize::from(dispatch) + 1);
+                    drop(handle);
+                    if let Some(client) = client {
+                        shutdown_consumer(&client);
+                    }
+                    drop(report);
+                    drop(fresh);
+                    empty(&bank);
+                }
+            }
+        });
+}
+
+#[test]
+fn partially_written_native_reply_is_disposed_on_cancel_or_last_root_loss() {
+    static BODY: [u8; 4096] = {
+        let mut body = [b' '; 4096];
+        body[4095] = b'7';
+        body
+    };
+    for cancel in [false, true] {
+        let a = address();
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut s = server(a, bank.clone(), calls.clone(), &BODY, false);
+        installed(&mut s);
+        s.begin_expose(100).unwrap();
+        let mut p = peer(a, request(a).as_bytes());
+        #[cfg(target_os = "linux")]
+        let descriptors = std::fs::read_dir("/proc/self/fd").unwrap().count();
+        TRACE.with(|t| {
+            let mut t = t.borrow_mut();
+            t.peak = 0;
+            t.allocations = 0;
+            t.enabled = true;
+        });
+        for _ in 0..100 {
+            step(&mut s, &mut work(1), 0);
+            if s.state() == State::Delivering {
+                break;
+            }
+        }
+        assert_eq!(s.state(), State::Delivering);
+        step(&mut s, &mut work(1), 0);
+        assert_eq!(
+            s.state(),
+            State::Delivering,
+            "4096-byte write budget cannot deliver the head plus full body"
+        );
+        let retained = TRACE.with(|t| t.borrow().live);
+        assert!(
+            retained >= BODY.len(),
+            "no actual native reply backing observed"
+        );
+        let funded = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
+        if cancel {
+            s.cancel();
+            step(&mut s, &mut work(0), 0);
+            assert_eq!(bank.snapshot(ResourceKind::ALL).map(|a| a.used()), funded);
+            assert_eq!(TRACE.with(|t| t.borrow().live), retained);
+            step(&mut s, &mut work(1), 0);
+            assert_eq!(s.state(), State::Closed);
+        }
+        let start = Instant::now();
+        drop(s);
+        let elapsed = start.elapsed();
+        let (live, peak, count) = TRACE.with(|t| {
+            let mut t = t.borrow_mut();
+            t.enabled = false;
+            (t.live, t.peak, t.allocations)
+        });
+        assert_eq!(
+            live, 0,
+            "native reply/socket/future outlived its final owner"
+        );
+        empty(&bank);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        eprintln!(
+            "partial native reply cancel={cancel}: allocations={count}, peak={peak}, pending={retained}, retained={live}, final_drop={elapsed:?}"
+        );
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            std::fs::read_dir("/proc/self/fd").unwrap().count(),
+            descriptors - 1
+        );
+        p.set_nonblocking(false).unwrap();
+        p.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        let mut wire = Vec::new();
+        p.read_to_end(&mut wire).unwrap();
+        assert!(wire.starts_with(b"HTTP/1.1 200 OK\r\n"));
+        let head = wire.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        assert!(
+            wire.len() - head < BODY.len(),
+            "cancellation delivered an unfinished response"
+        );
+        // A prefix was physically observable; local disposal is not rollback.
+        drop(TcpListener::bind(a).unwrap());
+    }
 }
 
 #[test]
@@ -784,16 +1158,23 @@ fn a_live_producer_exhausts_the_same_cleanup_capacity_used_by_public_consumer() 
 }
 
 #[test]
-fn native_allocations_and_descriptors_retire_for_success_unfinished_head_and_unread_reply() {
-    for mode in 0..3 {
+fn native_allocations_and_descriptors_retire_for_success_headers_and_pending_dispatch() {
+    for mode in 0..5 {
         let a = address();
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
         let calls = Arc::new(AtomicUsize::new(0));
-        let mut s = server(a, bank.clone(), calls, b"42", false);
+        let mut s = server(a, bank.clone(), calls.clone(), b"42", false);
         installed(&mut s);
         s.begin_expose(100).unwrap();
         let req = if mode == 1 {
             "GET /value HTTP/1.1\r\nHost:".into()
+        } else if mode >= 3 {
+            let prefix = format!(
+                "GET /value HTTP/1.1\r\nHost: {a}\r\n{}X-Pad: ",
+                "X: y\r\n".repeat(14)
+            );
+            let length = if mode == 3 { 8192 } else { 8193 };
+            format!("{prefix}{}\r\n\r\n", "x".repeat(length - prefix.len() - 4))
         } else {
             request(a)
         };
@@ -807,19 +1188,27 @@ fn native_allocations_and_descriptors_retire_for_success_unfinished_head_and_unr
             t.allocations = 0;
             t.enabled = true;
         });
-        if mode == 0 {
+        if mode == 0 || mode >= 3 {
             let mut received = 0;
+            let mut success = false;
             for _ in 0..1000 {
                 step(&mut s, &mut work(1), 0);
                 let mut bytes = [0; 512];
                 match p.read(&mut bytes) {
                     Ok(0) => break,
-                    Ok(n) => received += n,
+                    Ok(n) => {
+                        success |= bytes[..n].starts_with(b"HTTP/1.1 200");
+                        received += n;
+                    }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => break,
                     Err(e) => panic!("{e:?}"),
                 }
             }
-            assert!(received > 0);
+            assert_eq!(success, mode != 4);
+            if mode != 4 {
+                assert!(received > 0);
+            }
         } else {
             for _ in 0..10 {
                 step(&mut s, &mut work(1), 0);
@@ -837,11 +1226,15 @@ fn native_allocations_and_descriptors_retire_for_success_unfinished_head_and_unr
         });
         assert_eq!(live, 0, "native/handler backing escaped retirement");
         assert!(count > 0);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            usize::from(mode == 0 || mode == 2 || mode == 3)
+        );
         eprintln!("native Producer mode={mode}: allocations={count}, peak={peak}, retained={live}");
         #[cfg(target_os = "linux")]
         assert_eq!(
             std::fs::read_dir("/proc/self/fd").unwrap().count(),
-            descriptors - usize::from(mode != 0)
+            descriptors - usize::from(mode == 1 || mode == 2)
         );
         drop(s);
         drop(p);

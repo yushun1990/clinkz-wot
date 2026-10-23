@@ -4,8 +4,10 @@ Design revision 5.1; tranche `WP-600-HTTP-PRODUCER-PROPERTY-READ`.
 [index.toml](index.toml) owns admission state, dependencies, paths, checks and
 completion keys. **Implementation admission is accepted** by the
 [independent PR #216 review](https://github.com/yushun1990/clinkz-wot/pull/216#pullrequestreview-5583560319)
-at `90abeb1564b6da1e0d2001c5c2c3b587b48eb465`. Production implementation and
-completion evidence remain outstanding. No gate, package or milestone is closed.
+at `90abeb1564b6da1e0d2001c5c2c3b587b48eb465`. The production path is implemented;
+the [completion candidate](../evidence/WP-600-http-producer-property-read.toml)
+maps the six obligations to actual source, tests and measurements. Independent
+completion acceptance remains outstanding. No gate, package or milestone is closed.
 
 ## Decision and alternatives
 
@@ -242,8 +244,10 @@ not create separate admission units or waive the single completion boundary.
 
 ## Completion evidence and independent review
 
-Write `docs/evidence/WP-600-http-producer-property-read.toml` only with real results,
-exact source/dependency/configuration revisions and independent acceptance.
+Record only real results and exact source/dependency/configuration revisions in
+`docs/evidence/WP-600-http-producer-property-read.toml`. A candidate must identify
+independent acceptance as pending; only actual independent acceptance can support
+a passed completion record or a tranche-complete transition.
 
 | Stable key | Acceptance |
 | --- | --- |
