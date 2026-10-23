@@ -12,7 +12,7 @@ use clinkz_wot_td::{
 };
 use std::{
     io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -203,7 +203,9 @@ fn peer(address: SocketAddr, request: &[u8]) -> TcpStream {
     peer
 }
 fn exchange(s: &mut Server, address: SocketAddr, request: &[u8]) -> Vec<u8> {
-    let mut peer = peer(address, request);
+    read_reply(s, &mut peer(address, request))
+}
+fn read_reply(s: &mut Server, peer: &mut TcpStream) -> Vec<u8> {
     let mut response = Vec::new();
     let end = Instant::now() + Duration::from_secs(2);
     loop {
@@ -300,6 +302,64 @@ fn public_servient_raw_peer_publication_dispatch_credit_and_one_reply() {
     drop(s);
     empty(&bank);
     drop(TcpListener::bind(a).unwrap());
+}
+
+#[test]
+fn complete_requests_survive_peer_write_half_close() {
+    for before_acceptance in [true, false] {
+        let a = address();
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut s = server(a, bank.clone(), calls.clone(), b"42", false);
+        installed(&mut s);
+        s.begin_expose(100).unwrap();
+        let baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
+        let request = format!("GET /value HTTP/1.1\r\nHost: {a}\r\nConnection: close\r\n\r\n");
+        let mut p = peer(a, request.as_bytes());
+        if !before_acceptance {
+            for _ in 0..100 {
+                step(&mut s, &mut work(1), 0);
+                if s.state() == State::Dispatching {
+                    break;
+                }
+            }
+            assert_eq!(s.state(), State::Dispatching);
+            assert_eq!(calls.load(Ordering::SeqCst), 0);
+        }
+        p.shutdown(Shutdown::Write).unwrap();
+        let reply = read_reply(&mut s, &mut p);
+        assert!(reply.starts_with(b"HTTP/1.1 200 OK\r\n"), "{reply:?}");
+        assert!(reply.ends_with(b"\r\n\r\n42"));
+        assert_eq!(reply.windows(8).filter(|s| *s == b"HTTP/1.1").count(), 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(s.state(), State::Serving);
+        assert_eq!(s.first_cause(), None);
+        assert_eq!(bank.snapshot(ResourceKind::ALL).map(|a| a.used()), baseline);
+        drop(s);
+        empty(&bank);
+    }
+}
+
+#[test]
+fn incomplete_write_half_closed_request_retires_without_dispatch_or_retained_capacity() {
+    let a = address();
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut s = server(a, bank.clone(), calls.clone(), b"42", false);
+    installed(&mut s);
+    s.begin_expose(100).unwrap();
+    let baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
+    let mut p = peer(a, b"GET /value HTTP/1.1\r\nHost:");
+    p.shutdown(Shutdown::Write).unwrap();
+    assert!(read_reply(&mut s, &mut p).is_empty());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(s.state(), State::Serving);
+    assert_eq!(s.first_cause(), None);
+    assert_eq!(bank.snapshot(ResourceKind::ALL).map(|a| a.used()), baseline);
+    assert!(exchange(&mut s, a, request(a).as_bytes()).ends_with(b"42"));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    drop(s);
+    empty(&bank);
 }
 
 #[test]
@@ -509,6 +569,41 @@ fn response_body_bound_and_json_syntax_are_checked_before_wire_success() {
         s.begin_expose(100).unwrap();
         let reply = exchange(&mut s, a, request(a).as_bytes());
         assert_eq!(reply.starts_with(b"HTTP/1.1 200"), good);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        drop(s);
+        empty(&bank);
+    }
+}
+
+#[test]
+fn handler_json_requires_utf8_in_strings_nested_values_and_object_keys() {
+    for (body, good) in [
+        (r#""é""#.as_bytes(), true),
+        (r#"[{"ключ":"值"}]"#.as_bytes(), true),
+        (b"\"\xff\"".as_slice(), false),
+        (b"[{\"value\":\"\xff\"}]".as_slice(), false),
+        (b"{\"\xff\":42}".as_slice(), false),
+    ] {
+        let a = address();
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut s = server(a, bank.clone(), calls.clone(), body, false);
+        installed(&mut s);
+        s.begin_expose(100).unwrap();
+        let reply = exchange(&mut s, a, request(a).as_bytes());
+        let status = if good {
+            b"HTTP/1.1 200"
+        } else {
+            b"HTTP/1.1 500"
+        };
+        assert!(
+            reply.starts_with(status),
+            "handler body {body:?}: {reply:?}"
+        );
+        let head_end = reply.windows(4).position(|b| b == b"\r\n\r\n").unwrap() + 4;
+        let wire_body = &reply[head_end..];
+        assert_eq!(wire_body, if good { body } else { b"null" });
+        serde_json::from_slice::<serde_json::Value>(wire_body).unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         drop(s);
         empty(&bank);

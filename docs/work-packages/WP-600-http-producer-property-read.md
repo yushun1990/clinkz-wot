@@ -49,12 +49,15 @@ unimplemented predecessor contracts being counted as complete:
 | `core/src/binding.rs` rejects non-`StrictV1` Producer declarations; Consumer's Host-owned policy is role-specific. | Do not present transitive nonallocating StrictV1 as qualified for Hyper/Tokio. The scoped Host Producer ownership contract below is required. |
 | `servient/src/property_read.rs::HostRouteState` and the Host lifecycle calls in `core/src/binding.rs` repeat phase-specific recovery owners. | Simplification motivation, not a demonstrated native impossibility. Replace the families while preserving owner, permit, first cause and close obligations. |
 
-The committed diagnostic in the existing architecture runner reproduces thirteen
-cases: explicit POST, response media/status, coding, empty scopes, Form/root
+The retained static planner diagnostic in the architecture runner reproduces
+thirteen cases: explicit POST, response media/status, coding, empty scopes, Form/root
 Basic security, second Form/property, default read/write, default write-only
-advertised Profile and an unhandled vendor instruction. It also verifies complete mock cleanup. The old static
-and Host runner tests remain the reusable baseline for permit/late-result and
-cleanup invariants. They do not prove a real HTTP Producer.
+advertised Profile and an unhandled vendor instruction. The retired Host
+diagnostic and aggregate remain historical evidence. The
+[Producer gate](PROPERTY-READ-ARCHITECTURE.md#current-evidence-after-staged-host-retirement)
+owns the exact surviving static, retired Host and successor regression scope
+for permit/late-result and cleanup invariants. Original mock results do not
+prove a real HTTP Producer.
 
 ## Standards, guarantees and supported semantics
 

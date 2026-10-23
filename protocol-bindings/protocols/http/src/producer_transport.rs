@@ -219,6 +219,7 @@ impl NativeConnection {
         let driver = Box::pin(
             http1::Builder::new()
                 .keep_alive(false)
+                .half_close(true)
                 .max_headers(16)
                 .max_buf_size(8192)
                 .writev(false)
@@ -252,11 +253,14 @@ impl NativeConnection {
             return;
         }
         self.replied = true;
+        // IgnoredAny checks syntax without building a JSON tree, but skips
+        // UTF-8 checks in strings and object keys. Validate the bytes first.
         let body = response.result().ok().and_then(|o| o.data()).filter(|p| {
             p.content_type == "application/json"
                 && p.content_coding.is_none()
                 && p.body.len() <= 4096
-                && serde_json::from_slice::<serde::de::IgnoredAny>(&p.body).is_ok()
+                && std::str::from_utf8(&p.body)
+                    .is_ok_and(|json| serde_json::from_str::<serde::de::IgnoredAny>(json).is_ok())
         });
         let (status, bytes) = match body {
             Some(p) => (200, Bytes::copy_from_slice(&p.body)),

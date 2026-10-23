@@ -1466,8 +1466,12 @@ manual driver should pace polling; its wakeups are not an OS readiness reactor.
 HTTP limits are exact Host/path GET, one Host field, bodyless framing, 16 fields,
 8192 raw head bytes inclusive, 4096 read/write bytes per funded poll, no keepalive,
 pipelining, Expect or upgrade, JSON <=4096 bytes and media capacity <=64. JSON
-syntax is checked by the Binding; application TD schema conformity remains the
-handler's obligation. Invalid sealed output maps to fixed JSON `null`/500.
+syntax and UTF-8 (including nested strings and object keys) are checked by the
+Binding; application TD schema conformity remains the handler's obligation.
+Invalid sealed output maps to fixed JSON `null`/500.
+Read EOF after a complete supported request does not cancel its response: a peer
+may half-close its write side and continue reading. Incomplete input at EOF
+retires without dispatch; unfinished input without EOF remains deadline-bound.
 
 Malformed/unsupported preacceptance requests retire their connection without
 dispatch and allow another peer. A deadline or postacceptance native failure

@@ -27,7 +27,42 @@ The real-target probe precedes the aggregate mock gate because it supplies
 architecture feedback with actual protocol I/O. It does not itself claim
 WP-600 progress.
 
-## Current technical evidence
+## Current evidence after staged Host retirement
+
+ADR-0024 and the admitted
+[HTTP Producer tranche](WP-600-http-producer-property-read.md) replace the public
+staged Host facade with source-free completed preparation and a retained native
+driver. The gate's independent acceptance records the original static/Host-erased
+proof, retained through baseline `31a9899ffa03aac6c395e4cdd228e8500672d111`.
+That acceptance does not transfer to the successor Host implementation. The
+implementation author preserves the registered status; any status transition
+requires the separate independent boundary in `PROJECT_GOVERNANCE.md`.
+
+The application-static aggregate runner and Servient tests remain executable.
+The Zenoh probe now exercises only its static cells: real round trip, readiness
+failure and pre-publication cancellation. Core's `host_route_guard` tests and the
+external mock Binding retain lower-level staged SPI evidence. The deleted
+`servient/tests/support/servient_host.rs`, Host aggregate cells and Host Zenoh
+cells are historical evidence, not current production tests.
+
+The manifest registers surviving static cases and source-free single-driver
+regressions at their actual paths. Their scope is:
+
+| Retired staged Host evidence | Current disposition |
+| --- | --- |
+| `host_erased_cell_uses_the_same_production_path_and_one_route_carrier` and the Host half of `invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_both_cells` | `servient/tests/producer_installation.rs::external_non_http_executor_uses_the_same_native_serving_dispatch_and_seal` and HTTP's `public_servient_raw_peer_publication_dispatch_credit_and_one_reply` / `invalid_handler_success_is_core_sealed_as_failure` exercise the successor dispatch/seal path. The retained static invalid-success case is named `invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_static_cell`. No current Host-erased aggregate is claimed. |
+| Oversized activation recovery and insufficient Host call recovery capacity | The phase-call normal/recovery ceilings retire with the facade. `local_and_original_parent_limits_rollback_without_native_effects` and `funding::controlled_scratch_participates_in_exact_local_and_original_parent_live_peak` test actual successor owner/scratch admission and original-account overlap, not phase-call recovery. |
+| Outstanding Host lifecycle calls, pending response-delivery cancellation and pending cleanup-call cancellation | `cancel_and_last_owner_loss_dispose_every_legal_installation_stage`, `partial_install_and_cleanup_errors_retain_one_owner_and_the_first_cause`, `native_serving_cancellation_preserves_pending_request_and_reply_until_disposal` and HTTP's `cancelled_dispatch_and_unread_reply_keep_the_original_response_capacity_until_drop` test the retained installation/request/reply owner, first cause and terminal disposal. Separate staged call/rollback cancellation contexts are historical. |
+| Lifecycle, delivery and cleanup-call acknowledged transfers; rejected production-owner offer | `rejected_complete_object_transfer_and_sibling_installation_preserve_ownership` tests complete-object refusal and sibling preservation. Acknowledged phase-call transfers and their exact context/retry matrix retire with the staged facade; this successor checkpoint makes no accepted-transfer execution claim. |
+
+The successor tests are implementation/regression evidence under the HTTP
+tranche's existing six completion obligations, not independent acceptance of
+that tranche or a replacement aggregate gate. Static evidence is not relabeled
+as Host evidence, and finite native disposal does not prove the removed staged
+transfer machinery. The sections below describe the **original accepted
+construction**; their Host paths and phase-specific assertions are historical.
+
+## Original accepted technical evidence
 
 Completed slice history is retained by Git. Current regression ownership is
 instead executable at the crate that can be broken:
@@ -71,8 +106,8 @@ reference, closing safe whole-guard replacement or extraction. Workspace topic
 0058 is migrated. This correction satisfies the real-target prerequisite but
 does not substitute for the aggregate result.
 
-The aggregate fixture executes successfully at the two registered roots; the
-gate remains `ready` until independent acceptance. The external
+The original aggregate fixture executed successfully at the two registered roots
+before independent acceptance. The external
 binding crate supplies one deterministic protocol-local ingress slot,
 correlation owner, response delivery path, compiler, static server, Host
 server, lifecycle guards, and cleanup implementation. Its ingress declaration
@@ -158,7 +193,7 @@ validated registration/profile cell, Thing/generation, exact handler coverage
 and footprint, status and cleanup capacity, activation authority/accept lease,
 and vacant request/response owners.
 
-## Required scenario
+## Original required scenario
 
 Both application-static and host-erased cells exercise the same semantic path:
 
@@ -184,7 +219,7 @@ builder. The async/no-std compile cell constructs a real TD, external static
 binding registration, handler registration, and production Static Servient;
 it makes no executor-backed runtime claim.
 
-## First-entry closure
+## Original first-entry closure
 
 Before the first binding preparation side effect, WP-400 must possess:
 
@@ -207,7 +242,7 @@ not fabricate a logical plan, admitted artifact, route reservation, route key,
 `PrepareInput`, handler context, response opportunity, or cleanup owner in
 place of the production carrier under test.
 
-## Aggregate fixture boundary
+## Original aggregate fixture boundary
 
 The gate manifest registers two aggregate roots:
 

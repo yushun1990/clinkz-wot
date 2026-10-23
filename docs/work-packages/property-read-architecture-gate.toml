@@ -1,6 +1,8 @@
 schema_version = 3
 design_revision = "5.0"
 id = "PROPERTY-READ-ARCHITECTURE"
+# Historical acceptance is not transferred to the successor Host runtime.
+# The gate document owns the retired staged-Host/current-regression disposition.
 status = "passed"
 document = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
 fixture_roots = [
@@ -11,21 +13,31 @@ evidence = [
     "servient/src/property_read.rs",
     "tools/architecture-fixtures/property-read-binding/src/lib.rs",
     "tools/architecture-fixtures/property-read-runner/src/lib.rs",
+    "servient/src/producer_installation.rs",
+    "servient/tests/producer_installation.rs",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs",
 ]
 evidence_cases = [
+    # Retained application-static aggregate evidence.
     "application_static_cell_uses_the_complete_production_path",
-    "host_erased_cell_uses_the_same_production_path_and_one_route_carrier",
-    "invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_both_cells",
+    "invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_static_cell",
     "ingress_capacity_is_admitted_at_every_scope_before_buffering_or_side_effects",
-    "oversized_activation_uses_separately_admitted_recovery_and_preserves_predecessor",
-    "insufficient_host_call_recovery_capacity_rejects_before_construction_or_polling",
-    "outstanding_host_lifecycle_calls_cancel_before_route_rollback",
-    "pending_response_delivery_cancellation_retains_exact_context_and_cleans_once",
-    "pending_cleanup_call_cancellation_retains_route_and_call_contexts_to_terminal",
-    "lifecycle_transfer_uses_production_owner_and_retains_context_to_terminal",
-    "delivery_transfer_uses_production_owner_across_error_retry_and_terminal",
-    "cleanup_call_transfer_uses_production_owner_and_retains_both_contexts",
-    "rejected_production_owner_offer_retries_in_manual_owner_with_exact_context",
+    "incomplete_first_entry_policy_causes_no_preparation_side_effect",
+    "readiness_failure_returns_production_owned_routes_to_cleanup",
+    "outstanding_static_lifecycle_calls_cancel_before_route_rollback",
+    "runner_source_constructs_no_forbidden_intermediate_carrier",
+    # Successor single-driver regressions, not an accepted Host-erased aggregate.
+    "source_compiler_and_id_are_absent_at_funded_installation",
+    "local_and_original_parent_limits_rollback_without_native_effects",
+    "partial_install_and_cleanup_errors_retain_one_owner_and_the_first_cause",
+    "cancel_and_last_owner_loss_dispose_every_legal_installation_stage",
+    "rejected_complete_object_transfer_and_sibling_installation_preserve_ownership",
+    "external_non_http_executor_uses_the_same_native_serving_dispatch_and_seal",
+    "native_serving_rejects_a_copied_old_instance_key_before_dispatch",
+    "native_serving_cancellation_preserves_pending_request_and_reply_until_disposal",
+    "public_servient_raw_peer_publication_dispatch_credit_and_one_reply",
+    "invalid_handler_success_is_core_sealed_as_failure",
+    "cancelled_dispatch_and_unread_reply_keep_the_original_response_capacity_until_drop",
 ]
 test_commands = [
     "cargo test --locked -p clinkz-wot-core",
@@ -38,6 +50,8 @@ test_commands = [
     "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async",
     "cargo test --locked -p clinkz-wot-property-read-architecture-runner",
     "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-servient --test producer_installation -- --test-threads=1",
+    "cargo test --locked --offline -p clinkz-wot-binding-http --test producer_installation --test producer_serving -- --test-threads=1",
 ]
 
 [[dependency]]
@@ -71,11 +85,14 @@ owner_package = "WP-300"
 status = "covered"
 evidence = [
     "core/src/binding.rs",
+    "core/src/producer.rs",
     "core/tests/property_read_response_sealing.rs",
     "servient/src/property_read.rs",
+    "servient/src/producer_installation.rs",
     "servient/tests/property_read.rs",
+    "servient/tests/producer_installation.rs",
     "servient/tests/support/property_read_binding.rs",
-    "servient/tests/support/servient_host.rs",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs",
     "protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs",
 ]
 
@@ -97,7 +114,9 @@ owner_package = "WP-400"
 status = "covered"
 evidence = [
     "servient/src/property_read.rs",
+    "servient/src/producer_installation.rs",
     "servient/tests/property_read.rs",
-    "servient/tests/support/servient_host.rs",
+    "servient/tests/producer_installation.rs",
+    "protocol-bindings/protocols/http/tests/producer_serving.rs",
     "tools/architecture-fixtures/property-read-runner/src/lib.rs",
 ]
