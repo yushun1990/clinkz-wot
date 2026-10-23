@@ -914,15 +914,15 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
                         "producer-root-loss" => drop(s.take()),
                         _ => unreachable!(),
                     }
-                    if mode.starts_with("producer-") {
-                        if let Some(s) = &mut s {
-                            step(
-                                s,
-                                &mut work(1),
-                                if mode == "producer-deadline" { 10 } else { 0 },
-                            );
-                            assert_eq!(s.state(), State::Closed);
-                        }
+                    if mode.starts_with("producer-")
+                        && let Some(s) = &mut s
+                    {
+                        step(
+                            s,
+                            &mut work(1),
+                            if mode == "producer-deadline" { 10 } else { 0 },
+                        );
+                        assert_eq!(s.state(), State::Closed);
                     }
                     if let Some(call) = &mut call {
                         let result = public_result(call, None).await;
