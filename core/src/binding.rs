@@ -26,8 +26,8 @@ use crate::{
     AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope, BindingArtifactRef,
     BindingConfigurationDigest, BindingGeneration, BindingId, CleanupOperation, CleanupRecord,
     CleanupSlotId, CoreError, CoreResult, CorrelationId, Deadline, ErrorContext, ErrorPhase,
-    InteractionInput, InteractionOutput, InteractionStatus, OutboundRequest, PlanId,
-    PlanSetGeneration, ResponsePayloadRole, RetryClass, StartStatus, ThingId,
+    InteractionInput, InteractionOutput, OutboundRequest, PlanId, PlanSetGeneration, RetryClass,
+    StartStatus, ThingId,
 };
 
 // ---------------------------------------------------------------------------
@@ -1237,13 +1237,7 @@ fn seal_property_read_handler_output(
     opportunity: &RouteResponseOpportunity,
     output: InteractionOutput,
 ) -> CoreResult<InteractionOutput> {
-    let metadata = output.metadata();
-    if output.data().is_some()
-        && output.status() == InteractionStatus::Ok
-        && metadata.payload_role() == ResponsePayloadRole::Application
-        && metadata.binding_response().is_none()
-        && metadata.action_invocation().is_none()
-    {
+    if crate::response::property_read_handler_shape(&output) {
         return Ok(output);
     }
 

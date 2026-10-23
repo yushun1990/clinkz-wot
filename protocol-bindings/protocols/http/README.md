@@ -270,16 +270,55 @@ retained owner before a real nonblocking listener is installed. No Tokio runtime
 or dummy Consumer is needed. Occupied-port/FD failure, cancellation and root
 loss retain/dispose the same owner and preserve original accounts.
 
-The resulting `InstalledClosed` state issues no accept permit or Serving state.
-There is no accept/parser/request/response bridge or public Consumer-to-Producer
-loop yet. This installation is a production checkpoint, not a usable HTTP
-service. Its next dependency is the funded retained request/reply bridge and
-Servient publication/dispatch on the replacement Host facade;
-the old first-leaf/staged Producer path is not an HTTP fallback.
+The public source-free `ServientBuilder::new(limits, shared_accounts).produce`
+consumes that completed preparation and unique authority. `begin_expose(5000)`
+requests publication after native readiness; caller-driven `step` then accepts
+under a borrowed permit, invokes the registered `ReadPropertyHandler`, Core-seals
+its result and lends the sealed response back to the original native owner.
+`InstalledClosed` alone still issues no permit. The old `produce_td` and
+`ExposedThingHandle` staged Host facade has been removed.
+
+A minimal complete application is `examples/serve_property.rs`:
+
+```sh
+cargo run --locked --offline -p clinkz-wot-binding-http --example serve_property -- 8080 30
+# From another terminal while it is Serving:
+curl --http1.1 -H 'Connection: close' http://127.0.0.1:8080/value
+```
+
+It returns `21.5` from a real handler and retires after 30 seconds. This adapter
+uses std nonblocking TCP and Hyper 1.12.0 without a Producer Tokio reactor or
+detached task. The example paces its manual polling; wakeups are not OS readiness
+notifications. One root serves one logical route and one connection at a time.
+Multiple roots can use the same `Arc<HostResourceAccounts>` as public Consumer
+roots. Generic installations may lease shared native infrastructure; HTTP's
+exclusive listener is a concrete current limit, not a generic cardinality rule.
+Address reuse permits restart after closed connections enter TIME_WAIT; port
+sharing is disabled and an occupied listener still refuses installation.
+
+Requests require HTTP/1.1 GET, exact path/query and Host, bodyless framing, at
+most 16 fields and 8192 raw head bytes inclusive. A native poll reads/writes at
+most 4096 bytes. Keepalive, pipelining, Expect and upgrade are refused. Valid
+application results use JSON <=4096 bytes; invalid shape, media, size or syntax
+returns JSON `null` with status 500. General TD data-schema validation remains
+the handler's responsibility. The caller-clock timeout spans unfinished heads,
+dispatch and pending replies. A timeout or reply failure closes the instance;
+an application can prepare a fresh generation after retirement.
+
+Native socket/parser/future/encoded-reply allocation is Binding-private under
+the fresh Producer policy identity, separately from reserved Engine owner and
+response backing. Tests report actual allocation/FD disposal observations; these
+are neither universal SDK maxima nor a strict stack/allocator guarantee. Host
+process OOM remains a deployment assumption. Successful local writes do not
+prove that a peer observed the response. HTTPS, authentication, automatic
+scheduling, asynchronous handlers and shared HTTP listener matching remain
+future work. The usable bounded service is an implementation candidate requiring
+independent architecture and WP-600 completion acceptance.
 
 Run the preparation regressions with:
 
 ```sh
+cargo test --locked --offline -p clinkz-wot-binding-http --test producer_serving -- --test-threads=1 --nocapture
 cargo test --locked --offline -p clinkz-wot-binding-http --test producer_preparation
 cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test producer_lending
 cargo test --locked --offline -p clinkz-wot-binding-http --test producer_installation -- --test-threads=1

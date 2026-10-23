@@ -15,6 +15,17 @@ semantics, Consumer selection/control values, and portable operation state. It
 does not own application handles, Servient registries, plan construction,
 protocol I/O, or global scheduling.
 
+## Source-free Producer handler context
+
+The native Host Producer uses the same `ReadPropertyHandler` capability with
+`HandlerContext::for_producer_property_read`. The context carries the actual
+incarnation-qualified `producer_instance`, logical slot, exact Property target
+and Binding identity. Its source `thing_id` and logical `plan_id` are absent.
+Those accessors now return `Option`; the existing checked planned constructor
+still returns their actual supplied values as `Some`. Neither source identifiers
+nor a persistent logical plan are required merely to invoke a native handler.
+The context is diagnostic dispatch data, never an acceptance capability.
+
 ## Handler boundary
 
 `HANDLER-API-001`: Every operation-specific handler receives a

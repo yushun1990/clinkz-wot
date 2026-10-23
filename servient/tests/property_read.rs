@@ -2,14 +2,10 @@ mod support;
 
 use core::task::Context;
 
-#[cfg(feature = "std")]
-use clinkz_wot_core::HandlerFootprint;
 use clinkz_wot_core::{
     CoreResult, Deadline, ReadPropertyHandler, StaticHandlerRegistration, StepStatus, ThingSlotId,
 };
 use clinkz_wot_foundation::{ResourceLimits, WorkBudget};
-#[cfg(feature = "std")]
-use clinkz_wot_planning::HostBindingPreparation;
 use clinkz_wot_planning::StaticBindingPreparation;
 use clinkz_wot_servient::{StaticServient, StaticServientBuilder};
 use clinkz_wot_td::thing::Thing;
@@ -48,50 +44,6 @@ pub fn step_static_property_read(
 /// Closes static route selection before the caller continues bounded cleanup.
 pub fn begin_static_property_read_destroy(servient: &mut impl StaticServient) -> CoreResult<()> {
     servient.begin_destroy()
-}
-
-#[cfg(feature = "std")]
-use clinkz_wot_servient::{ExposedThingHandle, Servient, ServientBuilder, ServientResult};
-
-/// Type-checks complete host binding installation. Bare server/compiler
-/// values have no legal entry here.
-#[cfg(feature = "std")]
-pub fn build_host_property_read(
-    limits: ResourceLimits,
-    binding: HostBindingPreparation,
-) -> ServientResult<Servient> {
-    ServientBuilder::new()
-        .resource_limits(limits)
-        .binding_registration(binding)
-        .build()
-}
-
-/// Installs one real synchronous handler and begins the product-owned expose
-/// transaction. The runner never constructs a plan, route, or prepare input.
-#[cfg(feature = "std")]
-pub fn begin_host_property_read<H>(
-    servient: &Servient,
-    td: Thing,
-    handler: H,
-    footprint: HandlerFootprint,
-) -> ServientResult<ExposedThingHandle>
-where
-    H: ReadPropertyHandler + Send + Sync + 'static,
-{
-    let exposed = servient.produce_td(td)?;
-    exposed.set_read_property_handler("level", handler, footprint)?;
-    exposed.begin_expose()?;
-    Ok(exposed)
-}
-
-/// Drives the host adapter through the same bounded transition kernel.
-#[cfg(feature = "std")]
-pub fn step_host_property_read(
-    servient: &Servient,
-    cx: &mut Context<'_>,
-    budget: &mut WorkBudget,
-) -> StepStatus<()> {
-    servient.step(cx, budget)
 }
 
 #[cfg(test)]

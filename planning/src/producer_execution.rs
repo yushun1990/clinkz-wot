@@ -27,6 +27,7 @@ pub struct ProducerBindingPreparation<C, E: ProducerExecutor> {
     configuration: E::Configuration,
     identity: BindingRegistrationIdentity,
     policy: ProducerInstallPolicy,
+    service: Option<ProducerServicePolicy>,
 }
 
 impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, E> {
@@ -46,12 +47,14 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
         }
         let identity = executor.identity();
         let policy = executor.install_policy();
+        let service = executor.service_policy();
         Ok(Self {
             compiler,
             executor,
             configuration,
             identity,
             policy,
+            service,
         })
     }
 
@@ -81,6 +84,7 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
         if !self.executor.configuration_matches(&self.configuration)
             || self.executor.identity() != self.identity
             || self.executor.install_policy() != self.policy
+            || self.executor.service_policy() != self.service
             || self.compiler.configuration() != &self.configuration
         {
             return Err(refused((self, handler)));
@@ -119,6 +123,7 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
             self.executor,
             self.configuration,
             self.policy,
+            self.service,
             entry,
             handler,
             footprint,

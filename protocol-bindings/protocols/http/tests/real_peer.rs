@@ -84,7 +84,12 @@ fn unfinished_response_must_reject(bytes: Vec<u8>) {
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
         (timed_out, error)
     });
     peer.join().unwrap();
@@ -191,7 +196,12 @@ fn response_case_with_body(
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     });
     peer.join().unwrap();
 }
@@ -310,7 +320,12 @@ fn slow_chunked_octets_wake_public_runtime_across_every_delimiter() {
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     });
     peer.join().unwrap();
 }
@@ -566,7 +581,12 @@ fn incomplete_supported_responses_cancel_or_expire_then_reuse_original_runtime()
                     call.step(&mut Context::from_waker(Waker::noop()), &mut work());
                     assert!(call.try_take(&mut work()).unwrap().is_none());
                 }
-                assert!(parent.lock().unwrap().iter().any(|a| a.used() != 0));
+                assert!(
+                    parent
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                        .iter()
+                        .any(|a| a.used() != 0)
+                );
                 // Result occupancy cannot be borrowed by an ordinary new read.
                 let rejected = handle
                     .read_property(
@@ -609,7 +629,12 @@ fn incomplete_supported_responses_cancel_or_expire_then_reuse_original_runtime()
                 shutdown(&runtime);
                 drop(runtime);
                 drop(observer);
-                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+                assert!(
+                    parent
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                        .iter()
+                        .all(|a| a.used() == 0)
+                );
             });
             peer.join().unwrap();
         }
@@ -677,7 +702,12 @@ fn buffered_completion_respects_cancel_and_result_orders() {
                 shutdown(&runtime);
                 drop(runtime);
                 drop(observer);
-                assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+                assert!(
+                    parent
+                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                        .iter()
+                        .all(|a| a.used() == 0)
+                );
             });
             peer.join().unwrap();
         }
@@ -734,7 +764,12 @@ fn cancellation_and_dropped_ticket_retire_socket_and_allow_next_read() {
             shutdown(&runtime);
             drop(runtime);
             drop(observer);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
         });
         peer.join().unwrap();
     }
@@ -764,7 +799,12 @@ fn preacceptance_rejections_recover_the_original_request_without_connecting() {
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     }
     let rt = recipe();
     let _entered = rt.enter();
@@ -787,7 +827,12 @@ fn preacceptance_rejections_recover_the_original_request_without_connecting() {
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     }
     let (runtime, handle, observer, parent) = engine(port);
     let rejected = match handle.read_property(
@@ -804,7 +849,12 @@ fn preacceptance_rejections_recover_the_original_request_without_connecting() {
     shutdown(&runtime);
     drop(runtime);
     drop(observer);
-    assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+    assert!(
+        parent
+            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+            .iter()
+            .all(|a| a.used() == 0)
+    );
     assert!(listener.accept().is_err());
 }
 
@@ -861,7 +911,12 @@ fn deadline_drain_and_root_loss_retire_partial_chunked_peer() {
                 assert!(observer().0.unwrap().is_complete());
             }
             drop(observer);
-            assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+            assert!(
+                parent
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                    .iter()
+                    .all(|a| a.used() == 0)
+            );
         });
         peer.join().unwrap();
     }
@@ -915,7 +970,12 @@ server.server_close()
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     });
     assert!(peer.wait().unwrap().success());
 }
@@ -937,6 +997,11 @@ fn accepted_but_unpolled_call_has_no_network_effect() {
         drop(runtime);
         drop(observer);
         assert!(listener.accept().is_err());
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     });
 }

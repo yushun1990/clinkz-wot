@@ -9,7 +9,7 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     num::NonZeroU64,
-    sync::{Arc, Mutex},
+    sync::Arc,
     task::{Context, Waker},
     time::{Duration, Instant},
 };
@@ -47,7 +47,7 @@ type Engine<O> = (
     ConsumerPropertyReadRuntime,
     ConsumerPropertyReadHandle,
     O,
-    Arc<Mutex<[ResourceAccount; 20]>>,
+    Arc<clinkz_wot_servient::host_accounts::HostResourceAccounts>,
 );
 fn engine(port: u16) -> Engine<impl Fn() -> (Option<CleanupOutcome>, [u64; 4])> {
     engine_with_targets(
@@ -67,7 +67,7 @@ fn engine_with_clock(
     clock: Arc<dyn RuntimeClock + Send + Sync>,
 ) -> Engine<impl Fn() -> (Option<CleanupOutcome>, [u64; 4])> {
     let policy = policy();
-    let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+    let parent = Arc::new(clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap());
     let registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(600),

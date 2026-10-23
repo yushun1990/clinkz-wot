@@ -13,7 +13,12 @@ fn source(forms: Value) -> Value {
 }
 fn consume_source(value: Value) -> Engine<impl Fn() -> (Option<CleanupOutcome>, [u64; 4])> {
     let policy = policy();
-    let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+    let parent = Arc::new(
+        clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+            policy.parent_accounts(),
+        )
+        .unwrap(),
+    );
     let registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(600),
@@ -51,7 +56,7 @@ fn close<O>(
     runtime: ConsumerPropertyReadRuntime,
     handle: ConsumerPropertyReadHandle,
     observer: O,
-    parent: Arc<Mutex<[ResourceAccount; 20]>>,
+    parent: Arc<clinkz_wot_servient::host_accounts::HostResourceAccounts>,
 ) {
     drop(handle);
     shutdown(&runtime);
@@ -59,8 +64,7 @@ fn close<O>(
     drop(observer);
     assert!(
         parent
-            .lock()
-            .unwrap()
+            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
             .iter()
             .all(|account| account.used() == 0)
     );
@@ -541,7 +545,12 @@ fn failed_resolution_or_unsupported_security_reclaims_the_original_accounts() {
             _ => td["urn:many:values"] = json!(vec![0; 128]),
         }
         let policy = policy();
-        let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+        let parent = Arc::new(
+            clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                policy.parent_accounts(),
+            )
+            .unwrap(),
+        );
         let registration = try_consumer_registration(
             HttpConsumerConfig::for_cleartext_ip().unwrap(),
             BindingId::new(600),
@@ -585,8 +594,7 @@ fn failed_resolution_or_unsupported_security_reclaims_the_original_accounts() {
         drop(observer);
         assert!(
             parent
-                .lock()
-                .unwrap()
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
                 .iter()
                 .all(|account| account.used() == 0)
         );
@@ -1012,7 +1020,12 @@ mod reply_bus {
         .try_into_consumer_compiler()
         .unwrap_or_else(|_| panic!("open compiler capture"));
         let policy = policy();
-        let parent = Arc::new(Mutex::new(policy.parent_accounts()));
+        let parent = Arc::new(
+            clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+                policy.parent_accounts(),
+            )
+            .unwrap(),
+        );
         let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
             owner,
             policy,

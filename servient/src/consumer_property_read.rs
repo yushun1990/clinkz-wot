@@ -760,15 +760,60 @@ impl ConsumerPropertyReadPolicy {
 }
 
 trait Parent: Clone {
-    fn edit<T>(&self, f: impl FnOnce(&mut [ResourceAccount; N]) -> T) -> T;
+    fn snapshot(&self) -> [ResourceAccount; N];
+    fn reserve(&self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)>;
+    fn release(&self, amount: [u64; N]);
 }
 #[derive(Clone, Copy)]
 struct StaticParent<'a>(&'a RefCell<[ResourceAccount; N]>);
-impl Parent for StaticParent<'_> {
+impl StaticParent<'_> {
     fn edit<T>(&self, f: impl FnOnce(&mut [ResourceAccount; N]) -> T) -> T {
         f(&mut self.0.borrow_mut())
     }
 }
+impl Parent for StaticParent<'_> {
+    fn snapshot(&self) -> [ResourceAccount; N] {
+        let a = self.0.borrow();
+        core::array::from_fn(|i| {
+            let mut copy = ResourceAccount::new(
+                SlotIndex::new(i as u32),
+                Generation::INITIAL,
+                a[i].kind(),
+                a[i].limit(),
+            );
+            copy.try_reserve(a[i].used()).unwrap().commit();
+            copy
+        })
+    }
+    fn reserve(&self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)> {
+        self.edit(|a| reserve_accounts(a, amount))
+    }
+    fn release(&self, amount: [u64; N]) {
+        self.edit(|a| {
+            for (a, n) in a.iter_mut().zip(amount) {
+                assert!(a.release_committed(n));
+            }
+        });
+    }
+}
+fn reserve_accounts(
+    a: &mut [ResourceAccount; N],
+    amount: [u64; N],
+) -> Option<(usize, SlotIndex, Generation, u64, u64)> {
+    for i in 0..N {
+        if let Some(r) = a[i].try_reserve(amount[i]) {
+            r.commit();
+        } else {
+            for j in 0..i {
+                assert!(a[j].release_committed(amount[j]));
+            }
+            let owner = a[i].try_reserve(0).expect("zero receipt").owner();
+            return Some((i, owner.0, owner.1, a[i].limit(), a[i].used()));
+        }
+    }
+    None
+}
+
 struct Charge<P: Parent> {
     parent: P,
     local: [ResourceAccount; N],
@@ -778,15 +823,20 @@ struct Charge<P: Parent> {
 }
 impl<P: Parent> Charge<P> {
     fn is_held(&self) -> bool {
-        self.local.iter().zip(self.held).all(|(a, n)| a.used() == n)
-            && self.parent.edit(|a| {
-                a.iter()
-                    .enumerate()
-                    .all(|(i, a)| a.kind() == KINDS[i] && a.used() >= self.held[i])
-            })
+        self.local.iter().zip(self.held).all(|(a, n)| a.used() == n) && {
+            self.parent
+                .snapshot()
+                .iter()
+                .enumerate()
+                .all(|(i, a)| a.kind() == KINDS[i] && a.used() >= self.held[i])
+        }
     }
     fn new(parent: P, policy: &ConsumerPropertyReadPolicy) -> CoreResult<Self> {
-        let valid = parent.edit(|a| a.iter().zip(KINDS).all(|(a, k)| a.kind() == k));
+        let valid = parent
+            .snapshot()
+            .iter()
+            .zip(KINDS)
+            .all(|(a, k)| a.kind() == k);
         if !valid {
             return Err(invalid());
         }
@@ -807,25 +857,7 @@ impl<P: Parent> Charge<P> {
                 return Err(self.capacity_error(i, n, None));
             }
         }
-        let rejected = self.parent.edit(|a| {
-            let mut acquired = 0;
-            for i in 0..N {
-                if let Some(r) = a[i].try_reserve(amount[i]) {
-                    r.commit();
-                    acquired += 1;
-                } else {
-                    for j in 0..acquired {
-                        assert!(a[j].release_committed(amount[j]));
-                    }
-                    let owner = a[i]
-                        .try_reserve(0)
-                        .expect("zero receipt retains account totals")
-                        .owner();
-                    return Some((i, owner.0, owner.1, a[i].limit(), a[i].used()));
-                }
-            }
-            None
-        });
+        let rejected = self.parent.reserve(amount);
         if let Some((i, slot, generation, limit, used)) = rejected {
             return Err(self.capacity_error(i, amount[i], Some((slot, generation, limit, used))));
         }
@@ -879,11 +911,7 @@ impl<P: Parent> Charge<P> {
                 assert!(self.local[i].release_committed(n));
             }
         }
-        self.parent.edit(|a| {
-            for (a, n) in a.iter_mut().zip(amount) {
-                assert!(a.release_committed(n));
-            }
-        });
+        self.parent.release(amount);
     }
 }
 impl<P: Parent> Drop for Charge<P> {

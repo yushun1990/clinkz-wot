@@ -29,6 +29,6 @@ pub mod prelude {
         ReadPropertyHandler,
     };
     #[cfg(feature = "std")]
-    pub use crate::servient::{ExposedThingHandle, Servient, ServientBuilder};
+    pub use crate::servient::{Servient, ServientBuilder};
     pub use crate::servient::{ServientError, ServientResult};
 }

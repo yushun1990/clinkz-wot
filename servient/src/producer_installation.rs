@@ -1,21 +1,19 @@
-//! Funded Host Producer installation, deliberately ending at InstalledClosed.
-//! No serving permit, handler dispatch, or request/response bridge is supplied
-//! by this checkpoint. The old staged Host expose path is not invoked here.
+//! Funded Host Producer installation, publication, dispatch and retirement.
+//! The retained Binding owner borrows current acceptance permits and sealed
+//! replies; the Servient owns application dispatch and all Engine charges.
 use alloc::{boxed::Box, sync::Arc};
 use clinkz_wot_core::{producer::*, *};
 use clinkz_wot_foundation::{
-    Generation, MonotonicInstant, ResourceAccount, ResourceKind as K, ResourceLimits, SlotIndex,
-    WorkBudget, WorkClass,
+    MonotonicInstant, ResourceKind as K, ResourceLimits, WorkBudget, WorkClass,
 };
 use clinkz_wot_planning::producer_execution::PreparedProducer;
 use core::{
     alloc::Layout,
     mem::size_of,
-    sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
 };
 
-const KINDS: [K; 12] = [
+pub const INSTALLATION_ACCOUNT_KINDS: [K; 19] = [
     K::EngineLiveBytesGlobalMax,
     K::CompiledRuntimeBytesGlobalMax,
     K::BindingArtifactBytesGlobalMax,
@@ -28,87 +26,31 @@ const KINDS: [K; 12] = [
     K::BindingPollTemporaryBytesGlobalMax,
     K::BindingArtifactsGlobalMax,
     K::DurableStatusBytesGlobalMax,
+    K::PendingHandlerCallsGlobalMax,
+    K::InFlightResponsesGlobalMax,
+    K::BindingResponseBufferBytesGlobalMax,
+    K::BindingIngressItemsGlobalMax,
+    K::BindingIngressBytesGlobalMax,
+    K::ThingsGlobalMax,
+    K::BindingsGlobalMax,
 ];
-/// Application-provisioned parent capacity, shared by all participating owners.
-/// Limits are immutable and only funded runtime owners can change charges.
-/// Inspection returns detached snapshots, never a lock or mutable bank loan.
-///
-/// ```compile_fail,E0599
-/// use clinkz_wot_servient::producer_installation::ProducerInstallationAccounts;
-/// fn hold_parent(bank: &ProducerInstallationAccounts) {
-///     let _guard = bank.lock();
-/// }
-/// ```
-pub struct ProducerInstallationAccounts {
-    limits: [u64; 12],
-    used: [AtomicUsize; 12],
-    peak: [AtomicUsize; 12],
-}
+pub use crate::host_accounts::HostResourceAccounts as ProducerInstallationAccounts;
 pub fn producer_installation_accounts(limits: &ResourceLimits) -> ProducerInstallationAccounts {
-    ProducerInstallationAccounts {
-        limits: core::array::from_fn(|i| limits.get(KINDS[i]).unwrap_or(0)),
-        used: core::array::from_fn(|_| AtomicUsize::new(0)),
-        peak: core::array::from_fn(|_| AtomicUsize::new(0)),
-    }
-}
-impl ProducerInstallationAccounts {
-    /// Allocation-free individual account observations, not a transaction or
-    /// reservation authority. Holding or mutating the copies cannot delay Drop
-    /// or change the original limits/charges. Concurrent admission/retirement
-    /// may occur between samples of different resource fields.
-    pub fn snapshot(&self) -> [ResourceAccount; 12] {
-        core::array::from_fn(|i| {
-            let used = self.used[i].load(Ordering::Acquire) as u64;
-            let peak = (self.peak[i].load(Ordering::Relaxed) as u64).max(used);
-            let mut account = ResourceAccount::new(
-                SlotIndex::new(i as u32),
-                Generation::INITIAL,
-                KINDS[i],
-                self.limits[i],
-            );
-            account.try_reserve(peak).expect("bounded peak").commit();
-            assert!(account.release_committed(peak - used));
-            account
-        })
-    }
-    fn try_reserve(&self, i: usize, amount: u64) -> bool {
-        // These are controlled resident bytes/items, so aggregate backing must
-        // fit the native address space. Do not require 64-bit target atomics.
-        let Ok(amount) = usize::try_from(amount) else {
-            return false;
-        };
-        match self.used[i].fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-            used.checked_add(amount)
-                .filter(|next| *next as u64 <= self.limits[i])
-        }) {
-            Ok(previous) => {
-                self.peak[i].fetch_max(previous + amount, Ordering::Relaxed);
-                true
-            }
-            Err(_) => false,
-        }
-    }
-    fn release(&self, i: usize, amount: u64) {
-        if amount != 0 {
-            let amount = usize::try_from(amount).expect("original native-sized reservation");
-            // No mutex, callback, retry loop or deferred queue on disposal.
-            // Only the move-only charge holding these exact bytes can release
-            // them, after their physical owner has been destroyed.
-            let previous = self.used[i].fetch_sub(amount, Ordering::Release);
-            assert!(previous >= amount, "original Producer reservation");
-        }
-    }
+    ProducerInstallationAccounts::new(limits)
 }
 
 struct Charge {
     parent: Arc<ProducerInstallationAccounts>,
-    held: [u64; 12],
+    held: [u64; 19],
 }
 impl Charge {
     fn retain_status(&mut self, bytes: u64, status: u64) {
-        let keep = [bytes, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, status];
+        let keep = [
+            bytes, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, status, 0, 0, 0, 0, 0, 0, 0,
+        ];
         for (i, remaining) in keep.into_iter().enumerate() {
-            self.parent.release(i, self.held[i] - remaining);
+            self.parent
+                .release(INSTALLATION_ACCOUNT_KINDS[i], self.held[i] - remaining);
             self.held[i] = remaining;
         }
     }
@@ -116,7 +58,7 @@ impl Charge {
 impl Drop for Charge {
     fn drop(&mut self) {
         for (i, amount) in self.held.iter().copied().enumerate() {
-            self.parent.release(i, amount);
+            self.parent.release(INSTALLATION_ACCOUNT_KINDS[i], amount);
         }
     }
 }
@@ -146,6 +88,8 @@ fn invalid() -> CoreError {
 struct Owner<E: ProducerExecutor, H: ReadPropertyHandler> {
     execution: Option<ProducerExecutionRegistration<E, H>>,
     installation: Option<E::Installation>,
+    request: Option<ProducerRequest>,
+    response: Option<ProducerResponse>,
 }
 impl<E: ProducerExecutor, H: ReadPropertyHandler> Drop for Owner<E, H> {
     fn drop(&mut self) {
@@ -160,6 +104,9 @@ pub enum ProducerInstallationState {
     Reserved,
     Installing,
     InstalledClosed,
+    Serving,
+    Dispatching,
+    Delivering,
     Closing,
     Closed,
 }
@@ -176,6 +123,9 @@ pub struct ProducerInstallationRuntime<E: ProducerExecutor, H: ReadPropertyHandl
     first_cause: Option<CoreError>,
     deadline: Deadline,
     terminal_work: WorkBudget,
+    timeout_ticks: u64,
+    io_deadline: Deadline,
+    last_now: Option<MonotonicInstant>,
 }
 impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
     ProducerInstallationRuntime<E, H>
@@ -209,7 +159,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                 None,
                 None,
             );
-        let admit = || -> CoreResult<[u64; 12]> {
+        let admit = || -> CoreResult<[u64; 19]> {
             prepared.check_current()?;
             if prepared.entry().instance_key() != authority.key() {
                 return Err(invalid());
@@ -219,7 +169,63 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
             if f.retained_bytes() < size_of::<H>() as u64 || p.local_drop_work == 0 {
                 return Err(invalid());
             }
-            let property = prepared.entry().property().len() as u64;
+            let property = Layout::new::<[usize; 2]>()
+                .extend(
+                    Layout::array::<u8>(prepared.entry().property().len())
+                        .map_err(|_| invalid())?,
+                )
+                .map_err(|_| invalid())?
+                .0
+                .pad_to_align()
+                .size() as u64;
+            let service = prepared.service_policy();
+            let response = service
+                .map(|s| {
+                    clinkz_wot_core::consumer_result_backing(
+                        s.response_body_bytes,
+                        s.response_media_capacity,
+                    )
+                    .ok_or_else(invalid)
+                })
+                .transpose()?
+                .unwrap_or(0);
+            let request = if service.is_some() {
+                size_of::<ProducerRequest>() as u64
+            } else {
+                0
+            };
+            if let Some(service) = service {
+                for (kind, amount) in [
+                    (K::PendingHandlerCallsPerThingMax, 1),
+                    (K::InFlightResponsesPerThingMax, 1),
+                    (K::BindingIngressItemsPerRouteMax, 1),
+                    (K::BindingIngressItemsPerBindingMax, 1),
+                    (K::BindingIngressBytesPerRouteMax, request),
+                    (K::BindingIngressBytesPerBindingMax, request),
+                    (K::BindingResponseBufferBytesPerRouteMax, response),
+                    (
+                        K::LargestContiguousAllocationBytesMax,
+                        Layout::new::<[usize; 2]>()
+                            .extend(
+                                Layout::array::<u8>(
+                                    usize::try_from(service.response_body_bytes)
+                                        .map_err(|_| invalid())?,
+                                )
+                                .map_err(|_| invalid())?,
+                            )
+                            .map_err(|_| invalid())?
+                            .0
+                            .pad_to_align()
+                            .size() as u64,
+                    ),
+                    (
+                        K::LargestContiguousAllocationBytesMax,
+                        service.response_media_capacity,
+                    ),
+                ] {
+                    check(&limits, kind, amount, quota_context)?;
+                }
+            }
             let extra = add(
                 add(
                     add(p.executor_bytes, p.program_bytes)?,
@@ -227,6 +233,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                 )?,
                 add(property, f.retained_bytes() - size_of::<H>() as u64)?,
             )?;
+            let extra = add(extra, add(response, f.pending_call_bytes())?)?;
             let owned = add(size_of::<Owner<E, H>>() as u64, extra)?;
             let total = add(owned, size_of::<Self>() as u64)?;
             let live_peak = add(total, p.temporary_bytes)?;
@@ -283,6 +290,13 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                 p.temporary_bytes,
                 1,
                 size_of::<Option<CoreError>>() as u64,
+                u64::from(service.is_some()),
+                u64::from(service.is_some()),
+                response,
+                u64::from(service.is_some()),
+                request,
+                1,
+                1,
             ])
         };
         let amounts = match admit() {
@@ -296,16 +310,21 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
         };
         let mut charge = Charge {
             parent: parent.clone(),
-            held: [0; 12],
+            held: [0; 19],
         };
         let reserve = (|| -> CoreResult<()> {
-            for i in 0..12 {
-                check(&limits, KINDS[i], amounts[i], quota_context)?;
-                let limit = parent.limits[i];
-                if !parent.try_reserve(i, amounts[i]) {
+            for i in 0..19 {
+                check(
+                    &limits,
+                    INSTALLATION_ACCOUNT_KINDS[i],
+                    amounts[i],
+                    quota_context,
+                )?;
+                let limit = parent.limit(INSTALLATION_ACCOUNT_KINDS[i]);
+                if !parent.try_reserve(INSTALLATION_ACCOUNT_KINDS[i], amounts[i]) {
                     return Err(CoreError::LimitExceeded {
                         context: quota_context,
-                        resource: KINDS[i],
+                        resource: INSTALLATION_ACCOUNT_KINDS[i],
                         limit,
                         requested: Some(amounts[i]),
                         observed: None,
@@ -326,6 +345,8 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
         let mut owner = match clinkz_wot_core::artifact::try_box(Owner::<E, H> {
             execution: None,
             installation: None,
+            request: None,
+            response: None,
         }) {
             Ok(owner) => owner,
             Err(_) => {
@@ -352,6 +373,9 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
             first_cause: None,
             deadline,
             terminal_work: WorkBudget::new().with_remaining(WorkClass::CleanupItems, drop_work),
+            timeout_ticks: 0,
+            io_deadline: Deadline::NONE,
+            last_now: None,
         })
     }
     pub fn state(&self) -> ProducerInstallationState {
@@ -367,6 +391,52 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
         self.owner
             .as_ref()
             .map(|o| o.execution.as_ref().unwrap().entry())
+    }
+    /// Requests publication after native readiness. All source preparation has
+    /// finished; stepping installs the driver and then publishes locally.
+    pub fn begin_expose(&mut self, timeout_ticks: u64) -> CoreResult<()> {
+        if !matches!(
+            self.state,
+            ProducerInstallationState::Reserved
+                | ProducerInstallationState::Installing
+                | ProducerInstallationState::InstalledClosed
+        ) || timeout_ticks == 0
+            || self
+                .owner
+                .as_ref()
+                .unwrap()
+                .execution
+                .as_ref()
+                .unwrap()
+                .service_policy()
+                .is_none()
+        {
+            return Err(invalid());
+        }
+        self.timeout_ticks = timeout_ticks;
+        Ok(())
+    }
+    /// Atomically publishes local acceptance. No fallible Binding callback is
+    /// performed here. The caller supplies a nonzero duration in its clock's
+    /// ticks; the same clock must drive every subsequent step.
+    pub fn begin_serving(&mut self, timeout_ticks: u64) -> CoreResult<()> {
+        if self.state != ProducerInstallationState::InstalledClosed
+            || timeout_ticks == 0
+            || self
+                .owner
+                .as_ref()
+                .unwrap()
+                .execution
+                .as_ref()
+                .unwrap()
+                .service_policy()
+                .is_none()
+        {
+            return Err(invalid());
+        }
+        self.timeout_ticks = timeout_ticks;
+        self.state = ProducerInstallationState::Serving;
+        Ok(())
     }
     pub fn begin_close(&mut self) {
         if self.state != ProducerInstallationState::Closed {
@@ -388,7 +458,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
         }
         self.state = ProducerInstallationState::Closing;
     }
-    /// One funded construction, installation or close callback. No callbacks
+    /// One funded construction, native poll, handler call or close callback. No callbacks
     /// run with zero credit. Deadline/clock failure closes authority locally;
     /// first cause survives subsequent cleanup failures and cancellation.
     pub fn step(
@@ -398,7 +468,26 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
         now: MonotonicInstant,
     ) -> Poll<ProducerInstallationState> {
         use ProducerInstallationState::*;
-        if matches!(self.state, Reserved | Installing) {
+        if self.state != Closed {
+            if self
+                .last_now
+                .is_some_and(|last| now.checked_duration_since(last).is_none())
+            {
+                self.fail(invalid());
+            }
+            self.last_now = Some(now);
+        }
+        if matches!(self.state, Serving | Dispatching | Delivering) {
+            match self.io_deadline.checked_is_elapsed_at(now) {
+                Some(false) => {}
+                Some(true) => self.fail(CoreError::TimedOut(ErrorContext::new(
+                    ErrorPhase::Binding,
+                    RetryClass::Never,
+                ))),
+                None => self.fail(invalid()),
+            }
+        }
+        if matches!(self.state, Reserved | Installing | InstalledClosed) {
             match self.deadline.checked_is_elapsed_at(now) {
                 Some(false) => {}
                 Some(true) => self.fail(CoreError::TimedOut(ErrorContext::new(
@@ -408,11 +497,17 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                 None => self.fail(invalid()),
             }
         }
+        if self.state == InstalledClosed && self.timeout_ticks != 0 {
+            self.begin_serving(self.timeout_ticks)
+                .expect("admitted publication");
+        }
         if matches!(self.state, Closed | InstalledClosed) {
             return Poll::Ready(self.state);
         }
         let class = if self.state == Closing {
             WorkClass::CleanupItems
+        } else if self.state == Dispatching {
+            WorkClass::HandlerSteps
         } else {
             WorkClass::BindingPolls
         };
@@ -467,6 +562,78 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                     }
                     Poll::Ready(Err(error)) => {
                         self.fail(error);
+                        Poll::Ready(self.state)
+                    }
+                }
+            }
+            Serving => {
+                let owner = self.owner.as_mut().unwrap();
+                let native = owner.installation.as_mut().unwrap();
+                let result = native.poll_request(
+                    cx,
+                    self.authority.accept_permit(),
+                    now,
+                    self.timeout_ticks,
+                );
+                self.io_deadline = native.request_deadline();
+                match result {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Err(error)) => {
+                        self.fail(error);
+                        Poll::Ready(self.state)
+                    }
+                    Poll::Ready(Ok(request)) => {
+                        if request.instance() != self.authority.key()
+                            || request.correlation().is_empty()
+                        {
+                            owner.request = Some(request);
+                            self.fail(CoreError::StaleHandle(context()));
+                        } else {
+                            owner.request = Some(request);
+                            self.state = Dispatching;
+                        }
+                        Poll::Ready(self.state)
+                    }
+                }
+            }
+            Dispatching => {
+                let owner = self.owner.as_mut().unwrap();
+                let execution = owner.execution.as_ref().unwrap();
+                let entry = execution.entry();
+                let binding = entry.binding();
+                let context = HandlerContext::for_producer_property_read(
+                    self.authority.key(),
+                    entry.target(),
+                    (binding.binding_id(), binding.binding_generation()),
+                )
+                .expect("prepared Property Read target");
+                let result = execution.dispatch(context);
+                let service = execution.service_policy().unwrap();
+                owner.response = Some(ProducerResponse::seal(
+                    owner.request.take().unwrap(),
+                    result,
+                    service.response_body_bytes,
+                    service.response_media_capacity,
+                ));
+                self.state = Delivering;
+                Poll::Ready(self.state)
+            }
+            Delivering => {
+                let owner = self.owner.as_mut().unwrap();
+                match owner.installation.as_mut().unwrap().poll_response(
+                    cx,
+                    owner.response.as_ref().unwrap(),
+                    now,
+                ) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Err(error)) => {
+                        self.fail(error);
+                        Poll::Ready(self.state)
+                    }
+                    Poll::Ready(Ok(())) => {
+                        owner.response = None;
+                        self.io_deadline = Deadline::NONE;
+                        self.state = Serving;
                         Poll::Ready(self.state)
                     }
                 }

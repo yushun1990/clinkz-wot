@@ -373,3 +373,14 @@ mod tests {
         assert_validation_failure(output);
     }
 }
+
+/// One Core-owned handler-origin shape rule shared by static and native Host
+/// Producer carriers. Protocol mapping and payload syntax remain Binding owned.
+pub(crate) fn property_read_handler_shape(output: &InteractionOutput) -> bool {
+    let metadata = output.metadata();
+    output.data().is_some()
+        && output.status() == InteractionStatus::Ok
+        && metadata.payload_role() == ResponsePayloadRole::Application
+        && metadata.binding_response().is_none()
+        && metadata.action_invocation().is_none()
+}

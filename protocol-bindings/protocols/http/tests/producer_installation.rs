@@ -62,10 +62,15 @@ unsafe impl std::alloc::GlobalAlloc for AllocationObserver {
             .unwrap_or(false)
         {
             let funded = OBSERVED_BANK.with(|b| {
-                b.borrow().as_ref().unwrap().snapshot().iter().any(|a| {
-                    a.kind() == ResourceKind::BindingSlotStateBytesGlobalMax
-                        && a.used() >= layout.size() as u64
-                })
+                b.borrow()
+                    .as_ref()
+                    .unwrap()
+                    .snapshot(INSTALLATION_ACCOUNT_KINDS)
+                    .iter()
+                    .any(|a| {
+                        a.kind() == ResourceKind::BindingSlotStateBytesGlobalMax
+                            && a.used() >= layout.size() as u64
+                    })
             });
             FUNDED_AT_FREE.with(|f| f.set(funded));
         }
@@ -185,7 +190,11 @@ fn free(address: SocketAddr) {
     drop(TcpListener::bind(address).expect("native listener was retained"));
 }
 fn empty(b: &Arc<ProducerInstallationAccounts>) {
-    assert!(b.snapshot().iter().all(|a| a.used() == 0));
+    assert!(
+        b.snapshot(INSTALLATION_ACCOUNT_KINDS)
+            .iter()
+            .all(|a| a.used() == 0)
+    );
 }
 #[test]
 fn real_listener_stays_unpublished_then_paid_close_and_last_owner_drop_retire_it() {
@@ -284,7 +293,7 @@ fn parent_capacity_refusal_has_zero_native_effects_and_preserves_source_free_inp
         .unwrap();
     let b = Arc::new(producer_installation_accounts(&limits));
     let sibling = runtime(address, Generation::INITIAL.checked_next().unwrap(), &b);
-    let before = b.snapshot().map(|a| a.used());
+    let before = b.snapshot(INSTALLATION_ACCOUNT_KINDS).map(|a| a.used());
     let (prepared, authority) = prepare(address, Generation::INITIAL);
     let refused = Runtime::try_new(
         prepared,
@@ -295,7 +304,10 @@ fn parent_capacity_refusal_has_zero_native_effects_and_preserves_source_free_inp
     )
     .err()
     .unwrap();
-    assert_eq!(b.snapshot().map(|a| a.used()), before);
+    assert_eq!(
+        b.snapshot(INSTALLATION_ACCOUNT_KINDS).map(|a| a.used()),
+        before
+    );
     let ((prepared, authority, limits, original), _) = refused.into_parts();
     assert!(Arc::ptr_eq(&b, &original));
     assert_eq!(prepared.entry().program().listen_address(), address);
@@ -395,15 +407,17 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
         "admission must allocate only the one fallible controlled owner"
     );
     {
-        let bank = b.snapshot();
-        assert_eq!(bank[4].used(), block as u64);
+        let bank = b.snapshot(INSTALLATION_ACCOUNT_KINDS);
+        let extra =
+            2 * std::mem::size_of::<usize>() as u64 + consumer_result_backing(4096, 64).unwrap();
+        assert_eq!(bank[4].used(), block as u64 + extra);
         assert_eq!(
             bank[0].used(),
-            (block + std::mem::size_of::<Runtime>()) as u64 + 1024
+            (block + std::mem::size_of::<Runtime>()) as u64 + extra + 1024
         );
         assert_eq!(
             bank[1].used(),
-            (block + std::mem::size_of::<Runtime>()) as u64
+            (block + std::mem::size_of::<Runtime>()) as u64 + extra
         );
     }
     OBSERVED_BANK.with(|p| *p.borrow_mut() = Some(b.clone()));
@@ -416,7 +430,8 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
     OBSERVE_FREE.with(|s| s.set(0));
     OBSERVED_BANK.with(|p| p.borrow_mut().take());
     empty(&b);
-    for ceiling in [block, block - 1] {
+    let largest = block.max(4096 + 2 * std::mem::size_of::<usize>());
+    for ceiling in [largest, largest - 1] {
         let (prepared, authority) = prepare(address, Generation::INITIAL);
         let limits = GatewayDefaultV1::LIMITS
             .clone()
@@ -426,7 +441,7 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
             )
             .unwrap();
         let result = Runtime::try_new(prepared, authority, limits, b.clone(), Deadline::NONE);
-        assert_eq!(result.is_ok(), ceiling == block);
+        assert_eq!(result.is_ok(), ceiling == largest);
         drop(result);
         empty(&b);
     }
@@ -521,4 +536,77 @@ fn fd_pressure_remains_a_deployment_failure_and_releases_the_same_owner() {
     drop(fresh);
     empty(&b);
     free(address);
+}
+
+#[test]
+fn serving_ingress_response_and_instance_quotas_refuse_before_native_effects() {
+    let _serial = SERIAL.lock().unwrap();
+    use ResourceKind as K;
+    let address = address();
+    let request = std::mem::size_of::<ProducerRequest>() as u64;
+    let response = consumer_result_backing(4096, 64).unwrap();
+    let fields = [
+        (K::PendingHandlerCallsPerThingMax, 1),
+        (K::InFlightResponsesPerThingMax, 1),
+        (K::BindingIngressItemsPerRouteMax, 1),
+        (K::BindingIngressItemsPerBindingMax, 1),
+        (K::BindingIngressBytesPerRouteMax, request),
+        (K::BindingIngressBytesPerBindingMax, request),
+        (K::BindingResponseBufferBytesPerRouteMax, response),
+        (K::PendingHandlerCallsGlobalMax, 1),
+        (K::InFlightResponsesGlobalMax, 1),
+        (K::BindingIngressItemsGlobalMax, 1),
+        (K::BindingIngressBytesGlobalMax, request),
+        (K::BindingResponseBufferBytesGlobalMax, response),
+        (K::ThingsGlobalMax, 1),
+        (K::BindingsGlobalMax, 1),
+    ];
+    for (kind, required) in fields {
+        for ceiling in [required, required - 1] {
+            let limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .try_with_limit(kind, Some(ceiling))
+                .unwrap();
+            let b = bank();
+            let (prepared, authority) = prepare(address, Generation::INITIAL);
+            let key = authority.key();
+            let result = Runtime::try_new(prepared, authority, limits, b.clone(), Deadline::NONE);
+            assert_eq!(result.is_ok(), ceiling == required, "{kind:?}");
+            match result {
+                Ok(runtime) => drop(runtime),
+                Err(refused) => {
+                    assert!(
+                        matches!(refused.error().error(), CoreError::LimitExceeded { resource, .. } if *resource == kind)
+                    );
+                    let (_, returned, _, original) = refused.into_input();
+                    assert_eq!(returned.key(), key);
+                    assert!(Arc::ptr_eq(&original, &b));
+                }
+            }
+            empty(&b);
+            free(address);
+        }
+        if INSTALLATION_ACCOUNT_KINDS.contains(&kind) {
+            let parent_limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .try_with_limit(kind, Some(required - 1))
+                .unwrap();
+            let b = Arc::new(producer_installation_accounts(&parent_limits));
+            let (prepared, authority) = prepare(address, Generation::INITIAL);
+            let refused = Runtime::try_new(
+                prepared,
+                authority,
+                GatewayDefaultV1::LIMITS.clone(),
+                b.clone(),
+                Deadline::NONE,
+            )
+            .err()
+            .expect("original parent capacity");
+            assert!(
+                matches!(refused.error().error(), CoreError::LimitExceeded { resource, .. } if *resource == kind)
+            );
+            empty(&b);
+            free(address);
+        }
+    }
 }

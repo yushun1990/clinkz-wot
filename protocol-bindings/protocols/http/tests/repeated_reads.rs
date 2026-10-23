@@ -42,7 +42,11 @@ fn hundred_alternating_public_reads_are_source_free_and_use_fresh_connections() 
     });
     recipe().block_on(async {
         let (runtime, handle, observer, parent) = engine(port);
-        let account_baseline: Vec<_> = parent.lock().unwrap().iter().map(|a| a.used()).collect();
+        let account_baseline: Vec<_> = parent
+            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+            .iter()
+            .map(|a| a.used())
+            .collect();
         #[cfg(target_os = "linux")]
         let fd_baseline = std::fs::read_dir("/proc/self/fd").unwrap().count();
         for i in 0..100 {
@@ -72,8 +76,7 @@ fn hundred_alternating_public_reads_are_source_free_and_use_fresh_connections() 
             retirement.recv_timeout(Duration::from_secs(5)).unwrap();
             assert_eq!(
                 parent
-                    .lock()
-                    .unwrap()
+                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
                     .iter()
                     .map(|a| a.used())
                     .collect::<Vec<_>>(),
@@ -91,7 +94,12 @@ fn hundred_alternating_public_reads_are_source_free_and_use_fresh_connections() 
         shutdown(&runtime);
         drop(runtime);
         drop(observer);
-        assert!(parent.lock().unwrap().iter().all(|a| a.used() == 0));
+        assert!(
+            parent
+                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
+                .iter()
+                .all(|a| a.used() == 0)
+        );
     });
     peer.join().unwrap();
 }

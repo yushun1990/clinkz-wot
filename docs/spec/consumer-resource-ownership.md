@@ -439,3 +439,24 @@ compiler/executor pairing. Generic concrete Layouts replace exact-type admission
 for this representation, with the same engine reservations, result seal and
 cleanup authority. Existing strict/owned legacy configuration vectors and all
 resource schema defaults retain their original values and scope.
+
+## Shared Host account authority
+
+The native Producer serving extension replaces the Host parent's public
+`Arc<Mutex<[ResourceAccount; 20]>>` with `Arc<HostResourceAccounts>`. Consumer
+`try_new` and Producer `ServientBuilder::new` accept the same bank, so overlapping
+Engine/cleanup/instance capacity cannot be bypassed by separate role counters.
+This is a Host storage/API amendment only: static caller accounts, Consumer
+schema-2 field meanings, identities, seals, disposal policy and local quotas
+are unchanged. `try_from_accounts` consumes distinct empty accounts and retains
+their original slot/generation coordinates; duplicate/live accounts are returned
+unchanged. `new` provisions limits directly. Separate banks intentionally define
+separate authorities; the caller owns provisioning and the bank's storage.
+
+Admission reserves each relevant counter atomically, rolls back partial failure,
+and never exceeds a field limit. A multi-field snapshot is an observation, not
+an atomic transaction. Release uses fixed-count atomic subtraction, so an
+application-held snapshot or capacity lease cannot block final-owner disposal.
+There is no public lock guard or mutable account loan. A capacity lease releases
+only its own reservation against the original bank. Parent capacity refusal
+still returns all unaccepted Consumer/Producer inputs for retry.
