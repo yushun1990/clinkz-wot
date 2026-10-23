@@ -47,13 +47,13 @@ still change that excluded semantic boundary.
 ## Production evidence
 
 The discriminator is
-[`resource_ownership_configuration.rs`](../tools/architecture-fixtures/consumer-runtime-entry/tests/resource_ownership_configuration.rs).
+[`consumer_configuration.rs`](../planning/tests/consumer_configuration.rs).
 It calls the public production Core types directly. It does not use the fixture's
 included Planning source or experimental adapters. Its nondefault key is an
 arbitrary distinguishable witness, not a proposed canonical binding encoding.
 
 - `ResolvedTargetCompiler::configuration` in
-  [`core/src/binding_compiler.rs`](../core/src/binding_compiler.rs) encodes only
+  [`planning/src/binding_compiler.rs`](../planning/src/binding_compiler.rs) encodes only
   `[0x63, 0x74, 1, capacity]` followed by zeros. All 64 supported capacities are
   checked. There is no private-policy, resource-contract, result-bound or cell
   constructor operand.

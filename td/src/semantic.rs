@@ -5,22 +5,28 @@
 //! are refused rather than guessed. No context or compound raw JSON is lent to
 //! a protocol compiler. All names and IRI-valued strings are resolved here once.
 
+use crate::thing::Thing;
+#[cfg(any(feature = "validated-thing", test))]
 use crate::{
     context::{ContextEntry, WOT_CONTEXT_1_0, WOT_CONTEXT_1_1},
     data_type::ExtensionMap,
-    thing::Thing,
 };
-use alloc::{alloc::alloc, collections::BTreeMap, string::String, vec::Vec};
+#[cfg(any(feature = "validated-thing", test))]
+use alloc::{alloc::alloc, collections::BTreeMap};
+use alloc::{string::String, vec::Vec};
 use core::alloc::Layout;
 #[cfg(test)]
 use core::mem::size_of;
-use serde_json::{Map, Number, Value};
+#[cfg(any(feature = "validated-thing", test))]
+use serde_json::Map;
+use serde_json::{Number, Value};
 
 mod facts;
 pub use facts::*;
 
 const NODES: usize = 128;
 const SCOPES: usize = 32;
+#[cfg(any(feature = "validated-thing", test))]
 const DEPTH: usize = 16;
 #[cfg(test)]
 #[path = "semantic_tests.rs"]
@@ -230,6 +236,7 @@ impl<'a> ResolvedSemanticDocument<'a> {
     ) -> Result<Self, SemanticError> {
         Self::resolve_metered(thing, property, index).0
     }
+    #[cfg(any(feature = "validated-thing", test))]
     pub(crate) fn resolve_metered(
         thing: &'a Thing,
         property: &str,
@@ -251,6 +258,7 @@ impl<'a> ResolvedSemanticDocument<'a> {
         (result.map(|()| resolver.document), work)
     }
 }
+#[cfg(any(feature = "validated-thing", test))]
 impl<'a> Resolver<'a> {
     fn prepare(
         &mut self,
@@ -444,6 +452,7 @@ impl<'a> Resolver<'a> {
 }
 
 // Exact, fallible, engine-prepaid backing. Node/Scope have no owned descendants.
+#[cfg(any(feature = "validated-thing", test))]
 fn buffer<T>(count: usize) -> Result<Vec<T>, SemanticError> {
     let layout = Layout::array::<T>(count).map_err(|_| SemanticError::Limit)?;
     let pointer = unsafe { alloc(layout) }.cast::<T>();
@@ -454,15 +463,18 @@ fn buffer<T>(count: usize) -> Result<Vec<T>, SemanticError> {
 }
 
 #[derive(Clone, Copy)]
+#[cfg(any(feature = "validated-thing", test))]
 enum ContextMap<'a> {
     Typed(&'a BTreeMap<String, Value>),
     Json(&'a Map<String, Value>),
 }
 #[derive(Clone, Copy)]
+#[cfg(any(feature = "validated-thing", test))]
 struct ContextFrame<'a> {
     map: ContextMap<'a>,
     vocab: &'a str,
 }
+#[cfg(any(feature = "validated-thing", test))]
 impl<'a> ContextMap<'a> {
     fn get(self, name: &str, fuel: &mut u64) -> Result<Option<&'a Value>, SemanticError> {
         let mut find = |key: &str, value: &'a Value| {
@@ -491,11 +503,13 @@ impl<'a> ContextMap<'a> {
     }
 }
 #[derive(Clone, Copy)]
+#[cfg(any(feature = "validated-thing", test))]
 struct ActiveContext<'a> {
     maps: [Option<ContextFrame<'a>>; DEPTH],
     len: usize,
     vocab: &'a str,
 }
+#[cfg(any(feature = "validated-thing", test))]
 impl<'a> ActiveContext<'a> {
     fn new(vocab: &'a str) -> Self {
         Self {
@@ -539,10 +553,12 @@ impl<'a> ActiveContext<'a> {
         Ok(None)
     }
 }
+#[cfg(any(feature = "validated-thing", test))]
 struct Resolver<'a> {
     document: ResolvedSemanticDocument<'a>,
     fuel: u64,
 }
+#[cfg(any(feature = "validated-thing", test))]
 impl<'a> Resolver<'a> {
     fn pay(&mut self, n: u64) -> Result<(), SemanticError> {
         self.fuel = self.fuel.checked_sub(n).ok_or(SemanticError::Limit)?;

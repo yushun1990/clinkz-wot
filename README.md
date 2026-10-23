@@ -153,11 +153,14 @@ Protocol Bindings extend the runtime with protocol capabilities.
             Servient Runtime
 ```
 
-The current concrete production slice is
-[Host HTTP Consumer Property Read](protocol-bindings/protocols/http/README.md),
-with an explicit cleartext-IP / NoSec envelope. Zenoh retains scoped native
-transport and architecture probes; its legacy direct-dispatch facade is retired.
-Neither establishes general operation or protocol parity.
+The current concrete binding is
+[Host HTTP Producer and Consumer Property Read](protocol-bindings/protocols/http/README.md),
+with an explicit cleartext-IP / NoSec envelope, source-free execution and manual
+Servient progress. The Producer serves a bounded loopback GET endpoint. The
+Consumer also supports the documented explicit method/header mappings.
+HTTPS/security qualification and broader operation families remain delivery work.
+Zenoh/pico implementations and historical prototypes have been withdrawn; Git
+retains their source and results. HTTP is an optional direct Cargo dependency.
 
 ---
 
@@ -178,11 +181,23 @@ Neither establishes general operation or protocol parity.
 
 The [system goals](docs/architecture/00-system-goals-and-context.md) own the
 enduring mission, [PLAN.md](PLAN.md) owns v1 delivery scope, and code/tests plus
-registered evidence establish current capabilities. Removing legacy APIs does
-not remove their corresponding product objectives. The
-[migration evidence](docs/evidence/WP-200-preparation-execution-boundary.toml)
-distinguishes retained Property Read behavior from withdrawn API implementations
-and capabilities still awaiting replacements.
+registered evidence establish current capabilities. The retained baseline includes:
+
+- TD/TM models, builders, extension-preserving round trips, validation and bounded
+  borrowed semantic preparation for Properties, Actions, Events and security data;
+- Host HTTP Property Read Producer/Consumer execution and its real-I/O regressions;
+- protocol-neutral static Property Read runtimes and bounded ownership/cleanup;
+- independently composed discovery clients and their in-memory reference backend;
+- payload codecs, logical clocks, resource accounting and portable shared layers.
+
+Legacy Core event fan-out, queue/merge subscriptions, `SubscriptionAcceptance`,
+payload-bearing `InteractionOptions`, old form-selection/template helpers, and
+the Zenoh transport/session/pico APIs are removed without compatibility wrappers.
+General Property write/observation, Action and Event execution, subscriptions,
+secure transport and embedded production remain product objectives; the removed
+implementations are not claimed replaced. See the
+[module boundary](docs/architecture/20-module-boundaries.md) for the implementation
+disposition and [PLAN.md](PLAN.md) for delivery scope.
 
 ---
 

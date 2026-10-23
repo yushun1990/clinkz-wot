@@ -10,7 +10,7 @@ use clinkz_wot_foundation::{
 };
 #[path = "basic_corpus_shared.rs"]
 mod corpus;
-#[path = "../../../tools/architecture-fixtures/consumer-borrowed-readmission/tests/support/oracle.rs"]
+#[path = "typed_content_oracle.rs"]
 mod oracle;
 #[allow(dead_code)]
 #[path = "typed_corpus_shared.rs"]

@@ -115,7 +115,7 @@ Sources: [workspace manifest](../../Cargo.toml),
 [Planning manifest](../../planning/Cargo.toml),
 [Servient manifest](../../servient/Cargo.toml),
 [Discovery manifest](../../discovery/Cargo.toml),
-[binding manifest](../../protocol-bindings/protocols/zenoh/Cargo.toml),
+[historical binding manifest](https://github.com/yushun1990/clinkz-wot/blob/5091685/protocol-bindings/protocols/zenoh/Cargo.toml),
 [codec manifest](../../codecs/cbor/Cargo.toml), and
 [umbrella manifest](../../clinkz-wot/Cargo.toml).
 
@@ -154,7 +154,7 @@ The remaining coupling is concrete:
 - `test-zenoh` is named like a test facility but enables a concrete normal
   dependency from Servient. Target probes currently rely on dev-side reverse
   dependencies instead of a migrated production binding composition.
-- [The Zenoh crate](../../protocol-bindings/protocols/zenoh/src/lib.rs) rejects
+- [The historical Zenoh crate](https://github.com/yushun1990/clinkz-wot/blob/5091685/protocol-bindings/protocols/zenoh/src/lib.rs) rejects
   enabling `zenoh` and `zenoh-pico` together. This makes backend choice a crate
   graph constraint; applications combining different targets/backends cannot
   assume ordinary additive feature composition. Separating compiler support
@@ -179,10 +179,10 @@ Servient::consume(Thing)
   -> protocol execution
 ```
 
-See [consume](../../servient/src/servient.rs),
-[handle selection](../../servient/src/handle.rs),
+See historical [consume](https://github.com/yushun1990/clinkz-wot/blob/17f22b6/servient/src/servient.rs),
+[handle selection](https://github.com/yushun1990/clinkz-wot/blob/17f22b6/servient/src/handle.rs),
 [ConsumedThing request](../../core/src/thing.rs), and
-[Zenoh invocation/cache](../../protocol-bindings/protocols/zenoh/src/zenoh.rs).
+[historical Zenoh invocation/cache](https://github.com/yushun1990/clinkz-wot/blob/5091685/protocol-bindings/protocols/zenoh/src/zenoh.rs).
 Repeated checks call shared semantic helpers, so they are not all independent
 semantic algorithms. They are nevertheless duplicated execution work and a
 second selection/lifecycle path beside the target compiler pipeline.
@@ -234,7 +234,7 @@ of the TD into the Property Read owner and also constructs a legacy
 `ExposedThing` from the original. The target facade therefore has migration
 storage costs beyond its plans and artifacts.
 
-The legacy [server path](../../servient/src/servient.rs) calls security
+The legacy [server path](https://github.com/yushun1990/clinkz-wot/blob/17f22b6/servient/src/servient.rs) calls security
 providers and synchronous handlers inside `slot.with_read`. On `no_std`,
 [WotLock](../../core/src/sync.rs) executes that closure in a critical section.
 The actual call path does not support the lock module's broad comment that
@@ -317,7 +317,7 @@ With `async,zenoh-pico` and defaults disabled, it fails with E0277:
 `ZenohPicoTransport` contains `RefCell<Box<dyn ZenohPicoPlatform>>`, while the
 legacy generic client implementation requires `Send + Sync`. This disproves
 that specific composition, not the feasibility of a new typed poll-based Pico
-binding. The [platform hooks](../../protocol-bindings/protocols/zenoh/src/runtime/zenoh_pico.rs)
+binding. The [historical platform hooks](https://github.com/yushun1990/clinkz-wot/blob/5091685/protocol-bindings/protocols/zenoh/src/runtime/zenoh_pico.rs)
 leave real session, C calls, progress and buffer ownership to the integrator;
 fake-hook tests cannot settle those questions. Adding unsafe thread-safety
 claims would not be an architectural fix.

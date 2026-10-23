@@ -1159,13 +1159,10 @@ mod tests {
         let output = build_static(1);
         let omitted = select_consumer_property_read(&output, "level", &InteractionOptions::new())
             .expect("omitted form selection");
-        let call_varying = InteractionOptions::with_data(Payload::new(
-            b"poisoned-legacy-data".to_vec(),
-            "application/octet-stream",
-        ))
-        .with_uri_variable("poison", "must-not-replan")
-        .with_timeout(core::time::Duration::from_millis(1))
-        .with_form_index(0);
+        let call_varying = InteractionOptions::new()
+            .with_uri_variable("poison", "must-not-replan")
+            .with_timeout(core::time::Duration::from_millis(1))
+            .with_form_index(0);
         assert_eq!(
             select_consumer_property_read(&output, "level", &call_varying)
                 .expect("call-varying values do not alter the static reference"),

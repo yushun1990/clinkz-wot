@@ -3,6 +3,7 @@
 use super::*;
 use crate::{data_schema::DataSchema, data_type::MultiLanguage};
 
+#[cfg(any(feature = "validated-thing", test))]
 const JS: &str = "https://www.w3.org/2019/wot/json-schema#";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -358,6 +359,7 @@ impl<'a> ResolvedSemanticDocument<'a> {
     }
 }
 
+#[cfg(any(feature = "validated-thing", test))]
 impl<'a> Resolver<'a> {
     pub(super) fn security_facts_cost(
         &mut self,

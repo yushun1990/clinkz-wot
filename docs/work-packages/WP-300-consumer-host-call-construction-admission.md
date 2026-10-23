@@ -46,7 +46,7 @@ certificate, lifecycle, protocol, resource kind, WorkClass or scheduler. No new
 ADR is needed: ADR-0009's distinct representations and the existing sealing
 authority remain intact. The [investigation](../../workspace/0080-consumer-host-call-construction.md)
 owns the alternatives and their production-source rationale; the
-[fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md#host-call-construction-candidate)
+[historical fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md#host-call-construction-candidate)
 owns reproduction commands and measured experimental evidence.
 
 ## Production path and invariants

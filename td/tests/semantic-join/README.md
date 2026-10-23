@@ -27,7 +27,7 @@ Planning allowance never refills; TD retains its own production lifetime debit.
 
 After the second Done the TD child dies. All actual compiler bounds are collected
 before any start. The reused [complete static registration
-adapter](../../../tools/architecture-fixtures/validated-thing-planning-handoff/src/registration.rs)
+adapter](src/registration.rs)
 contains no TD algorithm or input; it joins the existing concrete `MockCompiler`,
 `ManualMockBinding` and an inert Consumer client through Core's complete
 registration API. Protocol execution panics if called. Candidate identity comes

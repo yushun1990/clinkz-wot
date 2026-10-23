@@ -9,15 +9,11 @@ result_large_err = "allow"
 
 [dependencies]
 clinkz-wot-foundation = { path = "../foundation", default-features = false }
-async-channel = { version = "2", optional = true, default-features = false }
 critical-section = { version = "1", default-features = false }
 sha2-const-stable = "0.1.0"
-futures-core = { workspace = true, optional = true }
 
 [dev-dependencies]
 critical-section = { version = "1", features = ["std"] }
-futures-util = { version = "0.3", default-features = false, features = ["alloc", "async-await"] }
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [features]
 default = ["std"]
@@ -25,9 +21,5 @@ default = ["std"]
 # dep flags. Deliberately orthogonal to `async` — `std` alone gives the lock
 # backend without pulling the async syntax surface or any executor.
 std = ["clinkz-wot-foundation/std", "critical-section/std"]
-# Optional event stream syntax and bounded fan-in; no executor is selected.
-async = [
-    "clinkz-wot-foundation/async",
-    "dep:futures-core",
-    "dep:async-channel",
-]
+# Compilation-cell identity for the portable execution contracts; no executor.
+async = ["clinkz-wot-foundation/async"]

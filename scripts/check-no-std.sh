@@ -5,10 +5,7 @@
 # Compiling `--no-default-features` against the (std) host only exercises the
 # crate's own `#![no_std]` attribute — it does NOT catch std-only transitive
 # dependencies (e.g. `tokio`, `getrandom`, or `time`'s `formatting` feature).
-# The async no-std flavor checks the embassy-style target (P2 §2.7, AD16).
-#
-# Runtime verification of the no_std driving path is deferred with the
-# zenoh-pico hardware platform (P2 §2.7, AD16).
+# Portable compilation is distinct from protocol-backend or hardware qualification.
 
 set -eu
 
@@ -24,14 +21,17 @@ cargo check --locked -p clinkz-wot-td --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-foundation --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-core --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-planning --no-default-features --target "$TARGET"
-cargo check --locked -p clinkz-wot-protocol-bindings --no-default-features --target "$TARGET"
-cargo check --locked -p clinkz-wot-protocol-bindings-zenoh --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-discovery --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-servient --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-codec-cbor --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot --no-default-features --target "$TARGET"
 
-echo "--- no_std + alloc + async (embassy flavor) ---"
+echo "--- no_std + alloc + async ---"
 cargo check --locked -p clinkz-wot-core --no-default-features --features async --target "$TARGET"
 cargo check --locked -p clinkz-wot-planning --no-default-features --features async --target "$TARGET"
 cargo check --locked -p clinkz-wot-servient --no-default-features --features async --target "$TARGET"
+cargo check --locked -p clinkz-wot-discovery --no-default-features --features async --target "$TARGET"
+
+echo "--- TD preparation and Core vocabulary without pointer atomics ---"
+rustup target add thumbv6m-none-eabi
+cargo check --locked -p clinkz-wot-td --no-default-features --features validated-thing --target thumbv6m-none-eabi

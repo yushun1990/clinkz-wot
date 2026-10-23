@@ -8,9 +8,8 @@ fail=0
 
 check() {
     desc="$1"; shift
-    if cargo check --locked "$@" 2>/dev/null; then
+    if cargo check --locked "$@"; then
         pass=$((pass + 1))
-        # echo "  ✓ $desc"
     else
         fail=$((fail + 1))
         echo "  ✗ FAIL: $desc ($*)"
@@ -41,15 +40,10 @@ echo "=== protocol-bindings-http ==="
 check "http preparation"        -p clinkz-wot-binding-http
 check "http execution-only"     -p clinkz-wot-binding-http --no-default-features
 
-echo "=== protocol-bindings-zenoh ==="
-check "zenoh default"           -p clinkz-wot-protocol-bindings-zenoh
-check "zenoh no-features"       -p clinkz-wot-protocol-bindings-zenoh --no-default-features
-check "zenoh-pico"              -p clinkz-wot-protocol-bindings-zenoh --no-default-features --features zenoh-pico
-check "zenoh td2-preview"       -p clinkz-wot-protocol-bindings-zenoh --features td2-preview
-
 echo "=== discovery ==="
 check "discovery default"       -p clinkz-wot-discovery
 check "discovery no-features"   -p clinkz-wot-discovery --no-default-features
+check "discovery async"         -p clinkz-wot-discovery --no-default-features --features async
 
 echo "=== servient ==="
 check "servient default"        -p clinkz-wot-servient
@@ -64,6 +58,12 @@ check "aggregate binding async"        -p clinkz-wot-property-read-binding-fixtu
 check "aggregate runner default"       -p clinkz-wot-property-read-architecture-runner
 check "aggregate runner no-features"   -p clinkz-wot-property-read-architecture-runner --no-default-features
 check "aggregate runner async"         -p clinkz-wot-property-read-architecture-runner --no-default-features --features async
+check "consumer binding default"       -p clinkz-wot-consumer-property-read-binding-fixture
+check "consumer binding no-features"   -p clinkz-wot-consumer-property-read-binding-fixture --no-default-features
+check "consumer binding async"         -p clinkz-wot-consumer-property-read-binding-fixture --no-default-features --features async
+check "consumer runner default"        -p clinkz-wot-consumer-property-read-runtime-runner
+check "consumer runner no-features"    -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features
+check "consumer runner async"          -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async
 
 echo "=== codec-cbor ==="
 check "cbor default"            -p clinkz-wot-codec-cbor
@@ -72,6 +72,8 @@ check "cbor no-features"        -p clinkz-wot-codec-cbor --no-default-features
 echo "=== facade ==="
 check "facade default"          -p clinkz-wot
 check "facade no-features"      -p clinkz-wot --no-default-features
+check "facade async"            -p clinkz-wot --no-default-features --features async
+check "facade cbor"             -p clinkz-wot --features cbor
 
 echo ""
 echo "Feature matrix: $pass passed, $fail failed"

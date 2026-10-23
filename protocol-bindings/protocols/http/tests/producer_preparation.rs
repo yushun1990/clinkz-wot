@@ -21,7 +21,7 @@ fn document() -> Value {
        "properties":{"level":{"type":"number", "readOnly":true,"forms":[{"href":"http://127.0.0.1:38080/level"}]}}})
 }
 fn admission<'a, 'h>(td: &'a Thing, handler: &'h str) -> ProducerPropertyReadAdmission<'a, 'h> {
-    let config = ValidatedThingAdmissionConfig::try_from_limits(&GatewayDefaultV1::LIMITS).unwrap();
+    let config = ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS).unwrap();
     let ledger = AdmissionLedger::new(
         SlotIndex::new(1),
         Generation::INITIAL,

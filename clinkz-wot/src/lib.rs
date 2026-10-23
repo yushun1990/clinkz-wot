@@ -15,10 +15,6 @@ pub mod discovery {
 pub mod servient {
     pub use clinkz_wot_servient::*;
 }
-#[cfg(feature = "zenoh")]
-pub mod zenoh {
-    pub use clinkz_wot_protocol_bindings_zenoh::*;
-}
 #[cfg(feature = "cbor")]
 pub mod cbor {
     pub use clinkz_wot_codec_cbor::*;

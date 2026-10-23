@@ -1,3 +1,0 @@
-[workspace]
-members = ["borrow", "portable", "unifier"]
-resolver = "2"

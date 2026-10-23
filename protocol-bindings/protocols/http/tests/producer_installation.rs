@@ -109,7 +109,7 @@ fn prepare(
 ) {
     let authority = ProducerInstanceAuthority::try_new(slot(generation)).unwrap();
     let td: Thing = serde_json::from_value(document(address)).unwrap();
-    let config = ValidatedThingAdmissionConfig::try_from_limits(&GatewayDefaultV1::LIMITS).unwrap();
+    let config = ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS).unwrap();
     let mut c = ValidatedThingCursor::from_thing(
         &td,
         &config,
@@ -153,7 +153,7 @@ fn address() -> SocketAddr {
         .unwrap()
 }
 fn bank() -> Arc<ProducerInstallationAccounts> {
-    Arc::new(producer_installation_accounts(&GatewayDefaultV1::LIMITS))
+    Arc::new(producer_installation_accounts(GatewayDefaultV1::LIMITS))
 }
 fn runtime(
     address: SocketAddr,

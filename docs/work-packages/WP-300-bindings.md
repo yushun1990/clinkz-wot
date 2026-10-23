@@ -150,9 +150,9 @@ progress.
 
 ### Real-target probe technical disposition
 
-The executable probe is
-`protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs`.
-It contains external application-static and public Host-erased authors built
+The retired [executable probe](https://github.com/yushun1990/clinkz-wot/blob/5091685/protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs)
+is historical feedback, reproduced from Git rather than maintained with the
+deferred backend. It contained application-static and public Host-erased authors built
 from the target Planning, Binding, and Servient surfaces. With the real Zenoh
 Rust SDK and loopback TCP it proves:
 

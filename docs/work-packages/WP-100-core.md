@@ -38,9 +38,11 @@ cross-package proof independent of the remaining broad handler migrations.
 The synchronous `ReadPropertyHandler` public contract and its negative
 async/step scope are owned by Core integration and rustdoc compile-fail tests.
 
-The passive handler surface contains five
-passive, additive Core values: `CancellationView`, `SubscriptionAcceptance`,
-`HandlerFootprint`, `HandlerStep`, and `StaticHandlerRegistration`. It
+The retained passive handler surface contains four
+Core values: `CancellationView`, `HandlerFootprint`, `HandlerStep`, and
+`StaticHandlerRegistration`. The orphaned `SubscriptionAcceptance` implementation
+was withdrawn during pre-v1 cleanup; its former schema is historical streaming
+design input, not current public availability. The retained surface
 deliberately excludes `Deadline`, request/context/target migration, handler
 traits, storage, execution, Producer integration, Servient setters, old API
 removal, state machines, and performance workloads. Core tests own the exact
@@ -48,7 +50,7 @@ schema, attributes, passive value semantics, and redacted diagnostics.
 
 The value-primitives surface is governed by
 `API-SURFACE-001` and `HANDLER-VALUE-001`. `HANDLER-VALUE-001` completely owns
-the five schemas' attributes, ownership, and passive value semantics. Handler,
+the retained schemas' attributes, ownership, and passive value semantics. Handler,
 subscription, storage, cancellation, work-budget, ownership-admission, and
 resource-limit behavior belongs to the later traits, state records, and
 admission items that consume these values, not to the passive values

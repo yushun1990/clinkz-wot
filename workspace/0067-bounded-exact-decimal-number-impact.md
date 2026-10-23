@@ -24,7 +24,7 @@ authority wins.
 
 ## Finding and decision
 
-The [Number boundary fixture](../tools/architecture-fixtures/validated-thing-number-boundary/README.md)
+The [historical Number boundary fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/validated-thing-number-boundary/README.md)
 exposes two independent failures of the frozen stable-`Number::as_f64` route.
 An arbitrarily long exponent is consumed synchronously before the public query
 returns, even when the result is `Some(1.0)` or `Some(10.0)`. Decimal-cancellation

@@ -166,7 +166,7 @@ is needed. Neither path uses the legacy TD-bearing Consumer or implicit Director
 The admission's three downstream discriminators use actual public
 output/root/reclaim and real accounts, with explicitly modeled
 publication/header logic. Exact source and limits are documented in the existing
-[runtime-entry fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md#runtime-admission-discriminators).
+[historical runtime-entry fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md#runtime-admission-discriminators).
 The production [Consumer application fixture](../../tools/architecture-fixtures/consumer-property-read-runner/README.md)
 and [completion evidence](../evidence/WP-400-consumer-property-read-runtime.toml)
 with key `consumer-property-read-runtime` are independently accepted by the

@@ -20,8 +20,6 @@ pub mod deadline;
 #[cfg(target_has_atomic = "ptr")]
 pub mod error;
 #[cfg(target_has_atomic = "ptr")]
-pub mod event;
-#[cfg(target_has_atomic = "ptr")]
 pub mod handler;
 #[cfg(target_has_atomic = "ptr")]
 pub mod identity;
@@ -91,18 +89,10 @@ pub use error::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, ResourceFailureDomain, RetryClass,
     SecurityFailureReason, SelectionFailureReason,
 };
-#[cfg(feature = "async")]
-#[cfg(target_has_atomic = "ptr")]
-pub use event::EventStream;
-#[cfg(target_has_atomic = "ptr")]
-pub use event::{
-    DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,
-    SubscriptionSender,
-};
 #[cfg(target_has_atomic = "ptr")]
 pub use handler::{
     CancellationView, HandlerContext, HandlerFootprint, HandlerStep, ReadPropertyHandler,
-    StaticHandlerRegistration, SubscriptionAcceptance,
+    StaticHandlerRegistration,
 };
 #[cfg(target_has_atomic = "ptr")]
 pub use identity::{

@@ -5,6 +5,7 @@ use alloc::boxed::Box;
 use clinkz_wot_foundation::SlotIndex;
 #[cfg(feature = "std")]
 use core::any::Any;
+#[cfg(feature = "std")]
 use core::{alloc::Layout, fmt};
 /// Stable compatibility identity shared by one compiler and its artifacts.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -681,7 +682,7 @@ impl ConsumerBindingConfiguration {
     pub const fn native_compatibility(&self) -> Option<BindingArtifactCompatibility> {
         #[cfg(feature = "std")]
         {
-            return self.native;
+            self.native
         }
         #[cfg(not(feature = "std"))]
         {

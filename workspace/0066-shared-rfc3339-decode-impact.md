@@ -15,7 +15,7 @@ Can the normalized ValidatedThing boundary share resumable date decoding with
 ordinary Thing deserialization without a new public API, WorkClass, resource
 row, allocation category, or broader architecture change?
 
-The [preserved counterexample](../tools/architecture-fixtures/validated-thing-decode-boundary/README.md)
+The [historical counterexample](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/validated-thing-decode-boundary/README.md)
 establishes that the accepted future source list omitted the actual semantic
 owner, `td/src/rfc3339.rs`. Its synchronous `parse_rfc3339` calls
 `Cursor::optional_fraction`, which inspects arbitrarily many fraction digits

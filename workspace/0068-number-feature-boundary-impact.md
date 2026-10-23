@@ -42,7 +42,7 @@ as well as capability-on paths.
 downstream serde features do not set TD-local cfgs, and rejected a private
 Serialize callback shape as stable access authority.
 
-The [executable prototype](../tools/architecture-fixtures/validated-thing-feature-boundary/README.md)
+The [historical executable prototype](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/validated-thing-feature-boundary/README.md)
 selects explicit opt-in `td/validated-thing`, forwarding serde AP. Bounded
 admission then always has the public borrowed text API. Ordinary TD base and
 default users keep their existing APIs. Under the current bounded-atomic

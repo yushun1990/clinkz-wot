@@ -37,13 +37,39 @@ an upward Core edge or claim the full target graph is already extracted.
 
 The old `clinkz-wot-protocol-bindings` utility crate and TD-at-call-time
 ClientBinding/ServerBinding/Dispatch facade are removed. Deferred Zenoh native
-transport and preparation helpers retain their scoped evidence, without a
-legacy dispatch entry. The umbrella names Planning directly. Servient does not
+transport, session/pico adapters and their preparation helpers are also removed;
+their scoped evidence is historical Git content. The umbrella names Planning directly. Servient does not
 construct an implicit Directory or supply a legacy fallback.
 
 Host/static storage, std, async syntax, thread mobility, pointer atomics and
 resource/disposal policy remain distinct capabilities. No Contracts crate,
 platform-wide allocator/reactor or split runtime packages are selected.
+
+### Retained pre-v1 implementation baseline
+
+The legacy Core event broker, publisher sinks, queue/merge subscriptions and
+`SubscriptionAcceptance` have no current runtime consumers and are withdrawn.
+`InteractionOptions` contains selection/control only; its legacy payload field
+and constructor are removed. The old form selector, URI-template expander and
+binding-error utility surface served only the withdrawn Zenoh path and are gone.
+Current preparation uses TD semantic lending and the compiled Planning outputs.
+
+Historical normalized-Snapshot, source-projection, admission-model, Number/date/
+strict-ingestion and Review 08 sketch implementations are not maintained parallel
+runtimes. Production aggregate/configuration/output regressions live in
+`planning/tests/`; the independent typed-content oracle lives in `td/tests/support/`.
+The four remaining external binding/runner crates exercise current static and
+Host execution contracts, including unique ownership and failure cases. The
+working HTTP Producer/Consumer paths, static runtimes, TD/TM semantics, discovery
+and CBOR codec remain available within their documented limits.
+
+This withdraws obsolete implementations, not
+[Property/Action/Event, subscription, discovery, security or embedded goals](00-system-goals-and-context.md).
+The successor general SPI is still a separate design objective. Historical
+evidence records describe their named revisions; retired source paths and
+commands are reproduced from Git at those revisions, not treated as current
+validation registrations. The work-package index and retained tests own current
+check locations. Earlier acceptance does not transfer to this cleanup revision.
 
 <a id="proposed-preparationexecution-separation-review-08"></a>
 ## Core internal boundaries

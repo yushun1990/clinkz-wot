@@ -123,10 +123,10 @@ impl HostSemanticCompiler for HttpCompiler {
             property: input.property,
             index: input.form_index,
         }) {
-            if let Some(status) = unique(response, "http://www.w3.org/2011/http#statusCodeValue")? {
-                if !matches!(status.value(), SemanticValue::Number(n) if n.as_u64() == Some(200)) {
-                    return Err(unsupported());
-                }
+            if let Some(status) = unique(response, "http://www.w3.org/2011/http#statusCodeValue")?
+                && !matches!(status.value(), SemanticValue::Number(n) if n.as_u64() == Some(200))
+            {
+                return Err(unsupported());
             }
             if response.children().any(|n| {
                 http_name(n) && !n.name().is("http://www.w3.org/2011/http#statusCodeValue")

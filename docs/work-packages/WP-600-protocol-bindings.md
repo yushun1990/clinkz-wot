@@ -17,8 +17,8 @@ Deliver an optional **Host HTTP/1.1 binding**, with HTTPS and explicit security
 configuration before production release, through the accepted public Planning,
 Binding and Servient path. Protocol-neutral crates acquire no HTTP, Tokio or TLS
 dependency. The application links and registers the concrete crate explicitly.
-The prospective crate is `protocol-bindings/protocols/http`; no crate, Cargo
-feature or dependency is created by this strategy change.
+The concrete optional crate is `protocol-bindings/protocols/http`; its `prepare`
+feature composes TD/Planning while runtime-only consumers can omit them.
 
 WP-600 retains its WP-300 package-completion dependency. Exact capability
 tranches may enter under ADR-0013 after their matching WP-200/WP-300/WP-400
@@ -133,8 +133,9 @@ to another operation. No real embedded protocol/backend is implied by completion
 
 Zenoh and zenoh-pico remain future optional bindings. Their
 [former detailed scope at the decision baseline](https://github.com/yushun1990/clinkz-wot/blob/6b3e478359e59ce21af233e38cc8337679d2d9a1/docs/work-packages/WP-600-protocol-bindings.md),
-[qualification history](WP-600-host-zenoh-owner-decision.md), SDK probes and
-Producer architecture feedback are preserved. They are not prerequisites of
+[qualification history](WP-600-host-zenoh-owner-decision.md), SDK probe results and
+Producer architecture feedback are preserved in their documents and Git. The
+deferred implementations and experimental executable probes are withdrawn. They are not prerequisites of
 HTTP admission, WP-600 v1 completion, WP-700 or release. Any resumed Zenoh work
 must re-evaluate eligibility under current specifications; this change does not
 qualify the existing SDK/backend or require its repair.
@@ -146,10 +147,10 @@ subscription/emission and cleanup evidence remain relevant where claimed.
 Historical package-exit language is not an active v1 dependency or implementation
 admission. Git retains that full migration input rather than a second scope copy.
 
-The v1 release surface must exclude or retire legacy Zenoh execution until its
-target replacement is admitted. Preserve optional experimental source without
-making its old selector/dispatch path a v1 API or routing any target request into
-it. WP-300/WP-400 retain shared legacy-removal work; WP-700 proves final absence
+The release surface excludes legacy Zenoh execution. Its optional source,
+selector/transport APIs, pico hooks and umbrella feature have been removed;
+future implementations must enter the then-current contracts directly.
+WP-300/WP-400 retain shared capability work; WP-700 verifies final absence
 in releasable cells. Adding HTTP does not implement the obsolete Zenoh migration
 adapters. General protocol-shape neutrality and embedded production remain
 separate evidence claims, not release prerequisites invented by this decision.

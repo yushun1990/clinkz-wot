@@ -82,9 +82,9 @@ instead executable at the crate that can be broken:
 The exact evidence paths are registered in the gate manifest. They run through
 workspace tests and focused no-default/default test cells.
 
-The prerequisite real-target feedback is executable at
-`protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs`.
-It uses the actual Zenoh Rust SDK and loopback TCP for three varied
+The prerequisite real-target feedback is historical at the
+[recorded pre-cleanup revision](https://github.com/yushun1990/clinkz-wot/blob/5091685/protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs).
+Its executable is retired with the deferred backend. It used the Zenoh Rust SDK and loopback TCP for three varied
 Thing/property/form shapes in both application-static and public Host-erased
 representations. Each representation reaches a real handler and requester
 response and completes terminal drain, readiness-failure rollback, and

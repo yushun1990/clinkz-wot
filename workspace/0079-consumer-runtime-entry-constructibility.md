@@ -25,7 +25,7 @@ these distinctions; their deployment proposals are not architecture authority.
 | Child accounts cannot authorize parent capacity | Foundation allows two equal independent ledgers with equal public reservation owner tuples | The private Servient transaction must retain the real parent/global reservation and bind policy, phase, registration and generation. A ledger getter or numeric equality does not repair this. |
 | Host call backing is not fallible compiler backing | `HostBindingCallBox::new` uses `Box::pin`; installed Host start invokes the raw client, then allocates a seal decorator or accepted-overrun owner | The closed compiler's fallible slot proof cannot certify call construction. Do not infer recoverable allocator failure, bounded callback cost or physical backing from declarations. |
 
-The [external discriminator](../tools/architecture-fixtures/consumer-runtime-entry/README.md)
+The [historical external discriminator](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md)
 owns executable cases and their limits. Its local owner retains actual public
 Planning output/root/account, exercises abandonment and bounded reclaim, and uses
 the concrete artifact after source and registration destruction. That proves a

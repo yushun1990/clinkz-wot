@@ -22,7 +22,7 @@ The necessary shared accounting/destructor interpretation is projected into
 [Binding SPI](../docs/spec/binding-spi.md#shared-protocol-infrastructure-lifetime).
 These are review candidates, not independent acceptance or production admission.
 
-The [public-SDK final-owner fixture](../tools/architecture-fixtures/host-zenoh-owner/README.md)
+The [historical public-SDK final-owner fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/host-zenoh-owner/README.md)
 distinguishes a last Session's blocking/allocating Drop, original-close
 abandonment/timeout, get-job callback quiescence, worker allocation failure,
 TCP receive-limit semantics and a separately retained original Foundation

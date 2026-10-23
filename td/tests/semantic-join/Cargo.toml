@@ -10,6 +10,7 @@ publish = false
 clinkz-wot-td = { path = "../..", default-features = false, features = ["validated-thing"] }
 clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
 clinkz-wot-core = { path = "../../../core", default-features = false }
+clinkz-wot-planning = { path = "../../../planning", default-features = false }
 clinkz-wot-property-read-binding-fixture = { path = "../../../tools/architecture-fixtures/property-read-binding", default-features = false }
 
 [dev-dependencies]
@@ -17,6 +18,6 @@ serde_json = { version = "1.0.149", default-features = false, features = ["alloc
 
 [features]
 default = ["std"]
-std = ["clinkz-wot-td/std", "clinkz-wot-foundation/std", "clinkz-wot-core/std", "clinkz-wot-property-read-binding-fixture/std"]
-async = ["clinkz-wot-foundation/async", "clinkz-wot-core/async", "clinkz-wot-property-read-binding-fixture/async"]
+std = ["clinkz-wot-td/std", "clinkz-wot-foundation/std", "clinkz-wot-core/std", "clinkz-wot-planning/std", "clinkz-wot-property-read-binding-fixture/std"]
+async = ["clinkz-wot-foundation/async", "clinkz-wot-core/async", "clinkz-wot-planning/async", "clinkz-wot-property-read-binding-fixture/async"]
 order = ["serde_json/preserve_order"]

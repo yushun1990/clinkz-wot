@@ -113,7 +113,7 @@ Its completion cannot prove recoverable runtime OOM or WP-400 capacity admission
 It also does not change the local/non-Send Planning root, create global accounts,
 publish output, grant call leases or make device-fit claims.
 
-The [external fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md)
+The [historical external fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md)
 is pre-implementation construction evidence using actual raw SPI parts. Its
 model cannot be installed, mint Core support or execute a sealed call. The Host
 model has no access to private support/configuration checks. Its own constructor

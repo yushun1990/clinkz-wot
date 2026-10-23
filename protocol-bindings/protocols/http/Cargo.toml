@@ -24,7 +24,6 @@ serde = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-hyper = { version = "=1.12.0", default-features = false, features = ["server", "http1"] }
 clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }
 serde_json = { workspace = true, features = ["std"] }

@@ -42,7 +42,7 @@ Drop is not its finite local destructor.
 The former scoped prerequisite decision and alternative dispositions are retained in
 [the deferred WP-600 owner history](../docs/work-packages/WP-600-host-zenoh-owner-decision.md)
 and [Binding SPI](../docs/spec/binding-spi.md#shared-protocol-infrastructure-lifetime).
-The [new public-SDK fixture](../tools/architecture-fixtures/host-zenoh-owner/README.md)
+The [historical public-SDK fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/host-zenoh-owner/README.md)
 demonstrates a scoped separate owner and original account retention, not complete
 Runtime capture or final worker loss. Its additional SDK discriminators supply
 the stopping evidence recorded there; they do not establish a shared Runtime
@@ -86,7 +86,7 @@ dependency, resource-layout and legacy-call-path audit; this topic does not
 duplicate or accept that review. The evidence baseline for both investigations
 is [`6e804d2`](https://github.com/yushun1990/clinkz-wot/tree/6e804d2d46ffc6a1a59b316f7e6e729cf0277512).
 The additional reproducible experiments live in
-[product-runtime-boundaries](../tools/architecture-fixtures/product-runtime-boundaries/README.md).
+[product-runtime-boundaries](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/product-runtime-boundaries/README.md).
 
 The active v5.1 owners remain authoritative under
 [Architecture Governance](../ARCHITECTURE_GOVERNANCE.md#architecture-authority-model).
@@ -123,8 +123,8 @@ Consumer or resource behavior to justify its costs.
   [umbrella](../clinkz-wot/Cargo.toml) include Discovery. Cargo dependencies
   demonstrate API/build coupling, not necessarily retained TD RAM or linked
   parser code.
-- [The public legacy Consumer](../servient/src/servient.rs) constructs
-  `ConsumedThing`; [handle calls](../servient/src/handle.rs) and
+- [The historical legacy Consumer](https://github.com/yushun1990/clinkz-wot/blob/17f22b6/servient/src/servient.rs) constructs
+  `ConsumedThing`; [handle calls](https://github.com/yushun1990/clinkz-wot/blob/17f22b6/servient/src/handle.rs) and
   [legacy request execution](../core/src/thing.rs) still inspect Forms. The
   target compiler and frozen selector are a distinct execution path. Repeated
   calls to shared TD helpers are duplicated work, not necessarily divergent
@@ -345,7 +345,7 @@ Project Governance only gains index navigation for session reconstruction.
 
 ## Evidence still needed to decide
 
-The [runtime-entry discriminator](../tools/architecture-fixtures/consumer-runtime-entry/README.md)
+The [historical runtime-entry discriminator](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md)
 now applies the existing early-escalation rule to actual completed aggregate
 output. Its draft, cleanup destination and rollback lease are local/non-Send,
 including when their concrete Host artifact is Send + Sync. A local unpublished
@@ -362,7 +362,7 @@ The narrower role-only construction question has a
 and a separate WP-300 candidate. It neither settles these runtime choices nor
 selects Contracts extraction, optional Discovery migration or generated images.
 
-The [fixture documentation](../tools/architecture-fixtures/product-runtime-boundaries/README.md)
+The [historical fixture documentation](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/product-runtime-boundaries/README.md)
 owns commands, measured results and recovery limitations. Predicate parity and
 target compilation do not establish complete runtime feasibility or savings.
 The next evaluation needs real Host construction/call-path evidence and, for
@@ -388,7 +388,7 @@ The terminal ownership subquestion is resolved narrowly against fetched
 Planning's specification and WP-200/WP-400. This topic remains DISCUSSING for
 the distinct runtime/call and broader product questions; it does not block that
 no-callback/no-allocation candidate. Commands and measured observations belong
-to the [existing fixture](../tools/architecture-fixtures/consumer-runtime-entry/README.md#construction-boundary-experiments).
+to the [historical fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md#construction-boundary-experiments).
 
 | Alternative | Executable finding | Disposition |
 | --- | --- | --- |

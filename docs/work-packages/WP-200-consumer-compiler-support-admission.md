@@ -76,9 +76,9 @@ Production paths are exactly:
   static registrations, with ownership-preserving rejection; and
 - `planning/src/lib.rs`: their necessary preparation exports.
 
-Focused completion tests may be added at
-`planning/tests/consumer_compiler_support.rs` and the existing external
-[construction fixture](../../tools/architecture-fixtures/consumer-compiler-support/README.md).
+Current completion regressions run at `planning/tests/consumer_compiler_support.rs`.
+The [historical construction fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-compiler-support/README.md)
+is retired; its model is not maintained alongside the production implementation.
 No manifest, Foundation, TD, Planning, Servient, concrete protocol, workflow or
 legacy API change is admitted. In particular, there is no allocator argument on
 `BindingCompilerExtension`, no new operation, WorkClass, resource row, public
@@ -117,14 +117,13 @@ All named prechecks are executable now:
 
 ```sh
 RUSTUP_TOOLCHAIN=1.95.0 tools/check-design-artifacts.sh
-RUSTUP_TOOLCHAIN=1.95.0 cargo run --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --bin witness
-RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml
-RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features
-RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --offline --manifest-path tools/architecture-fixtures/consumer-compiler-support/Cargo.toml --no-default-features --features async
+RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --offline -p clinkz-wot-planning --test consumer_compiler_support
+RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --offline -p clinkz-wot-planning --no-default-features --test consumer_compiler_support
+RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --offline -p clinkz-wot-planning --no-default-features --features async --test consumer_compiler_support
 RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --offline -p clinkz-wot-core -p clinkz-wot-planning
 ```
 
-The fixture library models the proposed Core issuer, and its separate downstream
+The retired fixture library modeled the proposed Core issuer, and its separate downstream
 binary/tests construct real complete Core registrations. Its positive Host result
 is a **transport model over a complete typed registration**, not the existing
 public Core Host adapter. A real complete Consumer-capable Host registration is

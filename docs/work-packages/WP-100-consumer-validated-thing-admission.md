@@ -836,11 +836,10 @@ a separate Cargo invocation, and inspect resolved features. API-ownership cells
 use `profile+validated-thing`; tranche `feature_cells` retains the orthogonal
 profile axis.
 
-The [non-production feature-graph prototype](../../tools/architecture-fixtures/validated-thing-feature-boundary/README.md)
-exercises these requested/resolved graphs and the selected public Number
-projection. Its current-code Basic oracle identifies the AP failed-projection
-delta. It does not implement the future shared Basic kernel or complete a
-pre-readmission evidence item.
+The retired [feature-graph prototype](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/validated-thing-feature-boundary/README.md)
+was pre-implementation input. Current feature-boundary regressions run against
+the actual TD package in `td/tests/compile/validated-capability`; Number and
+Basic regressions use the production implementation and shared typed corpora.
 
 In the resolved dependency `preserve_order` enables std, so it and combined
 are Host-only. Legal feature unification does not require an upstream std-only
