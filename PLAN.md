@@ -83,6 +83,21 @@ scope; independent tranche completion acceptance, followed by separate
 HTTPS/security evidence, remains on the critical path. Embedded qualification
 and v1 release readiness remain separate.
 
+Before extending the public Binding/Servient SPI into a general multi-route,
+multi-operation or long-lived execution surface, derive and independently
+challenge one coherent architecture from the enduring WoT goals, normative
+operation semantics, and contrasting native communication models. Existing
+single-route APIs, successful tests, architecture fixtures, and accepted narrow
+tranches are evidence and migration inputs, not a design template or reasons to
+preserve an inadequate abstraction. Separate logical operation/authority,
+compiled definition/checked instance, protocol-native matching/infrastructure,
+and delivery/lifecycle responsibilities without presupposing one universal trait,
+runtime manager, storage representation, or physical-resource cardinality.
+The accepted ADR-0024 dependency direction is a foundation, not completed
+general-SPI acceptance; revise its remaining assumptions deliberately if needed.
+This architecture-first dependency adds no new gate and does not block separately
+qualified HTTP HTTPS/security work.
+
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
 advance the frontier safely.
@@ -96,21 +111,38 @@ advance the frontier safely.
    have been selected and qualified for this Consumer scope. The existing
    WP-400 multi-owner/scheduler checkpoint may proceed in parallel.
 2. ADR-0024's dependency cut and the admitted HTTP Producer route/permit/response
-   path and public bidirectional loop are implemented. Close their scoped
-   completion evidence through independent acceptance, then establish
-   HTTPS/trust/security evidence before production release. Keep this real
-   integration ahead of unrelated broad binding work.
-3. Broaden one-shot Core, Planning, Binding, and Servient capabilities only
-   through exact admitted tranches. Before broad subscription/emission work,
-   complete the corresponding domain-entry review and one minimal
-   `ObserveProperty` long-lived architecture gate.
-4. Expand capability families with staged target-to-legacy removal. WP-500 has
-   a WP-100 package dependency and enters only through exact Core/TD predecessor
-   tranches; WP-600 retains its WP-300 package dependency while real protocol
-   evidence proceeds capability-by-capability as matching shared/runtime
-   tranches become stable. Real embedded protocol/hardware qualification and
-   optional Zenoh/pico migration are independent future work, not Host blockers.
-5. Join completed WP-400, WP-500, and WP-600 through WP-700 for final
+   path and public bidirectional loop are implemented. Reconcile their exact
+   independently accepted tranche completion without reopening narrow evidence.
+   HTTPS/trust/security is a separate v1 release obligation and may progress in
+   parallel with general SPI design; do not freeze a one-route physical model
+   as the general interface to deliver HTTPS.
+3. Before broad public Binding/Servient SPI expansion, design the complete
+   protocol-independent interaction and ownership boundary from WoT semantics
+   and meaningfully different native communication shapes: request/reply,
+   unsolicited input, subscriptions/streams, native matching and collection
+   delivery. Judge alternative responsibilities and executable data flows first;
+   challenge inherited assumptions, permit pre-v1 breaking replacement, and
+   reconcile accepted architecture only after a defensible design decision.
+   Do not use mock proofs, gate construction or prototype convenience as a
+   substitute for this design. Reuse the relevant existing architecture topics
+   and Review 08 rather than creating parallel governance artifacts.
+4. Following the design decision, implement a coherent production vertical
+   integration that exercises multi-route/multi-instance semantics and at least
+   one materially contrasting native interaction model. Use focused prototypes
+   only to resolve concrete design feasibility doubts; then verify actual
+   implemented matching, logical authority, independent cancellation, shared
+   physical retirement, and resource bounds. Do not widen the general SPI by
+   layering compatibility facades over the single-route HTTP adapter.
+5. Broaden Core, Planning, Binding, and Servient capabilities in useful admitted
+   slices. Resolve the long-lived domain entry and minimal `ObserveProperty`
+   boundary before broad subscription/emission expansion. Reusable compiled
+   definitions and checked instance binding require real ownership/compatibility
+   design; automatic caches and persistence are not prerequisites.
+6. Expand remaining capability families and Directory/Discovery with staged
+   legacy removal. WP-500 retains its WP-100 dependency and WP-600 its WP-300
+   dependency. Optional Zenoh/pico production and real embedded qualification
+   remain separate from Host HTTP delivery, without shrinking product goals.
+7. Join completed WP-400, WP-500, and WP-600 through WP-700 for final
    aggregation, absence, feature/conformance, and release evidence, then perform
    the v1 technical release review.
 
@@ -248,10 +280,12 @@ with borrowed typed state access and exact terminal release. The aggregate
 Property Read architecture gate has passed independent acceptance; broad WP-300
 exit remains open.
 
-Exit goals: externally exercised authoring and execution boundaries; explicit
-profile applicability and resource costs; executable lifecycle, failure, and
-cleanup evidence; no binding-owned dispatch; and independently reviewed
-WP-300 completion.
+Exit goals: one coherent general SPI responsibility and composition design,
+independently challenged against WoT semantics and contrasting protocol shapes;
+externally exercised authoring and execution boundaries; explicit profile
+applicability and resource costs; real lifecycle, failure, and cleanup evidence;
+no binding-owned application dispatch; and independently reviewed WP-300
+completion. Successful narrow-route proofs alone do not satisfy this goal.
 
 ## M5A — Servient Runtime and Application Lifecycle
 
@@ -266,9 +300,11 @@ multi-owner/multi-route scheduler checkpoint is the next broad WP-400 evidence
 that may proceed in parallel with Consumer domain-entry preparation. Broad
 runtime evidence remains.
 
-Exit goals: atomic serving activation; Servient-owned selection and progress;
-bounded host/constrained scheduling and cleanup; explicit v1 availability
-limits; and independently reviewed WP-400 completion.
+Exit goals: atomic serving activation; independently authorized multi-route
+logical dispatch over binding-owned native infrastructure; bounded
+host/constrained scheduling and cleanup; explicit v1 availability limits; and
+independently reviewed WP-400 completion. One typed Property Read root is not
+the general Servient composition interface.
 
 ## M5B — Directory and Discovery Client Runtime
 
