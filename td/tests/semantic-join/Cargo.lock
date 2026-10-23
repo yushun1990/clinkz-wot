@@ -113,6 +113,7 @@ version = "0.0.0"
 dependencies = [
  "clinkz-wot-core",
  "clinkz-wot-foundation",
+ "clinkz-wot-planning",
  "clinkz-wot-property-read-binding-fixture",
  "clinkz-wot-td",
  "serde_json",

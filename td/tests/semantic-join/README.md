@@ -3,8 +3,9 @@
 This external crate exercises obligation 5 of the [WP-100 borrowed TD
 contract](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md)
 through production public APIs. It explicitly requests TD's `validated-thing`
-capability. Its normal dependencies are production TD, Foundation, Core and the
-existing concrete Property Read binding fixture. No TD candidate, source
+capability. Its normal dependencies are production TD, Foundation, Core,
+Planning's compiler/registration contracts and the existing concrete Property
+Read binding fixture. No TD candidate, source
 projection, private validator, copied semantic algorithm or production Planning/
 Servient coordinator participates.
 
@@ -39,7 +40,10 @@ public suspension and aborts it exactly once on cancellation or abandonment.
 
 The concrete compiler has one target allocation, one BindingPolls step, a scalar
 cursor, no temporary block and no artifact callback/source pointer. These are
-inspected support facts, checked against each returned bound. The witness pays
+inspected support facts, checked against each returned bound. Artifact bounds
+include the inline `MockArtifact` value and its target bytes; the allocation
+ledger measures only the target allocation because the inline value is already
+in the fixed Row storage. The witness pays
 for its target copy and reserves its declared bytes before calling `step`.
 Its Box allocation is infallible: allocation-failure injection deliberately ends
 before compiler starts. This establishes neither a generic compiler contract nor
