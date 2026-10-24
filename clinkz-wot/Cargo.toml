@@ -4,22 +4,22 @@ version.workspace = true
 edition.workspace = true
 
 description = "clinkz-wot — Rust Web of Things engine. Umbrella crate re-exporting the application-facing API."
-license = "MIT"
+license = "Apache-2.0"
 
 [lints.clippy]
 # ServientError keeps the frozen allocation-free CoreError inline at the umbrella boundary.
 result_large_err = "allow"
 
 [dependencies]
-# Always pull in the application-facing stack. Feature flags below add
-# protocol bindings and codecs on top.
+# Always pull in the application-facing stack. Concrete bindings are selected
+# directly by applications; feature flags below add optional capabilities.
 clinkz-wot-core = { path = "../core", default-features = false }
 clinkz-wot-td = { path = "../td", default-features = false }
 clinkz-wot-discovery = { path = "../discovery", default-features = false }
 clinkz-wot-planning = { path = "../planning", default-features = false }
 clinkz-wot-servient = { path = "../servient", default-features = false }
 
-# Optional concrete bindings + codecs. Off by default so downstream
+# Optional codecs. Off by default so downstream
 # crates can pick the surface they need; turn them on via features.
 clinkz-wot-codec-cbor = { path = "../codecs/cbor", default-features = false, optional = true }
 

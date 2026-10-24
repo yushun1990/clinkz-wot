@@ -16,9 +16,7 @@ clinkz-wot-td = { path = "../td", default-features = false }
 [dev-dependencies]
 serde_json = { version = "1" }
 clinkz-wot-consumer-property-read-binding-fixture = { path = "../tools/architecture-fixtures/consumer-property-read-binding", default-features = false }
-clinkz-wot-codec-cbor = { path = "../codecs/cbor" }
 clinkz-wot-property-read-binding-fixture = { path = "../tools/architecture-fixtures/property-read-binding" }
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [features]
 default = ["std"]

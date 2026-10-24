@@ -280,33 +280,21 @@ panic isolation, capability manifests, polling/cancellation, resource limits,
 and unload only after every route, call, subscription, and cleanup owner is
 terminal. That work is not inferred from the Rust crate SPI.
 
-## Staged legacy separation
+## Legacy execution retirement
 
-Legacy and target execution coexist by source path and generation; there is no
-adapter that sends a target artifact back through legacy selection.
+[ADR-0024](../ADRs/0024-preparation-and-execution-boundary.org) and the pre-v1
+cleanup retired the TD-at-call-time execution generation. The
+[retained implementation boundary](20-module-boundaries.md#retained-pre-v1-implementation-baseline)
+owns the exact source and API disposition. The former staged coexistence and
+handler-publication bridge are historical migration arrangements, reproduced
+from Git at their recorded revisions.
 
-- Planning is the only target owner of form selection and resolved artifacts.
-- Core and WP-300 consume only the selected plan/artifact identity and have no
-  dependency on `clinkz-wot-protocol-bindings` selectors or a complete TD.
-- The current Zenoh selector call remains reachable only from the legacy
-  execution generation until WP-600 replaces it with compiled input.
-- WP-400 prevents a target accepted request from entering legacy
-  `ServerBinding::serve`, `Dispatch`, or handler lookup.
-- WP-600 removes concrete calls to the legacy selector and execution boundary.
-- WP-700 proves that the public selector family and every named lifecycle,
-  handler, subscription, and publication compatibility edge are absent.
-
-The source boundary is also a Rust type boundary. Narrow WP-300 defines
-`RouteServerBinding`, `RouteInboundRequest`, `RouteResponseOpportunity`, and
-`RouteInboundResponse` in `core/src/binding.rs`; it does not overload or mutate
-the legacy names in `core/src/inbound.rs`. No conversion from a target request
-to the legacy request type exists. WP-700 removes the legacy root exports after
-WP-400 and WP-600 have migrated their owners.
-
-The one positive cross-generation compatibility path is the named legacy
-handler-publication to `ProducerEmission` adapter. It is one-way, preserves all
-generation and ownership identities, accepts no new callers after WP-300, and
-is removed at its WP-400 and WP-600 ends.
+Planning supplies selected, source-free execution inputs. Core and Binding
+execution do not return those inputs to legacy Form selection or dispatch.
+The retained static route SPI and native Host Producer driver keep their
+separately exercised ownership, publication, and cleanup contracts. Future
+interaction families enter through their accepted contracts; they do not require
+restoring a legacy compatibility adapter.
 
 ## Extension evidence
 

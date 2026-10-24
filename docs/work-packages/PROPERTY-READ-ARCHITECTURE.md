@@ -39,10 +39,10 @@ implementation author preserves the registered status; any status transition
 requires the separate independent boundary in `PROJECT_GOVERNANCE.md`.
 
 The application-static aggregate runner and Servient tests remain executable.
-The Zenoh probe now exercises only its static cells: real round trip, readiness
-failure and pre-publication cancellation. Core's `host_route_guard` tests and the
-external mock Binding retain lower-level staged SPI evidence. The deleted
-`servient/tests/support/servient_host.rs`, Host aggregate cells and Host Zenoh
+The deferred Zenoh backend and its executable probe are withdrawn; their original
+results are recorded below as historical feedback. Core's `host_route_guard`
+tests and the external mock Binding retain lower-level staged SPI evidence. The
+deleted `servient/tests/support/servient_host.rs`, Host aggregate cells and Host Zenoh
 cells are historical evidence, not current production tests.
 
 The manifest registers surviving static cases and source-free single-driver
@@ -86,8 +86,8 @@ The prerequisite real-target feedback is historical at the
 [recorded pre-cleanup revision](https://github.com/yushun1990/clinkz-wot/blob/5091685/protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs).
 Its executable is retired with the deferred backend. It used the Zenoh Rust SDK and loopback TCP for three varied
 Thing/property/form shapes in both application-static and public Host-erased
-representations. Each representation reaches a real handler and requester
-response and completes terminal drain, readiness-failure rollback, and
+representations. Each representation reached a real handler and requester
+response and completed terminal drain, readiness-failure rollback, and
 pre-publication cancellation cleanup. Their paired assertions cover
 generation, permit, correlation, response, and cleanup semantics. Its
 technical disposition is recorded in `WP-300-bindings.md`.

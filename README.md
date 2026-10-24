@@ -6,14 +6,14 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![W3C WoT](https://img.shields.io/badge/W3C-Web%20of%20Things-005A9C)](https://www.w3.org/WoT/)
-[![Project Status](https://img.shields.io/badge/status-early%20development-yellow)](#project-status)
+[![Project Status](https://img.shields.io/badge/status-early%20development-yellow)](#current-status)
 
 [Goals](docs/architecture/00-system-goals-and-context.md) ·
 [Architecture](#architecture) ·
-[Repository](#repository-structure) ·
-[Development Method](#development-method) ·
-[Status](#project-status) ·
-[Contributing](#contributing)
+[Repository](Cargo.toml) ·
+[Development Method](PROJECT_GOVERNANCE.md) ·
+[Status](#current-status) ·
+[Contributing](PROJECT_GOVERNANCE.md#git-and-pull-request-workflow)
 
 
 </div>
@@ -41,7 +41,7 @@ Applications interact with Things instead of depending on specific transports.
                     |                              Protocol Binding SPI
                     v                                        |
           +-------------------+                              v
-          |  Planning Layer   |                     Zenoh / MQTT / HTTP
+          |  Planning Layer   |                     HTTP Property Read
           +-------------------+
                     |
                     v

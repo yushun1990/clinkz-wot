@@ -6,10 +6,8 @@ edition.workspace = true
 [dependencies]
 clinkz-wot-td = { path = "../td", default-features = false }
 clinkz-wot-core = { path = "../core", default-features = false }
-serde = { version = "1", default-features = false, features = ["alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 async-trait = { workspace = true, optional = true }
-futures-core = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
@@ -22,4 +20,4 @@ std = ["clinkz-wot-td/std", "clinkz-wot-core/std", "async"]
 ## Native-async discovery traits (`DirectoryReader`, `DirectorySession`,
 ## `ThingDescriptionResolver`, `DirectoryPublisher`, `DirectoryWatch`,
 ## `Discoverer::request_thing_description`).
-async = ["dep:async-trait", "dep:futures-core", "clinkz-wot-core/async"]
+async = ["dep:async-trait", "clinkz-wot-core/async"]

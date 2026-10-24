@@ -1,10 +1,10 @@
 //! Runtime identity, credential material and scope checks.
 use crate::{CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason};
 use alloc::{string::String, vec::Vec};
-/// Transport-level credentials extracted by a binding and consumed by
-/// [`SecurityProvider`] verification (baseline addendum §1.2).
+/// Transport-level credential material extracted by a binding.
 ///
-/// These are raw extractions; verification happens in `verify`.
+/// These unverified values do not authenticate a caller, establish a
+/// [`Principal`], or select a security scheme.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum AuthMaterial {
@@ -88,9 +88,8 @@ impl Principal {
 /// returns a bounded [`SecurityFailureReason::AuthorizationDenied`] error. Raw
 /// required and present scope lists are not retained in public errors.
 ///
-/// Intended for inbound dispatchers to run after [`SecurityProvider::verify`]
-/// succeeds, enforcing the matched form's required scopes (baseline v3.0 §8:
-/// "authenticate plus an optional scope match").
+/// Use after caller authentication to compare established scopes with required
+/// scopes. This helper does not verify credentials or implement a security scheme.
 pub fn check_scopes(required: &[String], present: &[String]) -> CoreResult<()> {
     if required.iter().all(|scope| present.contains(scope)) {
         Ok(())
