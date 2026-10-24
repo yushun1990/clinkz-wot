@@ -2,6 +2,17 @@
 #+date: 2026-10-21
 #+status: Accepted
 
+* Post-cleanup Zenoh source disposition
+
+The pre-v1 cleanup subsequently withdrew the deferred Zenoh native transport,
+preparation helpers and executable probes. Their recorded ownership and protocol
+feedback remain historical evidence in Git; they are not current implementation
+or a successor production dependency. The current implementation disposition is
+in the [[file:../architecture/20-module-boundaries.md][module boundary]];
+[[file:../work-packages/WP-600-protocol-bindings.md][WP-600]] owns the deferred optional goal. The
+Planning/Core compiler and runtime-artifact dependency cut below is unchanged.
+Any future binding must enter through the then-current contracts.
+
 * Decision and scope
 
 Adopt the integrated direction examined in Review 08 after PR #218, with the
@@ -67,9 +78,10 @@ discovery, security and constrained/embedded objectives remain. This ADR makes
 no Owner product-goal decision and does not reduce v1 obligations to the retained
 Property Read slice.
 Keep runtime principal/auth/scope values and the target Property Read invariants.
-Retire the obsolete protocol utility crate; remaining deferred Zenoh preparation
-helpers name Planning explicitly. Its native transport probe is retained; its
-old direct-dispatch facade is withdrawn.
+At this dependency-cut baseline, the obsolete protocol utility crate was retired,
+remaining deferred Zenoh preparation helpers named Planning explicitly, and the
+native transport probe was retained. The old direct-dispatch facade was withdrawn.
+The later pre-v1 source disposition above supersedes that probe/helper retention.
 
 A facade-only compiler move would leave cyclic ownership and force runtime
 compilers. A new Contracts crate, split Host/Static runtimes, duplicated TD

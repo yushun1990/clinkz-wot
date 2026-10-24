@@ -13,12 +13,25 @@ Foundation/Binding/Runtime contracts below remain implementation authority until
 explicit schema/contract migration and readmission; they are not silently relaxed.
 The original rationale below is retained for that review.
 
+* Post-cleanup Zenoh source disposition
+
+This decision originally left deferred Zenoh/pico source and executable probes
+available as optional experiments. The pre-v1 cleanup subsequently withdrew
+those implementations, features and probes from the current workspace. Their
+recorded findings and qualification history remain available in Git; this
+changes neither the selection of Host HTTP nor the future optional Zenoh/pico
+goal. The current implementation baseline is recorded by the
+[[file:../architecture/20-module-boundaries.md][module boundary]];
+[[file:../work-packages/WP-600-protocol-bindings.md][WP-600]] owns the deferred binding and release
+disposition. The original probe findings and decision comparison below remain
+historical input, not instructions to restore the withdrawn source for v1.
+
 * Decision and review boundary
 
 Select *Host HTTP/1.1* as the first production Protocol Binding, using Hyper's
 explicit connection API and application-provided Tokio I/O. HTTPS is required
 for the production release envelope; the first admitted vertical slice may use
-explicitly configured local cleartext TCP. Keep Zenoh and zenoh-pico as deferred
+explicitly configured local cleartext TCP. Defer Zenoh and zenoh-pico as future
 optional bindings. Their SDK qualification is no longer a v1 dependency.
 
 This ADR and its projections are one proposed architecture change for independent
@@ -188,7 +201,7 @@ contrasting Zenoh Producer evidence remains narrower historical evidence.
 | Servient / WP-400 | Preserve finite manual Runtime, original accounts, child-before-parent release and final residual report. An external runtime is an explicit deployment dependency. No async registration-retirement API is added. |
 | Discovery / WP-500 | Client-only boundary and Core/TD dependency unchanged; HTTP binding does not silently implement Directory APIs or bounded JSON ingestion. |
 | Protocol production / WP-600 | Required production envelope becomes Host HTTP, with HTTPS/security before release. Zenoh/pico scope and qualification history are deferred optional input. No existing production tranche is invalidated: none was admitted. |
-| Aggregation / WP-700 and PLAN | Remove Zenoh/pico qualification from release dependencies. Retire or exclude their legacy public execution paths from the v1 release surface; deferral cannot preserve a target-to-legacy bypass. Keep optional source and historical fixtures as explicitly experimental evidence. Report Host, portable and hardware maturity separately. |
+| Aggregation / WP-700 and PLAN | Remove Zenoh/pico qualification from release dependencies. Their legacy public execution paths, optional source and executable probes were withdrawn in the pre-v1 cleanup; final absence must prevent a target-to-legacy bypass. Retain historical evidence in Git. Report Host, portable and hardware maturity separately. |
 | Passed gates, evidence TOML, performance/state/API projections | Reaffirm unchanged within their exact mock/controlled-owner/feature scopes. No gate/tranche status, trace, API, schema/default, workload identity or production code changes. Future HTTP evidence must name this failure scope and actual dependency/configuration envelope. |
 
 The rejected assumption is that protocol-independent correctness requires every
