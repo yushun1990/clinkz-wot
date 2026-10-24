@@ -33,9 +33,10 @@ Adopt these responsibility decisions together:
   resources have independent identities and lifetimes. Sharing is permitted
   only through explicit compatible owners and leases; it grants no authority.
 - Normalize shared semantics once and execute from owned prepared data. Permit
-  bounded preparation when an operation is first used, and owned incremental
-  Binding preparation; do not require native compilation of every TD operation
-  or a universal compiled-program representation.
+  bounded first-use preparation for Consumer partial support. Producer publication
+  requires qualified support for every retained advertised Form/operation;
+  only construction whose support is already established may be deferred.
+  Neither role requires a universal compiled-program representation.
 - Keep the current acyclic Core/TD/Planning direction and Cargo composition.
   Replace restrictions of the narrow Property Read adapters where necessary;
   do not wrap them into the general architecture through compatibility facades.
@@ -174,6 +175,9 @@ statically supported interaction and returns a per-operation support report;
 a caller can require a stricter capability set. TD tooling remains usable with
 no executable interaction. Missing credentials, current capacity and peer
 reachability are runtime availability, not structural support certificates.
+The report distinguishes coarse eligibility from support established by complete
+selected preparation; a deferred Consumer candidate can still prove unsupported.
+That partial-support rule does not apply to a published Producer description.
 
 An operation cannot proceed until its complete selected mapping, validation,
 security and necessary capacity checks succeed. Required preparation is not
@@ -191,7 +195,9 @@ irrelevant document content need not survive `consume`. Completion installs an
 immutable mapping into a generation-checked preparation slot, without changing
 instance authority. Source input can then remain destroyed. An execution-only
 composition accepts prepared entries and reports preparation-required for an
-unprepared operation; it never acquires an upward TD/Planning dependency.
+unprepared Consumer operation; it never acquires an upward TD/Planning dependency.
+A Producer can use deferred construction only under the pre-publication support
+guarantee specified below, with its preparation owner and input already retained.
 
 TD preparation resolves base and validates URI templates. Per-call variables
 are checked and expanded by the shared prepared URI mechanism under execution
@@ -204,10 +210,12 @@ contact arbitrary referenced addresses.
 A compiler can produce owned non-`Copy` data through incremental pure jobs.
 Capacity precedes each acquisition; failure retains provisional output and a
 funded rollback path. An atomic inline compiler remains an efficient optional
-adapter. There is no universal all-native-bounds-before-any-pure-start barrier;
-whole-input limits, required coverage and complete checks before native effects
-remain. This deliberately renews the exercised Consumer subset's ordering and
-cost evidence when its implementation changes.
+adapter. There is no universal all-native-bounds-before-any-pure-start barrier.
+Each native acquisition still needs prior authority, capacity and cleanup
+ownership; the final Producer coverage/endpoint checks precede Serving, not
+necessarily closed native setup that determines an endpoint. This deliberately
+replaces the exercised Consumer ordering and the old Producer freeze-before-
+all-effects rule where they conflict with the selected design.
 
 ## Definitions, instances and physical owners
 
@@ -318,9 +326,12 @@ delivery, optional reciprocal responses, stop and cleanup. Property observation
 uses Property value semantics. Event delivery also accounts for the TD's
 [subscription, data, dataResponse and cancellation schemas](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#eventaffordance).
 Reducing both to an endless iterator of payloads would lose required control
-and response opportunities. A delivered Event requiring `dataResponse` carries
-a bounded owned reply capability with its own deadline/disposal obligation.
-Protocol ACKs and semantic Event responses are separate.
+and response opportunities. Where the selected mapping supports a reciprocal
+Event response, its conversation retains the actual bounded response capability
+and deadline/disposal obligation. A `dataResponse` schema does not invent a
+protocol response channel. Required response semantics cannot be silently
+discarded by selecting a mapping that does not support them; such a combination
+is refused. Protocol ACKs and semantic Event responses are separate.
 
 Use an application-facing pull cursor, with asynchronous convenience adapters,
 over owned conversation state. Wire push, callbacks or polling are Binding
@@ -328,13 +339,26 @@ choices. A bounded callback can enqueue native observations and wake progress;
 it cannot invoke an application handler. Receiving application credit is not a
 claim that the wire or remote publisher supports backpressure.
 
-Each logical subscriber has an independent cursor, permission, limits and stop
-state. Bindings may share native subscriptions and packet backing when matching,
-authentication, QoS and delivery semantics are compatible. Matching determines
-zero/many original logical recipients, not new Things inferred from arbitrary
-topic text. Native acknowledgements/correlation remain with the actual native
-owner. Fan-out references, work and queued bytes are separately bounded; a
-single response opportunity cannot be duplicated across recipients.
+Each Engine-owned logical subscription has an independent cursor, permission,
+limits and stop state. Native publish/subscribe, multicast, group distribution,
+matching and any necessary local routing belong to the protocol/Binding. A
+broker's remote subscribers need not become individual Engine records. For
+Engine-local recipients, matching preserves original logical identities rather
+than inventing Things from topic text. Native distribution is not a mandatory
+Engine broadcast layer, and one protocol's group semantics do not define another's.
+
+Bindings may share native subscriptions and immutable packet backing when their
+authentication, QoS and delivery contracts permit it. Multiple logical deliveries
+can borrow the same owned bytes; the Engine mandates no body copy or fresh decode
+per recipient. A particular data contract can still require separate processing.
+Account backing once at its owner and actual recipient references/work separately.
+Native acknowledgements, correlation and reciprocal reply cardinality remain
+Binding responsibilities. If a protocol supplies only one reply opportunity, the
+Binding declares and enforces the supported response-bearing topology before
+acceptance. The Engine checks that capability against the promised logical
+interaction; it does not impose a universal unique-replier, aggregation or
+arbitration mechanism. It neither silently drops logical response obligations
+nor grants more native reply rights than the selected mapping provides.
 
 Property updates can coalesce only under an explicit policy; Event loss cannot
 be hidden as a newer state. Overflow must produce visible loss/termination or
@@ -350,9 +374,11 @@ that this architecture implements either mapping.
 
 Producer Event emission and observable Property changes enter through semantic
 sources owned by application behavior. Servient checks the source instance and
-applicable subscriber/delivery policy; Binding conversations perform native
-publication and any required response/control exchanges. A source can have zero
-subscribers. A one-off `publish` success alone does not implement an exposed
+its Engine-owned logical delivery policy; Binding conversations perform native
+publication/distribution and any required response/control exchanges. A broker
+may enforce remote subscriber policy without the Engine enumerating that broker's
+subscribers. A source can have zero subscribers. A one-off `publish` success
+alone does not implement an exposed
 Event's subscription lifecycle or establish consumer receipt.
 
 Stopping a logical subscription revokes local delivery first, then progresses
@@ -363,23 +389,102 @@ stop must remain possible even when remote cancellation is unsupported.
 
 ### Producer exposure, native ingress and dispatch
 
-Exposure binds behavior and final description coverage to one logical instance,
-then installs native participation. The Binding can listen, register with a
-broker or perform another supported topology. Pure form contribution and native
-setup are distinct. If setup determines a final endpoint, bounded final binding
-and description verification precede publication; no advertised form may describe
-a different installed behavior. Supplied forms are checked rather than silently
-replaced. Every retained advertised operation needs actual handler/process/data
-support or an explicitly supported aggregation path. A reduced TD is a deliberate
-pre-publication result, not a silent omission of failed operations.
+**Serving means every retained advertised Form and its effective operations have
+an established supported mapping, actual behavior coverage and ready required
+native participation. It does not mean every future request will succeed.** This
+all-retained-Forms publication guarantee is a ClinkZ engineering policy serving
+truthful advertisement. [TD 1.1 §8.3](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#protocol-bindings)
+requires accurate protocol mappings; it does not mandate our publication phases,
+coverage-result representation or a network-availability guarantee.
 
-Installation owns partial setup and can remain non-serving. Once all required
-participations are ready, Servient publishes the logical instance and serving
-authority in one local transition. External visibility and compensation are
-Binding-specific: neither remote registration nor rollback across protocols is
-a globally atomic network transaction. Four public setup-phase guard families
-are unnecessary for every Binding; one retained installation owner is sufficient
-if it preserves the same admission, partial-failure and drain guarantees.
+Before Serving, TD/Planning verify all retained Thing-root and affordance Forms,
+effective operation sets, schemas/security inheritance and supported extension
+meaning. The actual paired Binding and services must establish support for each
+complete combination: native addressing/matching, subprotocol, payload/response
+formats, required schema rules, security mechanisms, and any subscription,
+cancellation, Action continuation or Event-response behavior that is promised.
+Actual registered behavior or an explicitly supported aggregation path covers
+each operation. One preferred Form, default operation or security alternative
+cannot certify other retained advertised alternatives. A handler-key match,
+scheme bitset, `Covered` draft marker or program format tag alone is insufficient.
+Unregistered late handlers are private
+draft state, never covered live advertisement. There is no Serving exception
+that advertises an unimplemented operation and later returns Unsupported.
+
+Producer preparation has two legitimate strategies:
+
+| Strategy | Pre-publication obligation | What may remain deferred |
+| --- | --- | --- |
+| Construct the required native mappings | Complete native lowering and all common/Binding/service checks. This is the default if lowering is the only reliable support check. | Per-interaction operands, credentials, admission and runtime protocol work. |
+| Validate completely, construct some pure data later | The actual Binding supplies an equivalent complete support result for the exact final mapping/configuration, including all dependencies and representability restrictions. Checks that can first discover Unsupported cannot be postponed. | Only bounded pure materialization/cache building whose supported meaning is already fixed; it may still encounter ordinary runtime capacity or cancellation failure. |
+
+The second strategy is optional, not a universal compiler or certificate API.
+An unmaterialized definition contains owned normalized mapping facts and the
+Binding-qualified validation result with its immutable dependency requirements.
+The exposure record separately pins the actual executor/configuration and
+codec/security/behavior registrations, plus the funded deferred-construction
+owner/input and its coordinator. Shared definition content contains no live
+handler, infrastructure, authority or cleanup obligation. The checked association
+covers the final description and Form/operation coordinates, bound endpoints/
+operands and all policies relevant to mapping support, not a permanent permission.
+Semantically equivalent content may share backing; an arbitrary hash, public
+boolean or copied generation is not evidence. The result is a trusted linked
+implementation's checked obligation, not a mathematical proof or serving grant.
+Where validation cannot establish all required support without constructing the
+program, the Binding must construct it before publication or refuse exposure.
+Sharing validator/lowerer rules and testing their consistency is necessary
+implementation evidence; renaming a later Unsupported as an operational error
+does not satisfy the obligation.
+
+The timing is deliberately different from freezing all metadata before native
+effects. These are semantic boundaries, not mandatory public trait stages:
+
+1. Validate the private draft and known mapping/behavior dependencies. Capture
+   the actual providers/configuration and reserve setup, ingress, finalization
+   and cleanup capacity before acquiring native resources. Any unresolved endpoint
+   or negotiated fact remains an explicit dependency, not a completed coverage claim.
+2. Install required native participation while application ingress is closed.
+   The Binding can listen, register with a broker or perform another supported
+   topology. Partial setup remains owned; external visibility and compensation
+   are declared. Native control/ACK traffic is not semantic acceptance.
+3. Bind the actual endpoints and other setup-derived facts; finalize the effective
+   TD; revalidate all affected common and Binding support/ownership/collision
+   facts against that exact final revision. Supplied forms cannot silently change
+   meaning. A deliberate reduced TD must itself complete this entire validation
+   and readiness process. Failure keeps the instance unpublished and rolls back.
+4. With complete qualified coverage and every required participation ready,
+   publish the final TD revision, logical registry and current serving authority
+   in one Servient-local transition. Final dependency/cancellation checks and
+   install make no new fallible native preparation call. Required dispatch/ingress
+   material and ownership are already present; no handler receives work earlier.
+
+Readiness concerns the resources needed to expose this topology, such as its
+listener or broker participation. It does not pre-open every future connection,
+create subscriptions for absent consumers or reserve every future request's
+maximum storage. Those resources are admitted when their interactions occur.
+Conversely, a known supported mapping without the necessary serving
+infrastructure is not ready merely because its pure support check passed.
+
+Deferred materialization is driven by the retained preparation coordinator,
+never by a source-TD callback from Core or a hidden native handler. It remains
+bounded and cancellation-aware, preserves any accepted work and cleanup owner,
+and completes before the native operation, handler dispatch or result delivery
+that requires that data. A composition without preparation materializes required
+data before installation. A coarse preparation-required or unknown-support
+record cannot satisfy Producer coverage.
+
+| Later observation | Truthful disposition |
+| --- | --- |
+| Invalid operands, failed authorization, ordinary request/queue/allocation limits, timeout/cancellation, handler business failure, or lost connectivity | Runtime rejection/failure under the established mapping. Publication never promised all callers access, permanent capacity, peer cooperation or successful application effects. |
+| First use reveals an unimplemented op/subprotocol/codec/schema/security branch, a missing handler, or a deterministic mapping/configuration mismatch already present at publication | Qualification/implementation defect. Fail closed for affected acceptance, retain the exact failure and cleanup owners, and repair/requalify before claiming that mapping ready. Do not hide it as normal Unsupported, remove a Form silently, or substitute another mapping. |
+| Advertised endpoint meaning, bound implementation, capability profile or mapping-support policy changes after qualification | The old qualification cannot authorize the new configuration. Revoke affected acceptance and revalidate/re-publish as required; reconnecting equivalent infrastructure under the same checked mapping is ordinary availability recovery. Current authorization and credential rotation remain per-use policy, not a new definition by themselves. |
+
+Externally cached TDs, remote registration and rollback across protocols are not
+globally atomic. Local publication guarantees consistent admitted meaning and
+ownership, not that remote observers see no intermediate effects or that a
+published endpoint can never fail. Four public setup-phase guard families are
+unnecessary: one retained installation owner is sufficient if it enforces these
+boundaries and preserves partial-failure/drain obligations.
 
 The shared infrastructure path is:
 
@@ -624,9 +729,47 @@ proof. No new protocol experiment is a prerequisite for deciding this proposal.
 | Preserve the narrow SPI and add methods per WoT operation | Lowest immediate disruption, but carries single-read carrier/progress assumptions into every capability and still excludes owned compilers. Rejected as the general design; retain only useful adapters and invariant tests. |
 | A universal request/response or message bus SPI | Small apparent interface, but shifts subscription control, exposure, action continuations and lifecycle into ad hoc side channels or forces protocol concepts into Core. Rejected. Family contracts may share private ownership helpers without sharing an execution mechanism. |
 | Binding-owned complete semantic runtimes behind one facade | Gives protocol authors freedom but duplicates defaults, policy, validation and instance truth, and makes consistent dispatch/security hard to enforce. Rejected. Bindings own mapping and physical execution, not the WoT semantic runtime. |
-| Mandatory whole-TD native compilation and two-level immutable plans | Predictable upfront cost and useful for strict deployments. Excessive as a universal admission requirement and hostile to partial support/expensive uncommon operations. Keep as a selectable eager strategy; choose bounded semantic indexing plus eager/first-use native preparation. |
+| Mandatory whole-TD native compilation and two-level immutable plans | Predictable upfront cost and useful for strict deployments. Excessive as a universal Consumer admission requirement. For Producers it is a valid support-validation strategy and required when lowering is the only complete check, without mandating two-level storage. |
+| Publish a Producer from coarse capabilities and discover unsupported mappings on first use | Reject: makes a retained Form a speculative advertisement. Missing support is not an ordinary runtime availability failure. |
+| Binding-qualified Producer validation with deferred pure materialization | Permit where a complete validation path establishes the same supported meaning without constructing all data. Retained dependencies, construction ownership and final endpoint checks are mandatory; a Binding without that validation path uses pre-publication construction. |
 | Core-owned sessions/reactor/shared subscription manager | Central pooling might simplify one transport, but centralizes protocol authentication, matching, reconnect and QoS policy. Rejected. Explicit Binding infrastructure owners already provide the needed control boundary. |
 | Separate Host/embedded semantic engines or a new Contracts crate now | Can improve distribution in some projects, but no remaining cycle requires it here; duplicated meaning and migration add cost. Keep one semantic design with optional representation adapters and an execution-only dependency boundary. |
+
+## Assessment of the superseding review
+
+The [superseding review and Owner corrections](https://github.com/yushun1990/clinkz-wot/pull/227#pullrequestreview-5638007609)
+are challenge input, not a substitute for the decisions above. The publication
+objection is valid: the earlier text left first-use support discovery and complete
+Producer advertisement compatible without specifying how. Complete Binding-qualified
+validation, or construction when it is the only check, closes that gap. Calling
+an unchecked definition a certificate would not close it.
+
+The withdrawn universal Event reply-arbitration objection was too strong. Native
+distribution and reply cardinality belong to each Binding; logical semantics and
+permission do not require an Engine-wide arbitration or byte-copy layer. What
+remains necessary is truthful support for the selected logical response contract.
+The architecture-first correction is also justified: mutually incompatible active
+definitions cannot safely govern different halves of the same new lifecycle.
+Small useful implementation slices come after coherent contract correction;
+the historical Property Read interface does not determine the target.
+
+Concrete counterexamples explain the chosen limits:
+
+- A Binding advertising Event support but discovering an unsupported required
+  response mapping only on first use cannot justify Producer publication from
+  its coarse Event bit. Validate that combination first or reject the Form.
+- A listener assigned a port or broker-assigned address during closed setup
+  cannot have its final endpoint truthfully frozen earlier. Bind and recheck it
+  before Serving, retaining rollback ownership for the externally visible setup.
+- A validated codec mapping can defer a pure acceleration table and later fail
+  to allocate it. That is a declared runtime resource failure. Discovering an
+  unknown encoding branch instead means qualification was incomplete.
+- A broker can distribute one publication to many peers without an Engine
+  record or payload allocation for each peer. A different protocol's limited
+  reciprocal reply remains that Binding's compatibility problem.
+
+These are falsifiers of responsibility claims, not implemented examples or a
+finite proof of generality.
 
 ## Consequences after acceptance
 
@@ -645,27 +788,64 @@ can remain implementation adapters when they fit; their signatures must not
 constrain the new contracts. Withdraw any unmatched capability claim explicitly.
 There is no requirement to keep incorrect public compatibility before v1.
 
-Affected authority must be reconciled deliberately in its existing owners:
+### Comprehensive contract reconciliation before dependent implementation
 
-| Owner | Required reconciliation |
+The architecture is derived first. All incompatible active contracts must then
+be amended, superseded or removed coherently **before dependent implementation
+is treated as governed by this target**. Neither accepted ADRs (including
+ADR-0024), frozen API rows, successful narrow implementations nor old admission
+machinery constrain the redesign. Preserve their historical rationale and valid
+correctness obligations, not their authority over incompatible new mechanisms.
+A broad reconciliation PR, or a small set of dependent PRs with one unambiguous
+activation boundary, is appropriate. Do not scatter contradictory rules across
+old and new capability slices or add compatibility facades to avoid a large diff.
+This proposal PR performs none of that migration and creates no additional gate.
+
+The following inventory follows the registered owners in
+[artifacts.csv](../docs/artifacts.csv) and the
+[current authority map](../docs/spec/v5-authority-reset.toml). It distinguishes
+actual incompatible obligations from sound requirements needing new projections;
+an accepted ADR title alone does not make every historical clause active.
+
+| Current owner / exact contract | Reconciliation required by the recommended target |
 | --- | --- |
-| Architecture 10/20/30/40/50; ADR-0008/0009/0010/0011/0012/0024 | Project distinct capability flows, optional native preparation, live grant/instance ownership, native progress and physical retirement. Preserve the rationale for safety while superseding universal mechanisms and the last-route trigger where applicable. |
-| [Planning](../docs/spec/planning.md), TD admission/semantics, ADR-0020/0021 and API roles | Generalize operation/data/schema/security views and owned preparation; separate common validity from selected support; correct Action `synchronous` attribution, source-id/key restrictions and opaque security preservation. Preserve existing input/strict-ingestion evidence distinctions. |
-| [Binding SPI](../docs/spec/binding-spi.md), [Interaction Core](../docs/spec/interaction-core.md), [Runtime safety](../docs/spec/runtime-safety.md) | Define family-specific ownership and result/control contracts, common payload validation, security evidence/grants, cancellation certainty, native candidate/response multiplicity, installation and explicit retirement. Existing `BIND-*`, `LIFE-EXPOSE-*`, `API-SECURITY-001`, `HANDLE-DROP-001` guarantees need exact successor projections. |
-| Foundation/resource ownership and profile contracts; state/API/resource projections | Apply owner-scoped limits, backing/lease costs, reserved cleanup and no-atomic representations consistently. Update actual machines/layouts/traces for the implemented capabilities; do not require numerical Host/static identity. |
-| WP-100/200/300/400/500/600/700 and existing evidence | Revise intersecting implementation scope/dependencies and invalidate only changed claims. Preserve the client-only Discovery and HTTP/HTTPS release directions. No new architecture or generality gate is proposed. |
+| [Architecture backbone](../docs/architecture/README.md), documents 00/10/20/30/40/50; [Architecture Governance](../ARCHITECTURE_GOVERNANCE.md), Frozen Direction; [ADR set](../docs/ADRs), ADR-0001/0008/0009/0024 | Keep the independently justified dependency direction and explicit Cargo composition. Replace universal plan-set/native-stage/route-progress assumptions, compiler eligibility restrictions, last-route-only retirement and mandatory TD/Planning coupling in execution. Update the current-means portions of the goals document without shrinking its enduring goals. |
+| [Planning](../docs/spec/planning.md), `PLAN-ARTIFACT-001`, `FORM-FINALIZE-001`, Producer finalization order; ADR-0008 | Current text requires complete semantics/coverage before effects, eager inbound/publication compilation, final locally determined metadata, and forbids readiness from discovering endpoints. Split pre-setup checks from final pre-publication qualification; retain pure contribution, allow separately owned closed setup and endpoint binding, and permit qualified deferred pure construction. No final TD is served before all checks complete. |
+| Planning `FORM-COVERAGE-001` and Advertised behavior coverage | Remove the `AllowLateHandlers` live-publication exception and its normal first-use Unsupported outcome. Draft-only late registration is fine; every live advertised operation needs actual behavior plus Binding/service support. Preserve complete coverage of every retained Form/effective operation; a reduced TD is separately validated before publication. |
+| Planning `FORM-OWNER-001`, Owner and collision rules, Host Producer entry; [Binding SPI](../docs/spec/binding-spi.md), Host Producer installation | Reaffirm one accountable paired mapping owner and real collision checks. Reconcile reservation identities with late-bound endpoints and Binding-native sharing, and replace single-read entry/handler/response cardinalities as general contracts. A draft marker or constructor is not complete support evidence. |
+| Planning `PLAN-COST-001`, `PLAN-SET-001`, Consumer aggregate, eager/lazy sections; [Runtime safety](../docs/spec/runtime-safety.md), `ADMIT-TXN-001`/`DOC-RUNTIME-001`; ADR-0021 | Replace mandatory eager all-bounds-first Consumer admission and per-instance physical compilation with bounded partial support/preparation snapshots and independently owned definitions. Preserve complete common validity checks, paid work, source independence, exact leases and actual backing retention. Distinguish Consumer unknown support from qualified Producer deferred construction in the lifecycle itself. |
+| Binding SPI `BIND-REG-001` and compiler support sections; Planning compiler contracts | Remove installed Consumer `Copy`/atomic-only eligibility and mandatory role pairs while retaining actual compiler/executor/configuration pairing. An execution-only registration retains no compiler; an optional preparation coordinator owns any deferred jobs. Do not rename the restricted adapter into an allegedly open SPI. |
+| Binding SPI `LIFE-EXPOSE-001/002/003`, `BIND-ROUTE-001`; Runtime safety `STATE-EXPOSE-001`/`STATE-BIND-001`; ADR-0010/0012 | Preserve local publication, no premature semantic dispatch, complete failure/rollback owners and revocation. Supersede compulsory native prepare/readiness/activate/commit carrier families and route-only native progress. Publish final TD/support facts with current authority; native ingress/matching has independent bounded progress. |
+| Binding SPI `BIND-ROUTE-001` and Shared protocol infrastructure lifetime; architecture 50; ADR-0024 and relevant ADR-0023 retirement clauses | Replace the exact last-route initiation rule with explicit physical-owner retirement policy, bounded idle ownership, equivalent reconnect, authorized whole-owner shutdown and a final-use destruction barrier. Logical close must not revoke siblings; polling alone never grants shutdown rights. |
+| [Interaction Core](../docs/spec/interaction-core.md), `HANDLER-API-001`/`API-PAYLOAD-001`/`API-OPTIONS-001`; Binding `BIND-OUT-001`/`BIND-IO-001`/`BIND-DELIVERY-001`; ADR-0005/0019 | Replace a single selected Property Read request/result shape as the broad API. Specify separate finite, invocation, notification/control/reply and exposure contracts, including response variants and shared backing. Identity sealing remains distinct from codec/schema validation and remote effect. Equivalent supported Host/static semantics do not mean every capability uses the old read trace or carrier. |
+| ADR-0002/0003/0004; architecture 10/40/50 notification/emission/collection sections; corresponding retained Binding/Planning clauses | Reaffirm native remote distribution, no per-recipient byte copies, independent logical subscriptions and no hidden N-call collection fallback. Replace frozen staged publication-target machinery and data-only subscription driver shapes where they lose Event response/control. Broker recipients do not require mirrored Engine subscribers or a universal reply arbitrator. One logical collection operation need not mean one physical message/resource. |
+| [Runtime safety](../docs/spec/runtime-safety.md), `API-SECURITY-001`; Interaction Core payload/handler contracts; [handler amendment](../docs/amendments/WP-100-handler-api-v1.md), [output amendment](../docs/amendments/WP-100-interaction-output-api-v1.md); TD preparation under ADR-0020/0021 | Project open scheme preservation, selected security verification/authorization, bounded credential projection, actual required data validation and operation-specific roles. Correct TD 1.1 `synchronous` attribution and Consumer source-id/key restrictions. Preserve strict-versus-ordinary ingestion truth; do not reinstate retired ingestion prototypes or claim their evidence. |
+| [Foundation](../docs/spec/foundation.md), Binding `BIND-MEM-001`/`BIND-STORAGE-001`, [Consumer resource contract](../docs/spec/consumer-resource-ownership.md), [ownership schema](../docs/resource-contracts/consumer-ownership-v2.toml), [resource limits](../docs/resource-limits.csv); ADR-0022/0023 and scoped ADR-0006/0011 disposal clauses | Reconcile universal SDK maxima/final-drop assumptions and one-eager-generation policy projections with owner-scoped limits, shared backing and funded deferred construction/cleanup. Strict profiles can remain explicit supported policies. Generalize the useful principle, not a permanent set of one-off operation resource variants; renew physical accounting evidence. |
+| Interaction/Runtime safety cancellation, cleanup and profile clauses; [error/cleanup amendments](../docs/amendments/WP-100-error-cleanup-v1.md), [error disposition](../docs/amendments/WP-100-error-disposition-v1.md); ADR-0006/0011/0015/0016/0017 | Reaffirm owned late results, first cause, acknowledged transfer, linear work, clock truth and no implicit retry after uncertain effects. Reproject exact cleanup carriers/error phases for qualification defects, deferred construction, native retirement and no-atomic execution; no old shape is a universal ABI. No reason was found to reverse these underlying safety principles. |
+| [State machines](../docs/state-machines.toml) | Reconcile serving activation, compiled-plan-set/lazy-artifact, expose, binding-route/lifecycle/readiness/active-driver, Host Producer endpoint and Consumer admission machines with final qualification and optional materialization. Reproject subscription, producer-subscription, emission and cleanup/call machines for native distribution and separate logical/physical retirement. A changed label cannot preserve obsolete transition/ownership truth. |
+| [API ownership](../docs/api-ownership.csv), [performance contracts](../docs/performance), registered validation fixtures/checkers | Amend/delete incompatible frozen paths, stages, request/driver signatures and cardinalities. Reconcile eager/all-bounds, per-route, allocation/fan-out and trace assumptions with the selected capability/profile. Preserve valid invariant tests; replace incompatible assertions and renew affected measurements. Checkers are projections, never a veto on the target design. |
+| [Design manifest](../docs/design.md), [spec index](../docs/spec/README.md), [authority map](../docs/spec/v5-authority-reset.toml), [requirements](../docs/requirements.csv), [artifact registry](../docs/artifacts.csv); ADR-0007/0014/0018/0019 | Keep single-owner, explicit revision and history principles. Reconcile affected ownership/active/inactive dispositions and cross-references; the current 65-requirement set and deferred v4.9 clauses do not bound the new architecture. In particular `PLAN-LAZY-001`/`FORM-FINALIZE-002` and broad subscription/codec clauses are inactive input, not independent current authority or automatically reactivated target contracts. |
+| [Work-package DAG](../docs/work-packages/index.toml), WP-000/100/200/300/400/500/600/700, all registered intersecting admission and Property Read gate records; [PLAN](../PLAN.md) | Re-derive dependencies, implementation boundaries and evidence obligations from the accepted target, including TD/preparation, open compiler support, public runtime composition and Producer coverage. Preserve named historical results without transferring acceptance. Update durable roadmap/current-target projections coherently; old package boundaries, tranches or proof ordering cannot force a wrong interface. |
 
-Implementation should begin by reconciling these boundaries and replacing the
-current composition/preparation restrictions through a useful supported HTTP
-path, preserving its existing execution and cleanup behavior. Broaden finite
-interactions, security and notification conversations in coherent product slices;
-use the existing minimal ObserveProperty boundary before broad subscription
-expansion. Action process ownership and Event control cannot be deferred behind
-an API that falsely claims them. Real integration and profiling will refine the
-representation, not serve as a finite proof of universal protocol neutrality.
-HTTPS qualification remains a release obligation and need not wait for an
-unrelated protocol or pooling implementation. This task authorizes none of that
-production work.
+ADR-0013's proportional review/admission principle and the explicit client-only
+Discovery boundary remain useful. The inventory is not a request to discard
+correct accounting, cancellation, strict input or time semantics merely because
+they predate the redesign. It is a requirement to revise every conflicting
+normative projection together, including broad clauses embedded beside narrow
+exceptions, and to state what is retained as a compatible invariant or adapter.
+Historical evidence stays tied to the code/contracts actually tested; no green
+current-authority checker establishes acceptance of these replacements.
+
+After Owner acceptance and independent assessment, reconcile that complete
+contract set before dependent implementation, then implement useful supported
+capability slices against it. Test real publication and cancellation, conditional
+Producer materialization, notifications, action processes and resource release;
+select focused evidence for the claims rather than a quota of contrasting
+protocols. Existing useful HTTP/observation checks can be retained or revised
+for that purpose, without freezing the old SPI or adding a generality gate.
+HTTPS qualification and client-only Discovery remain product directions; their
+exact parallel work must be compatible with the accepted target. This task
+performs proposal rework only and authorizes no production implementation.
 
 ## Assumptions, objections and open decisions
 
@@ -681,8 +861,14 @@ security, logical and physical owners can become a token framework heavier than
 a native stack. The response is a small set of responsibility contracts with
 simple specialized adapters, not a mandatory type for each noun in this document.
 A second objection is that first-use preparation moves failure/latency into calls.
-Eager profiles remain available; preparation failure cannot masquerade as network
-failure. A third is that common validation/security services risk a new universal
+Eager profiles remain available. For Producers, the important residual risk is
+divergence between qualification and materialization or a stale dependency check;
+an unsupported branch is then a defect, not an allowed late surprise. If a complete
+separate support check is as expensive or complex as construction, construct
+before publication instead of inventing certificate machinery. Closed setup and
+final endpoint binding also need cancellation/publication-race and rollback
+evidence, including when native effects are already externally visible.
+A third objection is that common validation/security services risk a new universal
 IR. Limit them to actual WoT data/policy semantics and supported formats; keep
 protocol methods, tasks and wire control entirely in Binding implementations.
 
@@ -742,7 +928,7 @@ selection was executed with the lockfile and offline dependency resolution:
 cargo test --locked --offline -p clinkz-wot-binding-http --test architecture_reassessment --test semantic_compilation --test producer_serving --test real_peer
 ```
 
-All 57 tests passed: 4 diagnostics, 14 semantic compilation, 17 Producer serving
+All 57 baseline tests passed: 4 diagnostics, 14 semantic compilation, 17 Producer serving
 and 22 real-peer tests. The diagnostics intentionally reproduce restrictions or
 defects, not desirable target behavior. The serving/peer tests exercise actual
 HTTP I/O, publication, cancellation, response validation and resource release
@@ -750,6 +936,10 @@ within their narrow cleartext Property Read profiles. The compiler counterexampl
 proves an admission restriction. None establishes implemented general SPI,
 HTTPS/security qualification, Action/Event support, no-atomic execution, embedded
 hardware fitness, shared-infrastructure production or architectural acceptance.
+They were not rerun for the subsequent text-only review rework. In particular,
+qualified deferred construction and endpoint-finalization guarantees need new
+focused implementation evidence after contract reconciliation; the existing
+tests cannot certify them.
 
 This PR changes this proposal and its workspace index label only. Production,
 active contracts and historical review records are unchanged. The required
