@@ -2,9 +2,9 @@
 use alloc::sync::Arc;
 /// Location of an affordance within a Thing Description.
 ///
-/// Affordance names are stored as [`Arc<str>`] rather than [`String`] so that
-/// cloning an `AffordanceTarget` is a single atomic refcount bump. This matters
-/// on the inbound and consumed-interaction hot paths.
+/// Affordance names are stored as [`Arc<str>`] rather than
+/// [`alloc::string::String`] so cloning an `AffordanceTarget` is a single atomic
+/// refcount bump. This matters on the inbound and consumed-interaction hot paths.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AffordanceTarget {
     /// A form declared at Thing level.

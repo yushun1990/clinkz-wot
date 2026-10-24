@@ -209,8 +209,6 @@ dependencies = [
  "async-trait",
  "clinkz-wot-core",
  "clinkz-wot-td",
- "futures-core",
- "serde",
  "serde_json",
  "tokio",
 ]
@@ -266,7 +264,6 @@ dependencies = [
 name = "clinkz-wot-servient"
 version = "0.1.0"
 dependencies = [
- "clinkz-wot-codec-cbor",
  "clinkz-wot-consumer-property-read-binding-fixture",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
@@ -274,7 +271,6 @@ dependencies = [
  "clinkz-wot-property-read-binding-fixture",
  "clinkz-wot-td",
  "serde_json",
- "tokio",
 ]
 
 [[package]]

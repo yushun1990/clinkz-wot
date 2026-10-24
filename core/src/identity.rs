@@ -240,10 +240,9 @@ generation_id!(
 
 /// Canonical Thing identity.
 ///
-/// Replaces bare `String` ids across core, discovery, and servient. In v1 of
-/// the redesign it is carried by [`crate::InboundRequest`] and used by the
-/// exposed Thing registry; later phases migrate directory and registry ids to
-/// this type.
+/// Used by discovery records, [`crate::ServingActivationAuthority`], and
+/// [`crate::LogicalInteractionPlan`]. Name-free [`crate::OutboundRequest`]
+/// execution carries selected artifact identities instead.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ThingId(String);
 

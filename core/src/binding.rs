@@ -1192,8 +1192,8 @@ impl RouteInboundResponse {
     ///
     /// Handler failures are preserved unchanged. A nominal success becomes a
     /// deliverable [`CoreError::Validation`] unless it has one payload,
-    /// [`InteractionStatus::Ok`], [`ResponsePayloadRole::Application`], no
-    /// binding-response metadata, and no action invocation reference. The
+    /// [`crate::InteractionStatus::Ok`], [`crate::ResponsePayloadRole::Application`],
+    /// no binding-response metadata, and no action invocation reference. The
     /// opportunity remains in the response for every branch.
     pub fn seal_property_read_handler_result(
         opportunity: RouteResponseOpportunity,

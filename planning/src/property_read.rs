@@ -745,7 +745,7 @@ mod tests {
     use clinkz_wot_core::binding::BindingRouteKey;
     use clinkz_wot_core::{
         BindingLifetimeFootprint, BindingRegistrationIdentity, CollisionDomainId,
-        EndpointReservationKey, InteractionOptions, Payload, PlanSetGeneration, PrepareInput,
+        EndpointReservationKey, InteractionOptions, PlanSetGeneration, PrepareInput,
         RouteReservationIdentity, SelectionFailureReason,
     };
     use clinkz_wot_foundation::Generation;

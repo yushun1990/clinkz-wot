@@ -14,12 +14,16 @@ use std::{
     io::{Read, Write},
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, AtomicUsize, Ordering},
     },
     task::{Context, Waker},
     time::{Duration, Instant},
 };
+
+// Descriptor assertions observe the whole process. Every socket case in this
+// binary takes this lock before creating native owners and keeps it until drop.
+static SERIAL: Mutex<()> = Mutex::new(());
 
 struct AllocationTrace;
 struct Trace {
@@ -251,6 +255,7 @@ fn request(a: SocketAddr) -> String {
 
 #[test]
 fn public_servient_raw_peer_publication_dispatch_credit_and_one_reply() {
+    let _serial = SERIAL.lock().unwrap();
     let a = address();
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = Arc::new(AtomicUsize::new(0));
@@ -316,6 +321,7 @@ fn public_servient_raw_peer_publication_dispatch_credit_and_one_reply() {
 
 #[test]
 fn complete_requests_survive_peer_write_half_close() {
+    let _serial = SERIAL.lock().unwrap();
     for before_acceptance in [true, false] {
         let a = address();
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
@@ -352,6 +358,7 @@ fn complete_requests_survive_peer_write_half_close() {
 
 #[test]
 fn incomplete_write_half_closed_request_retires_without_dispatch_or_retained_capacity() {
+    let _serial = SERIAL.lock().unwrap();
     let a = address();
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = Arc::new(AtomicUsize::new(0));
@@ -374,6 +381,7 @@ fn incomplete_write_half_closed_request_retires_without_dispatch_or_retained_cap
 
 #[test]
 fn malformed_or_unsupported_requests_never_dispatch_then_a_fresh_read_succeeds() {
+    let _serial = SERIAL.lock().unwrap();
     let a = address();
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = Arc::new(AtomicUsize::new(0));
@@ -405,6 +413,7 @@ fn malformed_or_unsupported_requests_never_dispatch_then_a_fresh_read_succeeds()
 
 #[test]
 fn invalid_handler_success_is_core_sealed_as_failure() {
+    let _serial = SERIAL.lock().unwrap();
     let a = address();
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = Arc::new(AtomicUsize::new(0));
@@ -419,6 +428,7 @@ fn invalid_handler_success_is_core_sealed_as_failure() {
 
 #[test]
 fn unfinished_head_deadline_and_last_root_loss_retire_native_participation() {
+    let _serial = SERIAL.lock().unwrap();
     for deadline in [false, true] {
         let a = address();
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
@@ -447,6 +457,7 @@ fn unfinished_head_deadline_and_last_root_loss_retire_native_participation() {
 
 #[test]
 fn one_hundred_real_reads_and_distinct_instance_incarnations() {
+    let _serial = SERIAL.lock().unwrap();
     let a = address();
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = Arc::new(AtomicUsize::new(0));
@@ -483,6 +494,7 @@ fn one_hundred_real_reads_and_distinct_instance_incarnations() {
 
 #[test]
 fn exact_head_and_field_limits_and_one_over_are_enforced_before_dispatch() {
+    let _serial = SERIAL.lock().unwrap();
     let a = address();
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = Arc::new(AtomicUsize::new(0));
@@ -528,6 +540,7 @@ fn exact_head_and_field_limits_and_one_over_are_enforced_before_dispatch() {
 
 #[test]
 fn cancelled_dispatch_and_unread_reply_keep_the_original_response_capacity_until_drop() {
+    let _serial = SERIAL.lock().unwrap();
     for state in [State::Dispatching, State::Delivering] {
         let a = address();
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
@@ -566,6 +579,7 @@ fn cancelled_dispatch_and_unread_reply_keep_the_original_response_capacity_until
 
 #[test]
 fn response_body_bound_and_json_syntax_are_checked_before_wire_success() {
+    let _serial = SERIAL.lock().unwrap();
     static EXACT: [u8; 4096] = {
         let mut b = [b' '; 4096];
         b[4095] = b'7';
@@ -597,6 +611,7 @@ fn response_body_bound_and_json_syntax_are_checked_before_wire_success() {
 
 #[test]
 fn handler_json_requires_utf8_in_strings_nested_values_and_object_keys() {
+    let _serial = SERIAL.lock().unwrap();
     for (body, good) in [
         (r#""é""#.as_bytes(), true),
         (r#"[{"ключ":"值"}]"#.as_bytes(), true),
@@ -739,6 +754,7 @@ async fn public_result(
 }
 #[test]
 fn public_consumer_and_producer_share_capacity_and_execute_two_source_free_generations() {
+    let _serial = SERIAL.lock().unwrap();
     let executor = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
@@ -804,6 +820,7 @@ impl RuntimeClock for ControlledClock {
 
 #[test]
 fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incarnation() {
+    let _serial = SERIAL.lock().unwrap();
     tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
@@ -1020,6 +1037,7 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
 
 #[test]
 fn partially_written_native_reply_is_disposed_on_cancel_or_last_root_loss() {
+    let _serial = SERIAL.lock().unwrap();
     static BODY: [u8; 4096] = {
         let mut body = [b' '; 4096];
         body[4095] = b'7';
@@ -1107,6 +1125,7 @@ fn partially_written_native_reply_is_disposed_on_cancel_or_last_root_loss() {
 
 #[test]
 fn a_live_producer_exhausts_the_same_cleanup_capacity_used_by_public_consumer() {
+    let _serial = SERIAL.lock().unwrap();
     use clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime;
     let limits = GatewayDefaultV1::LIMITS
         .clone()
@@ -1159,6 +1178,7 @@ fn a_live_producer_exhausts_the_same_cleanup_capacity_used_by_public_consumer() 
 
 #[test]
 fn native_allocations_and_descriptors_retire_for_success_headers_and_pending_dispatch() {
+    let _serial = SERIAL.lock().unwrap();
     for mode in 0..5 {
         let a = address();
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
@@ -1244,6 +1264,7 @@ fn native_allocations_and_descriptors_retire_for_success_headers_and_pending_dis
 
 #[test]
 fn real_peer_reset_during_reply_closes_serving_authority_and_preserves_first_cause() {
+    let _serial = SERIAL.lock().unwrap();
     let a = address();
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = Arc::new(AtomicUsize::new(0));
