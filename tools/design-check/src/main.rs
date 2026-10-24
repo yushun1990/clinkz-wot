@@ -12,6 +12,7 @@ const PACKAGE_IDS: &[&str] = &[
 ];
 const PREDECESSOR_COMMIT: &str = "ed09f059e383b7a1b9d22902ee29aa218b4471a6";
 const PREDECESSOR_MANIFEST: &str = "docs/spec/v5-authority-reset.toml";
+const PACKAGE_INDEX: &str = "docs/work-packages/index.toml";
 const CRITICAL_STATE_TRANSITIONS: &[(&str, &str, &str)] = &[
     (
         "notification-conversation",
@@ -242,9 +243,13 @@ fn check_authority_document(root: &Path, document: &DocumentMut) -> Result<(), S
 }
 
 fn pinned_predecessor(root: &Path) -> Result<DocumentMut, String> {
+    pinned_document(root, PREDECESSOR_MANIFEST)
+}
+
+fn pinned_document(root: &Path, path: &str) -> Result<DocumentMut, String> {
     // The historical tree is the independent owner of v5.1 lineage. CI checks
     // out full history; do not replace the pinned object with current metadata.
-    let object = format!("{PREDECESSOR_COMMIT}:{PREDECESSOR_MANIFEST}");
+    let object = format!("{PREDECESSOR_COMMIT}:{path}");
     let output = Command::new("git")
         .current_dir(root)
         .args(["show", &object])
@@ -430,8 +435,12 @@ fn expand_requirement(expression: &str) -> Result<Vec<String>, String> {
 }
 
 fn check_work_packages(root: &Path) -> Result<(), String> {
-    let relative = "docs/work-packages/index.toml";
-    let document = parse_toml(root, relative)?;
+    let document = parse_toml(root, PACKAGE_INDEX)?;
+    check_work_packages_document(root, &document)
+}
+
+fn check_work_packages_document(root: &Path, document: &DocumentMut) -> Result<(), String> {
+    let relative = PACKAGE_INDEX;
     if root_integer(&document, "schema_version", relative)? != 7 {
         return Err(format!("{relative} is not work-package schema version 7"));
     }
@@ -484,6 +493,7 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
         .get("historical_tranche")
         .and_then(Item::as_array_of_tables)
         .ok_or_else(|| "missing historical tranche dispositions".to_owned())?;
+    check_historical_tranche_lineage(root, document, historical)?;
     let mut historical_graph = BTreeMap::new();
     for record in historical {
         let id = table_string(record, "id", "historical tranche")?;
@@ -511,19 +521,231 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
         )?;
     }
     check_dag(&historical_graph, "historical tranche")?;
-    for field in [
-        "historical_producer_gate_manifest",
-        "historical_consumer_gate_manifest",
-    ] {
-        let path = root_string(&document, field, relative)?;
-        let gate = parse_toml(root, &path)?;
-        require_root_string(
-            &gate,
-            "authority_scope",
-            "historical-property-read-only",
-            &path,
+    Ok(())
+}
+
+fn check_historical_tranche_lineage(
+    root: &Path,
+    current: &DocumentMut,
+    historical: &toml_edit::ArrayOfTables,
+) -> Result<(), String> {
+    require_root_string(
+        current,
+        "historical_basis_commit",
+        PREDECESSOR_COMMIT,
+        PACKAGE_INDEX,
+    )?;
+    let pinned = pinned_document(root, PACKAGE_INDEX)?;
+    if root_integer(&pinned, "schema_version", "pinned work packages")? != 6 {
+        return Err("pinned work-package schema revision differs".to_owned());
+    }
+    require_root_string(&pinned, "design_revision", "5.1", "pinned work packages")?;
+    let original = pinned
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "pinned work packages have no tranches".to_owned())?;
+    let mut expected = BTreeMap::new();
+    for tranche in original {
+        let id = table_string(tranche, "id", "pinned tranche")?;
+        if expected.insert(id.clone(), tranche).is_some() {
+            return Err(format!("duplicate pinned tranche {id}"));
+        }
+    }
+    let mut actual = BTreeSet::new();
+    for record in historical {
+        let id = table_string(record, "id", "historical tranche")?;
+        if !actual.insert(id.clone()) {
+            return Err(format!("duplicate historical tranche {id}"));
+        }
+        let original = expected
+            .get(&id)
+            .ok_or_else(|| format!("historical tranche {id} is absent from pinned baseline"))?;
+        require_table_string(
+            record,
+            "recorded_design_revision",
+            &root_string(&pinned, "design_revision", "pinned work packages")?,
+            &id,
         )?;
-        require_root_string(&gate, "successor_acceptance", "not-transferred", &path)?;
+        for field in [
+            "work_package",
+            "status",
+            "admission_status",
+            "impact_status",
+            "admission_review",
+            "completion_evidence_path",
+        ] {
+            require_table_string(record, field, &table_string(original, field, &id)?, &id)?;
+        }
+        for field in [
+            "impact_review",
+            "impact_disposition",
+            "decision_review",
+            "completion_evidence_disposition",
+        ] {
+            let previous = optional_table_string(original, field, &id)?;
+            let retained = optional_table_string(record, field, &id)?;
+            if previous != retained {
+                return Err(format!(
+                    "historical tranche {id} {field} differs from pinned baseline"
+                ));
+            }
+        }
+        if table_integer(record, "sequence", &id)? != table_integer(original, "sequence", &id)? {
+            return Err(format!(
+                "historical tranche {id} sequence differs from pinned baseline"
+            ));
+        }
+        for field in ["depends_on", "completion_evidence_keys"] {
+            if table_strings(record, field, &id)? != table_strings(original, field, &id)? {
+                return Err(format!(
+                    "historical tranche {id} {field} differs from pinned baseline"
+                ));
+            }
+        }
+        let path = table_string(record, "completion_evidence_path", &id)?;
+        let evidence = parse_toml(root, &path)?;
+        let original_evidence = pinned_document(root, &path)?;
+        check_historical_evidence_lineage(&path, &evidence, &original_evidence)?;
+    }
+    let expected_ids = expected.keys().cloned().collect();
+    if actual != expected_ids {
+        return Err(set_difference(
+            "pinned tranches",
+            &expected_ids,
+            "historical tranches",
+            &actual,
+        ));
+    }
+
+    for (old_field, historical_field) in [
+        (
+            "integration_gate_manifest",
+            "historical_producer_gate_manifest",
+        ),
+        (
+            "consumer_integration_gate_manifest",
+            "historical_consumer_gate_manifest",
+        ),
+    ] {
+        let path = root_string(&pinned, old_field, PACKAGE_INDEX)?;
+        require_root_string(current, historical_field, &path, PACKAGE_INDEX)?;
+        let gate = parse_toml(root, &path)?;
+        let original_gate = pinned_document(root, &path)?;
+        check_historical_gate_lineage(&path, &gate, &original_gate)?;
+    }
+    Ok(())
+}
+
+fn check_historical_evidence_lineage(
+    path: &str,
+    current: &DocumentMut,
+    pinned: &DocumentMut,
+) -> Result<(), String> {
+    require_root_string(
+        current,
+        "authority_scope",
+        "historical-property-read-only",
+        path,
+    )?;
+    require_root_string(current, "successor_acceptance", "not-transferred", path)?;
+    if root_integer(current, "schema_version", path)?
+        != root_integer(pinned, "schema_version", path)?
+    {
+        return Err(format!(
+            "historical evidence {path} schema_version differs from pinned baseline"
+        ));
+    }
+    for field in ["design_revision", "work_package", "tranche", "status"] {
+        require_root_string(current, field, &root_string(pinned, field, path)?, path)?;
+    }
+    if let Some(keys) = pinned.get("evidence_keys") {
+        if root_strings(current, "evidence_keys", path)?
+            != item_strings(keys, &format!("{path}.evidence_keys"))?
+        {
+            return Err(format!(
+                "historical evidence {path} evidence_keys differs from pinned baseline"
+            ));
+        }
+    } else if current.get("evidence_keys").is_some() {
+        return Err(format!(
+            "historical evidence {path} adds unpinned evidence_keys"
+        ));
+    }
+    Ok(())
+}
+
+fn check_historical_gate_lineage(
+    path: &str,
+    current: &DocumentMut,
+    pinned: &DocumentMut,
+) -> Result<(), String> {
+    require_root_string(
+        current,
+        "authority_scope",
+        "historical-property-read-only",
+        path,
+    )?;
+    require_root_string(current, "successor_design_revision", "6.0", path)?;
+    require_root_string(current, "successor_acceptance", "not-transferred", path)?;
+    if root_integer(current, "schema_version", path)?
+        != root_integer(pinned, "schema_version", path)?
+    {
+        return Err(format!(
+            "historical gate {path} schema_version differs from pinned baseline"
+        ));
+    }
+    for field in ["id", "status", "design_revision", "document"] {
+        require_root_string(current, field, &root_string(pinned, field, path)?, path)?;
+    }
+    for field in ["fixture_roots", "evidence", "evidence_cases"] {
+        if root_strings(current, field, path)? != root_strings(pinned, field, path)? {
+            return Err(format!(
+                "historical gate {path} {field} differs from pinned baseline"
+            ));
+        }
+    }
+    let current_dependencies = current
+        .get("dependency")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("historical gate {path} has no dependencies"))?;
+    let pinned_dependencies = pinned
+        .get("dependency")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("pinned gate {path} has no dependencies"))?;
+    let mut expected = BTreeMap::new();
+    for dependency in pinned_dependencies {
+        let id = table_string(dependency, "id", path)?;
+        if expected.insert(id.clone(), dependency).is_some() {
+            return Err(format!("pinned gate {path} repeats dependency {id}"));
+        }
+    }
+    let mut actual = BTreeSet::new();
+    for dependency in current_dependencies {
+        let id = table_string(dependency, "id", path)?;
+        if !actual.insert(id.clone()) {
+            return Err(format!("historical gate {path} repeats dependency {id}"));
+        }
+        let original = expected
+            .get(&id)
+            .ok_or_else(|| format!("historical gate {path} has unpinned dependency {id}"))?;
+        for field in ["owner_package", "status"] {
+            require_table_string(dependency, field, &table_string(original, field, &id)?, &id)?;
+        }
+        if table_strings(dependency, "evidence", &id)? != table_strings(original, "evidence", &id)?
+        {
+            return Err(format!(
+                "historical gate {path} dependency {id} evidence differs from pinned baseline"
+            ));
+        }
+    }
+    let expected_ids = expected.keys().cloned().collect();
+    if actual != expected_ids {
+        return Err(set_difference(
+            "pinned gate dependencies",
+            &expected_ids,
+            "historical gate dependencies",
+            &actual,
+        ));
     }
     Ok(())
 }
@@ -995,12 +1217,45 @@ fn root_integer(document: &DocumentMut, field: &str, context: &str) -> Result<i6
         .ok_or_else(|| format!("{context} has no integer {field}"))
 }
 
+fn root_strings(document: &DocumentMut, field: &str, context: &str) -> Result<Vec<String>, String> {
+    let item = document
+        .get(field)
+        .ok_or_else(|| format!("{context} has no {field}"))?;
+    item_strings(item, &format!("{context}.{field}"))
+}
+
 fn table_string(table: &Table, field: &str, context: &str) -> Result<String, String> {
     table
         .get(field)
         .and_then(Item::as_str)
         .map(str::to_owned)
         .ok_or_else(|| format!("{context} has no string {field}"))
+}
+
+fn optional_table_string(
+    table: &Table,
+    field: &str,
+    context: &str,
+) -> Result<Option<String>, String> {
+    table
+        .get(field)
+        .map(|_| table_string(table, field, context))
+        .transpose()
+}
+
+fn require_table_string(
+    table: &Table,
+    field: &str,
+    expected: &str,
+    context: &str,
+) -> Result<(), String> {
+    let actual = table_string(table, field, context)?;
+    if actual != expected {
+        return Err(format!(
+            "historical tranche/gate {context} {field} differs from pinned baseline: {actual:?} != {expected:?}"
+        ));
+    }
+    Ok(())
 }
 
 fn table_strings(table: &Table, field: &str, context: &str) -> Result<Vec<String>, String> {
@@ -1226,6 +1481,157 @@ mod tests {
             transition["to"] = toml_edit::value(from);
             let error = super::check_state_machines_document(&root, &altered).unwrap_err();
             assert!(error.contains("required transition"), "{id}: {error}");
+        }
+    }
+
+    #[test]
+    fn historical_tranches_reject_missing_identity_or_changed_status_revision_and_evidence() {
+        let root = repository_root().unwrap();
+        let index = parse_toml(&root, super::PACKAGE_INDEX).unwrap();
+        super::check_work_packages_document(&root, &index).unwrap();
+        let mut missing = index.clone();
+        let historical = missing["historical_tranche"]
+            .as_array_of_tables_mut()
+            .unwrap();
+        historical.remove(historical.len() - 1);
+        assert!(
+            super::check_work_packages_document(&root, &missing)
+                .unwrap_err()
+                .contains("pinned tranches")
+        );
+
+        let id = "WP-200-PREPARATION-EXECUTION-BOUNDARY";
+        for (field, replacement) in [
+            ("status", "complete"),
+            ("admission_status", "admitted"),
+            ("recorded_design_revision", "6.0"),
+            (
+                "completion_evidence_path",
+                "docs/evidence/WP-600-http-consumer-property-read.toml",
+            ),
+        ] {
+            let mut altered = index.clone();
+            let tranche = altered["historical_tranche"]
+                .as_array_of_tables_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|tranche| tranche["id"].as_str() == Some(id))
+                .unwrap();
+            tranche[field] = toml_edit::value(replacement);
+            let error = super::check_work_packages_document(&root, &altered).unwrap_err();
+            assert!(error.contains(field), "{field}: {error}");
+        }
+        let mut altered = index.clone();
+        let tranche = altered["historical_tranche"]
+            .as_array_of_tables_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|tranche| tranche["id"].as_str() == Some(id))
+            .unwrap();
+        tranche["completion_evidence_keys"] = toml_edit::value({
+            let mut keys = toml_edit::Array::new();
+            keys.push("different-evidence");
+            keys
+        });
+        assert!(
+            super::check_work_packages_document(&root, &altered)
+                .unwrap_err()
+                .contains("completion_evidence_keys")
+        );
+        let mut altered = index.clone();
+        altered["historical_basis_commit"] = toml_edit::value("other-revision");
+        assert!(
+            super::check_work_packages_document(&root, &altered)
+                .unwrap_err()
+                .contains("historical_basis_commit")
+        );
+        let mut altered = index.clone();
+        altered["historical_producer_gate_manifest"] =
+            toml_edit::value("docs/work-packages/consumer-property-read-architecture-gate.toml");
+        assert!(
+            super::check_work_packages_document(&root, &altered)
+                .unwrap_err()
+                .contains("historical_producer_gate_manifest")
+        );
+    }
+
+    #[test]
+    fn historical_gates_reject_changed_status_revision_evidence_and_dependencies() {
+        let root = repository_root().unwrap();
+        for path in [
+            "docs/work-packages/property-read-architecture-gate.toml",
+            "docs/work-packages/consumer-property-read-architecture-gate.toml",
+        ] {
+            let gate = parse_toml(&root, path).unwrap();
+            let pinned = super::pinned_document(&root, path).unwrap();
+            super::check_historical_gate_lineage(path, &gate, &pinned).unwrap();
+            for (field, replacement) in [("status", "ready"), ("design_revision", "6.0")] {
+                let mut altered = gate.clone();
+                altered[field] = toml_edit::value(replacement);
+                let error =
+                    super::check_historical_gate_lineage(path, &altered, &pinned).unwrap_err();
+                assert!(error.contains(field), "{path}: {error}");
+            }
+            let mut altered = gate.clone();
+            altered["evidence"] = toml_edit::value({
+                let mut evidence = toml_edit::Array::new();
+                evidence.push("unrelated-evidence");
+                evidence
+            });
+            assert!(
+                super::check_historical_gate_lineage(path, &altered, &pinned)
+                    .unwrap_err()
+                    .contains("evidence differs")
+            );
+            let mut altered = gate.clone();
+            altered["dependency"]
+                .as_array_of_tables_mut()
+                .unwrap()
+                .remove(0);
+            assert!(
+                super::check_historical_gate_lineage(path, &altered, &pinned)
+                    .unwrap_err()
+                    .contains("pinned gate dependencies")
+            );
+        }
+    }
+
+    #[test]
+    fn historical_evidence_rejects_changed_status_revision_and_keys() {
+        let root = repository_root().unwrap();
+        for (path, changed_status) in [
+            (
+                "docs/evidence/WP-200-preparation-execution-boundary.toml",
+                "passed",
+            ),
+            (
+                "docs/evidence/WP-600-http-consumer-property-read.toml",
+                "candidate",
+            ),
+        ] {
+            let evidence = parse_toml(&root, path).unwrap();
+            let pinned = super::pinned_document(&root, path).unwrap();
+            super::check_historical_evidence_lineage(path, &evidence, &pinned).unwrap();
+            for (field, replacement) in [("status", changed_status), ("design_revision", "6.0")] {
+                let mut altered = evidence.clone();
+                altered[field] = toml_edit::value(replacement);
+                let error =
+                    super::check_historical_evidence_lineage(path, &altered, &pinned).unwrap_err();
+                assert!(error.contains(field), "{path}: {error}");
+            }
+            if evidence.get("evidence_keys").is_some() {
+                let mut altered = evidence.clone();
+                altered["evidence_keys"] = toml_edit::value({
+                    let mut keys = toml_edit::Array::new();
+                    keys.push("unreviewed-evidence");
+                    keys
+                });
+                assert!(
+                    super::check_historical_evidence_lineage(path, &altered, &pinned)
+                        .unwrap_err()
+                        .contains("evidence_keys")
+                );
+            }
         }
     }
 
