@@ -3,11 +3,26 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use toml_edit::{Array, DocumentMut, Item, Table};
 
 const PACKAGE_IDS: &[&str] = &[
     "WP-000", "WP-100", "WP-200", "WP-300", "WP-400", "WP-500", "WP-600", "WP-700",
+];
+const PREDECESSOR_COMMIT: &str = "ed09f059e383b7a1b9d22902ee29aa218b4471a6";
+const PREDECESSOR_MANIFEST: &str = "docs/spec/v5-authority-reset.toml";
+const CRITICAL_STATE_TRANSITIONS: &[(&str, &str, &str)] = &[
+    (
+        "notification-conversation",
+        "Reserved:cancel-or-fail-before-native-start",
+        "CleanupPending",
+    ),
+    (
+        "native-infrastructure",
+        "Reconnecting:terminal-reconnect-failure-fence-and-report",
+        "Retiring",
+    ),
 ];
 
 fn main() {
@@ -94,9 +109,9 @@ fn check_authority_document(root: &Path, document: &DocumentMut) -> Result<(), S
         &root_string(document, "workspace_basis", relative)?,
         "authority investigation",
     )?;
-    let predecessor = parse_toml(root, "docs/spec/v5-authority-reset.toml")?;
-    require_root_string(&predecessor, "status", "superseded", "predecessor")?;
-    require_root_string(&predecessor, "successor", relative, "predecessor")?;
+    let predecessor = parse_toml(root, PREDECESSOR_MANIFEST)?;
+    let pinned = pinned_predecessor(root)?;
+    let expected_prior = check_predecessor_lineage(document, &predecessor, &pinned)?;
     let metadata_text =
         fs::read_to_string(root.join("docs/requirements.csv")).map_err(|e| e.to_string())?;
     let mut metadata = BTreeMap::new();
@@ -158,6 +173,16 @@ fn check_authority_document(root: &Path, document: &DocumentMut) -> Result<(), S
         if !prior.insert(id.clone()) {
             return Err(format!("duplicate prior disposition {id}"));
         }
+        let (expected_status, expected_source) = expected_prior
+            .get(&id)
+            .ok_or_else(|| format!("prior identity {id} is absent from pinned predecessor"))?;
+        if table_string(record, "prior_status", &id)? != *expected_status
+            || table_string(record, "prior_source", &id)? != *expected_source
+        {
+            return Err(format!(
+                "prior status/source differs from pinned predecessor for {id}"
+            ));
+        }
         let disposition = table_string(record, "disposition", &id)?;
         let successors = table_strings(record, "successors", &id)?;
         if table_string(record, "reason", &id)?.is_empty()
@@ -189,8 +214,14 @@ fn check_authority_document(root: &Path, document: &DocumentMut) -> Result<(), S
             return Err(format!("successor metadata differs for {id}"));
         }
     }
-    if prior.len() as i64 != root_integer(document, "predecessor_requirement_count", relative)? {
-        return Err("incomplete predecessor dispositions".to_owned());
+    let expected_prior_ids: BTreeSet<_> = expected_prior.keys().cloned().collect();
+    if prior != expected_prior_ids {
+        return Err(set_difference(
+            "pinned predecessor identities",
+            &expected_prior_ids,
+            "dispositions",
+            &prior,
+        ));
     }
     let indexed: BTreeSet<_> = metadata.keys().cloned().collect();
     if indexed != prior.union(&active).cloned().collect() {
@@ -208,6 +239,141 @@ fn check_authority_document(root: &Path, document: &DocumentMut) -> Result<(), S
         }
     }
     Ok(())
+}
+
+fn pinned_predecessor(root: &Path) -> Result<DocumentMut, String> {
+    // The historical tree is the independent owner of v5.1 lineage. CI checks
+    // out full history; do not replace the pinned object with current metadata.
+    let object = format!("{PREDECESSOR_COMMIT}:{PREDECESSOR_MANIFEST}");
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["show", &object])
+        .output()
+        .map_err(|error| format!("cannot load pinned predecessor {object}: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cannot load pinned predecessor {object} (full Git history required): {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    String::from_utf8(output.stdout)
+        .map_err(|error| format!("invalid UTF-8 in pinned predecessor {object}: {error}"))?
+        .parse()
+        .map_err(|error| format!("invalid pinned predecessor {object}: {error}"))
+}
+
+fn check_predecessor_lineage(
+    successor: &DocumentMut,
+    tombstone: &DocumentMut,
+    pinned: &DocumentMut,
+) -> Result<BTreeMap<String, (String, String)>, String> {
+    let relative = "docs/spec/authority.toml";
+    require_root_string(
+        successor,
+        "predecessor_commit",
+        PREDECESSOR_COMMIT,
+        relative,
+    )?;
+    require_root_string(
+        successor,
+        "predecessor_manifest",
+        PREDECESSOR_MANIFEST,
+        relative,
+    )?;
+    require_root_string(tombstone, "status", "superseded", PREDECESSOR_MANIFEST)?;
+    require_root_string(tombstone, "successor", relative, PREDECESSOR_MANIFEST)?;
+    require_root_string(
+        tombstone,
+        "historical_commit",
+        PREDECESSOR_COMMIT,
+        PREDECESSOR_MANIFEST,
+    )?;
+    require_root_string(
+        tombstone,
+        "historical_path",
+        PREDECESSOR_MANIFEST,
+        PREDECESSOR_MANIFEST,
+    )?;
+    require_root_string(pinned, "status", "active", "pinned predecessor")?;
+    require_root_string(
+        pinned,
+        "current_design_revision",
+        "5.1",
+        "pinned predecessor",
+    )?;
+    require_root_string(
+        tombstone,
+        "current_design_revision",
+        "5.1",
+        PREDECESSOR_MANIFEST,
+    )?;
+
+    let classifications = pinned
+        .get("classification")
+        .and_then(Item::as_table)
+        .ok_or_else(|| "pinned predecessor has no classifications".to_owned())?;
+    let mut identities = BTreeMap::new();
+    for (name, item) in classifications {
+        let table = item
+            .as_table()
+            .ok_or_else(|| format!("pinned classification.{name} is not a table"))?;
+        let status = table_string(table, "authority_status", name)?;
+        let requirements = table_strings(table, "requirements", name)?;
+        if requirements.len() as i64 != table_integer(table, "expected_count", name)? {
+            return Err(format!("pinned classification.{name} count mismatch"));
+        }
+        for id in requirements {
+            if identities
+                .insert(
+                    id.clone(),
+                    (status.clone(), PREDECESSOR_MANIFEST.to_owned()),
+                )
+                .is_some()
+            {
+                return Err(format!("duplicate pinned predecessor identity {id}"));
+            }
+        }
+    }
+    if identities.len() as i64
+        != root_integer(pinned, "classified_requirement_count", "pinned predecessor")?
+        || identities.len() as i64
+            != root_integer(successor, "predecessor_requirement_count", relative)?
+    {
+        return Err("pinned predecessor requirement count mismatch".to_owned());
+    }
+
+    let sources = pinned
+        .get("active_source")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "pinned predecessor has no active sources".to_owned())?;
+    let mut owned = BTreeSet::new();
+    for source in sources {
+        let path = table_string(source, "path", "pinned active_source")?;
+        let requirements = table_strings(source, "requirements", &path)?;
+        if requirements.len() as i64 != table_integer(source, "expected_count", &path)? {
+            return Err(format!("pinned active source {path} count mismatch"));
+        }
+        for id in requirements {
+            if !owned.insert(id.clone()) {
+                return Err(format!("duplicate pinned active owner for {id}"));
+            }
+            let (status, recorded_source) = identities
+                .get_mut(&id)
+                .ok_or_else(|| format!("unclassified pinned active identity {id}"))?;
+            if status != "active" {
+                return Err(format!("inactive pinned identity has active owner: {id}"));
+            }
+            *recorded_source = path.clone();
+        }
+    }
+    if owned.len() as i64 != root_integer(pinned, "active_requirement_count", "pinned predecessor")?
+        || identities
+            .iter()
+            .any(|(id, (status, _))| (status == "active") != owned.contains(id))
+    {
+        return Err("pinned predecessor active source mismatch".to_owned());
+    }
+    Ok(identities)
 }
 
 fn load_requirement_ids(root: &Path) -> Result<BTreeSet<String>, String> {
@@ -642,6 +808,11 @@ fn check_dag(graph: &BTreeMap<String, Vec<String>>, context: &str) -> Result<(),
 fn check_state_machines(root: &Path) -> Result<(), String> {
     let relative = "docs/state-machines.toml";
     let document = parse_toml(root, relative)?;
+    check_state_machines_document(root, &document)
+}
+
+fn check_state_machines_document(root: &Path, document: &DocumentMut) -> Result<(), String> {
+    let relative = "docs/state-machines.toml";
     let known_requirements = load_requirement_ids(root)?;
     let machines = document
         .get("machine")
@@ -670,7 +841,7 @@ fn check_state_machines(root: &Path) -> Result<(), String> {
             .get("transition")
             .and_then(Item::as_array_of_tables)
             .ok_or_else(|| format!("machine {id} has no transitions"))?;
-        let mut events = BTreeSet::new();
+        let mut events = BTreeMap::new();
         let mut edges: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for transition in transitions {
             let from = table_string(transition, "from", &format!("machine {id} transition"))?;
@@ -681,14 +852,32 @@ fn check_state_machines(root: &Path) -> Result<(), String> {
                     "machine {id} transition {from}:{event}->{to} uses an unknown state"
                 ));
             }
-            if !events.insert(format!("{from}:{event}")) {
+            if events
+                .insert(format!("{from}:{event}"), to.clone())
+                .is_some()
+            {
                 return Err(format!("machine {id} repeats event {from}:{event}"));
             }
             edges.entry(from).or_default().push(to);
         }
-        for required in table_strings(machine, "required_events", &id)? {
-            if !events.contains(&required) {
+        let required_events: BTreeSet<_> = table_strings(machine, "required_events", &id)?
+            .into_iter()
+            .collect();
+        for required in &required_events {
+            if !events.contains_key(required) {
                 return Err(format!("machine {id} misses required event {required}"));
+            }
+        }
+        for &(_, required, target) in CRITICAL_STATE_TRANSITIONS
+            .iter()
+            .filter(|(machine, _, _)| *machine == id)
+        {
+            if !required_events.contains(required)
+                || events.get(required).map(String::as_str) != Some(target)
+            {
+                return Err(format!(
+                    "machine {id} misses required transition {required}->{target}"
+                ));
             }
         }
         let mut reachable = BTreeSet::from([initial.clone()]);
@@ -707,6 +896,11 @@ fn check_state_machines(root: &Path) -> Result<(), String> {
                 "reachable states",
                 &reachable,
             ));
+        }
+    }
+    for &(id, _, _) in CRITICAL_STATE_TRANSITIONS {
+        if !machine_ids.contains(id) {
+            return Err(format!("missing critical state machine {id}"));
         }
     }
 
@@ -816,6 +1010,13 @@ fn table_strings(table: &Table, field: &str, context: &str) -> Result<Vec<String
     item_strings(item, &format!("{context}.{field}"))
 }
 
+fn table_integer(table: &Table, field: &str, context: &str) -> Result<i64, String> {
+    table
+        .get(field)
+        .and_then(Item::as_integer)
+        .ok_or_else(|| format!("{context} has no integer {field}"))
+}
+
 fn item_strings(item: &Item, context: &str) -> Result<Vec<String>, String> {
     let array: &Array = item
         .as_array()
@@ -880,8 +1081,152 @@ mod tests {
         assert!(
             super::check_authority_document(&root, &missing)
                 .unwrap_err()
-                .contains("predecessor dispositions")
+                .contains("pinned predecessor identities")
         );
+    }
+
+    #[test]
+    fn predecessor_lineage_rejects_substituted_identity_status_and_source() {
+        let root = repository_root().unwrap();
+        let authority = parse_toml(&root, "docs/spec/authority.toml").unwrap();
+        // Both IDs have the same successor and metadata disposition. The old
+        // count/metadata checks accepted this swap despite changing lineage.
+        let mut swapped = authority.clone();
+        let records = swapped["prior_requirement"]
+            .as_array_of_tables_mut()
+            .unwrap();
+        let bound = records
+            .iter()
+            .position(|record| record["id"].as_str() == Some("PLAN-BOUND-001"))
+            .unwrap();
+        let index = records
+            .iter()
+            .position(|record| record["id"].as_str() == Some("PLAN-INDEX-001"))
+            .unwrap();
+        records.get_mut(bound).unwrap()["id"] = toml_edit::value("PLAN-INDEX-001");
+        records.get_mut(index).unwrap()["id"] = toml_edit::value("PLAN-BOUND-001");
+        assert!(
+            super::check_authority_document(&root, &swapped)
+                .unwrap_err()
+                .contains("status/source differs")
+        );
+
+        for (field, replacement, expected) in [
+            ("id", "SUBSTITUTED-001", "absent from pinned predecessor"),
+            (
+                "prior_status",
+                "inactive-historical-input",
+                "status/source differs",
+            ),
+            (
+                "prior_source",
+                "docs/spec/planning.md",
+                "status/source differs",
+            ),
+        ] {
+            let mut altered = authority.clone();
+            altered["prior_requirement"]
+                .as_array_of_tables_mut()
+                .unwrap()
+                .iter_mut()
+                .next()
+                .unwrap()[field] = toml_edit::value(replacement);
+            let error = super::check_authority_document(&root, &altered).unwrap_err();
+            assert!(error.contains(expected), "{field}: {error}");
+        }
+        let mut inactive_source = authority.clone();
+        let record = inactive_source["prior_requirement"]
+            .as_array_of_tables_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|record| record["id"].as_str() == Some("API-CODEC-001"))
+            .unwrap();
+        record["prior_source"] = toml_edit::value("docs/spec/interaction-core.md");
+        assert!(
+            super::check_authority_document(&root, &inactive_source)
+                .unwrap_err()
+                .contains("status/source differs")
+        );
+    }
+
+    #[test]
+    fn predecessor_lineage_rejects_changed_revision_and_pinned_reference() {
+        let root = repository_root().unwrap();
+        let authority = parse_toml(&root, "docs/spec/authority.toml").unwrap();
+        let tombstone = parse_toml(&root, super::PREDECESSOR_MANIFEST).unwrap();
+        let pinned = super::pinned_predecessor(&root).unwrap();
+        super::check_predecessor_lineage(&authority, &tombstone, &pinned).unwrap();
+
+        let mut altered = authority.clone();
+        altered["predecessor_commit"] = toml_edit::value("another-revision");
+        assert!(
+            super::check_predecessor_lineage(&altered, &tombstone, &pinned)
+                .unwrap_err()
+                .contains("predecessor_commit")
+        );
+        let mut altered = tombstone.clone();
+        altered["historical_commit"] = toml_edit::value("another-revision");
+        assert!(
+            super::check_predecessor_lineage(&authority, &altered, &pinned)
+                .unwrap_err()
+                .contains("historical_commit")
+        );
+        let mut altered = tombstone.clone();
+        altered["current_design_revision"] = toml_edit::value("5.0");
+        assert!(
+            super::check_predecessor_lineage(&authority, &altered, &pinned)
+                .unwrap_err()
+                .contains("current_design_revision")
+        );
+    }
+
+    #[test]
+    fn critical_failure_paths_cannot_be_removed_or_redirected() {
+        let root = repository_root().unwrap();
+        let document = parse_toml(&root, "docs/state-machines.toml").unwrap();
+        super::check_state_machines_document(&root, &document).unwrap();
+        for &(id, key, target) in super::CRITICAL_STATE_TRANSITIONS {
+            let (from, event) = key.split_once(':').unwrap();
+            for remove_requirement in [false, true] {
+                let mut altered = document.clone();
+                let machine = altered["machine"]
+                    .as_array_of_tables_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|machine| machine["id"].as_str() == Some(id))
+                    .unwrap();
+                let transitions = machine["transition"].as_array_of_tables_mut().unwrap();
+                let index = transitions
+                    .iter()
+                    .position(|t| {
+                        t["from"].as_str() == Some(from) && t["event"].as_str() == Some(event)
+                    })
+                    .unwrap();
+                transitions.remove(index);
+                if remove_requirement {
+                    machine["required_events"] = toml_edit::value(toml_edit::Array::new());
+                }
+                let error = super::check_state_machines_document(&root, &altered).unwrap_err();
+                assert!(error.contains("required"), "{id}: {error}");
+            }
+            let mut altered = document.clone();
+            let machine = altered["machine"]
+                .as_array_of_tables_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|machine| machine["id"].as_str() == Some(id))
+                .unwrap();
+            let transition = machine["transition"]
+                .as_array_of_tables_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|t| t["event"].as_str() == Some(event))
+                .unwrap();
+            assert_eq!(transition["to"].as_str(), Some(target));
+            transition["to"] = toml_edit::value(from);
+            let error = super::check_state_machines_document(&root, &altered).unwrap_err();
+            assert!(error.contains("required transition"), "{id}: {error}");
+        }
     }
 
     #[test]

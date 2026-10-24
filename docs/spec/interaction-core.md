@@ -76,6 +76,9 @@ progresses mapped removal/release; it remains possible when remote cancellation
 is unsupported. Shared native subscriptions/backing retain compatible owners;
 one stop cannot release a sibling. Sources may have zero subscribers; publish
 success alone proves neither subscription lifetime nor recipient delivery.
+Cancellation or funding failure before native establishment releases the retained
+reservation and reports its first local cause without claiming remote effects;
+after native setup starts, its owner remains responsible for bounded cleanup.
 
 `EXEC-COLLECTION-001`: Described root collection operations MUST preserve native
 semantics and logical attribution, including partial failure and supported

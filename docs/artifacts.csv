@@ -16,7 +16,7 @@ docs/amendments,active-normative-amendments,restricted-except-registered-time-ow
 docs/api-ownership.csv,public-api-ownership,normative,6.0,1,docs/design.md
 docs/resource-limits.csv,resource-limit-schema-and-profiles,restricted-implementation,5.1,1,docs/design.md
 docs/state-machines.toml,lifecycle-state-model,normative,6.0,1,docs/design.md
-docs/requirements.csv,requirement-metadata-index,normative-metadata-index,6.0,3,docs/spec/v5-authority-reset.toml
+docs/requirements.csv,requirement-metadata-index,normative-metadata-index,6.0,3,docs/spec/authority.toml
 docs/performance,workload-and-performance-contracts,historical-except-registered-evidence-contract,5.0,1,docs/design.md
 docs/work-packages/index.toml,current-work-package-dag,normative-migration-plan,6.0,6,docs/design.md
 docs/work-packages/property-read-architecture-gate.toml,historical-property-read-integration-dag,historical,5.0,2,docs/spec/authority.toml

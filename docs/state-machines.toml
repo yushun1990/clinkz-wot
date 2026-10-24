@@ -253,13 +253,18 @@ requirements = ["EXEC-NOTIFY-001", "SAFE-OVERFLOW-001"]
 states = ["Reserved", "Establishing", "Active", "Stopping", "CleanupPending", "Closed"]
 initial = "Reserved"
 terminal = ["Closed"]
-required_events = []
-invariant = "Each Engine logical subscription has independent cursor/permission/stop. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing."
+required_events = ["Reserved:cancel-or-fail-before-native-start"]
+invariant = "Each Engine logical subscription has independent cursor/permission/stop. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
 
 [[machine.transition]]
 from = "Reserved"
 event = "fund-start-control-result-cleanup"
 to = "Establishing"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel-or-fail-before-native-start"
+to = "CleanupPending"
 
 [[machine.transition]]
 from = "Establishing"
@@ -302,8 +307,8 @@ requirements = ["SPI-NATIVE-001", "SPI-RETIRE-001", "RES-OWNER-001"]
 states = ["Owned", "Ready", "Idle", "Reconnecting", "Retiring", "Closed"]
 initial = "Owned"
 terminal = ["Closed"]
-required_events = []
-invariant = "A Thing is not a connection/listener. Logical close releases only its lease. Polling/clone grants no shutdown right. Idle backing remains charged; final destruction requires final-use barrier."
+required_events = ["Reconnecting:terminal-reconnect-failure-fence-and-report"]
+invariant = "A Thing is not a connection/listener. Logical close releases only its lease. Polling/clone grants no shutdown right. Idle backing remains charged; final destruction requires final-use barrier. Terminal reconnect failure fences affected acceptance and reports retained first cause, dependent terminal/availability and remote effect uncertainty without implying authorized shutdown; the physical owner retains jobs and backing through bounded retirement or acknowledged whole-owner transfer."
 
 [[machine.transition]]
 from = "Owned"
@@ -334,6 +339,11 @@ to = "Reconnecting"
 from = "Reconnecting"
 event = "equivalent-mapping-ready"
 to = "Ready"
+
+[[machine.transition]]
+from = "Reconnecting"
+event = "terminal-reconnect-failure-fence-and-report"
+to = "Retiring"
 
 [[machine.transition]]
 from = "Reconnecting"

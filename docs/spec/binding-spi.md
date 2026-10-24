@@ -55,6 +55,11 @@ Only an authorized infrastructure owner may initiate whole-service shutdown,
 revoking/draining affected dependents. Polling or a participation clone grants no
 shutdown authority. Cross-Servient sharing requires an application-owned service
 with distinct compatible trust/account leases, not an Engine session manager.
+Terminal reconnect failure is a separate outcome: fence affected acceptance,
+report the first cause and dependent availability/terminal outcomes, retain native
+jobs and backing until bounded retirement or acknowledged whole-owner transfer,
+and report remote effect uncertainty. It does not imply a shutdown request or
+authorize implicit replay of semantic effects.
 
 ## Publication and security collaboration
 
