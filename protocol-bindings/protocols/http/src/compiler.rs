@@ -67,6 +67,11 @@ impl HostSemanticCompiler for HttpCompiler {
         // Only absence enables the protocol default. Malformed/unsupported
         // explicit instructions never silently turn into a default request.
         if let Some(method) = unique(form, "http://www.w3.org/2011/http#methodName")? {
+            // TD 1.1 §8.3.1: a multi-operation Form uses operation defaults,
+            // never one explicit method shared across the operation set.
+            if facts.declared_operations.is_some_and(|ops| ops.len() > 1) {
+                return Err(unsupported());
+            }
             output.method = match method.value() {
                 SemanticValue::Text("GET") => "GET",
                 SemanticValue::Text("POST") => "POST",

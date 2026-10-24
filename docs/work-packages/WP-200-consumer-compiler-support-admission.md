@@ -1,3 +1,18 @@
+# Historical / restricted Property Read record
+
+Status: historical v5 authority; **no v6 implementation admission or architecture
+acceptance**. The original record and exact prose are preserved below and at
+[the predecessor revision](https://github.com/yushun1990/clinkz-wot/blob/ed09f059e383b7a1b9d22902ee29aa218b4471a6/docs/work-packages/WP-200-consumer-compiler-support-admission.md).
+[ADR-0025](../ADRs/0025-semantic-engine-and-binding-runtimes.org) supersedes its
+general API, gate ordering and lifecycle projections. The [index](index.toml)
+records individual tranche impact dispositions. Tests of retained Property Read
+code remain useful at that narrow scope; neither a passed status nor this
+record constrains the successor SPI. Exact schema/resource encodings still used
+by retained adapters keep their original meaning. Any new source scope must use
+the successor requirements and applicable review, not inherit this admission.
+
+## Preserved predecessor record (non-authoritative for the general architecture)
+
 # WP-200 Consumer compiler support admission
 
 Admission was granted under ADR-0013, design revision v5.1. The

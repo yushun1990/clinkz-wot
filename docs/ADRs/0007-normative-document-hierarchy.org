@@ -1,6 +1,17 @@
 #+title: ADR-0007: Normative Document Hierarchy and Architecture Backbone
 #+date: 2026-07-19
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Replace the v4/v5 hierarchy and exact manifest structure with one v6 source map and single detailed owners.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Context
 

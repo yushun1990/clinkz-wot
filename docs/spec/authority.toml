@@ -1,0 +1,1047 @@
+schema_version = 2
+current_design_revision = "6.0"
+status = "active"
+decision = "docs/ADRs/0025-semantic-engine-and-binding-runtimes.org"
+workspace_basis = "workspace/0076-composable-capabilities-and-runtime-boundaries.md"
+predecessor_commit = "ed09f059e383b7a1b9d22902ee29aa218b4471a6"
+predecessor_manifest = "docs/spec/v5-authority-reset.toml"
+activation = "atomic-integration-of-independently-reviewed-authority-tree"
+active_requirement_count = 40
+predecessor_requirement_count = 121
+implementation_acceptance = "not-transferred"
+
+[[active_source]]
+path = "docs/design.md"
+requirements = ["AUTH-REV-001", "AUTH-EVIDENCE-001"]
+
+[[active_source]]
+path = "docs/architecture/10-primary-data-flows.md"
+requirements = ["DISC-CLIENT-001"]
+
+[[active_source]]
+path = "docs/architecture/20-module-boundaries.md"
+requirements = ["MOD-DEPS-001"]
+
+[[active_source]]
+path = "docs/spec/td.md"
+requirements = ["WOT-SEM-001", "WOT-EXT-001"]
+
+[[active_source]]
+path = "docs/spec/planning.md"
+requirements = ["PREP-ISOLATION-001", "PREP-SELECT-001", "PREP-DEFER-001", "PREP-REUSE-001", "PREP-COVER-001"]
+
+[[active_source]]
+path = "docs/spec/interaction-core.md"
+requirements = ["EXEC-ID-001", "EXEC-HANDLER-001", "EXEC-DATA-001", "EXEC-SECURITY-001", "EXEC-ACTION-001", "EXEC-NOTIFY-001", "EXEC-COLLECTION-001", "EXEC-OUTCOME-001"]
+
+[[active_source]]
+path = "docs/spec/binding-spi.md"
+requirements = ["SPI-COMPOSE-001", "SPI-NATIVE-001", "SPI-INGRESS-001", "SPI-DELIVERY-001", "SPI-RETIRE-001"]
+
+[[active_source]]
+path = "docs/spec/runtime-safety.md"
+requirements = ["SAFE-AUTH-001", "SAFE-PUBLISH-001", "SAFE-CANCEL-001", "SAFE-CLEANUP-001", "SAFE-DROP-001", "SAFE-CONCUR-001", "SAFE-PROFILE-001", "SAFE-OVERFLOW-001"]
+
+[[active_source]]
+path = "docs/spec/foundation.md"
+requirements = ["RES-OWNER-001", "RES-HANDOFF-001", "RES-WORK-001", "RES-SCHEMA-001", "RES-ENV-001"]
+
+[[active_source]]
+path = "docs/performance/fixture-generator.md"
+requirements = ["PERF-CLAIM-001"]
+
+[[active_source]]
+path = "docs/amendments/WP-100-time-domain-v1.md"
+requirements = ["TIME-001", "API-SOURCE-TIME-001"]
+
+[[prior_requirement]]
+id = "ADMIT-MEM-001"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-OWNER-001"]
+reason = "Replace universal transitive SDK/per-Thing maxima with actual Engine/native/deployment physical owners."
+
+[[prior_requirement]]
+id = "ADMIT-TXN-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["SAFE-PUBLISH-001"]
+reason = "Replace route-stage/freeze-before-effects models with final qualified local publication after closed setup."
+
+[[prior_requirement]]
+id = "API-CODEC-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-DATA-001"]
+reason = "Retain payload ownership and checks; generalize data roles/schema/media without mandatory JSON or copy."
+
+[[prior_requirement]]
+id = "API-DIRECTORY-POLL-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "API-DISCOVERY-EXEC-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "API-HOT-ID-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-ID-001"]
+reason = "Retain original obligation identity and redaction; local authority does not require source TD names."
+
+[[prior_requirement]]
+id = "API-OPTIONS-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["PREP-SELECT-001"]
+reason = "Retain deterministic bounded selection and actual pairing without narrow Property Read request restrictions."
+
+[[prior_requirement]]
+id = "API-OWNERSHIP-001"
+prior_status = "active"
+prior_source = "docs/design.md"
+disposition = "superseded"
+successors = ["MOD-DEPS-001", "AUTH-REV-001"]
+reason = "Keep single responsibility/dependency ownership; withdraw speculative paths and upward execution edges."
+
+[[prior_requirement]]
+id = "API-PAYLOAD-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-DATA-001"]
+reason = "Retain payload ownership and checks; generalize data roles/schema/media without mandatory JSON or copy."
+
+[[prior_requirement]]
+id = "API-RESOURCE-001"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-HANDOFF-001"]
+reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+
+[[prior_requirement]]
+id = "API-SECURITY-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["EXEC-SECURITY-001", "SAFE-AUTH-001"]
+reason = "Retain independent policy/credential safety; support verifier/native collaboration without protocol cases."
+
+[[prior_requirement]]
+id = "API-SOURCE-TIME-001"
+prior_status = "active"
+prior_source = "docs/amendments/WP-100-time-domain-v1.md"
+disposition = "reaffirmed"
+successors = ["API-SOURCE-TIME-001"]
+reason = "Exact clock/source-time meaning remains unchanged; historical tranche sequencing is not a new gate."
+
+[[prior_requirement]]
+id = "API-SURFACE-001"
+prior_status = "inactive-premature-or-superseded"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "retired"
+successors = []
+reason = "Speculative universal frozen Rust inventory withdrawn; ownership and semantic contracts remain."
+
+[[prior_requirement]]
+id = "API-TYPES-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-ID-001"]
+reason = "Retain original obligation identity and redaction; local authority does not require source TD names."
+
+[[prior_requirement]]
+id = "ARTIFACT-AUTH-001"
+prior_status = "active"
+prior_source = "docs/design.md"
+disposition = "superseded"
+successors = ["AUTH-REV-001"]
+reason = "Replace prior bounded identity-set and document-hierarchy mechanisms with one successor authority."
+
+[[prior_requirement]]
+id = "BIND-CALL-CANCEL-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SAFE-CANCEL-001"]
+reason = "Keep first cause and owned late results; exact Host call/stage inventory is not universal."
+
+[[prior_requirement]]
+id = "BIND-DELIVERY-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SPI-DELIVERY-001"]
+reason = "Retain complete input/reply ownership; allow native backing sharing and profile-appropriate representation."
+
+[[prior_requirement]]
+id = "BIND-HOST-CANCEL-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SAFE-CANCEL-001"]
+reason = "Keep first cause and owned late results; exact Host call/stage inventory is not universal."
+
+[[prior_requirement]]
+id = "BIND-IO-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SPI-NATIVE-001", "SPI-DELIVERY-001", "EXEC-DATA-001"]
+reason = "Replace per-route progress/equality/request abstraction with Binding native matching and independent acceptance."
+
+[[prior_requirement]]
+id = "BIND-MEM-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["RES-OWNER-001", "RES-HANDOFF-001", "SPI-RETIRE-001"]
+reason = "Replace universal transitive SDK/per-Thing maxima with actual Engine/native/deployment physical owners."
+
+[[prior_requirement]]
+id = "BIND-OUT-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SPI-NATIVE-001"]
+reason = "Replace per-route progress/equality/request abstraction with Binding native matching and independent acceptance."
+
+[[prior_requirement]]
+id = "BIND-PROGRESS-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "BIND-REG-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SPI-COMPOSE-001"]
+reason = "Retain linked startup composition and actual pairing; runtime registration requires no compiler/dummy role."
+
+[[prior_requirement]]
+id = "BIND-ROUTE-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SPI-NATIVE-001", "SPI-INGRESS-001", "SPI-RETIRE-001", "SAFE-AUTH-001"]
+reason = "Replace per-route progress/equality/request abstraction with Binding native matching and independent acceptance."
+
+[[prior_requirement]]
+id = "BIND-STORAGE-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["RES-OWNER-001"]
+reason = "Replace universal transitive SDK/per-Thing maxima with actual Engine/native/deployment physical owners."
+
+[[prior_requirement]]
+id = "CAP-OVERFLOW-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["SAFE-OVERFLOW-001"]
+reason = "Keep visible bounded loss/status and saturation-safe progress without a universal queue."
+
+[[prior_requirement]]
+id = "CAP-STATUS-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["SAFE-OVERFLOW-001"]
+reason = "Keep visible bounded loss/status and saturation-safe progress without a universal queue."
+
+[[prior_requirement]]
+id = "CHANGE-CONTROL-001"
+prior_status = "inactive-stronger-owner"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["AUTH-REV-001"]
+reason = "Replace prior bounded identity-set and document-hierarchy mechanisms with one successor authority."
+
+[[prior_requirement]]
+id = "CLEANUP-RECORD-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["SAFE-CLEANUP-001"]
+reason = "Keep funded acknowledged whole-owner transfer; cleanup record cannot substitute for live ownership."
+
+[[prior_requirement]]
+id = "CONCUR-CRIT-001"
+prior_status = "active"
+prior_source = "docs/architecture/10-primary-data-flows.md"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "CONCUR-LIN-001"
+prior_status = "active"
+prior_source = "docs/architecture/10-primary-data-flows.md"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "CONCUR-LOCK-001"
+prior_status = "active"
+prior_source = "docs/architecture/10-primary-data-flows.md"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "CONCUR-USER-001"
+prior_status = "active"
+prior_source = "docs/architecture/10-primary-data-flows.md"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "CONSTRAINED-OWN-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["SAFE-PROFILE-001"]
+reason = "Retain equivalent supported semantics; separate feature/storage/progress/atomics axes and evidence."
+
+[[prior_requirement]]
+id = "CONSTRAINED-PROGRESS-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["RES-WORK-001"]
+reason = "Retain linear prepaid bounded work and static/manual feasibility, not one universal step ABI."
+
+[[prior_requirement]]
+id = "CONSTRAINED-SCHED-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "CONSTRAINED-STORAGE-001"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-OWNER-001"]
+reason = "Replace universal transitive SDK/per-Thing maxima with actual Engine/native/deployment physical owners."
+
+[[prior_requirement]]
+id = "CONSTRAINED-STORAGE-002"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-OWNER-001"]
+reason = "Replace universal transitive SDK/per-Thing maxima with actual Engine/native/deployment physical owners."
+
+[[prior_requirement]]
+id = "CONSTRAINED-WORK-001"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-WORK-001"]
+reason = "Retain linear prepaid bounded work and static/manual feasibility, not one universal step ABI."
+
+[[prior_requirement]]
+id = "CRATE-DEPS-001"
+prior_status = "active"
+prior_source = "docs/architecture/20-module-boundaries.md"
+disposition = "superseded"
+successors = ["MOD-DEPS-001"]
+reason = "Keep single responsibility/dependency ownership; withdraw speculative paths and upward execution edges."
+
+[[prior_requirement]]
+id = "DIR-AUTH-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "DIR-CONTRACT-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "DIR-SCOPE-001"
+prior_status = "active"
+prior_source = "docs/architecture/10-primary-data-flows.md"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "DIR-SNAPSHOT-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "DIR-STREAM-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "DIR-WATCH-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "DOC-GOV-001"
+prior_status = "inactive-stronger-owner"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["AUTH-REV-001"]
+reason = "Replace prior bounded identity-set and document-hierarchy mechanisms with one successor authority."
+
+[[prior_requirement]]
+id = "DOC-RUNTIME-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["PREP-ISOLATION-001"]
+reason = "Retain pure source-independent preparation; replace eager/Copy/whole-plan-set physical eligibility."
+
+[[prior_requirement]]
+id = "DOC-RUNTIME-002"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["WOT-SEM-001"]
+reason = "Use shared TD 1.1 semantics; W3C baseline is not a Rust representation mandate."
+
+[[prior_requirement]]
+id = "DOC-RUNTIME-003"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-DEFER-001"]
+reason = "Replace inactive universal eager/lazy/cache prescriptions with role-specific support and bounded first use."
+
+[[prior_requirement]]
+id = "ERR-RETRY-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-OUTCOME-001"]
+reason = "Keep truthful error/effect/retry distinctions without universal physical error/phase ABI."
+
+[[prior_requirement]]
+id = "ERR-TAXONOMY-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-OUTCOME-001"]
+reason = "Keep truthful error/effect/retry distinctions without universal physical error/phase ABI."
+
+[[prior_requirement]]
+id = "FEATURE-MATRIX-001"
+prior_status = "active"
+prior_source = "docs/design.md"
+disposition = "superseded"
+successors = ["SAFE-PROFILE-001"]
+reason = "Retain equivalent supported semantics; separate feature/storage/progress/atomics axes and evidence."
+
+[[prior_requirement]]
+id = "FORM-COVERAGE-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-COVER-001"]
+reason = "Replace late-handler/eager freeze mechanisms with complete final qualified Producer advertisement."
+
+[[prior_requirement]]
+id = "FORM-FINALIZE-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-COVER-001", "SAFE-PUBLISH-001"]
+reason = "Replace late-handler/eager freeze mechanisms with complete final qualified Producer advertisement."
+
+[[prior_requirement]]
+id = "FORM-FINALIZE-002"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-COVER-001", "SAFE-PUBLISH-001"]
+reason = "Replace late-handler/eager freeze mechanisms with complete final qualified Producer advertisement."
+
+[[prior_requirement]]
+id = "FORM-OWNER-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-COVER-001", "SPI-INGRESS-001"]
+reason = "Replace late-handler/eager freeze mechanisms with complete final qualified Producer advertisement."
+
+[[prior_requirement]]
+id = "HANDLE-DROP-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["SAFE-DROP-001"]
+reason = "Retain explicit destroy and nonblocking retained cleanup, without mandatory old carrier fields."
+
+[[prior_requirement]]
+id = "HANDLER-API-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-HANDLER-001"]
+reason = "Keep Engine dispatch and cooperative cancellation; withdraw eighteen-operation exact handler/carrier ABI."
+
+[[prior_requirement]]
+id = "HANDLER-CANCEL-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-HANDLER-001"]
+reason = "Keep Engine dispatch and cooperative cancellation; withdraw eighteen-operation exact handler/carrier ABI."
+
+[[prior_requirement]]
+id = "HANDLER-CANCEL-002"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["EXEC-HANDLER-001"]
+reason = "Keep Engine dispatch and cooperative cancellation; withdraw eighteen-operation exact handler/carrier ABI."
+
+[[prior_requirement]]
+id = "HANDLER-STORAGE-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-HANDLER-001"]
+reason = "Keep Engine dispatch and cooperative cancellation; withdraw eighteen-operation exact handler/carrier ABI."
+
+[[prior_requirement]]
+id = "HANDLER-SUB-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-NOTIFY-001", "EXEC-ACTION-001"]
+reason = "Replace payload-only driver and coordinator layouts with full control/response/stop conversation semantics."
+
+[[prior_requirement]]
+id = "HANDLER-VALUE-001"
+prior_status = "active"
+prior_source = "docs/amendments/WP-100-handler-api-v1.md"
+disposition = "superseded"
+successors = ["EXEC-HANDLER-001"]
+reason = "Keep Engine dispatch and cooperative cancellation; withdraw eighteen-operation exact handler/carrier ABI."
+
+[[prior_requirement]]
+id = "HOST-ASYNC-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["SAFE-PROFILE-001"]
+reason = "Retain equivalent supported semantics; separate feature/storage/progress/atomics axes and evidence."
+
+[[prior_requirement]]
+id = "HOST-DEFAULT-001"
+prior_status = "inactive-premature-or-superseded"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "retired"
+successors = []
+reason = "Unqualified global Host defaults are not successor requirements."
+
+[[prior_requirement]]
+id = "HOST-DEFAULT-002"
+prior_status = "inactive-premature-or-superseded"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "retired"
+successors = []
+reason = "Unqualified global Host defaults are not successor requirements."
+
+[[prior_requirement]]
+id = "HOST-SHARD-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "HOST-SHARD-002"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "IMPL-CONFORM-001"
+prior_status = "active"
+prior_source = "docs/design.md"
+disposition = "superseded"
+successors = ["AUTH-EVIDENCE-001"]
+reason = "Retain scoped review and evidence truth; old gate ordering grants no successor acceptance."
+
+[[prior_requirement]]
+id = "JSONLD-PREFIX-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["WOT-EXT-001"]
+reason = "Keep extension associations and bounded IRI meaning; remove prefix-only matching assumptions."
+
+[[prior_requirement]]
+id = "LIFE-EXPOSE-001"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SAFE-PUBLISH-001"]
+reason = "Replace route-stage/freeze-before-effects models with final qualified local publication after closed setup."
+
+[[prior_requirement]]
+id = "LIFE-EXPOSE-002"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SAFE-PUBLISH-001"]
+reason = "Replace route-stage/freeze-before-effects models with final qualified local publication after closed setup."
+
+[[prior_requirement]]
+id = "LIFE-EXPOSE-003"
+prior_status = "active"
+prior_source = "docs/spec/binding-spi.md"
+disposition = "superseded"
+successors = ["SAFE-PUBLISH-001", "SAFE-CLEANUP-001"]
+reason = "Replace route-stage/freeze-before-effects models with final qualified local publication after closed setup."
+
+[[prior_requirement]]
+id = "OBS-PROFILE-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["SAFE-OVERFLOW-001"]
+reason = "Keep visible bounded loss/status and saturation-safe progress without a universal queue."
+
+[[prior_requirement]]
+id = "PERF-ACCOUNT-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-ADMISSION-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-ALLOC-001"
+prior_status = "inactive-premature-or-superseded"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "retired"
+successors = []
+reason = "Universal zero-allocation target replaced by measured capability/profile claims."
+
+[[prior_requirement]]
+id = "PERF-BENCH-001"
+prior_status = "inactive-stronger-owner"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["AUTH-EVIDENCE-001"]
+reason = "Retain scoped review and evidence truth; old gate ordering grants no successor acceptance."
+
+[[prior_requirement]]
+id = "PERF-BENCH-002"
+prior_status = "inactive-stronger-owner"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["AUTH-EVIDENCE-001"]
+reason = "Retain scoped review and evidence truth; old gate ordering grants no successor acceptance."
+
+[[prior_requirement]]
+id = "PERF-BENCH-003"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-BUDGET-001"
+prior_status = "inactive-stronger-owner"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-CALL-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-COMPLEXITY-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-FANOUT-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-FANOUT-002"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-INDEX-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-PEAK-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PERF-SCALE-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PERF-CLAIM-001"]
+reason = "Historical workload/phase/fanout assumptions are characterization only; renew supported-profile measurements."
+
+[[prior_requirement]]
+id = "PLAN-ARTIFACT-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-ISOLATION-001", "PREP-REUSE-001", "PREP-COVER-001"]
+reason = "Retain pure source-independent preparation; replace eager/Copy/whole-plan-set physical eligibility."
+
+[[prior_requirement]]
+id = "PLAN-BOUND-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-SELECT-001"]
+reason = "Retain deterministic bounded selection and actual pairing without narrow Property Read request restrictions."
+
+[[prior_requirement]]
+id = "PLAN-CACHE-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-DEFER-001"]
+reason = "Replace inactive universal eager/lazy/cache prescriptions with role-specific support and bounded first use."
+
+[[prior_requirement]]
+id = "PLAN-COST-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-ISOLATION-001"]
+reason = "Retain pure source-independent preparation; replace eager/Copy/whole-plan-set physical eligibility."
+
+[[prior_requirement]]
+id = "PLAN-COST-002"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-DEFER-001"]
+reason = "Replace inactive universal eager/lazy/cache prescriptions with role-specific support and bounded first use."
+
+[[prior_requirement]]
+id = "PLAN-COST-003"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-ISOLATION-001"]
+reason = "Retain pure source-independent preparation; replace eager/Copy/whole-plan-set physical eligibility."
+
+[[prior_requirement]]
+id = "PLAN-INDEX-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-SELECT-001"]
+reason = "Retain deterministic bounded selection and actual pairing without narrow Property Read request restrictions."
+
+[[prior_requirement]]
+id = "PLAN-LAZY-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-DEFER-001"]
+reason = "Replace inactive universal eager/lazy/cache prescriptions with role-specific support and bounded first use."
+
+[[prior_requirement]]
+id = "PLAN-REQUEST-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-SELECT-001", "EXEC-ID-001", "SPI-DELIVERY-001"]
+reason = "Retain deterministic bounded selection and actual pairing without narrow Property Read request restrictions."
+
+[[prior_requirement]]
+id = "PLAN-SET-001"
+prior_status = "active"
+prior_source = "docs/spec/planning.md"
+disposition = "superseded"
+successors = ["PREP-REUSE-001"]
+reason = "Separate definitions, instance authority and actual shared backing; no per-instance plan-set epoch mandate."
+
+[[prior_requirement]]
+id = "PRODUCER-EMIT-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-NOTIFY-001"]
+reason = "Replace payload-only driver and coordinator layouts with full control/response/stop conversation semantics."
+
+[[prior_requirement]]
+id = "PROFILE-AXIS-001"
+prior_status = "active"
+prior_source = "docs/design.md"
+disposition = "superseded"
+successors = ["SAFE-PROFILE-001"]
+reason = "Retain equivalent supported semantics; separate feature/storage/progress/atomics axes and evidence."
+
+[[prior_requirement]]
+id = "REFACTOR-GATE-001"
+prior_status = "inactive-stronger-owner"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["AUTH-EVIDENCE-001"]
+reason = "Retain scoped review and evidence truth; old gate ordering grants no successor acceptance."
+
+[[prior_requirement]]
+id = "RES-LIMIT-001"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-HANDOFF-001"]
+reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+
+[[prior_requirement]]
+id = "RES-LIMIT-002"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-HANDOFF-001"]
+reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+
+[[prior_requirement]]
+id = "RES-LIMIT-003"
+prior_status = "active"
+prior_source = "docs/spec/foundation.md"
+disposition = "superseded"
+successors = ["RES-HANDOFF-001"]
+reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+
+[[prior_requirement]]
+id = "RES-LIMIT-004"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["RES-HANDOFF-001"]
+reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+
+[[prior_requirement]]
+id = "RES-PROFILE-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["RES-SCHEMA-001"]
+reason = "Keep explicit schema/meaning identity; flat V1 table is restricted implementation policy."
+
+[[prior_requirement]]
+id = "SEC-PERF-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-SECURITY-001"]
+reason = "Retain independent policy/credential safety; support verifier/native collaboration without protocol cases."
+
+[[prior_requirement]]
+id = "STATE-BIND-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["SAFE-PUBLISH-001", "SPI-RETIRE-001"]
+reason = "Replace route-stage/freeze-before-effects models with final qualified local publication after closed setup."
+
+[[prior_requirement]]
+id = "STATE-DISC-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["DISC-CLIENT-001"]
+reason = "Keep explicit client-only retrieval/trust/lifetime; do not force every discovery adapter through Consumer SPI."
+
+[[prior_requirement]]
+id = "STATE-EXPOSE-001"
+prior_status = "active"
+prior_source = "docs/spec/runtime-safety.md"
+disposition = "superseded"
+successors = ["SAFE-PUBLISH-001"]
+reason = "Replace route-stage/freeze-before-effects models with final qualified local publication after closed setup."
+
+[[prior_requirement]]
+id = "STATE-INFLIGHT-001"
+prior_status = "active"
+prior_source = "docs/spec/interaction-core.md"
+disposition = "superseded"
+successors = ["SAFE-CONCUR-001", "SAFE-AUTH-001"]
+reason = "Retain linearization/reentrancy/wake/fairness invariants without exact lane, slot or trace machinery."
+
+[[prior_requirement]]
+id = "STATE-SUB-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-NOTIFY-001"]
+reason = "Replace payload-only driver and coordinator layouts with full control/response/stop conversation semantics."
+
+[[prior_requirement]]
+id = "STD-BASELINE-001"
+prior_status = "active"
+prior_source = "docs/design.md"
+disposition = "superseded"
+successors = ["WOT-SEM-001"]
+reason = "Use shared TD 1.1 semantics; W3C baseline is not a Rust representation mandate."
+
+[[prior_requirement]]
+id = "SUB-DATA-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-NOTIFY-001"]
+reason = "Replace payload-only driver and coordinator layouts with full control/response/stop conversation semantics."
+
+[[prior_requirement]]
+id = "SUB-STORAGE-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-NOTIFY-001"]
+reason = "Replace payload-only driver and coordinator layouts with full control/response/stop conversation semantics."
+
+[[prior_requirement]]
+id = "TD-MEM-001"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-REUSE-001"]
+reason = "Separate definitions, instance authority and actual shared backing; no per-instance plan-set epoch mandate."
+
+[[prior_requirement]]
+id = "TD-MEM-002"
+prior_status = "inactive-historical-input"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["PREP-REUSE-001"]
+reason = "Separate definitions, instance authority and actual shared backing; no per-instance plan-set epoch mandate."
+
+[[prior_requirement]]
+id = "TIME-001"
+prior_status = "active"
+prior_source = "docs/amendments/WP-100-time-domain-v1.md"
+disposition = "reaffirmed"
+successors = ["TIME-001"]
+reason = "Exact clock/source-time meaning remains unchanged; historical tranche sequencing is not a new gate."
+
+[[prior_requirement]]
+id = "VALIDATE-COMPILE-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-DATA-001"]
+reason = "Retain payload ownership and checks; generalize data roles/schema/media without mandatory JSON or copy."
+
+[[prior_requirement]]
+id = "VALIDATE-REUSE-001"
+prior_status = "inactive-domain-entry-review-required"
+prior_source = "docs/spec/v5-authority-reset.toml"
+disposition = "superseded"
+successors = ["EXEC-DATA-001"]
+reason = "Retain payload ownership and checks; generalize data roles/schema/media without mandatory JSON or copy."
+
+[[scoped_source]]
+path = "docs/amendments"
+scope = "restricted-implementation-except-time"
+
+[[scoped_source]]
+path = "docs/spec/consumer-resource-ownership.md"
+scope = "restricted-consumer-property-read"
+
+[[scoped_source]]
+path = "docs/resource-limits.csv"
+scope = "legacy-numeric-adapter-schema"
+
+[[scoped_source]]
+path = "docs/resource-contracts/consumer-ownership-v2.toml"
+scope = "restricted-consumer-property-read"
+
+[[scoped_source]]
+path = "docs/evidence"
+scope = "historical-evidence-no-transfer"
+
+[[scoped_source]]
+path = "docs/performance"
+scope = "historical-recipes-except-PERF-CLAIM-001"

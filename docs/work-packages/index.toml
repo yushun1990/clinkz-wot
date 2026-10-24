@@ -1,12 +1,16 @@
-schema_version = 6
-design_revision = "5.1"
+schema_version = 7
+design_revision = "6.0"
 status = "in-progress"
-integration_gate_manifest = "docs/work-packages/property-read-architecture-gate.toml"
-consumer_integration_gate_manifest = "docs/work-packages/consumer-property-read-architecture-gate.toml"
+historical_basis_commit = "ed09f059e383b7a1b9d22902ee29aa218b4471a6"
+historical_producer_gate_manifest = "docs/work-packages/property-read-architecture-gate.toml"
+historical_consumer_gate_manifest = "docs/work-packages/consumer-property-read-architecture-gate.toml"
 
 [[package]]
 id = "WP-000"
-status = "complete"
+status = "in-progress"
+prior_design_revision = "5.1"
+prior_status = "complete"
+v6_disposition = "Retain prior primitive evidence; new owner-scoped policy/schema target is not completed by the old package status."
 document = "docs/work-packages/WP-000-foundation.md"
 owner_crates = ["foundation"]
 depends_on = []
@@ -23,21 +27,21 @@ id = "WP-200"
 status = "in-progress"
 document = "docs/work-packages/WP-200-planning.md"
 owner_crates = ["core", "planning", "td"]
-depends_on = ["WP-100"]
+depends_on = ["WP-100", "WP-300"]
 
 [[package]]
 id = "WP-300"
 status = "in-progress"
 document = "docs/work-packages/WP-300-bindings.md"
 owner_crates = ["core"]
-depends_on = ["WP-200"]
+depends_on = ["WP-100"]
 
 [[package]]
 id = "WP-400"
 status = "in-progress"
 document = "docs/work-packages/WP-400-servient.md"
 owner_crates = ["servient", "core"]
-depends_on = ["WP-300"]
+depends_on = ["WP-100", "WP-300"]
 
 [[package]]
 id = "WP-500"
@@ -53,7 +57,7 @@ document = "docs/work-packages/WP-600-protocol-bindings.md"
 # The real optional HTTP member implements the admitted Consumer tranche.
 # Deferred Zenoh/pico implementations are recoverable from Git, not maintained owners.
 owner_crates = ["planning", "protocol-bindings/protocols/http"]
-depends_on = ["WP-300"]
+depends_on = ["WP-200", "WP-300", "WP-400"]
 
 [[package]]
 id = "WP-700"
@@ -62,8 +66,11 @@ document = "docs/work-packages/WP-700-integration.md"
 owner_crates = ["clinkz-wot"]
 depends_on = ["WP-400", "WP-500", "WP-600"]
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-100-CONSUMER-CALL-VALUES-VALIDATOR"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep narrow Property Read result/ownership/cancellation regressions; exact old carrier/API does not constrain successor capabilities."
+successor_admission = "none"
 work_package = "WP-100"
 sequence = 160
 status = "complete"
@@ -116,8 +123,11 @@ admission_review = "github-pr:48"
 completion_evidence_keys = ["consumer-call-values-response-validation"]
 completion_evidence_path = "docs/evidence/WP-100-consumer-call-values-response-validation.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-100-CONSUMER-VALIDATED-THING"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep bounded whole-input Basic and shared lending evidence; remove source id/key and eager aggregate restrictions as general authority."
+successor_admission = "none"
 work_package = "WP-100"
 sequence = 170
 status = "complete"
@@ -345,8 +355,11 @@ admission_review = "github-pr:130#issuecomment-6034368557"
 completion_evidence_keys = ["consumer-borrowed-td-admission"]
 completion_evidence_path = "docs/evidence/WP-100-consumer-borrowed-td-admission.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep narrow Property Read result/ownership/cancellation regressions; exact old carrier/API does not constrain successor capabilities."
+successor_admission = "none"
 work_package = "WP-200"
 sequence = 210
 status = "complete"
@@ -400,8 +413,11 @@ admission_review = "github-pr:50"
 completion_evidence_keys = ["consumer-property-read-planning-selection"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-planning-selection.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-200-CONSUMER-COMPILER-SUPPORT"
+recorded_design_revision = "5.1"
+v6_disposition = "Copy/atomic admission is a restricted adapter, not open compiler eligibility."
+successor_admission = "none"
 work_package = "WP-200"
 sequence = 320
 status = "complete"
@@ -449,8 +465,11 @@ admission_review = "github-pr:144#issuecomment-6097700130"
 completion_evidence_keys = ["consumer-compiler-support"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-compiler-support.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE"
+recorded_design_revision = "5.1"
+v6_disposition = "Eager all-bounds and separate plan-set epoch remain only the exercised adapter."
+successor_admission = "none"
 work_package = "WP-200"
 sequence = 330
 status = "complete"
@@ -520,8 +539,11 @@ admission_review = "github-pr:148#issuecomment-6108374621"
 completion_evidence_keys = ["consumer-property-read-aggregate"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-aggregate.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-300-CONSUMER-ONLY-REGISTRATION"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep consumer-only composition evidence; general registration permits arbitrary conforming downstream facets."
+successor_admission = "none"
 work_package = "WP-300"
 sequence = 340
 status = "complete"
@@ -587,8 +609,11 @@ admission_review = "github-pr:152#issuecomment-6120235799"
 completion_evidence_keys = ["consumer-only-registration"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-only-registration.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep narrow Property Read result/ownership/cancellation regressions; exact old carrier/API does not constrain successor capabilities."
+successor_admission = "none"
 work_package = "WP-300"
 sequence = 310
 status = "complete"
@@ -682,8 +707,11 @@ admission_review = "github-pr:66"
 completion_evidence_keys = ["consumer-property-read-binding-execution"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-property-read-binding-execution.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-200-CONSUMER-OUTPUT-OWNERSHIP"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep original-account and bounded rollback backing; relocate runtime owners before execution-only Servient claims."
+successor_admission = "none"
 work_package = "WP-200"
 sequence = 350
 status = "complete"
@@ -726,8 +754,11 @@ admission_review = "github-pr:156#issuecomment-6137329268"
 completion_evidence_keys = ["consumer-output-ownership"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-output-ownership.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-300-CONSUMER-HOST-CALL-CONSTRUCTION"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep pre-effect owner acquisition and funded failure; no universal boxed call requirement."
+successor_admission = "none"
 work_package = "WP-300"
 sequence = 360
 status = "complete"
@@ -765,8 +796,11 @@ admission_review = "github-pr:161#issuecomment-6142207093"
 completion_evidence_keys = ["consumer-host-call-construction"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-host-call-construction.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-400-CONSUMER-PROPERTY-READ-RUNTIME"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep narrow Property Read result/ownership/cancellation regressions; exact old carrier/API does not constrain successor capabilities."
+successor_admission = "none"
 work_package = "WP-400"
 sequence = 410
 status = "complete"
@@ -847,8 +881,11 @@ admission_review = "github-pr:165#pullrequestreview-5505656673"
 completion_evidence_keys = ["consumer-property-read-runtime"]
 completion_evidence_path = "docs/evidence/WP-400-consumer-property-read-runtime.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-400-CONSUMER-RESOURCE-OWNERSHIP"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep schema-2 adapter meaning and original accounts; no general operation-specific policy template."
+successor_admission = "none"
 work_package = "WP-400"
 sequence = 420
 status = "complete"
@@ -942,8 +979,11 @@ completion_evidence_keys = [
 ]
 completion_evidence_path = "docs/evidence/WP-400-consumer-resource-ownership.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-600-HTTP-CONSUMER-PROPERTY-READ"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep cleartext IP NoSec real-peer evidence; renew changed HTTP mapping regressions; no HTTPS or general SPI acceptance."
+successor_admission = "none"
 work_package = "WP-600"
 sequence = 600
 status = "complete"
@@ -1049,8 +1089,11 @@ completion_evidence_keys = [
 completion_evidence_path = "docs/evidence/WP-600-http-consumer-property-read.toml"
 
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-600-HTTP-PRODUCER-PROPERTY-READ"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep bounded synchronous single-route setup/publication/reply/close evidence; status is historical, not successor coverage acceptance."
+successor_admission = "none"
 work_package = "WP-600"
 sequence = 610
 status = "in-progress"
@@ -1145,8 +1188,11 @@ completion_evidence_keys = [
 ]
 completion_evidence_path = "docs/evidence/WP-600-http-producer-property-read.toml"
 
-[[tranche]]
+[[historical_tranche]]
 id = "WP-200-PREPARATION-EXECUTION-BOUNDARY"
+recorded_design_revision = "5.1"
+v6_disposition = "Keep Core dependency cut and Planning compiler ownership; general execution/preparation extraction remains incomplete."
+successor_admission = "none"
 work_package = "WP-200"
 sequence = 620
 status = "in-progress"

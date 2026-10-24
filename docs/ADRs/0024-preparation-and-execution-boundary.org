@@ -1,6 +1,17 @@
 #+title: ADR-0024: Preparation and execution boundary
 #+date: 2026-10-21
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Keep the dependency cut, open actual compiler/executor pairing and content/instance/native separation. Replace the mandatory last-route retirement trigger and narrow source/API rules with owner policy and final-use barriers.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Post-cleanup Zenoh source disposition
 

@@ -34,8 +34,3 @@ async = [
     "clinkz-wot-foundation/async",
     "clinkz-wot-planning/async",
 ]
-## Experimental TD 2.0 data-model surface (`ActionAffordance.synchronous`).
-## Forwards to the data-model gate.
-td2-preview = [
-    "clinkz-wot-td/td2-preview",
-]

@@ -1,3 +1,7 @@
+//! v6 authority: current Property Read carriers and route-stage/plan-set APIs
+//! are restricted implementations, not the general capability SPI. See
+//! docs/spec/authority.toml and ADR-0025; no compatibility facade is promised.
+//!
 //! Protocol-neutral vocabulary and execution contracts.
 //!
 //! Operation vocabulary is available without pointer atomics. The current

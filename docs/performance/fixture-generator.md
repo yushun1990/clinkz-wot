@@ -1,3 +1,24 @@
+# Performance evidence and historical fixtures — v6.0
+
+`PERF-CLAIM-001`: A performance claim MUST name exact code/contracts, capability,
+profile/backend, workload/input distributions, toolchain/environment, measured
+boundary and retained physical owners. Report warm/first-use preparation,
+execution, fan-out references versus shared backing, cancellation/cleanup,
+saturation and final release where claimed. Logical quota is not measured RAM;
+portable compile is not hardware fit; mock traces and protocol counts prove no
+generality. Establish budgets/oracles before a gating run, and retain failures.
+Schema-valid manifests and deterministic fixture generation are not measurements.
+
+The gateway, constrained and Directory manifests below are historical v4.9/v5
+characterization recipes, all non-gating for v6. Their former gate budgets and
+trace/phase/zero-allocation assumptions are withdrawn as successor requirements.
+Their numerical thresholds remain historical comparison inputs, not accepted v6
+limits. Reusing a recipe requires checking its semantic oracle and actual owners
+against the supported slice and renewing measurements. No fleet, fan-out,
+allocation or shared-infrastructure qualification transfers through this migration.
+
+## Historical generator specification
+
 # Performance Fixture and Harness Contract
 
 Status: normative implementation-support contract for design revision v4.9.

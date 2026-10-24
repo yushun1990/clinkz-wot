@@ -60,136 +60,39 @@ irreversible external commitment that repository evidence cannot resolve.
 
 ## Active Architecture Target
 
-The authoritative revision is v5.1 Consumer one-shot authority. Its active
-source map is `docs/spec/v5-authority-reset.toml`; accepted specifications,
-ADRs, work packages, code, and tests own the current contract.
+The target in this tree is v6.0, the semantic Engine over Binding-owned native
+runtimes selected by ADR-0025. `docs/spec/authority.toml` is its sole source map.
+Mainline activation is the atomic integration of the independently reviewed
+complete authority tree. A task branch does not change master's active authority;
+there is no split per-document or per-feature activation.
 
-ADR-0021 refines the Consumer TD input/ownership boundary within that same
-requirement set. The registered TD, Planning and Servient owners project its
-borrowed-input/owned-output transaction and separate future ingestion scope.
-This migration grants no implementation admission or gate status.
-
-No individual v5.1 artifact grants implementation admission outside that
-active set. Git history retains the superseded activation and rollback record;
-current validation does not replay it.
-
-The v4.8 detailed-design candidate is migration input only. A v4.8 contract is
-not active merely because it still exists in a historical or residual document.
-It becomes active only after reconciliation into the registered v4.9 authority
-set.
-
-The active v5 architecture-closure effort must produce one coherent and executable target across:
-
-- architecture flows and module boundaries;
-- accepted ADRs;
-- domain specifications;
-- public and internal API ownership;
-- state and lifecycle models;
-- resource and performance contracts;
-- requirements and work packages;
-- implementation and tests; and
-- review, audit, and conformance evidence.
+`docs/design.md` is the concise normative-source entry. Registered architecture,
+ADRs, domain specifications and API/state/resource/work-package projections must
+agree. Code/tests establish implementation availability and cannot silently amend
+contracts. Historical v4/v5 records, the old fixed requirement set and passed
+Property Read gates have explicit dispositions; they grant no successor admission.
 
 ## Architecture Authority Model
 
-Architecture must be read through registered owners rather than inferred from a
-single narrative document.
+Read authority through its registered detailed owners: backbone for component
+relationships/flows, ADRs for rationale/supersession, domain specifications for
+exact behavior, machine projections for their declared fields, work packages for
+dependencies/admission, and code/tests for actual behavior. Each active requirement
+has exactly one definition; changed meanings use new identities where necessary.
+The source map preserves each prior identity's disposition. Neither a fixed
+historical requirement count nor a checker can veto a justified architecture
+correction. Workspace topics remain investigation/provenance rather than authority.
 
-Primary architecture sources are:
+## Selected direction
 
-1. `docs/architecture/README.md` and its registered architecture documents for
-   cross-domain structure, primary flows, boundaries, and invariants;
-2. accepted ADRs under `docs/ADRs/` for decisions that require durable rationale;
-3. registered domain specifications under `docs/spec/` for exact single-owner
-   behavioral, API, lifecycle, and SPI contracts;
-4. `docs/artifacts.csv` and other registered indexes for authority, ownership,
-   and evidence projection;
-5. `docs/work-packages/index.toml` for implementation dependency, admission,
-   completion, removal, and evidence contracts; and
-6. source code and tests for implementation truth and executable conformance.
-
-Under active v5.1 authority, `docs/design.md` is the concise revision entry
-point and normative-source manifest. It must not override a more specific
-registered owner. ADR-0018 established the bounded v5.0 reset; ADR-0019 then
-re-adopted exactly `PLAN-REQUEST-001`, `BIND-OUT-001`, and the narrowed
-`API-OPTIONS-001` for Consumer one-shot entry. The active v5.1 set therefore
-contains exactly 65 requirements while the remaining identities retain their
-checked inactive dispositions.
-
-`workspace/` is non-authoritative. It records questions, proposals,
-investigations, alternatives, and reasoning history. A workspace topic becomes
-architecturally effective only after its stable conclusion is migrated into the
-proper registered authority.
-
-## Frozen Direction for v1
-
-The accepted v1 architecture direction active in v5.1 includes:
-
-- an explicit compiled-plan-set lifecycle and binding-artifact boundary;
-- immutable admitted plan sets separating protocol-neutral logical plans from
-  binding-owned artifacts;
-- Cargo-linked, application-registered Protocol Binding crates;
-- startup-only binding composition for one Servient instance;
-- Servient-owned activation, orchestration, plan-set lifetime, scheduling, and
-  cleanup policy;
-- engine-orchestrated, route-scoped binding progress with no hidden direct
-  handler-dispatch path;
-- Protocol Bindings that own protocol syntax, I/O, correlation, adaptation, and
-  binding-local flow control, but do not select handlers or reinterpret TDs;
-- atomic serving publication through one Servient-owned activation authority
-  and nonretained route-scoped accept permits;
-- generation ownership, bounded resources, cancellation, and terminal cleanup
-  for retained operations;
-- protocol-neutral semantics across host and `no_std + alloc` profiles with
-  profile-appropriate progress mechanisms; and
-- a modular normative-document hierarchy with single-owner detailed contracts.
-
-The exact contracts live in the registered architecture, ADR, specification,
-API, state, resource, performance, requirement, and work-package artifacts.
-This summary is navigation, not an alternative normative owner.
-
-For the target Protocol Binding and Servient surface, the invariant direction
-above is frozen, but empirical maturity is deliberately narrower. Immutable
-artifacts, protocol-owned I/O and correlation, Servient-owned dispatch and
-publication, generation identity, route-scoped bounded progress,
-permit-gated acceptance, and explicit cleanup transfer remain authoritative.
-A real-target Zenoh Property Read probe now exercises both application-static
-and public Host-erased paths through actual protocol I/O and a network round
-trip. Its corrected Host carrier preserves one nonreplaceable erased route
-state, original preparation input, footprint, and generation identity across
-the distinct prepared, active, and committed stage owners until terminal
-cleanup, exposing only a type-checked shared pinned projection for
-protocol-local operations. Servient retains the committed owner during accept
-polling and lends the binding only a shared guard reference. The exact helper
-surface, broad operation
-signatures, multi-route resource model, and profile-specific physical resource
-accounting remain maturity and correction points; the paired probe does not
-freeze those broader containers or justify merging the Host and static
-lifecycle APIs.
-
-That bounded probe is architecture feedback rather than WP-600 product admission.
-[ADR-0022](docs/ADRs/0022-first-production-binding-and-runtime-environments.org)
-selects Host HTTP/1.1/HTTPS for first production and defers Zenoh/pico without
-discarding their evidence. It distinguishes shared correctness and resource
-ownership from environment failure, SDK allocation and hardware qualification.
-The package graph, accepted gates and controlled-owner guarantees remain.
-A production protocol claim names its actual capability/profile evidence;
-neither two Zenoh backends nor HTTP alone proves general protocol-shape
-neutrality. Embedded production requires separate real backend/target evidence.
-
-[ADR-0023](docs/ADRs/0023-resource-ownership-and-policy-boundaries.org) selects an
-ownership-scoped resource target and its explicit migration boundary. Existing
-strict resource/destructor contracts remain implementation authority pending
-schema/contract migration and independent readmission. HTTP remains the first
-production protocol; SDK selection/qualification belongs to its implementation
-tranche. Neither a shared manager nor removal of engine admission is selected.
-
-[ADR-0024](docs/ADRs/0024-preparation-and-execution-boundary.org) adopts the
-Preparation/Execution boundary from integrated Review 08. The module owner
-replaces the TD/Core edge and compiler placement. Planning and Binding owners
-separate reusable content, instance authority and native infrastructure. Existing
-strict/narrow evidence keeps its original scope; this is no gate closure or
-production reusable/shared-infrastructure claim.
+Shared TD semantics, independent live authority, truthful Producer advertisement,
+logical/physical ownership separation, funded bounded cancellation/cleanup and
+equivalent supported Host/constrained semantics remain binding. Separate execution
+capabilities sit over concrete Binding-owned native runtimes. Native matching,
+correlation, distribution and I/O stay out of the Engine. Eager plan sets, route
+stage inventories, one route/Thing resource ownership and universal session/RPC
+representations are not the general architecture. Exact detailed contracts have
+one owner in the source map; this section is navigation, not a second specification.
 
 ## Architectural Decision Lifecycle
 
@@ -253,8 +156,8 @@ AI must:
 
 1. identify the exact conflicting claims;
 2. determine each artifact's registered ownership and revision status;
-3. distinguish active v5.1 authority from historical or residual migration
-   input;
+3. distinguish the current registered revision from historical or restricted
+   implementation input;
 4. open or update a workspace investigation when the conflict affects semantics,
    ownership, lifecycle, resources, public behavior, or evidence truth;
 5. select and record one coherent direction;
@@ -265,23 +168,18 @@ No architecture conflict is resolved merely by adding another summary document.
 
 ## Architecture Closure
 
-The active v5 architecture-closure milestone is technically complete only when:
+The architecture-closure milestone is technically complete only when:
 
-1. the architecture backbone freezes primary flows, module boundaries,
-   compiled-plan lifecycle, Servient orchestration, and Protocol Binding
-   integration and deployment;
-2. every accepted ADR has one non-conflicting authoritative projection;
-3. every active detailed requirement has one registered normative owner;
-4. residual v4.8/v4.9 ownership is historical rather than active, all 121 v4.9
-   identities have one checked v5 authority disposition, and exactly 65 active
-   requirements have one registered normative owner;
-5. API, state, resource, performance, requirement, and work-package artifacts
-   identify the same revision and contracts;
-6. architecture-boundary and registered executable checks pass;
-7. affected evidence is current rather than silently carried across incompatible
-   changes; and
-8. an independent same-revision review closes every applicable architecture
-   gate.
+1. backbone, ADRs, domain owners and projections identify one coherent revision;
+2. each active requirement has one exact owner and each inherited identity an
+   explicit disposition;
+3. public ownership, semantic state, resource and work-package boundaries agree;
+4. applicable structural and executable checks pass at the claimed revision;
+5. implementation and performance claims have current scoped evidence rather
+   than inherited acceptance; and
+6. independent same-revision review finds no unresolved material conflict.
+
+A merge activates authority, not implementation completeness or release readiness.
 
 AI closes the technical milestone from registered evidence. Owner feedback may
 reopen it when a project-goal conflict, omitted real-world constraint,

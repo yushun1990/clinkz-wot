@@ -1,3 +1,4 @@
+# v6 scope: retained Consumer Property Read adapter encoding only; no general SPI authority.
 schema_revision = 2
 design_revision = "5.1"
 status = "accepted"

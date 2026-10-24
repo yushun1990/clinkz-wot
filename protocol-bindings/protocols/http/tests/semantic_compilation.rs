@@ -498,6 +498,8 @@ fn unsupported_explicit_instructions_never_become_default_requests() {
     listener.set_nonblocking(true).unwrap();
     let target = format!("http://{}/a", listener.local_addr().unwrap());
     for extra in [
+        json!({"op":["readproperty","writeproperty"],"htv:methodName":"POST"}),
+        json!({"op":["readproperty","writeproperty"],"http://www.w3.org/2011/http#methodName":"GET"}),
         json!({"htv:methodName":null}),
         json!({"htv:methodName":"get"}),
         json!({"htv:methodName":["POST"]}),

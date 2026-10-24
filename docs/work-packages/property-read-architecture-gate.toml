@@ -1,3 +1,6 @@
+authority_scope = "historical-property-read-only"
+successor_design_revision = "6.0"
+successor_acceptance = "not-transferred"
 schema_version = 3
 design_revision = "5.0"
 id = "PROPERTY-READ-ARCHITECTURE"

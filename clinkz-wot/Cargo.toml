@@ -45,8 +45,3 @@ async = [
 
 # Codec for CBOR payloads (TD 1.1 default content type).
 cbor = ["dep:clinkz-wot-codec-cbor"]
-
-# Experimental TD 2.0 surface; see docs/design.md.
-td2-preview = [
-    "clinkz-wot-td/td2-preview",
-]

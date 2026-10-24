@@ -2,6 +2,12 @@
 #+date: 2026-07-26
 #+status: Accepted
 
+* v6.0 scope amendment
+
+The extended logical clock, clock-id comparability, checked exhaustion and source-time semantics remain unchanged. TIME-001 and API-SOURCE-TIME-001 retain their exact amendment owner. Old two-tranche and broad-handler sequencing below is completed historical context, not a new global gate or a mandatory cleanup-carrier shape.
+
+* Preserved rationale and scoped contract
+
 * Context
 
 The v4.9 residual design combined two incompatible time models. It allowed a

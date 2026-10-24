@@ -19,7 +19,6 @@ check() {
 echo "=== td ==="
 check "td default"              -p clinkz-wot-td
 check "td no-features"          -p clinkz-wot-td --no-default-features
-check "td td2-preview"          -p clinkz-wot-td --features td2-preview
 
 echo "=== foundation ==="
 check "foundation default"      -p clinkz-wot-foundation
@@ -54,7 +53,6 @@ echo "=== servient ==="
 check "servient default"        -p clinkz-wot-servient
 check "servient no-features"    -p clinkz-wot-servient --no-default-features
 check "servient async"          -p clinkz-wot-servient --no-default-features --features async
-check "servient td2-preview"    -p clinkz-wot-servient --features td2-preview
 
 echo "=== Property Read architecture fixtures ==="
 check "aggregate binding default"      -p clinkz-wot-property-read-binding-fixture

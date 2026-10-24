@@ -62,7 +62,6 @@ jobs:
           cargo test --locked -p clinkz-wot-servient --no-default-features
           cargo test --locked -p clinkz-wot-servient --no-default-features --features async
           sh scripts/check-no-std.sh
-          sh scripts/check-td2-preview.sh
 
       - name: Check production bounded TD admission and lending
         if: inputs.level == 'full'
@@ -71,7 +70,7 @@ jobs:
             cargo test --locked -p clinkz-wot-td --features "$features" --lib validated::tests
             cargo test --locked -p clinkz-wot-td --features "$features" --test validated_admission --test validated_lending
           done
-          for features in validated-thing validated-thing,clinkz-wot-foundation/async validated-thing,td2-preview; do
+          for features in validated-thing validated-thing,clinkz-wot-foundation/async; do
             cargo test --locked -p clinkz-wot-td --no-default-features --features "$features" --lib validated::tests
             cargo test --locked -p clinkz-wot-td --no-default-features --features "$features" --test validated_admission --test validated_lending
             cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features "$features"

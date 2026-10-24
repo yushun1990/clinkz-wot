@@ -1,19 +1,28 @@
 # Consumer resource ownership migration
 
-Status: accepted successor contract under ADR-0023 and ADR-0013 for
-`WP-400-CONSUMER-RESOURCE-OWNERSHIP`. Implementation authority is limited to
-that tranche's recorded scope. Existing `StrictV1` registrations retain their
-contract and evidence scope; no existing footprint is implicitly converted.
-The active 65/31/121 dispositions and TD typed-input interpretation revision 2
-do not change. The later [native Host compiler amendment](#native-host-compiler-configuration)
-supersedes this document's closed-lowering-only restriction for that representation;
-its original configuration vectors and strict/static evidence remain historical
-for their exact scope.
+Status: **restricted Consumer Property Read schema-2 adapter contract** under
+v6.0 RES-SCHEMA-001. Its exact numeric/encoding/original-account meaning remains;
+its eligibility, closed compiler and operation-specific policy shapes do not
+constrain the general architecture. New capability admission and qualification
+are not transferred. The predecessor 65/31/121 classification is historical.
 
-This file owns the accepted detailed contract and API delta. The
+This file owns the retained adapter's detailed contract and API delta. The
 [schema overlay](../resource-contracts/consumer-ownership-v2.toml) owns its exact
 row dispositions. The [readmission record](../work-packages/WP-400-consumer-resource-ownership-admission.md)
 owns implementation scope, evidence obligations and impact disposition.
+
+## v6 TD 1.1 field correction
+
+Action `synchronous` is now a known optional typed field in every TD cell.
+Under the unchanged typed-content-v1 rule, a present value counts as one 8-byte
+fixed scalar, its known label counts zero, and absence counts zero. It is not
+extension content. The prior preview-disabled parsed representation retained it
+as an opaque extension, so its old document/string/extension totals and traces
+cannot certify the corrected model. The independent field oracle checks absent,
+false and true against production traversal. Numeric rows, schema-2 policy
+encoding, units and logical-content algorithm are unchanged; this explicit TD
+model/API correction requires fresh validation and evidence, not reuse of old
+proofs or persisted prepared content. No compatibility conversion is introduced.
 
 ## Scope and rejected expansion
 

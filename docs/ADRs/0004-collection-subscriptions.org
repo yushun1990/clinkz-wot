@@ -1,6 +1,17 @@
 #+title: ADR-0004: Collection Subscription Planning and Multiplexing
 #+date: 2026-07-16
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Keep native collection meaning, attribution and no silent per-affordance fan-out in EXEC-COLLECTION-001; remove one common driver/program mechanism.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Context
 

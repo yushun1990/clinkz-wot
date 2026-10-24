@@ -1,6 +1,17 @@
 #+title: ADR-0003: Subscription Driver and Flow-Control Ownership
 #+date: 2026-07-16
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Replace the exact HostSubscriptionDriver and payload-iterator ABI with control/data/reciprocal-response conversations. Keep independent cursor/stop/cleanup and original-recipient ownership.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Context
 

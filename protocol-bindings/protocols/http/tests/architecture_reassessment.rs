@@ -149,21 +149,6 @@ mod tests {
     }
 
     #[test]
-    fn explicit_http_method_on_multi_operation_form_is_currently_admitted() {
-        let mut value = td();
-        value["properties"]["a"]
-            .as_object_mut()
-            .unwrap()
-            .remove("readOnly");
-        value["properties"]["a"]["forms"][0]["op"] = json!(["readproperty", "writeproperty"]);
-        value["properties"]["a"]["forms"][0]["htv:methodName"] = json!("POST");
-        assert!(
-            consume(value),
-            "current Mapping accepts explicit POST on a multi-operation Form"
-        );
-    }
-
-    #[test]
     fn result_identity_seal_does_not_validate_json_or_payload_schema() {
         let generation = PlanSetGeneration::new(Generation::INITIAL);
         let plan = PlanId::new(SlotIndex::new(0), Generation::INITIAL);

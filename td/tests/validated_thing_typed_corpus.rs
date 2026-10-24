@@ -179,7 +179,7 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     assert!(rich_action.output.is_some());
     assert!(rich_action.safe);
     assert!(rich_action.idempotent);
-    #[cfg(feature = "td2-preview")]
+
     assert_eq!(rich_action.synchronous, Some(true));
     assert_eq!(
         rich_action._interaction.forms[0].op.as_deref(),
@@ -196,7 +196,7 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     assert!(minimal_action.output.is_none());
     assert!(!minimal_action.safe);
     assert!(!minimal_action.idempotent);
-    #[cfg(feature = "td2-preview")]
+
     assert_eq!(minimal_action.synchronous, None);
 
     let events = thing.events.as_ref().unwrap();

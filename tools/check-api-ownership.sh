@@ -57,8 +57,8 @@ awk -F, '
         validate_list($9, resources, "resource profile")
         validate_list($10, roles, "capability role")
         if (!migrations[$13]) fail("invalid migration action", $13)
-        if ($14 != "frozen" && $14 != "removed") fail("ownership is not frozen", $1)
-        if ($12 == "absent" && $13 != "add" && $14 != "removed") fail("invalid absent item", $1)
+        if ($14 != "frozen" && $14 != "restricted" && $14 != "withdrawn" && $14 != "removed") fail("invalid ownership disposition", $1)
+        if (($14 == "frozen" || $14 == "restricted") && $12 == "absent") fail("implemented item has no source path", $1)
     }
     function fail(message, value) {
         printf "api ownership check: line %d: %s: %s\n", NR, message, value > "/dev/stderr"
@@ -79,7 +79,7 @@ while IFS=, read -r item current_path; do
     fi
 done
 
-tail -n +2 "$root/docs/requirements.csv" | cut -d, -f1 | tr '|' '\n' >"$tmp/expressions"
+awk -F, 'NR > 1 && $10 == "active" { print $1 }' "$root/docs/requirements.csv" | tr '|' '\n' >"$tmp/expressions"
 : >"$tmp/requirements"
 while IFS= read -r expression; do
     if [[ "$expression" =~ ^([A-Z][A-Z0-9-]*-)([0-9]{3})\.\.([0-9]{3})$ ]]; then

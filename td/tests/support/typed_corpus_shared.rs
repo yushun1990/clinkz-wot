@@ -275,7 +275,7 @@ pub const CORPUS: &str = r##"{
 
 pub fn typed_corpus() -> Thing {
     let mut thing: Thing = serde_json::from_str(CORPUS).expect("fixed TD input must decode");
-    #[cfg(feature = "td2-preview")]
+
     {
         thing
             .actions

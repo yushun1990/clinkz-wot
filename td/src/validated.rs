@@ -842,16 +842,7 @@ mod fields {
                     3 => return v.output.as_ref().map(N::Schema),
                     4 => N::Scalar(v.safe as u64),
                     5 => N::Scalar(v.idempotent as u64),
-                    6 => {
-                        #[cfg(feature = "td2-preview")]
-                        {
-                            return v.synchronous.map(|v| N::Scalar(v as u64));
-                        }
-                        #[cfg(not(feature = "td2-preview"))]
-                        {
-                            return None;
-                        }
-                    }
+                    6 => return v.synchronous.map(|v| N::Scalar(v as u64)),
                     7 => N::Map(Map::Values(&v._extra_fields)),
                     _ => unreachable!(),
                 },

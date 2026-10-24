@@ -1,6 +1,10 @@
 # WP-100 Logical Time, Deadline, and Cleanup Timing Amendment
 
-Status: Frozen
+Status: retained exact time authority under v6.0 for TIME-001 and
+API-SOURCE-TIME-001. Clock/source-time semantics below are unchanged. References
+to other old requirement ids, handler ownership and two-tranche implementation
+sequencing are historical or restricted adapter context; ADR-0025 and current
+domain owners replace their general projections.
 
 Base design revision: v4.9
 
