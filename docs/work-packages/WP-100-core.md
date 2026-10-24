@@ -100,7 +100,7 @@ Minimum scope:
 
 Explicitly excluded:
 
-- write/action migration merely to remove legacy `InteractionOptions::data`;
+- write/action payload design or migration;
 - advanced options, broad defaults merging, media/subprotocol/security branch
   selectors, validation profiles;
 - codec/schema compiler work;
@@ -164,11 +164,15 @@ associated item, field, selector, or conversion is admitted by this tranche.
 Explicit form selection narrows the immutable consumed plan set; it never
 authorizes raw TD/Form scanning or binding-support probing.
 
-The existing `data` field and `with_data(...)` constructor remain legacy
-migration surface only because unmigrated write/action/subscription paths still
-use them. This tranche does not remove or privatize them. New Consumer Property
-Read code MUST NOT read `InteractionOptions::data`, and the new target methods
-MUST NOT expose payload as selection/control state.
+At this tranche's original admission revision (PR #48), the `data` field and
+`with_data(...)` constructor were retained as legacy migration surface. That
+tranche did not remove or privatize them and prohibited new Consumer Property
+Read code from reading `InteractionOptions::data`. The pre-v1 cleanup has since
+withdrawn both APIs. Current options contain only URI variables, an optional
+original Form index, and timeout intent, as specified by
+[Interaction Core](../spec/interaction-core.md). Future write/action/subscription
+payload semantics remain successor design work; they do not require restoring
+payload-bearing options.
 
 The response-validation part is implemented now as one Core-owned private
 Property Read kernel in `core/src/response.rs`:
@@ -209,7 +213,7 @@ to this exact Core kernel. WP-300 must not reimplement or widen the validation
 rules. This preserves ADR-0019's order: validation semantics are implemented in
 WP-100; live-request binding occurs when `OutboundRequest` enters in WP-300.
 
-Exact exclusions are:
+The original tranche's exact exclusions were:
 
 - no public `OutboundRequest` or public `validate_untrusted_binding_output`
   wrapper yet;
@@ -217,7 +221,9 @@ Exact exclusions are:
   lifecycle implementation;
 - no WP-200 Planning selection, consumed plan publication, Servient handle, or
   hot call-path migration;
-- no removal or semantic reuse of legacy `InteractionOptions::data`;
+- no removal or semantic reuse of legacy `InteractionOptions::data` at that
+  admission revision; its later cleanup withdrawal supersedes that retention
+  instruction;
 - no write, action, subscription, collection, or emission migration;
 - no media/subprotocol/binding-id/security-branch/validation-profile selector;
 - no broad handle-default/per-call merge semantics;
@@ -256,8 +262,9 @@ commit and passing results for:
   additional response selection, missing payload, non-`Ok` status,
   non-application payload role, and action invocation reference;
 - proof that native numeric status is not semantically interpreted;
-- proof that the target options surface adds no payload accessor/builder and
-  that existing legacy callers still compile;
+- proof that the target options surface added no payload accessor/builder and
+  that legacy callers compiled at the original tranche revision; this historical
+  evidence does not require retaining the subsequently withdrawn payload APIs;
 - `no-default`, `async-no-std`, and `std` Core feature-cell compilation; and
 - normal mainline validation.
 
@@ -297,7 +304,7 @@ completion obligations are owned by the linked TD admission record.
   order, reentrancy, publication, and bounded critical sections.
 - `HANDLER-API-001`, `HANDLER-SUB-001`, `HANDLER-CANCEL-001`, `HANDLER-CANCEL-002`, and
   `HANDLER-STORAGE-001` govern operation-specific handlers and sparse storage.
-- `HANDLER-VALUE-001` governs the exact five passive handler-value schemas,
+- `HANDLER-VALUE-001` governs the exact four retained passive handler-value schemas,
   including attributes, ownership, const APIs, generic bounds, and redacted
   diagnostics. Consumption by cancellation, subscription, storage, admission,
   and budget mechanisms remains governed by requirements on those consuming
@@ -350,9 +357,9 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
   `InteractionInput`, `InteractionOptions`, `InteractionOutput`, `InteractionStatus`,
   `ResponsePayloadRole`, `ResponseSelection`, `BindingResponseMetadata`,
   `InteractionOutputMetadata`, `HandlerContext`, `CancellationView`, `Deadline`,
-  `SubscriptionAcceptance`, `HandlerFootprint`, `HandlerStep`, and
-  `StaticHandlerRegistration`; the GAT future is associated with each async
-  trait rather than exposed as a public `HandlerFuture` alias;
+  `HandlerFootprint`, `HandlerStep`, and `StaticHandlerRegistration`; the GAT
+  future is associated with each async trait rather than exposed as a public
+  `HandlerFuture` alias;
 - codec: `PayloadCodec`, `DecodedPayload`, `PayloadDecoderState`, `PayloadEncoderState`,
   `DecodeStatus`, and `EncodeStatus`;
 - security: `SecurityProvider`, `SecurityProviderGeneration`, `SecurityRequirementView`,
@@ -514,8 +521,8 @@ cover these technical invariants:
   56-field planning/binding suffix, the appended `number_lexeme_bytes_max`, all
   named-profile values including `NA`, `WorkClass::HandlerSteps`, generated
   snapshots, boundaries, and three feature cells;
-- `handler-value-primitives` for the five admitted passive portable values, exact derive
-  and ownership contracts, three Core feature cells, dependency-free negative
+- `handler-value-primitives` for the four retained passive portable values,
+  exact derive and ownership contracts, three Core feature cells, dependency-free negative
   trait assertions, and handler-redacted static-registration diagnostics;
 - `logical-time-domain-correction` for extended Foundation ticks, raw counter
   extension, reset/exhaustion, source timestamp comparability, and the explicit
