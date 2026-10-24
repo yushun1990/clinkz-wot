@@ -1,3 +1,9 @@
+Status under v6.0: **restricted implementation contract**, preserving the exact
+retained Property Read/Foundation/TD value behavior only. General handler, payload,
+error, resource and lifecycle APIs are superseded by ADR-0025 and the registered
+v6 specifications. No broad interaction-family ABI or admission follows from
+this amendment. Its original evidence remains revision-scoped.
+
 # WP-100 Error and Cleanup Schema Amendment
 
 Status: Frozen

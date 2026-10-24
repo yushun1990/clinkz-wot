@@ -1,136 +1,19 @@
-# clinkz-wot Architecture Backbone
+# Architecture backbone — v6.0
 
-Status: active v5.1 authority.
+The backbone is navigation and cross-domain structure. Detailed requirements have
+one owner in [the authority map](../spec/authority.toml).
 
-[Architecture Review 08](../reviews/review-08-integrated-architecture-reassessment.md)
-is a completed non-normative reassessment of preparation, reusable programs,
-instance authority and protocol infrastructure. The sections explicitly marked
-as its proposals in the existing owners below are review material, not active
-v5.1 amendments or implementation admission. The current invariants and scoped
-accepted Host Producer contract remain binding pending deliberate migration.
+| Owner | Responsibility |
+| --- | --- |
+| [Goals/context](00-system-goals-and-context.md) | Enduring product outcomes and deployment scope |
+| [Flows](10-primary-data-flows.md) | Semantic and physical data flows, Discovery client boundary |
+| [Modules](20-module-boundaries.md) | Dependency and capability ownership |
+| [Preparation](30-compiled-plan-lifecycle.md) | Description, reusable definitions, instances and preparation lifetime |
+| [Bindings](40-protocol-binding-spi-and-deployment.md) | Native execution, composition and infrastructure |
+| [Servient](50-servient-runtime-lifecycle.md) | Publication, dispatch, logical lifetime and retirement |
 
-This directory defines the concise architecture backbone for `clinkz-wot`.
-It explains the engine from core invariants to edge integration. Detailed API
-schemas, state transitions, resource limits, and workloads must project this
-backbone without redefining it.
-
-## Reading order
-
-1. [System goals and context](00-system-goals-and-context.md)
-2. [Primary data flows](10-primary-data-flows.md)
-3. [Module boundaries](20-module-boundaries.md)
-4. [Compiled-plan lifecycle](30-compiled-plan-lifecycle.md)
-5. [Protocol Binding SPI and deployment](40-protocol-binding-spi-and-deployment.md)
-6. [Servient runtime lifecycle](50-servient-runtime-lifecycle.md)
-
-## Architectural invariants
-
-The following rules apply to every profile and implementation strategy:
-
-- W3C WoT TD 1.1 is the default compatibility target. TD 2.0 work is
-  experimental and additive.
-- TD/TM documents are lossless data contracts. They do not contain runtime
-  state, transport behavior, or compiled caches.
-- Interaction hot paths execute immutable admitted plans. They do not rescan a
-  TD, redo defaulting, or let a binding select another form.
-- Core owns protocol-neutral values and SPI semantics. It does not own a global
-  emission scheduler, a universal subscription queue, or application handles.
-- Servient owns application orchestration, plan-set lifetime, lifecycle
-  transactions, scheduling policy, and cleanup ownership.
-- A concrete Protocol Binding owns protocol syntax, I/O, correlation,
-  protocol-local flow control, and binding-local state. It does not call
-  application handlers directly or reinterpret the TD.
-- Every operation that can outlive its caller has one generation-bearing owner,
-  a bounded retained footprint, an explicit cancellation path, and a terminal
-  cleanup disposition.
-- All user, provider, codec, and binding callbacks execute outside engine locks
-  and constrained critical sections.
-- Every queue, cache, cursor set, type-erased object, and external-input buffer
-  has an admitted count and byte bound. No profile treats zero as unbounded.
-- `no_std + alloc` uses caller-driven progress and bounded storage while
-  preserving the same protocol-neutral semantics as host builds.
-- Protocol Binding code is composed through ordinary Rust crates and explicit
-  registration. Runtime code loading is not a v1 feature.
-
-## Normative hierarchy
-
-The [system goals](00-system-goals-and-context.md) separately own enduring
-product objectives. The hierarchy below resolves architectural authority;
-accepted ADRs and scoped requirement sets do not withdraw product goals or
-turn unimplemented capabilities into permanent exclusions.
-
-The authority order is:
-
-1. `ARCHITECTURE_GOVERNANCE.md` controls technical convergence and change.
-2. Accepted ADRs control decisions and explicit supersession.
-3. `docs/design.md`, this backbone, and the exact sources registered by
-   `docs/spec/v5-authority-reset.toml` own the 65 active requirements.
-4. API ownership, state, resource, requirement metadata, gate, performance,
-   and evidence artifacts own their exact machine-readable projections.
-5. Work packages own migration order, admission, and evidence, not behavior.
-
-`PLAN.md`, task sessions, pull requests, reviews, and thinking notes are
-non-normative. A conflict between normative sources is a gate
-failure, not a precedence shortcut.
-
-ADR-0018 supersedes residual decomposition and ADR-0014's D3 target DAG.
-ADR-0019 activates the reviewed v5.1 Consumer one-shot authority entry.
-`docs/requirements.csv` retains metadata and historical source pointers but no
-longer selects v5 authority. The transition manifest gives all 121 inherited
-identities one disposition and registers the ten owners of the 65 active
-definitions. An amendment is active only for an identity assigned to its exact
-path; other mentions are refinement or evidence history.
-
-The active v5.1 authority still grants no source-edit permission by itself. A
-bounded implementation tranche may proceed only through ADR-0013 admission;
-activation of the Consumer one-shot domain is not implementation admission.
-
-The first executable composition proof is
-`PROPERTY-READ-ARCHITECTURE`, defined by the registered work-package gate
-manifest. It exercises one Producer Property Read through real planner,
-binding, Servient, handler, response, generation, and cleanup boundaries in
-host and manual profiles, with an async/no-std compile projection. The gate has
-passed independent acceptance. It proves that Producer one-shot topology only;
-it does not imply that Consumer calls or long-lived interactions share the same
-ownership proof.
-
-Cross-package architecture proofs progress only when a materially different
-ownership topology cannot be falsified early enough by package-local evidence.
-For the current v1 roadmap this requires exactly two additional planned proofs:
-
-1. with the Consumer one-shot domain now active in v5.1, a narrow Consumer
-   Property Read proof covering admitted consumed-plan publication,
-   selected `OutboundRequest`, binding call ownership, response validation,
-   caller cancellation/drop/late completion, generation retention, and cleanup;
-2. after an explicit subscription/emission domain-entry authority review, one
-   minimal `ObserveProperty` proof covering a binding-owned long-lived driver or
-   static slot, repeated delivery, bounded backpressure, stop/drop/cancel,
-   Producer emission handoff, Servient drain, and terminal cleanup.
-
-These planned proofs do not reactivate any inactive requirement and receive no
-machine gate registration until their own domain-entry authority is reviewed.
-The existing WP-400 multi-owner/multi-route scheduler checkpoint remains
-package evidence, not a third architecture gate. Native collections,
-multi-target emission, Directory client progress, additional one-shot
-operations, and concrete protocol production/parity remain package or integration
-evidence unless new executable counterexamples demonstrate another distinct
-cross-package ownership boundary.
-
-[ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org)
-selects Host HTTP/1.1/HTTPS production before deferred Zenoh/pico qualification.
-Shared ownership and settlement remain portable; allocation/runtime mechanisms
-and process/reset recovery belong to their declared environments. HTTP
-production, portable mock parity and real embedded protocol/hardware maturity
-are separately evidenced claims. No package split or new global gate is selected.
-
-## Consumer TD admission refinement
-
-[ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org) supersedes the mandatory normalized typed-TD Snapshot with
-caller-owned immutable input, complete bounded TD validation, paid semantic
-lending, owned Planning output and a Servient-owned transaction. The exact
-contracts and resource interpretation revision 2 are registered in
-`docs/spec/v5-authority-reset.toml`. Strict bounded ingestion is a separate
-future capability under ADR-0020. The 65/31/121 requirement dispositions and prior
-production evidence are preserved. Implementation admission and its evidence
-boundary are owned by [the TD admission record](../work-packages/WP-100-consumer-validated-thing-admission.md)
-and [work-package index](../work-packages/index.toml).
+The retained filenames do not mandate compiled plan sets or route-scoped native
+progress. Those former universal mechanisms are superseded by ADR-0025.
+[Domain specifications](../spec/README.md) refine these boundaries. Availability
+is established by source/tests, not by this target description. Current Property
+Read representations are restricted implementations, not the general SPI.

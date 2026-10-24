@@ -1,6 +1,17 @@
 #+title: ADR-0021: Borrowed Consumer TD Admission
 #+date: 2026-10-06
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Keep borrowed immutable input, complete shared Basic/lending and source-independent output as a valid adapter. Replace eager all-bounds ordering and mandatory complete aggregate output/plan-set epochs as general architecture.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Context
 

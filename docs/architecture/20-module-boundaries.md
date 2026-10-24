@@ -1,205 +1,70 @@
-# Module Boundaries
+# Module boundaries — v6.0
 
-Status: active v5.1 authority.
-
-## Target dependency direction
+`MOD-DEPS-001`: Dependencies MUST follow this acyclic direction (`A -> B`
+means A depends on B):
 
 ```text
-Core execution        -> Foundation
-TD                    -> Core, Foundation
-Planning              -> TD, Core, Foundation
-Binding runtime       -> Core, native SDK
-Binding / prepare     -> Binding runtime, Planning, TD
-Servient execution    -> Core
-Servient / prepare    -> execution, Planning, TD
-application           -> selected capabilities, Discovery, codecs, platform
+Core                        -> Foundation
+TD                          -> Core, Foundation
+Planning                    -> TD, Core, Foundation
+Binding runtime             -> Core, selected native/platform/payload services
+Binding preparation         -> Binding runtime, Planning, TD
+Servient execution          -> Core, Foundation
+Servient preparation facade -> execution, Planning, TD
+Discovery                   -> Core, TD, selected client adapters
+Application / umbrella      -> selected capabilities and implementations
 ```
 
-`CRATE-DEPS-001`: The graph MUST be acyclic. Core MUST have no normal or optional
-TD/Planning/Discovery/concrete-Binding dependency or upward re-export. TD owns
-its document encoding of Core operation vocabulary. Planning owns compiler
-contracts, selected inputs, pure jobs and compiler erasure; TD owns the resolved
-semantic trees and paid loans they borrow. Runtime allocation, artifact storage,
-format compatibility, executor registration and result checks remain in Core.
-Native executable types MUST be defined by the Binding runtime, not Planning.
-Optional preparation MUST produce those same native types and capture/check the
-actual executor policy before effects. No concrete Binding becomes a Servient
-dependency. Only application/umbrella composition selects all capabilities.
+Core MUST NOT depend on TD, Planning, Discovery or a concrete Binding, including
+optional features and reexports. Planning/Servient MUST NOT name protocol cases.
+A Binding MUST NOT depend on Servient or retain application-dispatch authority.
+Native executable types belong to the Binding runtime; optional preparation
+produces those same types. Shared payload/schema/security execution contracts
+belong in Core, with implementations supplied as composable services. No new
+Contracts crate, universal runtime backend or Host/Static crate split is required.
 
-[ADR-0024](../ADRs/0024-preparation-and-execution-boundary.org) records the change.
-The first production extraction establishes Core -> Foundation, TD -> Core,
-Planning compiler ownership and HTTP's optional `prepare` feature. The current
-Servient package still composes preparation and execution: its Consumer retained
-output/rollback types and Producer build state name Planning. A future execution-
-only Servient feature must first separate those physical output/reclaim owners;
-a feature alias cannot remove that dependency. This limitation does not license
-an upward Core edge or claim the full target graph is already extracted.
+| Component | Owns |
+| --- | --- |
+| Foundation | Linear capacity/work, time and identity primitives |
+| TD | Documents/extensions and shared WoT interpretation |
+| Planning | Bounded selection/support and pure construction coordination |
+| Core | Semantic interaction/data/security/ownership contracts and outcomes |
+| Servient | Logical instances, current permission, publication, behavior dispatch, accepted work and cleanup |
+| Binding | Native mapping, matching/captures, correlation, I/O, distribution, infrastructure and its limits |
+| Discovery | Explicit introduction/exploration/retrieval client workflows |
+| Application/platform | Linked composition, behavior/services, deployment and environment recovery |
 
-The old `clinkz-wot-protocol-bindings` utility crate and TD-at-call-time
-ClientBinding/ServerBinding/Dispatch facade are removed. Deferred Zenoh native
-transport, session/pico adapters and their preparation helpers are also removed;
-their scoped evidence is historical Git content. The umbrella names Planning directly. Servient does not
-construct an implicit Directory or supply a legacy fallback.
+Runtime registrations need no compiler. Execution-only compositions MUST NOT
+acquire an upward preparation dependency. An optional preparation coordinator
+may own bounded normalized input and install generation-checked prepared entries;
+Core and native callbacks cannot reconstruct them from source documents.
 
-Host/static storage, std, async syntax, thread mobility, pointer atomics and
-resource/disposal policy remain distinct capabilities. No Contracts crate,
-platform-wide allocator/reactor or split runtime packages are selected.
+## Retained pre-v1 implementation baseline
 
-### Retained pre-v1 implementation baseline
+This is a target dependency graph, not a claim that every edge is already
+extracted. Current Core has only Foundation as its project dependency. TD owns
+semantic loans and Planning owns compilers. HTTP has optional `prepare`.
+Servient still unconditionally composes TD/Planning: its Property Read output,
+rollback and Producer build owners name Planning. These are restricted adapters.
+Their output/reclaim owners must move to the execution owner before claiming an
+execution-only Servient feature; a feature alias is insufficient.
 
-The legacy Core event broker, publisher sinks, queue/merge subscriptions and
-`SubscriptionAcceptance` have no current runtime consumers and are withdrawn.
-`InteractionOptions` contains selection/control only; its legacy payload field
-and constructor are removed. The old form selector, URI-template expander and
-binding-error utility surface served only the withdrawn Zenoh path and are gone.
-Current preparation uses TD semantic lending and the compiled Planning outputs.
+Current runtime availability is narrow Property Read: the Host HTTP Consumer,
+bounded loopback Producer, static/Host fixtures and manual Consumer runtime.
+The existing `HostSemanticCompiler` Copy/atomic restriction, eager all-bounds
+transaction, plan-set epochs, route-stage carriers and one-route Producer root
+are un-frozen implementation details for those adapters. They MUST NOT set
+eligibility or shape for new capability families. Replacement must remove a wrong
+abstraction, not preserve it through aliases or a compatibility facade.
 
-Historical normalized-Snapshot, source-projection, admission-model, Number/date/
-strict-ingestion and Review 08 sketch implementations are not maintained parallel
-runtimes. Production aggregate/configuration/output regressions live in
-`planning/tests/`; the independent typed-content oracle lives in `td/tests/support/`.
-The four remaining external binding/runner crates exercise current static and
-Host execution contracts, including unique ownership and failure cases. The
-working HTTP Producer/Consumer paths, static runtimes, TD/TM semantics, discovery
-and CBOR codec remain available within their documented limits.
+Anonymous TDs, empty affordance keys, extension security and no-atomic execution
+are target requirements; the current Consumer's id/key restriction, closed
+security enum and pointer-atomic runtime remain explicit gaps. TD vocabulary
+availability on a no-atomic target proves tooling compilation only. Identity/shape
+result seals are not full DataSchema validation. No general runtime, shared
+native infrastructure or new Action/Event implementation is claimed here.
 
-This withdraws obsolete implementations, not
-[Property/Action/Event, subscription, discovery, security or embedded goals](00-system-goals-and-context.md).
-The successor general SPI is still a separate design objective. Historical
-evidence records describe their named revisions; retired source paths and
-commands are reproduced from Git at those revisions, not treated as current
-validation registrations. The work-package index and retained tests own current
-check locations. Earlier acceptance does not transfer to this cleanup revision.
-
-<a id="proposed-preparationexecution-separation-review-08"></a>
-## Core internal boundaries
-
-Core separates at least:
-
-- `identity` and generation-bearing references;
-- `error`, retry, cleanup, progress, and status values;
-- `handler` context, cancellation, traits, and portable slots;
-- `security` and `codec` semantic contracts;
-- immutable `plan` values and source identity;
-- `binding/client`, `binding/server`, `binding/subscription`,
-  `binding/emission`, and registration values; and
-- local protocol-neutral dispatch semantics.
-
-Core does not use a catch-all event module for queues, merge policy, binding
-publication, and application streams.
-
-## Planning boundaries
-
-Planning receives a validated document view, immutable policy, resource budget,
-and checked preparation registration snapshot. It may call side-effect-free
-capability and compiler-extension methods. It returns values and admitted
-footprints; it never opens a route, sends a request, or retains a Servient
-handle.
-
-Logical plans share protocol-neutral work across candidates. Native programs contain protocol-specific instructions and may be shared under
-explicit ownership and accounting; instance entries retain current authority and
-varying operands. A binding compiler
-does not receive authority to reinterpret W3C defaults, choose a different
-operation, or access credentials.
-
-For the first Consumer Property Read aggregate, TD owns bounded complete typed
-inspection/Basic and an opaque `ValidatedThing<'td>` external loan. Its movable
-semantic cursor lends one paid Property/Form coordinate until acknowledged;
-current derived URI state stays TD-owned and every event loan is short. Shared
-Basic/default/security/URI meaning never moves into Planning. There is no mandatory
-complete normalized TD or unrestricted synchronous semantic view.
-
-Planning owns complete preflight, owned required facts/lookup/candidates, every
-compiler bound before start, sequential eager compilation, exact output footprint
-and a source-independent Frozen draft. It retains no loan/pointer into scratch
-across Pending and consumes input-bearing state before returning the draft.
-Concrete artifacts satisfy owned-lifetime and cleanup eligibility, beyond a generic
-wrapper's appearance. The completed exact-coordinate leaf remains narrower
-regression evidence; its raw `PlanBuildInput<&Thing>` is not an aggregate trust entry.
-
-The explicit TD `validated-thing` capability/AP boundary remains as specified by
-[the TD admission record](../work-packages/WP-100-consumer-validated-thing-admission.md).
-Ordinary typed APIs stay available without it. Strict literal JSON and shared field/
-RFC3339 decoding are a separate future TD ingestion capability under ADR-0020;
-its eventual controlled backend lends the same closed semantic program.
-
-## Servient boundaries
-
-Servient owns the transaction that composes modules. In particular it owns:
-
-- the immutable binding registration snapshot;
-- plan-set publication and retirement;
-- generation-safe produced/consumed registries;
-- callback leases and lock-free callback invocation;
-- cross-binding fairness and isolation;
-- application-visible subscription and emission facades;
-- cleanup reservation, progress, and durable in-instance status; and
-- host/static policy selection.
-
-It schedules binding SPI progress but does not implement protocol I/O.
-
-In the first Consumer slice, Servient owns the transaction and immutable checked
-policy/registration capture, child/parent capacity pairing, runtime reservation
-between preflight and materialization, independent Thing-slot/plan-set generations,
-cleanup transfer, final checks, permit/install, registration retention, leases/drain
-and reclaim. Build scratch and all input/config/compiler loans are terminal before
-final checks and permit. Actual capacity and overlap remain charged until physical
-release; an upstream source keeps its own charge. Aggregate allowances are not
-contiguous allocation observations.
-
-The private permit closes cancellation under exclusive slot mutation authority.
-It installs preallocated complete runtime material without callback, allocation,
-yield, source query or fallible work. Published owns execution output, one complete
-registration and lifecycle/resource records only. Servient does no Basic/default/
-security/URI work, semantic recount, lookup rebuild or TD retention. Legacy by-value
-consume/Arc<Thing> ergonomics cannot define the bounded borrowed facade.
-
-## Binding boundaries
-
-A concrete binding receives only compiled, selected values. It may retain
-protocol-local buffers and reactor handles only within its declared and admitted
-footprint. External-input queues use registration-declared item/byte limits and
-the shared overflow contract.
-
-A binding may use a protocol runtime internally to make I/O ready and wake an
-engine-owned call or route driver. It may not detach semantic ownership, call
-application handlers directly, or report terminal state only through logs.
-
-## Discovery boundary
-
-The engine-side Discovery crate is a client. Storage engines, Directory server
-query execution, redaction services, replication, and service SLOs belong to
-future service crates or deployments. No Servient default silently constructs a
-Directory service.
-
-## Feature boundary
-
-Host and embedded are deployment environments, not mandatory complete products.
-TD tooling, Consumer-only and Producer-only applications may construct only
-their admitted capabilities. The accepted Consumer-only registration and manual
-runtime already do this without a dummy server or Directory. Dynamic typed TD
-admission, static typed execution and any future generated-image installation
-are different capabilities; the last requires its own trust/validation evidence.
-ADR-0022 keeps this graph and shared semantic owners. Contracts extraction, a
-Host/embedded crate split and a universal allocator/reactor are not prerequisites
-of the first HTTP binding. Runtime, HAL/RTOS, network and reset mechanisms remain
-environment-specific dependencies with explicit lifetime and qualification.
-
-TD, planning values, core semantics, constrained binding contracts, and static
-Servient abstractions support `no_std + alloc`. Filesystem, sockets, threads,
-processes, dynamic libraries, and executor ownership remain in concrete host
-adapters or higher deployment layers.
-
-Operation vocabulary is available without pointer atomics. The current Core
-execution representations require pointer atomics and expose no runtime API on
-other targets; TD tooling uses the vocabulary independently. Cortex-M0 TD checks
-therefore do not establish no-atomic Core/Planning/Servient execution. The latter
-remains a separate unresolved representation task; qualified static execution
-continues to name its actual target (currently Cortex-M4 compilation evidence).
-
-Planning's `validated-thing` capability selects the borrowed Consumer aggregate
-and explicitly activates TD's matching capability. Generic compiler authoring,
-resolved semantic inputs and registration pairing do not implicitly activate
-that loan/precision surface. The default Planning product includes it; Servient
-selects it explicitly. Compiler-only Binding/probe dependencies may omit it.
-This preserves TD's independently checked capability and Serde feature boundary.
+The withdrawn event broker/subscription queues, old TD-at-call-time facade,
+Zenoh/pico implementations and admission prototypes remain in Git. Their deletion
+withdrew availability, not the enduring product goals. Historical evidence and
+commands stay tied to their original revisions.

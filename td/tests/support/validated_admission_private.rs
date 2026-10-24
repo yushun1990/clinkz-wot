@@ -152,25 +152,34 @@ fn complete_basic_first_coordinate_parity() {
 }
 #[test]
 fn whole_typed_content_matches_independent_field_oracle() {
-    let thing: Thing = serde_json::from_str(typed::CORPUS).unwrap();
-    let wire: Value = serde_json::from_str(typed::CORPUS).unwrap();
-    let context = wire["@context"].as_array().unwrap();
-    let expected = oracle::thing(&thing, context);
-    let proof = drive(&thing, &limits()).unwrap_or_else(|v| panic!("{v:?}"));
-    assert_eq!(proof.owner.counts.content, expected.document);
-    assert_eq!(proof.owner.counts.strings, expected.text);
-    assert_eq!(proof.owner.counts.extensions, expected.extension);
-    assert_eq!(proof.owner.trace.reads, expected.reads);
-    assert_eq!(proof.owner.trace.checksum, expected.checksum);
-    assert!(proof.owner.counts.schemas > 10);
-    assert!(proof.owner.counts.forms > 5);
-    assert_eq!(proof.owner.trace.entered, proof.owner.counts.nodes);
-    assert_eq!(
-        proof.owner.remaining,
-        limits().document_validation_work_units_max().unwrap()
-            - proof.owner.trace.work.iter().sum::<u64>()
-    );
-    assert!(proof.owner.trace.moves > 0);
+    for claim in [None, Some(false), Some(true)] {
+        let mut thing: Thing = serde_json::from_str(typed::CORPUS).unwrap();
+        thing
+            .actions
+            .as_mut()
+            .unwrap()
+            .get_mut("zeta")
+            .unwrap()
+            .synchronous = claim;
+        let wire: Value = serde_json::from_str(typed::CORPUS).unwrap();
+        let context = wire["@context"].as_array().unwrap();
+        let expected = oracle::thing(&thing, context);
+        let proof = drive(&thing, &limits()).unwrap_or_else(|v| panic!("{v:?}"));
+        assert_eq!(proof.owner.counts.content, expected.document);
+        assert_eq!(proof.owner.counts.strings, expected.text);
+        assert_eq!(proof.owner.counts.extensions, expected.extension);
+        assert_eq!(proof.owner.trace.reads, expected.reads);
+        assert_eq!(proof.owner.trace.checksum, expected.checksum);
+        assert!(proof.owner.counts.schemas > 10);
+        assert!(proof.owner.counts.forms > 5);
+        assert_eq!(proof.owner.trace.entered, proof.owner.counts.nodes);
+        assert_eq!(
+            proof.owner.remaining,
+            limits().document_validation_work_units_max().unwrap()
+                - proof.owner.trace.work.iter().sum::<u64>()
+        );
+        assert!(proof.owner.trace.moves > 0);
+    }
 }
 #[test]
 fn missing_id_and_serializer_failing_input_are_basic_valid() {

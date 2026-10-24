@@ -1,314 +1,40 @@
-# Protocol Binding SPI and Deployment
+# Binding execution and deployment — v6.0
 
-ADR-0023's accepted [Consumer resource migration](../spec/consumer-resource-ownership.md)
-specifies the registration/resource/disposal delta for the admitted successor.
-Existing strict registrations retain their current contracts.
+[Binding SPI](../spec/binding-spi.md) owns detailed contracts. The common boundary
+expresses WoT intent, a selected mapping, current permission, owned work and
+observable outcomes. It prescribes no common network request/session/task model.
 
-ADR-0024 adopts the preparation/runtime boundary. Planning pairs optional
-compilers with actual Core runtime registrations. Native program types belong to
-Binding runtime modules; HTTP's `prepare` facet is optional. The revised Binding
-SPI owns native progress/matching and independent Engine recipient acceptance.
-The old Host Producer Copy/atomic/per-exposure physical owner is superseded.
+Finite interactions, notification conversations, Producer exposure and Discovery
+have distinct controls. A private native driver may implement several facets;
+a registration need not supply dummy roles, compilers or servers. Third-party
+Cargo crates can supply complete conforming registrations without Engine edits
+or workspace membership. The application links and registers them at startup;
+one Servient's registration set is immutable after construction. Deployment
+owns a new-instance drain/cutover; no live code unloading is selected.
 
-## V1 integration model
+Bindings own native protocol vocabulary interpretation, resource acquisition,
+ingress, addressing/matching, captured variables, authentication integration,
+correlation, flow control, distribution and physical retirement. Native receiving
+and matching progress independently of semantic acceptance. Servient independently
+checks each logical candidate and alone chooses application behavior.
 
-A Protocol Binding is an ordinary Rust crate compiled into the application or
-firmware through Cargo. It exports constructors for a complete registration
-bundle. The application explicitly supplies that bundle to `ServientBuilder`.
+A logical role does not dictate network direction. A Producer can connect to a
+broker; a Consumer conversation can require a callback endpoint. A Thing is not
+one device, listener, connection or native subscription. Shared infrastructure
+has one physical owner and explicit compatible leases. Logical close releases
+only its participation. Final destruction waits for all actual packets/replies/
+callbacks/jobs; idle pools and reconnect are separately bounded owner policies.
+A participation clone or a poll method grants no infrastructure shutdown right.
 
-Official umbrella features are convenience composition only. A third-party
-binding can depend directly on the public engine crates and does not need to be
-added to this workspace or umbrella crate.
+There is no Engine-native universal RPC, session manager, topic matcher, message
+broadcast/copy requirement or unique-replier/aggregation protocol. Exclusive
+request endpoint ambiguity must be refused; native multicast can have independent
+recipients. The actual mapping declares response opportunities/cardinality and
+must support the promised semantic topology before acceptance.
 
-The first production direction is Host HTTP/1.1 with HTTPS before release,
-selected by [ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org).
-Zenoh/pico remain deferred optional bindings. A binding need not implement every
-role or run on every platform; capabilities and evidence must name their actual
-intersection. [WP-600](../work-packages/WP-600-protocol-bindings.md) owns the
-production sequence without adding a global gate.
-
-The Engine owns common WoT semantics, Form selection, authorization constraints,
-publication and lifecycle/resource authority. A protocol package owns its native
-mapping, native defaults, compilation, transport and vendor interpretation. Its
-Client and Server roles may be enabled independently and share private mapping
-code. A declared mapping must honor applicable explicit instructions and defaults;
-unrelated annotations do not invalidate it. Unknown values remain preserved,
-without an assertion that their behavior is implemented. Additional instances or
-implementations are explicit deployment choices; automatic same-protocol
-vocabulary scoring and a generic extension criticality classifier are not core
-features. This responsibility model follows TD 1.1's separation of context
-extensions and protocol mappings, not a W3C requirement about Rust packaging.
-
-The bounded [Host semantic compilation contract](../spec/binding-spi.md#host-semantic-consumer-compilation)
-implements the first compilation-boundary migration through actual HTTP Consumer
-execution with per-Form semantic preparation. Its input lends admitted standard
-Property/schema facts and scoped resolved extensions together; preserving only
-extensions is not sufficient for a replaceable native compiler. Its atomic, inline-artifact adapter
-does not establish general owned/resumable Consumer compiler openness. Legacy
-static compilers and runtime plan/lease records remain for their
-separately exercised ownership and selection responsibilities. They are not the
-native compiler's public semantic input. HTTP Producer routing and the public
-Consumer-to-Producer loop remain the immediate product frontier.
-
-The [replacement proposal in 0056](../../workspace/0056-target-spi-external-validation-and-cross-protocol-neutrality.md#decision-refinement-protocol-independent-compilation-and-execution)
-finds the current closed Consumer compiler and lossy compiler input structurally
-incompatible with independent third-party lowering for supported WoT semantics.
-It selects open Binding-owned compilation, minimal immutable execution entries
-and one owned endpoint driver in place of mandatory public native setup phases.
-[Planning](../spec/planning.md#proposed-replacement-of-the-compilation-boundary)
-and [Binding SPI](../spec/binding-spi.md#proposed-open-lowering-and-execution-boundary)
-record the proposed boundary. This is a candidate for independent review and
-cross-domain authority migration for the remaining endpoint/lifecycle proposals.
-The Host compilation subset is superseded by the scoped contract above. No
-endpoint-driver rewrite, broad gate closure or arbitrary-protocol conformance
-claim follows from that subset.
-
-`build.rs` is not a binding discovery or dependency mechanism. Cargo resolves
-Rust dependencies before build scripts run; recursively invoking Cargo would
-create incompatible type identities, features, targets, profiles, and lock
-ownership.
-
-## Complete registration bundle
-
-One logical bundle atomically associates:
-
-- a unique `BindingId` and binding generation;
-- a bounded configuration identity;
-- side-effect-free capabilities and compiler extension;
-- optional deterministic Producer form contribution;
-- client and/or server execution registration;
-- route, call, subscription, ingress, response, status, and cleanup footprint
-  declarations; and
-- host or constrained adapter metadata.
-
-The exact Rust schema belongs to the binding SPI specification. The
-architecture forbids independently registering compiler and execution halves
-whose ids, generations, or configuration differ.
-
-Builder validation rejects duplicate ids, incompatible capability overlap,
-missing execution halves, unsupported profile cells, and a footprint that
-cannot fit the selected resource profile. Registration order is stable for
-diagnostics but never resolves ambiguous exclusive route ownership.
-
-## Planning SPI
-
-The planning half declares coarse indexed capabilities, answers bounded
-side-effect-free support queries, and compiles only a candidate already resolved
-by the shared planner. It cannot access a Servient, handler, credential, socket,
-or executor.
-
-Execution uses generation-qualified entries; shared program content has a separate lifetime. An execution
-half rejects a plan reference from another generation or configuration.
-
-WP-200 supplies constructible compiler components before the complete bundle:
-Planning safely erases the host compiler, while an application-closed enum keeps the
-static form typed. These components are independently authorable and testable
-but have no builder installation operation. WP-300 consumes one component into
-the complete bundle and does not redefine its compiler, cursor, artifact,
-identity, footprint, or payload-access semantics.
-
-## Client execution SPI
-
-The engine supplies one owned `OutboundRequest` and an admitted call/slot owner.
-The binding supplies protocol I/O progress and a terminal WoT-facing result. It
-does not choose another form or invoke application behavior.
-
-Host calls are owned cancellation-aware objects retained by Servient across
-caller drop and late completion. Constrained calls use caller-owned typed slots
-with the same settlement semantics. Constructors are nonblocking and do not
-start a side effect until ownership and capacity have transferred.
-
-For installed v5.1 Consumer Property Read execution, the complete registration
-is also the mandatory Core-owned result-sealing boundary. It derives private
-single-use validation authority from the exact request before transfer and
-does not expose its raw client component. The Host representation returns the
-existing erased call box around a thin decorator that validates normal and
-late-returned successes. The application-static representation exposes a
-Core-private wrapper around the raw authoring slot; it validates synchronous
-ready output immediately and pending or cancellation-late output before
-terminal acknowledgement. Binding failures and cleanup classifications pass
-through unchanged.
-
-Raw `ClientBinding`, `PollClientBinding`, and `ClientRequestSlot` remain public
-authoring SPIs. They are not installed runtime projections. In particular,
-`HostBindingRegistration::client()` and the
-`StaticBindingRegistration::server_mut().client_mut()` path are absent from the
-installed Consumer surface. Producer progress remains available without
-revealing the Consumer component.
-
-Host and constrained execution share this semantic seal but not invented
-physical symmetry. A Host transfer envelope carries the complete decorated
-call, seal, and accounting. The admitted static request phase has no named
-transfer owner, so the caller-owned slot remains the manual cleanup owner;
-static result sealing introduces no transfer envelope, target, reservation, or
-executor.
-
-## Server execution SPI
-
-The v1 server SPI is engine-orchestrated and route-scoped:
-
-- prepare/readiness/activate/commit/shutdown operate on one generation-bearing
-  route and preserve guard ownership on failure;
-- successful commit returns a distinct committed-closed guard and never opens
-  request admission;
-- each `poll_accept` consumes one claim that exclusively borrows the route's
-  unique accept lease into a non-cloneable, route-scoped permit for the
-  currently serving produced generation;
-- each serving route has one poll/waker lease for inbound acceptance;
-- request, operational-error, and terminal events identify their route;
-- route terminal state does not ambiguously terminate an entire registration;
-- response delivery is bounded and retains the response opportunity on
-  pre-acceptance backpressure; and
-- readiness and cleanup are poll/step driven with explicit work, wake, deadline,
-  footprint, and transfer rules.
-
-A binding does not receive an application `Dispatch` capability. A host binding
-may run a bounded protocol reactor that wakes route/call drivers, but it cannot
-detach ownership, bypass engine admission, or call handlers directly.
-
-The complete registration declares whether preparation is externally hidden or
-visible. A visible route declares how closed-gate input is rejected,
-backpressured, or buffered within admitted ingress limits. It cannot emit an
-inbound request or report application acceptance before publication. A binding
-that cannot enforce permit-gated acceptance is rejected.
-
-The first WP-300 implementation tranche is deliberately narrower than the
-complete package. It installs one complete bundle advertising only Producer
-Property Read, exercises both immediate and externally visible readiness,
-accepts one permit-authorized request, delivers one owned response, and cleans
-up the route. Optional client, subscription, emission, collection, and
-contributor roles remain absent or use pre-side-effect default rejection. This
-keeps the installable-unit invariant intact without treating the presence of a
-forward-compatible interface as evidence for every optional behavior.
-
-The plan set, produced registry generation, and immutable serving activation
-authority are published by one Servient transition after every required route
-is committed-closed. The authority remains inside a private mutable Servient
-record and is not passed to a binding. Servient validates that record, moves
-the unique route lease into one claimed-call owner, and consumes the claim into
-a short-lived permit for one generation-checked accept call. Drain stops new
-claims before route shutdown. There is no per-route gate-opening callback and
-no binding observation of registry state.
-
-## Subscription and emission SPI
-
-A successful subscription start transfers one pull-capable driver or typed
-static slot. Its worst-case lifetime footprint is declared before start and its
-actual immutable upper bound is verified before application publication.
-
-Producer emission supplies one selected publication target at a time. Protocol
-remote fan-out stays inside the binding; cross-binding scheduling and aggregate
-results stay in Servient.
-
-## Memory, cancellation, and cleanup
-
-Every long-lived binding-owned object declares an immutable worst-case exclusive
-retained footprint for its entire lifetime, including cancellation. Poll-time
-temporary allocations and transport-library buffers are separately bounded and
-charged. A footprint cannot shrink merely because an initial poll completed.
-
-Foundation's [Host allocation/failure scope](../spec/foundation.md#host-allocation-and-environment-failure-scope)
-distinguishes admitted attributable costs from deployment baseline and process
-failure. Binding SPI owns the physical retirement barrier and original accounts.
-An OS memory limit does not implement protocol byte admission. A Host SDK need
-not provide universal recoverable allocation, but its variable state still needs
-enforced limits and a supported finite envelope. Embedded allocation/storage and
-real backend qualification are independent of the first Host production binding.
-
-External-input growth is covered by explicit per-route/per-binding/global item
-and byte limits. A binding cannot hide an unbounded pre-dispatch queue behind
-`poll_accept`.
-
-Cancellation uses an engine-created reservation carrying the complete bounded
-identity seed. A phase-specific context binds the operation and independent
-drain deadline at cancellation linearization. Start cancellation, active
-subscription stop, route readiness cancellation, response cancellation, and
-route cleanup use distinct operations. Pending cleanup is an ownership transfer
-of the complete call/guard/driver, not only a status record.
-
-## Host and constrained representations
-
-Host builds may erase concrete types behind owned trait objects. Constrained
-builds use associated state types, caller-owned slots, static tables, and
-manual progress. They share request, result, identity, cancellation, cleanup,
-and terminal semantics; they do not have to share allocation or executor
-representation.
-
-Both representations use the same permit-gated acceptance rule. A host runtime
-pins the immutable serving generation while calling outside locks. A
-constrained runtime claims a caller-owned route slot in a brief critical
-section and passes a scoped permit to manual progress afterward. The permit
-contract requires neither a shared atomic flag nor a host registry handle.
-
-## Packaging and rollout
-
-V1 rollout is process, container, or firmware replacement:
-
-1. build an application containing the new binding crate/configuration;
-2. start a new Servient instance and complete route readiness;
-3. switch traffic or application ownership;
-4. drain and explicitly shut down the old instance; and
-5. roll back by restoring the prior binary/configuration when necessary.
-
-Cargo features select compiled capabilities; they are not runtime rollout
-switches. Compiling multiple bindings into one binary allows startup selection,
-not safe code unload.
-
-The binding crate supplies build-time package metadata for its crate/source
-identity, version, engine-contract range, supported targets and profiles,
-features, configuration-schema identity, capability roles, and complete-bundle
-constructor. The `clinkz-wot` engine owns registration validation, runtime
-readiness, generation publication, drain, and cleanup. A platform package
-manager or deployment system owns trust, lockfile and feature selection,
-toolchain/target choice, build/sign/install, traffic cutover, and rollback.
-
-External configuration can avoid a rebuild only when already linked binding
-code explicitly accepts that configuration. It still creates a new Servient
-generation and never mutates a published bundle. In v1, “plugin” therefore
-means build/install/deploy composition, not dynamic-library loading or hot
-unload.
-
-## Dynamic loading decision
-
-Rust trait objects, `Arc`, `Box`, futures, wakers, enums, allocators, and panic
-behavior do not form a stable cross-dynamic-library ABI. V1 does not pass core
-Rust SPI objects across a `dylib` boundary and does not promise hot unload.
-
-A future host-only plugin design requires a separately versioned stable ABI or
-an out-of-process adapter. It must define ABI negotiation, allocation/free,
-panic isolation, capability manifests, polling/cancellation, resource limits,
-and unload only after every route, call, subscription, and cleanup owner is
-terminal. That work is not inferred from the Rust crate SPI.
-
-## Legacy execution retirement
-
-[ADR-0024](../ADRs/0024-preparation-and-execution-boundary.org) and the pre-v1
-cleanup retired the TD-at-call-time execution generation. The
-[retained implementation boundary](20-module-boundaries.md#retained-pre-v1-implementation-baseline)
-owns the exact source and API disposition. The former staged coexistence and
-handler-publication bridge are historical migration arrangements, reproduced
-from Git at their recorded revisions.
-
-Planning supplies selected, source-free execution inputs. Core and Binding
-execution do not return those inputs to legacy Form selection or dispatch.
-The retained static route SPI and native Host Producer driver keep their
-separately exercised ownership, publication, and cleanup contracts. Future
-interaction families enter through their accepted contracts; they do not require
-restoring a legacy compatibility adapter.
-
-## Extension evidence
-
-The conformance suite includes a fake third-party binding crate outside the
-workspace member list. It must compile against public crates, construct a
-complete registration, support consume/expose, and pass cancellation, cleanup,
-generation, resource, and hot-path tests without modifying engine or umbrella
-source.
-
-## Host Producer admission subset
-
-The accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
-selects the [retained endpoint contract](../spec/binding-spi.md#host-producer-endpoint-contract)
-in place of Host Property Read public phase families. Paired native compilation,
-Engine publication/dispatch, borrowed acceptance permits and retained close
-ownership are the boundary. Other roles/representations remain separate; the
-admission does not itself implement code or prove general protocol neutrality.
+Host and constrained profiles share supported semantic guarantees, using their
+own storage, synchronization and progress. Host erasure/Arc/executors and static
+associated state/caller-owned slots are choices. `std`, async syntax, allocation,
+thread mobility, atomics, dynamic preparation and backend/hardware support are
+independent axes. No protocol quota proves architectural generality; concrete
+capability evidence proves only the tested mapping/profile.

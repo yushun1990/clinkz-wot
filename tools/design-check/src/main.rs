@@ -28,7 +28,7 @@ fn run() -> Result<(), String> {
         }
         "check-authority" => {
             check_authority(&root)?;
-            println!("design check: current v5 authority valid");
+            println!("design check: current v6 authority valid");
         }
         "check-state" => {
             check_state_machines(&root)?;
@@ -64,120 +64,148 @@ fn parse_toml(root: &Path, relative: &str) -> Result<DocumentMut, String> {
 }
 
 fn check_authority(root: &Path) -> Result<(), String> {
-    let relative = "docs/spec/v5-authority-reset.toml";
-    let document = parse_toml(root, relative)?;
-    require_root_string(&document, "current_design_revision", "5.1", relative)?;
-    require_root_string(&document, "status", "active", relative)?;
-    require_root_string(
-        &document,
-        "decision",
-        "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
-        relative,
-    )?;
-    require_root_string(
-        &document,
-        "workspace_basis",
-        "workspace/0061-consumer-one-shot-domain-entry.md",
-        relative,
-    )?;
-    require_root_string(
-        &document,
-        "reviewed_candidate_commit",
-        "3b133ebfe3c870102931982d6c056595f9d44255",
-        relative,
-    )?;
+    let document = parse_toml(root, "docs/spec/authority.toml")?;
+    check_authority_document(root, &document)
+}
 
-    let classification = document
-        .get("classification")
-        .and_then(Item::as_table)
-        .ok_or_else(|| format!("{relative} has no classification table"))?;
-    let mut classified = BTreeSet::new();
-    let mut active = BTreeSet::new();
-    for (name, item) in classification {
-        let table = item
-            .as_table()
-            .ok_or_else(|| format!("classification.{name} is not a table"))?;
-        let status = table_string(table, "authority_status", &format!("classification.{name}"))?;
-        let requirements = table_strings(table, "requirements", &format!("classification.{name}"))?;
-        let expected = table_integer(table, "expected_count", &format!("classification.{name}"))?;
-        if expected != requirements.len() as i64 {
-            return Err(format!(
-                "classification.{name} expects {expected} requirements but declares {}",
-                requirements.len()
-            ));
+fn check_authority_document(root: &Path, document: &DocumentMut) -> Result<(), String> {
+    let relative = "docs/spec/authority.toml";
+    require_root_string(document, "current_design_revision", "6.0", relative)?;
+    require_root_string(document, "status", "active", relative)?;
+    require_root_string(
+        document,
+        "implementation_acceptance",
+        "not-transferred",
+        relative,
+    )?;
+    require_root_string(
+        document,
+        "activation",
+        "atomic-integration-of-independently-reviewed-authority-tree",
+        relative,
+    )?;
+    require_file(
+        root,
+        &root_string(document, "decision", relative)?,
+        "authority decision",
+    )?;
+    require_file(
+        root,
+        &root_string(document, "workspace_basis", relative)?,
+        "authority investigation",
+    )?;
+    let predecessor = parse_toml(root, "docs/spec/v5-authority-reset.toml")?;
+    require_root_string(&predecessor, "status", "superseded", "predecessor")?;
+    require_root_string(&predecessor, "successor", relative, "predecessor")?;
+    let metadata_text =
+        fs::read_to_string(root.join("docs/requirements.csv")).map_err(|e| e.to_string())?;
+    let mut metadata = BTreeMap::new();
+    for line in metadata_text.lines().skip(1) {
+        let fields: Vec<_> = line.split(',').collect();
+        if fields.len() != 11 || fields.iter().any(|f| f.is_empty()) {
+            return Err("requirements metadata must have 11 nonempty columns".to_owned());
         }
-        for requirement in requirements {
-            if !classified.insert(requirement.clone()) {
-                return Err(format!(
-                    "requirement {requirement:?} is classified more than once"
-                ));
-            }
-            if status == "active" {
-                active.insert(requirement);
-            }
+        if metadata.insert(fields[0].to_owned(), fields).is_some() {
+            return Err("duplicate requirement metadata".to_owned());
         }
     }
-
-    let expected_classified = root_integer(&document, "classified_requirement_count", relative)?;
-    let expected_active = root_integer(&document, "active_requirement_count", relative)?;
-    if classified.len() as i64 != expected_classified || active.len() as i64 != expected_active {
-        return Err(format!(
-            "authority counts differ: classified={} active={}, expected classified={expected_classified} active={expected_active}",
-            classified.len(),
-            active.len()
-        ));
-    }
-    let indexed = load_requirement_ids(root)?;
-    if indexed != classified {
-        return Err(set_difference(
-            "authority classification",
-            &classified,
-            "requirements index",
-            &indexed,
-        ));
-    }
-
     let sources = document
         .get("active_source")
         .and_then(Item::as_array_of_tables)
-        .ok_or_else(|| format!("{relative} has no active_source records"))?;
-    let mut sourced = BTreeSet::new();
+        .ok_or_else(|| "authority has no active sources".to_owned())?;
+    let mut active = BTreeSet::new();
+    let mut paths = BTreeSet::new();
     for source in sources {
         let path = table_string(source, "path", "active_source")?;
-        validate_relative_path(&path, "active_source path")?;
-        let source_text = fs::read_to_string(root.join(&path))
-            .map_err(|error| format!("cannot read active authority source {path}: {error}"))?;
-        let requirements = table_strings(source, "requirements", &format!("active_source {path}"))?;
-        let expected = table_integer(source, "expected_count", &format!("active_source {path}"))?;
-        if expected != requirements.len() as i64 {
-            return Err(format!(
-                "active_source {path} has a mismatched expected_count"
-            ));
+        require_file(root, &path, "active source")?;
+        if !paths.insert(path.clone()) {
+            return Err(format!("duplicate active source {path}"));
         }
-        for requirement in requirements {
-            if !active.contains(&requirement) {
-                return Err(format!(
-                    "active_source {path} owns inactive requirement {requirement}"
-                ));
+        let text = fs::read_to_string(root.join(&path)).map_err(|e| e.to_string())?;
+        let requirements = table_strings(source, "requirements", &path)?;
+        if requirements.is_empty() {
+            return Err(format!("empty active source {path}"));
+        }
+        for id in requirements {
+            if !active.insert(id.clone()) {
+                return Err(format!("multiple active owners for {id}"));
             }
-            if !sourced.insert(requirement.clone()) {
-                return Err(format!(
-                    "active requirement {requirement} has multiple sources"
-                ));
+            let marker = format!("`{id}`:");
+            if text.matches(&marker).count() != 1 {
+                return Err(format!("{path} must define {id} exactly once"));
             }
-            let marker = format!("`{requirement}`:");
-            if !source_text.contains(&marker) {
-                return Err(format!("active source {path} does not define {marker}"));
+            let row = metadata
+                .get(&id)
+                .ok_or_else(|| format!("unindexed active requirement {id}"))?;
+            if row[8] != path || row[9] != "active" || row[10] != "-" {
+                return Err(format!("active source/metadata mismatch for {id}"));
             }
         }
     }
-    if sourced != active {
-        return Err(set_difference(
-            "active classification",
-            &active,
-            "active sources",
-            &sourced,
-        ));
+    if active.len() as i64 != root_integer(document, "active_requirement_count", relative)? {
+        return Err("active requirement count differs from source map".to_owned());
+    }
+    if active != load_requirement_ids(root)? {
+        return Err("active metadata differs from source map".to_owned());
+    }
+    let records = document
+        .get("prior_requirement")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "authority has no predecessor dispositions".to_owned())?;
+    let mut prior = BTreeSet::new();
+    for record in records {
+        let id = table_string(record, "id", "prior_requirement")?;
+        if !prior.insert(id.clone()) {
+            return Err(format!("duplicate prior disposition {id}"));
+        }
+        let disposition = table_string(record, "disposition", &id)?;
+        let successors = table_strings(record, "successors", &id)?;
+        if table_string(record, "reason", &id)?.is_empty()
+            || table_string(record, "prior_status", &id)?.is_empty()
+        {
+            return Err(format!("missing prior disposition rationale {id}"));
+        }
+        let row = metadata
+            .get(&id)
+            .ok_or_else(|| format!("unindexed prior identity {id}"))?;
+        match disposition.as_str() {
+            "reaffirmed" if active.contains(&id) && successors == [id.clone()] => {}
+            "superseded"
+                if !active.contains(&id) && !successors.is_empty() && row[9] == "superseded" => {}
+            "retired" if !active.contains(&id) && successors.is_empty() && row[9] == "retired" => {}
+            _ => return Err(format!("invalid predecessor disposition for {id}")),
+        }
+        if successors.iter().any(|r| !active.contains(r)) {
+            return Err(format!("inactive successor for {id}"));
+        }
+        if disposition != "reaffirmed"
+            && row[10]
+                != if successors.is_empty() {
+                    "-".to_owned()
+                } else {
+                    successors.join("|")
+                }
+        {
+            return Err(format!("successor metadata differs for {id}"));
+        }
+    }
+    if prior.len() as i64 != root_integer(document, "predecessor_requirement_count", relative)? {
+        return Err("incomplete predecessor dispositions".to_owned());
+    }
+    let indexed: BTreeSet<_> = metadata.keys().cloned().collect();
+    if indexed != prior.union(&active).cloned().collect() {
+        return Err("unclassified requirement metadata".to_owned());
+    }
+    for scoped in document
+        .get("scoped_source")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "authority has no scoped source dispositions".to_owned())?
+    {
+        let path = table_string(scoped, "path", "scoped_source")?;
+        validate_relative_path(&path, "scoped source")?;
+        if !root.join(&path).exists() || table_string(scoped, "scope", &path)?.is_empty() {
+            return Err(format!("invalid scoped source {path}"));
+        }
     }
     Ok(())
 }
@@ -194,7 +222,11 @@ fn load_requirement_ids(root: &Path) -> Result<BTreeSet<String>, String> {
     }
     let mut requirements = BTreeSet::new();
     for line in lines.filter(|line| !line.trim().is_empty()) {
-        let field = line.split(',').next().unwrap_or_default();
+        let fields: Vec<_> = line.split(',').collect();
+        if fields.get(9) != Some(&"active") {
+            continue;
+        }
+        let field = fields[0];
         for expression in field.split('|') {
             for id in expand_requirement(expression)? {
                 if !requirements.insert(id.clone()) {
@@ -234,10 +266,10 @@ fn expand_requirement(expression: &str) -> Result<Vec<String>, String> {
 fn check_work_packages(root: &Path) -> Result<(), String> {
     let relative = "docs/work-packages/index.toml";
     let document = parse_toml(root, relative)?;
-    if root_integer(&document, "schema_version", relative)? != 6 {
-        return Err(format!("{relative} is not work-package schema version 6"));
+    if root_integer(&document, "schema_version", relative)? != 7 {
+        return Err(format!("{relative} is not work-package schema version 7"));
     }
-    require_root_string(&document, "design_revision", "5.1", relative)?;
+    require_root_string(&document, "design_revision", "6.0", relative)?;
     let packages = document
         .get("package")
         .and_then(Item::as_array_of_tables)
@@ -277,283 +309,56 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
         ));
     }
     check_dag(&graph, "work-package")?;
-    check_tranche_registry(root, &document, &graph)?;
-
-    let gate_path = root_string(&document, "integration_gate_manifest", relative)?;
-    let gate = parse_toml(root, &gate_path)?;
-    if root_integer(&gate, "schema_version", &gate_path)? != 3 {
-        return Err(format!(
-            "{gate_path} is not aggregate gate schema version 3"
-        ));
-    }
-    require_root_string(&gate, "design_revision", "5.0", &gate_path)?;
-    require_root_string(&gate, "id", "PROPERTY-READ-ARCHITECTURE", &gate_path)?;
-    let gate_document = root_string(&gate, "document", &gate_path)?;
-    require_file(root, &gate_document, "Property Read gate document")?;
-    let status = root_string(&gate, "status", &gate_path)?;
-    if !matches!(status.as_str(), "ready" | "passed") {
-        return Err(format!("Property Read gate has invalid status {status:?}"));
-    }
-    let fixture_roots: BTreeSet<String> = item_strings(
-        gate.get("fixture_roots")
-            .ok_or_else(|| format!("{gate_path} has no fixture_roots"))?,
-        &format!("{gate_path}.fixture_roots"),
-    )?
-    .into_iter()
-    .collect();
-    let expected_fixture_roots = BTreeSet::from([
-        "tools/architecture-fixtures/property-read-binding".to_owned(),
-        "tools/architecture-fixtures/property-read-runner".to_owned(),
-    ]);
-    if fixture_roots != expected_fixture_roots {
-        return Err(set_difference(
-            "Property Read fixture roots",
-            &expected_fixture_roots,
-            "registered fixture roots",
-            &fixture_roots,
-        ));
-    }
-    for fixture_root in &fixture_roots {
-        require_file(
-            root,
-            &format!("{fixture_root}/Cargo.toml"),
-            "Property Read fixture root",
-        )?;
-    }
-    let aggregate_evidence = item_strings(
-        gate.get("evidence")
-            .ok_or_else(|| format!("{gate_path} has no aggregate evidence"))?,
-        &format!("{gate_path}.evidence"),
-    )?;
-    if status == "passed" && aggregate_evidence.is_empty() {
-        return Err("passed Property Read gate has no aggregate evidence".to_owned());
-    }
-    for evidence in aggregate_evidence {
-        require_file(root, &evidence, "Property Read aggregate evidence")?;
-    }
-    let test_commands = item_strings(
-        gate.get("test_commands")
-            .ok_or_else(|| format!("{gate_path} has no test_commands"))?,
-        &format!("{gate_path}.test_commands"),
-    )?;
-    for required in [
-        "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features",
-        "cargo test --locked -p clinkz-wot-property-read-binding-fixture",
-        "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async",
-        "cargo test --locked -p clinkz-wot-property-read-architecture-runner",
-    ] {
-        if !test_commands.iter().any(|command| command == required) {
-            return Err(format!(
-                "{gate_path} does not register required aggregate command {required:?}"
-            ));
-        }
-    }
-    let dependencies = gate
-        .get("dependency")
-        .and_then(Item::as_array_of_tables)
-        .ok_or_else(|| format!("{gate_path} has no dependency records"))?;
-    let mut ids = BTreeSet::new();
-    for dependency in dependencies {
-        let id = table_string(dependency, "id", "Property Read dependency")?;
-        if !ids.insert(id.clone()) {
-            return Err(format!("duplicate Property Read dependency {id}"));
-        }
-        let owner = table_string(dependency, "owner_package", &id)?;
-        if !graph.contains_key(&owner) {
-            return Err(format!(
-                "Property Read dependency {id} has unknown owner {owner}"
-            ));
-        }
-        if table_string(dependency, "status", &id)? != "covered" {
-            return Err(format!("Property Read dependency {id} is not covered"));
-        }
-        for evidence in table_strings(dependency, "evidence", &id)? {
-            require_file(
-                root,
-                &evidence,
-                &format!("Property Read dependency {id} evidence"),
-            )?;
-        }
-    }
-    if ids.is_empty() {
-        return Err("Property Read gate has no current technical dependencies".to_owned());
-    }
-    let consumer_gate_path =
-        root_string(&document, "consumer_integration_gate_manifest", relative)?;
-    require_file(
-        root,
-        &consumer_gate_path,
-        "Consumer Property Read gate manifest",
-    )?;
-    let consumer_gate = parse_toml(root, &consumer_gate_path)?;
-    check_consumer_architecture_gate(root, &document, &consumer_gate, &consumer_gate_path)
-}
-
-fn check_consumer_architecture_gate(
-    root: &Path,
-    packages: &DocumentMut,
-    gate: &DocumentMut,
-    gate_path: &str,
-) -> Result<(), String> {
-    if root_integer(gate, "schema_version", gate_path)? != 3 {
-        return Err(format!(
-            "{gate_path} is not aggregate gate schema version 3"
-        ));
-    }
-    require_root_string(gate, "design_revision", "5.1", gate_path)?;
-    require_root_string(gate, "id", "CONSUMER-PROPERTY-READ-ARCHITECTURE", gate_path)?;
-    let status = root_string(gate, "status", gate_path)?;
-    if !matches!(status.as_str(), "ready" | "passed") {
-        return Err(format!("{gate_path} has invalid status {status:?}"));
-    }
-    require_file(
-        root,
-        &root_string(gate, "document", gate_path)?,
-        "Consumer gate document",
-    )?;
-    let strings = |field: &str| {
-        item_strings(
-            gate.get(field)
-                .ok_or_else(|| format!("{gate_path} has no {field}"))?,
-            &format!("{gate_path}.{field}"),
-        )
-    };
-    let roots: BTreeSet<_> = strings("fixture_roots")?.into_iter().collect();
-    let expected_roots = BTreeSet::from([
-        "tools/architecture-fixtures/consumer-property-read-binding".to_owned(),
-        "tools/architecture-fixtures/consumer-property-read-runner".to_owned(),
-    ]);
-    if roots != expected_roots {
-        return Err(set_difference(
-            "Consumer fixture roots",
-            &expected_roots,
-            "registered roots",
-            &roots,
-        ));
-    }
-    for fixture in &roots {
-        require_file(
-            root,
-            &format!("{fixture}/Cargo.toml"),
-            "Consumer fixture root",
-        )?;
-    }
-    let evidence = strings("evidence")?;
-    if evidence.is_empty() {
-        return Err(format!("{gate_path} has no aggregate evidence"));
-    }
-    let mut source = String::new();
-    for path in &evidence {
-        require_file(root, path, "Consumer aggregate evidence")?;
-        if path.ends_with(".rs") {
-            source.push_str(
-                &fs::read_to_string(root.join(path)).map_err(|e| format!("{path}: {e}"))?,
-            );
-            source.push('\n');
-        }
-    }
-    for fixture in &roots {
-        if !evidence.contains(&format!("{fixture}/src/lib.rs")) {
-            return Err(format!(
-                "{gate_path} omits aggregate fixture source {fixture}"
-            ));
-        }
-    }
-    let cases = strings("evidence_cases")?;
-    let mut seen = BTreeSet::new();
-    for case in &cases {
-        if !seen.insert(case) || !source.contains(&format!("fn {case}(")) {
-            return Err(format!(
-                "{gate_path} has duplicate or unresolved evidence case {case}"
-            ));
-        }
-    }
-    if cases.is_empty() {
-        return Err(format!("{gate_path} has no executable evidence cases"));
-    }
-    let commands = strings("test_commands")?;
-    for required in [
-        "cargo test --locked --offline -p clinkz-wot-servient --test consumer_property_read --lib consumer_property_read -- --test-threads=1",
-        "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --test consumer_property_read -- --test-threads=1",
-        "cargo test --locked --offline -p clinkz-wot-servient --no-default-features --features async --test consumer_property_read -- --test-threads=1",
-        "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner",
-        "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features",
-        "cargo test --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async",
-        "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --target thumbv7em-none-eabihf",
-        "cargo check --locked --offline -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async --target thumbv7em-none-eabihf",
-    ] {
-        if !commands.iter().any(|command| command == required) {
-            return Err(format!(
-                "{gate_path} omits required aggregate command {required:?}"
-            ));
-        }
+    if document.get("tranche").is_some() {
+        check_tranche_registry(root, &document, &graph)?;
     }
 
-    let tranches: BTreeMap<_, _> = packages
-        .get("tranche")
+    // Completed v5 tranches/gates are historical provenance, not current dependencies.
+    let historical = document
+        .get("historical_tranche")
         .and_then(Item::as_array_of_tables)
-        .ok_or_else(|| "work-package index has no tranches".to_owned())?
-        .iter()
-        .map(|t| Ok((table_string(t, "id", "tranche")?, t)))
-        .collect::<Result<_, String>>()?;
-    let mut closure = BTreeSet::new();
-    let mut pending = vec!["WP-400-CONSUMER-PROPERTY-READ-RUNTIME".to_owned()];
-    while let Some(id) = pending.pop() {
-        if !closure.insert(id.clone()) {
-            continue;
-        }
-        let tranche = tranches
-            .get(&id)
-            .ok_or_else(|| format!("unknown Consumer prerequisite {id}"))?;
-        pending.extend(table_strings(tranche, "depends_on", &id)?);
-    }
-    let dependencies = gate
-        .get("dependency")
-        .and_then(Item::as_array_of_tables)
-        .ok_or_else(|| format!("{gate_path} has no dependency records"))?;
-    let mut ids = BTreeSet::new();
-    for dependency in dependencies {
-        let id = table_string(dependency, "id", "Consumer dependency")?;
-        if !ids.insert(id.clone()) {
-            return Err(format!("duplicate Consumer dependency {id}"));
-        }
-        let tranche = tranches
-            .get(&id)
-            .ok_or_else(|| format!("unknown Consumer prerequisite {id}"))?;
-        if table_string(dependency, "status", &id)? != "covered"
-            || table_string(dependency, "owner_package", &id)?
-                != table_string(tranche, "work_package", &id)?
-            || table_string(tranche, "status", &id)? != "complete"
-            || table_string(tranche, "admission_status", &id)? != "admitted"
-            || table_string(tranche, "impact_status", &id)? != "current"
+        .ok_or_else(|| "missing historical tranche dispositions".to_owned())?;
+    let mut historical_graph = BTreeMap::new();
+    for record in historical {
+        let id = table_string(record, "id", "historical tranche")?;
+        if table_string(record, "successor_admission", &id)? != "none"
+            || table_string(record, "v6_disposition", &id)?.is_empty()
         {
             return Err(format!(
-                "Consumer prerequisite {id} is not covered/complete/admitted/current at its registered owner"
+                "historical tranche {id} cannot grant successor admission"
             ));
         }
-        let evidence_path = table_string(tranche, "completion_evidence_path", &id)?;
-        let paths = table_strings(dependency, "evidence", &id)?;
-        if !paths.contains(&evidence_path) {
-            return Err(format!(
-                "Consumer prerequisite {id} omits its registered completion evidence"
-            ));
+        if historical_graph
+            .insert(id.clone(), table_strings(record, "depends_on", &id)?)
+            .is_some()
+        {
+            return Err(format!("duplicate historical tranche {id}"));
         }
-        for path in paths {
-            require_file(root, &path, "Consumer prerequisite evidence")?;
+        let owner = table_string(record, "work_package", &id)?;
+        if !graph.contains_key(&owner) {
+            return Err(format!("unknown historical package {owner}"));
         }
-        let completion = parse_toml(root, &evidence_path)?;
-        require_root_string(&completion, "tranche", &id, &evidence_path)?;
-        require_root_string(&completion, "status", "passed", &evidence_path)?;
+        require_file(
+            root,
+            &table_string(record, "completion_evidence_path", &id)?,
+            "historical evidence",
+        )?;
     }
-    if ids != closure {
-        return Err(set_difference(
-            "Consumer Runtime prerequisite closure",
-            &closure,
-            "registered dependencies",
-            &ids,
-        ));
+    check_dag(&historical_graph, "historical tranche")?;
+    for field in [
+        "historical_producer_gate_manifest",
+        "historical_consumer_gate_manifest",
+    ] {
+        let path = root_string(&document, field, relative)?;
+        let gate = parse_toml(root, &path)?;
+        require_root_string(
+            &gate,
+            "authority_scope",
+            "historical-property-read-only",
+            &path,
+        )?;
+        require_root_string(&gate, "successor_acceptance", "not-transferred", &path)?;
     }
-    // Structural consistency is not executable success or independent acceptance.
     Ok(())
 }
 
@@ -1004,13 +809,6 @@ fn table_string(table: &Table, field: &str, context: &str) -> Result<String, Str
         .ok_or_else(|| format!("{context} has no string {field}"))
 }
 
-fn table_integer(table: &Table, field: &str, context: &str) -> Result<i64, String> {
-    table
-        .get(field)
-        .and_then(Item::as_integer)
-        .ok_or_else(|| format!("{context} has no integer {field}"))
-}
-
 fn table_strings(table: &Table, field: &str, context: &str) -> Result<Vec<String>, String> {
     let item = table
         .get(field)
@@ -1049,112 +847,65 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        check_consumer_architecture_gate, check_tranche_dependency_graph, parse_toml,
-        repository_root, valid_tranche_impact_state,
+        check_tranche_dependency_graph, parse_toml, repository_root, valid_tranche_impact_state,
     };
 
-    const CONSUMER_GATE: &str = "docs/work-packages/consumer-property-read-architecture-gate.toml";
-
     #[test]
-    fn consumer_gate_rejects_incomplete_or_non_current_prerequisites() {
+    fn successor_rejects_duplicate_owner_and_missing_predecessor_disposition() {
         let root = repository_root().unwrap();
-        let packages = parse_toml(&root, "docs/work-packages/index.toml").unwrap();
-        let gate = parse_toml(&root, CONSUMER_GATE).unwrap();
-        check_consumer_architecture_gate(&root, &packages, &gate, CONSUMER_GATE).unwrap();
-
-        for (field, state) in [
-            ("status", "planned"),
-            ("admission_status", "candidate"),
-            ("impact_status", "review-required"),
-        ] {
-            let mut changed = packages.clone();
-            // A transitive input must be current too, not only the Runtime row.
-            let tranche = changed["tranche"]
-                .as_array_of_tables_mut()
-                .unwrap()
-                .iter_mut()
-                .find(|t| t["id"].as_str() == Some("WP-100-CONSUMER-CALL-VALUES-VALIDATOR"))
-                .unwrap();
-            tranche[field] = toml_edit::value(state);
-            let error = check_consumer_architecture_gate(&root, &changed, &gate, CONSUMER_GATE)
-                .expect_err("a non-current prerequisite cannot be covered by a ready gate");
-            assert!(error.contains("WP-100-CONSUMER-CALL-VALUES-VALIDATOR"));
-        }
-    }
-
-    #[test]
-    fn consumer_gate_requires_exact_dependency_closure_owner_and_evidence() {
-        let root = repository_root().unwrap();
-        let packages = parse_toml(&root, "docs/work-packages/index.toml").unwrap();
-        let gate = parse_toml(&root, CONSUMER_GATE).unwrap();
-        let mut missing = gate.clone();
-        missing["dependency"]
+        let authority = parse_toml(&root, "docs/spec/authority.toml").unwrap();
+        super::check_authority_document(&root, &authority).unwrap();
+        let mut duplicate = authority.clone();
+        let source = duplicate["active_source"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap()
+            .clone();
+        duplicate["active_source"]
+            .as_array_of_tables_mut()
+            .unwrap()
+            .push(source);
+        assert!(
+            super::check_authority_document(&root, &duplicate)
+                .unwrap_err()
+                .contains("duplicate active source")
+        );
+        let mut missing = authority.clone();
+        missing["prior_requirement"]
             .as_array_of_tables_mut()
             .unwrap()
             .remove(0);
         assert!(
-            check_consumer_architecture_gate(&root, &packages, &missing, CONSUMER_GATE)
+            super::check_authority_document(&root, &missing)
                 .unwrap_err()
-                .contains("prerequisite closure")
+                .contains("predecessor dispositions")
         );
-        for field in ["id", "owner_package", "status", "evidence"] {
-            let mut changed = gate.clone();
-            let dependency = changed["dependency"]
-                .as_array_of_tables_mut()
-                .unwrap()
-                .iter_mut()
-                .next()
-                .unwrap();
-            dependency[field] = if field == "evidence" {
-                toml_edit::value(toml_edit::Array::new())
-            } else {
-                toml_edit::value("wrong")
-            };
-            assert!(
-                check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
-                    .is_err(),
-                "invalid dependency {field} was accepted"
-            );
-        }
     }
 
     #[test]
-    fn consumer_gate_rejects_missing_aggregate_cells_and_unresolved_cases() {
+    fn successor_rejects_inactive_replacement_and_inherited_acceptance() {
         let root = repository_root().unwrap();
-        let packages = parse_toml(&root, "docs/work-packages/index.toml").unwrap();
-        let gate = parse_toml(&root, CONSUMER_GATE).unwrap();
-        for field in [
-            "fixture_roots",
-            "evidence",
-            "evidence_cases",
-            "test_commands",
-        ] {
-            let mut changed = gate.clone();
-            changed[field] = toml_edit::value(toml_edit::Array::new());
-            assert!(
-                check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
-                    .is_err(),
-                "empty aggregate {field} was accepted"
-            );
-        }
-        let mut changed = gate.clone();
-        changed["evidence_cases"]
-            .as_array_mut()
+        let authority = parse_toml(&root, "docs/spec/authority.toml").unwrap();
+        let mut invalid = authority.clone();
+        invalid["prior_requirement"]
+            .as_array_of_tables_mut()
             .unwrap()
-            .push("unimplemented_gate_case");
+            .iter_mut()
+            .next()
+            .unwrap()["successors"] = toml_edit::value({
+            let mut a = toml_edit::Array::new();
+            a.push("PLAN-SET-001");
+            a
+        });
+        assert!(super::check_authority_document(&root, &invalid).is_err());
+        let mut inherited = authority.clone();
+        inherited["implementation_acceptance"] = toml_edit::value("passed-by-inheritance");
         assert!(
-            check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
+            super::check_authority_document(&root, &inherited)
                 .unwrap_err()
-                .contains("unresolved evidence case")
-        );
-        // A successful Host/static test list alone cannot omit the ARM projection.
-        let mut changed = gate.clone();
-        let commands = changed["test_commands"].as_array_mut().unwrap();
-        commands.remove(commands.len() - 1);
-        assert!(
-            check_consumer_architecture_gate(&root, &packages, &changed, CONSUMER_GATE)
-                .unwrap_err()
-                .contains("required aggregate command")
+                .contains("implementation_acceptance")
         );
     }
 

@@ -1,6 +1,17 @@
 #+title: ADR-0010: Engine-Orchestrated Server Route Lifecycle
 #+date: 2026-07-19
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Replace prepare/readiness/activate/commit public route stages and per-route drivers as general ABI. Keep retained partial setup, closed semantic ingress and funded retirement.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Context
 

@@ -29,8 +29,8 @@ failed implementation attempt is not such a decision.
   bindings; the current architecture assigns resolution to TD.
 - Clinkz-specific metadata uses a Clinkz JSON-LD namespace and never masquerades
   as W3C vocabulary.
-- TD 2.0 preview additions do not change TD 1.1 behavior when absent; the current
-  Cargo gate is `td2-preview`.
+- Future TD 2.0 additions require an explicit reviewed capability/revision.
+  The obsolete `td2-preview` gate for TD 1.1 Action `synchronous` is removed.
 
 ## Goals
 
@@ -73,12 +73,11 @@ device implements every operation, security scheme or deployment combination.
 
 ## Architectural decisions serving the goals
 
-Immutable precompiled plans, generation-bearing handles, explicit exposure/
-destroy transactions, pull-capable subscription drivers and native collection
-lowering are current architectural means. Their accepted contracts remain
-binding until deliberately changed; they are not permanent product requirements
-for those Rust representations or mechanisms. An alternative must preserve the
-product outcomes and undergo the existing architecture change process.
+ADR-0025 selects a semantic Engine with separate execution capabilities over
+Binding-owned native runtimes. Owned prepared data, independent instance
+permission, truthful publication and retained cancellation/cleanup are the
+means selected now. Eager plan sets, a plan-set epoch per Thing and route-scoped
+native progress are no longer universal architecture requirements.
 
 Likewise, executable evidence before tranche admission is an implementation
 policy owned by [project governance](../../PROJECT_GOVERNANCE.md), not an
@@ -151,19 +150,10 @@ or security as whatever the current implementation accepts.
 ## System context
 
 ```text
-Application
-    |
-    | application-facing API
-    v
-Servient ------------------------------------------------ Discovery client
-    |                         plan snapshots                  |
-    | lifecycle, dispatch, scheduling, cleanup                | Directory/API
-    v                                                         v
-Protocol-neutral core <------ shared planning ------> TD/TM documents
-    |
-    | planning extension + execution SPI
-    v
-Concrete Protocol Binding ------ protocol I/O ------ remote Things/peers
+TD semantic interpretation -> optional Planning/preparation -> owned mapping
+Application <-> Servient admission/dispatch <-> Binding native runtimes <-> peers
+                     Core semantic / data / security contracts
+Discovery client -> bounded retrieval -> TD admission
 ```
 
 The application chooses which concrete binding crates are linked into its
@@ -173,23 +163,26 @@ strings.
 
 ## Execution profiles
 
-The architecture separates three independent axes:
+The architecture separates independent axes:
 
 - compilation: `std` or `no_std + alloc`;
 - progress: host-erased integration or caller-driven poll/step; and
 - resources: dynamically configured bounded capacities or application-static
-  storage.
+  storage;
+- allocation, thread mobility and pointer atomics; and
+- dynamic preparation, selected capabilities and native backend/hardware support.
 
 A gateway may use either progress model. `async` describes an API syntax
 surface and never implies Tokio or another executor. Concrete host bindings may
-integrate a reactor internally, but their observable work remains owned through
-the engine SPI and its bounded records.
+integrate a reactor internally, with an explicit physical owner, bounded ingress and retained cleanup. Logical
+acceptance remains independently Engine-owned.
 
 ## Deployment units
 
 - A Rust crate is the compile-time extension unit.
 - A complete binding registration is the startup composition unit.
-- A Servient instance is the runtime ownership and ordinary error-containment unit.
+- A Servient instance is a logical authority and accepted-work ownership unit;
+  compatible physical services may be shared through explicit leases.
 - A process, container, or firmware image is the v1 rollout unit.
 
 A Servient is not a memory-protection or process-crash boundary. Host process

@@ -1,6 +1,9 @@
 # General SPI architecture: WoT semantics, execution authority and native resources
 
-Status: DISCUSSING — recommended architecture, awaiting Owner decision.
+Status: MIGRATED — Owner accepted the target direction on 2026-10-24; successor
+contracts are owned by [ADR-0025](../docs/ADRs/0025-semantic-engine-and-binding-runtimes.org)
+and [the v6.0 authority map](../docs/spec/authority.toml). The proposal below is
+preserved reasoning, not active authority or implementation acceptance.
 
 This proposal recommends the architecture for a protocol-independent Rust WoT
 Engine. It replaces this topic's earlier broad capability/package proposals;

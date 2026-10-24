@@ -1,6 +1,17 @@
 #+title: ADR-0022: First Production Binding and Runtime Environments
 #+date: 2026-10-15
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Keep Host HTTP/HTTPS first-production direction, optional Zenoh/pico and separate hardware qualification. No universal SDK choice, allocation recovery or transitive Engine maxima follows.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Subsequent ownership reassessment
 

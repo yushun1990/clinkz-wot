@@ -2,6 +2,12 @@
 #+date: 2026-10-01
 #+status: Accepted
 
+* v6.0 scope amendment
+
+The explicit strict-ingestion literal JSON/duplicate/null/Number and shared TD field/RFC3339 semantics remain a separate supported-input contract. Ordinary Serde remains distinct. Mandatory first-Consumer Snapshot/decoder coupling is superseded; strict ingestion grants no execution authority and is not required for every typed preparation. Its unimplemented backend requires its own scoped evidence. WOT-SEM-001 and WOT-EXT-001 own general shared meaning.
+
+* Preserved rationale and scoped contract
+
 * Context
 
 The planned WP-100 Consumer =ValidatedThing= has two inputs: an already typed

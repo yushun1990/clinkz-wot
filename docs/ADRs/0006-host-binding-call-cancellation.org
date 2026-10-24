@@ -1,6 +1,17 @@
 #+title: ADR-0006: Host Binding Call Cancellation and Late-Result Ownership
 #+date: 2026-07-16
-#+status: Accepted
+#+status: Superseded
+
+* v6.0 disposition
+
+Superseded by [[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]].
+Keep first cause, owned late values and complete acknowledged cleanup transfer. Replace universal Host call/route-successor schemas with capability-specific owned work.
+
+The remainder is preserved historical rationale and its original revision-scoped
+contract. It is not a second active architecture or successor implementation
+admission. Compatible obligations are restated in the registered v6 owners.
+
+* Historical decision record
 
 * Context
 

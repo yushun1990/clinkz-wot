@@ -64,13 +64,15 @@ The Servient is the runtime authority.
 
 It owns:
 
-- interaction routing
+- logical recipient admission and behavior dispatch
 - lifecycle management
 - handler execution
 - activation and cleanup
 - runtime state
 
-Protocol Bindings provide communication capabilities only.
+Protocol Bindings own native mapping, matching, correlation, distribution, I/O
+and physical infrastructure. Native progress and logical acceptance have independent
+authority and resource owners. A Thing does not imply one connection or listener.
 
 ```text
             Protocol Message
@@ -119,7 +121,15 @@ Protocol Bindings are responsible for:
 
 ## Compiled Execution Model
 
-Interaction decisions are prepared before runtime execution.
+Shared TD meaning is normalized once; selected mapping preparation completes
+before dependent execution. Consumer native preparation may occur on first use;
+Producer publication requires complete final support and required readiness.
+Prepared content grants no current execution permission.
+
+The [v6.0 authority map](docs/spec/authority.toml) and
+[ADR-0025](docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) own the target.
+Current Property Read carriers are restricted adapters, without a universal
+compiled-plan-set, RPC or session requirement.
 
 ```text
             Thing Description

@@ -1,190 +1,87 @@
-# Runtime Safety and Admission Specification
+# Runtime safety — v6.0
 
-Status: active v5.1 authority; Consumer admission refined by ADR-0021.
+`SAFE-AUTH-001`: Servient MUST own logical instances, current permission,
+publication and application dispatch independently of descriptions, prepared
+content and native physical owners. Each acceptance independently checks the
+current recipient/operation/policy and reserves work/result/cleanup. Replacing or
+revoking a slot stops new acceptance and cannot redirect accepted work to a
+successor. Native matching/transport control is not semantic permission.
 
-This specification owns ten active cross-domain safety requirements:
-`DOC-RUNTIME-001`, `API-SECURITY-001`, `CONSTRAINED-PROGRESS-001`,
-`CONSTRAINED-OWN-001`, `CAP-OVERFLOW-001`, `ADMIT-TXN-001`,
-`HANDLE-DROP-001`, `HOST-ASYNC-001`, `STATE-EXPOSE-001`, and
-`STATE-BIND-001`.
+`SAFE-PUBLISH-001`: Producer setup MUST validate the draft/known dependencies,
+capture actual providers/behavior and reserve setup/ingress/finalization/cleanup
+before acquiring native resources. Owned closed native participation may determine
+endpoints. Finalize the effective TD and revalidate affected common/Binding
+support, collision and ownership facts for that exact revision. All retained
+Forms/effective operations require complete qualified support and required
+readiness under PREP-COVER-001. Final dependency/cancellation checks and publication
+of final TD, logical registry and current authority share one Servient-local
+linearization boundary with no new fallible native preparation, allocation or
+handler call. Cancellation winning prevents publication; failure retains partial
+setup and rollback owners. No prepublication input dispatches behavior. A complete
+reduced TD can be deliberately requalified, never silently substituted. No global
+network/remote cached-TD atomicity is claimed.
 
-## Runtime representation and security
+A later deterministic unsupported operation/codec/schema/security/behavior/config
+branch already present at publication is a qualification/implementation defect,
+not normal Unsupported. Fail closed for affected acceptance, preserve exact first
+cause and cleanup, and requalify before claiming readiness. Changed endpoint
+meaning/providers/support policy invalidates prior qualification; equivalent
+reconnection is availability recovery. Per-use authorization/credential rotation
+is not by itself new immutable definition content.
 
-`DOC-RUNTIME-001`: Lossless document ownership and compiled runtime ownership
-are separate. A source document may preserve extensions, spelling, ordering,
-and evidence; a compiled Thing retains only admitted runtime identities,
-indexes, plans, and diagnostics. A runtime handle MUST NOT retain a complete
-generic JSON tree or lossless TD merely because admission began from it. Source
-retention is explicit and separately charged.
+`SAFE-CANCEL-001`: Cancellation/timeout MUST fix one first local cause, stop new
+local acceptance/delivery and request mapped protocol/application cancellation.
+Already accepted work and late successes retain identity, result and release
+owners. Local terminal settlement does not imply remote rollback, exactly-once
+remote effect or physical shutdown. A constructor rejection proves no escaped
+obligation; an operational error after effects cannot make that assertion merely
+by its error type. Cancellation, request deadline and cleanup/drain deadline are
+distinct phase contexts. Synchronous linked code is cooperative, not preemptible.
 
-`API-SECURITY-001`: Security capability and applicability probes are bounded
-and side-effect-free. Credential or verification commit happens only after one
-candidate is selected and returns an owned generation-bearing lease or
-principal. Provider identity and generation participate in plan validity.
-Credentials and provider-managed authentication fields never enter application
-payloads, logs, plans, or handler context. Callbacks run outside engine locks;
-body projection is explicit, bounded, and cannot cause a second unaccounted
-decode.
+`SAFE-CLEANUP-001`: Every accepted/provisional obligation MUST have funded bounded
+cleanup even under saturation. Ownership transfer commits only when a successor
+acknowledges receipt of the complete live owner/backing; a request, status record,
+spawned task or numeric token is not transfer. Rejection returns the same owner
+to retained/manual cleanup. Capacity stays charged through quarantine/pending
+cleanup. A residual report distinguishes external uncertainty and does not permit
+freeing surviving local state. A Host root needs qualified finite local abort or
+acknowledged transfer to a longer-lived supervisor retaining all obligations;
+an executor that may disappear is insufficient. Physical retirement remains at
+the actual infrastructure owner. No callback/guard can silently orphan work.
 
-## Progress, ownership, and overflow
+`SAFE-DROP-001`: Drop MAY revoke/request cancellation and move complete work into
+prepaid cleanup storage; it MUST NOT wait for a network/user callback or report
+completed drain. Explicit close/destroy reports drain/local release/remote residue.
+Caller-driven profiles retain and drive cleanup. If reserved transfer capacity
+is unavailable, fail closed before accepting new work; exhaustion cannot forget
+a live guard. Fixed trivial release may be prepaid; variable destruction needs
+bounded progress or a qualified owner.
 
-`CONSTRAINED-PROGRESS-001`: A manual runtime step consumes an explicit budget
-of transitions and typed work, returns at most one value plus exact pending or
-terminal state, and makes no hidden progress at zero budget. Cleanup has
-reserved bounded capacity. When that capacity is full, ownership remains with
-an explicit bounded operation or cleanup-pending handle; it is never dropped.
-A non-incremental operation is conforming when its admitted worst-case input is
-explicitly bounded and its complete work/lifetime debit succeeds before the
-operation starts; bounded progress does not require a cancellation point inside
-every byte loop of such an atomic operation.
+`SAFE-CONCUR-001`: Acceptance, revocation, publication, completion and transfer
+MUST have explicit linearization points under one logical ownership authority.
+No handler, Binding/service callback, allocation or unbounded destruction occurs
+under registry-wide locks or constrained critical sections. Pending progress
+registers wake interest then rechecks state; terminal results survive until
+acknowledged. Fairness/work budgets prevent unrelated supported logical work
+from being indefinitely blocked by a stalled Binding. This mandates outcomes,
+not a global lock, fixed lane/shard algorithm or identical scheduling traces.
 
-`CONSTRAINED-OWN-001`: Constrained handles use lifetimes, unique ownership, or
-generation-bearing table references and MUST NOT require `Arc` or pointer-width
-atomics. Cross-context sharing belongs to the application-selected critical
-section or message-passing boundary. Allocation and user callbacks occur
-outside critical sections.
+`SAFE-PROFILE-001`: Supported Host and constrained interactions MUST have equivalent
+WoT meaning, authority, late-result, loss, cancellation and cleanup guarantees.
+Storage, erasure, async syntax, thread mobility, atomics, allocation and driving
+mechanisms are independent choices; constrained execution MUST be usable without
+mandatory pointer atomics/Arc. Profiles use common semantic kernels/invariant
+cases where applicable and their own storage/wake/release evidence. No portable
+compile, matching mock trace or std flag qualifies hardware, SDK, allocator or
+real-time performance. Missing implemented profiles remain gaps, not exclusions.
 
-`CAP-OVERFLOW-001`: Overflow reporting MUST NOT enqueue into the queue that is
-already full. Loss counters and the latest summary use fixed or overwrite-in-
-place storage. Shutdown selected by overflow MUST make progress without relying
-exclusively on the blocked producer.
+`SAFE-OVERFLOW-001`: Every retained input/result/notification queue MUST have item
+and backing-byte limits with visible loss/backpressure/termination policy.
+Overflow reporting and cleanup MUST progress without enqueueing into the full
+queue or relying only on the blocked producer. Fixed counters/bounded terminal
+status retain first cause. Application credit cannot imply native backpressure.
 
-## Admission and lifecycle
-
-The accepted [Consumer resource migration contract](consumer-resource-ownership.md)
-owns the scoped accounting/disposal refinement under ADR-0023 for the admitted
-successor. The lifecycle below remains unchanged; existing strict registrations
-retain their original accounting/disposal contract.
-
-`ADMIT-TXN-001`: Parsing, validation, effective-view construction, planning,
-and registry publication form a reserve-build-publish transaction. Work and
-temporary bytes are charged first, persistent capacity is reserved next,
-private state is built before one publication transition, and every failure
-releases reservations idempotently. Cancellation is checked at bounded work
-intervals and before publication.
-
-For the first Consumer Property Read transaction, [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org)
-selects caller-owned immutable typed input, complete bounded TD inspection/Basic,
-a lifetime-bearing TD proof, paid semantic lending, source-independent owned
-Planning output and Servient-owned publication. The exact TD API, byte oracle,
-resource/support/progress and terminal refinements have one owner:
-[the TD admission contract](../work-packages/WP-100-consumer-validated-thing-admission.md).
-
-Whole-input structural inspection precedes complete shared Basic, including
-unrelated Actions/Events/security/schemas/opaque fields. No trust proof exists
-before both barriers. Resource Limit is distinct from Basic Invalid; diagnostics
-preserve the shared first semantic cause in fixed inline coordinates. Basic
-still accepts missing ID; Planning rejects it before runtime reservation,
-materialization, bounds or start. Serialization cannot narrow typed validity.
-
-The proof and semantic continuation borrow only external immutable input/config;
-owned scratch uses private coordinates and short step loans. TD derives effective
-operations/security/URI before lending a Ready coordinate. Ready retains completed
-UTF-8 and scope-sizing facts across insufficient copy credit; no unpaid source
-replay occurs. Every declared pass shares the remaining TD lifetime allowance.
-Step/lifetime/multi-class debits complete before work, zero credit makes no hidden
-progress, insufficient atomic credit carries no partial credit, lifetime exhaustion
-is terminal Limit. Number projection keeps the existing bounded-atomic amendment
-and explicit AP capability; production URI work is byte-resumable.
-
-The caller keeps Thing immutable/live through Planning; validation Complete does
-not shorten that lifetime. Input history is outside the additional controlled-state
-claim. Engine-owned upstream source remains charged while live. TD frame/current
-scratch, Planning/compiled output, simultaneous compiler/temporary state,
-registration/erasure/record/slot, diagnostics and cleanup capacity all require
-checked actual layout/accounting and paired local/parent allowances. Logical byte
-or allowance totals are neither physical source capacities nor contiguous requests.
-
-Planning preflight and complete materialization produce every property row and
-readable original coordinate; all compiler bounds pass before any start. Only
-one pure compiler cursor progresses at a time, with bounded callbacks and
-exactly-once abort. Concrete artifacts/callbacks and suspended cursors must be
-source-independent, not merely hidden behind a lifetime-free generic wrapper.
-The consumed build owner structurally ends all input-bearing state before
-returning source-free completion. Registration is a separate complete owner.
-
-Failure fixes first cause and enters explicit bounded rollback. TD releases only
-prepaid trivial workspace blocks; variable Planning output/artifacts use a
-nonrecursive item/byte-budgeted cleanup owner with pre-reserved transfer capacity.
-Caller input is never dropped by rejection, cancellation or abandonment.
-No observable terminal loses protected live objects or parent allowances.
-
-All build scratch cleanup and source-loan termination finish before Servient's
-final identity/generation/resource/registration/cancellation/slot checks. A private
-permit then closes cancellation under exclusive registry installation authority;
-preallocated atomic install has no allocation, callback, yield, source query,
-fallible release, new cancellation decision or retry. Readers see absent or
-complete. Published owns only execution output, complete registration and runtime
-lifecycle/resource records. It has no TD proof/view/borrow or Snapshot source
-charge. Leases/drain and bounded child-before-parent reclamation remain required.
-
-Strict bounded JSON is a separate future ingestion capability. ADR-0020's literal
-value/field/duplicate/null/Number rules, ordinary-serde distinction and shared
-resumable RFC3339 decoding remain binding there. That backend accounts controlled
-source construction from the first allocation, shares TD meaning and proves
-bounded decode/cancel/discard/release. Typed Consumer readmission does not require
-its decoder; ordinary parse-and-borrow cannot claim its guarantee. Directory and
-later external-input claims must enter their exact capability authority first.
-
-This migration changes no tranche/gate/production status. Snapshot arena counts,
-exact reseal and whole-TD post-copy equivalence are superseded; active semantic,
-resource, progress, cleanup, complete-output and atomic-publication guarantees
-remain at the replacement boundaries above.
-
-`HANDLE-DROP-001`: An explicit destroy operation is the only handle API that
-reports complete drain and cleanup. Dropping fixed private draft state performs only proved prepaid release; variable
-draft state transfers to its pre-reserved bounded rollback owner. Dropping preparing or serving host state requests cancellation
-or draining exactly once and transfers complete cleanup ownership to a
-reserved Servient executor or explicit manual driver without blocking on user
-or network work. Exhausted cleanup capacity returns a structured cleanup/limit
-result and never forgets a live guard.
-
-`HOST-ASYNC-001`: Boxed object-safe futures are compatibility adapters rather
-than the only host execution path. A binding may expose native async, poll, or
-reusable operation slots that avoid per-interaction allocation. Every claimed
-allocation-sensitive path is measured separately. Generation-safe pools apply
-backpressure on exhaustion and MUST NOT fall back to unbounded allocation.
-
-Host correctness assumes the declared I/O runtime remains live through dependent
-owner disposal. Foundation's [Host allocation/failure scope](foundation.md#host-allocation-and-environment-failure-scope)
-distinguishes recoverable engine admission from process/environment failure;
-Binding SPI owns retained protocol work and final destruction. This does not
-change `HANDLE-DROP-001`, Core call backing, static slots or the accepted finite
-mock Runtime. No host environment failure becomes successful cleanup, and no
-portable compile cell supplies hardware or allocator-recovery evidence.
-
-`STATE-EXPOSE-001`: Exposure progresses through private preparation, readiness,
-activation, committed-closed, publication, serving, draining, and terminal
-cleanup states. Publication and cancellation share one linearization boundary.
-Before publication no route is dispatchable; after cancellation wins it never
-becomes dispatchable. Every readiness token, route guard, reservation, and
-cleanup outcome retains exactly one owner through failure, cancellation, drop,
-destroy, retry, or terminal state.
-
-`STATE-BIND-001`: A binding route progresses from absent through prepared,
-ready, active, committed-closed, serving, draining, and closed, with explicit
-cleanup-pending transitions after resource acquisition. Servient owns state
-transitions; the guard owns protocol resources. A Host route's prepared,
-active, and committed stage guards successively own one unchanged Core-private
-carrier containing its complete preparation input, footprint, generation, and
-binding-private concrete state. A stage transition cannot replace or extract
-that state. Core exposes only a type-checked shared pinned projection of the
-state, never a safe whole-state mutable projection; protocol-local mutation is
-encapsulated behind methods on the shared state. Host accept polling borrows
-the committed guard only by shared reference; Servient never lends mutable
-whole-guard authority that could replace, extract, or prematurely dispose the
-linear lifecycle owner. Operations are idempotent for one Thing/binding
-generation. A guard drop is not a transition, late callbacks are generation
-checked, and a draining or closed route never returns to serving. Terminal
-cleanup or durable residual acknowledgement releases the carrier state exactly
-once.
-
-## Host Producer admission subset
-
-The [Host Producer candidate](../work-packages/WP-600-http-producer-property-read.md)
-proposes [single-driver ownership](binding-spi.md#host-producer-endpoint-contract)
-and the `host-producer-endpoint` state projection. Whole-description coverage and
-all Engine/cleanup funding precede native effects. Retained close ownership
-applies to partial installation, cancellation, root loss and response races.
-The Host Producer ownership interpretation is explicit; Consumer-only seals and
-StrictV1 SDK assumptions cannot be reused as Producer qualification.
+The state projection names these semantic boundaries without mandating public
+guard stages. Current Property Read implementations keep their existing linear
+carriers, final checks, result seals and funding at their measured scopes. Their
+historic success is not acceptance of the successor runtime.

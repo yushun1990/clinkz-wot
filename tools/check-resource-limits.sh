@@ -180,16 +180,8 @@ for field in compiled_runtime_bytes_per_thing_max compiled_runtime_bytes_global_
     fi
 done
 
-for fragment in \
-    'A permit is a temporary borrow and retains' \
-    'retained `RouteAcceptLease`, transient exclusive' \
-    '`binding_routes_*`,' \
-    '`binding_ingress_items_*` and `binding_ingress_bytes_*`'; do
-    if ! grep -Fq "$fragment" "$root/docs/spec/binding-spi.md"; then
-        echo "resource limit check: activation resource mapping is missing $fragment" >&2
-        exit 1
-    fi
-done
+# General publication/resource ownership is checked by the v6 source map.
+# The numeric schema below retains only its original restricted adapter meaning.
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -271,10 +263,10 @@ fi
 
 for profile in GatewayDefaultV1 DirectoryClientDefaultV1 BenchmarkStaticReferenceV1; do
     if ! awk -F, -v profile="$profile" '
-        NR > 1 && $1 == profile && $2 == "profile" && $14 == "frozen" { found = 1 }
+        NR > 1 && $1 == profile && $2 == "profile" && ($14 == "frozen" || $14 == "restricted") { found = 1 }
         END { exit !found }
     ' "$root/docs/api-ownership.csv"; then
-        echo "resource limit check: profile is not frozen in API ownership: $profile" >&2
+        echo "resource limit check: retained profile is not implemented in API ownership: $profile" >&2
         exit 1
     fi
 done

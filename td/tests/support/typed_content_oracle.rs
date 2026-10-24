@@ -327,6 +327,9 @@ pub fn thing(t: &Thing, context: &[Value]) -> Totals {
             }
             o.scalar(false);
             o.scalar(false);
+            if v.synchronous.is_some() {
+                o.scalar(false);
+            }
             o.extras(&v._extra_fields);
         }
     }

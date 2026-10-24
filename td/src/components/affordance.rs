@@ -12,7 +12,6 @@ use crate::{
     validate::{Validate, ValidateError, ValidationLevel},
 };
 
-#[cfg(feature = "td2-preview")]
 use super::util::deserialize_option_bool_flexible;
 use super::{data_schema::DataSchema, form::Form, util::deserialize_bool_flexible};
 
@@ -22,8 +21,7 @@ use super::{data_schema::DataSchema, form::Form, util::deserialize_bool_flexible
 struct FlexBoolField(#[serde(deserialize_with = "deserialize_bool_flexible")] bool);
 
 /// Deserialize adapter carrying the optional flexible-bool decoder used by the
-/// TD 2.0 `synchronous` field.
-#[cfg(feature = "td2-preview")]
+/// TD 1.1 `synchronous` field.
 #[derive(Deserialize)]
 struct OptionFlexBoolField(
     #[serde(deserialize_with = "deserialize_option_bool_flexible")] Option<bool>,
@@ -242,9 +240,8 @@ pub struct ActionAffordance {
 
     /// Indicates whether the Action is synchronous(=true) or not.
     ///
-    /// TD 2.0 field; gated behind the `td2-preview` feature. TD 1.1 actions are
-    /// implicitly synchronous by default and do not carry this term.
-    #[cfg(feature = "td2-preview")]
+    /// Optional in TD 1.1. Absence makes no synchronicity claim; it is not true
+    /// by default and does not imply that an Action completes in one exchange.
     pub synchronous: Option<bool>,
 
     pub _extra_fields: ExtensionMap,
@@ -267,7 +264,7 @@ impl<'de> Deserialize<'de> for ActionAffordance {
             Some(field) => field.0,
             None => false,
         };
-        #[cfg(feature = "td2-preview")]
+
         let synchronous =
             crate::flat::take::<OptionFlexBoolField, D::Error>(&mut map, "synchronous")?
                 .and_then(|field| field.0);
@@ -281,7 +278,6 @@ impl<'de> Deserialize<'de> for ActionAffordance {
             output,
             safe,
             idempotent,
-            #[cfg(feature = "td2-preview")]
             synchronous,
             _extra_fields: crate::flat::into_extras(map),
         })
@@ -309,7 +305,7 @@ impl Serialize for ActionAffordance {
         if self.idempotent {
             map.serialize_entry("idempotent", &self.idempotent)?;
         }
-        #[cfg(feature = "td2-preview")]
+
         if let Some(synchronous) = self.synchronous {
             map.serialize_entry("synchronous", &synchronous)?;
         }
@@ -381,8 +377,7 @@ impl ActionAffordanceBuilder {
         self
     }
 
-    /// Sets the synchronous flag (TD 2.0; requires `td2-preview`).
-    #[cfg(feature = "td2-preview")]
+    /// Sets the optional TD 1.1 synchronicity claim.
     pub fn synchronous(mut self, synchronous: bool) -> Self {
         self.affordance.synchronous = Some(synchronous);
         self

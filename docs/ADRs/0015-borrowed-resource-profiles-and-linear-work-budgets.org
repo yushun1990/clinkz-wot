@@ -2,6 +2,12 @@
 #+date: 2026-07-22
 #+status: Accepted
 
+* v6.0 scope amendment
+
+Borrow immutable policy and never duplicate a remaining work allowance. The exact ResourceLimits/StaticResourceProfile schema is a retained adapter API, not mandatory v6 configuration for every capability. RES-OWNER-001, RES-SCHEMA-001 and RES-WORK-001 own the general obligations. Original 195/196-field tranche instructions are historical sequencing.
+
+* Preserved rationale and scoped contract
+
 * Context
 
 The exhaustive v4.9 resource schema grows from 118 fields in the currently

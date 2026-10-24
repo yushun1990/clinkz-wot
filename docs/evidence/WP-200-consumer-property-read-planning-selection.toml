@@ -1,3 +1,5 @@
+authority_scope = "historical-property-read-only"
+successor_acceptance = "not-transferred"
 schema_version = 1
 design_revision = "5.1"
 work_package = "WP-200"

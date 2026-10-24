@@ -1,211 +1,42 @@
-# Compiled-Plan Lifecycle
+# Preparation, definitions and instance lifetime — v6.0
 
-## Decision
+The exact preparation requirements are owned by [Planning](../spec/planning.md).
+A compiled plan set is an optional representation, not the Engine's universal
+unit of execution, publication or physical ownership.
 
-The engine has an explicit compiled-plan-set lifecycle. Individual plan values
-remain immutable; lifecycle state belongs to the Servient record that owns the
-set, not to each value.
+| Object | Identity, content and lifetime |
+| --- | --- |
+| TD/TM revision | Description/model, not execution authority |
+| Prepared definition | Immutable semantic/native content with checked dependencies; no live credential, handler, session or cleanup obligation |
+| Registration | Linked implementation/configuration and supported facets; not a network endpoint |
+| Logical instance | Consumed/exposed local identity, policy, behavior association, generation and publication |
+| Admitted work | Call, Action invocation, subscription or exposure participation with independent authority and funded release |
+| Native infrastructure | Binding-owned listeners, sessions, subscriptions, pools, workers and buffers; may serve multiple logical owners |
+| Deployment | Runtime/process/firmware owner, with its own failure and recovery boundary |
 
-## Plan taxonomy
+Content sharing never shares permission. A physical content owner and its
+original account survive every borrowed reference. Each logical owner pays its
+actual reference/operand/record cost. Prepared-definition identity and logical
+instance generation are independent; a plan-set epoch exists only if that object
+is independently retained/replaced.
 
-- A logical interaction plan contains resolved target context, operation,
-  source form identity, media/schema rules, URI-variable rules, effective
-  security, response classification, and diagnostic source identity.
-- A binding candidate pairs a logical plan with one binding id/generation and
-  side-effect-free capability result.
-- A binding artifact contains bounded protocol-specific compiled data produced
-  by that binding's compiler extension.
-- A binding plan reference joins a logical plan, binding identity, and artifact
-  slot without exposing protocol-local representation to other bindings.
-- A compiled plan set is the immutable admitted collection owned by one
-  produced or consumed handle generation.
+Consumer admission interprets common meaning once and reports support per
+operation. Native lowering can be eager or a bounded first-use job above
+execution. A deferred candidate can prove unsupported; actual use waits for its
+complete selected preparation. An execution-only composition reports preparation
+required for an unprepared Consumer operation.
 
-## Plan-set lifecycle
+Producer advertisement is stricter: every retained final Form/effective operation
+must be fully qualified before Serving. Only pure construction whose support is
+already established may be deferred, with owned normalized input, actual provider
+association and funded bounded coordinator. If complete support checking cannot
+be separated reliably from lowering, construct before publication.
 
-```text
-Building -> Frozen -> Published -> Draining -> Reclaimed
-    |          |
-    +-> Failed +-> Failed
-```
+Closed native setup may precede final endpoint binding and final TD qualification.
+It remains owned and cannot dispatch application work. This replaces the former
+freeze-before-all-native-effects rule. Final dependency/cancellation checks and
+local installation are one non-fallible publication boundary.
 
-- `Building` retains the external document/policy/registration loans and owns the admission
-  transaction, compiler cursors, and provisional artifacts.
-- `Frozen` means every mandatory plan, identity, footprint, and route owner is
-  immutable and all required capacity is reserved. No binding side effect has
-  started for a Consumer. A Producer may enter route preparation only from this
-  state.
-- `Published` means a handle generation can select and pin plans. Publication
-  is one atomic Servient registry transition.
-- `Draining` rejects new selection while existing operation, route,
-  subscription, and cleanup leases finish.
-- `Reclaimed` is reachable only when all leases, routes, lazy artifacts, and
-  cleanup owners for that generation are terminal.
-- `Failed` is an admission terminal before publication. Any provisional
-  binding artifact is released outside engine locks.
-
-Pin count and active-operation count are orthogonal retained fields, not extra
-public states. A published plan value is never modified in place.
-
-## Producer and Consumer timing
-
-- Consumer plans are built, frozen, and published by the `consume` transaction.
-  Transport execution starts only from the published set.
-- Producer plans are built and frozen during `expose` before the first route
-  side effect. Route preparation, readiness, activation, and commit bind that
-  frozen plan set to committed route generations. The set becomes published
-  only with the registry generation, complete committed route set, and shared
-  serving activation authority in one transition.
-
-The route lifecycle and plan-set lifecycle are orthogonal. A failed route
-transaction rolls back resources and leaves the unpublished plan set failed;
-it does not mutate individual plans.
-
-## Binding compiler extension
-
-Planning defines the portable associated-type compiler contract; Core owns
-runtime artifact envelopes and storage. A third-party Binding packages its
-compiler in a Host or static compiler registration. Planning pairs it with the
-actual Core runtime registration, checking format, configuration and policy
-before effects. The preparation owner can release the compiler and return that
-runtime registration for execution.
-
-A constrained application uses one closed compiler enum and matching closed
-cursor/artifact enums. A `std` host uses Planning's safe compiler/cursor erasure
-and Core's completed runtime artifact storage. Both forms
-return their owned cursor on pending or failure and produce the same identity
-and footprint envelope; no binding-authored unsafe cast is part of the SPI.
-
-The compiler extension:
-
-- is deterministic for a fixed input snapshot;
-- is local and side-effect free;
-- consumes an explicit work and memory budget;
-- returns a bounded artifact plus its immutable lifetime footprint;
-- never receives credentials or application handler objects; and
-- never selects a different form, operation, security branch, or binding.
-
-Compiler cursors and provisional artifacts are pure in-memory planning state.
-Aborting them has no protocol cleanup obligation. The complete bundle remains
-the only installable unit, so constructibility does not permit compiler and
-execution generations to drift.
-
-Server route and publication artifacts required for exposure are eager.
-Consumer artifacts may be lazy only when construction is pure, bounded, and
-does not start protocol work.
-
-## Lazy artifact lifecycle
-
-```text
-Empty -> Compiling -> Ready
-                    -> Negative
-Ready | Negative -> Reclaiming -> Empty
-```
-
-One generation has at most one compiler lease for a slot. Waiters observe the
-same immutable result or bounded backpressure. `Negative` stores a bounded,
-redacted deterministic failure and cannot hide a retryable transport failure.
-No lazy state is shared across incompatible document, policy, binding, or
-configuration generations.
-
-Budget exhaustion retains a cursor and resumes; it does not restart compilation
-or publish a partial artifact. Callbacks execute outside locks.
-
-## Registration and generation rules
-
-The v1 registration set is startup-only:
-
-- `ServientBuilder` validates a complete set and assigns/captures binding
-  generations before `build` returns.
-- A produced or consumed handle pins that immutable registration snapshot.
-- The Servient exposes no runtime add/remove/replace API in v1.
-- Configuration or code rollout creates a new Servient/process generation.
-- The old instance drains its handles, routes, calls, subscriptions, and cleanup
-  before exit.
-
-Therefore a binding-generation change never silently invalidates an existing
-handle or mutates its cache. A future runtime replacement design must define
-explicit rebuild, cutover, lease, and cleanup semantics before adding such an
-API.
-
-For the first Consumer Property Read aggregate, the consumed record owns one
-generation-bearing `ThingSlotId` and one separately allocated non-wrapping
-`PlanSetGeneration`. Their generation values are not required to be equal and
-the two wrappers are never interchangeable. Dense `PlanId` slots use the plan-
-set generation; artifact references and aggregate lookup rows resolve only
-under a live lease for that exact plan-set record. The lease, rather than
-numeric coincidence or global uniqueness, proves which record may resolve an
-artifact.
-
-For this aggregate, [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org)
-requires paid TD semantic lending from an immutable typed loan. Planning owns a
-complete source-independent draft and consumes/destroys the terminal input-bearing
-build state before handoff. Concrete plans/artifacts remain usable after Thing and
-compiler-registration destruction; runtime retains its execution registration.
-
-All input/derived/config/compiler loans end and bounded build cleanup finishes
-before final actual-account reconciliation and identity/generation/registration/
-cancellation/slot checks. Servient then issues a private single-use permit under
-exclusive registry installation authority; cancellation closes at the last check.
-The already allocated record is installed with no allocation, callback, yield,
-source query, new cancellation decision, fallible release or retry. Neither ending
-a loan nor publishing authorizes releasing a still-live upstream source charge.
-
-Host records share the complete registration; application-static roots retain it
-directly. Neither creates per-plan pins or a general registration scan. Close
-rejects new plan-set leases/calls. Existing calls, leases and cleanup retain output
-and registration until terminal settlement. Reclaim is monotonic and bounded by
-PlanningItems and `plan_reclaim_bytes_per_step_max`, releasing physical children
-before runtime parent allowances. No proof, source/view borrow or TD charge
-attributable to this build survives publication.
-
-## Hot-path contract
-
-After publication, an interaction may inspect only the bounded candidate list
-for its target and operation. It does not:
-
-- traverse the TD tree;
-- resolve `base` or URI templates from source text again;
-- probe unindexed bindings;
-- redo W3C defaults or security inheritance;
-- compile an unbounded artifact; or
-- mutate a shared plan.
-
-Protocol-native connection/session caches may exist in a binding, but they are
-runtime resources keyed by admitted plan and binding generations, not a second
-undocumented planning system.
-
-## Resource and evidence requirements
-
-The accepted [Consumer resource migration](../spec/consumer-resource-ownership.md)
-keeps compiler artifacts/cursors and owned output within engine admission.
-It supplies no successor composition acceptance or changed Planning lifecycle.
-
-Admission accounts for logical bytes, binding-artifact lifetime bytes, lazy
-slot metadata, negative results, candidate counts, and compilation work.
-Reclamation is incremental under `WorkBudget` for constrained profiles.
-
-Evidence must cover cold maximum-plan compilation, repeated hot selection,
-single-flight lazy compilation, deterministic negative caching, cancellation at
-each build phase, maximum-generation drain, and zero retained plan/artifact
-bytes after reclamation.
-
-## Host Producer admission subset
-
-The accepted [Host HTTP Producer admission](../work-packages/WP-600-http-producer-property-read.md)
-selects the [single-entry Planning contract](../spec/planning.md#host-producer-property-read-entry)
-for its immutable one-instance scope. This replaces mandatory persistent logical
-plans and independently versioned plan-set ownership only in that admitted
-scope. Production implementation remains outstanding. Other scopes and old
-evidence keep their stated limits.
-
-<a id="proposed-program-and-instance-lifetimes-review-08"></a>
-## Program and instance lifetimes
-
-ADR-0024 separates definition content, checked instance operands, current live
-authority and native infrastructure. A generation identifies an admitted use,
-not content equivalence. Independent shared backing/accounts outlive all users;
-a departing instance cannot reclaim sibling data or close sibling service.
-Plan Sets remain useful collections; their independent epoch is required only
-when independently retained/replaced. Existing Consumer generations/leases keep
-their exact checks. Planning's program-definition contract owns checked binding;
-this extraction makes no production reuse or persistence claim.
+Optional caches require bounded entries, work/waiters, negative-result policy,
+stale-completion fencing and reclaim ownership. Automatic caching, serialized
+images, code generation, interning and cross-Thing pooling are not prerequisites.

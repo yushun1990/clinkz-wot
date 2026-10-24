@@ -1,0 +1,115 @@
+#+title: ADR-0025: Semantic Engine over Binding-owned runtimes
+#+date: 2026-10-24
+#+status: Accepted
+
+* Decision and activation
+
+The Owner accepts topic 0076's recommended target direction. Independently
+reconcile it against the fetched repository and WoT 1.1 rather than promote its
+inventory wholesale. Select v6.0: one shared WoT semantic Engine, separate
+execution capability families, and Binding-owned native protocol runtimes.
+The exact source map is =docs/spec/authority.toml=.
+
+All v6 authority owners in this tree form one successor revision. Mainline
+activation is one atomic merge of the independently reviewed complete authority
+tree. Before merge this branch is the reviewable proposed successor; master
+retains its own authority. No old/new feature switch, per-document activation
+or simultaneous active architectural model is permitted. This ADR records the
+accepted direction, not self-acceptance of this migration or an implemented
+runtime. Independent review and exact Git/GitHub evidence remain necessary.
+
+* Responsibility conclusion
+
+TD owns shared interpretation and extension associations. Planning owns bounded
+selection/support and pure optional preparation. Core owns semantic interaction,
+data/validation/security, identity and ownership contracts. Servient owns live
+logical instances, current authority, publication, behavior dispatch and accepted
+work/cleanup. Concrete Bindings own native vocabulary, matching/captures,
+correlation, distribution, I/O, physical resources and retirement. Discovery is
+an explicitly composed client workflow. Protocol cases stay out of the Engine.
+
+Finite Consumer interactions, notification conversations, Producer exposure and
+Discovery have different controls. Action invocation lifetime is independent of
+the initiating exchange; Event response/control semantics cannot become a bare
+payload iterator. No universal RPC/session/task, Engine matcher/broadcast/copy
+layer, mandatory symmetric roles or one-native-resource-per-Thing rule is selected.
+
+Separate immutable description/definition content, logical instance authority,
+admitted work and physical infrastructure. Sharing has explicit compatible owners
+and leases with original-account retention; it never grants permission. Prepared
+data is source-independent, not necessarily one universal program representation.
+Consumer native preparation may be first-use under a bounded coordinator above
+execution. Producer final advertisement needs complete actual mapping/behavior/
+service support and required native readiness. Optional deferred materialization
+cannot postpone discovering Unsupported. Closed native setup may determine
+endpoints before final TD qualification; publication is one local non-fallible
+commit, not global network atomicity.
+
+Preserve first cause, owned late results, independent current authorization,
+visible loss, linear work, capacity-before-acquisition, funded acknowledged
+whole-owner cleanup and truthful local/remote outcomes. Native physical owners
+control retirement; idle retention, reconnect and explicit shutdown differ.
+Profiles share supported WoT guarantees, not layouts, costs or scheduling traces.
+
+* Independent reconciliation and alternatives
+
+Repository basis is =ed09f059e383b7a1b9d22902ee29aa218b4471a6=.
+Inspection confirms current Core -> Foundation and Planning compiler ownership;
+Servient still retains TD/Planning through Property Read output/reclaim/build
+owners. Calling a feature alias execution-only would conceal that edge, so the
+required relocation is a later source task with explicit dependencies.
+
+The Copy/atomic installed Host compiler, eager all-bounds aggregate, three-stage
+route carrier and one synchronous Producer instance solve narrow current paths.
+They cannot become general eligibility or be multiplied per family. Keep the
+working adapter and safety regressions; withdraw its universal API freeze.
+Actual native owner retirement cannot be derived from the last logical route:
+packet/reply jobs and bounded idle pools have independent lives. Adopt owner
+policy and a final-use destruction barrier instead.
+
+Complete Producer qualification remains stronger than Consumer partial support.
+The old late-handler exception is removed. An unknown or unprepared Consumer
+candidate may refuse on first use; a published Producer Form may not first
+discover deterministic unsupported meaning. If support-check/lowering separation
+is too costly or unreliable, lower before publication instead of inventing a
+certificate framework. Setup-derived endpoints require final revalidation rather
+than freezing a guessed TD before native setup.
+
+WoT Architecture 1.1 defines affordances and hypermedia semantics, not Rust
+mechanisms. TD 1.1 Table 6 defines optional =synchronous= with no default claim;
+§8.3.1 forbids an explicit HTTP method on a multi-operation Form. Correct those
+source-level contradictions without adding Action execution or a new Binding.
+Anonymous TDs/empty keys, extension-security preservation and no-atomic execution
+remain target requirements and current implementation gaps, not new exclusions.
+
+Rejected: wrapping the old SPI into renamed general facades; using one universal
+session/RPC; giving native callbacks handler authority; requiring all native
+costs through an Engine-wide flat schema; demanding a quota of protocols as proof
+of generality; replacing all owned safety mechanisms merely because their prior
+carrier is superseded. Exact trait/enum layout, erasure, schema storage,
+scheduling/static synchronization and pool algorithms remain engineering choices
+inside the selected boundaries, not unresolved product decisions.
+
+* Prior decisions and evidence
+
+Every ADR-0001 through ADR-0024 has a local disposition/amendment, with exact
+replacement owners below. ADR-0013 retains proportional admission, ADR-0015
+borrowed policy/linear work, ADR-0016 exact time, and ADR-0020 scoped strict input.
+The remaining physical/hierarchy/reset contracts are superseded; compatible
+invariants are restated in the registered v6 owners, not activated by precedence.
+=authority.toml= records each of the 121 inherited requirement identities and
+its explicit reaffirmation, replacement or retirement. New meanings receive new
+identities; the previous 65-active set is not the successor design envelope.
+
+Old tranches/gates/evidence keep original statuses and exact revisions as
+historical records with individual impact dispositions and no inherited v6
+admission. Numeric StrictV1 and Consumer schema-2 retain their adapter meanings.
+Historical performance recipes are non-gating characterization; exact layout,
+zero-copy/allocation, native resource and profile measurements must be renewed
+when claimed. Design checks validate this projection, not architecture acceptance.
+
+The package DAG separates runtime contracts from optional preparation and actual
+product integration. Disjoint narrow HTTPS/security and Discovery client work may
+proceed under successor requirements and proportional admission. No new global
+freeze or protocol-generality gate is created. Implementation and v1/hardware
+qualification remain separate from this authority migration.
