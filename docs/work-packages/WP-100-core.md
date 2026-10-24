@@ -491,16 +491,17 @@ requiring `Arc`, atomics, `Send`, `Sync`, or boxed futures.
   to credential-bearing debug output and immutable-plan credential storage.
 - Replace the current `CorrelationId` representation that requires `Arc` in portable builds
   with a bounded no-std-capable owned representation.
-- Add the target handler values, 54 traits, reducers, and constrained storage boundary without
-  deleting a facade still required by a later package. WP-300 first supplies
-  `ProducerEmission` plus compatibility adapters; WP-400 then removes `PushFn`, the
-  `SubscriptionSender` handler path, the legacy nine sync/async handler families, `ReadSlot`,
-  `WriteSlot`, `ObserveSlot`, `UnobserveSlot`, `InvokeSlot`, `QuerySlot`, `CancelSlot`,
-  `SubscribeSlot`, `UnsubscribeSlot`, and all nine public raw handler lookup methods. WP-600
-  removes `PublisherSink` from concrete protocol publication. WP-700 proves the final absence.
-- No new WP-100 implementation may call a legacy push or raw lookup surface. The bounded
-  compatibility interval above is a downstream migration bridge, not a deprecated target API,
-  and its removal owners are recorded as explicit completion conditions in those packages.
+- Add the target handler values, 54 traits, reducers, and constrained storage
+  boundary. The original handler/emission migration staged `ProducerEmission`
+  adapters in WP-300,
+  removal of `PushFn`, `SubscriptionSender`, the legacy handler families, public raw
+  slots/lookups in WP-400, and concrete `PublisherSink` removal in WP-600. The
+  [pre-v1 cleanup](../architecture/20-module-boundaries.md#retained-pre-v1-implementation-baseline)
+  subsequently withdrew the old broker/queue/push implementations; no staged
+  adapters remain. WP-700 verifies final absence rather than waiting for another
+  staged migration.
+- No new WP-100 implementation may call or restore a legacy push or raw lookup surface.
+  The original bounded compatibility interval was a migration bridge, not a target API.
 - Remove any public re-export of internal `WotLock` or mutable registry access once the target
   handler surface is available.
 
@@ -588,6 +589,6 @@ all public error and debug representations.
   their compile, size, redaction, and transition evidence.
 - All listed workload adapters attributable to core are registered and emit schema-valid result
   identity, even when a later package supplies the final end-to-end runner.
-- The old public security, codec, error, and lock facades owned by WP-100 are absent. Only the
-  explicitly staged handler/emission compatibility bridge may remain, and source inspection must
-  prove it has no new callers and names WP-300, WP-400, WP-600, and WP-700 as its removal owners.
+- The old public security, codec, error, and lock facades owned by WP-100 are absent.
+  Source inspection must confirm the withdrawn handler/emission compatibility
+  bridge remains absent; WP-700 verifies this in every releasable cell.

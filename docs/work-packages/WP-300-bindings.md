@@ -25,11 +25,11 @@ in the integration-gate manifest. It proves one route and one request without
 claiming the subscription, emission, form-contribution, multi-route, workload,
 or production-protocol parts of broad WP-300.
 
-This is the only package that introduces `ProducerEmission`. Core defines the immutable emission
+This is the package assigned future `ProducerEmission`. Core defines the immutable emission
 values and a `BindingEmissionSlot` for exactly one selected binding generation; it does not own
-the Servient-wide fan-out record or a concrete dispatch policy. This package also provides bounded internal
-compatibility adapters for unmigrated Servient and concrete-binding callers.
-An adapter is not a second public emission contract and accepts no new callers.
+the Servient-wide fan-out record or a concrete dispatch policy. The earlier
+plan for staged compatibility adapters for Servient and concrete-binding callers
+was superseded by the pre-v1 cleanup; broad emission work must not restore them.
 
 One host or static binding is installable only as a complete startup bundle. Component traits
 remain constructible and independently testable, but a compiler, contributor, client half,
@@ -114,39 +114,38 @@ Target code may consume only the WP-200 logical plan and artifact identity. It
 must not depend on or call the legacy
 `clinkz-wot-protocol-bindings` form selectors, receive a TD, or send a target
 request through legacy `ServerBinding::serve`, `Dispatch`, or handler lookup.
-Legacy selector and execution paths remain separate legacy generations until
-their WP-600/WP-700 removal scope.
+The legacy selector and execution paths were subsequently withdrawn by the
+pre-v1 cleanup. WP-700 still verifies their absence.
 
-Rust method overloading cannot preserve the legacy
+At the original narrow tranche, Rust method overloading could not preserve the legacy
 `ServerBinding::shutdown(&ThingId)` and add target
 `shutdown(RouteShutdownInput)` to the same trait. The narrow target therefore
 uses the uniquely named `RouteServerBinding`, `RouteInboundRequest`,
 `RouteResponseOpportunity`, and `RouteInboundResponse` types in
-`core/src/binding.rs`. Existing `core/src/inbound.rs` values remain the legacy
-generation and are outside this narrow surface. WP-700 removes the old exports;
-there is no alias or conversion from a target request to a legacy request.
+`core/src/binding.rs`. The former `core/src/inbound.rs` generation was subsequently
+withdrawn; WP-700 verifies its exports remain absent. There is no alias or
+conversion from a target request to a legacy request.
 
 The exact signatures, both readiness shapes, both public author profiles, and
 the exclusions above are technical constraints of the narrow surface. They do
 not imply subscription, emission, or the rest of broad WP-300.
 
-Before the aggregate Property Read fixture or broad WP-300 work proceeds, run one bounded,
-non-authoritative real-target Zenoh Property Read feedback probe against the
-complete public registration surface. It uses actual Zenoh I/O and a network
-round trip; carries a real plan/route output through readiness,
-correlation, response, cancellation/drain, and cleanup; and includes enough
-multiple-Thing/route/form shape to expose hidden single-fixture assumptions.
-Helpers may group fields, generate closed static enums/tables, and adapt
-synchronous `NoCleanupSuccessor` operations, but may not hide resources or
-lifecycle ownership. The probe records cleanup-library mapping, diagnostics,
-repeated workarounds, generic/monomorphization pressure, constrained
-layout/code size, and unsafe/private dependency needs. Reopen the SPI for a
-concrete ownership, portability, resource-accounting, unsafe-erasure, or
-implementability defect, or for systematic authoring failures that repeatedly
-lose semantic truth or exceed declared bounds. Mechanical repetition and
-field count alone remain helper/generation concerns. The probe does not
-release WP-600, prove protocol-shape neutrality, or claim production-protocol
-progress.
+At the original Property Read tranche revision, a bounded, non-authoritative
+real-target Zenoh Property Read feedback probe preceded the aggregate fixture.
+It used actual Zenoh I/O and a network round trip; carried a real plan/route
+output through readiness, correlation, response, cancellation/drain, and cleanup;
+and included multiple Thing/route/form shapes to expose hidden single-fixture
+assumptions. The original criteria allowed helpers to group fields, generate
+closed static enums/tables, and adapt synchronous `NoCleanupSuccessor` operations,
+but not to hide resources or lifecycle ownership. They called for recording
+cleanup-library mapping, diagnostics, repeated workarounds, generic/
+monomorphization pressure, constrained layout/code size, and unsafe/private
+dependency needs; a concrete ownership, portability, resource-accounting,
+unsafe-erasure, implementability, or systematic authoring defect would reopen
+the SPI. Mechanical repetition and field count alone were helper/generation
+concerns. The probe did not release WP-600, prove protocol-shape neutrality, or
+claim production-protocol progress. It has since been retired with the deferred
+backend, and its results below are historical Git evidence.
 
 ### Real-target probe technical disposition
 
@@ -307,9 +306,9 @@ Explicitly excluded:
 - broad retry/fallback;
 - concrete Zenoh production implementation.
 
-Legacy `BindingRequest` and raw-form selection may remain only for legitimate
-unmigrated capabilities. The Consumer Property Read target path must have zero
-edges to them.
+At the original Consumer tranche, legacy `BindingRequest` and raw-form selection
+were confined to unmigrated capabilities. They were subsequently withdrawn;
+the Consumer Property Read target path must still have zero edges to them.
 
 ### Historical reopening: completed name-free selected request
 
@@ -556,11 +555,11 @@ contributor metadata; a bare trait object is never the configuration contract.
 - A `BindingEmissionSlot` owns one immutable payload lease and one selected binding generation's
   publication and cleanup state. Servient's private `EmissionRecord` owns local-subscriber and
   binding-target cursors; core poll methods never perform engine-wide fan-out.
-- Translate a legacy handler-path publication into exactly one admitted `ProducerEmission` at
-  the compatibility boundary. Preserve payload ownership, target, subscription, route, binding,
-  and generation identity; the adapter may not clone an unbounded stream or publish directly to
-  a concrete protocol. WP-400 removes the handler-side adapter entry and WP-600 removes the
-  protocol-side adapter exit.
+- The original staged migration proposed a one-way legacy handler-path publication
+  adapter to `ProducerEmission`, with payload and generation identity preserved and
+  no unbounded cloning or direct concrete-protocol publication. Its WP-400 entry
+  and WP-600 exit are no longer needed after the pre-v1 cleanup; future emission
+  must satisfy those ownership and boundedness goals without restoring the adapter.
 - Classify runtime events before overflow. Critical details update the bounded durable status
   record before a queued copy can be dropped; no payload, credentials, or redacted TD fields
   enter status storage.
@@ -573,14 +572,13 @@ contributor metadata; a bare trait object is never the configuration contract.
 
 ## Old API Removal
 
-- Add the frozen route-scoped
-  prepare/readiness/activate/commit/accept/abort/shutdown contract as
-  `core/src/binding.rs::RouteServerBinding` inside a complete registration
-  bundle. Keep the current `core/src/inbound.rs::ServerBinding` confined to the
-  legacy generation until WP-400/WP-600 migrate its consumers; WP-700 removes
-  its export. Remove any registration-wide acceptance and any cleanup path
-  whose only completion signal is guard drop or an unstructured outer error
-  in that owning removal scope.
+- The original narrow tranche added route-scoped
+  prepare/readiness/activate/commit/accept/abort/shutdown as
+  `core/src/binding.rs::RouteServerBinding` inside a complete registration.
+  It temporarily confined `core/src/inbound.rs::ServerBinding` to a separate
+  legacy generation; the pre-v1 cleanup subsequently withdrew that generation.
+  Keep registration-wide acceptance and cleanup paths whose only completion
+  signal is guard drop or an unstructured outer error absent.
 - Remove any successful `RouteCommitOutcome::Serving` branch, any `poll_accept` overload that
   accepts an active guard or omits `RouteActivationPermit<'_>`, every per-route `open_gate` or
   `release_gate` callback, and every binding view of Servient registry state. Successful commit
@@ -588,23 +586,24 @@ contributor metadata; a bare trait object is never the configuration contract.
 - Remove any preparation path with undeclared external visibility or an implicit closed-ingress
   policy. A complete registration that cannot enforce hidden preparation or one bounded declared
   reject, backpressure, or buffer policy is invalid.
-- Replace the current `core/src/outbound.rs::ClientBinding` request shape with the frozen owned
-  `OutboundRequest`, validated output, owned `HostBindingCall`, `HostSubscriptionDriver`, and
-  `HostSubscriptionStart` contracts. Remove `BindingRequest` and `BindingFuture`; no public
-  compatibility alias remains at package completion.
+- The original migration called for replacing `core/src/outbound.rs::ClientBinding`
+  and `BindingRequest`/`BindingFuture` with owned `OutboundRequest`, validated
+  output, `HostBindingCall`, `HostSubscriptionDriver`, and `HostSubscriptionStart`
+  contracts. The old request shape was subsequently withdrawn without claiming
+  those broader subscription contracts implemented; no public compatibility
+  alias may be restored.
 - Remove public `TransportRequest`, `TransportResponse`, and `TransportAdapter` facades that
   bypass compiled route matches or duplicate protocol binding ownership.
-- Remove direct push paths from the new binding SPI and reject any new registration that can
-  publish without `ProducerEmission`, bounded subscriber/binding results, and explicit overflow
-  accounting. Retain only the named migration adapters needed by existing WP-400 and WP-600
-  callers. WP-400 removes `PushFn` and the `SubscriptionSender` handler path after host activation;
-  WP-600 removes `PublisherSink` from admitted production protocol paths;
-  deferred legacy Zenoh users must be excluded or retired from the v1 release
-  surface under ADR-0022. WP-700 verifies final releasable absence.
-- Remove the core-owned queue `Subscription`, `SubscriptionGuard`, `SubscriptionSender`,
-  `EventStream`, `Subscription::merge`, `EventBroker`, and `EventName` routing key. The staged
-  concrete `PublisherSink` call sites migrate through WP-600 or are explicitly
-  excluded with deferred experimental code. They are absent from the final target surface.
+- Keep the withdrawn direct push paths out of the binding SPI. Future registration
+  must use `ProducerEmission`, bounded subscriber/binding results, and explicit
+  overflow accounting before it may publish. At the original tranche revision,
+  WP-400/WP-600 were assigned adapters for `PushFn`, `SubscriptionSender`, and
+  `PublisherSink` and deferred Zenoh callers; the pre-v1 cleanup removed those
+  implementations instead. WP-700 verifies final releasable absence.
+- Keep the withdrawn Core queue `Subscription`, `SubscriptionGuard`,
+  `SubscriptionSender`, `EventStream`, `Subscription::merge`, `EventBroker`,
+  `EventName` routing key, and concrete `PublisherSink` call paths absent. Future
+  subscription/emission work does not require a staged compatibility bridge.
 - Remove binding vectors embedded in consumed Things and bare trait objects as the stored
 - Remove independently installable `ServerBindingRegistration`, `ClientBindingRegistration`,
   `StaticServerBindingRegistration`, `StaticClientBindingRegistration`,
@@ -648,8 +647,9 @@ these technical invariants:
 - `cleanup-kernel-implementability` for the common source-owned -> offered ->
   acknowledged-transfer/manual-return -> complete/residual machine, including
   synchronous `NoCleanupSuccessor` authors with no executor requirement.
-- `producer-emission-migration` for the one-way legacy-adapter boundary, identity preservation,
-  bounded admission, and proof that no new caller enters the bridge.
+- `producer-emission-migration` for identity preservation and bounded admission
+  through the future emission boundary, plus source/compile evidence that the
+  old legacy-adapter boundary is not restored.
 - `host-subscription-driver` for object safety, exact source attribution, one receive cursor,
   binding-owned flow control, stop/drop teardown, and absence of a core queue.
 - `binding-emission-slot` for one-binding ownership, retained poll/cancel progress, stale
@@ -669,11 +669,11 @@ these technical invariants:
 - `cleanup-obligation-coexistence` for the legal simultaneous-obligation
   matrix, non-additive mutually exclusive reservations, and saturation at each
   real coexistence boundary.
-- `binding-authoring-usability` for the real-target Zenoh feedback probe's
-  public declarations, actual network lifecycle, multiple Thing/route/form
-  shape, diagnostics, workarounds, generic/layout/code-size, cleanup mapping,
-  and unsafe/private dependency findings, with a technical disposition before
-  aggregate fixture work begins.
+- `binding-authoring-usability` for current public authoring and real I/O evidence
+  of lifecycle, multiple Thing/route/form shapes, diagnostics, workarounds,
+  generic/layout/code-size, cleanup mapping, and unsafe/private dependency
+  findings. The retired Zenoh probe supplied historical feedback before the
+  aggregate fixture; it is not a live WP-300 test input.
 - `target-legacy-no-backflow` for poisoned legacy selector,
   `ServerBinding::serve`, and `Dispatch` boundaries with zero
   target-generation calls.
@@ -755,5 +755,5 @@ terminal or critical status is lost merely because a bounded queue is full.
 - The obsolete transport, push, split-registration, bare-registration, registration-wide accept,
   active-guard accept, per-route activation-gate, registry-observation, old-signature, opaque
   concrete-slot, and unbounded pending-work facades owned by WP-300 are absent, and no concrete
-  protocol logic has entered core. Only the explicitly named WP-400/WP-600 compatibility adapter
-  edges may remain, with compile and source evidence assigning their removal to those packages.
+  protocol logic has entered core. Source and compile evidence must confirm the
+  withdrawn WP-400/WP-600 compatibility adapter edges remain absent.

@@ -33,8 +33,8 @@ Collection subscription planning is first-class. `subscribe_all_events` and
 planning never lowers either operation into per-affordance requests or a local merged stream.
 
 WP-200 consumes the WP-100 handler context and operation identities only as immutable plan
-facts. It neither activates host handler registrations nor removes a compatibility facade needed
-by WP-300, WP-400, or WP-600. New planning code must not call `PushFn`, `PublisherSink`,
+facts. It neither activates host handler registrations nor restores the withdrawn
+handler/emission bridge. New planning code must not call `PushFn`, `PublisherSink`,
 `SubscriptionSender`, a legacy raw handler lookup, or an old handler trait.
 
 ADR-0017 closes the AR-004 selection/fallback design gap without returning form
@@ -538,11 +538,11 @@ for strict selection and diagnostics.
   `SelectedForm`, `SelectedAffordanceForm`, `SelectedAffordanceSelection`, and
   `EffectiveFormSecurity` after their target equivalents are available. A private compiler
   helper may keep an internal role but not the obsolete cross-crate contract.
-- While legacy concrete callers remain, the public selector implementation in
-  `protocol-bindings/core` is a legacy-generation source boundary, not a
-  target adapter. New Planning, Core, and WP-300 code must not call it or send a
-  selected target artifact back through it. WP-600 removes the concrete Zenoh
-  call edge and WP-700 proves final absence of the legacy selector exports.
+- At the original tranche revision, the public selector in `protocol-bindings/core`
+  was a legacy-generation source boundary, never a target adapter. The pre-v1
+  cleanup withdrew that selector and its concrete Zenoh call edge; new Planning,
+  Core, and WP-300 code must not restore them or route target artifacts through
+  them. WP-700 verifies their final absence.
 - Remove per-call TD-tree scanning, repeated `base`/default/security resolution, and plan-time
   cloning of target strings, schemas, response metadata, security expressions, or extension
   maps into `OutboundRequest`.
@@ -555,9 +555,11 @@ for strict selection and diagnostics.
   `clinkz-wot-planning`; that ownership would violate the frozen dependency graph.
 - Do not add a runtime registration-replacement API or rebuild existing handles when a different
   startup registration bundle is used by a later Servient instance.
-- Do not remove or extend the staged handler/emission compatibility bridge in this package.
-  WP-300 owns `ProducerEmission` and its adapters, WP-400 owns host handler activation and the
-  legacy handler-path removal, and WP-600 owns concrete-protocol `PublisherSink` removal.
+- The original staged handler/emission bridge assigned `ProducerEmission` adapters
+  to WP-300, handler-path removal to WP-400, and concrete `PublisherSink` removal
+  to WP-600. The [pre-v1 cleanup](../architecture/20-module-boundaries.md#retained-pre-v1-implementation-baseline)
+  subsequently withdrew the old call paths; no staged adapters remain.
+  WP-200 neither restores them nor owns future emission execution.
 
 ## Verification Responsibilities
 
@@ -679,8 +681,10 @@ Compiler. Preparation can be consumed into runtime registration and HTTP can
 build without its optional preparation facet. Retire TD-at-call-time dispatch,
 legacy public handles/security providers, implicit Directory and the obsolete
 utility crate; unmatched interactions are withdrawn pending qualified target
-replacements, not represented as migrated. Preserve the native Zenoh probe and
-all relevant target negative oracles.
+replacements, not represented as migrated. At that tranche revision the native
+Zenoh probe was retained; it was subsequently withdrawn by the pre-v1 cleanup,
+with its protocol feedback preserved in Git. Retain relevant target negative
+oracles for the current implementation.
 
 The exact boundary is falsified by an upward Core dependency, a compiler needed
 by runtime registration, source/compiler retention needed for accepted execution,
