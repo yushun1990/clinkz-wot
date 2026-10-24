@@ -24,50 +24,6 @@ impl CancellationView {
     }
 }
 
-/// The response produced by a successful subscription-start handler.
-///
-/// The payload is intentionally accessible only through the consuming API,
-/// and the acceptance itself is linear.
-///
-/// ```compile_fail
-/// use clinkz_wot_core::{InteractionOutput, SubscriptionAcceptance};
-/// let _ = SubscriptionAcceptance { response: InteractionOutput::empty() };
-/// ```
-///
-/// ```compile_fail
-/// use clinkz_wot_core::SubscriptionAcceptance;
-/// fn require_copy<T: Copy>() {}
-/// require_copy::<SubscriptionAcceptance>();
-/// ```
-///
-/// ```compile_fail
-/// #![deny(unused_must_use)]
-/// use clinkz_wot_core::{InteractionOutput, SubscriptionAcceptance};
-/// SubscriptionAcceptance::new(InteractionOutput::empty());
-/// ```
-#[derive(Debug, Eq, PartialEq)]
-#[must_use = "a successful acceptance must be consumed by the subscription transaction"]
-pub struct SubscriptionAcceptance {
-    response: InteractionOutput,
-}
-
-impl SubscriptionAcceptance {
-    /// Creates an acceptance carrying the handler response.
-    pub const fn new(response: InteractionOutput) -> Self {
-        Self { response }
-    }
-
-    /// Borrows the handler response.
-    pub const fn response(&self) -> &InteractionOutput {
-        &self.response
-    }
-
-    /// Consumes the acceptance and returns the handler response.
-    pub fn into_response(self) -> InteractionOutput {
-        self.response
-    }
-}
-
 /// Application-owned worst-case storage declared for one handler.
 ///
 /// ```compile_fail

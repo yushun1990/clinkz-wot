@@ -1,9 +1,8 @@
-//! Interaction input/output value types aligned with the WoT Scripting API
-//! (baseline v4.0 §4.3).
+//! Protocol-neutral interaction input/output and selection/control values.
 //!
 //! These are the protocol-neutral value types that flow through both the
 //! inbound (exposed) and outbound (consumed) interaction paths. The handler
-//! traits in [`crate::thing`] operate on [`InteractionInput`] /
+//! traits in [`crate::handler`] operate on [`InteractionInput`] /
 //! [`InteractionOutput`].
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
@@ -150,17 +149,11 @@ impl InteractionInput {
     }
 }
 
-/// Caller-facing options for an outbound (consumed) interaction call
-/// (Scripting API §7.1; baseline §4.3).
+/// Caller-facing selection and control options for a consumed interaction.
 ///
 /// The Consumer Property Read selection/control surface carries URI-template
-/// variables, an optional form index, and optional timeout intent. The `data`
-/// field and [`Self::with_data`] remain only for legacy write, action, and
-/// subscription callers; payload is not selection/control state.
-///
-/// Callers construct this value through its constructors and builders so
-/// future selection/control fields can be added without breaking source
-/// compatibility.
+/// variables, an optional form index, and optional timeout intent. Payload is
+/// separate from selection/control state.
 ///
 /// ```compile_fail,E0639
 /// use clinkz_wot_core::InteractionOptions;
@@ -169,7 +162,6 @@ impl InteractionInput {
 /// let _ = InteractionOptions {
 ///     uri_variables: BTreeMap::new(),
 ///     form_index: None,
-///     data: None,
 ///     timeout: None,
 /// };
 /// ```
@@ -178,17 +170,12 @@ impl InteractionInput {
 pub struct InteractionOptions {
     /// URI-template variables to expand into the selected form's target.
     pub uri_variables: BTreeMap<String, String>,
-    /// Explicit form index, bypassing binding `supports` selection. A pinned
-    /// form no binding can drive yields a
+    /// Explicit original form index in the compiled plan set. A pinned form
+    /// without an executable artifact yields a
     /// [`CoreError::Selection`](crate::CoreError::Selection) with
-    /// `StrictSelectionMismatch` (baseline §5.1 / AD47).
+    /// `StrictSelectionMismatch`.
     pub form_index: Option<usize>,
-    /// Legacy encoded request payload for unmigrated operation families.
-    pub data: Option<Payload>,
-    /// Outbound timeout. Enforced via build-time cfg (AD39/H2): `std`/embassy
-    /// apply it; bare `no_std` without a timer returns
-    /// [`CoreError::UnsupportedOperation`](crate::CoreError::UnsupportedOperation)
-    /// rather than silently ignoring it (AD45).
+    /// Timeout intent interpreted against the runtime's supplied logical clock.
     pub timeout: Option<Duration>,
 }
 
@@ -198,24 +185,11 @@ impl InteractionOptions {
         Self::default()
     }
 
-    /// Legacy convenience constructor that pre-seeds `data`. Equivalent to
-    /// `Self::new()` followed by setting the `data` field, but reads more
-    /// naturally at call sites:
-    ///
-    /// ```ignore
-    /// handle.write_property("on", InteractionOptions::with_data(payload)).await?;
-    /// ```
-    pub fn with_data(data: Payload) -> Self {
-        Self {
-            data: Some(data),
-            ..Self::default()
-        }
-    }
-
     /// Builder-style setter for a single URI-template variable. Chains:
     ///
-    /// ```ignore
-    /// let opts = InteractionOptions::with_uri_variable("brightness", "75")
+    /// ```
+    /// use clinkz_wot_core::InteractionOptions;
+    /// let opts = InteractionOptions::new().with_uri_variable("brightness", "75")
     ///     .with_uri_variable("zone", "north");
     /// ```
     ///

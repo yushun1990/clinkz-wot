@@ -82,7 +82,7 @@ than a choice between async spelling and polling:
 - Default close does not wait for all callbacks. A synchronous get job can
   remain inside its callback after first close succeeds.
 
-The [public-SDK fixture](../../tools/architecture-fixtures/host-zenoh-owner/README.md)
+The [historical public-SDK fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/host-zenoh-owner/README.md)
 exercises blocking/allocating Drop, original-close abandonment and timeout,
 get/callback quiescence, worker query-allocation failure, TCP receive-limit
 semantics and an actual original Foundation account.

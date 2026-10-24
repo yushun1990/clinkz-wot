@@ -3,8 +3,7 @@ use alloc::{borrow::Cow, string::String, sync::Arc, vec::Vec};
 /// An encoded interaction payload plus protocol-neutral media metadata.
 ///
 /// `body` is stored as `Arc<[u8]>` rather than `Vec<u8>` so cloning a `Payload`
-/// is a single refcount bump. This matters for the event fan-out path, where
-/// one emitted payload is queued into N subscriber buffers. Access the bytes
+/// is a single refcount bump while retained results share their backing. Access the bytes
 /// via `body.as_ref()` / `&body[..]` (the `as_slice` method is unstable on
 /// `Arc<[u8]>`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

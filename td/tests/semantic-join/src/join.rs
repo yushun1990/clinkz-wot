@@ -412,8 +412,12 @@ impl<'td, 'registration> Build<'td, 'registration> {
                 let bound = self.compiler.bounds(&input).map_err(|_| Cause::Compiler)?;
                 // Validate this actual compiler's closed support contract, not a
                 // synthetic failure switch or generic compiler admission claim.
+                // The artifact footprint includes its inline value; Memory
+                // accounts only for the target allocation outside fixed Row storage.
                 if bound.artifact().retained_bytes() > self.limits.artifact_bytes
-                    || bound.artifact().retained_bytes() != row.plan.resolved_target().len() as u64
+                    || bound.artifact().retained_bytes()
+                        != (mem::size_of::<MockArtifact>() + row.plan.resolved_target().len())
+                            as u64
                     || bound.artifact().retained_items() != 1
                     || bound.cursor_bytes() != mem::size_of::<MockCompilerCursor>() as u64
                     || bound.temporary_bytes() != 0

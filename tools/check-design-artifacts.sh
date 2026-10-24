@@ -40,7 +40,6 @@ cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml"
 "$root/tools/check-architecture-adrs.sh"
 "$root/tools/check-directory-client-scope.sh"
 "$root/tools/check-resource-limits.sh"
-"$root/tools/check-legacy-api-absence.sh"
 cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- verify
 
 echo "design artifact check: active v5.1 authority and stable cross-cutting invariants validated"

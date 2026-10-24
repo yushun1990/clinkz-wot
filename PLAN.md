@@ -83,19 +83,14 @@ scope; independent tranche completion acceptance, followed by separate
 HTTPS/security evidence, remains on the critical path. Embedded qualification
 and v1 release readiness remain separate.
 
-Before designing and implementing the successor general SPI, conduct a
-one-time repository cleanup of demonstrated obsolete code, unused public APIs,
-competing execution paths, dead crates/dependencies, historical prototypes,
-unneeded architecture fixtures, deprecated documentation and their registrations.
-Prefer direct deletion and internal caller migration over compatibility shims
-or indefinitely preserving old and new paths side by side. Preserve the
-enduring WoT capabilities and currently useful implementations; do not destroy
-active protocol/semantic functionality merely to reduce source count. Git
-history is the archive for superseded material. Keep the result buildable,
-supported examples working, and tests targeted at real current behavior.
-Treat this as ordinary engineering cleanup, not a new gate, evidence program
-or permanent migration framework. A successor SPI design may later replace
-currently active narrow representations without a compatibility obligation.
+The pre-v1 baseline withdraws obsolete Core event/subscription APIs, payload-bearing
+call options, deferred Zenoh/pico implementations and their utility surface,
+historical admission/Snapshot/source-projection prototypes and deprecated docs.
+Production regression coverage stays with the retained implementations. Git is
+the archive; the [module boundary](docs/architecture/20-module-boundaries.md#retained-pre-v1-implementation-baseline)
+owns the exact implementation disposition. This adds no gate or evidence program
+and removes no enduring WoT capability objective. A successor SPI design may
+replace the remaining narrow representations without a compatibility obligation.
 
 Before extending the public Binding/Servient SPI into a general multi-route,
 multi-operation or long-lived execution surface, derive a coherent full-scope
@@ -135,13 +130,11 @@ advance the frontier safely.
    HTTPS/trust/security is a separate v1 release obligation and may progress in
    parallel with general SPI design; do not freeze a one-route physical model
    as the general interface to deliver HTTPS.
-3. Remove obsolete runtime/API/documentation/prototype paths in a coordinated
-   repository cleanup before the general SPI redesign. Check genuine references,
-   replace or retire stale registrations and tests, preserve current useful
-   execution and WoT product goals, and leave no compatibility facade for
-   deleted behavior. The work is not complete merely because dead-code warnings
-   disappear; remove entire superseded abstractions and their ownership burden.
-   Do not add a new governance gate or a permanent cleanup support layer.
+3. Keep the cleaned runtime/API/documentation baseline coherent before the general
+   SPI redesign. Independent cleanup review must distinguish withdrawn
+   implementations from retained product objectives and verify current execution,
+   feature profiles and regression coverage. No compatibility facade or permanent
+   cleanup framework is required.
 4. Before broad public Binding/Servient SPI expansion, design a complete
    conceptual architecture grounded primarily in W3C WoT Architecture 1.1 and
    TD 1.1. Derive the semantic/physical responsibilities for Producer and
@@ -183,20 +176,6 @@ still govern any ensuing source or contract changes. Reuse the evidence and
 open questions in [Review 07](docs/reviews/review-07-product-runtime-architecture.md)
 rather than restarting the same general review.
 
-- **After the admitted Consumer resource-ownership implementation completes:**
-  audit the existing architecture fixtures for independent falsification value,
-  direct production-contract coverage, and redundant parallel implementations.
-  Prefer a bounded review and focused retirement/consolidation only when proof
-  obligations remain covered. Preserve unique negative probes and regressions;
-  raw fixture LOC is not a sufficient reason for deletion. This audit may
-  proceed alongside HTTP admission and is not an extra HTTP predecessor unless
-  it finds a concrete intersecting defect.
-- **After a usable target Host HTTP Consumer Property Read path exists:**
-  examine the legacy/public facade versus the target call path, map old public
-  capabilities to tested replacements, and stage removal of superseded
-  selection, binding, and lifecycle paths. Do not claim migrated capabilities
-  based on test-local adapters or delete unmatched behavior without an explicit
-  disposition. Avoid a simultaneous workspace-wide crate rewrite.
 - **Before implementing a second one-shot operation family:** challenge the
   risk of duplicating Property Read's carrier, generation, lease, settlement,
   cancellation, and cleanup mechanisms. Use contrasting operation semantics

@@ -107,7 +107,7 @@ would be the architectural error.
 
 ## Reproducible discriminators and their limits
 
-The [compiler observation](../tools/architecture-fixtures/consumer-compiler-admission/README.md)
+The [historical compiler observation](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-compiler-admission/README.md)
 owns commands, assertions and measured Layouts. It now adds a fixture-only
 fixed-capacity compiler, copying an already resolved target into an owned array,
 through the production static component and Core Host erasure. It duplicates
@@ -123,7 +123,7 @@ no allocator request does not mean zero physical cost. The original two Host
 requests are not one 49-byte contiguous allocation. No simultaneous peak or
 allocator metadata measurement follows from these request logs.
 
-The existing [topic 0076 fixture](../tools/architecture-fixtures/product-runtime-boundaries/README.md)
+The historical [topic 0076 fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/product-runtime-boundaries/README.md)
 runs the production leaf planner at build time, compares frozen selection and
 response predicates, and checks its generated subset with Foundation-only normal
 dependencies on Cortex-M0. Reproduction at this baseline retains the 15 selection
@@ -140,7 +140,7 @@ artifacts. It remains a fixed static witness with infallible compiler allocation
 fixed prepaid destruction and no exact production PlanFootprint/global accounting.
 Neither representation probe substitutes for that trusted TD boundary.
 
-Source owners inspected include [Core erasure](../core/src/binding_compiler.rs),
+Source owners inspected include [compiler erasure](../planning/src/binding_compiler.rs),
 [shared leaf Planning](../planning/src/property_read.rs),
 [complete registration](../core/src/binding.rs), and the
 [existing concrete compiler](../tools/architecture-fixtures/property-read-binding/src/lib.rs).
@@ -180,7 +180,7 @@ post-hoc Planning footprint checks.
 
 ## Construction decision and migration
 
-The new [downstream construction witness](../tools/architecture-fixtures/consumer-compiler-support/README.md)
+The historical [downstream construction witness](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-compiler-support/README.md)
 adds evidence beyond the earlier allocation observation. Its upstream model owns
 one private, immutable target-copy compiler and the support issuer. It creates
 real complete Consumer-capable Core registrations; the caller can choose checked

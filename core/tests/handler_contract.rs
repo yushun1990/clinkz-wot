@@ -6,8 +6,8 @@ use clinkz_wot_core::Operation;
 use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, CancellationView, CoreError, CoreResult,
     ErrorPhase, HandlerContext, HandlerFootprint, HandlerSlotId, HandlerStep, InteractionInput,
-    InteractionOutput, InteractionStatus, PlanId, ReadPropertyHandler, RetryClass,
-    StaticHandlerRegistration, SubscriptionAcceptance, ThingId, ThingSlotId,
+    InteractionOutput, PlanId, ReadPropertyHandler, RetryClass, StaticHandlerRegistration, ThingId,
+    ThingSlotId,
 };
 use clinkz_wot_foundation::{Generation, SlotIndex};
 
@@ -30,11 +30,6 @@ fn passive_handler_values_preserve_linear_and_bounded_semantics() {
     assert_eq!(CancellationView::Requested as u8, 1);
     assert!(!CancellationView::Active.is_requested());
     assert!(CancellationView::Requested.is_requested());
-
-    let response = InteractionOutput::empty().with_status(InteractionStatus::Created);
-    let acceptance = SubscriptionAcceptance::new(response.clone());
-    assert_eq!(acceptance.response(), &response);
-    assert_eq!(acceptance.into_response(), response);
 
     let maximum = HandlerFootprint::new(u64::MAX, u64::MAX, u64::MAX);
     assert_eq!(maximum.retained_bytes(), u64::MAX);

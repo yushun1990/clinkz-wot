@@ -1,9 +1,0 @@
-[package]
-name = "review08-planning"
-version.workspace = true
-edition.workspace = true
-publish.workspace = true
-
-[dependencies]
-review08-core = { path = "../core" }
-review08-td = { path = "../td" }

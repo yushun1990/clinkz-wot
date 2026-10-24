@@ -1,4 +1,4 @@
-//! Fixed typed input shared by the typed-corpus tests and snapshot prototype.
+//! Fixed typed input shared by model and borrowed-admission regression tests.
 
 extern crate alloc;
 use self::alloc::vec;

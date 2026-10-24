@@ -156,7 +156,7 @@ For one projection of a Number with lexical length `n`, where `0 < n <= L`:
 One uninterrupted projection has the validated finite input bound `L`.
 `CONSTRAINED-PROGRESS-001` requires complete precharging and cancellation
 checkpoints around that operation; work units do not promise elapsed time or
-stack depth. The [M4 Number workload](../../tools/architecture-fixtures/bounded-atomic-number/README.md#optional-target-characterization-workload)
+stack depth. The retired [M4 Number workload](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/bounded-atomic-number/README.md#optional-target-characterization-workload)
 can characterize a named target/product or calibrate a profile. Its
 168,000-cycle and 4,096-byte tolerances are not generic WP-100 admission gates.
 Any target or product making those promises must review measurements for its

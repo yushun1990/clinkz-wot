@@ -17,10 +17,6 @@ use clinkz_wot_core::{
 use clinkz_wot_foundation::WorkBudget;
 use clinkz_wot_td::thing::Thing;
 
-// WP-200 owns the algorithm now; WP-300 will provide the first product
-// consumer through a complete registration. Inline tests are its current
-// executable consumer.
-#[allow(dead_code)]
 mod property_read;
 pub use property_read::{
     PropertyReadBuildCursor, PropertyReadPlanCompiler, select_consumer_property_read,
@@ -196,16 +192,6 @@ pub mod binding_compiler;
 pub mod binding_registration;
 pub use binding_compiler::*;
 pub use binding_registration::*;
-
-// Preparation-only helpers retained for the deferred Zenoh mapping probe.
-pub mod error;
-pub mod error_status;
-pub mod form;
-pub mod uri_template;
-pub use error::{BindingError, BindingResult};
-pub use error_status::error_status;
-pub use form::*;
-pub use uri_template::{TemplateExpandError, expand_uri_template, expand_uri_template_strict};
 
 #[cfg(all(feature = "std", feature = "validated-thing"))]
 mod producer_property_read;

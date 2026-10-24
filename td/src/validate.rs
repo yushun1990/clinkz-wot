@@ -984,6 +984,7 @@ pub(crate) mod basic_kernel {
         Cancellation,
         FormSecurity,
         FormOperation,
+        #[cfg(feature = "validated-thing")]
         FormHref,
     }
 
@@ -1010,6 +1011,7 @@ pub(crate) mod basic_kernel {
                 Self::Cancellation => "cancellation",
                 Self::FormSecurity => "security",
                 Self::FormOperation => "op",
+                #[cfg(feature = "validated-thing")]
                 Self::FormHref => "href",
             }
         }

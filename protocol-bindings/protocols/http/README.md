@@ -207,8 +207,8 @@ completion orders, drain/root loss, saturation/reuse and original-account releas
 On Linux, the 100-read test also checks that descriptors return to baseline after
 each peer observes retirement. Supported body-reservation refusal preserves
 607/DeploymentFailure; decoded overflow preserves 608/BindingPolicy, followed by
-a successful read on the same Runtime. Old `tests/sdk_limits.rs` probes retain
-their historical incompatibility scope; they are not successor failures.
+a successful read on the same Runtime. Parser-boundary regressions exercise the
+actual configured production path in `tests/real_peer.rs`.
 
 `tests/lifecycle_races.rs` controls the clock and final peer byte/EOF across
 fixed, chunked, close-delimited and invalid-trailer responses. All 16 orders

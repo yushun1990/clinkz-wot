@@ -31,7 +31,7 @@ or an intermediate owned `Thing`/Value graph. It had no reserved extension-key
 exclusion or explicit strict/serde collision exception. A bounded shared
 decoder satisfying that combination had not been demonstrated.
 
-The new [public-entry corpus](../tools/architecture-fixtures/validated-thing-schema-kernel/tests/support/decode_boundary_cases.rs)
+The historical [public-entry corpus](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/validated-thing-schema-kernel/tests/support/decode_boundary_cases.rs)
 identifies the missing semantic boundary. It calls real `serde_json::from_str`
 into real TD types, compiling identically against unchanged production and
 the existing #115 public-source candidate. Candidate generation still changes
@@ -118,7 +118,7 @@ current goals and actual field composition. ADR-0020 records the resulting
 choice and the rejected alternatives rather than treating the initial
 preference as evidence for itself.
 
-The new [decision probes](../tools/architecture-fixtures/validated-thing-schema-kernel/tests/value_decode_contract.rs)
+The historical [decision probes](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/validated-thing-schema-kernel/tests/value_decode_contract.rs)
 use public APIs in both actual TD source models, without modifying their
 decoders or the existing candidate generator:
 

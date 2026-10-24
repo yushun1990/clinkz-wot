@@ -132,10 +132,17 @@ planning, general ConsumedThing migration, broad package/milestone completion,
 full performance workloads, ingestion, subscriptions/emission, Directory,
 deployment or release readiness.
 
-The deterministic binding is mock protocol evidence. Real Host Zenoh Consumer
-qualification is the roadmap successor immediately after this architecture proof;
-the earlier Producer network probe does not prove it. Real zenoh-pico runtime and
-materially contrasting protocol-shape evidence retain their separate obligations.
+The deterministic binding is mock protocol evidence. At this gate's registration,
+real Host Zenoh Consumer qualification was proposed as the immediate successor.
+[ADR-0022](../ADRs/0022-first-production-binding-and-runtime-environments.org)
+subsequently selected real Host HTTP Consumer evidence as the first production
+frontier. The pre-v1 cleanup withdrew the Zenoh/pico implementations and
+executable probes; [WP-600](WP-600-protocol-bindings.md#deferred-bindings-and-removal-boundary)
+owns their future optional qualification. The earlier Producer network probe
+remains historical architecture feedback, not Consumer qualification. Materially
+contrasting protocol-shape evidence is a separate claim, not established by this
+gate or required to deliver Host HTTP.
+
 Strict bounded JSON ingestion is a future capability under ADR-0021, not a missing
 typed-input prerequisite. OPEN topics 0081 (reusable Plan versus Thing identity) and
 0082 (logical versus physical subscriptions) remain non-blocking for this bounded

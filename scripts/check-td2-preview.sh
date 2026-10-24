@@ -10,10 +10,8 @@
 set -eu
 
 cargo check --locked -p clinkz-wot-td --features td2-preview
-cargo check --locked -p clinkz-wot-core --features td2-preview
 cargo check --locked -p clinkz-wot-servient --features td2-preview
-cargo check --locked -p clinkz-wot-protocol-bindings-zenoh --features td2-preview
+cargo check --locked -p clinkz-wot --features td2-preview
 
 cargo test --locked -p clinkz-wot-td --features td2-preview
 cargo test --locked -p clinkz-wot-servient --features td2-preview
-cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --features td2-preview

@@ -45,71 +45,53 @@ jobs:
         if: inputs.level != 'authority'
         run: cargo test --workspace --locked
 
-      - name: Exercise product/runtime boundary investigation
-        if: inputs.level == 'full'
-        run: |
-          runtime_probe_manifest=tools/architecture-fixtures/product-runtime-boundaries/Cargo.toml
-          cargo run --locked --manifest-path "$runtime_probe_manifest" -p runtime-boundary-compare
-          cargo check --locked --manifest-path "$runtime_probe_manifest" -p static-plan-probe --target thumbv6m-none-eabi
-          bash tools/architecture-fixtures/product-runtime-boundaries/check-normal-dependencies.sh
+      - name: Run supported feature matrix
+        if: inputs.level == 'feature-matrix' || inputs.level == 'full'
+        run: sh scripts/check-feature-matrix.sh
 
-      - name: Check closed Consumer compiler support construction
-        if: inputs.level == 'full'
-        run: |
-          compiler_support_manifest=tools/architecture-fixtures/consumer-compiler-support/Cargo.toml
-          cargo run --locked --manifest-path "$compiler_support_manifest" --bin witness
-          cargo test --locked --manifest-path "$compiler_support_manifest"
-          cargo test --locked --manifest-path "$compiler_support_manifest" --no-default-features
-          cargo test --locked --manifest-path "$compiler_support_manifest" --no-default-features --features async
+      - name: Run portable Property Read integration
+        if: inputs.level == 'feature-matrix' || inputs.level == 'full'
+        run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read
 
-      - name: Check Consumer aggregate admission composition
+      - name: Check production Planning and Servient feature variants
         if: inputs.level == 'full'
         run: |
-          aggregate_admission_manifest=tools/architecture-fixtures/consumer-aggregate-admission/Cargo.toml
-          cargo test --locked --manifest-path "$aggregate_admission_manifest"
-          cargo test --locked --manifest-path "$aggregate_admission_manifest" --no-default-features
-          cargo test --locked --manifest-path "$aggregate_admission_manifest" --no-default-features --features async
-          cargo check --locked --manifest-path "$aggregate_admission_manifest" --no-default-features --target thumbv7em-none-eabihf
-          cargo check --locked --manifest-path "$aggregate_admission_manifest" --no-default-features --features async --target thumbv7em-none-eabihf
-
-      - name: Check Consumer runtime entry and role-only construction
-        if: inputs.level == 'full'
-        run: |
-          consumer_entry_manifest=tools/architecture-fixtures/consumer-runtime-entry/Cargo.toml
-          cargo test --locked --manifest-path "$consumer_entry_manifest"
-          cargo test --locked --manifest-path "$consumer_entry_manifest" --no-default-features
-          cargo test --locked --manifest-path "$consumer_entry_manifest" --no-default-features --features async
-          cargo check --locked --manifest-path "$consumer_entry_manifest" --no-default-features --target thumbv7em-none-eabihf
-          cargo check --locked --manifest-path "$consumer_entry_manifest" --no-default-features --features async --target thumbv7em-none-eabihf
+          for features in validated-thing validated-thing,async; do
+            cargo test --locked -p clinkz-wot-planning --no-default-features --features "$features"
+          done
+          cargo test --locked -p clinkz-wot-servient --no-default-features
+          cargo test --locked -p clinkz-wot-servient --no-default-features --features async
+          sh scripts/check-no-std.sh
+          sh scripts/check-td2-preview.sh
 
       - name: Check production bounded TD admission and lending
         if: inputs.level == 'full'
         run: |
-          for td_features in validated-thing validated-thing,serde_json/preserve_order; do
-            cargo test --locked -p clinkz-wot-td --features "$td_features" --lib validated::tests
-            cargo test --locked -p clinkz-wot-td --features "$td_features" --test validated_admission --test validated_lending
+          for features in validated-thing validated-thing,serde_json/preserve_order; do
+            cargo test --locked -p clinkz-wot-td --features "$features" --lib validated::tests
+            cargo test --locked -p clinkz-wot-td --features "$features" --test validated_admission --test validated_lending
           done
-          for td_features in validated-thing validated-thing,clinkz-wot-foundation/async validated-thing,td2-preview; do
-            cargo test --locked -p clinkz-wot-td --no-default-features --features "$td_features" --lib validated::tests
-            cargo test --locked -p clinkz-wot-td --no-default-features --features "$td_features" --test validated_admission --test validated_lending
-            cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features "$td_features"
+          for features in validated-thing validated-thing,clinkz-wot-foundation/async validated-thing,td2-preview; do
+            cargo test --locked -p clinkz-wot-td --no-default-features --features "$features" --lib validated::tests
+            cargo test --locked -p clinkz-wot-td --no-default-features --features "$features" --test validated_admission --test validated_lending
+            cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features "$features"
           done
           cargo test --locked -p clinkz-wot-td --features validated-thing --doc
+
+      - name: Join production TD semantics to plans and binding artifacts
+        if: inputs.level == 'full'
+        run: |
+          manifest=td/tests/semantic-join/Cargo.toml
+          cargo test --locked --manifest-path "$manifest"
+          cargo test --locked --manifest-path "$manifest" --features order
+          cargo test --locked --manifest-path "$manifest" --no-default-features
+          cargo test --locked --manifest-path "$manifest" --no-default-features --features async
+          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$manifest" --no-default-features
+          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$manifest" --no-default-features --features async
 
       - name: Install ARM runtime emulator
         if: inputs.level == 'full'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-arm
-
-      - name: Join production TD semantics to Core plans and binding artifacts
-        if: inputs.level == 'full'
-        run: |
-          semantic_join_manifest=td/tests/semantic-join/Cargo.toml
-          cargo test --locked --manifest-path "$semantic_join_manifest"
-          cargo test --locked --manifest-path "$semantic_join_manifest" --features order
-          cargo test --locked --manifest-path "$semantic_join_manifest" --no-default-features
-          cargo test --locked --manifest-path "$semantic_join_manifest" --no-default-features --features async
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$semantic_join_manifest" --no-default-features
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$semantic_join_manifest" --no-default-features --features async
 
       - name: Execute production TD with native and bare ARM allocators
         if: inputs.level == 'full'
@@ -120,156 +102,45 @@ jobs:
       - name: Check production TD capability dependencies
         if: inputs.level == 'full'
         run: |
-          td_capability_manifest=td/tests/compile/validated-capability/Cargo.toml
-          for td_profile in std portable async; do
-            td_profile_args=()
-            td_profile_features=""
-            td_serde_axes=(base ap)
-            if [ "$td_profile" = std ]; then
-              td_serde_axes+=(order ap,order)
+          manifest=td/tests/compile/validated-capability/Cargo.toml
+          for profile in std portable async; do
+            args=()
+            prefix=""
+            axes=(base ap)
+            if [ "$profile" = std ]; then
+              axes+=(order ap,order)
             else
-              td_profile_args+=(--no-default-features)
-              if [ "$td_profile" = async ]; then td_profile_features="async,"; fi
+              args+=(--no-default-features)
+              if [ "$profile" = async ]; then prefix="async,"; fi
             fi
-            for td_axis in "${td_serde_axes[@]}"; do
-              td_axis_features="${td_profile_features}"
-              if [ "$td_axis" != base ]; then td_axis_features+="$td_axis,"; fi
-              for td_activation in capability sibling; do
-                cargo test --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features}${td_activation},positive"
-                cargo tree --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features}${td_activation},positive" --edges normal --format '{p} features=[{f}]'
+            for axis in "${axes[@]}"; do
+              features="$prefix"
+              if [ "$axis" != base ]; then features+="$axis,"; fi
+              for activation in capability sibling; do
+                cargo test --locked --manifest-path "$manifest" "${args[@]}" --features "${features}${activation},positive"
+                cargo tree --locked --manifest-path "$manifest" "${args[@]}" --features "${features}${activation},positive" --edges normal --format '{p} features=[{f}]'
               done
-              td_negative_log="$(mktemp)"
-              if cargo check --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features}negative" >"$td_negative_log" 2>&1; then
-                cat "$td_negative_log"
+              log="$(mktemp)"
+              if cargo check --locked --manifest-path "$manifest" "${args[@]}" --features "${features}negative" >"$log" 2>&1; then
+                cat "$log"
                 exit 1
               fi
-              grep -E 'unresolved imports.*td::ValidatedThing' "$td_negative_log" || { cat "$td_negative_log"; exit 1; }
-              rm "$td_negative_log"
-              cargo test --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features%,}"
-              cargo tree --locked --manifest-path "$td_capability_manifest" "${td_profile_args[@]}" --features "${td_axis_features%,}" --edges normal --format '{p} features=[{f}]'
+              grep -E 'unresolved imports.*td::ValidatedThing' "$log" || { cat "$log"; exit 1; }
+              rm "$log"
+              cargo test --locked --manifest-path "$manifest" "${args[@]}" --features "${features%,}"
             done
           done
-          for td_prefix in '' async,; do
-            for td_axis in '' ap,; do
-              for td_activation in capability sibling; do
-                td_features="${td_prefix}${td_axis}${td_activation},positive"
-                cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "$td_features"
-                cargo tree --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "$td_features" --edges normal --format '{p} features=[{f}]'
+          for prefix in '' async,; do
+            for axis in '' ap,; do
+              for activation in capability sibling; do
+                cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$manifest" --no-default-features --features "${prefix}${axis}${activation},positive"
               done
-              td_negative_log="$(mktemp)"
-              if cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "${td_prefix}${td_axis}negative" >"$td_negative_log" 2>&1; then
-                cat "$td_negative_log"
+              log="$(mktemp)"
+              if cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$manifest" --no-default-features --features "${prefix}${axis}negative" >"$log" 2>&1; then
+                cat "$log"
                 exit 1
               fi
-              grep -E 'unresolved imports.*td::ValidatedThing' "$td_negative_log" || { cat "$td_negative_log"; exit 1; }
-              rm "$td_negative_log"
-              cargo tree --locked --target thumbv7em-none-eabihf --manifest-path "$td_capability_manifest" --no-default-features --features "${td_prefix}${td_axis}negative" --edges normal --format '{p} features=[{f}]'
+              grep -E 'unresolved imports.*td::ValidatedThing' "$log" || { cat "$log"; exit 1; }
+              rm "$log"
             done
           done
-
-      # Workspace tests cover the default graph; the snapshot's JSON object
-      # canonicalization must also execute with the alternate serde map backend,
-      # and feature-gated typed fields need their own readback run.
-      - name: Verify normalized snapshot feature variants
-        if: inputs.level == 'full'
-        run: |
-          cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --no-default-features
-          cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --features serde_json/preserve_order
-          cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --no-default-features --features td2-preview
-
-      - name: Check Number feature boundary prototype
-        if: inputs.level == 'full'
-        run: python3 tools/architecture-fixtures/validated-thing-feature-boundary/check.py
-
-      - name: Check bounded atomic Number probe
-        if: inputs.level == 'full'
-        run: |
-          cargo test --locked --manifest-path tools/architecture-fixtures/bounded-atomic-number/Cargo.toml
-          cargo build --release --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/bounded-atomic-number/Cargo.toml
-
-      - name: Check ValidatedThing arena and Planning handoff prototypes
-        if: inputs.level == 'full'
-        run: |
-          cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml
-          cargo check --locked --target thumbv7em-none-eabihf -p validated-thing-planning-handoff-probe
-
-      - name: Check strict ValidatedThing Number lexeme boundary
-        if: inputs.level == 'full'
-        run: |
-          cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-strict-number-lexeme/Cargo.toml
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-strict-number-lexeme/Cargo.toml
-
-      - name: Check bounded literal value construction
-        if: inputs.level == 'full'
-        run: |
-          value_fixture_manifest=tools/architecture-fixtures/validated-thing-value-construction/Cargo.toml
-          cargo test --locked --manifest-path "$value_fixture_manifest"
-          cargo test --locked --manifest-path "$value_fixture_manifest" --features order
-          cargo test --locked --manifest-path "$value_fixture_manifest" --no-default-features
-          cargo test --locked --manifest-path "$value_fixture_manifest" --no-default-features --features async
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$value_fixture_manifest" --no-default-features
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$value_fixture_manifest" --no-default-features --features async
-
-      - name: Check shared resumable RFC3339 prototype
-        if: inputs.level == 'full'
-        run: |
-          cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-rfc3339-resumable/Cargo.toml
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-rfc3339-resumable/Cargo.toml
-
-      - name: Check shared Thing and DataSchema Basic source projection
-        if: inputs.level == 'full'
-        run: |
-          schema_fixture_manifest=tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml
-          cargo test --locked --manifest-path "$schema_fixture_manifest"
-          for schema_features in ap order ap,order validated-thing validated-thing,ap validated-thing,order validated-thing,ap,order; do
-            cargo test --locked --manifest-path "$schema_fixture_manifest" --features "$schema_features"
-          done
-          cargo test --locked --manifest-path "$schema_fixture_manifest" --no-default-features
-          for schema_features in async validated-thing async,validated-thing td2-preview,validated-thing; do
-            cargo test --locked --manifest-path "$schema_fixture_manifest" --no-default-features --features "$schema_features"
-          done
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$schema_fixture_manifest" --no-default-features
-          for schema_features in ap async async,ap validated-thing validated-thing,ap async,validated-thing async,ap,validated-thing; do
-            cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$schema_fixture_manifest" --no-default-features --features "$schema_features"
-          done
-
-      - name: Check borrowed Consumer admission discriminator
-        if: inputs.level == 'full'
-        run: |
-          borrowed_fixture_manifest=tools/architecture-fixtures/consumer-borrowed-admission/Cargo.toml
-          cargo test --locked --manifest-path "$borrowed_fixture_manifest"
-          cargo test --locked --manifest-path "$borrowed_fixture_manifest" --features order
-          cargo test --locked --manifest-path "$borrowed_fixture_manifest" --no-default-features
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$borrowed_fixture_manifest" --no-default-features
-
-      - name: Check borrowed Consumer readmission evidence candidate
-        if: inputs.level == 'full'
-        run: |
-          readmission_fixture_manifest=tools/architecture-fixtures/consumer-borrowed-readmission/Cargo.toml
-          cargo test --locked --manifest-path "$readmission_fixture_manifest"
-          cargo test --locked --manifest-path "$readmission_fixture_manifest" --features order
-          cargo test --locked --manifest-path "$readmission_fixture_manifest" --no-default-features --features validated-thing,async
-          python3 tools/architecture-fixtures/consumer-borrowed-readmission/check_boundary.py
-          cargo check --locked --target thumbv7em-none-eabihf --manifest-path "$readmission_fixture_manifest" --no-default-features --features validated-thing
-
-      - name: Run no-default Property Read integration tests
-        if: inputs.level == 'full'
-        run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read
-
-      - name: Check representative feature profiles
-        if: inputs.level == 'full'
-        run: |
-          cargo check --locked -p clinkz-wot-core --no-default-features
-          cargo check --locked -p clinkz-wot-servient --no-default-features
-          cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features
-          cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async
-          cargo check --locked -p clinkz-wot-protocol-bindings-zenoh --no-default-features --features zenoh-pico
-
-      - name: Run supported feature matrix
-        if: inputs.level == 'feature-matrix' || inputs.level == 'full'
-        run: sh scripts/check-feature-matrix.sh
-
-      - name: Run no-default Property Read integration (matrix)
-        if: inputs.level == 'feature-matrix'
-        run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read

@@ -39,7 +39,7 @@ Wrapping the existing graph in `Arc`/`Mutex` fails its auto-trait contracts;
 replacing the whole build/root protocol with shared synchronization is unnecessary
 for this claim. Host synchronization and scheduling remain WP-400 decisions.
 
-The [existing external fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md#construction-boundary-experiments)
+The [historical external fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md#construction-boundary-experiments)
 compiles an unchanged copy of the current Planning program with a private
 experimental adapter appended. It demonstrates feasibility, not the existence
 or acceptance of the proposed public API. The production aggregate's accepted

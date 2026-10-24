@@ -6,6 +6,7 @@ use clinkz_wot_foundation::{
     AdmissionLedger, GatewayDefaultV1, Generation, ResourceLimits, SlotIndex,
     StaticResourceProfile, WorkBudget, WorkClass as W,
 };
+use clinkz_wot_property_read_binding_fixture::MockArtifact;
 use clinkz_wot_td::{
     ValidatedPropertyReadCursor, ValidatedThingAdmissionConfig, ValidatedThingCause,
     ValidatedThingCursor, ValidatedThingPhase, ValidatedThingProgress, thing::Thing,
@@ -131,6 +132,10 @@ fn assert_output(draft: &Draft) {
         assert_eq!(row.plan.content_type(), Some(content));
         let artifact = row.artifact.as_ref().unwrap();
         assert_eq!(artifact.artifact().payload().target(), Some(target));
+        assert_eq!(
+            artifact.artifact().footprint().retained_bytes(),
+            (core::mem::size_of::<MockArtifact>() + target.len()) as u64
+        );
         let identity = artifact.identity();
         assert_eq!(identity.binding_id(), BindingId::new(7));
         assert_eq!(identity.binding_generation(), BindingGeneration::INITIAL);
@@ -359,7 +364,8 @@ fn later_actual_compiler_bound_rejects_before_any_start() {
     let calls = Calls::default();
     let observation = support::start(None);
     let limits = Limits {
-        artifact_bytes: "https://example.test/a/c/value?q=1#f".len() as u64,
+        artifact_bytes: (core::mem::size_of::<MockArtifact>()
+            + "https://example.test/a/c/value?q=1#f".len()) as u64,
         ..Limits::default()
     };
     assert_eq!(

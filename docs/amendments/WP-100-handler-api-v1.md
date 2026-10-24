@@ -2,6 +2,14 @@
 
 Status: Frozen
 
+Implementation disposition after pre-v1 cleanup: the unconsumed
+`SubscriptionAcceptance` public type is withdrawn. References to its exact Rust
+representation below are historical streaming-domain input, not a maintained
+implementation or an instruction to recreate it. The current retained value
+surface and active handler semantics are owned by
+[Interaction Core](../spec/interaction-core.md); subscription objectives and
+ownership obligations remain, pending the successor general SPI design.
+
 Base design revision: v4.9
 
 Amendment id: WP-100-HANDLER-API-001

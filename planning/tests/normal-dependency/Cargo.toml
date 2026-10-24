@@ -7,7 +7,7 @@ publish = false
 [workspace]
 
 [dependencies]
-clinkz-wot-planning = { path = "../..", default-features = false }
+clinkz-wot-planning = { path = "../..", default-features = false, features = ["validated-thing"] }
 
 [features]
 default = ["std"]

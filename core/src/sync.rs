@@ -1,8 +1,6 @@
 //! Portable, always-thread-safe interior-mutability lock for the WoT engine.
 //!
-//! [`WotLock<T>`] is the single lock primitive mandated by the v4.0 baseline
-//! (§4.7). It replaces the former three-way `MapLock`/`multithread` split with
-//! one always-correct container:
+//! [`WotLock<T>`] provides a shared container with profile-appropriate locking:
 //!
 //! | Build | Backing primitive |
 //! |---|---|
@@ -10,8 +8,7 @@
 //! | `no_std` | `critical_section::Mutex<core::cell::RefCell<T>>` (always exclusive) |
 //!
 //! The handle is itself a cheaply [`Clone`]-able `Arc`-backed wrapper, so the
-//! pervasive `Arc<MapLock<T>>` nesting of the prior design collapses to a plain
-//! `WotLock<T>`. Critical sections are always short and never span `.await` or
+//! container needs no additional `Arc` wrapper. Critical sections stay short and never span `.await` or
 //! handler dispatch.
 //!
 //! ## Poison handling
@@ -103,21 +100,6 @@ impl<T> WotLock<T> {
                 f(&*shared_ref)
             })
         }
-    }
-
-    /// Panic-healing alias of [`with`](Self::with).
-    ///
-    /// Retained as the documented entry point for paths that must be robust to
-    /// a panic in the surrounding code (e.g. around handler dispatch). It has
-    /// identical semantics to [`with`](Self::with); the name documents intent.
-    pub fn with_recover<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
-        self.with(f)
-    }
-
-    /// Shared panic-healing alias of [`with_read`](Self::with_read). See
-    /// [`with_recover`](Self::with_recover).
-    pub fn with_read_recover<R>(&self, f: impl FnOnce(&T) -> R) -> R {
-        self.with_read(f)
     }
 
     #[cfg(feature = "std")]

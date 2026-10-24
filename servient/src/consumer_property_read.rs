@@ -63,10 +63,13 @@ const CLEANUP_ITEMS: usize = 10;
 const CLEANUP_BYTES: usize = 11;
 const BINDINGS: usize = 12;
 const THINGS: usize = 13;
+#[cfg(feature = "std")]
 const HOST_BYTES: usize = 14;
 const SLOT_BYTES: usize = 15;
 const POLL_TEMP: usize = 16;
+#[cfg(feature = "std")]
 const TRANSFER_SLOTS: usize = 17;
+#[cfg(feature = "std")]
 const TRANSFER_BYTES: usize = 18;
 const CANCEL_BYTES: usize = 19;
 const KINDS: [K; N] = [
@@ -675,10 +678,7 @@ impl ConsumerPropertyReadPolicy {
         budget: &mut WorkBudget,
         census: Preflight,
     ) -> CoreResult<()> {
-        if options.data.is_some()
-            || name.len() as u64 > self.input[3]
-            || options.uri_variables.len() as u64 > self.input[0]
-        {
+        if name.len() as u64 > self.input[3] || options.uri_variables.len() as u64 > self.input[0] {
             return Err(invalid());
         }
         let comparisons = add(add(census.property_count, census.coordinate_count)?, 1)?;

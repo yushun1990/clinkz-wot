@@ -98,7 +98,7 @@ throughput, latency, device-fit or protocol-neutrality claim is made.
 
 ## Pre-implementation evidence
 
-The [external composition discriminator](../../tools/architecture-fixtures/consumer-aggregate-admission/README.md)
+The [historical composition discriminator](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-aggregate-admission/README.md)
 normally depends on production TD/Core/Foundation and requests `validated-thing`
 explicitly. It reuses only inert execution halves from the compiler fixture;
 support comes from real Core complete-owner capture. It runs two paid TD passes,

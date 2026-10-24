@@ -166,7 +166,7 @@ is needed. Neither path uses the legacy TD-bearing Consumer or implicit Director
 The admission's three downstream discriminators use actual public
 output/root/reclaim and real accounts, with explicitly modeled
 publication/header logic. Exact source and limits are documented in the existing
-[runtime-entry fixture](../../tools/architecture-fixtures/consumer-runtime-entry/README.md#runtime-admission-discriminators).
+[historical runtime-entry fixture](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-runtime-entry/README.md#runtime-admission-discriminators).
 The production [Consumer application fixture](../../tools/architecture-fixtures/consumer-property-read-runner/README.md)
 and [completion evidence](../evidence/WP-400-consumer-property-read-runtime.toml)
 with key `consumer-property-read-runtime` are independently accepted by the
@@ -470,16 +470,19 @@ integration remains behind an explicit test feature.
 - Remove any registration whose preparation visibility or closed-ingress behavior is implicit.
   Host and static builders reject server bundles that cannot enforce hidden preparation or one
   bounded declared reject, backpressure, or buffer-within-admitted-limits policy.
-- After every host registration call site uses the 73 target methods, remove `PushFn` and every
-  `SubscriptionSender`-based handler setup/publication path. Remove the legacy affordance-first
-  sync/async handler traits and setters, all nine public `*Slot` enums (`ReadSlot`, `WriteSlot`,
-  `ObserveSlot`, `UnobserveSlot`, `InvokeSlot`, `QuerySlot`, `CancelSlot`, `SubscribeSlot`, and
-  `UnsubscribeSlot`), and all nine public raw handler lookup methods. Do not carry these names
-  behind a compatibility feature. `PublisherSink` remains solely for WP-600 protocol migration
-  and is not callable from the migrated Servient.
-- Remove Servient storage or calls for `EventBroker`, `EventName`, core `Subscription`,
-  `SubscriptionGuard`, `EventStream`, `Subscription::merge`, and `SubscriptionSender`. Standard
-  collection methods have no implicit per-affordance fan-out fallback.
+- The original staged migration assigned removal of `PushFn`,
+  `SubscriptionSender` handler paths, legacy affordance-first traits/setters,
+  nine public raw `*Slot` enums (`ReadSlot`, `WriteSlot`, `ObserveSlot`,
+  `UnobserveSlot`, `InvokeSlot`, `QuerySlot`, `CancelSlot`, `SubscribeSlot`,
+  `UnsubscribeSlot`) and nine lookup methods to WP-400 after host activation,
+  leaving `PublisherSink` for WP-600. The pre-v1 cleanup withdrew those old
+  implementations and the staged protocol edge. Verify they remain
+  absent rather than retaining a compatibility feature or scheduling another
+  removal.
+- Keep Servient storage and calls for the withdrawn `EventBroker`, `EventName`,
+  core `Subscription`, `SubscriptionGuard`, `EventStream`, `Subscription::merge`,
+  and `SubscriptionSender` absent. Future standard collection methods must not
+  silently fall back to per-affordance fan-out.
 
 No compatibility facade may keep the removed lifecycle callable on a releasable feature cell.
 
@@ -648,6 +651,7 @@ exhausted transfer capacity falls back to durable residual recording.
   compile fixtures and internal call sites. Per-route activation gates, active-guard or
   permit-free accept calls, binding registry observation, and undeclared closed-ingress behavior
   are likewise absent.
-- `PushFn`, the `SubscriptionSender` handler path, legacy handler traits/setters, raw slot enums,
-  and raw lookup methods are absent. The only remaining staged emission debt is the WP-600-owned
-  concrete-protocol `PublisherSink` edge.
+- `PushFn`, the `SubscriptionSender` handler path, legacy handler traits/setters,
+  raw slot enums, raw lookup methods, and concrete-protocol `PublisherSink` paths
+  remain absent in all releasable cells. Future subscription/emission integration
+  must satisfy its own domain-entry and lifecycle evidence without a staged bridge.

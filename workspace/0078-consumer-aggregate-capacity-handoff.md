@@ -68,7 +68,7 @@ evaluation boundary.
 
 ## Evidence, migration and impact
 
-The [external discriminator](../tools/architecture-fixtures/consumer-aggregate-admission/README.md)
+The [historical external discriminator](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/consumer-aggregate-admission/README.md)
 joins production TD to checked complete Core static/public Host registrations,
 exercises two paid passes, real bounds before starts, a later bound failure,
 concrete output after actual source/registration destruction, and fixed

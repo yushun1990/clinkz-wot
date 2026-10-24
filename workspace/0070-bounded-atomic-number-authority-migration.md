@@ -65,7 +65,7 @@ as ordinary binary64 spellings. The original assertion that this is "small
 enough" did not justify its cancellation latency: Rust's public float parser
 can enter a slower fallback with a 768-digit buffer even on shorter input.
 Lexeme length bounds input, not cycles or stack. The correction supplies a
-[declared constrained workload and non-production probe](../tools/architecture-fixtures/bounded-atomic-number/README.md)
+[historical constrained workload and non-production probe](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/bounded-atomic-number/README.md)
 with adversarial public projections, explicit cycle/stack rejection bounds,
 and measurement instructions. The amendment owns the acceptance requirement.
 256 remains a candidate ceiling until target results pass independent review;

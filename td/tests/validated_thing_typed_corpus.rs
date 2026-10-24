@@ -1,8 +1,4 @@
-//! Non-production input corpus for WP-100-CONSUMER-VALIDATED-THING item 3.
-//!
-//! These tests establish typed input semantics using the current Thing model.
-//! They do not stand in for a future normalized snapshot or prove that the
-//! compatibility cursor accepts the corpus; that cursor is not admitted yet.
+//! Typed model semantics, including fields used by borrowed TD admission.
 
 use std::collections::BTreeMap;
 
@@ -499,9 +495,7 @@ fn basic_valid_typed_thing_can_fail_its_serializer() {
             .contains("Context must contain at least one official WoT URI")
     );
 
-    // The typed fields remain available after failed serialization. A future
-    // compatibility normalizer must inspect these directly and accept this
-    // Basic-valid input without trying to serialize it first.
+    // Typed admission inspects these fields directly, without serialization.
     assert_eq!(
         thing.properties.as_ref().unwrap()["zeta"]
             ._interaction

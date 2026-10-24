@@ -121,12 +121,18 @@ Availability is established by public code and executed evidence, not by this
 goal list, operation enums, planned API rows or an accepted ADR. The
 [Preparation/Execution migration evidence](../evidence/WP-200-preparation-execution-boundary.toml)
 owns the exact retained, removed and unimplemented scope. It retains narrow
-Producer/Consumer Property Read paths; the concrete HTTP path is a Host,
-cleartext-IP, NoSec Consumer slice. Broad legacy Action/Event, write and
+Producer/Consumer Property Read paths; the concrete HTTP path now includes Host,
+cleartext-IP, NoSec Consumer reads and a bounded loopback Producer service. Broad legacy Action/Event, write and
 subscription facades have no claimed replacement in that migration.
 [Discovery](../../discovery/src/lib.rs) remains separately available; removal
 of Servient convenience methods does not complete the
 [target Directory client contract](../work-packages/WP-500-discovery.md).
+
+The pre-v1 cleanup also withdraws orphaned Core event/subscription APIs and the
+deferred Zenoh/pico transport stack. Their removal adds no replacement capability;
+the [retained implementation boundary](20-module-boundaries.md#retained-pre-v1-implementation-baseline)
+identifies current coverage. Strict remote JSON ingestion remains future work
+after retirement of its non-production prototypes.
 
 Deleting legacy Producer/Consumer, Action/Event, subscription, discovery,
 security or embedded-related APIs withdraws those API implementations and any

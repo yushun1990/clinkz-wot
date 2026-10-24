@@ -45,9 +45,8 @@
 #![no_std]
 extern crate alloc;
 
-// Reuse only the existing complete Core registration authoring adapter. It has
-// no TD/Planning dependency, semantic algorithm, input loan or publication path.
-#[path = "../../../../tools/architecture-fixtures/validated-thing-planning-handoff/src/registration.rs"]
+// Complete static preparation registration using Planning's compiler contracts;
+// no TD semantic algorithm, input loan or publication path.
 pub mod registration;
 
 mod join;

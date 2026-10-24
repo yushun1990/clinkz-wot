@@ -430,6 +430,8 @@ pub(crate) mod lending {
         TemplateBase,
         Resolve(ResolveError),
     }
+    // The alias's borrowed bytes are consumed only by the bounded admission driver.
+    #[cfg_attr(not(feature = "validated-thing"), allow(dead_code))]
     pub(crate) enum Target<'a> {
         Alias(&'a str),
         Resolve(Resolution<'a>),

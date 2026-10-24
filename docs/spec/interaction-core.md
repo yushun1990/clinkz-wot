@@ -57,9 +57,15 @@ per-step contract. Aggregate timeout and cancellation describe the aggregate
 request/response lifecycle, not preemption of synchronous code. Public API
 documentation MUST state this distinction.
 
-The exact five handler values, eighteen-operation matrix, registration methods,
+The retained handler values, eighteen-operation matrix, registration methods,
 cancellation reducers, and completed Property Read handler representation are
 owned by `docs/amendments/WP-100-handler-api-v1.md`.
+
+The pre-v1 cleanup withdraws the unconsumed `SubscriptionAcceptance` type and
+legacy payload-bearing `InteractionOptions`. Subscription-start and teardown
+semantics remain future domain work; the historical acceptance wrapper is not a
+required physical representation for the successor SPI. Current options contain
+only URI variables, an optional original Form index and timeout intent.
 
 ## Values and errors
 

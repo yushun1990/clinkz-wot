@@ -25,15 +25,15 @@ use clinkz_wot_td::{
     validate::{Validate, ValidationLevel},
 };
 
-#[cfg(feature = "std")]
-use crate::DirectoryWatch;
 use crate::{
-    CapabilityFilter, ContinuationToken, CountMode, CountValue, DirectoryBatch, DirectoryChange,
-    DirectoryFilter, DirectoryItem::*, DirectoryPatch, DirectoryPublisher, DirectoryQuery,
-    DirectoryReader, DirectoryRegistration, DirectorySession, DirectoryStats, DiscoveryError,
-    DiscoveryResult, LeaseState, LeaseToken, ProjectionMode, RegistrationAck, Revision,
-    SummaryFields, ThingDescriptionResolver, ThingFragment,
+    CapabilityFilter, ContinuationToken, CountMode, CountValue, DirectoryBatch, DirectoryFilter,
+    DirectoryItem::*, DirectoryPatch, DirectoryPublisher, DirectoryQuery, DirectoryReader,
+    DirectoryRegistration, DirectorySession, DirectoryStats, DiscoveryError, DiscoveryResult,
+    LeaseState, LeaseToken, ProjectionMode, RegistrationAck, Revision, SummaryFields,
+    ThingDescriptionResolver, ThingFragment,
 };
+#[cfg(feature = "std")]
+use crate::{DirectoryChange, DirectoryWatch};
 
 // ---------------------------------------------------------------------------
 // State (primary map + secondary indexes + lease/revision counters).

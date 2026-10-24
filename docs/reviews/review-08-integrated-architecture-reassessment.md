@@ -40,7 +40,7 @@ one-exposure/one-listener cardinalities do not establish a general architecture.
 | --- | --- | --- |
 | F1: Producer semantic loss and incomplete coverage | [Planner](../../planning/src/property_read.rs) selects the first read-looking Form and treats absent `op` as readable. The [existing diagnostic](../../tools/architecture-fixtures/property-read-runner/tests/producer_admission.rs) reproduces thirteen Basic-valid mutations with absent semantic loans, equal plans, preparation/handler/response and complete mock cleanup. | Proven implementation defects, already acknowledged by the accepted Producer admission. Correct whole-description admission before native effects; this is not an HTTP authentication exploit or proof that the proposed driver works. |
 | F2: Explicit HTTP method on a multi-operation Form | [HTTP lowering](../../protocol-bindings/protocols/http/src/compiler.rs) receives effective operations but does not apply their multiplicity to `htv:methodName`. The independent probe admits a Form with explicit `op: [readproperty, writeproperty]` and `htv:methodName: POST`. | Additional protocol-mapping defect. TD 1.1 prohibits this combination. Correct HTTP lowering, without an HTTP case in the Engine. The probe establishes compilation/admission, not a new wire-execution claim. |
-| F3: General compiler erasure does not imply open Consumer admission | [Compiler contracts](../../core/src/binding_compiler.rs) support generic owned/resumable state, but `HostSemanticCompiler` requires an inline `Copy` artifact and one atomic callback. The [existing external compiler test](../../protocol-bindings/protocols/http/tests/semantic_compilation.rs) executes 512 funded steps and then proves exclusion from Consumer planning. | Proven extensibility restriction. Restricted inline authoring is useful, but cannot establish general Binding authorability. |
+| F3: General compiler erasure does not imply open Consumer admission | [Compiler contracts at the reviewed revision](https://github.com/yushun1990/clinkz-wot/blob/700cfdb/core/src/binding_compiler.rs) support generic owned/resumable state, but `HostSemanticCompiler` requires an inline `Copy` artifact and one atomic callback. The [existing external compiler test](../../protocol-bindings/protocols/http/tests/semantic_compilation.rs) executes 512 funded steps and then proves exclusion from Consumer planning. | Proven extensibility restriction. Restricted inline authoring is useful, but cannot establish general Binding authorability. |
 | F4: Extension security data is rejected upstream | [Security deserialization](../../td/src/components/security_scheme.rs) has a closed scheme discriminator. The independent probe adds an unused `ex:nonce` definition alongside selected NoSec and fails before Binding selection. | Proven extensibility barrier. TD must distinguish preserving an extension from knowing how to satisfy it. Preservation cannot grant authorization; selected unsupported security must still refuse. |
 | F5: Execution and environment capabilities remain coupled | [Servient dependencies](../../servient/Cargo.toml) include TD, Planning, Discovery and the legacy compiler utility. Core base modules use `Arc`. Cortex-M4 no-default and async/no-std checks pass; Core fails on installed `riscv32imc-unknown-none-elf` because pointer atomics are unavailable. | Proven dependency and portability restrictions. They do not show that all embedded execution is impossible or that a new Contracts crate is necessary. |
 | F6: Source representation restricts Consumer availability | The independent probe passes ordinary TD Basic validation with absent source id or an empty Property key, then observes Consumer admission refusal. [Planning](../../planning/src/consumer_property_read.rs) requires both. Original accounts return to baseline. | Availability restrictions, not failed cleanup. The new Producer admission already handles these cases; source provenance should not define live authority. |
@@ -124,7 +124,7 @@ eligibility must also stop calling concrete compiler recognition from Core.
 | Native program and typed operand representations, including compiler/executor mapping compatibility | Binding runtime module; the optional compiler produces this same type. No native type is defined by Planning or mentioned by Core. |
 | Runtime registration/executor contract and private live instance/route records | Core contracts / Servient records; no compiler trait object is retained in an execution-only registration. Preparation captures and checks the real paired registration separately. |
 
-The isolated [five-crate sketch](../../tools/architecture-fixtures/review08-boundaries/README.md)
+The retired [five-crate sketch](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/review08-boundaries/README.md)
 compiles the critical Core/TD/Planning/Binding edges in distinct packages, using
 language primitives in place of Foundation and std UDP in place of a native SDK.
 It has no production crate dependency. Binding's
@@ -174,7 +174,7 @@ declaring which inputs are definition dependencies and which are operands.
 This corrects the earlier suggestion that a checked context alone could supply
 reuse: there must be a callable binding boundary and a surviving program owner.
 The sketch's minimal preparation interface is in
-[Planning](../../tools/architecture-fixtures/review08-boundaries/planning/src/lib.rs):
+[Planning](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/review08-boundaries/planning/src/lib.rs):
 
 ```rust,ignore
 trait ReadCompiler {
@@ -334,8 +334,8 @@ records. A candidate carries that exact issuer/registration/generation, captured
 native facts and a lease on its immutable packet. Matching grants no authority;
 the Engine neither decodes patterns nor lets a Binding choose an authorized handler.
 
-The [UDP Binding](../../tools/architecture-fixtures/review08-boundaries/binding/src/lib.rs)
-and [exact-unicast Engine adapter](../../tools/architecture-fixtures/review08-boundaries/engine/src/lib.rs)
+The historical [UDP Binding](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/review08-boundaries/binding/src/lib.rs)
+and [exact-unicast Engine adapter](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/review08-boundaries/engine/src/lib.rs)
 still demonstrate two routes sharing actual I/O. Equality lookup and unique-key
 collision refusal are valid for that adapter's exclusive endpoints. They are
 not required by the general matching boundary or by logical subscriptions.
@@ -390,8 +390,8 @@ regression failed before the correction, then passed with B still receiving,
 replying and admitting a replacement sibling after that poll. Final observation,
 reply and job drain still precede exactly one socket close.
 
-The companion [Binding matcher](../../tools/architecture-fixtures/review08-boundaries/binding/src/matching.rs)
-and [Engine recipient dispatcher](../../tools/architecture-fixtures/review08-boundaries/engine/src/matching.rs)
+The historical [Binding matcher](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/review08-boundaries/binding/src/matching.rs)
+and [Engine recipient dispatcher](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/review08-boundaries/engine/src/matching.rs)
 construct the relation without a protocol case in Engine. Two tests exercise
 `meters/+/watts` with `meters/m1/#`, and identical `meters/+/watts` filters, over
 one decoded packet. Captures, zero/many candidates, shared backing, independent
@@ -564,6 +564,6 @@ The required GitHub `validation` status checks diff hygiene only.
 
 The constructibility rework ran on Linux x86_64, Rust 1.99.0. Reproduction commands
 and exact evidence limits are in the
-[sketch README](../../tools/architecture-fixtures/review08-boundaries/README.md).
+[historical sketch README](https://github.com/yushun1990/clinkz-wot/blob/5091685/tools/architecture-fixtures/review08-boundaries/README.md).
 The new tests exercise the proposed interfaces, not production contracts; the
 original four diagnostics remain observations of unchanged production behavior.
