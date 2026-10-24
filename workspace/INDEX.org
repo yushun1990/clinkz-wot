@@ -35,7 +35,7 @@ Topics are retained after migration as decision history.
 - [[file:0056-target-spi-external-validation-and-cross-protocol-neutrality.md][0056 Target SPI External Validation and Conditional Protocol Independence]]
 - [[file:0081-reusable-plan-and-thing-identity.md][0081 Reusable Plan Semantics Versus Thing-Generation Ownership]]
 - [[file:0083-host-zenoh-consumer-query-ownership.md][0083 Host Zenoh Consumer Query Ownership — deferred optional binding]]
-- [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 Composable Capabilities and Runtime Boundaries]]
+- [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 General SPI Architecture: WoT Semantics, Execution Authority and Native Resources]]
 
 ** DECIDED
 
