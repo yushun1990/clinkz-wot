@@ -671,6 +671,16 @@ fn check_historical_evidence_lineage(
             "historical evidence {path} adds unpinned evidence_keys"
         ));
     }
+    // The two v6 annotations are the only authorized additions. Pin the entire
+    // historical payload, including provenance refs and nested evidence results.
+    let mut retained = current.clone();
+    retained.as_table_mut().remove("authority_scope");
+    retained.as_table_mut().remove("successor_acceptance");
+    if retained.to_string() != pinned.to_string() {
+        return Err(format!(
+            "historical evidence {path} payload differs from pinned baseline"
+        ));
+    }
     Ok(())
 }
 
@@ -1630,6 +1640,27 @@ mod tests {
                     super::check_historical_evidence_lineage(path, &altered, &pinned)
                         .unwrap_err()
                         .contains("evidence_keys")
+                );
+            }
+            if path == "docs/evidence/WP-200-preparation-execution-boundary.toml" {
+                for field in ["implementation_ref", "verification_ref"] {
+                    let mut altered = evidence.clone();
+                    altered[field] = toml_edit::value("unrelated-commit");
+                    let error = super::check_historical_evidence_lineage(path, &altered, &pinned)
+                        .unwrap_err();
+                    assert!(error.contains("payload differs"), "{field}: {error}");
+                }
+                let mut altered = evidence.clone();
+                altered["evidence"]
+                    .as_array_of_tables_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .next()
+                    .unwrap()["result"] = toml_edit::value("failed");
+                assert!(
+                    super::check_historical_evidence_lineage(path, &altered, &pinned)
+                        .unwrap_err()
+                        .contains("payload differs")
                 );
             }
         }
