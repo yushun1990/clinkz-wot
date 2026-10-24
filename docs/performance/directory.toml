@@ -194,6 +194,7 @@ requirements = ["PERF-SCALE-001", "PERF-COMPLEXITY-001"]
 fixture_id = "FX-DIR-009"
 harness_case = "directory_admission_byte_and_structure_scaling"
 gating = false
+characterization = true
 name = "directory_admission_byte_and_structure_scaling"
 axes = [
     "td-bytes",
@@ -223,6 +224,7 @@ requirements = ["HOST-SHARD-001", "HOST-SHARD-002"]
 fixture_id = "FX-DIR-010"
 harness_case = "unrelated_directory_sessions"
 gating = false
+characterization = true
 name = "unrelated_directory_sessions"
 require_independent_progress = true
 

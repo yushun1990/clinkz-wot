@@ -764,6 +764,7 @@ requirements = [
 fixture_id = "FX-CS-023"
 harness_case = "bounded_binding_ingress"
 gating = false
+characterization = true
 name = "bounded_binding_ingress"
 pressure_scopes = ["per-route", "per-binding", "global"]
 saturation_axes = ["items", "bytes", "items-and-bytes"]
