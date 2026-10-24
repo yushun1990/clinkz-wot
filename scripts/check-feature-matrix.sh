@@ -36,6 +36,11 @@ check "planning default"        -p clinkz-wot-planning
 check "planning no-features"    -p clinkz-wot-planning --no-default-features
 check "planning async"          -p clinkz-wot-planning --no-default-features --features async
 
+echo "=== isolated Planning normal dependency ==="
+check "planning isolated default"     --manifest-path planning/tests/normal-dependency/Cargo.toml
+check "planning isolated no-default"  --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features
+check "planning isolated async"       --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async
+
 echo "=== protocol-bindings-http ==="
 check "http preparation"        -p clinkz-wot-binding-http
 check "http execution-only"     -p clinkz-wot-binding-http --no-default-features

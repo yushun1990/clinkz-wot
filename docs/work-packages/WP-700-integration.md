@@ -37,13 +37,14 @@ target path. WP-700 owns final public/source/umbrella absence and may remove onl
 surfaces whose last legitimate migration user disappears at final composition.
 
 ADR-0022 defers Zenoh/pico production and real embedded networking. Neither is a
-WP-700 entry or completion dependency. Retire or exclude legacy Zenoh execution
-from the v1 releasable surface while preserving optional experimental source and
-its historical evidence. A future Zenoh binding must enter through current
-target contracts; adding HTTP cannot justify shipping a target-to-legacy bypass.
-All final absence claims below cover the releasable public surface and its source
-paths; excluded experimental paths must be named explicitly, not hidden behind
-an apparently supported v1 feature. Portable static/ARM evidence remains required.
+WP-700 entry or completion dependency. The pre-v1 cleanup has removed legacy
+Zenoh execution, its experimental source, and its Cargo features from the current
+workspace; historical evidence remains in Git and its decision records. Future
+Zenoh bindings must enter through then-current contracts. All final absence
+claims below cover the releasable public surface and its source paths; any
+subsequently added experimental paths must be named explicitly, not hidden
+behind an apparently supported v1 feature. Portable static/ARM evidence remains
+required.
 
 The broad success/error and cross-binding metadata projection retained in
 `docs/amendments/WP-100-interaction-output-api-v1.md` is v5-inactive historical
@@ -89,20 +90,22 @@ focused package-level result with one broad integration test.
 | Cargo package | Feature cell | Required surface |
 | --- | --- | --- |
 | `clinkz-wot` | `--no-default-features` | Useful constrained re-exports for foundation, TD, core, planning, Discovery client values/poll traits, codecs selected by feature, and `StaticServient` |
-| `clinkz-wot` | `async`, no `std` | Native async adapters without an executor, host runtime, or concrete Rust zenoh dependency |
+| `clinkz-wot` | `async`, no `std` | Native async adapters without an executor, host runtime, or concrete transport dependency |
 | `clinkz-wot` | `std` | Feature-composed `Servient`, host handles, Discovery client adapters, and host conveniences |
-| `clinkz-wot` | prospective `http` | Optional Host HTTP/1.1/HTTPS composition; exact feature/dependencies enter with admitted binding work |
-| `clinkz-wot` | `zenoh`, `zenoh-pico` | Deferred experimental cells; no v1 production claim or completion dependency; legacy execution excluded or retired before release |
+| `clinkz-wot` | future `http` feature | Optional composition of the existing Host HTTP binding, including HTTPS when qualified; umbrella feature/dependencies require admitted binding work |
 | `clinkz-wot` | `cbor` | Optional `clinkz-wot-codec-cbor` re-exports in every supported codec cell |
 | `clinkz-wot` | `td2-preview` | Additive experimental TD 2.0 surface with unchanged TD 1.1 behavior when preview fields are absent |
 
-The workspace compile matrix covers the actual Cargo packages
+The current product compile matrix covers the actual Cargo packages
 `clinkz-wot-foundation`, `clinkz-wot-td`, `clinkz-wot-core`,
 `clinkz-wot-planning`, `clinkz-wot-discovery`, `clinkz-wot-servient`,
-`clinkz-wot-protocol-bindings-zenoh`, `clinkz-wot-codec-cbor`, and `clinkz-wot`.
-Zenoh-pico is a feature of `clinkz-wot-protocol-bindings-zenoh`, not a separate package in this
-revision. The prospective HTTP package joins this matrix only through admitted
-creation; no placeholder package/feature is created by the strategy decision.
+`clinkz-wot-binding-http`, `clinkz-wot-codec-cbor`, and `clinkz-wot`, plus the
+retained Property Read fixture packages. The isolated Planning normal-dependency
+fixture has its own locked default, no-default and async cells. Tools are
+registered in the workspace manifest but do not create product feature cells.
+Neither `zenoh` nor `zenoh-pico` is currently an umbrella feature or a workspace
+package. The HTTP package exists; an umbrella `http` feature has not yet been
+added.
 
 ## Public API and Data Migration
 
@@ -119,9 +122,9 @@ creation; no placeholder package/feature is created by the strategy decision.
   installation boundaries plus intentionally public construction components. Do not re-export a
   split client/server registration, separately installable compiler or contributor, runtime event
   sink configuration, driving-mode selector, or bare trait-object builder convenience.
-- Re-export the core `BindingCompilerExtension` and immutable artifact envelope/reference SPI and
-  the planning crate's compiler coordinator under their defining type identities. Do not recreate
-  the former shared protocol-bindings planning namespace.
+- Re-export Planning's `BindingCompilerExtension` and compiler coordinator, and Core's
+  immutable runtime artifact envelope/reference SPI, under their defining type
+  identities. Do not recreate the former shared protocol-bindings planning namespace.
 - Preserve the defining type identities of `ServingActivationAuthority`,
   `RouteActivationPermit<'_>`, `HostCommittedRouteGuard`, and `HostShutdownRouteGuard` in every
   intended umbrella exposure. No umbrella wrapper may make the permit owned, cloneable, storable,
@@ -215,19 +218,6 @@ not permission to keep routine legacy backflow alive until this package.
 - Remove legacy security, payload, error, and resource aliases that define a second cross-crate
   role instead of re-exporting the frozen owner. A transitional alias may not remain enabled in a
   releasable feature cell.
-- Remove every legacy handler/emission/subscription bridge and export: `PushFn`, `EventBroker`,
-  `EventName`, `EventStream`, `PublisherSink`, `SubscriptionSender`, core `Subscription`,
-  `SubscriptionGuard`, `BindingRequest`, `ServerEmissionSlot`, the affordance-first sync/async handler traits
-  and setters, all nine public `ReadSlot` through `UnsubscribeSlot` enums, and all nine raw
-  `property_handler_*`, `action_handler_*`, and `event_handler_*` lookup methods. The final
-  umbrella exposes only the 54 operation-specific core traits and the 73 WP-400 host
-  registration methods frozen in `docs/api-ownership.csv`.
-- Remove the legacy public form-selection family from
-  `clinkz-wot-protocol-bindings`, including `FormSelectionCriteria`,
-  `SelectedForm`, `SelectedAffordanceForm`, `SelectedAffordanceSelection`,
-  `select_form*`, and `select_affordance_form*`. Final source inspection proves
-  that no target plan, registration, route, or request can re-enter a TD/form
-  selection path after Planning has acted.
 - Remove stale crate documentation claiming that the default `std` feature installs Tokio or a
   concrete transport when the actual feature graph does not do so.
 - Remove `RuntimeEventSinkConfig`, `BindingDrivingMode`, independently installable host/static
@@ -237,6 +227,18 @@ not permission to keep routine legacy backflow alive until this package.
 - Remove `RouteCommitOutcome::Serving`, per-route `open_gate` or `release_gate` callbacks,
   `poll_accept` over an active guard or without a borrowed activation permit, registry observation
   from a binding context, and any owned, cloneable, or retained activation-permit adapter.
+
+Earlier migrations and the pre-v1 cleanup have already removed the old handler,
+broker/queue/subscription bridges (`PushFn`, `EventBroker`, `EventName`,
+`EventStream`, `PublisherSink`, `SubscriptionSender`, core `Subscription`,
+`SubscriptionGuard`, `BindingRequest`, `ServerEmissionSlot`, the affordance-first
+traits/slots/raw lookups) and the public form-selection family
+(`FormSelectionCriteria`, `SelectedForm`, `SelectedAffordanceForm`,
+`SelectedAffordanceSelection`, `select_form*`, `select_affordance_form*`). WP-700
+verifies they remain absent in every releasable cell and that no target plan,
+registration, route, or request re-enters TD/form selection after Planning has
+acted. Final positive checks establish the intended handler and registration
+paths against their defining owners.
 
 The old-API compile-fail suite names every removed public path and proves that no default,
 no-default, async, or optional binding cell restores it.
@@ -258,8 +260,9 @@ no-default, async, or optional binding cell restores it.
   requirement has current focused evidence and that all artifact, ownership, state, resource,
   gate, and work-package checks pass in one revision.
 - `binding-spi-final-conformance`: type-identity and composed lifecycle evidence for complete
-  startup bundles, core compiler-extension artifacts, immutable plan-set leases, route-scoped
-  fairness, committed-closed guards, borrowed activation permits, associated-state slots,
+  startup bundles, Planning compiler-extension contracts and Core runtime artifacts,
+  immutable plan-set leases, route-scoped fairness, committed-closed guards,
+  borrowed activation permits, associated-state slots,
   lifetime/ingress accounting, typed input rejection, and acknowledged complete-work cleanup
   transfer across host and constrained feature cells. Each common capability
   consumes one machine-readable trace oracle; semantic deltas and normalized
@@ -329,8 +332,9 @@ reference gate. The Gateway `PERF-GW-030` and constrained `PERF-CS-022` results 
   feature cell.
 - Every applicable positive and negative public-surface fixture passes, including
   useful no-default and async no-std umbrella builds, admitted HTTP/HTTPS, `cbor`
-  and additive `td2-preview`. Deferred Zenoh/pico cells have explicit experimental
-  dispositions; they are not production protocol acceptance requirements.
+  and additive `td2-preview`. Deferred Zenoh/pico have explicit release
+  dispositions; their withdrawn Cargo cells are not production protocol
+  acceptance requirements.
 - Constrained runtime maturity is claimed only for executed common runtime
   capabilities; compile-only async/no-std and profile-only capabilities are
   listed separately and cannot inherit runtime parity from type availability.
