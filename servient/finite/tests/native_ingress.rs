@@ -1,4 +1,6 @@
 //! External Binding with actual TCP I/O and a separate retained-reply probe.
+#[path = "native_ingress/shared_ownership.rs"]
+mod shared_ownership;
 use clinkz_wot_core::{
     finite::{
         FiniteCandidate, FiniteDelivery, FiniteEffect, FiniteIngress, FiniteIngressBinding,
@@ -30,15 +32,25 @@ fn budget(n: u64) -> WorkBudget {
 }
 fn limits() -> RawFiniteLimits {
     RawFiniteLimits {
-        instances: 2,
-        behaviors_per_instance: 1,
-        target_name_bytes: 64,
         candidates: 2,
         input_body_bytes: 16,
         output_body_bytes: 16,
         output_media_capacity: 32,
         output_retained_bytes: 256,
     }
+}
+fn registry_limits() -> RawFiniteRegistryLimits {
+    RawFiniteRegistryLimits {
+        instances: 2,
+        behaviors_per_instance: 1,
+        target_name_bytes: 64,
+    }
+}
+fn servient(
+    instances: Vec<RawFiniteInstance>,
+    limits: RawFiniteRegistryLimits,
+) -> RawFiniteServient {
+    RawFiniteServient::try_new(instances, limits).unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn authority(slot: u32) -> ProducerInstanceAuthority {
     ProducerInstanceAuthority::try_new(ThingSlotId::new(SlotIndex::new(slot), Generation::INITIAL))
@@ -231,10 +243,21 @@ impl FiniteIngressBinding for TcpBinding {
         Poll::Ready(Ok(disposition))
     }
 }
-fn step<B: FiniteIngressBinding>(rt: &mut RawFiniteRuntime<B>) -> Poll<RawFiniteState> {
-    rt.step(&mut context(), &mut budget(5000))
+fn step<B: FiniteIngressBinding>(
+    servient: &mut RawFiniteServient,
+    rt: &mut RawFiniteRuntime<B>,
+) -> Poll<RawFiniteState> {
+    servient
+        .step(rt, &mut context(), &mut budget(5000))
+        .unwrap()
 }
-fn exchange(rt: &mut RawFiniteRuntime<TcpBinding>, addr: SocketAddr, message: u8, expected: u8) {
+fn exchange(
+    servient: &mut RawFiniteServient,
+    rt: &mut RawFiniteRuntime<TcpBinding>,
+    addr: SocketAddr,
+    message: u8,
+    expected: u8,
+) {
     let mut client = TcpStream::connect(addr).unwrap();
     client
         .set_read_timeout(Some(std::time::Duration::from_secs(2)))
@@ -245,7 +268,7 @@ fn exchange(rt: &mut RawFiniteRuntime<TcpBinding>, addr: SocketAddr, message: u8
         RawFiniteState::Delivering,
         RawFiniteState::Serving,
     ] {
-        assert_eq!(step(rt), Poll::Ready(state));
+        assert_eq!(step(servient, rt), Poll::Ready(state));
     }
     let mut response = [0];
     client.read_exact(&mut response).unwrap();
@@ -272,21 +295,26 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
         b: bk,
         polls: polls.clone(),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        7,
+    let mut servient = servient(
         vec![
             instance(a, Operation::ReadProperty, calls_a.clone(), b"1"),
             instance(b, Operation::WriteProperty, calls_b.clone(), b"2"),
         ],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     let addr = addr.lock().unwrap().unwrap();
     let mut early = TcpStream::connect(addr).unwrap();
     early.write_all(b"a").unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     assert_eq!(polls.load(Ordering::SeqCst), 0);
     assert_eq!(calls_a.load(Ordering::SeqCst), 0);
     rt.activate_raw().unwrap();
@@ -295,31 +323,42 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
         RawFiniteState::Delivering,
         RawFiniteState::Serving,
     ] {
-        assert_eq!(step(&mut rt), Poll::Ready(state));
+        assert_eq!(step(&mut servient, &mut rt), Poll::Ready(state));
     }
     let mut first = [0];
     early.read_exact(&mut first).unwrap();
     assert_eq!(first, *b"1");
     let polls_before_ack = polls.load(Ordering::SeqCst);
     assert_eq!(
-        rt.step(&mut context(), &mut budget(0)),
+        servient
+            .step(&mut rt, &mut context(), &mut budget(0))
+            .unwrap(),
         Poll::Ready(RawFiniteState::Serving)
     );
     assert_eq!(polls.load(Ordering::SeqCst), polls_before_ack);
     assert_eq!(rt.take_settlement().unwrap().effect, FiniteEffect::Unknown);
-    exchange(&mut rt, addr, b'b', b'2');
-    exchange(&mut rt, addr, b'd', b'E'); // authorization precedes behavior
-    exchange(&mut rt, addr, b'm', b'E'); // exclusive reply ambiguity refuses
-    exchange(&mut rt, addr, b'o', b'E'); // retained input exceeds declared limit
-    exchange(&mut rt, addr, b'v', b'E'); // no registered operation for matched Thing
-    exchange(&mut rt, addr, b'x', b'E'); // zero native candidates
+    exchange(&mut servient, &mut rt, addr, b'b', b'2');
+    exchange(&mut servient, &mut rt, addr, b'd', b'E'); // authorization precedes behavior
+    exchange(&mut servient, &mut rt, addr, b'm', b'E'); // exclusive reply ambiguity refuses
+    exchange(&mut servient, &mut rt, addr, b'o', b'E'); // retained input exceeds declared limit
+    exchange(&mut servient, &mut rt, addr, b'v', b'E'); // no registered operation for matched Thing
+    exchange(&mut servient, &mut rt, addr, b'x', b'E'); // zero native candidates
     // Native matching preceded revocation, but semantic acceptance has not.
     let mut stale = TcpStream::connect(addr).unwrap();
     stale.write_all(b"a").unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert!(rt.revoke(ak));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert!(servient.revoke(ak));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Serving)
+    );
     let mut rejected = [0];
     stale.read_exact(&mut rejected).unwrap();
     assert_eq!(rejected, *b"E");
@@ -327,13 +366,16 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
         rt.take_settlement().unwrap().effect,
         FiniteEffect::NotInvoked
     );
-    assert!(!rt.revoke(ak));
-    exchange(&mut rt, addr, b'a', b'E');
-    exchange(&mut rt, addr, b'b', b'2'); // sibling remains available
+    assert!(!servient.revoke(ak));
+    exchange(&mut servient, &mut rt, addr, b'a', b'E');
+    exchange(&mut servient, &mut rt, addr, b'b', b'2'); // sibling remains available
     assert_eq!(calls_a.load(Ordering::SeqCst), 1);
     assert_eq!(calls_b.load(Ordering::SeqCst), 2);
     rt.begin_close();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closed)
+    );
     assert!(TcpStream::connect(addr).is_err());
 }
 
@@ -352,21 +394,29 @@ fn same_slot_new_authority_cannot_receive_old_native_candidate() {
         pending: None,
         polls: Arc::new(AtomicUsize::new(0)),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        7,
+    let mut servient = servient(
         vec![instance(
             replacement,
             Operation::ReadProperty,
             calls.clone(),
             b"1",
         )],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    exchange(&mut rt, addr.lock().unwrap().unwrap(), b'a', b'E');
+    exchange(
+        &mut servient,
+        &mut rt,
+        addr.lock().unwrap().unwrap(),
+        b'a',
+        b'E',
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
@@ -440,6 +490,7 @@ impl FiniteIngressBinding for PendingBinding {
 #[test]
 fn pending_reply_survives_revocation_and_closing_until_native_retirement() {
     let a = authority(5);
+    let key = a.key();
     let dropped = Arc::new(AtomicUsize::new(0));
     let calls = Arc::new(AtomicUsize::new(0));
     let pending_send = Arc::new(AtomicBool::new(true));
@@ -459,26 +510,43 @@ fn pending_reply_survives_revocation_and_closing_until_native_retirement() {
         fail_send: Arc::new(AtomicBool::new(false)),
         fail_close: Arc::new(AtomicBool::new(false)),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        (),
+    let mut servient = servient(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert_eq!(rt.step(&mut context(), &mut budget(0)), Poll::Pending);
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        servient
+            .step(&mut rt, &mut context(), &mut budget(0))
+            .unwrap(),
+        Poll::Pending
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
-    assert_eq!(step(&mut rt), Poll::Pending);
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(step(&mut servient, &mut rt), Poll::Pending);
+    assert!(servient.revoke(key));
     rt.begin_close();
-    assert_eq!(step(&mut rt), Poll::Pending);
+    assert_eq!(step(&mut servient, &mut rt), Poll::Pending);
     assert_eq!(dropped.load(Ordering::SeqCst), 0);
     assert!(rt.activate_raw().is_err());
     pending_close.store(false, Ordering::SeqCst);
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closed)
+    );
     assert_eq!(dropped.load(Ordering::SeqCst), 1);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     let settlement = rt.take_settlement().unwrap();
@@ -511,27 +579,35 @@ fn close_retains_full_unaccepted_input_until_native_retirement() {
         fail_send: Arc::new(AtomicBool::new(false)),
         fail_close: Arc::new(AtomicBool::new(false)),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        (),
+    let mut servient = servient(
         vec![instance(
             a,
             Operation::ReadProperty,
             Arc::new(AtomicUsize::new(0)),
             b"1",
         )],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
     rt.begin_close();
-    assert_eq!(step(&mut rt), Poll::Pending);
+    assert_eq!(step(&mut servient, &mut rt), Poll::Pending);
     assert_eq!(Arc::strong_count(&body), 2);
     assert_eq!(dropped.load(Ordering::SeqCst), 0);
     pending_close.store(false, Ordering::SeqCst);
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closed)
+    );
     let outcome = rt.take_settlement().unwrap();
     assert_eq!(outcome.effect, FiniteEffect::NotInvoked);
     assert_eq!(outcome.delivery, FiniteDelivery::Unknown);
@@ -563,25 +639,39 @@ fn denied_input_and_reply_stay_owned_across_pending_send_and_failed_close() {
         fail_send: Arc::new(AtomicBool::new(false)),
         fail_close: fail_close.clone(),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        (),
+    let mut servient = servient(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
-    assert_eq!(step(&mut rt), Poll::Pending);
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(step(&mut servient, &mut rt), Poll::Pending);
     assert_eq!(Arc::strong_count(&body), 2);
     rt.begin_close();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closing));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closing)
+    );
     assert_eq!(Arc::strong_count(&body), 2);
     assert_eq!(dropped.load(Ordering::SeqCst), 0);
     fail_close.store(false, Ordering::SeqCst);
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closed)
+    );
     let settled = rt.take_settlement().unwrap();
     assert_eq!(settled.effect, FiniteEffect::NotInvoked);
     assert_eq!(settled.delivery, FiniteDelivery::Unknown);
@@ -612,29 +702,46 @@ fn failure_keeps_original_reply_and_first_cause_during_failed_close() {
         fail_send: Arc::new(AtomicBool::new(true)),
         fail_close: fail_close.clone(),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        (),
+    let mut servient = servient(
         vec![instance(
             a,
             Operation::ReadProperty,
             Arc::new(AtomicUsize::new(0)),
             b"1",
         )],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closing));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closing)
+    );
     assert!(matches!(rt.first_cause(), Some(CoreError::Binding(_))));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closing));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closing)
+    );
     assert!(matches!(rt.first_cause(), Some(CoreError::Binding(_))));
     assert_eq!(dropped.load(Ordering::SeqCst), 0);
     fail_close.store(false, Ordering::SeqCst);
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closed)
+    );
     assert_eq!(dropped.load(Ordering::SeqCst), 1);
     let settlement = rt.take_settlement().unwrap();
     assert_eq!(settlement.effect, FiniteEffect::Unknown);
@@ -644,13 +751,6 @@ fn failure_keeps_original_reply_and_first_cause_during_failed_close() {
 #[test]
 fn invalid_behavior_set_refuses_before_native_start_and_returns_owners() {
     let a = authority(8);
-    let binding = PendingBinding {
-        ingress: None,
-        pending_send: Arc::new(AtomicBool::new(false)),
-        pending_close: Arc::new(AtomicBool::new(false)),
-        fail_send: Arc::new(AtomicBool::new(false)),
-        fail_close: Arc::new(AtomicBool::new(false)),
-    };
     let calls = Arc::new(AtomicUsize::new(0));
     let invalid = RawFiniteInstance::new(
         a,
@@ -670,12 +770,11 @@ fn invalid_behavior_set_refuses_before_native_start_and_returns_owners() {
             ),
         ],
     );
-    let rejected = RawFiniteRuntime::try_new(binding, (), vec![invalid], limits())
+    let rejected = RawFiniteServient::try_new(vec![invalid], registry_limits())
         .err()
         .unwrap();
     assert!(matches!(rejected.error().error(), CoreError::Validation(_)));
-    let (binding, (), instances) = rejected.into_input();
-    assert!(binding.ingress.is_none());
+    let instances = rejected.into_input();
     assert_eq!(instances.len(), 1);
     assert_eq!(instances[0].key().slot().slot(), SlotIndex::new(8));
 }
@@ -694,13 +793,16 @@ fn actual_binding_configuration_and_finite_operation_are_checked_before_effects(
         b: a.key(),
         polls: Arc::new(AtomicUsize::new(0)),
     };
-    let original = vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")];
-    let refused = RawFiniteRuntime::try_new(binding, 8, original, limits())
+    let servient = servient(
+        vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
+        registry_limits(),
+    );
+    let refused = RawFiniteRuntime::try_new(binding, 8, &servient, limits())
         .err()
         .unwrap();
     assert_eq!(*refused.input().0.configuration(), 7);
     assert!(address.lock().unwrap().is_none());
-    let (binding, _, instances) = refused.into_input();
+    let (binding, _) = refused.into_input();
     let authority = authority(11);
     let invalid = RawFiniteInstance::new(
         authority,
@@ -710,11 +812,12 @@ fn actual_binding_configuration_and_finite_operation_are_checked_before_effects(
             Handler { calls, value: b"1" },
         )],
     );
-    let refused = RawFiniteRuntime::try_new(binding, 7, vec![invalid], limits())
+    let refused = RawFiniteServient::try_new(vec![invalid], registry_limits())
         .err()
         .unwrap();
     assert!(matches!(refused.error().error(), CoreError::Validation(_)));
-    assert_eq!(instances.len(), 1);
+    assert_eq!(refused.into_input().len(), 1);
+    assert_eq!(*binding.configuration(), 7);
     assert!(address.lock().unwrap().is_none());
 }
 
@@ -732,23 +835,31 @@ fn close_before_dispatch_returns_original_native_refusal_without_running_handler
         b: a.key(),
         polls: Arc::new(AtomicUsize::new(0)),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        7,
+    let mut servient = servient(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
     let mut client = TcpStream::connect(addr.lock().unwrap().unwrap()).unwrap();
     client
         .set_read_timeout(Some(std::time::Duration::from_secs(2)))
         .unwrap();
     client.write_all(b"a").unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
     rt.begin_close();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closed)
+    );
     let mut response = [0];
     client.read_exact(&mut response).unwrap();
     assert_eq!(response, *b"E");
@@ -774,25 +885,36 @@ fn close_after_write_reports_unknown_effect_and_undelivered_success() {
         b: a.key(),
         polls: Arc::new(AtomicUsize::new(0)),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        7,
+    let mut servient = servient(
         vec![instance(a, Operation::WriteProperty, calls.clone(), b"1")],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
     let mut client = TcpStream::connect(addr.lock().unwrap().unwrap()).unwrap();
     client
         .set_read_timeout(Some(std::time::Duration::from_secs(2)))
         .unwrap();
     client.write_all(b"b").unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     rt.begin_close();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Closed)
+    );
     let mut response = [0];
     client.read_exact(&mut response).unwrap();
     assert_eq!(response, *b"E");
@@ -821,7 +943,11 @@ fn fixed_exchange(
     operation: Operation,
     outcome: CoreResult<InteractionOutput>,
     limits: RawFiniteLimits,
-) -> (RawFiniteRuntime<PendingBinding>, Arc<AtomicUsize>) {
+) -> (
+    RawFiniteServient,
+    RawFiniteRuntime<PendingBinding>,
+    Arc<AtomicUsize>,
+) {
     let a = authority(22);
     let calls = Arc::new(AtomicUsize::new(0));
     let binding = PendingBinding {
@@ -850,14 +976,27 @@ fn fixed_exchange(
             },
         )],
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, (), vec![instance], limits)
+    let mut servient = servient(vec![instance], registry_limits());
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits)
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
-    (rt, calls)
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Serving)
+    );
+    (servient, rt, calls)
 }
 
 #[test]
@@ -909,7 +1048,7 @@ fn raw_property_success_requires_operation_shape_not_merely_a_small_body() {
         ),
     ];
     for (operation, output) in cases {
-        let (mut rt, calls) = fixed_exchange(operation, Ok(output), limits());
+        let (_servient, mut rt, calls) = fixed_exchange(operation, Ok(output), limits());
         let outcome = rt.take_settlement().unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(outcome.effect, FiniteEffect::Unknown);
@@ -931,10 +1070,10 @@ fn retained_output_counts_arc_and_both_string_capacities_and_refuses_one_over() 
     exact.output_body_bytes = 1;
     exact.output_media_capacity = 16;
     exact.output_retained_bytes = bytes;
-    let (mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output.clone()), exact);
+    let (_servient, mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output.clone()), exact);
     assert!(rt.take_settlement().unwrap().result.is_ok());
     exact.output_retained_bytes -= 1;
-    let (mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output), exact);
+    let (_servient, mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output), exact);
     let refused = rt.take_settlement().unwrap();
     assert_eq!(refused.effect, FiniteEffect::Unknown);
     assert!(matches!(refused.result, Err(CoreError::Backpressure(_))));
@@ -946,7 +1085,7 @@ fn retained_output_counts_arc_and_both_string_capacities_and_refuses_one_over() 
     let mut zero_body = limits();
     zero_body.output_body_bytes = 0;
     zero_body.output_media_capacity = 16;
-    let (mut rt, _) = fixed_exchange(
+    let (_servient, mut rt, _) = fixed_exchange(
         Operation::ReadProperty,
         Ok(InteractionOutput::with_data(payload)),
         zero_body,
@@ -959,7 +1098,8 @@ fn retained_output_counts_arc_and_both_string_capacities_and_refuses_one_over() 
 
 #[test]
 fn write_handler_error_and_oversized_result_never_prove_effect_absent() {
-    let (mut rt, calls) = fixed_exchange(Operation::WriteProperty, Err(error()), limits());
+    let (_servient, mut rt, calls) =
+        fixed_exchange(Operation::WriteProperty, Err(error()), limits());
     let error_result = rt.take_settlement().unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(error_result.effect, FiniteEffect::Unknown);
@@ -968,7 +1108,7 @@ fn write_handler_error_and_oversized_result_never_prove_effect_absent() {
     let mut tiny = limits();
     tiny.output_body_bytes = 0;
     let oversized = InteractionOutput::with_data(Payload::new(b"1".as_slice(), "application/json"));
-    let (mut rt, calls) = fixed_exchange(Operation::WriteProperty, Ok(oversized), tiny);
+    let (_servient, mut rt, calls) = fixed_exchange(Operation::WriteProperty, Ok(oversized), tiny);
     let overrun = rt.take_settlement().unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(overrun.effect, FiniteEffect::Unknown);
@@ -1013,27 +1153,43 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
         fail_send: Arc::new(AtomicBool::new(false)),
         fail_close: Arc::new(AtomicBool::new(false)),
     };
-    let mut max = limits();
-    max.instances = 32;
-    max.behaviors_per_instance = 16;
-    max.target_name_bytes = 3;
-    let mut rt = RawFiniteRuntime::try_new(binding, (), instances, max)
+    let max = limits();
+    let mut registry = registry_limits();
+    registry.instances = 32;
+    registry.behaviors_per_instance = 16;
+    registry.target_name_bytes = 3;
+    let mut servient = servient(instances, registry);
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, max)
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
     let mut insufficient = budget(96);
-    assert_eq!(rt.step(&mut context(), &mut insufficient), Poll::Pending);
+    assert_eq!(
+        servient
+            .step(&mut rt, &mut context(), &mut insufficient)
+            .unwrap(),
+        Poll::Pending
+    );
     assert_eq!(insufficient.remaining(WorkClass::HandlerSteps), 96);
     assert_eq!(count.load(Ordering::SeqCst), 0);
     let mut exact = budget(97);
     assert_eq!(
-        rt.step(&mut context(), &mut exact),
+        servient.step(&mut rt, &mut context(), &mut exact).unwrap(),
         Poll::Ready(RawFiniteState::Delivering)
     );
     assert_eq!(exact.remaining(WorkClass::HandlerSteps), 0);
     assert_eq!(count.load(Ordering::SeqCst), 1);
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Serving)
+    );
     assert_eq!(rt.take_settlement().unwrap().recipient, Some(key));
 }
 
@@ -1069,28 +1225,43 @@ fn equal_prefix_target_misses_pay_for_every_bounded_name_byte() {
         fail_send: Arc::new(AtomicBool::new(false)),
         fail_close: Arc::new(AtomicBool::new(false)),
     };
-    let mut max = limits();
-    max.instances = 1;
-    max.behaviors_per_instance = 16;
-    max.target_name_bytes = 64;
-    let mut rt =
-        RawFiniteRuntime::try_new(binding, (), vec![RawFiniteInstance::new(a, behaviors)], max)
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    let max = limits();
+    let mut registry = registry_limits();
+    registry.instances = 1;
+    registry.behaviors_per_instance = 16;
+    registry.target_name_bytes = 64;
+    let mut servient = servient(vec![RawFiniteInstance::new(a, behaviors)], registry);
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, max)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
     // 1 instance + 16 * (1 length/discriminant + 64 bytes) + 1 callback.
     let mut insufficient = budget(1041);
-    assert_eq!(rt.step(&mut context(), &mut insufficient), Poll::Pending);
+    assert_eq!(
+        servient
+            .step(&mut rt, &mut context(), &mut insufficient)
+            .unwrap(),
+        Poll::Pending
+    );
     assert_eq!(insufficient.remaining(WorkClass::HandlerSteps), 1041);
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     let mut exact = budget(1042);
     assert_eq!(
-        rt.step(&mut context(), &mut exact),
+        servient.step(&mut rt, &mut context(), &mut exact).unwrap(),
         Poll::Ready(RawFiniteState::Delivering)
     );
     assert_eq!(exact.remaining(WorkClass::HandlerSteps), 0);
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Serving)
+    );
     let settled = rt.take_settlement().unwrap();
     assert_eq!(settled.effect, FiniteEffect::NotInvoked);
     assert!(matches!(
@@ -1119,38 +1290,41 @@ fn target_name_limit_checks_both_registration_and_native_candidate() {
         fail_close: Arc::new(AtomicBool::new(false)),
     };
     let calls = Arc::new(AtomicUsize::new(0));
-    let mut max = limits();
-    max.target_name_bytes = 5;
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        (),
+    let max = limits();
+    let mut registry = registry_limits();
+    registry.target_name_bytes = 5;
+    let mut servient = servient(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
-        max,
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry,
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, max)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Serving)
+    );
     let refused = rt.take_settlement().unwrap();
     assert_eq!(refused.effect, FiniteEffect::NotInvoked);
     assert!(matches!(refused.result, Err(CoreError::Backpressure(_))));
     // A fresh authority tests pre-effect registration refusal as well.
     let a = authority(142);
-    let binding = PendingBinding {
-        ingress: None,
-        pending_send: Arc::new(AtomicBool::new(false)),
-        pending_close: Arc::new(AtomicBool::new(false)),
-        fail_send: Arc::new(AtomicBool::new(false)),
-        fail_close: Arc::new(AtomicBool::new(false)),
-    };
-    max.target_name_bytes = 4;
-    let rejected = RawFiniteRuntime::try_new(
-        binding,
-        (),
+    registry.target_name_bytes = 4;
+    let rejected = RawFiniteServient::try_new(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
-        max,
+        registry,
     )
     .err()
     .unwrap();
@@ -1177,18 +1351,29 @@ fn thing_level_candidate_is_unsupported_not_a_name_capacity_failure() {
         fail_send: Arc::new(AtomicBool::new(false)),
         fail_close: Arc::new(AtomicBool::new(false)),
     };
-    let mut rt = RawFiniteRuntime::try_new(
-        binding,
-        (),
+    let mut servient = servient(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
-        limits(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+        registry_limits(),
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
     rt.activate_raw().unwrap();
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
-    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(
+        step(&mut servient, &mut rt),
+        Poll::Ready(RawFiniteState::Serving)
+    );
     let settled = rt.take_settlement().unwrap();
     assert_eq!(settled.effect, FiniteEffect::NotInvoked);
     assert_eq!(settled.delivery, FiniteDelivery::Delivered);
@@ -1207,7 +1392,7 @@ fn settlement_debug_is_bounded_and_redacts_owned_output() {
     max.output_retained_bytes = 4096;
     let output =
         InteractionOutput::with_data(Payload::new(vec![b's'; 2048], "private-media-marker"));
-    let (mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output), max);
+    let (_servient, mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output), max);
     let settled = rt.take_settlement().unwrap();
     let diagnostic = format!("{settled:?}");
     assert!(

@@ -50,14 +50,23 @@ Their output/reclaim owners must move to the execution owner before claiming an
 execution-only Servient feature; a feature alias is insufficient.
 
 The separate `clinkz-wot-servient-finite` Host execution slice links only Core
-and Foundation. Its raw finite ingress accepts an externally registered Binding
-with captured configuration, independently checks current logical recipients
-and registered behavior under a fixed paid count/name-byte lookup envelope,
-and retains the complete native exclusive input/reply through refusal and
-close. Effect, delivery and the complete late result survive until settlement
-acknowledgement. Handler output is application-backed until return; the
-Engine checks the complete output representation and accepts only the declared
-retained backing. Raw data still obeys Property operation/result shape rules.
+and Foundation. `RawFiniteServient` owns the logical registry, unique authority
+and actual behavior set. Independently typed `RawFiniteRuntime<B>` values own
+their captured Binding/configuration and one bounded exchange/settlement each;
+none owns a copy of current logical permission. Servient progress borrows the
+one logical owner and checks current recipients/behavior under a fixed paid
+count/name-byte lookup envelope. Native progress/close needs no logical owner.
+Accepted work retains its original instance through settlement acknowledgement;
+replacement cannot retarget it, and retiring one Binding does not revoke the
+instance or its siblings. Weak issuer association fences new acceptance after
+the logical owner is dropped. This synchronous manual Host facet uses local
+reference retention and claims no thread mobility or automatic scheduling.
+
+The complete native exclusive input/reply survives refusal and close. Effect,
+delivery, originating Binding, accepted target and complete late result survive
+until settlement acknowledgement. The target shares registered backing; output
+is application-backed until return and the Engine accepts only the declared
+complete output representation. Raw data still obeys Property result-shape rules.
 It does not qualify or publish a TD, validate DataSchema/security schemes, or
 replace the preparation-dependent Property Read Servient. Its `activate_raw`
 gate permits only this explicitly raw local service; full Producer exposure
