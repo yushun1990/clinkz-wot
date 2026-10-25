@@ -86,6 +86,7 @@ struct Probe {
     pending_close: AtomicBool,
     fail_close: AtomicBool,
     serve: AtomicBool,
+    no_validator: AtomicBool,
     calls: AtomicUsize,
     replies: AtomicUsize,
     pending_reply: AtomicBool,
@@ -111,6 +112,21 @@ impl Drop for Handler {
     }
 }
 struct Program(Vec<u8>); // deliberately owned, non-Copy native backing
+impl ProducerOutputValidator for Program {
+    fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
+        let number = output.data().is_some_and(|p| {
+            serde_json::from_slice::<serde_json::Value>(&p.body).is_ok_and(|v| v.is_number())
+        });
+        if number {
+            Ok(())
+        } else {
+            Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            )))
+        }
+    }
+}
 struct Executor(Arc<Probe>);
 struct Compiler {
     probe: Arc<Probe>,
@@ -137,6 +153,16 @@ impl ProducerExecutor for Executor {
     type Program = Program;
     type Configuration = usize;
     type Installation = Installation;
+    fn output_validator<'a>(
+        &'a self,
+        program: &'a Program,
+    ) -> Option<&'a dyn ProducerOutputValidator> {
+        if self.0.no_validator.load(SeqCst) {
+            None
+        } else {
+            Some(program)
+        }
+    }
     fn configuration_matches(&self, captured: &usize) -> bool {
         self.0.policy.load(SeqCst) == *captured
     }
@@ -377,6 +403,92 @@ fn source_compiler_and_id_are_absent_at_funded_installation() {
     empty(&b);
     assert_eq!(p.dropped.load(SeqCst), 1);
 }
+#[test]
+fn numeric_service_policy_cannot_replace_an_actual_validator_and_loss_fences_serving() {
+    let p = Arc::new(Probe::default());
+    p.serve.store(true, SeqCst);
+    p.no_validator.store(true, SeqCst);
+    let td = td();
+    let mut admission = coverage(&td);
+    let authority = authority(instance(0));
+    let refused = pair(&p)
+        .prepare_property_read(
+            &mut admission,
+            &authority,
+            registered(&p, "", &authority),
+            &mut work(1_000_000),
+        )
+        .err()
+        .expect("service limits are not a validation capability");
+    assert_eq!(refused.input().1.instance_key(), authority.key());
+    assert_eq!(p.created.load(SeqCst), 0);
+    assert_eq!(p.calls.load(SeqCst), 0);
+    let (pair, handler) = refused.into_input();
+    p.no_validator.store(false, SeqCst);
+    let prepared = accepted(pair.prepare_property_read(
+        &mut admission,
+        &authority,
+        handler,
+        &mut work(1_000_000),
+    ));
+    // Loss after preparation is also checked before installation/funding.
+    p.no_validator.store(true, SeqCst);
+    let limits = GatewayDefaultV1::LIMITS.clone();
+    let bank = bank(&limits);
+    let refused = Runtime::try_new(prepared, authority, limits, bank.clone(), Deadline::NONE)
+        .err()
+        .expect("missing actual dependency cannot install");
+    assert_eq!(p.created.load(SeqCst), 0);
+    drop(refused);
+    empty(&bank);
+
+    // Loss after readiness, receipt, or handler completion fences the next
+    // acceptance/dispatch/delivery. Cleanup needs no validation service.
+    for state in [
+        ProducerInstallationState::Serving,
+        ProducerInstallationState::Dispatching,
+        ProducerInstallationState::Delivering,
+    ] {
+        p.no_validator.store(false, SeqCst);
+        let calls = p.calls.load(SeqCst);
+        let (mut runtime, bank) = runtime(&p);
+        let _ = step(&mut runtime, 1);
+        let _ = step(&mut runtime, 1);
+        runtime.begin_serving(100).unwrap();
+        if state != ProducerInstallationState::Serving {
+            let _ = step(&mut runtime, 1);
+        }
+        if state == ProducerInstallationState::Delivering {
+            let _ = step(&mut runtime, 1);
+        }
+        assert_eq!(runtime.state(), state);
+        p.no_validator.store(true, SeqCst);
+        assert!(step(&mut runtime, 0).is_pending());
+        assert_eq!(runtime.state(), state);
+        let _ = step(&mut runtime, 1);
+        assert_eq!(runtime.state(), ProducerInstallationState::Closing);
+        assert!(matches!(
+            runtime.first_cause(),
+            Some(CoreError::Validation(_))
+        ));
+        assert_eq!(
+            p.calls.load(SeqCst),
+            calls + usize::from(state == ProducerInstallationState::Delivering)
+        );
+        assert_eq!(p.replies.load(SeqCst), 0);
+        let cause = runtime.first_cause().unwrap().clone();
+        p.pending_close.store(true, SeqCst);
+        assert!(step(&mut runtime, 1).is_pending());
+        assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+        p.pending_close.store(false, SeqCst);
+        let _ = step(&mut runtime, 1);
+        assert_eq!(runtime.state(), ProducerInstallationState::Closed);
+        assert_eq!(runtime.first_cause(), Some(&cause));
+        drop(runtime);
+        empty(&bank);
+    }
+}
+
 #[test]
 fn actual_configuration_registered_key_and_current_instance_refuse_before_construction() {
     let p = Arc::new(Probe::default());

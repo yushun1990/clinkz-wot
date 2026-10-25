@@ -22,6 +22,7 @@ mod compiler;
 #[cfg(all(test, feature = "prepare"))]
 mod identity_tests;
 mod producer;
+mod producer_validation;
 mod program;
 pub use producer::{
     HttpProducerConfig, HttpProducerExecutor, HttpProducerInstallation, HttpProducerProgram,

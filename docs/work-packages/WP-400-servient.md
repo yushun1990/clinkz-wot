@@ -47,3 +47,17 @@ Property Read gates and PR #229 evidence keep their original revision scope;
 independent acceptance of the changed API/ownership remains necessary. TD
 qualification/publication, optional Planning, threading, Action/Event and
 constrained execution are separate work.
+
+## Captured validation service on the retained HTTP path
+
+The older single-provider Producer root requires an actual output-validation
+facet for Serving, beyond numeric response limits. Preparation and runtime
+admission reject a missing facet. Funded Serving/dispatch/delivery progress
+rechecks the captured provider/configuration and required service before permits,
+behavior or native delivery; loss closes acceptance and retains first cause and
+funded native cleanup. Installation-only providers omit the facet. Core checks
+result shape/backing bounds before the external codec service.
+
+This fixes a concrete prerequisite on the working HTTP path. It does not move
+that path into the shared finite registry or implement final-TD qualification/
+publication. Those contracts remain governed by SAFE-PUBLISH-001/PREP-COVER-001.

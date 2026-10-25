@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0090-producer-qualification-and-data-validation.md][0090 Producer Qualification and Executable Data Validation]]
+
 - [[file:0076-composable-capabilities-and-runtime-boundaries.md][0076 General SPI Architecture: WoT Semantics, Execution Authority and Native Resources]] — ADR-0025 / v6.0 authority
 
 - [[file:0088-http-consumer-parser-policy.md][0088 HTTP Consumer Parser Policy and SDK Maintenance]]

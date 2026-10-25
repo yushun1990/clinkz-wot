@@ -244,15 +244,74 @@ fn zero_credit_missing_coverage_cancel_and_listen_mismatch_never_issue_a_program
 }
 
 #[test]
-fn standard_nested_schema_is_supported_but_extension_aliases_cannot_replace_typed_branches() {
+fn standard_nested_schema_requires_a_validator_and_cannot_be_silently_advertised() {
     let mut td = document();
     td["properties"]["level"]["type"] = json!("object");
     td["properties"]["level"]["properties"] =
         json!({"values":{"type":"array","items":{"type":"number"}}});
-    assert!(prepare(td.clone(), "level").is_ok());
+    assert!(prepare(td, "level").is_err());
+
+    // Start from a supported schema so an alias refusal cannot be false-green
+    // merely because its neighboring nested schema already refused.
+    let mut td = document();
     td["@context"][1]["shadow"] = json!("https://www.w3.org/2019/wot/json-schema#properties");
     td["properties"]["level"]["shadow"] = json!({});
     assert!(prepare(td, "level").is_err());
+}
+
+#[test]
+fn unsupported_assertions_refuse_even_without_an_explicit_type() {
+    for (kind, field, value) in [
+        ("number", "minimum", json!(0)),
+        ("number", "maximum", json!(10)),
+        ("number", "exclusiveMinimum", json!(0)),
+        ("number", "exclusiveMaximum", json!(10)),
+        ("number", "multipleOf", json!(2)),
+        ("integer", "minimum", json!(0)),
+        ("integer", "maximum", json!(10)),
+        ("integer", "exclusiveMinimum", json!(0)),
+        ("integer", "exclusiveMaximum", json!(10)),
+        ("integer", "multipleOf", json!(2)),
+        ("string", "minLength", json!(1)),
+        ("string", "maxLength", json!(10)),
+        ("string", "pattern", json!("^ok$")),
+        ("string", "contentEncoding", json!("base64")),
+        ("string", "contentMediaType", json!("application/json")),
+        ("array", "minItems", json!(1)),
+        ("array", "maxItems", json!(10)),
+        ("array", "items", json!({"type":"number"})),
+        ("array", "items", json!([{"type":"number"}])),
+        ("object", "properties", json!({"x":{"type":"number"}})),
+        ("object", "required", json!(["x"])),
+        ("number", "enum", json!([1, 2])),
+        ("number", "const", json!(1)),
+        ("null", "const", json!(null)),
+        ("string", "format", json!("date-time")),
+        (
+            "number",
+            "oneOf",
+            json!([{"type":"number"}, {"type":"string"}]),
+        ),
+    ] {
+        for typed in [true, false] {
+            let mut td = document();
+            let schema = &mut td["properties"]["level"];
+            if typed {
+                schema["type"] = json!(kind);
+            } else {
+                schema.as_object_mut().unwrap().remove("type");
+            }
+            schema[field] = value.clone();
+            // required names must also be structurally declared for Basic.
+            if field == "required" {
+                schema["properties"] = json!({"x":{"type":"number"}});
+            }
+            assert!(
+                prepare(td, "level").is_err(),
+                "{kind}/{field}/typed={typed}"
+            );
+        }
+    }
 }
 
 #[test]

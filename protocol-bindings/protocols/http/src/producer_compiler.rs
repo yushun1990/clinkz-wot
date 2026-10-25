@@ -34,7 +34,7 @@ pub fn try_producer_registration(
     )
 }
 use clinkz_wot_td::semantic::{
-    SchemaView, SemanticName, SemanticNode, SemanticScope, SemanticValue, UriVariableScope,
+    SemanticName, SemanticNode, SemanticScope, SemanticValue, UriVariableScope,
 };
 
 impl HttpProducerConfig {
@@ -81,10 +81,13 @@ impl HttpProducerConfig {
                 .ok_or_else(producer_unsupported)?
                 .children()
                 .any(|n| !class_assertion(n))
-            || !supported_schema(document.property().schema)
         {
             return Err(producer_unsupported());
         }
+        // Shared DataSchema meaning is prepared once. HTTP supplies JSON
+        // decoding; accepting extension-free schemas is not validation support.
+        let response_schema =
+            clinkz_wot_planning::type_schema::prepare_type_schema(document.property().schema)?;
         let form = document
             .scope(SemanticScope::Form {
                 property: input.property(),
@@ -135,6 +138,7 @@ impl HttpProducerConfig {
             authority_end: authority_end as u8,
             origin: [0; 64],
             origin_len: origin.len() as u8,
+            response_schema,
         };
         program.target[..input.target().len()].copy_from_slice(input.target().as_bytes());
         program.origin[..origin.len()].copy_from_slice(origin.as_bytes());
@@ -148,16 +152,4 @@ fn class_assertion(node: SemanticNode<'_>) -> bool {
                 && node
                     .children()
                     .all(|n| matches!(n.value(), SemanticValue::Iri(_))))
-}
-fn supported_schema(schema: SchemaView<'_>) -> bool {
-    schema.extension_semantics().all(class_assertion)
-        && schema
-            .properties()
-            .is_none_or(|mut children| children.all(|(_, child)| supported_schema(child)))
-        && schema
-            .items()
-            .is_none_or(|mut children| children.all(supported_schema))
-        && schema
-            .one_of()
-            .is_none_or(|mut children| children.all(supported_schema))
 }
