@@ -49,7 +49,16 @@ rollback and Producer build owners name Planning. These are restricted adapters.
 Their output/reclaim owners must move to the execution owner before claiming an
 execution-only Servient feature; a feature alias is insufficient.
 
-Current runtime availability is narrow Property Read: the Host HTTP Consumer,
+The separate `clinkz-wot-servient-finite` Host execution slice links only Core
+and Foundation. Its raw finite ingress accepts an externally registered Binding
+with captured configuration, independently checks current logical recipients
+and registered behavior, and retains the native exclusive reply through close.
+It does not qualify or publish a TD, validate DataSchema/security schemes, or
+replace the preparation-dependent Property Read Servient. Its `activate_raw`
+gate permits only this explicitly raw local service; full Producer exposure
+still requires final TD coverage, resource admission and publication.
+
+Other runtime availability remains narrow Property Read: the Host HTTP Consumer,
 bounded loopback Producer, static/Host fixtures and manual Consumer runtime.
 The existing `HostSemanticCompiler` Copy/atomic restriction, eager all-bounds
 transaction, plan-set epochs, route-stage carriers and one-route Producer root

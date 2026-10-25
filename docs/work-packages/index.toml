@@ -40,7 +40,7 @@ depends_on = ["WP-100"]
 id = "WP-400"
 status = "in-progress"
 document = "docs/work-packages/WP-400-servient.md"
-owner_crates = ["servient", "core"]
+owner_crates = ["servient", "servient/finite", "core"]
 depends_on = ["WP-100", "WP-300"]
 
 [[package]]

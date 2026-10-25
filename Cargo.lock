@@ -274,6 +274,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-servient-finite"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+]
+
+[[package]]
 name = "clinkz-wot-td"
 version = "0.1.0"
 dependencies = [
