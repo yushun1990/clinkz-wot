@@ -40,8 +40,12 @@ it cannot capture. Concrete codecs classify values; Core evaluates the prepared
 type relation. `integer` includes mathematically integral decimal/exponent
 encodings and is a subset of `number`; binary floating-point rounding cannot
 establish integrality. The restricted Host Producer executor must check output
-with its captured program/services before successful delivery. Raw finite
-execution remains explicitly unvalidated.
+with its captured program/services before successful delivery. Finite raw mode
+remains explicitly unvalidated. The shared finite owner can require the actual
+captured provider's output-validation facet: it checks complete result shape/
+backing before entering that service and retains its result through native
+delivery/retirement. This proves only that participant's output check, not
+complete TD support or publication. Missing/lost required services fence progress.
 Serving requires an actual validation-service facet; numeric service limits do
 not establish it. Native installation alone need not provide that facet. Result
 shape/backing bounds precede the external codec/validation callback.

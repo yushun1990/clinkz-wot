@@ -143,6 +143,7 @@ dependencies = [
  "clinkz-wot-foundation",
  "clinkz-wot-planning",
  "clinkz-wot-servient",
+ "clinkz-wot-servient-finite",
  "clinkz-wot-td",
  "http-body-util",
  "httparse",

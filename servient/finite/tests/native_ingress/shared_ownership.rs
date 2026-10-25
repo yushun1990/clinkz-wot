@@ -133,6 +133,7 @@ impl FiniteIngressBinding for DatagramBinding {
     fn poll_receive(
         &mut self,
         _: &mut Context<'_>,
+        _: MonotonicInstant,
     ) -> Poll<CoreResult<FiniteIngress<Self::Reply>>> {
         let mut bytes = [0u8; 1];
         match self.socket.as_ref().unwrap().recv_from(&mut bytes) {
@@ -233,12 +234,26 @@ fn one_mutable_behavior_serves_two_native_types_and_survives_one_retirement() {
         registry_limits(),
     );
     let (binding, tcp_addr) = tcp(key, key);
-    let mut tcp_rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut tcp_rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let binding = datagram(key, key);
     let (udp_addr, live) = (binding.addr.clone(), binding.live.clone());
-    let mut udp_rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut udp_rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     start(&mut servient, &mut tcp_rt);
     start(&mut servient, &mut udp_rt);
     let (tcp_addr, udp_addr) = (tcp_addr.lock().unwrap().unwrap(), udp_addr.get().unwrap());
@@ -255,9 +270,12 @@ fn one_mutable_behavior_serves_two_native_types_and_survives_one_retirement() {
     );
     exchange(&mut servient, &mut tcp_rt, tcp_addr, b'a', b'3');
     tcp_rt.begin_close();
-    assert_eq!(tcp_rt.step(&mut context(), &mut budget(0)), Poll::Pending);
     assert_eq!(
-        tcp_rt.step(&mut context(), &mut budget(1)),
+        tcp_rt.step(&mut context(), &mut budget(0), now()),
+        Poll::Pending
+    );
+    assert_eq!(
+        tcp_rt.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Closed)
     );
     assert!(TcpStream::connect(tcp_addr).is_err());
@@ -281,7 +299,7 @@ fn one_mutable_behavior_serves_two_native_types_and_survives_one_retirement() {
     assert!(live.get()); // logical revocation does not retire native resources
     udp_rt.begin_close();
     assert_eq!(
-        udp_rt.step(&mut context(), &mut budget(1)),
+        udp_rt.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Closed)
     );
     assert!(!live.get());
@@ -303,12 +321,26 @@ fn revocation_and_same_generation_replacement_fence_both_deferred_native_candida
         registry_limits(),
     );
     let (binding, address) = tcp(old_key, next_key);
-    let mut tcp_rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut tcp_rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let binding = datagram(old_key, next_key);
     let udp_addr = binding.addr.clone();
-    let mut udp_rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut udp_rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     start(&mut servient, &mut tcp_rt);
     start(&mut servient, &mut udp_rt);
     let tcp_addr = address.lock().unwrap().unwrap();
@@ -321,15 +353,15 @@ fn revocation_and_same_generation_replacement_fence_both_deferred_native_candida
     let udp_client = client(udp_addr, b'o');
     // Native progress alone can match, but cannot invoke the single behavior.
     assert_eq!(
-        tcp_rt.step(&mut context(), &mut budget(1)),
+        tcp_rt.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Dispatching)
     );
     assert_eq!(
-        udp_rt.step(&mut context(), &mut budget(1)),
+        udp_rt.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Dispatching)
     );
     assert_eq!(
-        tcp_rt.step(&mut context(), &mut budget(5000)),
+        tcp_rt.step(&mut context(), &mut budget(5000), now()),
         Poll::Ready(RawFiniteState::Dispatching)
     );
     assert!(dispatches.borrow().is_empty());
@@ -416,13 +448,27 @@ fn two_accepted_results_pin_original_behavior_until_both_acknowledge_while_sibli
     let binding = pending(old_key);
     let fail_close = binding.fail_close.clone();
     let reply_dropped = binding.ingress.as_ref().unwrap().reply.0.clone();
-    let mut stuck = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut stuck = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let binding = datagram(old_key, next_key);
     let (addr, send_pending) = (binding.addr.clone(), binding.send_pending.clone());
     send_pending.set(true);
-    let mut sibling = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut sibling = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     start(&mut servient, &mut stuck);
     start(&mut servient, &mut sibling);
     assert_eq!(
@@ -452,9 +498,12 @@ fn two_accepted_results_pin_original_behavior_until_both_acknowledge_while_sibli
     assert_eq!(old_dropped.get(), 0);
     stuck.begin_close();
     for _ in 0..3 {
-        assert_eq!(stuck.step(&mut context(), &mut budget(0)), Poll::Pending);
         assert_eq!(
-            stuck.step(&mut context(), &mut budget(1)),
+            stuck.step(&mut context(), &mut budget(0), now()),
+            Poll::Pending
+        );
+        assert_eq!(
+            stuck.step(&mut context(), &mut budget(1), now()),
             Poll::Ready(RawFiniteState::Closing)
         );
         assert_eq!(reply_dropped.load(Ordering::SeqCst), 0);
@@ -478,7 +527,7 @@ fn two_accepted_results_pin_original_behavior_until_both_acknowledge_while_sibli
     assert_eq!(new_dropped.get(), 0);
     fail_close.store(false, Ordering::SeqCst);
     assert_eq!(
-        stuck.step(&mut context(), &mut budget(1)),
+        stuck.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Closed)
     );
     assert_eq!(reply_dropped.load(Ordering::SeqCst), 1);
@@ -527,12 +576,26 @@ fn wrong_issuer_cannot_dispatch_and_owner_drop_fences_unaccepted_but_retains_acc
     let binding = pending(key);
     binding.fail_close.store(false, Ordering::SeqCst);
     let send_pending = binding.pending_send.clone();
-    let mut accepted = RawFiniteRuntime::try_new(binding, (), &original, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut accepted = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &original,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let binding = pending(key);
     let fail_close = binding.fail_close.clone();
-    let mut deferred = RawFiniteRuntime::try_new(binding, (), &original, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut deferred = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &original,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     start(&mut original, &mut accepted);
     start(&mut original, &mut deferred);
     assert_eq!(
@@ -545,7 +608,7 @@ fn wrong_issuer_cannot_dispatch_and_owner_drop_fences_unaccepted_but_retains_acc
     );
     let mut credits = budget(5000);
     assert!(matches!(
-        other.step(&mut deferred, &mut context(), &mut credits),
+        other.step(&mut deferred, &mut context(), &mut credits, now()),
         Err(CoreError::StaleHandle(_))
     ));
     assert_eq!(credits.remaining(WorkClass::HandlerSteps), 5000);
@@ -557,10 +620,13 @@ fn wrong_issuer_cannot_dispatch_and_owner_drop_fences_unaccepted_but_retains_acc
     );
     drop(original);
     assert_eq!(dropped.get(), 0);
-    assert_eq!(deferred.step(&mut context(), &mut budget(0)), Poll::Pending);
+    assert_eq!(
+        deferred.step(&mut context(), &mut budget(0), now()),
+        Poll::Pending
+    );
     assert_eq!(deferred.state(), RawFiniteState::Dispatching);
     assert_eq!(
-        deferred.step(&mut context(), &mut budget(1)),
+        deferred.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Closing)
     );
     assert!(matches!(
@@ -568,27 +634,30 @@ fn wrong_issuer_cannot_dispatch_and_owner_drop_fences_unaccepted_but_retains_acc
         Some(CoreError::StaleHandle(_))
     ));
     assert_eq!(
-        deferred.step(&mut context(), &mut budget(1)),
+        deferred.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Closing)
     );
     fail_close.store(false, Ordering::SeqCst);
     assert_eq!(
-        deferred.step(&mut context(), &mut budget(1)),
+        deferred.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Closed)
     );
     let refused = deferred.take_settlement().unwrap();
     assert_eq!(refused.effect, FiniteEffect::NotInvoked);
     assert!(matches!(refused.result, Err(CoreError::StaleHandle(_))));
     // Accepted success remains deliverable and owned after the registry dies.
-    assert_eq!(accepted.step(&mut context(), &mut budget(1)), Poll::Pending);
+    assert_eq!(
+        accepted.step(&mut context(), &mut budget(1), now()),
+        Poll::Pending
+    );
     send_pending.store(false, Ordering::SeqCst);
     assert_eq!(
-        accepted.step(&mut context(), &mut budget(1)),
+        accepted.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Serving)
     );
     accepted.begin_close();
     assert_eq!(
-        accepted.step(&mut context(), &mut budget(1)),
+        accepted.step(&mut context(), &mut budget(1), now()),
         Poll::Ready(RawFiniteState::Closed)
     );
     assert_eq!(dropped.get(), 0);
@@ -624,8 +693,15 @@ fn failed_replacement_returns_exact_owner_and_does_not_change_current_authority(
     assert!(servient.replace(old_key, invalid).is_err());
     let binding = datagram(old_key, old_key);
     let addr = binding.addr.clone();
-    let mut runtime = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut runtime = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     start(&mut servient, &mut runtime);
     udp_exchange(&mut servient, &mut runtime, addr.get().unwrap(), b'o', b'1');
     assert_eq!(dropped.get(), 0);

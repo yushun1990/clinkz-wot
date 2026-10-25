@@ -9,7 +9,9 @@ use clinkz_wot_core::{
     producer::{ProducerInstanceAuthority, ProducerInstanceKey},
     *,
 };
-use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_foundation::{
+    ClockId, Generation, MonotonicInstant, SlotIndex, WorkBudget, WorkClass,
+};
 use clinkz_wot_servient_finite::*;
 use std::{
     io::{Read, Write},
@@ -21,6 +23,9 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
+fn now() -> MonotonicInstant {
+    MonotonicInstant::new(ClockId::new(1), 0)
+}
 fn context() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
@@ -138,6 +143,7 @@ impl FiniteIngressBinding for TcpBinding {
     fn poll_receive(
         &mut self,
         _: &mut Context<'_>,
+        _: MonotonicInstant,
     ) -> Poll<CoreResult<FiniteIngress<Self::Reply>>> {
         self.polls.fetch_add(1, Ordering::SeqCst);
         let mut socket = if let Some(pending) = self.pending.take() {
@@ -248,7 +254,7 @@ fn step<B: FiniteIngressBinding>(
     rt: &mut RawFiniteRuntime<B>,
 ) -> Poll<RawFiniteState> {
     servient
-        .step(rt, &mut context(), &mut budget(5000))
+        .step(rt, &mut context(), &mut budget(5000), now())
         .unwrap()
 }
 fn exchange(
@@ -302,8 +308,15 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
         ],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -331,7 +344,7 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
     let polls_before_ack = polls.load(Ordering::SeqCst);
     assert_eq!(
         servient
-            .step(&mut rt, &mut context(), &mut budget(0))
+            .step(&mut rt, &mut context(), &mut budget(0), now())
             .unwrap(),
         Poll::Ready(RawFiniteState::Serving)
     );
@@ -403,8 +416,15 @@ fn same_slot_new_authority_cannot_receive_old_native_candidate() {
         )],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -448,6 +468,7 @@ impl FiniteIngressBinding for PendingBinding {
     fn poll_receive(
         &mut self,
         _: &mut Context<'_>,
+        _: MonotonicInstant,
     ) -> Poll<CoreResult<FiniteIngress<Self::Reply>>> {
         self.ingress
             .take()
@@ -514,8 +535,15 @@ fn pending_reply_survives_revocation_and_closing_until_native_retirement() {
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -527,7 +555,7 @@ fn pending_reply_survives_revocation_and_closing_until_native_retirement() {
     );
     assert_eq!(
         servient
-            .step(&mut rt, &mut context(), &mut budget(0))
+            .step(&mut rt, &mut context(), &mut budget(0), now())
             .unwrap(),
         Poll::Pending
     );
@@ -588,8 +616,15 @@ fn close_retains_full_unaccepted_input_until_native_retirement() {
         )],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -643,8 +678,15 @@ fn denied_input_and_reply_stay_owned_across_pending_send_and_failed_close() {
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -711,8 +753,15 @@ fn failure_keeps_original_reply_and_first_cause_during_failed_close() {
         )],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -797,9 +846,16 @@ fn actual_binding_configuration_and_finite_operation_are_checked_before_effects(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
         registry_limits(),
     );
-    let refused = RawFiniteRuntime::try_new(binding, 8, &servient, limits())
-        .err()
-        .unwrap();
+    let refused = RawFiniteRuntime::try_new(
+        binding,
+        8,
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .err()
+    .unwrap();
     assert_eq!(*refused.input().0.configuration(), 7);
     assert!(address.lock().unwrap().is_none());
     let (binding, _) = refused.into_input();
@@ -839,8 +895,15 @@ fn close_before_dispatch_returns_original_native_refusal_without_running_handler
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -889,8 +952,15 @@ fn close_after_write_reports_unknown_effect_and_undelivered_success() {
         vec![instance(a, Operation::WriteProperty, calls.clone(), b"1")],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, 7, &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -977,8 +1047,15 @@ fn fixed_exchange(
         )],
     );
     let mut servient = servient(vec![instance], registry_limits());
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits,
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -1159,8 +1236,15 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
     registry.behaviors_per_instance = 16;
     registry.target_name_bytes = 3;
     let mut servient = servient(instances, registry);
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, max)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        max,
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -1173,7 +1257,7 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
     let mut insufficient = budget(96);
     assert_eq!(
         servient
-            .step(&mut rt, &mut context(), &mut insufficient)
+            .step(&mut rt, &mut context(), &mut insufficient, now())
             .unwrap(),
         Poll::Pending
     );
@@ -1181,7 +1265,9 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
     assert_eq!(count.load(Ordering::SeqCst), 0);
     let mut exact = budget(97);
     assert_eq!(
-        servient.step(&mut rt, &mut context(), &mut exact).unwrap(),
+        servient
+            .step(&mut rt, &mut context(), &mut exact, now())
+            .unwrap(),
         Poll::Ready(RawFiniteState::Delivering)
     );
     assert_eq!(exact.remaining(WorkClass::HandlerSteps), 0);
@@ -1231,8 +1317,15 @@ fn equal_prefix_target_misses_pay_for_every_bounded_name_byte() {
     registry.behaviors_per_instance = 16;
     registry.target_name_bytes = 64;
     let mut servient = servient(vec![RawFiniteInstance::new(a, behaviors)], registry);
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, max)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        max,
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -1246,7 +1339,7 @@ fn equal_prefix_target_misses_pay_for_every_bounded_name_byte() {
     let mut insufficient = budget(1041);
     assert_eq!(
         servient
-            .step(&mut rt, &mut context(), &mut insufficient)
+            .step(&mut rt, &mut context(), &mut insufficient, now())
             .unwrap(),
         Poll::Pending
     );
@@ -1254,7 +1347,9 @@ fn equal_prefix_target_misses_pay_for_every_bounded_name_byte() {
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     let mut exact = budget(1042);
     assert_eq!(
-        servient.step(&mut rt, &mut context(), &mut exact).unwrap(),
+        servient
+            .step(&mut rt, &mut context(), &mut exact, now())
+            .unwrap(),
         Poll::Ready(RawFiniteState::Delivering)
     );
     assert_eq!(exact.remaining(WorkClass::HandlerSteps), 0);
@@ -1297,8 +1392,15 @@ fn target_name_limit_checks_both_registration_and_native_candidate() {
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
         registry,
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, max)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        max,
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)
@@ -1355,8 +1457,15 @@ fn thing_level_candidate_is_unsupported_not_a_name_capacity_failure() {
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
         registry_limits(),
     );
-    let mut rt = RawFiniteRuntime::try_new(binding, (), &servient, limits())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        &servient,
+        limits(),
+        FiniteOutputValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(
         step(&mut servient, &mut rt),
         Poll::Ready(RawFiniteState::InstalledClosed)

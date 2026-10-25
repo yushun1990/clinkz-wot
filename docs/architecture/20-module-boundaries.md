@@ -67,10 +67,15 @@ delivery, originating Binding, accepted target and complete late result survive
 until settlement acknowledgement. The target shares registered backing; output
 is application-backed until return and the Engine accepts only the declared
 complete output representation. Raw data still obeys Property result-shape rules.
-It does not qualify or publish a TD, validate DataSchema/security schemes, or
-replace the preparation-dependent Property Read Servient. Its `activate_raw`
-gate permits only this explicitly raw local service; full Producer exposure
-still requires final TD coverage, resource admission and publication.
+Required output-validation mode additionally uses the captured native provider's
+actual prepared service, after prepaid bounded result traversal. Caller-clock
+deadlines fence unfinished ingress, dispatch and pending delivery; local fencing
+does not require credits, while native/cleanup polls do.
+The direct HTTP finite facet supplies its prepared JSON/type service without the
+older installation/permit ABI or a Binding-to-Servient dependency. Neither mode
+qualifies/publishes a TD or replaces the funded preparation-dependent Producer
+root. `activate_raw` remains local activation even when output checking is
+required; final coverage, aggregate resource admission and publication remain.
 
 Other runtime availability remains narrow Property Read: the Host HTTP Consumer,
 bounded loopback Producer, static/Host fixtures and manual Consumer runtime.
