@@ -72,6 +72,13 @@ Drop disposes native owners before program/services, without network waits/tasks
 An opaque native issuer and monotonic correlation fence the original reply;
 numeric Binding/instance equality cannot substitute a sibling's opportunity.
 
+Raw output also has to fit the concrete HTTP encoding. Malformed JSON, unsupported
+media/coding or a body above the native 4096-byte limit refuses before any response
+is queued or written, even if the Engine's result envelope is larger. The native
+mapping error closes through the retained owner and settles the original value/
+effect as NotDelivered. Only an original error result maps to the fixed 500/null;
+a substituted error cannot certify delivery of an original successful output.
+
 The `finite_producer` target uses actual HTTP peers and the public Consumer, with
 sources destroyed before execution, shared mutable behavior, type/Unicode/exact
 integer rejection, zero/short/exact credits, failed setup/cleanup, original-result

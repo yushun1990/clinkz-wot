@@ -361,6 +361,14 @@ polls; dispatch prepays the declared complete result traversal before the codec.
 The original result/behavior remain owned through cancellation, partial writes
 and settlement acknowledgement. Closing one HTTP owner leaves siblings usable.
 
+Raw mode still enforces HTTP's native encoding envelope. Unencodable successful
+output refuses before a response write and retains its original value/effect
+through retirement as NotDelivered. The fixed 500/null mapping delivers an
+original error, including a Required validation failure; it does not replace an
+unencodable success and report that value delivered. Clock violations after
+native admission use InternalInvariant with the active Binding, Handler or Cleanup
+phase, while initial timing refusal remains Validation/Admission.
+
 `activate_raw` opens only local acceptance, including with Required checking.
 It does **not** publish a qualified TD. This integration has caller-provisioned
 bounded finite slots, not the older root's aggregate Host account admission.

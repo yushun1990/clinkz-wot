@@ -395,11 +395,16 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     deadline: Deadline,
     io_deadline: Deadline,
     last_now: Option<MonotonicInstant>,
+    // Starting may retain partial native effects even when poll_start returned
+    // Pending. State alone cannot distinguish timing admission from live work.
+    native_started: bool,
 }
 
 impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     /// Associate a native owner with one Servient, without moving or copying
     /// logical authority/behavior. Rejection returns the complete native pair.
+    /// `deadline` bounds the caller's logical interaction/lifetime envelope;
+    /// native requests retain their independent Binding-owned deadline.
     pub fn try_new(
         binding: B,
         configuration: B::Configuration,
@@ -432,6 +437,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             deadline,
             io_deadline: Deadline::NONE,
             last_now: None,
+            native_started: false,
         })
     }
 
@@ -506,20 +512,61 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         if self.state == RawFiniteState::Closed {
             return;
         }
-        if self
+        let monotonic_failure = self
             .last_now
-            .is_some_and(|last| now.checked_duration_since(last).is_none())
+            .is_some_and(|last| now.checked_duration_since(last).is_none());
+        let cleanup = self.state == RawFiniteState::Closing;
+        let admitted = self.native_started || cleanup;
+        let interaction_phase = if cleanup {
+            ErrorPhase::Cleanup
+        } else {
+            ErrorPhase::Handler
+        };
+        let native_phase = if cleanup {
+            ErrorPhase::Cleanup
+        } else {
+            ErrorPhase::Binding
+        };
+        let comparisons = [
+            (self.deadline.checked_is_elapsed_at(now), interaction_phase),
+            (self.io_deadline.checked_is_elapsed_at(now), native_phase),
+        ];
+        // Check the actual deadline domains before the general progress clock.
+        // This preserves Handler versus Binding attribution when both fail.
+        let clock_phase = comparisons
+            .iter()
+            .find_map(|(elapsed, phase)| elapsed.is_none().then_some(*phase))
+            .or_else(|| {
+                monotonic_failure.then_some(if self.deadline.instant().is_some() {
+                    interaction_phase
+                } else {
+                    native_phase
+                })
+            });
+        let timing_context = |phase| {
+            ErrorContext::new(
+                if admitted {
+                    phase
+                } else {
+                    ErrorPhase::Admission
+                },
+                RetryClass::Never,
+            )
+        };
+        if let Some(phase) = clock_phase {
+            let context = timing_context(phase);
+            self.fail(if admitted {
+                CoreError::InternalInvariant(context)
+            } else {
+                CoreError::Validation(context)
+            });
+        } else if let Some(phase) = comparisons
+            .iter()
+            .find_map(|(elapsed, phase)| (*elapsed == Some(true)).then_some(*phase))
         {
-            self.fail(CoreError::Validation(context()));
+            self.fail(CoreError::TimedOut(timing_context(phase)));
         }
         self.last_now = Some(now);
-        for deadline in [self.deadline, self.io_deadline] {
-            match deadline.checked_is_elapsed_at(now) {
-                Some(false) => {}
-                Some(true) => self.fail(CoreError::TimedOut(context())),
-                None => self.fail(CoreError::Validation(context())),
-            }
-        }
     }
 
     fn settle_reply(&mut self, delivery: FiniteDelivery) {
@@ -610,17 +657,22 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             return Poll::Ready(self.state);
         }
         match self.state {
-            Starting => match self.binding.poll_start(cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(Ok(())) => {
-                    self.state = InstalledClosed;
-                    Poll::Ready(self.state)
+            Starting => {
+                // The first paid native invocation may create partial effects,
+                // independently of its readiness result.
+                self.native_started = true;
+                match self.binding.poll_start(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Ok(())) => {
+                        self.state = InstalledClosed;
+                        Poll::Ready(self.state)
+                    }
+                    Poll::Ready(Err(e)) => {
+                        self.fail(e);
+                        Poll::Ready(self.state)
+                    }
                 }
-                Poll::Ready(Err(e)) => {
-                    self.fail(e);
-                    Poll::Ready(self.state)
-                }
-            },
+            }
             Serving => {
                 let received = self.binding.poll_receive(cx, now);
                 self.io_deadline = self.binding.request_deadline();

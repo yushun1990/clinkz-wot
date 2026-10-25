@@ -180,7 +180,9 @@ pub trait FiniteIngressBinding {
         now: MonotonicInstant,
     ) -> Poll<CoreResult<FiniteIngress<Self::Reply>>>;
     /// Ready(Ok) certifies that the original result reached this Binding's
-    /// declared delivery boundary. Pending and error do not.
+    /// declared delivery boundary. Pending and error do not. Raw mode waives
+    /// schema checks, not this guarantee: substituting an error response cannot
+    /// certify delivery of a retained successful value.
     fn poll_send(
         &mut self,
         cx: &mut Context<'_>,

@@ -2,7 +2,9 @@
 //! its service only marks a candidate and waits for the retained Engine result.
 use super::producer::HttpProducerProgram;
 use bytes::Bytes;
-use clinkz_wot_core::{CoreError, InteractionOutput};
+use clinkz_wot_core::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass,
+};
 use http_body_util::Full;
 use hyper::{Request, Response, body::Incoming, server::conn::http1, service::Service};
 use std::{
@@ -254,11 +256,13 @@ impl NativeConnection {
     pub(super) fn write_started(&self) -> bool {
         self.bridge.lock().unwrap().wrote
     }
-    pub(super) fn reply(&mut self, result: Result<&InteractionOutput, &CoreError>) {
+    pub(super) fn reply(
+        &mut self,
+        result: Result<&InteractionOutput, &CoreError>,
+    ) -> CoreResult<()> {
         if self.replied {
-            return;
+            return Ok(());
         }
-        self.replied = true;
         // IgnoredAny checks syntax without building a JSON tree, but skips
         // UTF-8 checks in strings and object keys. Validate the bytes first.
         let body = result.ok().and_then(|o| o.data()).filter(|p| {
@@ -268,6 +272,17 @@ impl NativeConnection {
                 && std::str::from_utf8(&p.body)
                     .is_ok_and(|json| serde_json::from_str::<serde::de::IgnoredAny>(json).is_ok())
         });
+        if result.is_ok() && body.is_none() {
+            // Raw results still need an executable native encoding. Refuse
+            // before queuing/writing anything; a replacement 500 would not be
+            // delivery of this retained successful value. Its original owner
+            // stays with Servient through native retirement and settlement.
+            return Err(CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+                    .with_redacted_cause(628, "HTTP Producer result cannot be encoded"),
+            ));
+        }
+        self.replied = true;
         let (status, bytes) = match body {
             Some(p) => (200, Bytes::copy_from_slice(&p.body)),
             None => (500, Bytes::from_static(b"null")),
@@ -280,5 +295,6 @@ impl NativeConnection {
                 .body(Full::new(bytes))
                 .expect("fixed HTTP response"),
         );
+        Ok(())
     }
 }

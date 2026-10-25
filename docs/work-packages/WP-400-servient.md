@@ -65,6 +65,15 @@ Zero credits can fence locally but cannot run a native/cleanup poll. Drop remain
 finite local disposal, not a completed network drain.
 Old finite callers migrate directly to the explicit time/validation arguments.
 
+Timing errors follow the retained [time-domain authority](../amendments/WP-100-time-domain-v1.md).
+Before the first funded native start invocation, invalid clock/deadline input is
+Validation/Admission. That invocation admits native effects even when readiness
+stays Pending. Later clock violations are InternalInvariant/Binding for native
+request/progress timing, InternalInvariant/Handler for the caller's logical
+deadline, and InternalInvariant/Cleanup while retiring. Incomparability is never
+TimedOut. A later cleanup clock/error cannot replace the original cause or
+release an accepted result before physical retirement and acknowledgement.
+
 The HTTP `finite_producer` integration target now exercises this owner over real
 HTTP, alongside the finite TCP/UDP ownership regressions. It includes required
 schema checks, service loss, bounded funding, partial-write uncertainty, deadlines,

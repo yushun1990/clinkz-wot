@@ -115,6 +115,8 @@ fn native(addr: SocketAddr, key: ProducerInstanceKey, id: u32, schema: &str) -> 
 struct Application {
     calls: Cell<u32>,
     body: RefCell<Option<Vec<u8>>>,
+    media: Cell<Option<&'static str>>,
+    coding: Cell<Option<&'static str>>,
     allowed: Cell<bool>,
     drops: Cell<u32>,
     bindings: RefCell<Vec<BindingId>>,
@@ -160,10 +162,11 @@ impl RawFiniteHandler for Handler {
             .borrow()
             .clone()
             .unwrap_or_else(|| self.0.calls.get().to_string().into_bytes());
-        Ok(InteractionOutput::with_data(Payload::new(
-            body,
-            "application/json",
-        )))
+        let mut payload = Payload::new(body, self.0.media.get().unwrap_or("application/json"));
+        if let Some(coding) = self.0.coding.get() {
+            payload = payload.with_content_coding(coding);
+        }
+        Ok(InteractionOutput::with_data(payload))
     }
 }
 fn instance(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawFiniteInstance {
@@ -283,6 +286,7 @@ struct ControlledHttp {
     native: HttpFiniteBinding,
     live: Rc<Cell<bool>>,
     stall_send: Rc<Cell<bool>>,
+    stall_start: Cell<bool>,
     close_failures: Rc<Cell<u32>>,
     validations: Rc<Cell<u32>>,
 }
@@ -292,6 +296,7 @@ impl ControlledHttp {
             native,
             live: Rc::new(Cell::new(true)),
             stall_send: Rc::new(Cell::new(false)),
+            stall_start: Cell::new(false),
             close_failures: Rc::new(Cell::new(0)),
             validations: Rc::new(Cell::new(0)),
         }
@@ -319,7 +324,10 @@ impl FiniteIngressBinding for ControlledHttp {
         self.native.request_deadline()
     }
     fn poll_start(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
-        self.native.poll_start(cx)
+        match self.native.poll_start(cx) {
+            Poll::Ready(Ok(())) if self.stall_start.get() => Poll::Pending,
+            result => result,
+        }
     }
     fn poll_receive(
         &mut self,
@@ -890,6 +898,11 @@ fn deadline_and_clock_fencing_before_start_require_only_funded_native_cleanup() 
             MonotonicInstant::new(ClockId::new(92), 2),
             false,
         ),
+        (
+            Deadline::at(MonotonicInstant::new(ClockId::new(92), 100)),
+            now(2),
+            false,
+        ),
     ] {
         let authority = new_authority();
         let key = authority.key();
@@ -922,6 +935,11 @@ fn deadline_and_clock_fencing_before_start_require_only_funded_native_cleanup() 
             matches!(runtime.first_cause(), Some(CoreError::TimedOut(_))),
             timeout
         );
+        if !timeout {
+            let error = runtime.first_cause().unwrap();
+            assert!(matches!(error, CoreError::Validation(_)));
+            assert_eq!(error.context().phase(), ErrorPhase::Admission);
+        }
         assert_eq!(
             runtime.step(&mut cx(), &mut work(1), later),
             Poll::Ready(RawFiniteState::Closed)
@@ -940,6 +958,253 @@ fn deadline_and_clock_fencing_before_start_require_only_funded_native_cleanup() 
     assert!(runtime.activate_raw().is_err());
     assert_eq!(runtime.state(), RawFiniteState::Closing);
     close(&mut runtime);
+}
+
+#[test]
+fn raw_http_mapping_rejection_preserves_the_undelivered_original_result() {
+    let mut oversized = vec![b' '; 4097];
+    oversized[0] = b'1';
+    for (body, media, coding) in [
+        (b"not json".to_vec(), "application/json", None),
+        (oversized, "application/json", None),
+        (b"1".to_vec(), "text/plain", None),
+        (b"1".to_vec(), "application/json", Some("gzip")),
+    ] {
+        let authority = new_authority();
+        let key = authority.key();
+        let addr = address();
+        let app = Rc::new(Application::default());
+        *app.body.borrow_mut() = Some(body.clone());
+        app.media.set(Some(media));
+        app.coding.set(coding);
+        let mut owner = owner(authority, app.clone());
+        let binding = native(addr, key, 1, "integer");
+        let config = binding.configuration().clone();
+        // Admit the original result into Engine ownership. In particular, the
+        // 4097-byte case isolates HTTP's native 4096-byte mapping limit.
+        let mut envelope = limits();
+        envelope.output_body_bytes = 8192;
+        envelope.output_retained_bytes = 16384;
+        let mut runtime = accepted(RawFiniteRuntime::try_new(
+            binding,
+            config,
+            &owner,
+            envelope,
+            FiniteOutputValidation::Raw,
+            Deadline::NONE,
+        ));
+        ready(&mut owner, &mut runtime);
+        let (wire, settlement) = response(&mut owner, &mut runtime, request(addr));
+        assert_eq!(
+            settlement.delivery,
+            FiniteDelivery::NotDelivered,
+            "substituted wire reply: {wire}"
+        );
+        assert!(
+            wire.is_empty(),
+            "mapping refusal must precede native writes: {wire}"
+        );
+        let error = runtime.first_cause().unwrap();
+        assert!(matches!(error, CoreError::Validation(_)));
+        assert_eq!(error.context().phase(), ErrorPhase::Binding);
+        assert_eq!(settlement.recipient, Some(key));
+        assert_eq!(settlement.effect, FiniteEffect::Unknown);
+        let output = settlement.result.unwrap();
+        let payload = output.data().unwrap();
+        assert_eq!(payload.body.as_ref(), body.as_slice());
+        assert_eq!(payload.content_type, media);
+        assert_eq!(payload.content_coding.as_deref(), coding);
+        assert_eq!(app.calls.get(), 1);
+        drop(owner);
+        assert_eq!(app.drops.get(), 1);
+        drop(TcpListener::bind(addr).unwrap());
+    }
+}
+
+#[test]
+fn http_clock_failure_after_admission_preserves_phase_first_cause_and_late_result() {
+    #[derive(Clone, Copy, Debug)]
+    enum Stage {
+        PendingStart,
+        Headers,
+        Dispatch,
+        Delivery,
+        InteractionDeadline,
+    }
+    for stage in [
+        Stage::PendingStart,
+        Stage::Headers,
+        Stage::Dispatch,
+        Stage::Delivery,
+        Stage::InteractionDeadline,
+    ] {
+        for fault in [MonotonicInstant::new(ClockId::new(92), 2), now(0)] {
+            let authority = new_authority();
+            let key = authority.key();
+            let addr = address();
+            let app = Rc::new(Application::default());
+            let mut owner = owner(authority, app.clone());
+            let binding = ControlledHttp::new(native(addr, key, 1, "integer"));
+            binding
+                .stall_start
+                .set(matches!(stage, Stage::PendingStart));
+            binding.stall_send.set(true);
+            binding.close_failures.set(1);
+            let config = binding.configuration().clone();
+            let deadline = if matches!(stage, Stage::InteractionDeadline) {
+                Deadline::at(now(100))
+            } else {
+                Deadline::NONE
+            };
+            let mut runtime = accepted(RawFiniteRuntime::try_new(
+                binding,
+                config,
+                &owner,
+                limits(),
+                FiniteOutputValidation::Required,
+                deadline,
+            ));
+            step(&mut owner, &mut runtime);
+            let peer = if matches!(stage, Stage::PendingStart) {
+                assert_eq!(runtime.state(), RawFiniteState::Starting);
+                None // The native socket exists even though start returned Pending.
+            } else {
+                runtime.activate_raw().unwrap();
+                if matches!(stage, Stage::Headers) {
+                    let mut peer = TcpStream::connect(addr).unwrap();
+                    peer.write_all(b"GET /value HTTP/1.1\r\n").unwrap();
+                    for _ in 0..10 {
+                        step(&mut owner, &mut runtime);
+                    }
+                    Some(peer)
+                } else {
+                    let peer = request(addr);
+                    until(&mut owner, &mut runtime, RawFiniteState::Dispatching);
+                    if !matches!(stage, Stage::Dispatch) {
+                        step(&mut owner, &mut runtime);
+                    }
+                    Some(peer)
+                }
+            };
+            // Establish a nonzero last observation so both a domain switch and
+            // same-domain regression are exercised after actual native setup.
+            let _ = runtime.step(&mut cx(), &mut work(1_000_000), now(1));
+            assert_eq!(runtime.step(&mut cx(), &mut work(0), fault), Poll::Pending);
+            assert_eq!(runtime.state(), RawFiniteState::Closing);
+            let error = runtime.first_cause().unwrap();
+            assert!(
+                matches!(error, CoreError::InternalInvariant(_)),
+                "{stage:?}: {error:?}"
+            );
+            let phase = if matches!(stage, Stage::InteractionDeadline) {
+                ErrorPhase::Handler
+            } else {
+                ErrorPhase::Binding
+            };
+            assert_eq!(error.context().phase(), phase, "{stage:?}");
+            assert_eq!(error.context().retry_class(), RetryClass::Never);
+            let accepted = matches!(stage, Stage::Delivery | Stage::InteractionDeadline);
+            assert_eq!(app.calls.get(), u32::from(accepted));
+            drop(owner);
+            assert_eq!(app.drops.get(), u32::from(!accepted));
+            assert!(TcpListener::bind(addr).is_err()); // Zero credit retained the socket.
+            assert_eq!(
+                runtime.step(&mut cx(), &mut work(1), fault),
+                Poll::Ready(RawFiniteState::Closing)
+            );
+            assert!(TcpListener::bind(addr).is_err()); // Failed close retained it too.
+            let cleanup_clock = MonotonicInstant::new(ClockId::new(93), 3);
+            assert_eq!(
+                runtime.step(&mut cx(), &mut work(0), cleanup_clock),
+                Poll::Pending
+            );
+            assert_eq!(runtime.first_cause().unwrap().context().phase(), phase);
+            assert_eq!(
+                runtime.step(&mut cx(), &mut work(1), cleanup_clock),
+                Poll::Ready(RawFiniteState::Closed)
+            );
+            assert!(matches!(
+                runtime.first_cause(),
+                Some(CoreError::InternalInvariant(_))
+            ));
+            assert_eq!(runtime.first_cause().unwrap().context().phase(), phase);
+            if accepted {
+                assert_eq!(app.drops.get(), 0);
+                let settlement = runtime.take_settlement().unwrap();
+                assert_eq!(settlement.recipient, Some(key));
+                assert_eq!(settlement.effect, FiniteEffect::Unknown);
+                assert_eq!(settlement.delivery, FiniteDelivery::NotDelivered);
+                assert_eq!(
+                    settlement.result.unwrap().data().unwrap().body.as_ref(),
+                    b"1"
+                );
+                assert_eq!(app.drops.get(), 1);
+            } else if matches!(stage, Stage::Dispatch) {
+                let settlement = runtime.take_settlement().unwrap();
+                assert_eq!(settlement.effect, FiniteEffect::NotInvoked);
+                assert!(matches!(
+                    settlement.result,
+                    Err(CoreError::InternalInvariant(_))
+                ));
+            } else {
+                assert!(runtime.take_settlement().is_none());
+            }
+            drop(peer);
+            drop(TcpListener::bind(addr).unwrap());
+        }
+    }
+}
+
+#[test]
+fn cleanup_clock_failure_is_attributed_and_completed_delivery_clears_request_deadline() {
+    for cleanup_fault in [false, true] {
+        let authority = new_authority();
+        let key = authority.key();
+        let addr = address();
+        let mut owner = owner(authority, Rc::new(Application::default()));
+        let binding = ControlledHttp::new(native(addr, key, 1, "integer"));
+        binding.close_failures.set(u32::from(cleanup_fault));
+        let mut runtime = runtime(binding, &owner, FiniteOutputValidation::Required);
+        ready(&mut owner, &mut runtime);
+        let instant = if cleanup_fault {
+            MonotonicInstant::new(ClockId::new(92), 11)
+        } else {
+            let (wire, settlement) = response(&mut owner, &mut runtime, request(addr));
+            assert!(wire.starts_with("HTTP/1.1 200"));
+            assert_eq!(settlement.delivery, FiniteDelivery::Delivered);
+            assert_eq!(
+                runtime.step(&mut cx(), &mut work(1), now(11)),
+                Poll::Pending
+            );
+            assert_eq!(runtime.state(), RawFiniteState::Serving);
+            assert!(runtime.first_cause().is_none()); // The tick-10 request is already settled.
+            now(11)
+        };
+        runtime.begin_close();
+        assert_eq!(
+            runtime.step(&mut cx(), &mut work(0), instant),
+            Poll::Pending
+        );
+        if cleanup_fault {
+            let error = runtime.first_cause().unwrap();
+            assert!(matches!(error, CoreError::InternalInvariant(_)));
+            assert_eq!(error.context().phase(), ErrorPhase::Cleanup);
+            assert_eq!(
+                runtime.step(&mut cx(), &mut work(1), instant),
+                Poll::Ready(RawFiniteState::Closing)
+            );
+            assert!(TcpListener::bind(addr).is_err());
+            assert_eq!(
+                runtime.first_cause().unwrap().context().phase(),
+                ErrorPhase::Cleanup
+            );
+        }
+        assert_eq!(
+            runtime.step(&mut cx(), &mut work(1), instant),
+            Poll::Ready(RawFiniteState::Closed)
+        );
+        drop(TcpListener::bind(addr).unwrap());
+    }
 }
 
 #[test]

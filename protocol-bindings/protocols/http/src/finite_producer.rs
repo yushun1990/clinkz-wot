@@ -250,7 +250,9 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         let Some(connection) = self.connection.as_mut() else {
             return Poll::Ready(Err(crate::producer::producer_unsupported()));
         };
-        connection.reply(reply.result.as_ref());
+        if let Err(error) = connection.reply(reply.result.as_ref()) {
+            return Poll::Ready(Err(error));
+        }
         match connection.poll(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => {
