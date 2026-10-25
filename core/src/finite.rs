@@ -64,9 +64,15 @@ pub enum FiniteDelivery {
 }
 
 /// One terminal native and semantic outcome, including the complete owned late
-/// result (even if delivery was refused or uncertain). The runtime retains one
-/// unread settlement; another exchange cannot be received until it is taken.
+/// result (even if delivery was refused or uncertain) and original mapping
+/// identity. Each native runtime retains one unread settlement; another exchange
+/// on that runtime cannot be received until it is taken. Siblings are independent.
 pub struct RawFiniteSettlement {
+    /// Actual native runtime association, retained even after independent close.
+    pub binding: (BindingId, BindingGeneration),
+    /// Shared view of the original registered target backing. Refused/unaccepted
+    /// input has no accepted target; its native input is settled separately.
+    pub target: Option<AffordanceTarget>,
     pub recipient: Option<ProducerInstanceKey>,
     pub operation: Option<Operation>,
     pub effect: FiniteEffect,
@@ -78,6 +84,8 @@ impl core::fmt::Debug for RawFiniteSettlement {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("RawFiniteSettlement")
+            .field("binding", &self.binding)
+            .field("has_target", &self.target.is_some())
             .field("recipient", &self.recipient)
             .field("operation", &self.operation)
             .field("effect", &self.effect)

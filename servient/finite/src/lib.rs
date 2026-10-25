@@ -5,7 +5,11 @@
 
 extern crate alloc;
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{
+    boxed::Box,
+    rc::{Rc, Weak},
+    vec::Vec,
+};
 use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, BindingOperationalError,
     CoreError, CoreResult, ErrorContext, ErrorPhase, HandlerContext, InteractionOutput, Operation,
@@ -33,14 +37,14 @@ const MAX_TARGET_NAME_BYTES: usize = 256;
 pub struct RawFiniteBehavior {
     target: AffordanceTarget,
     operation: Operation,
-    handler: Box<dyn RawFiniteHandler + Send>,
+    handler: Box<dyn RawFiniteHandler>,
 }
 
 impl RawFiniteBehavior {
     pub fn new(
         target: AffordanceTarget,
         operation: Operation,
-        handler: impl RawFiniteHandler + Send + 'static,
+        handler: impl RawFiniteHandler + 'static,
     ) -> Self {
         Self {
             target,
@@ -50,12 +54,11 @@ impl RawFiniteBehavior {
     }
 }
 
-/// One move-only logical instance. Multiple behaviors may use one physical
-/// Binding service without giving the Binding any handler authority.
+/// One move-only logical authority and behavior set, owned by Servient rather
+/// than by any Binding runtime. Accepted work may retain this exact instance.
 pub struct RawFiniteInstance {
     authority: ProducerInstanceAuthority,
     behaviors: Vec<RawFiniteBehavior>,
-    current: bool,
 }
 
 impl RawFiniteInstance {
@@ -63,7 +66,6 @@ impl RawFiniteInstance {
         Self {
             authority,
             behaviors,
-            current: true,
         }
     }
 
@@ -72,18 +74,242 @@ impl RawFiniteInstance {
     }
 }
 
-/// Fixed Host lookup envelope and Engine-retained result backing. Output is
+/// Fixed registration/lookup envelope at the logical owner. Construction and
+/// replacement validate externally built behavior before changing authority.
+#[derive(Clone, Copy, Debug)]
+pub struct RawFiniteRegistryLimits {
+    pub instances: usize,
+    pub behaviors_per_instance: usize,
+    /// Maximum UTF-8 bytes per registered or accepted native target name.
+    pub target_name_bytes: usize,
+}
+
+struct InstanceEntry {
+    instance: Rc<RawFiniteInstance>,
+    current: bool,
+}
+
+struct AcceptedBehavior {
+    instance: Rc<RawFiniteInstance>,
+    behavior: usize,
+}
+
+/// One logical owner shared by independently typed native runtimes. Exclusive
+/// manual access orders acceptance, revocation and replacement without locks.
+/// This Host facet is single-threaded; retention references confer no authority.
+pub struct RawFiniteServient {
+    instances: Vec<InstanceEntry>,
+    issuer: Rc<()>,
+    limits: RawFiniteRegistryLimits,
+}
+
+impl RawFiniteServient {
+    pub fn try_new(
+        instances: Vec<RawFiniteInstance>,
+        limits: RawFiniteRegistryLimits,
+    ) -> Result<Self, BindingInputRejection<Vec<RawFiniteInstance>>> {
+        let valid = (1..=MAX_INSTANCES).contains(&limits.instances)
+            && (1..=MAX_BEHAVIORS_PER_INSTANCE).contains(&limits.behaviors_per_instance)
+            && limits.target_name_bytes <= MAX_TARGET_NAME_BYTES
+            && !instances.is_empty()
+            && instances.len() <= limits.instances
+            && instances.iter().enumerate().all(|(i, instance)| {
+                Self::valid_instance(instance, limits)
+                    && !instances[..i]
+                        .iter()
+                        .any(|prior| prior.key().slot().slot() == instance.key().slot().slot())
+            });
+        if !valid {
+            return Err(rejection(instances));
+        }
+        Ok(Self {
+            instances: instances
+                .into_iter()
+                .map(|instance| InstanceEntry {
+                    instance: Rc::new(instance),
+                    current: true,
+                })
+                .collect(),
+            issuer: Rc::new(()),
+            limits,
+        })
+    }
+
+    fn valid_instance(instance: &RawFiniteInstance, limits: RawFiniteRegistryLimits) -> bool {
+        !instance.behaviors.is_empty()
+            && instance.behaviors.len() <= limits.behaviors_per_instance
+            && instance.behaviors.iter().enumerate().all(|(j, behavior)| {
+                matches!(
+                    behavior.operation,
+                    Operation::ReadProperty | Operation::WriteProperty
+                ) && matches!(&behavior.target, AffordanceTarget::Property(name)
+                        if name.len() <= limits.target_name_bytes)
+                    && !instance.behaviors[..j].iter().any(|prior| {
+                        prior.operation == behavior.operation && prior.target == behavior.target
+                    })
+            })
+    }
+
+    /// Stop new acceptance everywhere. At most 32 key probes; no native callback,
+    /// handler destruction or accepted-work cancellation occurs here.
+    pub fn revoke(&mut self, key: ProducerInstanceKey) -> bool {
+        if let Some(entry) = self
+            .instances
+            .iter_mut()
+            .find(|entry| entry.instance.key() == key && entry.current)
+        {
+            entry.current = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Validate the complete successor, then atomically replace the expected
+    /// incarnation (current or revoked) in the same numeric slot. Old accepted
+    /// work retains its original instance; no Binding is reconfigured or closed.
+    pub fn replace(
+        &mut self,
+        expected: ProducerInstanceKey,
+        replacement: RawFiniteInstance,
+    ) -> Result<(), BindingInputRejection<RawFiniteInstance>> {
+        let index = self
+            .instances
+            .iter()
+            .position(|entry| entry.instance.key() == expected);
+        if index.is_none()
+            || replacement.key() == expected
+            || replacement.key().slot().slot() != expected.slot().slot()
+            || !Self::valid_instance(&replacement, self.limits)
+        {
+            return Err(rejection(replacement));
+        }
+        self.instances[index.expect("checked entry")] = InstanceEntry {
+            instance: Rc::new(replacement),
+            current: true,
+        };
+        Ok(())
+    }
+
+    fn resolve<R>(
+        &self,
+        ingress: &FiniteIngress<R>,
+        limits: RawFiniteLimits,
+    ) -> CoreResult<(usize, usize)> {
+        if ingress.candidates.len() > limits.candidates
+            || ingress
+                .input
+                .data
+                .as_ref()
+                .is_some_and(|data| data.body.len() > limits.input_body_bytes)
+        {
+            return Err(CoreError::Backpressure(context()));
+        }
+        let [candidate] = ingress.candidates.as_slice() else {
+            return Err(CoreError::UnsupportedOperation(context()));
+        };
+        match &candidate.target {
+            AffordanceTarget::Property(name) if name.len() > self.limits.target_name_bytes => {
+                return Err(CoreError::Backpressure(context()));
+            }
+            AffordanceTarget::Property(_) => {}
+            _ => return Err(CoreError::UnsupportedOperation(context())),
+        }
+        let instance_index = self
+            .instances
+            .iter()
+            .position(|entry| entry.instance.key() == candidate.instance && entry.current)
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        let behavior_index = self.instances[instance_index]
+            .instance
+            .behaviors
+            .iter()
+            .position(|b| b.target == candidate.target && b.operation == candidate.operation)
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        Ok((instance_index, behavior_index))
+    }
+
+    /// Progress one runtime using this exact logical owner. A different issuer
+    /// returns an error without consuming or altering its exchange. Native polls
+    /// and retirement can also be driven directly through `RawFiniteRuntime::step`.
+    pub fn step<B: FiniteIngressBinding>(
+        &mut self,
+        runtime: &mut RawFiniteRuntime<B>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Poll<RawFiniteState>> {
+        if runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        if runtime.state != RawFiniteState::Dispatching {
+            return Ok(runtime.step(cx, budget));
+        }
+        let units = (self.limits.instances
+            + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
+            + 1) as u64;
+        if budget.consume(WorkClass::HandlerSteps, units).is_err() {
+            return Ok(Poll::Pending);
+        }
+        if !runtime.pair_is_current() {
+            runtime.fail(CoreError::Validation(context()));
+            return Ok(Poll::Ready(runtime.state));
+        }
+        let ingress = runtime.ingress.take().expect("received exchange retained");
+        let single = ingress
+            .candidates
+            .first()
+            .filter(|_| ingress.candidates.len() == 1);
+        let recipient = single.map(|candidate| candidate.instance);
+        let operation = single.map(|candidate| candidate.operation);
+        let mut effect = FiniteEffect::NotInvoked;
+        let result = self.resolve(&ingress, runtime.limits).and_then(|(i, b)| {
+            let instance = &self.instances[i].instance;
+            let behavior = &instance.behaviors[b];
+            behavior.handler.authorize(&ingress.input)?;
+            let ctx = HandlerContext::for_producer(
+                instance.key(),
+                &behavior.target,
+                behavior.operation,
+                runtime.identity,
+            )?;
+            // Acceptance is ordered by exclusive access to this owner. No lock,
+            // native callback, allocation or re-lookup surrounds application code.
+            runtime.accepted_instance = Some(AcceptedBehavior {
+                instance: Rc::clone(instance),
+                behavior: b,
+            });
+            effect = FiniteEffect::Unknown;
+            let output = behavior.handler.handle(ctx, &ingress.input)?;
+            if !runtime.output_fits(&output) {
+                return Err(CoreError::Backpressure(context()));
+            }
+            if !raw_finite_property_shape(behavior.operation, &output) {
+                return Err(CoreError::Validation(
+                    ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                        .with_thing(instance.key().slot())
+                        .with_operation(behavior.operation),
+                ));
+            }
+            Ok(output)
+        });
+        runtime.reply = Some(RawFiniteReply {
+            ingress,
+            result,
+            effect,
+            recipient,
+            operation,
+        });
+        runtime.state = RawFiniteState::Delivering;
+        Ok(Poll::Ready(runtime.state))
+    }
+}
+
+/// Per-runtime exchange opportunity and Engine-retained result backing. Output is
 /// application-backed during the handler callback; on return it is moved into
 /// Engine ownership only if the *entire* measured representation fits this
 /// declared result opportunity. Native input/metadata/backing is Binding-owned.
 #[derive(Clone, Copy, Debug)]
 pub struct RawFiniteLimits {
-    pub instances: usize,
-    pub behaviors_per_instance: usize,
-    /// Maximum UTF-8 bytes in each registered and native candidate name.
-    /// Empty Property names remain supported. This Host facet accepts at most
-    /// MAX_TARGET_NAME_BYTES (256), not an unbounded comparison under one poll.
-    pub target_name_bytes: usize,
     pub candidates: usize,
     pub input_body_bytes: usize,
     pub output_body_bytes: usize,
@@ -109,73 +335,40 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     // Complete pending work drops before the physical driver on local disposal.
     ingress: Option<FiniteIngress<B::Reply>>,
     reply: Option<RawFiniteReply<B::Reply>>,
+    settlement: Option<RawFiniteSettlement>,
     binding: B,
-    instances: Vec<RawFiniteInstance>,
+    // Survives native disposal and ends only at settlement acknowledgement.
+    accepted_instance: Option<AcceptedBehavior>,
+    issuer: Weak<()>,
     identity: (BindingId, BindingGeneration),
     configuration: B::Configuration,
     limits: RawFiniteLimits,
     state: RawFiniteState,
     first_cause: Option<CoreError>,
-    settlement: Option<RawFiniteSettlement>,
 }
 
 impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
-    /// Validate actual registered behavior before starting native effects. This
-    /// is a raw runtime registration, not a TD coverage/publication certificate.
-    #[allow(clippy::type_complexity)]
+    /// Associate a native owner with one Servient, without moving or copying
+    /// logical authority/behavior. Rejection returns the complete native pair.
     pub fn try_new(
         binding: B,
         configuration: B::Configuration,
-        instances: Vec<RawFiniteInstance>,
+        servient: &RawFiniteServient,
         limits: RawFiniteLimits,
-    ) -> Result<Self, BindingInputRejection<(B, B::Configuration, Vec<RawFiniteInstance>)>> {
+    ) -> Result<Self, BindingInputRejection<(B, B::Configuration)>> {
         let identity = binding.identity();
         let valid = binding.configuration() == &configuration
-            && (1..=MAX_INSTANCES).contains(&limits.instances)
-            && (1..=MAX_BEHAVIORS_PER_INSTANCE).contains(&limits.behaviors_per_instance)
-            && limits.target_name_bytes <= MAX_TARGET_NAME_BYTES
-            && instances.len() <= limits.instances
             && limits.candidates > 0
-            && limits.output_retained_bytes >= size_of::<InteractionOutput>()
-            && !instances.is_empty()
-            && instances.iter().enumerate().all(|(i, instance)| {
-                !instance.behaviors.is_empty()
-                    && instance.behaviors.len() <= limits.behaviors_per_instance
-                    && !instances[..i]
-                        .iter()
-                        .any(|prior| prior.key().slot() == instance.key().slot())
-                    && instance.behaviors.iter().enumerate().all(|(j, behavior)| {
-                        matches!(
-                            behavior.operation,
-                            Operation::ReadProperty | Operation::WriteProperty
-                        ) && behavior
-                            .target
-                            .name()
-                            .is_some_and(|name| name.len() <= limits.target_name_bytes)
-                            && !instance.behaviors[..j].iter().any(|prior| {
-                                prior.operation == behavior.operation
-                                    && prior.target == behavior.target
-                            })
-                            && HandlerContext::for_producer(
-                                instance.key(),
-                                &behavior.target,
-                                behavior.operation,
-                                identity,
-                            )
-                            .is_ok()
-                    })
-            });
+            && limits.output_retained_bytes >= size_of::<InteractionOutput>();
         if !valid {
-            return Err(BindingInputRejection::new(
-                (binding, configuration, instances),
-                BindingOperationalError::new(CoreError::Validation(context())),
-            ));
+            return Err(rejection((binding, configuration)));
         }
         Ok(Self {
             ingress: None,
             reply: None,
             binding,
-            instances,
+            accepted_instance: None,
+            issuer: Rc::downgrade(&servient.issuer),
             identity,
             configuration,
             limits,
@@ -196,33 +389,24 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     /// the next receive. This bounded record reports local effect and native
     /// delivery independently; neither an error nor close proves a write absent.
     pub fn take_settlement(&mut self) -> Option<RawFiniteSettlement> {
-        self.settlement.take()
+        let settlement = self.settlement.take();
+        if settlement.is_some() {
+            self.accepted_instance = None;
+        }
+        settlement
     }
 
     /// Locally enable raw acceptance after native readiness; this does not
     /// publish or qualify a TD. No native callback or handler runs here.
     pub fn activate_raw(&mut self) -> CoreResult<()> {
+        if self.issuer.strong_count() == 0 {
+            return Err(CoreError::StaleHandle(context()));
+        }
         if self.state != RawFiniteState::InstalledClosed || !self.pair_is_current() {
             return Err(CoreError::Validation(context()));
         }
         self.state = RawFiniteState::Serving;
         Ok(())
-    }
-
-    /// Revocation stops *new* semantic acceptance, without closing the native
-    /// driver or any sibling. Its lookup is at most MAX_INSTANCES (32) probes;
-    /// already accepted replies keep their original owner.
-    pub fn revoke(&mut self, key: ProducerInstanceKey) -> bool {
-        if let Some(instance) = self
-            .instances
-            .iter_mut()
-            .find(|i| i.key() == key && i.current)
-        {
-            instance.current = false;
-            true
-        } else {
-            false
-        }
     }
 
     pub fn begin_close(&mut self) {
@@ -236,9 +420,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             // Unaccepted ingress retains its *entire* original native input and
             // opportunity for the Binding's refusal/retirement path.
             self.state = RawFiniteState::Closing;
-            for instance in &mut self.instances {
-                instance.current = false;
-            }
         }
     }
 
@@ -258,6 +439,14 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         if let Some(reply) = self.reply.take() {
             assert!(self.settlement.is_none(), "unread finite settlement");
             self.settlement = Some(RawFiniteSettlement {
+                binding: self.identity,
+                // A view of the captured registered target shares its funded
+                // backing, rather than extending Binding-private input storage.
+                target: self.accepted_instance.as_ref().map(|accepted| {
+                    accepted.instance.behaviors[accepted.behavior]
+                        .target
+                        .clone()
+                }),
                 recipient: reply.recipient,
                 operation: reply.operation,
                 effect: reply.effect,
@@ -275,6 +464,8 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 .first()
                 .filter(|_| ingress.candidates.len() == 1);
             self.settlement = Some(RawFiniteSettlement {
+                binding: self.identity,
+                target: None,
                 recipient: single.map(|c| c.instance),
                 operation: single.map(|c| c.operation),
                 effect: FiniteEffect::NotInvoked,
@@ -296,67 +487,29 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             .is_some_and(|bytes| bytes <= self.limits.output_retained_bytes)
     }
 
-    fn resolve(&self, ingress: &FiniteIngress<B::Reply>) -> CoreResult<(usize, usize)> {
-        if ingress.candidates.len() > self.limits.candidates
-            || ingress
-                .input
-                .data
-                .as_ref()
-                .is_some_and(|data| data.body.len() > self.limits.input_body_bytes)
-        {
-            return Err(CoreError::Backpressure(context()));
-        }
-        // This facet has one reply, not a multicast/aggregation promise.
-        let [candidate] = ingress.candidates.as_slice() else {
-            return Err(CoreError::UnsupportedOperation(context()));
-        };
-        match &candidate.target {
-            AffordanceTarget::Property(name) if name.len() > self.limits.target_name_bytes => {
-                return Err(CoreError::Backpressure(context()));
-            }
-            AffordanceTarget::Property(_) => {}
-            _ => return Err(CoreError::UnsupportedOperation(context())),
-        }
-        let instance_index = self
-            .instances
-            .iter()
-            .position(|i| i.key() == candidate.instance && i.current)
-            .ok_or_else(|| CoreError::StaleHandle(context()))?;
-        let behavior_index = self.instances[instance_index]
-            .behaviors
-            .iter()
-            .position(|b| b.target == candidate.target && b.operation == candidate.operation)
-            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
-        Ok((instance_index, behavior_index))
-    }
-
-    /// One paid binding poll, synchronous cooperative handler call, or cleanup
-    /// poll. Pending never discards the reply or changes the first failure.
+    /// One paid native or cleanup poll. Dispatching waits for the associated
+    /// Servient; native retirement never needs logical authority or a handler.
+    /// Pending never discards the reply or changes the first failure.
     pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<RawFiniteState> {
         use RawFiniteState::*;
         if self.state == Closed
             || self.state == InstalledClosed
             || (self.state == Serving && self.settlement.is_some())
+            || (self.state == Dispatching && self.issuer.strong_count() != 0)
         {
             return Poll::Ready(self.state);
         }
         let class = match self.state {
-            Dispatching => WorkClass::HandlerSteps,
             Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        // One atomic, *bounded* lookup: each registered name comparison costs
-        // a discriminant/length probe and up to target_name_bytes UTF-8 bytes.
-        // Add instance probes and one handler invocation before doing any work.
-        let units = if self.state == Dispatching {
-            (self.limits.instances
-                + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
-                + 1) as u64
-        } else {
-            1
-        };
-        if budget.consume(class, units).is_err() {
+        if budget.consume(class, 1).is_err() {
             return Poll::Pending;
+        }
+        if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
+        {
+            self.fail(CoreError::StaleHandle(context()));
+            return Poll::Ready(self.state);
         }
         if self.state != Closing && !self.pair_is_current() {
             self.fail(CoreError::Validation(context()));
@@ -386,53 +539,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     Poll::Ready(self.state)
                 }
             },
-            Dispatching => {
-                let ingress = self.ingress.take().expect("received exchange retained");
-                let single = ingress
-                    .candidates
-                    .first()
-                    .filter(|_| ingress.candidates.len() == 1);
-                let recipient = single.map(|candidate| candidate.instance);
-                let operation = single.map(|candidate| candidate.operation);
-                let mut effect = FiniteEffect::NotInvoked;
-                let result = self
-                    .resolve(&ingress)
-                    .and_then(|(instance_index, behavior_index)| {
-                        let instance = &self.instances[instance_index];
-                        let behavior = &instance.behaviors[behavior_index];
-                        // No registry-wide lock, native callback or Binding code runs
-                        // around the authorization and application callbacks.
-                        behavior.handler.authorize(&ingress.input)?;
-                        let ctx = HandlerContext::for_producer(
-                            instance.key(),
-                            &behavior.target,
-                            behavior.operation,
-                            self.identity,
-                        )?;
-                        effect = FiniteEffect::Unknown;
-                        let output = behavior.handler.handle(ctx, &ingress.input)?;
-                        if !self.output_fits(&output) {
-                            return Err(CoreError::Backpressure(context()));
-                        }
-                        if !raw_finite_property_shape(behavior.operation, &output) {
-                            return Err(CoreError::Validation(
-                                ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
-                                    .with_thing(instance.key().slot())
-                                    .with_operation(behavior.operation),
-                            ));
-                        }
-                        Ok(output)
-                    });
-                self.reply = Some(RawFiniteReply {
-                    ingress,
-                    result,
-                    effect,
-                    recipient,
-                    operation,
-                });
-                self.state = Delivering;
-                Poll::Ready(self.state)
-            }
             Delivering => match self
                 .binding
                 .poll_send(cx, self.reply.as_ref().expect("reply retained"))
@@ -468,11 +574,18 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     Poll::Ready(Closed)
                 }
             },
-            InstalledClosed | Closed => unreachable!(),
+            InstalledClosed | Closed | Dispatching => unreachable!(),
         }
     }
 }
 
 fn context() -> ErrorContext {
     ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+}
+
+fn rejection<T>(input: T) -> BindingInputRejection<T> {
+    BindingInputRejection::new(
+        input,
+        BindingOperationalError::new(CoreError::Validation(context())),
+    )
 }

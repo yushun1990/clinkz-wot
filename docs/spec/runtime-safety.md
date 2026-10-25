@@ -6,6 +6,10 @@ content and native physical owners. Each acceptance independently checks the
 current recipient/operation/policy and reserves work/result/cleanup. Replacing or
 revoking a slot stops new acceptance and cannot redirect accepted work to a
 successor. Native matching/transport control is not semantic permission.
+Participation in several Binding runtimes MUST retain one logical authority and
+behavior owner. Currentness cannot be copied into per-Binding registries. A
+retention reference for original accepted work grants neither fresh acceptance
+nor native shutdown authority.
 
 `SAFE-PUBLISH-001`: Producer setup MUST validate the draft/known dependencies,
 capture actual providers/behavior and reserve setup/ingress/finalization/cleanup

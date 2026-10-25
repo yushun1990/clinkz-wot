@@ -10,6 +10,9 @@ A local reference is qualified by its issuer/registry, slot, generation and
 particular admitted obligation, or an equivalent lifetime proof. Neither a TD id,
 endpoint, Rust type, content digest nor copied generation authorizes a call.
 Several instances may share one description or physical runtime independently.
+One logical instance can also participate in several independent Binding
+runtimes under that same authority and captured behavior owner. Native runtime
+retirement is not logical revocation; it cannot revoke a sibling's acceptance.
 
 Consumer use selects a prepared candidate, checks policy/data/capacity and owns
 the entire conversation/result/cleanup obligation before effects. Deferred pure

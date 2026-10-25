@@ -22,3 +22,28 @@ v6. Exact successor source scope/API/state/resource changes, removals, checks an
 independent review are determined from the current repository for each material
 slice, not from a saved next-action list. New interaction families and Bindings
 are outside this architecture migration.
+
+## Raw finite shared-instance slice
+
+The execution-only Host slice in `servient/finite` separates the bounded logical
+registry from typed native runtimes. Registry count/name limits belong to
+`RawFiniteRegistryLimits`; per-runtime input/result opportunities belong to
+`RawFiniteLimits`. Revocation and complete same-slot replacement occur at the
+logical owner. Accepted work retains the original instance through native
+settlement and acknowledgement. Registry mutation/destruction has at most 32
+entries and 16 behaviors per instance with names at most 256 bytes; linked
+callbacks/local destructors remain trusted cooperative code, not preemptible.
+Caller-provisioned runtime slots have independent native/dispatch/cleanup budgets
+and no growing Engine runtime queue. There is no aggregate process-RAM claim.
+
+The former runtime-owned-instance constructor and runtime-local revocation are
+replaced directly. Core settlement retains original Binding/target identity;
+the Binding facet remains native and receives no registry/handler capability.
+Affected checks are the finite `native_ingress` integration test (including its
+`shared_ownership` cases), Core handler contracts, execution-only dependency and
+feature checks, and authority/API projections. TCP/datagram test providers are
+ownership/I/O evidence, not production protocol qualification. Historical
+Property Read gates and PR #229 evidence keep their original revision scope;
+independent acceptance of the changed API/ownership remains necessary. TD
+qualification/publication, optional Planning, threading, Action/Event and
+constrained execution are separate work.
