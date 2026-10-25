@@ -33,12 +33,12 @@ pub struct FiniteIngress<R> {
     pub reply: R,
 }
 
-/// The original reply opportunity stays with its result through pending sends,
-/// revocation, failure and native close. Success here is explicitly *raw* data;
-/// DataSchema conformance is not implied by the carrier. Handler invocation is
-/// never proof that a write did or did not take effect.
+/// The complete original input, candidates and reply opportunity stay together
+/// through pending sends, refusal, revocation, failure and native close. Success
+/// here is explicitly *raw* data; DataSchema conformance is not implied by the
+/// carrier. Handler invocation is never proof of write effect certainty.
 pub struct RawFiniteReply<R> {
-    pub opportunity: R,
+    pub ingress: FiniteIngress<R>,
     pub result: CoreResult<InteractionOutput>,
     pub effect: FiniteEffect,
     pub recipient: Option<ProducerInstanceKey>,
@@ -63,7 +63,8 @@ pub enum FiniteDelivery {
     Unknown,
 }
 
-/// One terminal native and semantic outcome. The runtime retains exactly one
+/// One terminal native and semantic outcome, including the complete owned late
+/// result (even if delivery was refused or uncertain). The runtime retains one
 /// unread settlement; another exchange cannot be received until it is taken.
 #[derive(Debug)]
 pub struct RawFiniteSettlement {
@@ -71,7 +72,7 @@ pub struct RawFiniteSettlement {
     pub operation: Option<Operation>,
     pub effect: FiniteEffect,
     pub delivery: FiniteDelivery,
-    pub result: CoreResult<()>,
+    pub result: CoreResult<InteractionOutput>,
 }
 
 /// Basic Property result shape. Raw mode permits unvalidated data bytes, not
@@ -114,7 +115,7 @@ pub fn raw_finite_output_backing(output: &InteractionOutput) -> Option<usize> {
 /// exchanges with one exclusive reply. `poll_start` may acquire native resources
 /// but MUST keep semantic ingress closed until the runtime activates locally.
 /// The Binding bounds input/metadata and candidate backing before returning an
-/// ingress. A pending or failed send retains its original opportunity until
+/// ingress. A pending or failed send retains its complete original exchange until
 /// `poll_close` has disposed native work. Close receives the *complete* unmatched
 /// input or accepted reply, including the original opportunity. It MUST perform
 /// the supported native refusal/abort or report an uncertain delivery; it must

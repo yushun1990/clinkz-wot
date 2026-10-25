@@ -27,6 +27,7 @@ use core::{
 // a different indexed/resumable owner, not one unbounded HandlerSteps charge.
 const MAX_INSTANCES: usize = 32;
 const MAX_BEHAVIORS_PER_INSTANCE: usize = 16;
+const MAX_TARGET_NAME_BYTES: usize = 256;
 
 /// Handler storage and dispatch identity, independent of a native route.
 pub struct RawFiniteBehavior {
@@ -79,6 +80,10 @@ impl RawFiniteInstance {
 pub struct RawFiniteLimits {
     pub instances: usize,
     pub behaviors_per_instance: usize,
+    /// Maximum UTF-8 bytes in each registered and native candidate name.
+    /// Empty Property names remain supported. This Host facet accepts at most
+    /// MAX_TARGET_NAME_BYTES (256), not an unbounded comparison under one poll.
+    pub target_name_bytes: usize,
     pub candidates: usize,
     pub input_body_bytes: usize,
     pub output_body_bytes: usize,
@@ -128,6 +133,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         let valid = binding.configuration() == &configuration
             && (1..=MAX_INSTANCES).contains(&limits.instances)
             && (1..=MAX_BEHAVIORS_PER_INSTANCE).contains(&limits.behaviors_per_instance)
+            && limits.target_name_bytes <= MAX_TARGET_NAME_BYTES
             && instances.len() <= limits.instances
             && limits.candidates > 0
             && limits.output_retained_bytes >= size_of::<InteractionOutput>()
@@ -142,15 +148,21 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         matches!(
                             behavior.operation,
                             Operation::ReadProperty | Operation::WriteProperty
-                        ) && !instance.behaviors[..j].iter().any(|prior| {
-                            prior.operation == behavior.operation && prior.target == behavior.target
-                        }) && HandlerContext::for_producer(
-                            instance.key(),
-                            &behavior.target,
-                            behavior.operation,
-                            identity,
-                        )
-                        .is_ok()
+                        ) && behavior
+                            .target
+                            .name()
+                            .is_some_and(|name| name.len() <= limits.target_name_bytes)
+                            && !instance.behaviors[..j].iter().any(|prior| {
+                                prior.operation == behavior.operation
+                                    && prior.target == behavior.target
+                            })
+                            && HandlerContext::for_producer(
+                                instance.key(),
+                                &behavior.target,
+                                behavior.operation,
+                                identity,
+                            )
+                            .is_ok()
                     })
             });
         if !valid {
@@ -250,7 +262,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 operation: reply.operation,
                 effect: reply.effect,
                 delivery,
-                result: reply.result.map(|_| ()),
+                result: reply.result,
             });
         }
     }
@@ -298,6 +310,13 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         let [candidate] = ingress.candidates.as_slice() else {
             return Err(CoreError::UnsupportedOperation(context()));
         };
+        if candidate
+            .target
+            .name()
+            .is_none_or(|name| name.len() > self.limits.target_name_bytes)
+        {
+            return Err(CoreError::Backpressure(context()));
+        }
         let instance_index = self
             .instances
             .iter()
@@ -326,10 +345,13 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        // One atomic, *bounded* lookup: at most every instance and every
-        // behavior of the selected instance, plus one handler invocation.
+        // One atomic, *bounded* lookup: each registered name comparison costs
+        // a discriminant/length probe and up to target_name_bytes UTF-8 bytes.
+        // Add instance probes and one handler invocation before doing any work.
         let units = if self.state == Dispatching {
-            (self.limits.instances + self.limits.behaviors_per_instance + 1) as u64
+            (self.limits.instances
+                + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
+                + 1) as u64
         } else {
             1
         };
@@ -370,6 +392,8 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     .candidates
                     .first()
                     .filter(|_| ingress.candidates.len() == 1);
+                let recipient = single.map(|candidate| candidate.instance);
+                let operation = single.map(|candidate| candidate.operation);
                 let mut effect = FiniteEffect::NotInvoked;
                 let result = self
                     .resolve(&ingress)
@@ -400,11 +424,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         Ok(output)
                     });
                 self.reply = Some(RawFiniteReply {
-                    opportunity: ingress.reply,
+                    ingress,
                     result,
                     effect,
-                    recipient: single.map(|c| c.instance),
-                    operation: single.map(|c| c.operation),
+                    recipient,
+                    operation,
                 });
                 self.state = Delivering;
                 Poll::Ready(self.state)

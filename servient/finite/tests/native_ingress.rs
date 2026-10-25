@@ -32,6 +32,7 @@ fn limits() -> RawFiniteLimits {
     RawFiniteLimits {
         instances: 2,
         behaviors_per_instance: 1,
+        target_name_bytes: 64,
         candidates: 2,
         input_body_bytes: 16,
         output_body_bytes: 16,
@@ -192,7 +193,7 @@ impl FiniteIngressBinding for TcpBinding {
             Ok(output) => output.data().map(|p| p.body[0]).unwrap_or(b'E'),
             Err(_) => b'E',
         };
-        let mut socket = &reply.opportunity.0;
+        let mut socket = &reply.ingress.reply.0;
         match socket.write(&[byte]) {
             Ok(1) => Poll::Ready(Ok(())),
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Poll::Pending,
@@ -214,7 +215,7 @@ impl FiniteIngressBinding for TcpBinding {
                 _ => FiniteDelivery::Unknown,
             }
         } else if let Some(reply) = reply {
-            let mut socket = &reply.opportunity.0;
+            let mut socket = &reply.ingress.reply.0;
             // A native rejection for an unmatched/unaccepted request; after a
             // handler invocation the wire success may already be uncertain.
             match socket.write(b"E") {
@@ -231,7 +232,7 @@ impl FiniteIngressBinding for TcpBinding {
     }
 }
 fn step<B: FiniteIngressBinding>(rt: &mut RawFiniteRuntime<B>) -> Poll<RawFiniteState> {
-    rt.step(&mut context(), &mut budget(4))
+    rt.step(&mut context(), &mut budget(5000))
 }
 fn exchange(rt: &mut RawFiniteRuntime<TcpBinding>, addr: SocketAddr, message: u8, expected: u8) {
     let mut client = TcpStream::connect(addr).unwrap();
@@ -483,7 +484,8 @@ fn pending_reply_survives_revocation_and_closing_until_native_retirement() {
     let settlement = rt.take_settlement().unwrap();
     assert_eq!(settlement.effect, FiniteEffect::Unknown);
     assert_eq!(settlement.delivery, FiniteDelivery::Unknown);
-    assert!(settlement.result.is_ok());
+    let output = settlement.result.unwrap();
+    assert_eq!(&*output.data().unwrap().body, b"1");
     assert!(matches!(rt.first_cause(), Some(CoreError::Cancelled(_))));
     pending_send.store(false, Ordering::SeqCst);
 }
@@ -536,6 +538,58 @@ fn close_retains_full_unaccepted_input_until_native_retirement() {
     assert!(matches!(outcome.result, Err(CoreError::Cancelled(_))));
     assert_eq!(Arc::strong_count(&body), 1);
     assert_eq!(dropped.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn denied_input_and_reply_stay_owned_across_pending_send_and_failed_close() {
+    let a = authority(7);
+    let body: Arc<[u8]> = Arc::from(b"deny".as_slice());
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let pending_send = Arc::new(AtomicBool::new(true));
+    let fail_close = Arc::new(AtomicBool::new(true));
+    let binding = PendingBinding {
+        ingress: Some(FiniteIngress {
+            candidates: vec![FiniteCandidate {
+                instance: a.key(),
+                target: AffordanceTarget::Property("value".into()),
+                operation: Operation::ReadProperty,
+            }],
+            input: InteractionInput::with_data(Payload::new(body.clone(), "application/json")),
+            reply: RetainedReply(dropped.clone()),
+        }),
+        pending_send: pending_send.clone(),
+        pending_close: Arc::new(AtomicBool::new(false)),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: fail_close.clone(),
+    };
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
+        limits(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
+    assert_eq!(step(&mut rt), Poll::Pending);
+    assert_eq!(Arc::strong_count(&body), 2);
+    rt.begin_close();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closing));
+    assert_eq!(Arc::strong_count(&body), 2);
+    assert_eq!(dropped.load(Ordering::SeqCst), 0);
+    fail_close.store(false, Ordering::SeqCst);
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    let settled = rt.take_settlement().unwrap();
+    assert_eq!(settled.effect, FiniteEffect::NotInvoked);
+    assert_eq!(settled.delivery, FiniteDelivery::Unknown);
+    assert!(matches!(settled.result, Err(CoreError::Security { .. })));
+    assert_eq!(Arc::strong_count(&body), 1);
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    pending_send.store(false, Ordering::SeqCst);
 }
 
 #[test]
@@ -962,16 +1016,17 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
     let mut max = limits();
     max.instances = 32;
     max.behaviors_per_instance = 16;
+    max.target_name_bytes = 3;
     let mut rt = RawFiniteRuntime::try_new(binding, (), instances, max)
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
     rt.activate_raw().unwrap();
     assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
-    let mut insufficient = budget(48);
+    let mut insufficient = budget(96);
     assert_eq!(rt.step(&mut context(), &mut insufficient), Poll::Pending);
-    assert_eq!(insufficient.remaining(WorkClass::HandlerSteps), 48);
+    assert_eq!(insufficient.remaining(WorkClass::HandlerSteps), 96);
     assert_eq!(count.load(Ordering::SeqCst), 0);
-    let mut exact = budget(49);
+    let mut exact = budget(97);
     assert_eq!(
         rt.step(&mut context(), &mut exact),
         Poll::Ready(RawFiniteState::Delivering)
@@ -980,4 +1035,125 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
     assert_eq!(count.load(Ordering::SeqCst), 1);
     assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
     assert_eq!(rt.take_settlement().unwrap().recipient, Some(key));
+}
+
+#[test]
+fn equal_prefix_target_misses_pay_for_every_bounded_name_byte() {
+    let a = authority(140);
+    let prefix = "x".repeat(63);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let behaviors = (b'A'..=b'P')
+        .map(|suffix| {
+            RawFiniteBehavior::new(
+                AffordanceTarget::Property(format!("{prefix}{}", char::from(suffix)).into()),
+                Operation::ReadProperty,
+                Handler {
+                    calls: calls.clone(),
+                    value: b"1",
+                },
+            )
+        })
+        .collect();
+    let binding = PendingBinding {
+        ingress: Some(FiniteIngress {
+            candidates: vec![FiniteCandidate {
+                instance: a.key(),
+                target: AffordanceTarget::Property(format!("{prefix}Z").into()),
+                operation: Operation::ReadProperty,
+            }],
+            input: InteractionInput::empty(),
+            reply: RetainedReply(Arc::new(AtomicUsize::new(0))),
+        }),
+        pending_send: Arc::new(AtomicBool::new(false)),
+        pending_close: Arc::new(AtomicBool::new(false)),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: Arc::new(AtomicBool::new(false)),
+    };
+    let mut max = limits();
+    max.instances = 1;
+    max.behaviors_per_instance = 16;
+    max.target_name_bytes = 64;
+    let mut rt =
+        RawFiniteRuntime::try_new(binding, (), vec![RawFiniteInstance::new(a, behaviors)], max)
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    // 1 instance + 16 * (1 length/discriminant + 64 bytes) + 1 callback.
+    let mut insufficient = budget(1041);
+    assert_eq!(rt.step(&mut context(), &mut insufficient), Poll::Pending);
+    assert_eq!(insufficient.remaining(WorkClass::HandlerSteps), 1041);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let mut exact = budget(1042);
+    assert_eq!(
+        rt.step(&mut context(), &mut exact),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(exact.remaining(WorkClass::HandlerSteps), 0);
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    let settled = rt.take_settlement().unwrap();
+    assert_eq!(settled.effect, FiniteEffect::NotInvoked);
+    assert!(matches!(
+        settled.result,
+        Err(CoreError::UnsupportedOperation(_))
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn target_name_limit_checks_both_registration_and_native_candidate() {
+    let a = authority(141);
+    let binding = PendingBinding {
+        ingress: Some(FiniteIngress {
+            candidates: vec![FiniteCandidate {
+                instance: a.key(),
+                target: AffordanceTarget::Property("values".into()),
+                operation: Operation::ReadProperty,
+            }],
+            input: InteractionInput::empty(),
+            reply: RetainedReply(Arc::new(AtomicUsize::new(0))),
+        }),
+        pending_send: Arc::new(AtomicBool::new(false)),
+        pending_close: Arc::new(AtomicBool::new(false)),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: Arc::new(AtomicBool::new(false)),
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut max = limits();
+    max.target_name_bytes = 5;
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
+        max,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    let refused = rt.take_settlement().unwrap();
+    assert_eq!(refused.effect, FiniteEffect::NotInvoked);
+    assert!(matches!(refused.result, Err(CoreError::Backpressure(_))));
+    // A fresh authority tests pre-effect registration refusal as well.
+    let a = authority(142);
+    let binding = PendingBinding {
+        ingress: None,
+        pending_send: Arc::new(AtomicBool::new(false)),
+        pending_close: Arc::new(AtomicBool::new(false)),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: Arc::new(AtomicBool::new(false)),
+    };
+    max.target_name_bytes = 4;
+    let rejected = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
+        max,
+    )
+    .err()
+    .unwrap();
+    assert!(matches!(rejected.error().error(), CoreError::Validation(_)));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
