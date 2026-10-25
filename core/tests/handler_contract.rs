@@ -224,7 +224,8 @@ fn native_producer_context_keeps_real_instance_without_source_or_plan_fiction() 
     let binding = (BindingId::new(11), BindingGeneration::INITIAL);
     let property = AffordanceTarget::Property("".into());
     let context =
-        HandlerContext::for_producer_property_read(authority.key(), &property, binding).unwrap();
+        HandlerContext::for_producer(authority.key(), &property, Operation::ReadProperty, binding)
+            .unwrap();
     assert_eq!(context.producer_instance(), Some(authority.key()));
     assert_eq!(context.thing_slot(), thing_slot());
     assert_eq!(context.thing_id(), None);
@@ -236,8 +237,13 @@ fn native_producer_context_keeps_real_instance_without_source_or_plan_fiction() 
         AffordanceTarget::Action("x".into()),
         AffordanceTarget::Event("x".into()),
     ] {
-        let error = HandlerContext::for_producer_property_read(authority.key(), &target, binding)
-            .unwrap_err();
+        let error = HandlerContext::for_producer(
+            authority.key(),
+            &target,
+            Operation::ReadProperty,
+            binding,
+        )
+        .unwrap_err();
         assert_eq!(error.context().plan(), None);
         assert!(matches!(error, CoreError::Validation(_)));
     }

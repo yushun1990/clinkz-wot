@@ -17,6 +17,7 @@ awk -F, '
         packages["clinkz-wot-foundation"] = packages["clinkz-wot-td"] = 1
         packages["clinkz-wot-core"] = packages["clinkz-wot-planning"] = 1
         packages["clinkz-wot-discovery"] = packages["clinkz-wot-servient"] = 1
+        packages["clinkz-wot-servient-finite"] = 1
         packages["clinkz-wot-binding-http"] = 1
         kinds["type"] = kinds["trait"] = kinds["registration"] = 1
         kinds["state_record"] = kinds["function"] = kinds["profile"] = 1
@@ -39,6 +40,7 @@ awk -F, '
         prefixes["clinkz-wot-planning"] = "clinkz_wot_planning::"
         prefixes["clinkz-wot-discovery"] = "clinkz_wot_discovery::"
         prefixes["clinkz-wot-servient"] = "clinkz_wot_servient::"
+        prefixes["clinkz-wot-servient-finite"] = "clinkz_wot_servient_finite::"
         prefixes["clinkz-wot-binding-http"] = "clinkz_wot_binding_http::"
     }
     NF != 14 { fail("wrong column count", NF) }

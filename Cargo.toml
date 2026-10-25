@@ -9,6 +9,7 @@ members = [
     "planning",
     "protocol-bindings/protocols/http",
     "servient",
+    "servient/finite",
     "td",
     "tools/design-check",
     "tools/architecture-fixtures/property-read-binding",

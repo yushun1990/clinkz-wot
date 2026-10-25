@@ -224,16 +224,8 @@ pub struct HandlerContext<'a> {
 }
 
 impl<'a> HandlerContext<'a> {
-    /// Creates a context after validating the operation/target-kind pairing.
-    pub fn try_new(
-        thing_id: &'a ThingId,
-        thing_slot: ThingSlotId,
-        target: &'a AffordanceTarget,
-        operation: crate::Operation,
-        plan_id: PlanId,
-        binding: Option<(BindingId, BindingGeneration)>,
-    ) -> CoreResult<Self> {
-        let compatible = match target {
+    fn compatible(target: &AffordanceTarget, operation: Operation) -> bool {
+        match target {
             AffordanceTarget::Property(_) => matches!(
                 operation,
                 Operation::ReadProperty
@@ -261,9 +253,19 @@ impl<'a> HandlerContext<'a> {
                     | Operation::SubscribeAllEvents
                     | Operation::UnsubscribeAllEvents
             ),
-        };
+        }
+    }
 
-        if !compatible {
+    /// Creates a context after validating the operation/target-kind pairing.
+    pub fn try_new(
+        thing_id: &'a ThingId,
+        thing_slot: ThingSlotId,
+        target: &'a AffordanceTarget,
+        operation: crate::Operation,
+        plan_id: PlanId,
+        binding: Option<(BindingId, BindingGeneration)>,
+    ) -> CoreResult<Self> {
+        if !Self::compatible(target, operation) {
             let mut context = ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
                 .with_thing(thing_slot)
                 .with_operation(operation)
@@ -286,19 +288,20 @@ impl<'a> HandlerContext<'a> {
         })
     }
 
-    /// Creates a source-free native Producer Property Read context. Neither a
-    /// source Thing identifier nor an independent logical plan is invented.
+    /// Creates a source-free native Producer context for a compatible target and
+    /// operation. Neither a source Thing id nor a logical plan is invented.
     #[cfg(feature = "std")]
-    pub fn for_producer_property_read(
+    pub fn for_producer(
         instance: crate::producer::ProducerInstanceKey,
         target: &'a AffordanceTarget,
+        operation: Operation,
         binding: (BindingId, BindingGeneration),
     ) -> CoreResult<Self> {
-        if !matches!(target, AffordanceTarget::Property(_)) {
+        if !Self::compatible(target, operation) {
             return Err(CoreError::Validation(
                 ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
                     .with_thing(instance.slot())
-                    .with_operation(Operation::ReadProperty)
+                    .with_operation(operation)
                     .with_binding(binding.0, binding.1),
             ));
         }
@@ -306,7 +309,7 @@ impl<'a> HandlerContext<'a> {
             thing_id: None,
             thing_slot: instance.slot(),
             target,
-            operation: Operation::ReadProperty,
+            operation,
             plan_id: None,
             producer_instance: Some(instance),
             binding: Some(binding),

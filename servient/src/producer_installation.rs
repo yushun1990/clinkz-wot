@@ -601,9 +601,10 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                 let execution = owner.execution.as_ref().unwrap();
                 let entry = execution.entry();
                 let binding = entry.binding();
-                let context = HandlerContext::for_producer_property_read(
+                let context = HandlerContext::for_producer(
                     self.authority.key(),
                     entry.target(),
+                    Operation::ReadProperty,
                     (binding.binding_id(), binding.binding_generation()),
                 )
                 .expect("prepared Property Read target");
