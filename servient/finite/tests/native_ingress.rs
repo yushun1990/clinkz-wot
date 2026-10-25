@@ -1157,3 +1157,64 @@ fn target_name_limit_checks_both_registration_and_native_candidate() {
     assert!(matches!(rejected.error().error(), CoreError::Validation(_)));
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
+
+#[test]
+fn thing_level_candidate_is_unsupported_not_a_name_capacity_failure() {
+    let a = authority(143);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let binding = PendingBinding {
+        ingress: Some(FiniteIngress {
+            candidates: vec![FiniteCandidate {
+                instance: a.key(),
+                target: AffordanceTarget::Thing,
+                operation: Operation::ReadAllProperties,
+            }],
+            input: InteractionInput::empty(),
+            reply: RetainedReply(Arc::new(AtomicUsize::new(0))),
+        }),
+        pending_send: Arc::new(AtomicBool::new(false)),
+        pending_close: Arc::new(AtomicBool::new(false)),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: Arc::new(AtomicBool::new(false)),
+    };
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
+        limits(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    let settled = rt.take_settlement().unwrap();
+    assert_eq!(settled.effect, FiniteEffect::NotInvoked);
+    assert_eq!(settled.delivery, FiniteDelivery::Delivered);
+    assert!(matches!(
+        settled.result,
+        Err(CoreError::UnsupportedOperation(_))
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn settlement_debug_is_bounded_and_redacts_owned_output() {
+    let mut max = limits();
+    max.output_body_bytes = 2048;
+    max.output_media_capacity = 64;
+    max.output_retained_bytes = 4096;
+    let output =
+        InteractionOutput::with_data(Payload::new(vec![b's'; 2048], "private-media-marker"));
+    let (mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output), max);
+    let settled = rt.take_settlement().unwrap();
+    let diagnostic = format!("{settled:?}");
+    assert!(
+        diagnostic.len() < 512,
+        "diagnostics must not scale with payload"
+    );
+    assert!(!diagnostic.contains("private-media-marker"));
+    assert!(!diagnostic.contains("115, 115, 115"));
+    assert_eq!(settled.result.unwrap().data().unwrap().body.len(), 2048);
+}

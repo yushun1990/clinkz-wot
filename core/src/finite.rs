@@ -66,13 +66,28 @@ pub enum FiniteDelivery {
 /// One terminal native and semantic outcome, including the complete owned late
 /// result (even if delivery was refused or uncertain). The runtime retains one
 /// unread settlement; another exchange cannot be received until it is taken.
-#[derive(Debug)]
 pub struct RawFiniteSettlement {
     pub recipient: Option<ProducerInstanceKey>,
     pub operation: Option<Operation>,
     pub effect: FiniteEffect,
     pub delivery: FiniteDelivery,
     pub result: CoreResult<InteractionOutput>,
+}
+
+impl core::fmt::Debug for RawFiniteSettlement {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("RawFiniteSettlement")
+            .field("recipient", &self.recipient)
+            .field("operation", &self.operation)
+            .field("effect", &self.effect)
+            .field("delivery", &self.delivery)
+            // CoreError Debug is redacted and bounded. A successful output is
+            // application data; never format its body or media metadata.
+            .field("error", &self.result.as_ref().err())
+            .field("has_output", &self.result.is_ok())
+            .finish()
+    }
 }
 
 /// Basic Property result shape. Raw mode permits unvalidated data bytes, not

@@ -310,12 +310,12 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         let [candidate] = ingress.candidates.as_slice() else {
             return Err(CoreError::UnsupportedOperation(context()));
         };
-        if candidate
-            .target
-            .name()
-            .is_none_or(|name| name.len() > self.limits.target_name_bytes)
-        {
-            return Err(CoreError::Backpressure(context()));
+        match &candidate.target {
+            AffordanceTarget::Property(name) if name.len() > self.limits.target_name_bytes => {
+                return Err(CoreError::Backpressure(context()));
+            }
+            AffordanceTarget::Property(_) => {}
+            _ => return Err(CoreError::UnsupportedOperation(context())),
         }
         let instance_index = self
             .instances
