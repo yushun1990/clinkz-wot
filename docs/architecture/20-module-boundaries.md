@@ -52,7 +52,11 @@ execution-only Servient feature; a feature alias is insufficient.
 The separate `clinkz-wot-servient-finite` Host execution slice links only Core
 and Foundation. Its raw finite ingress accepts an externally registered Binding
 with captured configuration, independently checks current logical recipients
-and registered behavior, and retains the native exclusive reply through close.
+and registered behavior under a fixed paid lookup envelope, and retains the
+complete native exclusive input/reply through close with separate effect and
+delivery settlement. Handler output is application-backed until return; the
+Engine checks the complete output representation and accepts only the declared
+retained backing. Raw data still obeys Property operation/result shape rules.
 It does not qualify or publish a TD, validate DataSchema/security schemes, or
 replace the preparation-dependent Property Read Servient. Its `activate_raw`
 gate permits only this explicitly raw local service; full Producer exposure

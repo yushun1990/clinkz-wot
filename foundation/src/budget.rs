@@ -26,7 +26,8 @@ pub enum WorkClass {
     BindingPolls,
     /// Cleanup records or cleanup targets processed.
     CleanupItems,
-    /// Bounded handler start, step, cancel, or adapter-poll work.
+    /// Bounded semantic recipient/behavior lookup and handler start, step,
+    /// cancel, or adapter-poll work.
     HandlerSteps = 9,
     /// Generic typed-document validation and census visits not already
     /// owned by a more specific class. Typed schema-node visits remain

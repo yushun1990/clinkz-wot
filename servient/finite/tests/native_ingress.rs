@@ -1,7 +1,8 @@
 //! External Binding with actual TCP I/O and a separate retained-reply probe.
 use clinkz_wot_core::{
     finite::{
-        FiniteCandidate, FiniteIngress, FiniteIngressBinding, RawFiniteHandler, RawFiniteReply,
+        FiniteCandidate, FiniteDelivery, FiniteEffect, FiniteIngress, FiniteIngressBinding,
+        RawFiniteHandler, RawFiniteReply,
     },
     producer::{ProducerInstanceAuthority, ProducerInstanceKey},
     *,
@@ -29,9 +30,13 @@ fn budget(n: u64) -> WorkBudget {
 }
 fn limits() -> RawFiniteLimits {
     RawFiniteLimits {
+        instances: 2,
+        behaviors_per_instance: 1,
         candidates: 2,
         input_body_bytes: 16,
         output_body_bytes: 16,
+        output_media_capacity: 32,
+        output_retained_bytes: 256,
     }
 }
 fn authority(slot: u32) -> ProducerInstanceAuthority {
@@ -64,6 +69,9 @@ impl RawFiniteHandler for Handler {
         assert!(ctx.thing_id().is_none());
         assert!(ctx.plan_id().is_none());
         self.calls.fetch_add(1, Ordering::SeqCst);
+        if ctx.operation() == Operation::WriteProperty {
+            return Ok(InteractionOutput::empty());
+        }
         Ok(InteractionOutput::with_data(Payload::new(
             self.value,
             "application/json",
@@ -179,13 +187,11 @@ impl FiniteIngressBinding for TcpBinding {
         _: &mut Context<'_>,
         reply: &RawFiniteReply<Self::Reply>,
     ) -> Poll<CoreResult<()>> {
-        let byte = reply
-            .result
-            .as_ref()
-            .ok()
-            .and_then(InteractionOutput::data)
-            .map(|p| p.body[0])
-            .unwrap_or(b'E');
+        let byte = match &reply.result {
+            Ok(_) if reply.operation == Some(Operation::WriteProperty) => b'2',
+            Ok(output) => output.data().map(|p| p.body[0]).unwrap_or(b'E'),
+            Err(_) => b'E',
+        };
         let mut socket = &reply.opportunity.0;
         match socket.write(&[byte]) {
             Ok(1) => Poll::Ready(Ok(())),
@@ -193,14 +199,39 @@ impl FiniteIngressBinding for TcpBinding {
             _ => Poll::Ready(Err(error())),
         }
     }
-    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<()>> {
+    fn poll_close(
+        &mut self,
+        _: &mut Context<'_>,
+        ingress: Option<&FiniteIngress<Self::Reply>>,
+        reply: Option<&RawFiniteReply<Self::Reply>>,
+        cause: Option<&CoreError>,
+    ) -> Poll<CoreResult<FiniteDelivery>> {
+        let disposition = if let Some(ingress) = ingress {
+            assert!(matches!(cause, Some(CoreError::Cancelled(_))));
+            let mut socket = &ingress.reply.0;
+            match socket.write(b"E") {
+                Ok(1) => FiniteDelivery::Delivered,
+                _ => FiniteDelivery::Unknown,
+            }
+        } else if let Some(reply) = reply {
+            let mut socket = &reply.opportunity.0;
+            // A native rejection for an unmatched/unaccepted request; after a
+            // handler invocation the wire success may already be uncertain.
+            match socket.write(b"E") {
+                Ok(1) if reply.effect == FiniteEffect::NotInvoked => FiniteDelivery::Delivered,
+                Ok(1) => FiniteDelivery::NotDelivered,
+                _ => FiniteDelivery::Unknown,
+            }
+        } else {
+            FiniteDelivery::NotDelivered
+        };
         self.listener = None;
         self.pending = None;
-        Poll::Ready(Ok(()))
+        Poll::Ready(Ok(disposition))
     }
 }
 fn step<B: FiniteIngressBinding>(rt: &mut RawFiniteRuntime<B>) -> Poll<RawFiniteState> {
-    rt.step(&mut context(), &mut budget(1))
+    rt.step(&mut context(), &mut budget(4))
 }
 fn exchange(rt: &mut RawFiniteRuntime<TcpBinding>, addr: SocketAddr, message: u8, expected: u8) {
     let mut client = TcpStream::connect(addr).unwrap();
@@ -218,6 +249,8 @@ fn exchange(rt: &mut RawFiniteRuntime<TcpBinding>, addr: SocketAddr, message: u8
     let mut response = [0];
     client.read_exact(&mut response).unwrap();
     assert_eq!(response[0], expected);
+    let settled = rt.take_settlement().expect("each exchange is reported");
+    assert_eq!(settled.delivery, FiniteDelivery::Delivered);
 }
 
 #[test]
@@ -266,6 +299,13 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
     let mut first = [0];
     early.read_exact(&mut first).unwrap();
     assert_eq!(first, *b"1");
+    let polls_before_ack = polls.load(Ordering::SeqCst);
+    assert_eq!(
+        rt.step(&mut context(), &mut budget(0)),
+        Poll::Ready(RawFiniteState::Serving)
+    );
+    assert_eq!(polls.load(Ordering::SeqCst), polls_before_ack);
+    assert_eq!(rt.take_settlement().unwrap().effect, FiniteEffect::Unknown);
     exchange(&mut rt, addr, b'b', b'2');
     exchange(&mut rt, addr, b'd', b'E'); // authorization precedes behavior
     exchange(&mut rt, addr, b'm', b'E'); // exclusive reply ambiguity refuses
@@ -282,6 +322,10 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
     let mut rejected = [0];
     stale.read_exact(&mut rejected).unwrap();
     assert_eq!(rejected, *b"E");
+    assert_eq!(
+        rt.take_settlement().unwrap().effect,
+        FiniteEffect::NotInvoked
+    );
     assert!(!rt.revoke(ak));
     exchange(&mut rt, addr, b'a', b'E');
     exchange(&mut rt, addr, b'b', b'2'); // sibling remains available
@@ -371,7 +415,14 @@ impl FiniteIngressBinding for PendingBinding {
             Poll::Ready(Ok(()))
         }
     }
-    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<()>> {
+    fn poll_close(
+        &mut self,
+        _: &mut Context<'_>,
+        ingress: Option<&FiniteIngress<Self::Reply>>,
+        reply: Option<&RawFiniteReply<Self::Reply>>,
+        _: Option<&CoreError>,
+    ) -> Poll<CoreResult<FiniteDelivery>> {
+        assert!(!(ingress.is_some() && reply.is_some()));
         if self.pending_close.load(Ordering::SeqCst) {
             Poll::Pending
         } else if self.fail_close.load(Ordering::SeqCst) {
@@ -380,7 +431,7 @@ impl FiniteIngressBinding for PendingBinding {
                 RetryClass::Never,
             ))))
         } else {
-            Poll::Ready(Ok(()))
+            Poll::Ready(Ok(FiniteDelivery::Unknown))
         }
     }
 }
@@ -429,7 +480,62 @@ fn pending_reply_survives_revocation_and_closing_until_native_retirement() {
     assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
     assert_eq!(dropped.load(Ordering::SeqCst), 1);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let settlement = rt.take_settlement().unwrap();
+    assert_eq!(settlement.effect, FiniteEffect::Unknown);
+    assert_eq!(settlement.delivery, FiniteDelivery::Unknown);
+    assert!(settlement.result.is_ok());
+    assert!(matches!(rt.first_cause(), Some(CoreError::Cancelled(_))));
     pending_send.store(false, Ordering::SeqCst);
+}
+
+#[test]
+fn close_retains_full_unaccepted_input_until_native_retirement() {
+    let a = authority(6);
+    let body: Arc<[u8]> = Arc::from(b"held".as_slice());
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let pending_close = Arc::new(AtomicBool::new(true));
+    let binding = PendingBinding {
+        ingress: Some(FiniteIngress {
+            candidates: vec![FiniteCandidate {
+                instance: a.key(),
+                target: AffordanceTarget::Property("value".into()),
+                operation: Operation::ReadProperty,
+            }],
+            input: InteractionInput::with_data(Payload::new(body.clone(), "application/json")),
+            reply: RetainedReply(dropped.clone()),
+        }),
+        pending_send: Arc::new(AtomicBool::new(false)),
+        pending_close: pending_close.clone(),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: Arc::new(AtomicBool::new(false)),
+    };
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        (),
+        vec![instance(
+            a,
+            Operation::ReadProperty,
+            Arc::new(AtomicUsize::new(0)),
+            b"1",
+        )],
+        limits(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    rt.begin_close();
+    assert_eq!(step(&mut rt), Poll::Pending);
+    assert_eq!(Arc::strong_count(&body), 2);
+    assert_eq!(dropped.load(Ordering::SeqCst), 0);
+    pending_close.store(false, Ordering::SeqCst);
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    let outcome = rt.take_settlement().unwrap();
+    assert_eq!(outcome.effect, FiniteEffect::NotInvoked);
+    assert_eq!(outcome.delivery, FiniteDelivery::Unknown);
+    assert!(matches!(outcome.result, Err(CoreError::Cancelled(_))));
+    assert_eq!(Arc::strong_count(&body), 1);
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -476,6 +582,9 @@ fn failure_keeps_original_reply_and_first_cause_during_failed_close() {
     fail_close.store(false, Ordering::SeqCst);
     assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
     assert_eq!(dropped.load(Ordering::SeqCst), 1);
+    let settlement = rt.take_settlement().unwrap();
+    assert_eq!(settlement.effect, FiniteEffect::Unknown);
+    assert_eq!(settlement.delivery, FiniteDelivery::Unknown);
 }
 
 #[test]
@@ -553,4 +662,322 @@ fn actual_binding_configuration_and_finite_operation_are_checked_before_effects(
     assert!(matches!(refused.error().error(), CoreError::Validation(_)));
     assert_eq!(instances.len(), 1);
     assert!(address.lock().unwrap().is_none());
+}
+
+#[test]
+fn close_before_dispatch_returns_original_native_refusal_without_running_handler() {
+    let a = authority(20);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let addr = Arc::new(Mutex::new(None));
+    let binding = TcpBinding {
+        config: 7,
+        listener: None,
+        pending: None,
+        addr: addr.clone(),
+        a: a.key(),
+        b: a.key(),
+        polls: Arc::new(AtomicUsize::new(0)),
+    };
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
+        limits(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    let mut client = TcpStream::connect(addr.lock().unwrap().unwrap()).unwrap();
+    client
+        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+        .unwrap();
+    client.write_all(b"a").unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    rt.begin_close();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    let mut response = [0];
+    client.read_exact(&mut response).unwrap();
+    assert_eq!(response, *b"E");
+    let settlement = rt.take_settlement().unwrap();
+    assert_eq!(settlement.effect, FiniteEffect::NotInvoked);
+    assert_eq!(settlement.delivery, FiniteDelivery::Delivered);
+    assert!(matches!(settlement.result, Err(CoreError::Cancelled(_))));
+    assert!(matches!(rt.first_cause(), Some(CoreError::Cancelled(_))));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn close_after_write_reports_unknown_effect_and_undelivered_success() {
+    let a = authority(21);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let addr = Arc::new(Mutex::new(None));
+    let binding = TcpBinding {
+        config: 7,
+        listener: None,
+        pending: None,
+        addr: addr.clone(),
+        a: a.key(),
+        b: a.key(),
+        polls: Arc::new(AtomicUsize::new(0)),
+    };
+    let mut rt = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        vec![instance(a, Operation::WriteProperty, calls.clone(), b"1")],
+        limits(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    let mut client = TcpStream::connect(addr.lock().unwrap().unwrap()).unwrap();
+    client
+        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+        .unwrap();
+    client.write_all(b"b").unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    rt.begin_close();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Closed));
+    let mut response = [0];
+    client.read_exact(&mut response).unwrap();
+    assert_eq!(response, *b"E");
+    let settlement = rt.take_settlement().unwrap();
+    assert_eq!(settlement.effect, FiniteEffect::Unknown);
+    assert_eq!(settlement.delivery, FiniteDelivery::NotDelivered);
+    assert!(settlement.result.is_ok());
+    assert!(matches!(rt.first_cause(), Some(CoreError::Cancelled(_))));
+}
+
+struct FixedHandler {
+    calls: Arc<AtomicUsize>,
+    outcome: Mutex<Option<CoreResult<InteractionOutput>>>,
+}
+impl RawFiniteHandler for FixedHandler {
+    fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+        Ok(())
+    }
+    fn handle(&self, _: HandlerContext<'_>, _: &InteractionInput) -> CoreResult<InteractionOutput> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.outcome.lock().unwrap().take().unwrap()
+    }
+}
+
+fn fixed_exchange(
+    operation: Operation,
+    outcome: CoreResult<InteractionOutput>,
+    limits: RawFiniteLimits,
+) -> (RawFiniteRuntime<PendingBinding>, Arc<AtomicUsize>) {
+    let a = authority(22);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let binding = PendingBinding {
+        ingress: Some(FiniteIngress {
+            candidates: vec![FiniteCandidate {
+                instance: a.key(),
+                target: AffordanceTarget::Property("value".into()),
+                operation,
+            }],
+            input: InteractionInput::empty(),
+            reply: RetainedReply(Arc::new(AtomicUsize::new(0))),
+        }),
+        pending_send: Arc::new(AtomicBool::new(false)),
+        pending_close: Arc::new(AtomicBool::new(false)),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: Arc::new(AtomicBool::new(false)),
+    };
+    let instance = RawFiniteInstance::new(
+        a,
+        vec![RawFiniteBehavior::new(
+            AffordanceTarget::Property("value".into()),
+            operation,
+            FixedHandler {
+                calls: calls.clone(),
+                outcome: Mutex::new(Some(outcome)),
+            },
+        )],
+    );
+    let mut rt = RawFiniteRuntime::try_new(binding, (), vec![instance], limits)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Delivering));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    (rt, calls)
+}
+
+#[test]
+fn raw_property_success_requires_operation_shape_not_merely_a_small_body() {
+    let binding_metadata = BindingResponseMetadata::primary(
+        BindingId::new(4),
+        BindingGeneration::INITIAL,
+        PlanId::new(SlotIndex::new(1), Generation::INITIAL),
+        200,
+    );
+    let action_metadata = InteractionOutputMetadata::default().with_action_invocation(
+        ActionInvocationRef::new(SlotIndex::new(1), Generation::INITIAL),
+    );
+    let cases = [
+        (Operation::ReadProperty, InteractionOutput::empty()),
+        (
+            Operation::ReadProperty,
+            InteractionOutput::with_data(Payload::new(b"1".as_slice(), "application/json"))
+                .with_status(InteractionStatus::Accepted),
+        ),
+        (
+            Operation::ReadProperty,
+            InteractionOutput::with_data(Payload::new(b"1".as_slice(), "application/json"))
+                .try_with_metadata(action_metadata)
+                .unwrap(),
+        ),
+        (
+            Operation::ReadProperty,
+            InteractionOutput::with_data(Payload::new(b"1".as_slice(), "application/json"))
+                .try_with_metadata(
+                    InteractionOutputMetadata::default()
+                        .with_untrusted_binding_response(binding_metadata),
+                )
+                .unwrap(),
+        ),
+        (
+            Operation::WriteProperty,
+            InteractionOutput::empty().with_status(InteractionStatus::Accepted),
+        ),
+        (
+            Operation::WriteProperty,
+            InteractionOutput::with_data(Payload::new(b"1".as_slice(), "application/json")),
+        ),
+        (
+            Operation::WriteProperty,
+            InteractionOutput::empty()
+                .try_with_metadata(action_metadata)
+                .unwrap(),
+        ),
+    ];
+    for (operation, output) in cases {
+        let (mut rt, calls) = fixed_exchange(operation, Ok(output), limits());
+        let outcome = rt.take_settlement().unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(outcome.effect, FiniteEffect::Unknown);
+        assert_eq!(outcome.delivery, FiniteDelivery::Delivered);
+        assert!(matches!(outcome.result, Err(CoreError::Validation(_))));
+    }
+}
+
+#[test]
+fn retained_output_counts_arc_and_both_string_capacities_and_refuses_one_over() {
+    let mut media = String::with_capacity(16);
+    media.push_str("application/json");
+    let mut coding = String::with_capacity(8);
+    coding.push_str("identity");
+    let payload = Payload::new(b"1".as_slice(), media).with_content_coding(coding);
+    let output = InteractionOutput::with_data(payload);
+    let bytes = clinkz_wot_core::finite::raw_finite_output_backing(&output).unwrap();
+    let mut exact = limits();
+    exact.output_body_bytes = 1;
+    exact.output_media_capacity = 16;
+    exact.output_retained_bytes = bytes;
+    let (mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output.clone()), exact);
+    assert!(rt.take_settlement().unwrap().result.is_ok());
+    exact.output_retained_bytes -= 1;
+    let (mut rt, _) = fixed_exchange(Operation::ReadProperty, Ok(output), exact);
+    let refused = rt.take_settlement().unwrap();
+    assert_eq!(refused.effect, FiniteEffect::Unknown);
+    assert!(matches!(refused.result, Err(CoreError::Backpressure(_))));
+
+    // A tiny body with spare String capacity must not escape the media ceiling.
+    let mut oversized = String::with_capacity(17);
+    oversized.push_str("application/json");
+    let payload = Payload::new(b"".as_slice(), oversized);
+    let mut zero_body = limits();
+    zero_body.output_body_bytes = 0;
+    zero_body.output_media_capacity = 16;
+    let (mut rt, _) = fixed_exchange(
+        Operation::ReadProperty,
+        Ok(InteractionOutput::with_data(payload)),
+        zero_body,
+    );
+    assert!(matches!(
+        rt.take_settlement().unwrap().result,
+        Err(CoreError::Backpressure(_))
+    ));
+}
+
+#[test]
+fn write_handler_error_and_oversized_result_never_prove_effect_absent() {
+    let (mut rt, calls) = fixed_exchange(Operation::WriteProperty, Err(error()), limits());
+    let error_result = rt.take_settlement().unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(error_result.effect, FiniteEffect::Unknown);
+    assert!(matches!(error_result.result, Err(CoreError::Binding(_))));
+
+    let mut tiny = limits();
+    tiny.output_body_bytes = 0;
+    let oversized = InteractionOutput::with_data(Payload::new(b"1".as_slice(), "application/json"));
+    let (mut rt, calls) = fixed_exchange(Operation::WriteProperty, Ok(oversized), tiny);
+    let overrun = rt.take_settlement().unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(overrun.effect, FiniteEffect::Unknown);
+    assert!(matches!(overrun.result, Err(CoreError::Backpressure(_))));
+}
+
+#[test]
+fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
+    let count = Arc::new(AtomicUsize::new(0));
+    let mut instances = Vec::new();
+    let mut last = None;
+    for slot in 0..32 {
+        let a = authority(100 + slot);
+        last = Some(a.key());
+        let behaviors = (0..16)
+            .map(|n| {
+                RawFiniteBehavior::new(
+                    AffordanceTarget::Property(format!("b{n}").into()),
+                    Operation::ReadProperty,
+                    Handler {
+                        calls: count.clone(),
+                        value: b"1",
+                    },
+                )
+            })
+            .collect();
+        instances.push(RawFiniteInstance::new(a, behaviors));
+    }
+    let key = last.unwrap();
+    let binding = PendingBinding {
+        ingress: Some(FiniteIngress {
+            candidates: vec![FiniteCandidate {
+                instance: key,
+                target: AffordanceTarget::Property("b15".into()),
+                operation: Operation::ReadProperty,
+            }],
+            input: InteractionInput::empty(),
+            reply: RetainedReply(Arc::new(AtomicUsize::new(0))),
+        }),
+        pending_send: Arc::new(AtomicBool::new(false)),
+        pending_close: Arc::new(AtomicBool::new(false)),
+        fail_send: Arc::new(AtomicBool::new(false)),
+        fail_close: Arc::new(AtomicBool::new(false)),
+    };
+    let mut max = limits();
+    max.instances = 32;
+    max.behaviors_per_instance = 16;
+    let mut rt = RawFiniteRuntime::try_new(binding, (), instances, max)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::InstalledClosed));
+    rt.activate_raw().unwrap();
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Dispatching));
+    let mut insufficient = budget(48);
+    assert_eq!(rt.step(&mut context(), &mut insufficient), Poll::Pending);
+    assert_eq!(insufficient.remaining(WorkClass::HandlerSteps), 48);
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    let mut exact = budget(49);
+    assert_eq!(
+        rt.step(&mut context(), &mut exact),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(exact.remaining(WorkClass::HandlerSteps), 0);
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    assert_eq!(step(&mut rt), Poll::Ready(RawFiniteState::Serving));
+    assert_eq!(rt.take_settlement().unwrap().recipient, Some(key));
 }

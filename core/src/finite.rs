@@ -3,12 +3,16 @@
 //! This raw-value slice makes no DataSchema or Action-lifetime claim.
 
 use alloc::vec::Vec;
-use core::task::{Context, Poll};
+use core::{
+    alloc::Layout,
+    mem::size_of,
+    task::{Context, Poll},
+};
 
 use crate::producer::ProducerInstanceKey;
 use crate::{
     AffordanceTarget, BindingGeneration, BindingId, CoreResult, HandlerContext, InteractionInput,
-    InteractionOutput, Operation,
+    InteractionOutput, InteractionStatus, Operation, ResponsePayloadRole,
 };
 
 /// One *candidate*, not a grant to dispatch. A copied key cannot keep a revoked
@@ -31,10 +35,79 @@ pub struct FiniteIngress<R> {
 
 /// The original reply opportunity stays with its result through pending sends,
 /// revocation, failure and native close. Success here is explicitly *raw* data;
-/// no structural or schema validation is implied by the carrier.
+/// DataSchema conformance is not implied by the carrier. Handler invocation is
+/// never proof that a write did or did not take effect.
 pub struct RawFiniteReply<R> {
     pub opportunity: R,
     pub result: CoreResult<InteractionOutput>,
+    pub effect: FiniteEffect,
+    pub recipient: Option<ProducerInstanceKey>,
+    pub operation: Option<Operation>,
+}
+
+/// Semantic-effect certainty, independent of the native reply outcome.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FiniteEffect {
+    /// The handler was not entered; no application effect was attempted.
+    NotInvoked,
+    /// The handler was entered. Even an error or invalid/oversized result may
+    /// follow a committed write; implicit replay is not safe.
+    Unknown,
+}
+
+/// Whether the original result reached the Binding's declared delivery edge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FiniteDelivery {
+    Delivered,
+    NotDelivered,
+    Unknown,
+}
+
+/// One terminal native and semantic outcome. The runtime retains exactly one
+/// unread settlement; another exchange cannot be received until it is taken.
+#[derive(Debug)]
+pub struct RawFiniteSettlement {
+    pub recipient: Option<ProducerInstanceKey>,
+    pub operation: Option<Operation>,
+    pub effect: FiniteEffect,
+    pub delivery: FiniteDelivery,
+    pub result: CoreResult<()>,
+}
+
+/// Basic Property result shape. Raw mode permits unvalidated data bytes, not
+/// Action status/invocation metadata, untrusted Binding response claims, or a
+/// missing Read value. This initial Write facet supports empty success only.
+pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutput) -> bool {
+    match operation {
+        Operation::ReadProperty => crate::response::property_read_handler_shape(output),
+        Operation::WriteProperty => {
+            let metadata = output.metadata();
+            output.data().is_none()
+                && output.status() == InteractionStatus::Ok
+                && metadata.payload_role() == ResponsePayloadRole::Application
+                && metadata.action_invocation().is_none()
+                && metadata.binding_response().is_none()
+        }
+        _ => false,
+    }
+}
+
+/// Actual Engine-retained handler output backing: inline value and the exact
+/// Arc slice allocation (including its two counters) plus both String capacities.
+/// No source document or Binding-private ingress allocation is included.
+pub fn raw_finite_output_backing(output: &InteractionOutput) -> Option<usize> {
+    let Some(payload) = output.data() else {
+        return Some(size_of::<InteractionOutput>());
+    };
+    let arc = Layout::new::<[usize; 2]>()
+        .extend(Layout::array::<u8>(payload.body.len()).ok()?)
+        .ok()?
+        .0
+        .pad_to_align();
+    size_of::<InteractionOutput>()
+        .checked_add(arc.size())?
+        .checked_add(payload.content_type.capacity())?
+        .checked_add(payload.content_coding.as_ref().map_or(0, |s| s.capacity()))
 }
 
 /// Binding-owned matching, I/O, correlation and physical retirement for finite
@@ -42,25 +115,45 @@ pub struct RawFiniteReply<R> {
 /// but MUST keep semantic ingress closed until the runtime activates locally.
 /// The Binding bounds input/metadata and candidate backing before returning an
 /// ingress. A pending or failed send retains its original opportunity until
-/// `poll_close` has disposed native work. Drop performs finite local disposal.
+/// `poll_close` has disposed native work. Close receives the *complete* unmatched
+/// input or accepted reply, including the original opportunity. It MUST perform
+/// the supported native refusal/abort or report an uncertain delivery; it must
+/// not silently discard the opportunity. Drop of Binding/Reply performs finite
+/// local disposal without network waits, reporting no completed drain.
 pub trait FiniteIngressBinding {
     type Reply;
     type Configuration: Eq;
 
     fn identity(&self) -> (BindingId, BindingGeneration);
     /// Actual native configuration, borrowed without rebuilding a matching tag.
+    /// Equality with the captured value must be passive and bounded on each
+    /// progress step; an unbounded native configuration needs a different
+    /// immutable revision-bearing representation.
     fn configuration(&self) -> &Self::Configuration;
     fn poll_start(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>>;
     fn poll_receive(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<CoreResult<FiniteIngress<Self::Reply>>>;
+    /// Ready(Ok) certifies that the original result reached this Binding's
+    /// declared delivery boundary. Pending and error do not.
     fn poll_send(
         &mut self,
         cx: &mut Context<'_>,
         reply: &RawFiniteReply<Self::Reply>,
     ) -> Poll<CoreResult<()>>;
-    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>>;
+    /// The borrowed unmatched ingress or accepted reply stays owned by Servient
+    /// until terminal success. `cause` describes the first local close reason.
+    /// Report whether its original result/refusal was delivered; a partially
+    /// sent result MUST be classified Unknown. Pending/error retains the complete
+    /// owner for a subsequent close poll.
+    fn poll_close(
+        &mut self,
+        cx: &mut Context<'_>,
+        ingress: Option<&FiniteIngress<Self::Reply>>,
+        reply: Option<&RawFiniteReply<Self::Reply>>,
+        cause: Option<&crate::CoreError>,
+    ) -> Poll<CoreResult<FiniteDelivery>>;
 }
 
 /// Application behavior for a *raw* finite operation. Authorization runs at
