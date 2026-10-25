@@ -12,6 +12,9 @@ pub trait ProducerCompiler<E: ProducerExecutor> {
     /// Pair construction checks a separately provisioned owned snapshot;
     /// funded preparation rechecks borrow this view without reconstructing it.
     fn configuration(&self) -> &E::Configuration;
+    /// Establish complete mapping and required schema/codec support for this
+    /// exact input. The returned program captures source-independent validation
+    /// operands for the actual runtime validation service required by Serving.
     fn compile(
         &self,
         input: ResolvedProducerInput<'_>,
@@ -115,6 +118,9 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
                 (self, handler),
                 BindingOperationalError::new(error),
             ));
+        }
+        if self.service.is_some() && self.executor.output_validator(&program).is_none() {
+            return Err(refused((self, handler)));
         }
         let (instance, property, handler, footprint) = handler.into_parts();
         let entry = ProducerExecutionEntry::new(instance, self.identity, property, program);

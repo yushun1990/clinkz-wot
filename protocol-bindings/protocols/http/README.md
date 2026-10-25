@@ -259,6 +259,15 @@ href, optional source id and empty Property keys are supported. Unknown scoped
 predicates, Profiles and unsupported security/response instructions refuse.
 The target limit of 64 bytes belongs to this HTTP adapter.
 
+Preparation supports only a type assertion (null, boolean, number, integer,
+string, object or array), or no type assertion. It refuses nested/composed
+schemas, const/enum, required, numeric bounds/multiples, lengths, patterns,
+formats, content assertions and unknown schema predicates. A schema accepted
+by TD tooling is not necessarily executable by this service. Metadata, default,
+unit and read/write annotations do not restrict returned values. This replaces
+the old extension-only check, which could accept assertions without validating
+them at runtime.
+
 The native program retains no source, arena, logical plan, handler or resource.
 It also carries no installation or publication authority. `producer_execution`
 supplies a runtime-only executor; optional `try_producer_registration` pairs the
@@ -297,10 +306,14 @@ sharing is disabled and an occupied listener still refuses installation.
 Requests require HTTP/1.1 GET, exact path/query and Host, bodyless framing, at
 most 16 fields and 8192 raw head bytes inclusive. A native poll reads/writes at
 most 4096 bytes. Keepalive, pipelining, Expect and upgrade are refused. Valid
-application results use JSON <=4096 bytes; invalid shape, media, size or syntax
+application results use JSON <=4096 bytes; invalid type, shape, media, size or syntax
 returns JSON `null` with status 500. General TD data-schema validation remains
-the handler's responsibility. The caller-clock timeout spans unfinished heads,
-dispatch and pending replies. A timeout or reply failure closes the instance;
+unimplemented and unsupported assertions refuse preparation. The actual captured
+executor checks the prepared type and JSON encoding before success sealing.
+Integer classification uses exact decimal/exponent meaning, including `1.0`
+and `100e-2`, without floating-point rounding. Strings and keys require scalar
+Unicode, including paired surrogate escapes. The caller-clock timeout spans
+unfinished heads, dispatch and pending replies. A timeout or reply failure closes the instance;
 an application can prepare a fresh generation after retirement.
 
 Native socket/parser/future/encoded-reply allocation is Binding-private under
@@ -325,6 +338,12 @@ check native retained allocations as well as Engine accounts; exact/one-over
 heads also have allocator/descriptor observations. The typed single-registration
 root and instance/correlation-only request are provisional narrow APIs, not a
 general multi-route/multi-operation Producer SPI or proof of shared matching.
+
+This adapter remains separate from `servient/finite`'s raw shared logical
+Producer. Neither its older single-provider Serving marker nor raw activation
+qualifies a final TD under v6. Complete actual participation/behavior/support,
+required native readiness and the final Servient publication commit remain
+necessary; no v6 exposure API is introduced by the schema prerequisite.
 
 Run the preparation regressions with:
 

@@ -34,6 +34,7 @@ pub struct HttpProducerProgram {
     pub(super) authority_end: u8,
     pub(super) origin: [u8; 64],
     pub(super) origin_len: u8,
+    pub(super) response_schema: clinkz_wot_core::value_type::TypeSchema,
 }
 impl HttpProducerProgram {
     pub fn listen_address(&self) -> SocketAddr {
@@ -64,7 +65,7 @@ use std::{
 
 // Separate role identity: never borrow Consumer policy/seals or StrictV1's
 // transitive disposal claim. Native parser/reply backing remains Binding-owned.
-const INSTALL_POLICY: &[u8] = b"request-reply-v2;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-IgnoredAny+UTF8;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
+const INSTALL_POLICY: &[u8] = b"request-reply-v3;type-only-schema;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-IgnoredAny+UTF8;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
 
 /// Runtime-only executor. It retains neither a compiler nor source TD.
 pub struct HttpProducerExecutor {
@@ -99,7 +100,7 @@ pub fn producer_execution(
             id,
             generation,
             BindingConfigurationDigest::new(digest),
-            BindingArtifactCompatibility::new(*b"http-prod-rpl-v2"),
+            BindingArtifactCompatibility::new(*b"http-prod-rpl-v3"),
             ordinal,
         ),
     }
@@ -141,6 +142,12 @@ impl ProducerExecutor for HttpProducerExecutor {
         }
         Ok(())
     }
+    fn output_validator<'a>(
+        &'a self,
+        program: &'a Self::Program,
+    ) -> Option<&'a dyn ProducerOutputValidator> {
+        Some(program)
+    }
     fn create_installation(
         &self,
         entry: &ProducerExecutionEntry<Self::Program>,
@@ -162,6 +169,11 @@ impl ProducerExecutor for HttpProducerExecutor {
             failed: None,
             closed: false,
         })
+    }
+}
+impl ProducerOutputValidator for HttpProducerProgram {
+    fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
+        super::producer_validation::validate(self.response_schema, output)
     }
 }
 /// Binding-owned native setup, request correlation, reply and retirement.

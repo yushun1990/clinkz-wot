@@ -34,6 +34,18 @@ schema/encoding/stream combinations refuse the guarantee. An explicitly raw
 API reports unvalidated data as such. Identity/shape sealing alone MUST NOT be
 represented as schema conformance. Native status mapping remains Binding-owned.
 
+The implemented `value_type::TypeSchema` is a fixed-size type-only subset, not
+the general schema representation. Planning must refuse every required assertion
+it cannot capture. Concrete codecs classify values; Core evaluates the prepared
+type relation. `integer` includes mathematically integral decimal/exponent
+encodings and is a subset of `number`; binary floating-point rounding cannot
+establish integrality. The restricted Host Producer executor must check output
+with its captured program/services before successful delivery. Raw finite
+execution remains explicitly unvalidated.
+Serving requires an actual validation-service facet; numeric service limits do
+not establish it. Native installation alone need not provide that facet. Result
+shape/backing bounds precede the external codec/validation callback.
+
 `EXEC-SECURITY-001`: Shared interpretation MUST resolve effective security,
 Form override and allOf/oneOf composition. Security services evaluate selected
 schemes, establish verified principals and apply application policy; Bindings

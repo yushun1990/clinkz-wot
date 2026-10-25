@@ -50,6 +50,7 @@ pub mod status;
 pub mod sync;
 #[cfg(target_has_atomic = "ptr")]
 pub mod thing;
+pub mod value_type;
 
 #[cfg(target_has_atomic = "ptr")]
 pub use artifact::{

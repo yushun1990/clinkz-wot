@@ -120,7 +120,26 @@ fn server(
     body: &'static [u8],
     invalid: bool,
 ) -> Server {
-    let td: Thing = serde_json::from_value(serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"real Producer", "securityDefinitions":{"n":{"scheme":"nosec"}},"security":["n"], "properties":{"":{"type":"number","readOnly":true,"forms":[{"href":format!("http://{address}/value")} ]}}})).unwrap();
+    server_with_schema(
+        address,
+        bank,
+        calls,
+        body,
+        invalid,
+        serde_json::json!({"type":"number"}),
+    )
+}
+fn server_with_schema(
+    address: SocketAddr,
+    bank: Arc<HostResourceAccounts>,
+    calls: Arc<AtomicUsize>,
+    body: &'static [u8],
+    invalid: bool,
+    mut schema: serde_json::Value,
+) -> Server {
+    schema["readOnly"] = true.into();
+    schema["forms"] = serde_json::json!([{"href":format!("http://{address}/value")}]);
+    let td: Thing = serde_json::from_value(serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"real Producer", "securityDefinitions":{"n":{"scheme":"nosec"}},"security":["n"], "properties":{"":schema}})).unwrap();
     server_from_td(address, bank, calls, body, invalid, td)
 }
 fn server_from_td(
@@ -578,6 +597,74 @@ fn cancelled_dispatch_and_unread_reply_keep_the_original_response_capacity_until
 }
 
 #[test]
+fn advertised_number_schema_refuses_a_json_string_before_wire_success() {
+    let _serial = SERIAL.lock().unwrap();
+    let a = address();
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut s = server(a, bank.clone(), calls.clone(), br#""not a number""#, false);
+    installed(&mut s);
+    s.begin_expose(100).unwrap();
+    let reply = exchange(&mut s, a, request(a).as_bytes());
+    assert!(reply.starts_with(b"HTTP/1.1 500"), "{reply:?}");
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    drop(s);
+    empty(&bank);
+}
+
+#[test]
+fn prepared_type_schema_survives_source_drop_and_checks_actual_http_results() {
+    let _serial = SERIAL.lock().unwrap();
+    for (kind, body, good) in [
+        ("null", b"null".as_slice(), true),
+        ("null", b"false", false),
+        ("boolean", b"true", true),
+        ("boolean", b"0", false),
+        ("string", br#""hello""#, true),
+        ("string", b"[]", false),
+        ("object", br#"{"x":[1,true]}"#, true),
+        ("object", b"[]", false),
+        ("array", br#"[1,{"x":true}]"#, true),
+        ("array", b"{}", false),
+        ("number", b"1.5", true),
+        ("number", b"1e99999", true),
+        ("number", b"1e-99999", true),
+        ("number", b"false", false),
+        ("integer", b"9007199254740993", true),
+        ("integer", b"9007199254740993.0000000000000001", false),
+        ("integer", b"1.00", true),
+        ("integer", b"100e-2", true),
+        ("integer", b"1.25e2", true),
+        ("integer", b"1.25e1", false),
+        ("integer", b"1e99999", true),
+        ("integer", b"0e-99999", true),
+        ("integer", b"-0.000e-99999", true),
+        ("integer", b"1e-99999", false),
+    ] {
+        let a = address();
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut s = server_with_schema(
+            a,
+            bank.clone(),
+            calls.clone(),
+            body,
+            false,
+            serde_json::json!({"type":kind}),
+        );
+        installed(&mut s);
+        s.begin_expose(100).unwrap();
+        let reply = exchange(&mut s, a, request(a).as_bytes());
+        assert_eq!(reply.starts_with(b"HTTP/1.1 200"), good, "{kind}/{body:?}");
+        let head_end = reply.windows(4).position(|b| b == b"\r\n\r\n").unwrap() + 4;
+        assert_eq!(&reply[head_end..], if good { body } else { b"null" });
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        drop(s);
+        empty(&bank);
+    }
+}
+
+#[test]
 fn response_body_bound_and_json_syntax_are_checked_before_wire_success() {
     let _serial = SERIAL.lock().unwrap();
     static EXACT: [u8; 4096] = {
@@ -615,6 +702,13 @@ fn handler_json_requires_utf8_in_strings_nested_values_and_object_keys() {
     for (body, good) in [
         (r#""é""#.as_bytes(), true),
         (r#"[{"ключ":"值"}]"#.as_bytes(), true),
+        (br#""\uD834\uDD1E""#.as_slice(), true),
+        (br#""\\uD800""#.as_slice(), true),
+        (br#""\uD800""#.as_slice(), false),
+        (br#""\uDC00""#.as_slice(), false),
+        (br#"["\uD800x"]"#.as_slice(), false),
+        (br#"{"\uD800":42}"#.as_slice(), false),
+        (br#""\uD800\u0041""#.as_slice(), false),
         (b"\"\xff\"".as_slice(), false),
         (b"[{\"value\":\"\xff\"}]".as_slice(), false),
         (b"{\"\xff\":42}".as_slice(), false),
@@ -622,7 +716,15 @@ fn handler_json_requires_utf8_in_strings_nested_values_and_object_keys() {
         let a = address();
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
         let calls = Arc::new(AtomicUsize::new(0));
-        let mut s = server(a, bank.clone(), calls.clone(), body, false);
+        // No declared type: this case isolates complete JSON/UTF-8 decoding.
+        let mut s = server_with_schema(
+            a,
+            bank.clone(),
+            calls.clone(),
+            body,
+            false,
+            serde_json::json!({}),
+        );
         installed(&mut s);
         s.begin_expose(100).unwrap();
         let reply = exchange(&mut s, a, request(a).as_bytes());

@@ -514,6 +514,22 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
         if budget.consume(class, 1).is_err() {
             return Poll::Pending;
         }
+        // Required services and their captured configuration must remain
+        // available before lending an accept permit, entering behavior, or
+        // delivering its result. Cleanup remains drivable without that facet.
+        if matches!(self.state, Serving | Dispatching | Delivering)
+            && let Err(error) = self
+                .owner
+                .as_ref()
+                .unwrap()
+                .execution
+                .as_ref()
+                .unwrap()
+                .check_current()
+        {
+            self.fail(error);
+            return Poll::Ready(self.state);
+        }
         match self.state {
             Reserved => {
                 match self

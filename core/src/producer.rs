@@ -192,6 +192,13 @@ pub struct ProducerServicePolicy {
     pub response_media_capacity: u64,
 }
 
+/// Actual source-independent output validation service. It borrows only the
+/// bounded handler result; it performs no I/O or application dispatch. Its
+/// concrete owner captures the selected schema and codec/configuration.
+pub trait ProducerOutputValidator {
+    fn validate(&self, output: &InteractionOutput) -> CoreResult<()>;
+}
+
 /// Nonretained current-instance permission. Possession of a copied lookup key
 /// cannot construct it: its lifetime borrows the move-only authority.
 pub struct ProducerAcceptPermit<'a>(&'a ProducerInstanceAuthority);
@@ -245,15 +252,7 @@ impl ProducerResponse {
         media_capacity: u64,
     ) -> Self {
         let result = result.and_then(|output| {
-            let valid = crate::response::property_read_handler_shape(&output)
-                && output.data().is_some_and(|p| {
-                    p.body.len() as u64 <= body_limit
-                        && p.content_type.capacity() as u64 <= media_capacity
-                        && p.content_coding
-                            .as_ref()
-                            .is_none_or(|c| c.capacity() as u64 <= media_capacity)
-                });
-            if valid {
+            if property_read_output_fits(&output, body_limit, media_capacity) {
                 Ok(output)
             } else {
                 Err(CoreError::Validation(
@@ -271,6 +270,17 @@ impl ProducerResponse {
     pub fn result(&self) -> Result<&InteractionOutput, &CoreError> {
         self.result.as_ref()
     }
+}
+
+fn property_read_output_fits(output: &InteractionOutput, body: u64, media: u64) -> bool {
+    crate::response::property_read_handler_shape(output)
+        && output.data().is_some_and(|p| {
+            p.body.len() as u64 <= body
+                && p.content_type.capacity() as u64 <= media
+                && p.content_coding
+                    .as_ref()
+                    .is_none_or(|c| c.capacity() as u64 <= media)
+        })
 }
 
 /// An actual captured executor, independently of optional preparation. Native
@@ -295,6 +305,18 @@ pub trait ProducerExecutor: Send + 'static {
     /// Pure validation of native operands and complete controlled backing
     /// against the captured policy. It must not perform native installation.
     fn check_program(&self, program: &Self::Program) -> CoreResult<()>;
+    /// Borrow the actual validation service for this exact program. Lookup is
+    /// passive, bounded and allocation-free. None means the facet is absent;
+    /// declaring numeric service limits alone cannot qualify Serving. Providers
+    /// that only install native participation need no dummy validator.
+    /// Its concrete service/operands belong to the captured program/configuration;
+    /// substituting a service must invalidate that pairing, not retain its tag.
+    fn output_validator<'a>(
+        &'a self,
+        _program: &'a Self::Program,
+    ) -> Option<&'a dyn ProducerOutputValidator> {
+        None
+    }
     /// Pure construction, after Engine admission. No socket, registration or
     /// other native effect may occur here. All partial native effects belong to
     /// the returned installation, starting with its first funded install poll.
@@ -344,7 +366,35 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler> ProducerExecutionRegistration<
         self.footprint
     }
     pub fn dispatch(&self, context: HandlerContext<'_>) -> CoreResult<InteractionOutput> {
-        self.handler.handle(context, &InteractionInput::default())
+        // The actual runtime provider owns codec execution. It receives the
+        // exact source-independent program, never a TD/Planning callback.
+        let validator = self
+            .executor
+            .output_validator(self.entry.program())
+            .ok_or_else(|| {
+                CoreError::Validation(
+                    ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                        .with_redacted_cause(626, "Producer validation service disappeared"),
+                )
+            })?;
+        let service = self.service.ok_or_else(|| {
+            CoreError::Validation(ErrorContext::new(ErrorPhase::Validate, RetryClass::Never))
+        })?;
+        let output = self.handler.handle(context, &InteractionInput::default())?;
+        // Bound the callback input before entering an external codec service.
+        if !property_read_output_fits(
+            &output,
+            service.response_body_bytes,
+            service.response_media_capacity,
+        ) {
+            return Err(CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                    .with_thing(self.entry.instance())
+                    .with_operation(Operation::ReadProperty),
+            ));
+        }
+        validator.validate(&output)?;
+        Ok(output)
     }
     pub fn configuration(&self) -> &E::Configuration {
         &self.configuration
@@ -360,6 +410,11 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler> ProducerExecutionRegistration<
             || self.executor.identity() != self.entry.binding()
             || self.executor.install_policy() != self.policy
             || self.executor.service_policy() != self.service
+            || self.service.is_some()
+                && self
+                    .executor
+                    .output_validator(self.entry.program())
+                    .is_none()
         {
             return Err(CoreError::Validation(
                 ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
