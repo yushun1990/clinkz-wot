@@ -19,9 +19,11 @@ use std::{
 };
 #[cfg(feature = "prepare")]
 mod compiler;
+mod finite_producer;
 #[cfg(all(test, feature = "prepare"))]
 mod identity_tests;
 mod producer;
+pub use finite_producer::{HttpFiniteBinding, HttpFiniteConfig, HttpFiniteReply};
 mod producer_validation;
 mod program;
 pub use producer::{

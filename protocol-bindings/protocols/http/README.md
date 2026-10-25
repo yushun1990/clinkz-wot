@@ -345,6 +345,36 @@ qualifies a final TD under v6. Complete actual participation/behavior/support,
 required native readiness and the final Servient publication commit remain
 necessary; no v6 exposure API is introduced by the schema prerequisite.
 
+## HTTP through the shared finite owner
+
+`HttpFiniteConfig::try_new` consumes an owned `HttpProducerProgram`, the matching
+listen configuration, candidate instance/key and timeout. `HttpFiniteBinding`
+then implements Core's native finite facet directly. It retains no handler,
+logical authority, compiler or TD. The old `HttpProducerInstallation` is not
+under this path. Both paths reuse the HTTP parser/socket/reply mechanics.
+
+Use `RawFiniteRuntime::try_new` with `FiniteOutputValidation::Required` to require
+the program's actual JSON/type validator. The associated `RawFiniteServient`
+owns the sole logical behavior and can drive independently typed native owners.
+Pass caller-clock time to progress. Native request deadlines do not reset with
+polls; dispatch prepays the declared complete result traversal before the codec.
+The original result/behavior remain owned through cancellation, partial writes
+and settlement acknowledgement. Closing one HTTP owner leaves siblings usable.
+
+`activate_raw` opens only local acceptance, including with Required checking.
+It does **not** publish a qualified TD. This integration has caller-provisioned
+bounded finite slots, not the older root's aggregate Host account admission.
+Complete final-TD/actual-behavior/provider/service qualification, aggregate
+admission, final endpoint/dependency checks and the local publication commit
+must precede a qualified exposure API. The funded public root remains a separate
+restricted implementation until those guarantees have a real replacement.
+
+Run the executable shared integration (raw independent peers and public Consumer):
+
+```sh
+cargo test --locked --offline -p clinkz-wot-binding-http --test finite_producer
+```
+
 Run the preparation regressions with:
 
 ```sh

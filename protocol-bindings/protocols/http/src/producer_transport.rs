@@ -1,8 +1,8 @@
 //! One retained native HTTP request/reply owner. Hyper frames the exchange;
-//! its service only marks a candidate and waits for a Core-sealed response.
+//! its service only marks a candidate and waits for the retained Engine result.
 use super::producer::HttpProducerProgram;
 use bytes::Bytes;
-use clinkz_wot_core::producer::*;
+use clinkz_wot_core::{CoreError, InteractionOutput};
 use http_body_util::Full;
 use hyper::{Request, Response, body::Incoming, server::conn::http1, service::Service};
 use std::{
@@ -22,6 +22,7 @@ struct Bridge {
     reply: Option<Reply>,
     read_left: usize,
     write_left: usize,
+    wrote: bool,
 }
 struct ReplyFuture(Arc<Mutex<Bridge>>);
 impl Future for ReplyFuture {
@@ -175,7 +176,9 @@ impl hyper::rt::Write for Ingress {
         }
         match self.socket.write(&bytes[..n]) {
             Ok(n) => {
-                self.bridge.lock().unwrap().write_left -= n;
+                let mut bridge = self.bridge.lock().unwrap();
+                bridge.write_left -= n;
+                bridge.wrote |= n != 0;
                 Poll::Ready(Ok(n))
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -248,14 +251,17 @@ impl NativeConnection {
             false
         }
     }
-    pub(super) fn reply(&mut self, response: &ProducerResponse) {
+    pub(super) fn write_started(&self) -> bool {
+        self.bridge.lock().unwrap().wrote
+    }
+    pub(super) fn reply(&mut self, result: Result<&InteractionOutput, &CoreError>) {
         if self.replied {
             return;
         }
         self.replied = true;
         // IgnoredAny checks syntax without building a JSON tree, but skips
         // UTF-8 checks in strings and object keys. Validate the bytes first.
-        let body = response.result().ok().and_then(|o| o.data()).filter(|p| {
+        let body = result.ok().and_then(|o| o.data()).filter(|p| {
             p.content_type == "application/json"
                 && p.content_coding.is_none()
                 && p.body.len() <= 4096

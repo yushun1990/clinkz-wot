@@ -24,6 +24,7 @@ serde = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+clinkz-wot-servient-finite = { path = "../../../servient/finite" }
 clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }
 serde_json = { workspace = true, features = ["std"] }

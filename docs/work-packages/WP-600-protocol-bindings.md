@@ -47,7 +47,38 @@ allowance; native parser/SDK backing retains its existing Host deployment policy
 No general validation performance, constrained execution or SDK maximum is claimed.
 Historical evidence keeps its original revisions and no completion state changes.
 
-This prerequisite does not implement qualified publication from the v6 shared
-logical runtime. Its integration with the real HTTP native owner, complete
-multi-participant qualification, final endpoint/dependency revalidation and the
-Servient-local final-TD commit are still required under SAFE-PUBLISH-001.
+This prerequisite alone does not implement qualified publication from the v6
+shared logical runtime. Complete multi-participant qualification, aggregate
+admission, final endpoint/dependency revalidation and the Servient-local final-TD
+commit remain required under SAFE-PUBLISH-001.
+
+## Direct shared finite HTTP participation
+
+`HttpFiniteBinding` implements `FiniteIngressBinding` directly over the real
+nonblocking listener and shared Hyper transport. It uses none of the old
+Producer installation, accept-permit, request or sealed-response ABI. The native
+owner contains no authority/handler/registry. `HttpFiniteConfig` captures the
+owned prepared program/schema, exact native operands, candidate and timeout;
+one actual logical behavior can serve independent participants. The runtime-only
+normal graph still excludes TD, Planning and Servient.
+
+The concrete limits remain loopback/nonzero HTTP/1.1 bodyless GET, exact path/Host,
+one connection/correlation, 16 headers/8192 bytes, 4096 I/O bytes per native poll
+and JSON results <=4096 bytes. Readiness keeps semantic acceptance closed.
+Malformed native input disposes its connection without dispatch and preserves
+the listener. Request timeouts span the original input/reply. Retirement aborts
+the exact connection and listener; any started write reports Unknown delivery.
+Drop disposes native owners before program/services, without network waits/tasks.
+An opaque native issuer and monotonic correlation fence the original reply;
+numeric Binding/instance equality cannot substitute a sibling's opportunity.
+
+The `finite_producer` target uses actual HTTP peers and the public Consumer, with
+sources destroyed before execution, shared mutable behavior, type/Unicode/exact
+integer rejection, zero/short/exact credits, failed setup/cleanup, original-result
+retention and socket reuse. The old funded public root and its account/transport
+regressions remain restricted independent evidence. It is not wrapped by the new
+path; retiring it requires replacement of its funded execution guarantees plus
+the successor final-description commit. No old API becomes successor authority.
+Neither successful HTTP I/O nor required output validation is qualified TD
+publication. Multi-route HTTP matching, HTTPS/security, constrained execution,
+aggregate capacity and release qualification retain their separate boundaries.

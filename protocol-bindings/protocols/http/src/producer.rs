@@ -323,7 +323,7 @@ impl ProducerInstallation for HttpProducerInstallation {
             return Poll::Ready(Err(producer_unsupported()));
         }
         let connection = self.connection.as_mut().unwrap();
-        connection.reply(response);
+        connection.reply(response.result());
         match connection.poll(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => {

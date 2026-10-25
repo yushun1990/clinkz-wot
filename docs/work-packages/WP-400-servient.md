@@ -48,6 +48,30 @@ independent acceptance of the changed API/ownership remains necessary. TD
 qualification/publication, optional Planning, threading, Action/Event and
 constrained execution are separate work.
 
+## Prepared validation and time on shared finite ingress
+
+`FiniteOutputValidation::Required` refuses an absent actual provider service at
+admission and fences start/acceptance/delivery on service loss. Raw mode remains
+explicit. Complete shape/backing checks precede the codec callback; dispatch
+prepays the count/name lookup plus the declared maximum body and both media
+traversals. Invalid output becomes the retained exchange error before the native
+reply. A service is part of its actual captured configuration, not a support tag.
+
+Progress takes one caller-qualified monotonic instant. The runtime retains the
+original native request deadline across incomplete input, dispatch and pending
+send; expiry, clock mismatch/regression and explicit close keep the first cause,
+complete original exchange and accepted behavior until retirement/acknowledgement.
+Zero credits can fence locally but cannot run a native/cleanup poll. Drop remains
+finite local disposal, not a completed network drain.
+Old finite callers migrate directly to the explicit time/validation arguments.
+
+The HTTP `finite_producer` integration target now exercises this owner over real
+HTTP, alongside the finite TCP/UDP ownership regressions. It includes required
+schema checks, service loss, bounded funding, partial-write uncertainty, deadlines,
+replacement and independent physical retirement. Caller-provisioned finite slots
+still have no aggregate Host account admission. Required validation is not final
+TD qualification; no publication certificate/facade or package completion is added.
+
 ## Captured validation service on the retained HTTP path
 
 The older single-provider Producer root requires an actual output-validation

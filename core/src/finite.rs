@@ -1,6 +1,7 @@
 //! Source-free, exclusive finite ingress. A native Binding matches and retains
 //! the wire opportunity; it never receives an application-dispatch capability.
-//! This raw-value slice makes no DataSchema or Action-lifetime claim.
+//! Raw activation makes no TD-publication or Action-lifetime claim. A runtime
+//! can additionally require the actual provider's prepared output validator.
 
 use alloc::vec::Vec;
 use core::{
@@ -9,11 +10,13 @@ use core::{
     task::{Context, Poll},
 };
 
+use crate::Deadline;
 use crate::producer::ProducerInstanceKey;
 use crate::{
     AffordanceTarget, BindingGeneration, BindingId, CoreResult, HandlerContext, InteractionInput,
     InteractionOutput, InteractionStatus, Operation, ResponsePayloadRole,
 };
+use clinkz_wot_foundation::MonotonicInstant;
 
 /// One *candidate*, not a grant to dispatch. A copied key cannot keep a revoked
 /// instance alive or redirect an accepted exchange to its replacement.
@@ -154,10 +157,27 @@ pub trait FiniteIngressBinding {
     /// progress step; an unbounded native configuration needs a different
     /// immutable revision-bearing representation.
     fn configuration(&self) -> &Self::Configuration;
+    /// Actual source-independent service for this captured native mapping.
+    /// None is an absent facet, not a successful validation. A runtime requiring
+    /// validation must fence progress if this service disappears. Providers with
+    /// multiple mappings need a separately qualified per-mapping facet; this
+    /// initial service covers every output accepted by this native participant.
+    /// The service and its operands belong to the captured Configuration;
+    /// substituting them must invalidate that pairing, not preserve its tag.
+    fn output_validator(&self) -> Option<&dyn crate::producer::ProducerOutputValidator> {
+        None
+    }
+    /// Passive deadline of the original retained native exchange, including
+    /// unfinished ingress and pending delivery. Clock identity belongs to the
+    /// caller; native code must not substitute a wall clock or reset on polls.
+    fn request_deadline(&self) -> Deadline {
+        Deadline::NONE
+    }
     fn poll_start(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>>;
     fn poll_receive(
         &mut self,
         cx: &mut Context<'_>,
+        now: MonotonicInstant,
     ) -> Poll<CoreResult<FiniteIngress<Self::Reply>>>;
     /// Ready(Ok) certifies that the original result reached this Binding's
     /// declared delivery boundary. Pending and error do not.

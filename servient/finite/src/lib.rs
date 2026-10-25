@@ -12,15 +12,15 @@ use alloc::{
 };
 use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, BindingOperationalError,
-    CoreError, CoreResult, ErrorContext, ErrorPhase, HandlerContext, InteractionOutput, Operation,
-    RetryClass,
+    CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, HandlerContext, InteractionOutput,
+    Operation, RetryClass,
     finite::{
         FiniteDelivery, FiniteEffect, FiniteIngress, FiniteIngressBinding, RawFiniteHandler,
         RawFiniteReply, RawFiniteSettlement, raw_finite_output_backing, raw_finite_property_shape,
     },
     producer::{ProducerInstanceAuthority, ProducerInstanceKey},
 };
-use clinkz_wot_foundation::{WorkBudget, WorkClass};
+use clinkz_wot_foundation::{MonotonicInstant, WorkBudget, WorkClass};
 use core::{
     mem::size_of,
     task::{Context, Poll},
@@ -237,16 +237,35 @@ impl RawFiniteServient {
         runtime: &mut RawFiniteRuntime<B>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
+        now: MonotonicInstant,
     ) -> CoreResult<Poll<RawFiniteState>> {
         if runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer) {
             return Err(CoreError::StaleHandle(context()));
         }
+        runtime.check_time(now);
         if runtime.state != RawFiniteState::Dispatching {
-            return Ok(runtime.step(cx, budget));
+            return Ok(runtime.step(cx, budget, now));
         }
-        let units = (self.limits.instances
+        let mut units = (self.limits.instances
             + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
             + 1) as u64;
+        if runtime.validation == FiniteOutputValidation::Required {
+            // Prepay the complete declared value/media traversal, before
+            // behavior entry or a codec callback. Linked validators still owe
+            // bounded cooperative work; this is not callback preemption.
+            let bytes = runtime
+                .limits
+                .output_media_capacity
+                .checked_mul(2)
+                .and_then(|media| runtime.limits.output_body_bytes.checked_add(media))
+                .and_then(|n| u64::try_from(n).ok())
+                .and_then(|n| units.checked_add(n));
+            let Some(total) = bytes else {
+                runtime.fail(CoreError::Backpressure(context()));
+                return Ok(Poll::Ready(runtime.state));
+            };
+            units = total;
+        }
         if budget.consume(WorkClass::HandlerSteps, units).is_err() {
             return Ok(Poll::Pending);
         }
@@ -266,6 +285,22 @@ impl RawFiniteServient {
             let instance = &self.instances[i].instance;
             let behavior = &instance.behaviors[b];
             behavior.handler.authorize(&ingress.input)?;
+            // Policy is application code and can invalidate an externally
+            // mutable provider. Recheck before behavior entry, then retain the
+            // actual service loan through the synchronous callback/validation.
+            if !runtime.pair_is_current() {
+                return Err(CoreError::Validation(context()));
+            }
+            let validator = if runtime.validation == FiniteOutputValidation::Required {
+                Some(
+                    runtime
+                        .binding
+                        .output_validator()
+                        .ok_or_else(|| CoreError::Validation(context()))?,
+                )
+            } else {
+                None
+            };
             let ctx = HandlerContext::for_producer(
                 instance.key(),
                 &behavior.target,
@@ -289,6 +324,9 @@ impl RawFiniteServient {
                         .with_thing(instance.key().slot())
                         .with_operation(behavior.operation),
                 ));
+            }
+            if let Some(validator) = validator {
+                validator.validate(&output)?;
             }
             Ok(output)
         });
@@ -315,6 +353,14 @@ pub struct RawFiniteLimits {
     pub output_body_bytes: usize,
     pub output_media_capacity: usize,
     pub output_retained_bytes: usize,
+}
+
+/// Output checking for this participant, independent of TD publication. Raw
+/// mode claims no schema conformance; Required refuses an absent/lost service.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FiniteOutputValidation {
+    Raw,
+    Required,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -345,6 +391,10 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     limits: RawFiniteLimits,
     state: RawFiniteState,
     first_cause: Option<CoreError>,
+    validation: FiniteOutputValidation,
+    deadline: Deadline,
+    io_deadline: Deadline,
+    last_now: Option<MonotonicInstant>,
 }
 
 impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
@@ -355,11 +405,14 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         configuration: B::Configuration,
         servient: &RawFiniteServient,
         limits: RawFiniteLimits,
+        validation: FiniteOutputValidation,
+        deadline: Deadline,
     ) -> Result<Self, BindingInputRejection<(B, B::Configuration)>> {
         let identity = binding.identity();
         let valid = binding.configuration() == &configuration
             && limits.candidates > 0
-            && limits.output_retained_bytes >= size_of::<InteractionOutput>();
+            && limits.output_retained_bytes >= size_of::<InteractionOutput>()
+            && (validation == FiniteOutputValidation::Raw || binding.output_validator().is_some());
         if !valid {
             return Err(rejection((binding, configuration)));
         }
@@ -375,6 +428,10 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             state: RawFiniteState::Starting,
             first_cause: None,
             settlement: None,
+            validation,
+            deadline,
+            io_deadline: Deadline::NONE,
+            last_now: None,
         })
     }
 
@@ -397,13 +454,21 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     /// Locally enable raw acceptance after native readiness; this does not
-    /// publish or qualify a TD. No native callback or handler runs here.
+    /// publish or qualify a TD, even with Required output validation. No native
+    /// callback or handler runs here.
     pub fn activate_raw(&mut self) -> CoreResult<()> {
-        if self.issuer.strong_count() == 0 {
-            return Err(CoreError::StaleHandle(context()));
-        }
-        if self.state != RawFiniteState::InstalledClosed || !self.pair_is_current() {
+        if self.state != RawFiniteState::InstalledClosed {
             return Err(CoreError::Validation(context()));
+        }
+        if self.issuer.strong_count() == 0 {
+            let error = CoreError::StaleHandle(context());
+            self.fail(error.clone());
+            return Err(error);
+        }
+        if !self.pair_is_current() {
+            let error = CoreError::Validation(context());
+            self.fail(error.clone());
+            return Err(error);
         }
         self.state = RawFiniteState::Serving;
         Ok(())
@@ -433,6 +498,28 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     fn pair_is_current(&self) -> bool {
         self.binding.identity() == self.identity
             && self.binding.configuration() == &self.configuration
+            && (self.validation == FiniteOutputValidation::Raw
+                || self.binding.output_validator().is_some())
+    }
+
+    fn check_time(&mut self, now: MonotonicInstant) {
+        if self.state == RawFiniteState::Closed {
+            return;
+        }
+        if self
+            .last_now
+            .is_some_and(|last| now.checked_duration_since(last).is_none())
+        {
+            self.fail(CoreError::Validation(context()));
+        }
+        self.last_now = Some(now);
+        for deadline in [self.deadline, self.io_deadline] {
+            match deadline.checked_is_elapsed_at(now) {
+                Some(false) => {}
+                Some(true) => self.fail(CoreError::TimedOut(context())),
+                None => self.fail(CoreError::Validation(context())),
+            }
+        }
     }
 
     fn settle_reply(&mut self, delivery: FiniteDelivery) {
@@ -490,8 +577,15 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     /// One paid native or cleanup poll. Dispatching waits for the associated
     /// Servient; native retirement never needs logical authority or a handler.
     /// Pending never discards the reply or changes the first failure.
-    pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<RawFiniteState> {
+    pub fn step(
+        &mut self,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+        now: MonotonicInstant,
+    ) -> Poll<RawFiniteState> {
         use RawFiniteState::*;
+        // Local fencing requires no native work credit. Cleanup still does.
+        self.check_time(now);
         if self.state == Closed
             || self.state == InstalledClosed
             || (self.state == Serving && self.settlement.is_some())
@@ -527,18 +621,22 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     Poll::Ready(self.state)
                 }
             },
-            Serving => match self.binding.poll_receive(cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(e)) => {
-                    self.fail(e);
-                    Poll::Ready(self.state)
+            Serving => {
+                let received = self.binding.poll_receive(cx, now);
+                self.io_deadline = self.binding.request_deadline();
+                match received {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Err(e)) => {
+                        self.fail(e);
+                        Poll::Ready(self.state)
+                    }
+                    Poll::Ready(Ok(ingress)) => {
+                        self.ingress = Some(ingress);
+                        self.state = Dispatching;
+                        Poll::Ready(self.state)
+                    }
                 }
-                Poll::Ready(Ok(ingress)) => {
-                    self.ingress = Some(ingress);
-                    self.state = Dispatching;
-                    Poll::Ready(self.state)
-                }
-            },
+            }
             Delivering => match self
                 .binding
                 .poll_send(cx, self.reply.as_ref().expect("reply retained"))
@@ -550,6 +648,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 }
                 Poll::Ready(Ok(())) => {
                     self.settle_reply(FiniteDelivery::Delivered);
+                    self.io_deadline = Deadline::NONE;
                     self.state = Serving;
                     Poll::Ready(self.state)
                 }
