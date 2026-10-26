@@ -33,6 +33,8 @@ pub mod handler;
 pub mod identity;
 #[cfg(target_has_atomic = "ptr")]
 pub mod interaction;
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod notification;
 pub mod operation;
 #[cfg(target_has_atomic = "ptr")]
 pub mod outbound;
