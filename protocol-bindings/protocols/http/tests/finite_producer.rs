@@ -169,8 +169,8 @@ impl RawFiniteHandler for Handler {
         Ok(InteractionOutput::with_data(payload))
     }
 }
-fn instance(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawFiniteInstance {
-    RawFiniteInstance::new(
+fn instance(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawProducerInstance {
+    RawProducerInstance::new(
         authority,
         vec![RawFiniteBehavior::new(
             AffordanceTarget::Property(Arc::from("level")),
@@ -179,11 +179,11 @@ fn instance(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawFi
         )],
     )
 }
-fn owner(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawFiniteServient {
+fn owner(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawProducerServient {
     app.allowed.set(true);
-    accepted(RawFiniteServient::try_new(
+    accepted(RawProducerServient::try_new(
         vec![instance(authority, app)],
-        RawFiniteRegistryLimits {
+        RawProducerRegistryLimits {
             instances: 1,
             behaviors_per_instance: 1,
             target_name_bytes: 5,
@@ -192,7 +192,7 @@ fn owner(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawFinit
 }
 fn runtime<B: FiniteIngressBinding>(
     binding: B,
-    owner: &RawFiniteServient,
+    owner: &RawProducerServient,
     validation: FiniteOutputValidation,
 ) -> RawFiniteRuntime<B>
 where
@@ -208,13 +208,16 @@ where
         Deadline::NONE,
     ))
 }
-fn step<B: FiniteIngressBinding>(owner: &mut RawFiniteServient, runtime: &mut RawFiniteRuntime<B>) {
+fn step<B: FiniteIngressBinding>(
+    owner: &mut RawProducerServient,
+    runtime: &mut RawFiniteRuntime<B>,
+) {
     let _ = owner
         .step(runtime, &mut cx(), &mut work(1_000_000), now(0))
         .unwrap();
 }
 fn ready<B: FiniteIngressBinding>(
-    owner: &mut RawFiniteServient,
+    owner: &mut RawProducerServient,
     runtime: &mut RawFiniteRuntime<B>,
 ) {
     step(owner, runtime);
@@ -231,7 +234,7 @@ fn request(addr: SocketAddr) -> TcpStream {
     peer
 }
 fn until<B: FiniteIngressBinding>(
-    owner: &mut RawFiniteServient,
+    owner: &mut RawProducerServient,
     runtime: &mut RawFiniteRuntime<B>,
     state: RawFiniteState,
 ) {
@@ -247,7 +250,7 @@ fn until<B: FiniteIngressBinding>(
     }
 }
 fn response<B: FiniteIngressBinding>(
-    owner: &mut RawFiniteServient,
+    owner: &mut RawProducerServient,
     runtime: &mut RawFiniteRuntime<B>,
     mut peer: TcpStream,
 ) -> (String, RawFiniteSettlement) {

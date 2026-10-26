@@ -50,7 +50,7 @@ Their output/reclaim owners must move to the execution owner before claiming an
 execution-only Servient feature; a feature alias is insufficient.
 
 The separate `clinkz-wot-servient-finite` Host execution slice links only Core
-and Foundation. `RawFiniteServient` owns the logical registry, unique authority
+and Foundation. `RawProducerServient` owns the logical registry, unique authority
 and actual behavior set. Independently typed `RawFiniteRuntime<B>` values own
 their captured Binding/configuration and one bounded exchange/settlement each;
 none owns a copy of current logical permission. Servient progress borrows the
@@ -77,6 +77,23 @@ qualifies/publishes a TD or replaces the funded preparation-dependent Producer
 root. `activate_raw` remains local activation even when output checking is
 required; final coverage, aggregate resource admission and publication remain.
 
+The same execution-only logical owner can register Action behavior without a
+finite runtime. Core's raw Action contracts and Servient's bounded invocation
+store separate application continuation from the initiating Binding exchange.
+The owner pins the original instance, invocation reference, principal and
+selected invoke/query/cancel mapping associations; controls recheck current
+authority and policy. Cancel/abandon do not assert completion, and a late result
+remains charged until application retirement and settlement acknowledgement.
+Lost handles cannot orphan work: the owner has a separate paid retirement path;
+root Drop uses only the application's qualified finite local abort for unfinished
+work, not a poll or a claim of completed native delivery.
+Native correlations, replies, cancellation and infrastructure cleanup remain at
+the Binding. This Host-only manual kernel has no native Action adapter, TD
+qualification/publication, schema validation or automatic progress. It does not
+model Property observation or Event notification as finite exchanges: their
+establishment, delivery, reciprocal responses and stop require separate logical
+conversation owners.
+
 Other runtime availability remains narrow Property Read: the Host HTTP Consumer,
 bounded loopback Producer, static/Host fixtures and manual Consumer runtime.
 The existing `HostSemanticCompiler` Copy/atomic restriction, eager all-bounds
@@ -90,7 +107,8 @@ are target requirements; the current Consumer's id/key restriction, closed
 security enum and pointer-atomic runtime remain explicit gaps. TD vocabulary
 availability on a no-atomic target proves tooling compilation only. Identity/shape
 result seals are not full DataSchema validation. No general runtime, shared
-native infrastructure or new Action/Event implementation is claimed here.
+native infrastructure, notification implementation or complete Action support
+is claimed here.
 
 The withdrawn event broker/subscription queues, old TD-at-call-time facade,
 Zenoh/pico implementations and admission prototypes remain in Git. Their deletion

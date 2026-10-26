@@ -75,6 +75,17 @@ Local abandonment/cancellation and known remote terminal state MUST be reported
 separately. `synchronous` absence makes no completion claim. Unknown effect
 MUST NOT authorize implicit replay of an Action or write.
 
+The implemented raw Host Producer kernel uses a single Servient logical registry
+for finite and Action behavior, but a separate bounded invocation store for
+continuing Action work. It captures separate selected invoke/query/cancel route
+identities (possibly different Bindings), the established principal id and the
+original behavior. Query/cancel require a live local handle, original route,
+current instance and fresh application permission. Cooperative cancellation,
+local abandonment, application result and native delivery are separate outcomes;
+an error after behavior entry is effect-uncertain. This is NOT an implementation
+of TD `synchronous`, qualified Forms, native control/continuation, validation or
+Producer publication. It provides no remote-terminal claim.
+
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property
 observation carries Property values. Event subscription/data/dataResponse/

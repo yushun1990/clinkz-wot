@@ -1,9 +1,13 @@
-//! Source-free, manually driven finite ingress. This deliberately does not use
-//! TD, Planning, a route stage, or one native installation per Thing.
+//! Source-free, manually driven Producer ownership. The finite ingress facet
+//! and independent Action obligations share one logical instance registry.
+//! Neither facet publishes a TD or defines a universal native runtime.
 #![cfg(feature = "std")]
 #![no_std]
 
 extern crate alloc;
+
+mod action;
+pub use action::*;
 
 use alloc::{
     boxed::Box,
@@ -16,8 +20,9 @@ use clinkz_wot_core::{
     Operation, RetryClass,
     finite::{
         FiniteDelivery, FiniteEffect, FiniteIngress, FiniteIngressBinding, RawFiniteHandler,
-        RawFiniteReply, RawFiniteSettlement, raw_finite_output_backing, raw_finite_property_shape,
+        RawFiniteReply, RawFiniteSettlement, raw_finite_property_shape,
     },
+    interaction_output_backing,
     producer::{ProducerInstanceAuthority, ProducerInstanceKey},
 };
 use clinkz_wot_foundation::{MonotonicInstant, WorkBudget, WorkClass};
@@ -56,17 +61,26 @@ impl RawFiniteBehavior {
 
 /// One move-only logical authority and behavior set, owned by Servient rather
 /// than by any Binding runtime. Accepted work may retain this exact instance.
-pub struct RawFiniteInstance {
+pub struct RawProducerInstance {
     authority: ProducerInstanceAuthority,
     behaviors: Vec<RawFiniteBehavior>,
+    actions: Vec<RawActionBehavior>,
 }
 
-impl RawFiniteInstance {
+impl RawProducerInstance {
     pub fn new(authority: ProducerInstanceAuthority, behaviors: Vec<RawFiniteBehavior>) -> Self {
         Self {
             authority,
             behaviors,
+            actions: Vec::new(),
         }
+    }
+
+    /// Install Action behavior on this *same* logical authority. An instance
+    /// may have only Action behaviors; no finite native driver is implied.
+    pub fn with_actions(mut self, actions: Vec<RawActionBehavior>) -> Self {
+        self.actions = actions;
+        self
     }
 
     pub fn key(&self) -> ProducerInstanceKey {
@@ -77,7 +91,7 @@ impl RawFiniteInstance {
 /// Fixed registration/lookup envelope at the logical owner. Construction and
 /// replacement validate externally built behavior before changing authority.
 #[derive(Clone, Copy, Debug)]
-pub struct RawFiniteRegistryLimits {
+pub struct RawProducerRegistryLimits {
     pub instances: usize,
     pub behaviors_per_instance: usize,
     /// Maximum UTF-8 bytes per registered or accepted native target name.
@@ -85,29 +99,30 @@ pub struct RawFiniteRegistryLimits {
 }
 
 struct InstanceEntry {
-    instance: Rc<RawFiniteInstance>,
+    instance: Rc<RawProducerInstance>,
     current: bool,
 }
 
 struct AcceptedBehavior {
-    instance: Rc<RawFiniteInstance>,
+    instance: Rc<RawProducerInstance>,
     behavior: usize,
 }
 
 /// One logical owner shared by independently typed native runtimes. Exclusive
 /// manual access orders acceptance, revocation and replacement without locks.
 /// This Host facet is single-threaded; retention references confer no authority.
-pub struct RawFiniteServient {
+pub struct RawProducerServient {
     instances: Vec<InstanceEntry>,
     issuer: Rc<()>,
-    limits: RawFiniteRegistryLimits,
+    limits: RawProducerRegistryLimits,
+    actions: Option<ActionStore>,
 }
 
-impl RawFiniteServient {
+impl RawProducerServient {
     pub fn try_new(
-        instances: Vec<RawFiniteInstance>,
-        limits: RawFiniteRegistryLimits,
-    ) -> Result<Self, BindingInputRejection<Vec<RawFiniteInstance>>> {
+        instances: Vec<RawProducerInstance>,
+        limits: RawProducerRegistryLimits,
+    ) -> Result<Self, BindingInputRejection<Vec<RawProducerInstance>>> {
         let valid = (1..=MAX_INSTANCES).contains(&limits.instances)
             && (1..=MAX_BEHAVIORS_PER_INSTANCE).contains(&limits.behaviors_per_instance)
             && limits.target_name_bytes <= MAX_TARGET_NAME_BYTES
@@ -132,12 +147,19 @@ impl RawFiniteServient {
                 .collect(),
             issuer: Rc::new(()),
             limits,
+            actions: None,
         })
     }
 
-    fn valid_instance(instance: &RawFiniteInstance, limits: RawFiniteRegistryLimits) -> bool {
-        !instance.behaviors.is_empty()
-            && instance.behaviors.len() <= limits.behaviors_per_instance
+    fn valid_instance(instance: &RawProducerInstance, limits: RawProducerRegistryLimits) -> bool {
+        (!instance.behaviors.is_empty() || !instance.actions.is_empty())
+            && instance.behaviors.len() + instance.actions.len() <= limits.behaviors_per_instance
+            && instance.actions.iter().enumerate().all(|(j, action)| {
+                action.name().len() <= limits.target_name_bytes
+                    && !instance.actions[..j]
+                        .iter()
+                        .any(|prior| prior.name() == action.name())
+            })
             && instance.behaviors.iter().enumerate().all(|(j, behavior)| {
                 matches!(
                     behavior.operation,
@@ -150,8 +172,9 @@ impl RawFiniteServient {
             })
     }
 
-    /// Stop new acceptance everywhere. At most 32 key probes; no native callback,
-    /// handler destruction or accepted-work cancellation occurs here.
+    /// Stop new acceptance everywhere. At most 32 key probes and 128 Action
+    /// flags; no native callback, handler destruction or synchronous application
+    /// cancellation occurs here. Funded steps request cancellation afterwards.
     pub fn revoke(&mut self, key: ProducerInstanceKey) -> bool {
         if let Some(entry) = self
             .instances
@@ -159,6 +182,9 @@ impl RawFiniteServient {
             .find(|entry| entry.instance.key() == key && entry.current)
         {
             entry.current = false;
+            if let Some(actions) = &mut self.actions {
+                actions.revoke(key);
+            }
             true
         } else {
             false
@@ -171,8 +197,8 @@ impl RawFiniteServient {
     pub fn replace(
         &mut self,
         expected: ProducerInstanceKey,
-        replacement: RawFiniteInstance,
-    ) -> Result<(), BindingInputRejection<RawFiniteInstance>> {
+        replacement: RawProducerInstance,
+    ) -> Result<(), BindingInputRejection<RawProducerInstance>> {
         let index = self
             .instances
             .iter()
@@ -188,6 +214,9 @@ impl RawFiniteServient {
             instance: Rc::new(replacement),
             current: true,
         };
+        if let Some(actions) = &mut self.actions {
+            actions.revoke(expected);
+        }
         Ok(())
     }
 
@@ -408,7 +437,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     pub fn try_new(
         binding: B,
         configuration: B::Configuration,
-        servient: &RawFiniteServient,
+        servient: &RawProducerServient,
         limits: RawFiniteLimits,
         validation: FiniteOutputValidation,
         deadline: Deadline,
@@ -617,7 +646,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     .content_coding
                     .as_ref()
                     .is_none_or(|coding| coding.capacity() <= self.limits.output_media_capacity)
-        }) && raw_finite_output_backing(output)
+        }) && interaction_output_backing(output)
             .is_some_and(|bytes| bytes <= self.limits.output_retained_bytes)
     }
 

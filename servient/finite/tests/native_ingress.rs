@@ -44,18 +44,18 @@ fn limits() -> RawFiniteLimits {
         output_retained_bytes: 256,
     }
 }
-fn registry_limits() -> RawFiniteRegistryLimits {
-    RawFiniteRegistryLimits {
+fn registry_limits() -> RawProducerRegistryLimits {
+    RawProducerRegistryLimits {
         instances: 2,
         behaviors_per_instance: 1,
         target_name_bytes: 64,
     }
 }
 fn servient(
-    instances: Vec<RawFiniteInstance>,
-    limits: RawFiniteRegistryLimits,
-) -> RawFiniteServient {
-    RawFiniteServient::try_new(instances, limits).unwrap_or_else(|e| panic!("{:?}", e.error()))
+    instances: Vec<RawProducerInstance>,
+    limits: RawProducerRegistryLimits,
+) -> RawProducerServient {
+    RawProducerServient::try_new(instances, limits).unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn authority(slot: u32) -> ProducerInstanceAuthority {
     ProducerInstanceAuthority::try_new(ThingSlotId::new(SlotIndex::new(slot), Generation::INITIAL))
@@ -101,8 +101,8 @@ fn instance(
     operation: Operation,
     calls: Arc<AtomicUsize>,
     value: &'static [u8],
-) -> RawFiniteInstance {
-    RawFiniteInstance::new(
+) -> RawProducerInstance {
+    RawProducerInstance::new(
         authority,
         vec![RawFiniteBehavior::new(
             AffordanceTarget::Property("value".into()),
@@ -250,7 +250,7 @@ impl FiniteIngressBinding for TcpBinding {
     }
 }
 fn step<B: FiniteIngressBinding>(
-    servient: &mut RawFiniteServient,
+    servient: &mut RawProducerServient,
     rt: &mut RawFiniteRuntime<B>,
 ) -> Poll<RawFiniteState> {
     servient
@@ -258,7 +258,7 @@ fn step<B: FiniteIngressBinding>(
         .unwrap()
 }
 fn exchange(
-    servient: &mut RawFiniteServient,
+    servient: &mut RawProducerServient,
     rt: &mut RawFiniteRuntime<TcpBinding>,
     addr: SocketAddr,
     message: u8,
@@ -801,7 +801,7 @@ fn failure_keeps_original_reply_and_first_cause_during_failed_close() {
 fn invalid_behavior_set_refuses_before_native_start_and_returns_owners() {
     let a = authority(8);
     let calls = Arc::new(AtomicUsize::new(0));
-    let invalid = RawFiniteInstance::new(
+    let invalid = RawProducerInstance::new(
         a,
         vec![
             RawFiniteBehavior::new(
@@ -819,7 +819,7 @@ fn invalid_behavior_set_refuses_before_native_start_and_returns_owners() {
             ),
         ],
     );
-    let rejected = RawFiniteServient::try_new(vec![invalid], registry_limits())
+    let rejected = RawProducerServient::try_new(vec![invalid], registry_limits())
         .err()
         .unwrap();
     assert!(matches!(rejected.error().error(), CoreError::Validation(_)));
@@ -860,7 +860,7 @@ fn actual_binding_configuration_and_finite_operation_are_checked_before_effects(
     assert!(address.lock().unwrap().is_none());
     let (binding, _) = refused.into_input();
     let authority = authority(11);
-    let invalid = RawFiniteInstance::new(
+    let invalid = RawProducerInstance::new(
         authority,
         vec![RawFiniteBehavior::new(
             AffordanceTarget::Action("run".into()),
@@ -868,7 +868,7 @@ fn actual_binding_configuration_and_finite_operation_are_checked_before_effects(
             Handler { calls, value: b"1" },
         )],
     );
-    let refused = RawFiniteServient::try_new(vec![invalid], registry_limits())
+    let refused = RawProducerServient::try_new(vec![invalid], registry_limits())
         .err()
         .unwrap();
     assert!(matches!(refused.error().error(), CoreError::Validation(_)));
@@ -1014,7 +1014,7 @@ fn fixed_exchange(
     outcome: CoreResult<InteractionOutput>,
     limits: RawFiniteLimits,
 ) -> (
-    RawFiniteServient,
+    RawProducerServient,
     RawFiniteRuntime<PendingBinding>,
     Arc<AtomicUsize>,
 ) {
@@ -1035,7 +1035,7 @@ fn fixed_exchange(
         fail_send: Arc::new(AtomicBool::new(false)),
         fail_close: Arc::new(AtomicBool::new(false)),
     };
-    let instance = RawFiniteInstance::new(
+    let instance = RawProducerInstance::new(
         a,
         vec![RawFiniteBehavior::new(
             AffordanceTarget::Property("value".into()),
@@ -1142,7 +1142,7 @@ fn retained_output_counts_arc_and_both_string_capacities_and_refuses_one_over() 
     coding.push_str("identity");
     let payload = Payload::new(b"1".as_slice(), media).with_content_coding(coding);
     let output = InteractionOutput::with_data(payload);
-    let bytes = clinkz_wot_core::finite::raw_finite_output_backing(&output).unwrap();
+    let bytes = clinkz_wot_core::interaction_output_backing(&output).unwrap();
     let mut exact = limits();
     exact.output_body_bytes = 1;
     exact.output_media_capacity = 16;
@@ -1212,7 +1212,7 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
                 )
             })
             .collect();
-        instances.push(RawFiniteInstance::new(a, behaviors));
+        instances.push(RawProducerInstance::new(a, behaviors));
     }
     let key = last.unwrap();
     let binding = PendingBinding {
@@ -1316,7 +1316,7 @@ fn equal_prefix_target_misses_pay_for_every_bounded_name_byte() {
     registry.instances = 1;
     registry.behaviors_per_instance = 16;
     registry.target_name_bytes = 64;
-    let mut servient = servient(vec![RawFiniteInstance::new(a, behaviors)], registry);
+    let mut servient = servient(vec![RawProducerInstance::new(a, behaviors)], registry);
     let mut rt = RawFiniteRuntime::try_new(
         binding,
         (),
@@ -1424,7 +1424,7 @@ fn target_name_limit_checks_both_registration_and_native_candidate() {
     // A fresh authority tests pre-effect registration refusal as well.
     let a = authority(142);
     registry.target_name_bytes = 4;
-    let rejected = RawFiniteServient::try_new(
+    let rejected = RawProducerServient::try_new(
         vec![instance(a, Operation::ReadProperty, calls.clone(), b"1")],
         registry,
     )

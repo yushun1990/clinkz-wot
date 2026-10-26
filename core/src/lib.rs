@@ -15,6 +15,8 @@ extern crate std;
 
 extern crate alloc;
 
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod action;
 #[cfg(target_has_atomic = "ptr")]
 pub mod artifact;
 #[cfg(target_has_atomic = "ptr")]
@@ -112,7 +114,7 @@ pub use identity::{
 pub use interaction::{
     AcceptHint, BindingResponseMetadata, InteractionInput, InteractionOptions, InteractionOutput,
     InteractionOutputMetadata, InteractionStatus, MediaType, ResponsePayloadRole,
-    ResponseSelection,
+    ResponseSelection, interaction_output_backing,
 };
 pub use operation::Operation;
 #[cfg(target_has_atomic = "ptr")]

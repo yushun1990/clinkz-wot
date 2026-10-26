@@ -8,6 +8,7 @@
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 use core::time::Duration;
+use core::{alloc::Layout, mem::size_of};
 
 use clinkz_wot_foundation::ResourceLimits;
 
@@ -486,4 +487,23 @@ impl InteractionOutput {
     ) {
         (self.data, self.status, self.metadata)
     }
+}
+
+/// Engine-retained output backing, independently of interaction lifetime:
+/// inline value, exact Arc slice allocation (including its two counters) and
+/// both String capacities. Binding-private ingress and application work are
+/// accounted at their own owners, not by this representation helper.
+pub fn interaction_output_backing(output: &InteractionOutput) -> Option<usize> {
+    let Some(payload) = output.data() else {
+        return Some(size_of::<InteractionOutput>());
+    };
+    let arc = Layout::new::<[usize; 2]>()
+        .extend(Layout::array::<u8>(payload.body.len()).ok()?)
+        .ok()?
+        .0
+        .pad_to_align();
+    size_of::<InteractionOutput>()
+        .checked_add(arc.size())?
+        .checked_add(payload.content_type.capacity())?
+        .checked_add(payload.content_coding.as_ref().map_or(0, |s| s.capacity()))
 }

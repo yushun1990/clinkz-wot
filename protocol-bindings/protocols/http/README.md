@@ -354,7 +354,7 @@ logical authority, compiler or TD. The old `HttpProducerInstallation` is not
 under this path. Both paths reuse the HTTP parser/socket/reply mechanics.
 
 Use `RawFiniteRuntime::try_new` with `FiniteOutputValidation::Required` to require
-the program's actual JSON/type validator. The associated `RawFiniteServient`
+the program's actual JSON/type validator. The associated `RawProducerServient`
 owns the sole logical behavior and can drive independently typed native owners.
 Pass caller-clock time to progress. Native request deadlines do not reset with
 polls; dispatch prepays the declared complete result traversal before the codec.

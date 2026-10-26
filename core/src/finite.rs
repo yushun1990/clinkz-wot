@@ -4,11 +4,7 @@
 //! can additionally require the actual provider's prepared output validator.
 
 use alloc::vec::Vec;
-use core::{
-    alloc::Layout,
-    mem::size_of,
-    task::{Context, Poll},
-};
+use core::task::{Context, Poll};
 
 use crate::Deadline;
 use crate::producer::ProducerInstanceKey;
@@ -117,24 +113,6 @@ pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutpu
         }
         _ => false,
     }
-}
-
-/// Actual Engine-retained handler output backing: inline value and the exact
-/// Arc slice allocation (including its two counters) plus both String capacities.
-/// No source document or Binding-private ingress allocation is included.
-pub fn raw_finite_output_backing(output: &InteractionOutput) -> Option<usize> {
-    let Some(payload) = output.data() else {
-        return Some(size_of::<InteractionOutput>());
-    };
-    let arc = Layout::new::<[usize; 2]>()
-        .extend(Layout::array::<u8>(payload.body.len()).ok()?)
-        .ok()?
-        .0
-        .pad_to_align();
-    size_of::<InteractionOutput>()
-        .checked_add(arc.size())?
-        .checked_add(payload.content_type.capacity())?
-        .checked_add(payload.content_coding.as_ref().map_or(0, |s| s.capacity()))
 }
 
 /// Binding-owned matching, I/O, correlation and physical retirement for finite
