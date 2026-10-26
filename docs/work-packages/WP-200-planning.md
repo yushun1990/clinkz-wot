@@ -41,3 +41,22 @@ provider; a numeric response policy is insufficient. The
 extension-only `supported_schema` predicate is removed. Complete final-TD
 participation/behavior/readiness qualification remains distinct from the existing
 single-Property `Covered` shape marker and `PreparedProducer` adapter.
+
+## Joined v6 preparation boundary
+
+The delivery priority in [PLAN.md](../../PLAN.md) is a complete Producer
+TD-to-runtime path, not a generalized Copy/atomic Property Read compiler. The
+selected mapping must capture the *actual* Binding/configuration and executable
+codec/schema/security services, carry independent owned facts after source TD
+destruction, and qualify every retained final Form/effective operation before
+Serving. Final endpoint facts discovered during closed native setup require
+revalidation; optional deferred pure materialization cannot defer detection of
+deterministic Unsupported. Explicitly reduced TDs need complete requalification.
+
+Relocate runtime output/reclaim ownership out of Planning-dependent Servient
+adapters when constructing the execution-only composition. Keep pure
+preparation and live instance/physical infrastructure ownership independent;
+consider checked definition reuse only with proved compatibility. The
+type-only HTTP schema path is valid evidence for exactly its supported subset,
+not general DataSchema acceptance. Test the first composed path rather than
+introduce a universal artifact/cache/program type or a preparatory gate.

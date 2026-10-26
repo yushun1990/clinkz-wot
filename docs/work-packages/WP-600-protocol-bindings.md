@@ -89,3 +89,22 @@ the successor final-description commit. No old API becomes successor authority.
 Neither successful HTTP I/O nor required output validation is qualified TD
 publication. Multi-route HTTP matching, HTTPS/security, constrained execution,
 aggregate capacity and release qualification retain their separate boundaries.
+
+## Priority: joined v6 Producer through actual HTTP I/O
+
+[PLAN.md](../../PLAN.md) prioritizes a complete cross-layer Producer path.
+The current direct shared finite HTTP facet supplies usable real-peer evidence;
+its local raw activation and prepared type check do **not** replace complete
+final-TD support assessment, closed native setup, endpoint/dependency
+revalidation, multi-participant publication or aggregate ownership. Keep the
+legacy single-route Producer path as scoped regression evidence while replacing
+wrong physical APIs, not by wrapping its old permit/facade.
+
+A supported deliberately narrow final TD may be used, but all its retained
+Forms and effective operations must be qualified before local publication.
+Exercise real Consumer-to-Producer traffic only after publication, together
+with prepublication refusal, unsupported alternatives, cancellation/replacement,
+validation, late responses and actual native/cleanup retirement. Keep code and
+tests as executable proof of the claimed slice, not a new mandatory HTTP-first
+architecture phase. HTTPS/authentication/authorization and other native
+operation families require their own supported mapping and security claims.

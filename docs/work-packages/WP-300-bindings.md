@@ -22,3 +22,23 @@ v6. Exact successor source scope/API/state/resource changes, removals, checks an
 independent review are determined from the current repository for each material
 slice, not from a saved next-action list. New interaction families and Bindings
 are outside this architecture migration.
+
+## Joined execution and protocol-independence evidence
+
+For the composed path prioritized in [PLAN.md](../../PLAN.md), a Binding's real
+native runtime supplies closed installation, actual captures/correlation,
+delivery and final-use retirement. The Servient retains the single current
+logical authority and behavior owner; native callbacks never select/call
+handlers. Prepublication native visibility is permitted only with bounded
+closed ingress policy. Each eventual candidate independently passes current
+logical acceptance, while reply opportunities and sharing topology remain
+Binding-native. One logical Thing implies no particular number of native
+resources or physical subscriptions.
+
+The existing direct HTTP finite participant can exercise the seam without
+making request/reply or one-listener-per-Thing universal. Later select
+contrasting native behavior to challenge sharing, multiple recipients, reply
+cardinality and cancellation. A real downstream Cargo-linked registration
+must be possible without Core protocol cases/whitelists. These are
+claim-scoped integration checks, not a required number of protocols, new
+universal matcher/session layer or separate generality-proof gate.
