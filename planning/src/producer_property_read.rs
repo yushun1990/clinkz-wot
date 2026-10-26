@@ -171,7 +171,7 @@ fn unsupported() -> CoreError {
         context().with_redacted_cause(620, "unsupported Producer draft coverage"),
     )
 }
-fn td_error(cause: ValidatedThingCause) -> CoreError {
+pub(crate) fn td_error(cause: ValidatedThingCause) -> CoreError {
     match cause {
         ValidatedThingCause::Cancelled { .. } => CoreError::Cancelled(context()),
         ValidatedThingCause::Limit(limit) => CoreError::LimitExceeded {

@@ -270,6 +270,7 @@ dependencies = [
  "clinkz-wot-foundation",
  "clinkz-wot-planning",
  "clinkz-wot-property-read-binding-fixture",
+ "clinkz-wot-servient-finite",
  "clinkz-wot-td",
  "serde_json",
 ]

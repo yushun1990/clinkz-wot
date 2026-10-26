@@ -75,7 +75,14 @@ The direct HTTP finite facet supplies its prepared JSON/type service without the
 older installation/permit ABI or a Binding-to-Servient dependency. Neither mode
 qualifies/publishes a TD or replaces the funded preparation-dependent Producer
 root. `activate_raw` remains local activation even when output checking is
-required; final coverage, aggregate resource admission and publication remain.
+required. The optional `servient::producer` facade now joins complete final
+qualification to source-free staged publication for its single-read subset.
+It captures the actual preparation provider at startup, stages/funds the final
+description and behavior before native setup, rechecks the closed native
+participant, then commits locally at the one logical owner. Detailed supported
+scope and resource/evidence limits belong to WP-200/WP-400/WP-600; the legacy
+installation path remains an independent restricted implementation. Runtime-only
+finite and HTTP normal dependency graphs retain their original direction.
 
 The same execution-only logical owner can register Action behavior without a
 finite runtime. Core's raw Action contracts and Servient's bounded invocation
