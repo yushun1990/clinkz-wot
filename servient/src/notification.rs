@@ -73,6 +73,10 @@ pub enum EventResponseState {
     Awaiting,
     Pending,
     Delivered,
+    /// An unused optional opportunity is being retired without a dataResponse.
+    Declining,
+    /// Native retirement completed; the cursor may advance without a send.
+    Declined,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NotificationLoss {
@@ -747,6 +751,34 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         Ok(())
     }
 
+    /// Decline the exposed front item's unused OPTIONAL response opportunity.
+    /// This is a paid local retirement intent, not an application response or
+    /// cursor advance. Progress retains the exact reply owner, data and capacity
+    /// through Pending/error; successful retirement leaves the subscription
+    /// Active and the item available for advance. Required or already submitted
+    /// responses cannot be skipped. Like advance, releasing this accepted owner
+    /// does not require permission to send a new reciprocal response.
+    pub fn decline_response(
+        &mut self,
+        cursor: &mut NotificationCursor,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        let i = self.index(cursor.identity())?;
+        let paired = self.paired();
+        let e = self.slots[i].entry.as_mut().unwrap();
+        e.check_live(paired)?;
+        let item = e.queue.front_mut().ok_or_else(invalid)?;
+        if e.request.responses != ResponseRequirement::None
+            || !item.exposed
+            || item.response_state != EventResponseState::Awaiting
+        {
+            return Err(unsupported());
+        }
+        debit(budget, WorkClass::QueueOperations, 1)?;
+        item.response_state = EventResponseState::Declining;
+        Ok(())
+    }
+
     /// At most one native/response poll or one retained item disposal per call.
     /// Callers select independent subscriptions; a stalled one cannot hold a
     /// registry lock or consume a sibling's progress lane. Zero work is passive
@@ -873,22 +905,34 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             return Ok(e.state);
         }
         if e.queue.front().is_some_and(|v| {
-            v.response_state == EventResponseState::Delivered && v.native.response.is_some()
+            matches!(
+                v.response_state,
+                EventResponseState::Delivered | EventResponseState::Declining
+            ) && v.native.response.is_some()
         }) {
             debit(budget, WorkClass::BindingPolls, 1)?;
             let item = e.queue.front_mut().unwrap();
             let result = item.native.response.as_mut().unwrap().poll_retire(cx);
             e.sync_stop();
             match result {
-                Poll::Ready(Ok(_)) => e
-                    .queue
-                    .front_mut()
-                    .unwrap()
-                    .native
-                    .response
-                    .take()
-                    .unwrap()
-                    .abort_local(),
+                Poll::Ready(Ok(delivery)) => {
+                    let item = e.queue.front_mut().unwrap();
+                    if item.response_state == EventResponseState::Declining {
+                        // Preserve the native outcome independently of the
+                        // decline intent; retirement must not invent a send.
+                        match delivery {
+                            EventResponseDelivery::Delivered => {
+                                e.responses_delivered = e.responses_delivered.saturating_add(1)
+                            }
+                            EventResponseDelivery::Unknown => {
+                                e.responses_uncertain = e.responses_uncertain.saturating_add(1)
+                            }
+                            EventResponseDelivery::NotAttempted => {}
+                        }
+                        item.response_state = EventResponseState::Declined;
+                    }
+                    item.native.response.take().unwrap().abort_local();
+                }
                 Poll::Ready(Err(error)) => {
                     e.cleanup_error(error.clone());
                     e.fence(error);

@@ -860,6 +860,7 @@ fn empty_event_data_is_supported_without_fabricating_a_property_value_or_respons
     let view = root.front(&mut cursor, &mut budget()).unwrap().unwrap();
     assert!(view.data.is_none());
     assert_eq!(view.response, EventResponseState::Unavailable);
+    assert!(root.decline_response(&mut cursor, &mut budget()).is_err());
     assert!(
         root.respond(&mut cursor, EventDataResponse(None), &mut budget())
             .is_err()
@@ -1684,4 +1685,278 @@ fn stop_intent_precedes_later_owner_revocation_and_pairing_errors_are_not_capaci
         settle(&mut root, &id).first_cause,
         Some(CoreError::Cancelled(_))
     ));
+}
+
+#[test]
+fn optional_event_response_can_be_declined_and_later_notifications_consumed_without_a_send() {
+    let bus = Bus::new();
+    let (mut root, policy, _) = root(&bus, limits());
+    let mut cursor = subscribe(&mut root, event(false), Program::event());
+    let id = cursor.identity().clone();
+    step(&mut root, &id);
+    let first = payload("first");
+    let weak = Arc::downgrade(&first.body);
+    Bus::publish(&bus, ("sensor", 1), Some(first));
+    step(&mut root, &id);
+    // An unexposed opportunity cannot be skipped through the receive cursor.
+    assert!(root.decline_response(&mut cursor, &mut budget()).is_err());
+    assert_eq!(data(&mut root, &mut cursor), b"first");
+    Bus::publish(&bus, ("sensor", 1), Some(payload("second")));
+    step(&mut root, &id);
+    let reserved = root.reserved_engine_bytes();
+    let bytes = root.status(&id).unwrap().queued_payload_bytes;
+    assert_eq!(root.status(&id).unwrap().queued_items, 2);
+    assert!(
+        root.decline_response(&mut cursor, &mut WorkBudget::new())
+            .is_err()
+    );
+    assert_eq!(
+        root.front(&mut cursor, &mut budget())
+            .unwrap()
+            .unwrap()
+            .response,
+        EventResponseState::Awaiting
+    );
+    assert_eq!(bus.borrow().reply_retire_polls, 0);
+    // Declining is release of accepted work, not permission to send a new
+    // application response. A denied Respond permission must not force a send.
+    policy.denied.set(bit(NotificationPermission::Respond));
+    root.decline_response(&mut cursor, &mut budget()).unwrap();
+    assert_eq!(
+        root.front(&mut cursor, &mut budget())
+            .unwrap()
+            .unwrap()
+            .response,
+        EventResponseState::Declining
+    );
+    assert!(root.advance(&mut cursor, &mut budget()).is_err());
+    assert!(
+        root.progress(
+            &id,
+            &mut Context::from_waker(Waker::noop()),
+            &mut WorkBudget::new()
+        )
+        .is_err()
+    );
+    assert_eq!(bus.borrow().reply_retire_polls, 0);
+    bus.borrow_mut().retire = Mode::Pending;
+    for _ in 0..3 {
+        assert_eq!(step(&mut root, &id), NotificationState::Active);
+    }
+    assert_eq!(data(&mut root, &mut cursor), b"first");
+    assert_eq!(root.reserved_engine_bytes(), reserved);
+    assert_eq!(root.status(&id).unwrap().queued_payload_bytes, bytes);
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 2);
+    assert_eq!(bus.borrow().reply_aborts, 0);
+    assert!(root.advance(&mut cursor, &mut budget()).is_err());
+    assert!(weak.upgrade().is_some());
+    bus.borrow_mut().retire = Mode::Ready;
+    assert_eq!(step(&mut root, &id), NotificationState::Active);
+    assert_eq!(
+        root.front(&mut cursor, &mut budget())
+            .unwrap()
+            .unwrap()
+            .response,
+        EventResponseState::Declined
+    );
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+    assert!(weak.upgrade().is_some()); // Cursor still owns the original data.
+    root.advance(&mut cursor, &mut budget()).unwrap();
+    assert!(weak.upgrade().is_none());
+    assert_eq!(data(&mut root, &mut cursor), b"second");
+    assert_eq!(
+        root.front(&mut cursor, &mut budget())
+            .unwrap()
+            .unwrap()
+            .sequence,
+        1
+    );
+    root.decline_response(&mut cursor, &mut budget()).unwrap();
+    step(&mut root, &id);
+    root.advance(&mut cursor, &mut budget()).unwrap();
+    assert!(root.front(&mut cursor, &mut budget()).unwrap().is_none());
+    assert_eq!(bus.borrow().reply_send_polls, 0);
+    assert!(bus.borrow().response_inputs.is_empty());
+    assert_eq!(bus.borrow().close_polls, 0);
+    root.stop(&cursor, None, &mut budget())
+        .unwrap_or_else(|_| panic!());
+    let report = settle(&mut root, &id);
+    assert_eq!(report.delivered_items, 2);
+    assert_eq!(report.responses_delivered, 0);
+    assert_eq!(report.responses_uncertain, 0);
+}
+
+#[test]
+fn optional_decline_retirement_failure_retains_exact_owner_payload_and_capacity_until_cleanup() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(
+        &bus,
+        RawNotificationLimits {
+            subscriptions: 1,
+            ..limits()
+        },
+    );
+    let baseline = root.reserved_engine_bytes();
+    let mut cursor = subscribe(&mut root, event(false), Program::event());
+    let id = cursor.identity().clone();
+    step(&mut root, &id);
+    let original = payload("retained optional response data");
+    let weak = Arc::downgrade(&original.body);
+    Bus::publish(&bus, ("sensor", 1), Some(original));
+    step(&mut root, &id);
+    assert_eq!(
+        data(&mut root, &mut cursor),
+        b"retained optional response data"
+    );
+    let reserved = root.reserved_engine_bytes();
+    let bytes = root.status(&id).unwrap().queued_payload_bytes;
+    root.decline_response(&mut cursor, &mut budget()).unwrap();
+    bus.borrow_mut().retire = Mode::Fail;
+    assert_eq!(step(&mut root, &id), NotificationState::Closing);
+    assert!(matches!(
+        root.status(&id).unwrap().first_cause,
+        Some(CoreError::Cleanup(_))
+    ));
+    assert!(root.status(&id).unwrap().cleanup_error.is_some());
+    assert_eq!(root.status(&id).unwrap().queued_payload_bytes, bytes);
+    assert_eq!(root.reserved_engine_bytes(), reserved);
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+    assert_eq!(bus.borrow().reply_aborts, 0);
+    assert!(weak.upgrade().is_some());
+    assert!(root.advance(&mut cursor, &mut budget()).is_err());
+    assert!(root.take_settlement(&id).is_err());
+    assert!(
+        root.subscribe(event(false), Program::event(), &mut budget())
+            .is_err()
+    );
+    bus.borrow_mut().retire = Mode::Pending;
+    step(&mut root, &id);
+    assert_eq!(root.reserved_engine_bytes(), reserved);
+    assert!(weak.upgrade().is_some());
+    bus.borrow_mut().retire = Mode::Ready;
+    bus.borrow_mut().close = Mode::Pending;
+    step(&mut root, &id); // Only native response retirement completed.
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 0);
+    assert!(weak.upgrade().is_some());
+    step(&mut root, &id); // Original data is now disposed.
+    assert!(weak.upgrade().is_none());
+    step(&mut root, &id); // Native participation is still pending.
+    assert_eq!(root.reserved_engine_bytes(), reserved);
+    assert!(root.take_settlement(&id).is_err());
+    bus.borrow_mut().close = Mode::Ready;
+    let report = settle(&mut root, &id);
+    assert_eq!(report.responses_delivered, 0);
+    assert_eq!(report.responses_uncertain, 0);
+    assert!(report.cleanup_error.is_some());
+    assert_eq!(bus.borrow().reply_send_polls, 0);
+    assert_eq!(bus.borrow().reply_aborts, 1);
+    assert!(bus.borrow().physical.is_empty());
+    assert_eq!(root.reserved_engine_bytes(), baseline);
+}
+
+#[test]
+fn required_or_already_submitted_event_responses_cannot_be_declined() {
+    for required in [false, true] {
+        let bus = Bus::new();
+        let (mut root, _, _) = root(&bus, limits());
+        let mut cursor = subscribe(&mut root, event(required), Program::event());
+        let id = cursor.identity().clone();
+        step(&mut root, &id);
+        Bus::publish(&bus, ("sensor", 1), Some(payload("event")));
+        step(&mut root, &id);
+        data(&mut root, &mut cursor);
+        if required {
+            assert!(root.decline_response(&mut cursor, &mut budget()).is_err());
+            assert_eq!(
+                root.front(&mut cursor, &mut budget())
+                    .unwrap()
+                    .unwrap()
+                    .response,
+                EventResponseState::Awaiting
+            );
+            for _ in 0..3 {
+                step(&mut root, &id);
+            }
+            assert_eq!(bus.borrow().reply_retire_polls, 0);
+            assert!(root.advance(&mut cursor, &mut budget()).is_err());
+        }
+        root.respond(
+            &mut cursor,
+            EventDataResponse(Some(payload("admitted original response"))),
+            &mut budget(),
+        )
+        .unwrap_or_else(|_| panic!());
+        assert!(root.decline_response(&mut cursor, &mut budget()).is_err());
+        bus.borrow_mut().send = Mode::Pending;
+        step(&mut root, &id);
+        assert!(root.decline_response(&mut cursor, &mut budget()).is_err());
+        assert_eq!(
+            root.front(&mut cursor, &mut budget())
+                .unwrap()
+                .unwrap()
+                .response,
+            EventResponseState::Pending
+        );
+        assert_eq!(bus.borrow().reply_retire_polls, 0);
+        assert!(root.advance(&mut cursor, &mut budget()).is_err());
+        bus.borrow_mut().send = Mode::Ready;
+        step(&mut root, &id);
+        step(&mut root, &id);
+        assert!(root.decline_response(&mut cursor, &mut budget()).is_err());
+        root.advance(&mut cursor, &mut budget()).unwrap();
+        assert!(
+            bus.borrow()
+                .response_inputs
+                .iter()
+                .all(|p| p == b"admitted original response")
+        );
+        root.stop(&cursor, None, &mut budget())
+            .unwrap_or_else(|_| panic!());
+        assert_eq!(settle(&mut root, &id).responses_delivered, 1);
+    }
+}
+
+#[test]
+fn cursor_loss_during_optional_decline_leaves_prepaid_owner_cleanup_usable() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(&bus, limits());
+    let mut cursor = subscribe(&mut root, event(false), Program::event());
+    step(&mut root, cursor.identity());
+    let original = payload("abandoned decline");
+    let weak = Arc::downgrade(&original.body);
+    Bus::publish(&bus, ("sensor", 1), Some(original));
+    step(&mut root, cursor.identity());
+    data(&mut root, &mut cursor);
+    root.decline_response(&mut cursor, &mut budget()).unwrap();
+    bus.borrow_mut().retire = Mode::Pending;
+    step(&mut root, cursor.identity());
+    let reserved = root.reserved_engine_bytes();
+    drop(cursor);
+    for _ in 0..4 {
+        assert!(
+            root.step_cleanup(&mut Context::from_waker(Waker::noop()), &mut budget())
+                .unwrap()
+                .is_none()
+        );
+    }
+    assert_eq!(root.reserved_engine_bytes(), reserved);
+    assert!(weak.upgrade().is_some());
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+    bus.borrow_mut().retire = Mode::Ready;
+    let mut reports = vec![];
+    for _ in 0..8 {
+        if let Some(report) = root
+            .step_cleanup(&mut Context::from_waker(Waker::noop()), &mut budget())
+            .unwrap()
+        {
+            reports.push(report);
+        }
+    }
+    assert_eq!(reports.len(), 1);
+    assert_eq!(root.retained_subscriptions(), 0);
+    assert_eq!(reports[0].responses_delivered, 0);
+    assert_eq!(reports[0].responses_uncertain, 0);
+    assert_eq!(bus.borrow().reply_send_polls, 0);
+    assert!(bus.borrow().physical.is_empty());
+    assert!(weak.upgrade().is_none());
 }

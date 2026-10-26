@@ -114,9 +114,14 @@ infrastructure. A non-cloneable cursor borrows retained raw data until explicit
 advance; cloneable stop intent grants no receive/response or shutdown authority.
 Event control inputs and reciprocal responses have distinct carriers. Required
 responses refuse absent native support; each actual response opportunity has a
-separate retained delivery/retirement owner. No initial Property value, replay,
-wire backpressure, TD qualification or schema validation is inferred. Collection
-operations and constrained execution remain unimplemented by this Host slice.
+separate retained delivery/retirement owner. An exposed unused optional
+opportunity can be explicitly declined without sending a dataResponse or stopping
+the subscription. Pending/error retains its
+reply owner, payload and capacity; only successful native retirement permits
+cursor advance. Required and already submitted responses cannot be declined.
+No initial Property value, replay, wire backpressure, TD qualification or schema
+validation is inferred. Collection operations and constrained execution remain
+unimplemented by this Host slice.
 Fixed loss status and one prepaid overflow/late handoff preserve cleanup when
 the item/byte queue is full. Explicit owner cleanup works after every cursor is
 lost; terminal acknowledgement releases the logical reservation. Native physical

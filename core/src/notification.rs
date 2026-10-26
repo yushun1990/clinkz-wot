@@ -135,7 +135,9 @@ pub enum EventResponseDelivery {
 /// retains both correlation and local backing. Ready(Ok) from poll_deliver
 /// certifies delivery of the ORIGINAL response at the declared native edge.
 /// poll_retire must dispose all local obligations before Ready(Ok); it reports
-/// remote delivery separately. abort_local consumes the entire owner in finite,
+/// remote delivery separately. It may retire an unused optional opportunity
+/// without any poll_deliver call; retirement must not synthesize an application
+/// dataResponse. abort_local consumes the entire owner in finite,
 /// nonblocking local work, with no escaped tasks/callbacks or remote claim.
 /// Trusted linked code must fund its own indirect backing and disposal envelope.
 pub trait NotificationResponse {
