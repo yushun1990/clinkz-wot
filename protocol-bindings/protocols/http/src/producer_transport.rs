@@ -1,8 +1,10 @@
 //! One retained native HTTP request/reply owner. Hyper frames the exchange;
-//! its service only marks a candidate and waits for a Core-sealed response.
+//! its service only marks a candidate and waits for the retained Engine result.
 use super::producer::HttpProducerProgram;
 use bytes::Bytes;
-use clinkz_wot_core::producer::*;
+use clinkz_wot_core::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass,
+};
 use http_body_util::Full;
 use hyper::{Request, Response, body::Incoming, server::conn::http1, service::Service};
 use std::{
@@ -22,6 +24,7 @@ struct Bridge {
     reply: Option<Reply>,
     read_left: usize,
     write_left: usize,
+    wrote: bool,
 }
 struct ReplyFuture(Arc<Mutex<Bridge>>);
 impl Future for ReplyFuture {
@@ -175,7 +178,9 @@ impl hyper::rt::Write for Ingress {
         }
         match self.socket.write(&bytes[..n]) {
             Ok(n) => {
-                self.bridge.lock().unwrap().write_left -= n;
+                let mut bridge = self.bridge.lock().unwrap();
+                bridge.write_left -= n;
+                bridge.wrote |= n != 0;
                 Poll::Ready(Ok(n))
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -248,20 +253,36 @@ impl NativeConnection {
             false
         }
     }
-    pub(super) fn reply(&mut self, response: &ProducerResponse) {
+    pub(super) fn write_started(&self) -> bool {
+        self.bridge.lock().unwrap().wrote
+    }
+    pub(super) fn reply(
+        &mut self,
+        result: Result<&InteractionOutput, &CoreError>,
+    ) -> CoreResult<()> {
         if self.replied {
-            return;
+            return Ok(());
         }
-        self.replied = true;
         // IgnoredAny checks syntax without building a JSON tree, but skips
         // UTF-8 checks in strings and object keys. Validate the bytes first.
-        let body = response.result().ok().and_then(|o| o.data()).filter(|p| {
+        let body = result.ok().and_then(|o| o.data()).filter(|p| {
             p.content_type == "application/json"
                 && p.content_coding.is_none()
                 && p.body.len() <= 4096
                 && std::str::from_utf8(&p.body)
                     .is_ok_and(|json| serde_json::from_str::<serde::de::IgnoredAny>(json).is_ok())
         });
+        if result.is_ok() && body.is_none() {
+            // Raw results still need an executable native encoding. Refuse
+            // before queuing/writing anything; a replacement 500 would not be
+            // delivery of this retained successful value. Its original owner
+            // stays with Servient through native retirement and settlement.
+            return Err(CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+                    .with_redacted_cause(628, "HTTP Producer result cannot be encoded"),
+            ));
+        }
+        self.replied = true;
         let (status, bytes) = match body {
             Some(p) => (200, Bytes::copy_from_slice(&p.body)),
             None => (500, Bytes::from_static(b"null")),
@@ -274,5 +295,6 @@ impl NativeConnection {
                 .body(Full::new(bytes))
                 .expect("fixed HTTP response"),
         );
+        Ok(())
     }
 }
