@@ -53,9 +53,11 @@ qualified; silently dropping unsupported Forms/operations is not a solution.
 
 An integrated Producer claim requires the following observable composition:
 
-1. TD resolves common and extension meaning; Planning selects **actual**
-   registered Binding/configuration, codec, schema, security and behavior
-   services, producing owned source-independent execution facts.
+1. TD interprets common WoT semantics, resolves extension vocabulary IRIs and
+   preserves extension metadata; concrete Bindings interpret protocol
+   vocabularies. Planning coordinates selection of **actual** registered
+   Binding/configuration, codec, schema, security and behavior services and
+   pure construction of owned source-independent execution facts.
 2. Native preparation and closed installation retain real physical owners,
    acquire no application-dispatch authority, and allow endpoint-derived facts
    to be checked against the final TD.
