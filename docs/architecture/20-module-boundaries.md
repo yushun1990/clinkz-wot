@@ -84,6 +84,9 @@ The owner pins the original instance, invocation reference, principal and
 selected invoke/query/cancel mapping associations; controls recheck current
 authority and policy. Cancel/abandon do not assert completion, and a late result
 remains charged until application retirement and settlement acknowledgement.
+Lost handles cannot orphan work: the owner has a separate paid retirement path;
+root Drop uses only the application's qualified finite local abort for unfinished
+work, not a poll or a claim of completed native delivery.
 Native correlations, replies, cancellation and infrastructure cleanup remain at
 the Binding. This Host-only manual kernel has no native Action adapter, TD
 qualification/publication, schema validation or automatic progress. It does not

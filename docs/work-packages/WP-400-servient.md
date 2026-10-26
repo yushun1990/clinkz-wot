@@ -112,16 +112,28 @@ nor a native request correlation is execution permission.
 Revocation/replacement fence new acceptance and request cooperative cancellation
 of accepted work without redirecting it. Cancel and local abandon allow late
 completion; explicit close retains failed/pending cleanup and reports local
-cancellation without claiming remote terminal state. Capacity, original behavior
-and result remain charged until settlement acknowledgement. Host linked callbacks
+cancellation without claiming remote terminal state. While the owner lives,
+capacity, original behavior and result remain charged until settlement
+acknowledgement. Host linked callbacks
 and local disposal are trusted/cooperative; the owner is manually progressed and
 does not supply a scheduler or guarantee a deadline for non-returning code.
 Native initiating/control exchanges, opaque wire continuation, delivery and
 physical resources remain Binding-owned and are not implemented by this kernel.
 
+An Action handle is not the cleanup owner. The Servient can fence new Action
+acceptance and drive bounded owner-level retirement after **every** handle is
+lost; it returns each complete original settlement to the caller, keeps pending
+and failed close obligations charged, and steps independent cleanup fairly.
+Dropping the Host root without completing that explicit drain invokes each live
+application continuation's required finite, nonblocking local abort, rather than
+silently treating `poll_close` as completed. Linked applications unable to
+guarantee that local abort are not qualified for this raw Host kernel. Drop does
+not report a completed drain or settle any Binding-owned native obligation.
+
 Deterministic `action_lifecycle` tests exercise distinct control routes, fresh
 policy, old-instance late completion, saturation, invalid results, cancellation,
-failed cleanup and Action-only admission. This slice is explicitly raw: no TD
+handle-loss retirement, failed cleanup, root local abort and Action-only admission.
+This slice is explicitly raw: no TD
 publication/`synchronous` interpretation, schema-validated Action payloads,
 native Action Binding, notification conversation, constrained execution or
 aggregate Host resource qualification is claimed.

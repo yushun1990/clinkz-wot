@@ -83,6 +83,7 @@ struct Trace {
     polls: usize,
     cancels: usize,
     closes: usize,
+    local_aborts: usize,
     dropped: usize,
     operations: Vec<Operation>,
     instances: Vec<ProducerInstanceKey>,
@@ -175,6 +176,11 @@ impl RawActionWork for Work {
             )))),
             _ => Poll::Ready(Ok(())),
         }
+    }
+    fn abort_local(self: Box<Self>) {
+        self.trace.borrow_mut().local_aborts += 1;
+        // No waiting, native I/O or escaped work. Destroy the owned local
+        // continuation after recording its finite abort.
     }
 }
 impl Drop for Work {
@@ -788,4 +794,205 @@ fn stalled_invocation_and_foreign_same_number_handle_do_not_block_or_alias_sibli
             .unwrap()
             .is_none()
     );
+}
+
+#[test]
+fn lost_handles_do_not_orphan_owner_level_retirement_or_terminal_results() {
+    let a = key(20);
+    let b = key(21);
+    let a_key = a.key();
+    let b_key = b.key();
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut owner = RawProducerServient::try_new(
+        vec![
+            instance(
+                a,
+                Rc::clone(&trace),
+                Rc::new(Cell::new(false)),
+                false,
+                false,
+                false,
+                Rc::new(Cell::new(0)),
+            ),
+            instance(
+                b,
+                Rc::clone(&trace),
+                Rc::new(Cell::new(true)),
+                true,
+                false,
+                false,
+                Rc::new(Cell::new(0)),
+            ),
+        ],
+        RawProducerRegistryLimits {
+            instances: 2,
+            behaviors_per_instance: 4,
+            target_name_bytes: 16,
+        },
+    )
+    .ok()
+    .unwrap();
+    owner
+        .enable_raw_actions(RawActionLimits {
+            invocations: 2,
+            application_work_bytes: 128,
+            ..limits()
+        })
+        .unwrap();
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let input = caller("alice");
+    let mut budget = work_budget();
+    let a_handle = owner
+        .invoke_raw_action(request(a_key, &target, &input), &mut budget)
+        .unwrap();
+    let a_ref = a_handle.reference();
+    let b_handle = owner
+        .invoke_raw_action(request(b_key, &target, &input), &mut budget)
+        .unwrap();
+    let b_ref = b_handle.reference();
+    drop(a_handle);
+    drop(b_handle);
+
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut budget),
+        Err(CoreError::Lifecycle(_))
+    ));
+    owner.begin_raw_action_retirement().unwrap();
+    assert_eq!(trace.borrow().closes, 0);
+    assert!(matches!(
+        owner.invoke_raw_action(request(a_key, &target, &input), &mut budget),
+        Err(CoreError::StaleHandle(_))
+    ));
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut WorkBudget::new()),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(trace.borrow().closes, 0);
+    let Poll::Ready(Some(completed)) = owner.step_raw_action_retirement(&mut budget).unwrap()
+    else {
+        panic!("terminal result must be returned before pending cleanup");
+    };
+    assert_eq!(completed.reference, b_ref);
+    assert_eq!(completed.instance, b_key);
+    assert_eq!(
+        completed.result.unwrap().data().unwrap().body.as_ref(),
+        b"now"
+    );
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut budget),
+        Ok(Poll::Pending)
+    ));
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut budget),
+        Err(CoreError::Cleanup(_))
+    ));
+    let Poll::Ready(Some(cleaned)) = owner.step_raw_action_retirement(&mut budget).unwrap() else {
+        panic!("failed cleanup still owns the original invocation");
+    };
+    assert_eq!(cleaned.reference, a_ref);
+    assert_eq!(cleaned.instance, a_key);
+    assert!(matches!(cleaned.result, Err(CoreError::Cancelled(_))));
+    assert!(matches!(cleaned.close_failure, Some(CoreError::Cleanup(_))));
+    assert!(cleaned.abandoned);
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut WorkBudget::new()),
+        Ok(Poll::Ready(None))
+    ));
+    drop(owner);
+    assert_eq!(trace.borrow().local_aborts, 0);
+    assert_eq!(trace.borrow().dropped, 1);
+}
+
+#[test]
+fn stalled_cleanup_does_not_block_sibling_and_root_drop_locally_aborts_the_rest() {
+    let a = key(22);
+    let b = key(23);
+    let a_key = a.key();
+    let b_key = b.key();
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut owner = RawProducerServient::try_new(
+        vec![
+            instance(
+                a,
+                Rc::clone(&trace),
+                Rc::new(Cell::new(false)),
+                false,
+                false,
+                false,
+                Rc::new(Cell::new(0)),
+            ),
+            instance(
+                b,
+                Rc::clone(&trace),
+                Rc::new(Cell::new(false)),
+                false,
+                false,
+                false,
+                Rc::new(Cell::new(2)),
+            ),
+        ],
+        RawProducerRegistryLimits {
+            instances: 2,
+            behaviors_per_instance: 4,
+            target_name_bytes: 16,
+        },
+    )
+    .ok()
+    .unwrap();
+    owner
+        .enable_raw_actions(RawActionLimits {
+            invocations: 2,
+            application_work_bytes: 128,
+            ..limits()
+        })
+        .unwrap();
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let mut budget = work_budget();
+    for instance_key in [a_key, b_key] {
+        let handle = owner
+            .invoke_raw_action(
+                request(instance_key, &target, &caller("alice")),
+                &mut budget,
+            )
+            .unwrap();
+        drop(handle);
+    }
+    owner.begin_raw_action_retirement().unwrap();
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut budget),
+        Ok(Poll::Pending)
+    ));
+    let Poll::Ready(Some(sibling)) = owner.step_raw_action_retirement(&mut budget).unwrap() else {
+        panic!("stalled cleanup must not block a sibling");
+    };
+    assert!(matches!(sibling.result, Err(CoreError::Cancelled(_))));
+    assert_eq!(trace.borrow().dropped, 1);
+    drop(owner);
+    assert_eq!(trace.borrow().local_aborts, 1);
+    assert_eq!(trace.borrow().dropped, 2);
+}
+
+#[test]
+fn root_drop_without_retirement_uses_qualified_finite_local_abort() {
+    let authority = key(24);
+    let key = authority.key();
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut owner = owner(instance(
+        authority,
+        Rc::clone(&trace),
+        Rc::new(Cell::new(false)),
+        false,
+        false,
+        false,
+        Rc::new(Cell::new(0)),
+    ));
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let handle = owner
+        .invoke_raw_action(request(key, &target, &caller("alice")), &mut work_budget())
+        .unwrap();
+    drop(handle);
+    drop(owner);
+    assert_eq!(trace.borrow().local_aborts, 1);
+    assert_eq!(trace.borrow().closes, 0);
+    assert_eq!(trace.borrow().dropped, 1);
 }

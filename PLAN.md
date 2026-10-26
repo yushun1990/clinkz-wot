@@ -18,6 +18,12 @@ eager per-instance plan-set and route-scoped native model. Exact authorities and
 prior-evidence dispositions belong to the registered documents and work-package
 index, not this roadmap.
 
+Engine interaction semantics, ownership and lifecycle drive implementation.
+Concrete Bindings validate and refine those boundaries; no one protocol sets the
+Core abstractions or default development sequence. Action, notification and
+publication slices have no fixed internal ordering: select useful work by
+semantic need and executable evidence without creating a new gate.
+
 1. Integrate one coherent successor authority before dependent general SPI work.
 2. Stabilize semantic/data/security and native capability boundaries, then replace
    narrow physical APIs where needed without compatibility facades. Preserve

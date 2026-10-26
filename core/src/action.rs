@@ -38,12 +38,20 @@ pub struct RawActionRequest<'a> {
 
 /// Cooperative, application-owned continuation. `request_cancel` is a request,
 /// not proof of termination. `poll_close` retires a stalled continuation when
-/// the owner explicitly closes it. Pending retains the complete owner. Drop is
-/// finite local disposal, not an enforced deadline or remote rollback.
+/// the owner explicitly closes it. Pending and errors retain the complete owner.
+/// `abort_local` is the mandatory Host-root fallback if the owner itself drops:
+/// it consumes the complete application continuation and MUST perform finite,
+/// fixed-bound, nonblocking local abort (including its destructor), without
+/// waiting for network/user progress or escaping live work. It MUST
+/// NOT claim remote cancellation or delivery. Implementations unable to provide
+/// that guarantee cannot be admitted by this raw Host kernel; a longer-lived
+/// acknowledged cleanup owner would be needed instead. Linked code and its
+/// destructor remain trusted contracts, not preemptible callbacks.
 pub trait RawActionWork {
     fn poll(&mut self) -> Poll<CoreResult<InteractionOutput>>;
     fn request_cancel(&mut self) -> CoreResult<()>;
     fn poll_close(&mut self) -> Poll<CoreResult<()>>;
+    fn abort_local(self: Box<Self>);
 }
 
 pub enum RawActionStart {

@@ -125,6 +125,7 @@ pub struct RawActionSettlement {
     pub abandoned: bool,
     pub close_failure: Option<CoreError>,
 }
+
 impl core::fmt::Debug for RawActionSettlement {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RawActionSettlement")
@@ -168,6 +169,21 @@ pub(super) struct ActionStore {
     limits: RawActionLimits,
     used_work_bytes: usize,
     next: u32,
+    retiring: bool,
+    retire_cursor: usize,
+}
+
+impl Drop for ActionStore {
+    fn drop(&mut self) {
+        // No poll/await or remote callback in Drop. Every accepted live work
+        // owner must supply a qualified finite local abort. Explicit retirement
+        // is required to report results/cleanup errors before dropping the root.
+        for entry in &mut self.entries {
+            if let Some(work) = entry.work.take() {
+                work.abort_local();
+            }
+        }
+    }
 }
 
 fn denied() -> CoreError {
@@ -296,6 +312,8 @@ impl RawProducerServient {
             limits,
             used_work_bytes: 0,
             next: 0,
+            retiring: false,
+            retire_cursor: 0,
         });
         Ok(())
     }
@@ -312,6 +330,9 @@ impl RawProducerServient {
             .actions
             .as_mut()
             .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        if store.retiring {
+            return Err(CoreError::StaleHandle(context()));
+        }
         let limits = store.limits;
         let AffordanceTarget::Action(name) = request.target else {
             return Err(CoreError::UnsupportedOperation(context()));
@@ -431,6 +452,9 @@ impl RawProducerServient {
             .actions
             .as_ref()
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        if store.retiring {
+            return Err(CoreError::StaleHandle(context()));
+        }
         if !check_input(input, store.limits) {
             return Err(CoreError::Backpressure(context()));
         }
@@ -587,7 +611,91 @@ impl RawProducerServient {
         let i = store
             .index(handle)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
-        let entry = &mut store.entries[i];
+        store.progress(i, budget, store.limits.invocations as u64)
+    }
+
+    /// Explicit acknowledgement. Until this point the old instance, result,
+    /// application reservation and local cleanup obligation stay charged.
+    pub fn take_raw_action_settlement(
+        &mut self,
+        handle: &RawActionHandle,
+    ) -> CoreResult<Option<RawActionSettlement>> {
+        let store = self
+            .actions
+            .as_mut()
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        let i = store
+            .index(handle)
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        Ok(store.take_at(i))
+    }
+
+    /// Fence new Action acceptance and public query/cancel without revoking
+    /// unrelated finite Property work. The Servient itself remains the owner
+    /// of EVERY admitted Action, including ones with no surviving handle.
+    /// No application callback, native call, allocation or result destruction
+    /// occurs at this local linearization point.
+    pub fn begin_raw_action_retirement(&mut self) -> CoreResult<()> {
+        let store = self
+            .actions
+            .as_mut()
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        store.retiring = true;
+        for entry in &mut store.entries {
+            entry.abandoned = true;
+            entry.closing = true;
+            if entry.work.is_some() {
+                entry.cancel_requested = true;
+            }
+        }
+        Ok(())
+    }
+
+    /// Funded owner-level cleanup/settlement when all handles have been lost.
+    /// A Pending or error keeps the complete work owner and its reservation;
+    /// the next call may progress another obligation. `Settled` transfers the
+    /// complete terminal result to the caller, not a native delivery claim.
+    /// Ready(Some) owns that settlement; Ready(None) means the local Action
+    /// store is drained, not that a remote Action or Binding resource is gone.
+    pub fn step_raw_action_retirement(
+        &mut self,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Poll<Option<RawActionSettlement>>> {
+        let store = self
+            .actions
+            .as_mut()
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        if !store.retiring {
+            return Err(CoreError::Lifecycle(context()));
+        }
+        if store.entries.is_empty() {
+            return Ok(Poll::Ready(None));
+        }
+        // One prepaid bounded scan, including a possible Vec removal. Terminal
+        // work is handed off first; otherwise round-robin avoids a stalled
+        // application cleanup starving independent invocations.
+        let scan = store.limits.invocations as u64 * 2 + 1;
+        if budget.consume(WorkClass::CleanupItems, scan).is_err() {
+            return Ok(Poll::Pending);
+        }
+        let i = store
+            .entries
+            .iter()
+            .position(|entry| entry.work.is_none())
+            .unwrap_or(store.retire_cursor % store.entries.len());
+        store.retire_cursor = (i + 1) % store.entries.len();
+        match store.progress(i, budget, 0)? {
+            Poll::Pending => Ok(Poll::Pending),
+            Poll::Ready(()) => Ok(Poll::Ready(Some(
+                store.take_at(i).expect("completed Action still owned"),
+            ))),
+        }
+    }
+}
+
+impl ActionStore {
+    fn progress(&mut self, i: usize, budget: &mut WorkBudget, lookup: u64) -> CoreResult<Poll<()>> {
+        let entry = &mut self.entries[i];
         if entry.work.is_none() {
             return Ok(Poll::Ready(()));
         }
@@ -597,15 +705,13 @@ impl RawProducerServient {
         } else {
             WorkClass::HandlerSteps
         };
-        let lookup = u64::try_from(store.limits.invocations).unwrap_or(u64::MAX);
         let units = if closing {
             lookup.saturating_add(1)
         } else {
             u64::try_from(
-                store
-                    .limits
+                self.limits
                     .output_body_bytes
-                    .saturating_add(store.limits.output_media_capacity.saturating_mul(2)),
+                    .saturating_add(self.limits.output_media_capacity.saturating_mul(2)),
             )
             .unwrap_or(u64::MAX)
             .saturating_add(lookup)
@@ -644,7 +750,7 @@ impl RawProducerServient {
                 Poll::Pending => return Ok(Poll::Pending),
                 Poll::Ready(result) => {
                     entry.result = Some(
-                        result.and_then(|value| check_output(&value, store.limits).map(|()| value)),
+                        result.and_then(|value| check_output(&value, self.limits).map(|()| value)),
                     );
                     entry.work = None;
                 }
@@ -653,25 +759,13 @@ impl RawProducerServient {
         Ok(Poll::Ready(()))
     }
 
-    /// Explicit acknowledgement. Until this point the old instance, result,
-    /// application reservation and local cleanup obligation stay charged.
-    pub fn take_raw_action_settlement(
-        &mut self,
-        handle: &RawActionHandle,
-    ) -> CoreResult<Option<RawActionSettlement>> {
-        let store = self
-            .actions
-            .as_mut()
-            .ok_or_else(|| CoreError::StaleHandle(context()))?;
-        let i = store
-            .index(handle)
-            .ok_or_else(|| CoreError::StaleHandle(context()))?;
-        if store.entries[i].work.is_some() {
-            return Ok(None);
+    fn take_at(&mut self, i: usize) -> Option<RawActionSettlement> {
+        if self.entries[i].work.is_some() {
+            return None;
         }
-        let entry = store.entries.remove(i);
-        store.used_work_bytes -= entry.work_bytes;
-        Ok(Some(RawActionSettlement {
+        let entry = self.entries.remove(i);
+        self.used_work_bytes -= entry.work_bytes;
+        Some(RawActionSettlement {
             reference: entry.id,
             instance: entry.instance.key(),
             target: AffordanceTarget::Action(Arc::clone(
@@ -687,6 +781,6 @@ impl RawProducerServient {
             cancel_failure: entry.cancel_failure,
             abandoned: entry.abandoned,
             close_failure: entry.close_failure,
-        }))
+        })
     }
 }
