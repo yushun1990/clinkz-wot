@@ -140,3 +140,34 @@ This slice is explicitly raw: no TD
 publication/`synchronous` interpretation, schema-validated Action payloads,
 native Action Binding, notification conversation, constrained execution or
 aggregate Host resource qualification is claimed.
+
+## Raw Consumer notification conversation
+
+`core::notification` separates subscription input, raw Property/Event data,
+Event dataResponse opportunity, cancellation input and native delivery/retirement.
+`servient::notification::RawNotificationServient` owns one Consumer incarnation
+and a captured Binding/configuration, with independently admitted logical slots,
+non-cloneable cursors, fresh application permission, stop intent and retained
+cleanup. The existing finite and compiled Property Read adapters are not reused:
+neither owns the required long-lived control/response lifetime. Per-logical native
+participation may be a lease on shared infrastructure; no Engine distribution,
+native session manager or new protocol integration is introduced.
+
+`RawNotificationLimits` bounds root/queue storage, retained payload backing,
+controls, target names and per-owner Engine reservations. Each slot prepays one
+extra handoff and one response payload; native participation/reply indirect
+backing stays at the Binding owner. These conservative logical allowances are
+not additive shared physical RAM or aggregate Host-account qualification. Linear
+work budgets precede callbacks/queue progress. Stop fences delivery before mapped
+cancellation, including unsupported/denied cancellation. Pending/error retains
+original data, reply jobs, first cause and capacity; bounded owner cleanup can
+return complete terminal reports after all cursors are lost. Host-root Drop uses
+the native owners' required finite local abort and reports no completed drain.
+
+`cargo test --locked -p clinkz-wot-servient --test notification` exercises actual
+Core/Servient lifecycle code through deterministic external in-memory Binding
+capabilities: compatible sharing, independent stop/cursors, tenant separation,
+late/stale delivery, item/byte/native loss, reciprocal responses and cardinality,
+policy/configuration changes, saturation, failed cleanup and root disposal.
+This is raw Host lifecycle evidence, not real protocol I/O, TD/schema/security
+qualification, fleet scalability, hardware evidence or package/gate completion.
