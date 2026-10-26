@@ -111,12 +111,15 @@ nor a native request correlation is execution permission.
 
 Revocation/replacement fence new acceptance and request cooperative cancellation
 of accepted work without redirecting it. Cancel and local abandon allow late
-completion; explicit close retains failed/pending cleanup and reports local
-cancellation without claiming remote terminal state. While the owner lives,
-capacity, original behavior and result remain charged until settlement
-acknowledgement. Host linked callbacks
-and local disposal are trusted/cooperative; the owner is manually progressed and
-does not supply a scheduler or guarantee a deadline for non-returning code.
+completion; a funded explicit close or owner retirement first delivers any queued
+application cancellation once (retaining its error) before polling local close.
+Explicit close retains failed/pending cleanup and reports local cancellation
+without claiming remote terminal state. Input traversal and handle-based step
+lookup are prepaid before scanning admitted fields/invocations. While the owner
+lives, capacity, original behavior and result remain charged until settlement
+acknowledgement. Host linked callbacks and local disposal are trusted/cooperative;
+the owner is manually progressed and does not supply a scheduler or guarantee a
+deadline for non-returning code.
 Native initiating/control exchanges, opaque wire continuation, delivery and
 physical resources remain Binding-owned and are not implemented by this kernel.
 

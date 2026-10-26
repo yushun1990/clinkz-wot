@@ -1,8 +1,8 @@
 //! Deterministic source-free Engine semantics; no native transport or TD
 //! publication is inferred from these in-memory Binding observations.
 use clinkz_wot_core::{
-    ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
-    ErrorContext, ErrorPhase, HandlerContext, InteractionInput, InteractionOutput,
+    AcceptHint, ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError,
+    CoreResult, ErrorContext, ErrorPhase, HandlerContext, InteractionInput, InteractionOutput,
     InteractionStatus, Operation, Payload, Principal, PrincipalId, RetryClass, ThingSlotId,
     action::{
         ActionMappingKey, ActionRoute, RawActionHandler, RawActionRequest, RawActionStart,
@@ -682,7 +682,9 @@ fn action_only_instance_needs_no_finite_runtime_and_unpublished_controls_are_uns
         ),
         Err(CoreError::UnsupportedOperation(_))
     ));
+    owner.close_raw_action(&handle).unwrap();
     let result = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
+    assert!(!result.cancel_requested); // Completed before close: no request was queued.
     assert_eq!(result.binding, route(8, 800).binding);
     assert_eq!(result.result.unwrap().data().unwrap().body.as_ref(), b"now");
     assert_eq!(trace.borrow().operations, vec![Operation::InvokeAction]);
@@ -995,4 +997,269 @@ fn root_drop_without_retirement_uses_qualified_finite_local_abort() {
     assert_eq!(trace.borrow().local_aborts, 1);
     assert_eq!(trace.borrow().closes, 0);
     assert_eq!(trace.borrow().dropped, 1);
+}
+
+#[test]
+fn cancel_then_close_sends_application_request_before_immediate_local_retirement() {
+    let authority = key(25);
+    let instance_key = authority.key();
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    // A compliant work owner may complete local close on its first call.
+    let mut owner = owner(instance(
+        authority,
+        Rc::clone(&trace),
+        Rc::new(Cell::new(false)),
+        false,
+        false,
+        false,
+        Rc::new(Cell::new(2)),
+    ));
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let input = caller("alice");
+    let mut budget = work_budget();
+    let handle = owner
+        .invoke_raw_action(request(instance_key, &target, &input), &mut budget)
+        .unwrap();
+    assert!(
+        owner
+            .cancel_raw_action(
+                &handle,
+                route(3, 33).binding,
+                ActionMappingKey(33),
+                &input,
+                &mut budget
+            )
+            .unwrap()
+    );
+    owner.close_raw_action(&handle).unwrap();
+    assert_eq!(trace.borrow().cancels, 0);
+    let mut one_credit = WorkBudget::new().with_remaining(WorkClass::CleanupItems, 2);
+    assert!(matches!(
+        owner.step_raw_action(&handle, &mut one_credit),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(one_credit.remaining(WorkClass::CleanupItems), 1);
+    assert_eq!(trace.borrow().cancels, 0);
+    // The lookup is prepaid, and the two callbacks share a funded close step.
+    let mut cleanup_only = WorkBudget::new().with_remaining(WorkClass::CleanupItems, 3);
+    assert!(matches!(
+        owner.step_raw_action(&handle, &mut cleanup_only),
+        Ok(Poll::Ready(()))
+    ));
+    assert_eq!(cleanup_only.remaining(WorkClass::CleanupItems), 0);
+    let settled = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
+    assert!(settled.cancel_requested);
+    assert!(settled.cancel_failure.is_none());
+    assert!(matches!(settled.result, Err(CoreError::Cancelled(_))));
+    let trace = trace.borrow();
+    assert_eq!(
+        (trace.cancels, trace.closes, trace.polls, trace.dropped),
+        (1, 1, 0, 1)
+    );
+}
+
+#[test]
+fn revoke_then_owner_retirement_keeps_cancel_and_close_failures_until_settlement() {
+    let authority = key(26);
+    let instance_key = authority.key();
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut owner = owner(instance(
+        authority,
+        Rc::clone(&trace),
+        Rc::new(Cell::new(false)),
+        false,
+        true,
+        false,
+        Rc::new(Cell::new(0)),
+    ));
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let mut budget = work_budget();
+    let handle = owner
+        .invoke_raw_action(
+            request(instance_key, &target, &caller("alice")),
+            &mut budget,
+        )
+        .unwrap();
+    assert!(owner.revoke(instance_key));
+    drop(handle);
+    owner.begin_raw_action_retirement().unwrap();
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut WorkBudget::new()),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(trace.borrow().cancels, 0);
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut budget),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(trace.borrow().cancels, 1);
+    assert!(matches!(
+        owner.step_raw_action_retirement(&mut budget),
+        Err(CoreError::Cleanup(_))
+    ));
+    assert_eq!(trace.borrow().dropped, 0);
+    let Poll::Ready(Some(settled)) = owner.step_raw_action_retirement(&mut budget).unwrap() else {
+        panic!("failed close must retain the original result until local cleanup completes");
+    };
+    assert!(settled.cancel_requested);
+    assert!(matches!(
+        settled.cancel_failure,
+        Some(CoreError::Cancelled(_))
+    ));
+    assert!(matches!(settled.close_failure, Some(CoreError::Cleanup(_))));
+    assert!(matches!(settled.result, Err(CoreError::Cancelled(_))));
+    let trace = trace.borrow();
+    assert_eq!(
+        (trace.cancels, trace.closes, trace.polls, trace.dropped),
+        (1, 3, 0, 1)
+    );
+}
+
+#[test]
+fn input_and_last_slot_lookup_are_prepaid_before_bounded_traversal() {
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    // Fill the allowed 128 fields across all three traversed input collections.
+    let mut dense = caller("alice");
+    dense.uri_variables = (0..48)
+        .map(|i| (format!("var{i}"), "value".into()))
+        .collect();
+    dense.principal.as_mut().unwrap().scopes = (0..48).map(|_| "allow".into()).collect();
+    dense.accept = Some(
+        AcceptHint::single("application/json")
+            .with_alternatives((0..30).map(|_| "application/json".into())),
+    );
+    dense.data = Some(Payload::new(vec![1; 16], "application/octet-stream"));
+    let mut invalid = dense.clone();
+    invalid
+        .accept
+        .as_mut()
+        .unwrap()
+        .alternatives
+        .as_mut()
+        .unwrap()[29] = "x".repeat(8192).into();
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    // A funded invalid input spends the declared envelope before rejecting its
+    // last oversized alternative; a zero-credit path cannot do this traversal.
+    let authority = key(28);
+    let instance_key = authority.key();
+    let mut owner = RawProducerServient::try_new(
+        vec![instance(
+            authority,
+            Rc::clone(&trace),
+            Rc::new(Cell::new(false)),
+            false,
+            false,
+            false,
+            Rc::new(Cell::new(0)),
+        )],
+        RawProducerRegistryLimits {
+            instances: 2,
+            behaviors_per_instance: 4,
+            target_name_bytes: 16,
+        },
+    )
+    .ok()
+    .unwrap();
+    owner
+        .enable_raw_actions(RawActionLimits {
+            invocations: 128,
+            application_work_bytes: 128 * 64,
+            input_fields: 128,
+            input_bytes: 4096,
+            ..limits()
+        })
+        .unwrap();
+    let mut no_credit = WorkBudget::new();
+    for _ in 0..8 {
+        assert!(matches!(
+            owner.invoke_raw_action(request(instance_key, &target, &invalid), &mut no_credit),
+            Err(CoreError::Backpressure(_))
+        ));
+    }
+    assert_eq!(trace.borrow().started, 0);
+    let mut budget = work_budget();
+    let before = budget.remaining(WorkClass::HandlerSteps);
+    assert!(matches!(
+        owner.invoke_raw_action(request(instance_key, &target, &invalid), &mut budget),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert!(budget.remaining(WorkClass::HandlerSteps) < before);
+    assert_eq!(trace.borrow().started, 0);
+
+    let mut handles = Vec::new();
+    for _ in 0..128 {
+        handles.push(
+            owner
+                .invoke_raw_action(request(instance_key, &target, &dense), &mut budget)
+                .unwrap(),
+        );
+    }
+    let last = handles.last().unwrap();
+    for _ in 0..8 {
+        assert!(matches!(
+            owner.query_raw_action(
+                last,
+                route(2, 22).binding,
+                ActionMappingKey(22),
+                &invalid,
+                &mut no_credit
+            ),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert!(matches!(
+            owner.cancel_raw_action(
+                last,
+                route(3, 33).binding,
+                ActionMappingKey(33),
+                &invalid,
+                &mut no_credit
+            ),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert!(matches!(
+            owner.step_raw_action(last, &mut no_credit),
+            Ok(Poll::Pending)
+        ));
+    }
+    assert_eq!(trace.borrow().operations.len(), 128);
+    assert_eq!(trace.borrow().polls, 0);
+    let before = budget.remaining(WorkClass::HandlerSteps);
+    assert!(matches!(
+        owner.query_raw_action(
+            last,
+            route(2, 22).binding,
+            ActionMappingKey(22),
+            &invalid,
+            &mut budget
+        ),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert!(budget.remaining(WorkClass::HandlerSteps) < before);
+    let mut lookup_only = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 128);
+    assert!(matches!(
+        owner.step_raw_action(last, &mut lookup_only),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(lookup_only.remaining(WorkClass::HandlerSteps), 0);
+    assert_eq!(trace.borrow().polls, 0);
+    let mut underfunded = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 127);
+    assert!(matches!(
+        owner.step_raw_action(last, &mut underfunded),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(underfunded.remaining(WorkClass::HandlerSteps), 127);
+    assert!(matches!(
+        owner.step_raw_action(last, &mut budget),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(trace.borrow().polls, 1);
+    owner.close_raw_action(last).unwrap();
+    let mut cleanup_only = WorkBudget::new().with_remaining(WorkClass::CleanupItems, 130);
+    assert!(matches!(
+        owner.step_raw_action(last, &mut cleanup_only),
+        Ok(Poll::Pending)
+    ));
+    assert_eq!(cleanup_only.remaining(WorkClass::CleanupItems), 0);
+    assert_eq!(trace.borrow().cancels, 1);
+    assert_eq!(trace.borrow().polls, 1);
 }

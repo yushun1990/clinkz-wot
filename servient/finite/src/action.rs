@@ -21,7 +21,7 @@ use clinkz_wot_core::{
     security::PrincipalId,
 };
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
-use core::{mem::size_of, task::Poll};
+use core::{cell::Cell, mem::size_of, task::Poll};
 
 const MAX_INVOCATIONS: usize = 128;
 
@@ -79,7 +79,7 @@ pub struct RawActionLimits {
 #[derive(Clone)]
 pub struct RawActionHandle {
     id: ActionInvocationRef,
-    token: Weak<()>,
+    token: Weak<Cell<bool>>,
 }
 impl RawActionHandle {
     pub fn reference(&self) -> ActionInvocationRef {
@@ -144,7 +144,9 @@ impl core::fmt::Debug for RawActionSettlement {
 
 struct Invocation {
     id: ActionInvocationRef,
-    token: Rc<()>,
+    // Shared with handles so step can select and debit the cleanup/handler
+    // lookup lane before scanning entries. Only the owner can set this flag.
+    token: Rc<Cell<bool>>,
     // Strong retention of the exact behavior/instance, never a successor lookup.
     instance: Rc<super::RawProducerInstance>,
     behavior: usize,
@@ -159,7 +161,6 @@ struct Invocation {
     cancel_sent: bool,
     cancel_failure: Option<CoreError>,
     abandoned: bool,
-    closing: bool,
     close_failure: Option<CoreError>,
     work_bytes: usize,
 }
@@ -337,11 +338,11 @@ impl RawProducerServient {
         let AffordanceTarget::Action(name) = request.target else {
             return Err(CoreError::UnsupportedOperation(context()));
         };
-        if name.len() > self.limits.target_name_bytes || !check_input(request.input, limits) {
+        if name.len() > self.limits.target_name_bytes {
             return Err(CoreError::Backpressure(context()));
         }
-        // Pay the whole bounded lookup, input traversal and maximum output
-        // traversal before entering linked application code.
+        // Pay the whole bounded input traversal, lookup and maximum output
+        // traversal before checking variable input or entering linked code.
         let units = self
             .limits
             .instances
@@ -359,6 +360,9 @@ impl RawProducerServient {
         budget
             .consume(WorkClass::HandlerSteps, units)
             .map_err(|_| CoreError::Backpressure(context()))?;
+        if !check_input(request.input, limits) {
+            return Err(CoreError::Backpressure(context()));
+        }
         let instance = self
             .instances
             .iter()
@@ -398,7 +402,7 @@ impl RawProducerServient {
             Operation::InvokeAction,
             request.invoke.binding,
         )?;
-        let token = Rc::new(());
+        let token = Rc::new(Cell::new(false));
         let id = ActionInvocationRef::new(SlotIndex::new(next), Generation::INITIAL);
         let handle = RawActionHandle {
             id,
@@ -423,7 +427,6 @@ impl RawProducerServient {
             cancel_sent: false,
             cancel_failure: None,
             abandoned: false,
-            closing: false,
             close_failure: None,
             work_bytes: behavior.work_bytes,
         });
@@ -455,9 +458,6 @@ impl RawProducerServient {
         if store.retiring {
             return Err(CoreError::StaleHandle(context()));
         }
-        if !check_input(input, store.limits) {
-            return Err(CoreError::Backpressure(context()));
-        }
         let units = self
             .limits
             .instances
@@ -476,6 +476,9 @@ impl RawProducerServient {
                 u64::try_from(units).map_err(|_| CoreError::Backpressure(context()))?,
             )
             .map_err(|_| CoreError::Backpressure(context()))?;
+        if !check_input(input, store.limits) {
+            return Err(CoreError::Backpressure(context()));
+        }
         let i = store
             .index(handle)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
@@ -591,9 +594,12 @@ impl RawProducerServient {
         let i = store
             .index(handle)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
-        store.entries[i].abandoned = true;
-        store.entries[i].cancel_requested = true;
-        store.entries[i].closing = true;
+        let entry = &mut store.entries[i];
+        entry.abandoned = true;
+        if entry.work.is_some() {
+            entry.cancel_requested = true;
+        }
+        entry.token.set(true);
         Ok(())
     }
 
@@ -608,10 +614,29 @@ impl RawProducerServient {
             .actions
             .as_mut()
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        // A live token provides an O(1) owner-set closing hint. Pay for the
+        // full bounded scan on that lane before looking through entries, even
+        // when the work has already completed or this is a foreign handle.
+        let closing = handle
+            .token
+            .upgrade()
+            .ok_or_else(|| CoreError::StaleHandle(context()))?
+            .get();
+        let class = if closing {
+            WorkClass::CleanupItems
+        } else {
+            WorkClass::HandlerSteps
+        };
+        if budget
+            .consume(class, store.limits.invocations as u64)
+            .is_err()
+        {
+            return Ok(Poll::Pending);
+        }
         let i = store
             .index(handle)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
-        store.progress(i, budget, store.limits.invocations as u64)
+        store.progress(i, budget)
     }
 
     /// Explicit acknowledgement. Until this point the old instance, result,
@@ -643,7 +668,7 @@ impl RawProducerServient {
         store.retiring = true;
         for entry in &mut store.entries {
             entry.abandoned = true;
-            entry.closing = true;
+            entry.token.set(true);
             if entry.work.is_some() {
                 entry.cancel_requested = true;
             }
@@ -684,7 +709,7 @@ impl RawProducerServient {
             .position(|entry| entry.work.is_none())
             .unwrap_or(store.retire_cursor % store.entries.len());
         store.retire_cursor = (i + 1) % store.entries.len();
-        match store.progress(i, budget, 0)? {
+        match store.progress(i, budget)? {
             Poll::Pending => Ok(Poll::Pending),
             Poll::Ready(()) => Ok(Poll::Ready(Some(
                 store.take_at(i).expect("completed Action still owned"),
@@ -694,19 +719,19 @@ impl RawProducerServient {
 }
 
 impl ActionStore {
-    fn progress(&mut self, i: usize, budget: &mut WorkBudget, lookup: u64) -> CoreResult<Poll<()>> {
+    fn progress(&mut self, i: usize, budget: &mut WorkBudget) -> CoreResult<Poll<()>> {
         let entry = &mut self.entries[i];
         if entry.work.is_none() {
             return Ok(Poll::Ready(()));
         }
-        let closing = entry.closing;
+        let closing = entry.token.get();
         let class = if closing {
             WorkClass::CleanupItems
         } else {
             WorkClass::HandlerSteps
         };
         let units = if closing {
-            lookup.saturating_add(1)
+            1 + u64::from(entry.cancel_requested && !entry.cancel_sent)
         } else {
             u64::try_from(
                 self.limits
@@ -714,13 +739,17 @@ impl ActionStore {
                     .saturating_add(self.limits.output_media_capacity.saturating_mul(2)),
             )
             .unwrap_or(u64::MAX)
-            .saturating_add(lookup)
             .saturating_add(1)
+            .saturating_add(u64::from(entry.cancel_requested && !entry.cancel_sent))
         };
         if budget.consume(class, units).is_err() {
             return Ok(Poll::Pending);
         }
         let work = entry.work.as_mut().expect("checked work");
+        if entry.cancel_requested && !entry.cancel_sent {
+            entry.cancel_sent = true;
+            entry.cancel_failure = work.request_cancel().err();
+        }
         if closing {
             match work.poll_close() {
                 Poll::Pending => return Ok(Poll::Pending),
@@ -742,10 +771,6 @@ impl ActionStore {
                 }
             }
         } else {
-            if entry.cancel_requested && !entry.cancel_sent {
-                entry.cancel_sent = true;
-                entry.cancel_failure = work.request_cancel().err();
-            }
             match work.poll() {
                 Poll::Pending => return Ok(Poll::Pending),
                 Poll::Ready(result) => {
