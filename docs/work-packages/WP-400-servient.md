@@ -27,7 +27,7 @@ are outside this architecture migration.
 
 The execution-only Host slice in `servient/finite` separates the bounded logical
 registry from typed native runtimes. Registry count/name limits belong to
-`RawFiniteRegistryLimits`; per-runtime input/result opportunities belong to
+`RawProducerRegistryLimits`; per-runtime input/result opportunities belong to
 `RawFiniteLimits`. Revocation and complete same-slot replacement occur at the
 logical owner. Accepted work retains the original instance through native
 settlement and acknowledgement. Registry mutation/destruction has at most 32
@@ -94,3 +94,34 @@ result shape/backing bounds before the external codec service.
 This fixes a concrete prerequisite on the working HTTP path. It does not move
 that path into the shared finite registry or implement final-TD qualification/
 publication. Those contracts remain governed by SAFE-PUBLISH-001/PREP-COVER-001.
+
+## Raw Producer Action invocation kernel
+
+`RawProducerServient`/`RawProducerInstance` replace the finite-only registry
+names directly; the finite native runtime remains a finite-only facet. The same
+instance may have Property and Action behavior, or only Action behavior. Core
+defines raw Action behavior, independent application continuation, selected
+per-operation Binding mapping association and effect-uncertain result shape.
+The Servient reserves a bounded per-owner invocation slot and declared application
+work footprint before handler entry, retains original behavior/principal and
+monotonic invocation identity, and enforces input/output and paid lookup/step
+ceilings. Separate query/cancel routes may belong to other Bindings. Controls
+recheck current instance, route, principal and policy; neither a copied reference
+nor a native request correlation is execution permission.
+
+Revocation/replacement fence new acceptance and request cooperative cancellation
+of accepted work without redirecting it. Cancel and local abandon allow late
+completion; explicit close retains failed/pending cleanup and reports local
+cancellation without claiming remote terminal state. Capacity, original behavior
+and result remain charged until settlement acknowledgement. Host linked callbacks
+and local disposal are trusted/cooperative; the owner is manually progressed and
+does not supply a scheduler or guarantee a deadline for non-returning code.
+Native initiating/control exchanges, opaque wire continuation, delivery and
+physical resources remain Binding-owned and are not implemented by this kernel.
+
+Deterministic `action_lifecycle` tests exercise distinct control routes, fresh
+policy, old-instance late completion, saturation, invalid results, cancellation,
+failed cleanup and Action-only admission. This slice is explicitly raw: no TD
+publication/`synchronous` interpretation, schema-validated Action payloads,
+native Action Binding, notification conversation, constrained execution or
+aggregate Host resource qualification is claimed.

@@ -44,8 +44,8 @@ fn counted(
     initial: u8,
     dispatches: &Dispatches,
     dropped: &Rc<Cell<usize>>,
-) -> RawFiniteInstance {
-    RawFiniteInstance::new(
+) -> RawProducerInstance {
+    RawProducerInstance::new(
         authority,
         vec![RawFiniteBehavior::new(
             AffordanceTarget::Property("value".into()),
@@ -77,7 +77,7 @@ fn tcp(
     )
 }
 fn start<B: FiniteIngressBinding>(
-    servient: &mut RawFiniteServient,
+    servient: &mut RawProducerServient,
     runtime: &mut RawFiniteRuntime<B>,
 ) {
     assert_eq!(
@@ -203,7 +203,7 @@ fn client(addr: SocketAddr, byte: u8) -> UdpSocket {
     socket
 }
 fn udp_exchange(
-    servient: &mut RawFiniteServient,
+    servient: &mut RawProducerServient,
     runtime: &mut RawFiniteRuntime<DatagramBinding>,
     addr: SocketAddr,
     request: u8,
@@ -689,7 +689,7 @@ fn failed_replacement_returns_exact_owner_and_does_not_change_current_authority(
     let recovered = refusal.into_input();
     assert_eq!(recovered.key(), candidate_key);
     // Invalid same-slot behavior must also leave the current entry untouched.
-    let invalid = RawFiniteInstance::new(authority(204), vec![]);
+    let invalid = RawProducerInstance::new(authority(204), vec![]);
     assert!(servient.replace(old_key, invalid).is_err());
     let binding = datagram(old_key, old_key);
     let addr = binding.addr.clone();
