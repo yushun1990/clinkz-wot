@@ -136,6 +136,14 @@ pub trait FiniteIngressBinding {
     /// progress step; an unbounded native configuration needs a different
     /// immutable revision-bearing representation.
     fn configuration(&self) -> &Self::Configuration;
+    /// Additional Engine-owned backing for the captured configuration pair
+    /// and admitted input, excluding their inline Rust layouts. A managed Host
+    /// composition requires this actual bound before native setup. Native
+    /// socket/parser/SDK backing keeps its separate Binding policy. None makes
+    /// no managed-account claim; raw execution remains independently available.
+    fn engine_backing_bytes(&self) -> Option<usize> {
+        None
+    }
     /// Passive closed-participation recipient check. This is a native mapping
     /// claim, not logical permission; a shared Binding may prepare several
     /// independent Things. Raw-only Bindings gain no publication readiness.

@@ -72,6 +72,9 @@ pub struct RawProducerInstance {
     description: Option<Arc<str>>,
     behaviors: Vec<RawFiniteBehavior>,
     actions: Vec<RawActionBehavior>,
+    // Last to drop: original accepted work retains the actual shared capacity
+    // owner through behavior/native/result disposal and acknowledgement.
+    retained_owner: Option<Rc<dyn core::any::Any>>,
 }
 
 impl RawProducerInstance {
@@ -81,6 +84,7 @@ impl RawProducerInstance {
             description: None,
             behaviors,
             actions: Vec::new(),
+            retained_owner: None,
         }
     }
 
@@ -93,6 +97,32 @@ impl RawProducerInstance {
 
     pub fn key(&self) -> ProducerInstanceKey {
         self.authority.key()
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    pub fn behaviors_described_by(
+        &self,
+        advertised: impl Fn(clinkz_wot_core::thing::AffordanceSite<'_>, Operation) -> bool,
+    ) -> bool {
+        self.behaviors.iter().all(|b| match &b.target {
+            AffordanceTarget::Property(name) => advertised(
+                clinkz_wot_core::thing::AffordanceSite::Property(name),
+                b.operation,
+            ),
+            _ => false,
+        }) && self.actions.iter().all(|a| {
+            [
+                Operation::InvokeAction,
+                Operation::QueryAction,
+                Operation::CancelAction,
+            ]
+            .into_iter()
+            .filter(|op| a.supports(*op))
+            .all(|op| advertised(clinkz_wot_core::thing::AffordanceSite::Action(a.name()), op))
+        })
     }
 
     /// Staged actual behavior coverage, queried during pure TD selection.
@@ -131,6 +161,28 @@ impl RawProducerInstance {
         self.description = Some(description);
         self
     }
+
+    /// Controlled layouts and description/target backing. Application handler
+    /// indirect storage remains a trusted, separately supplied declaration.
+    pub fn backing_bytes(&self) -> Option<usize> {
+        let mut bytes = size_of::<Self>()
+            .checked_add(2 * size_of::<usize>())?
+            .checked_add(self.behaviors.capacity() * size_of::<RawFiniteBehavior>())?
+            .checked_add(self.actions.capacity() * size_of::<RawActionBehavior>())?;
+        if let Some(description) = &self.description {
+            bytes = bytes.checked_add(description.len() + 2 * size_of::<usize>())?;
+        }
+        for behavior in &self.behaviors {
+            bytes = bytes.checked_add(core::mem::size_of_val(behavior.handler.as_ref()))?;
+            if let AffordanceTarget::Property(name) = &behavior.target {
+                bytes = bytes.checked_add(name.len() + 2 * size_of::<usize>())?;
+            }
+        }
+        for behavior in &self.actions {
+            bytes = bytes.checked_add(behavior.backing_bytes())?;
+        }
+        Some(bytes)
+    }
 }
 
 /// Fixed registration/lookup envelope at the logical owner. Construction and
@@ -144,10 +196,12 @@ pub struct RawProducerRegistryLimits {
 }
 
 struct InstanceEntry {
-    instance: Rc<RawProducerInstance>,
     // This is the one logical permission cell, shared with its publication
     // guard so lost roots can revoke without a lock or native callback.
     current: Rc<Cell<bool>>,
+    participations: Vec<Weak<()>>,
+    // Dispose registry/view backing before its last actual reservation owner.
+    instance: Rc<RawProducerInstance>,
 }
 
 struct AcceptedBehavior {
@@ -188,6 +242,7 @@ impl RawProducerServient {
         entries.extend(instances.into_iter().map(|instance| InstanceEntry {
             instance: Rc::new(instance),
             current: Rc::new(Cell::new(true)),
+            participations: Vec::new(),
         }));
         Ok(Self {
             instances: entries,
@@ -262,6 +317,7 @@ impl RawProducerServient {
         self.instances[index.expect("checked entry")] = InstanceEntry {
             instance: Rc::new(replacement),
             current: Rc::new(Cell::new(true)),
+            participations: Vec::new(),
         };
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);
@@ -477,6 +533,8 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     // Starting may retain partial native effects even when poll_start returned
     // Pending. State alone cannot distinguish timing admission from live work.
     native_started: bool,
+    participation: ProducerParticipationId,
+    retained_owner: Option<Rc<dyn core::any::Any>>,
 }
 
 impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
@@ -517,6 +575,8 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             io_deadline: Deadline::NONE,
             last_now: None,
             native_started: false,
+            participation: ProducerParticipationId::new(),
+            retained_owner: None,
         })
     }
 

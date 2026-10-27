@@ -145,6 +145,12 @@ impl FiniteIngressBinding for HttpFiniteBinding {
     fn configuration(&self) -> &Self::Configuration {
         &self.configuration
     }
+    fn engine_backing_bytes(&self) -> Option<usize> {
+        // Both configuration snapshots and accepted candidates share this
+        // original property Arc. HTTP input has no body/principal/fields.
+        // The native issuer allocation is retained until replies are disposed.
+        Some(self.configuration.property.len() + 4 * core::mem::size_of::<usize>())
+    }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.configuration.instance == key
     }

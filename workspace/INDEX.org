@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0093-composed-producer-resource-retirement.md][0093 Composed Producer Resource and Retirement Ownership]]
+
 - [[file:0092-joined-producer-publication.md][0092 Joined Producer Publication over Native Finite Execution]]
 
 - [[file:0090-producer-qualification-and-data-validation.md][0090 Producer Qualification and Executable Data Validation]]

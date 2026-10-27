@@ -234,3 +234,60 @@ independent evidence. This is one Host/manual/synchronous read mapping and one
 logical slot/required participant. It establishes no multi-participant atomicity,
 async behavior, Action/Event/observation publication, HTTPS/authentication,
 hardware/profile qualification or package/gate/milestone completion.
+
+## Owned composed Host Producer
+
+`producer_composition::ComposedProducerExposure` takes a complete pure
+`ComposedProducerInput`: actual staged instance/behavior/description, prepared
+definitions, captured immutable startup registrations and independently typed
+native participation owners. Refusal returns those same input owners. This is
+an ownership handoff after caller construction/preparation, before the managed
+participants acquire native work; it does not reuse the single-Property facade.
+
+The fixed member vector admits 1..=32 participants and 1..=32 actual capability
+registrations in this manual Host slice. Final common/service/behavior coverage
+is checked before the handoff and again after closed setup. Each effective
+operation has exactly one native owner and every member covers the qualified
+exposure. The source-free publication stages two bounded original identity
+vectors before setup, moves one into the registry at commit, and rejects changed,
+duplicate, omitted or foreign retirement sets. No allocation, native progress or
+fallible preparation is added inside the local publication commit.
+
+The existing shared `HostResourceAccounts` bank reserves Engine retained bytes,
+cleanup byte/item allowances and a Thing slot before ownership handoff. Costs
+include controlled layouts, definition storage, captured reference vectors,
+declared handler indirect backing, actual participant configuration/input bounds
+and promised retained result opportunities. Qualification reserves the same
+bounded Host temporary allowance as the first joined adapter, including its
+overlapping Engine charge. It ends after final qualification and before commit,
+or on cancellation/definitive qualification failure/Drop. Pending pure work keeps
+scratch for retry. Lifetime and cleanup reservations are one shared physical
+reservation owner retained by the exposure, actual participants and original
+logical instance; shared retention references do not debit the bank again.
+
+Typed participant loans do not permit substitution to escape accounting: an
+extracted native owner retains its original funding, and a replacement object's
+different identity cannot publish or retire the original set. Explicit close
+requests bounded local participation retirement; concrete native progress stays
+caller-driven. Pending/error cleanup and unread finite or Action settlements
+retain original identity, first cause and capacity. Only acknowledged complete
+retirement removes a logical record. Actual exposure/native disposal releases
+their surviving layout charges. Lost exposure Drop revokes and performs each
+actual member's finite local disposal, reporting no completed drain. Funded
+`retire_revoked_publication` can reclaim a lost-guard registry record only after
+all original native owner identities have disappeared and original Actions have
+been acknowledged; a surviving shared native service may continue for siblings.
+
+The raw logical registry/Action-store baseline and immutable startup registration
+backing are explicitly caller-provisioned. Application continuation limits remain
+the raw Action owner's existing independent contract; native SDK/OS/shared
+infrastructure remains Binding/deployment-owned. The new reservations bound
+this handoff's controlled ownership, not total process RAM, allocator recovery,
+all legacy flat resource fields, production Action/Event mappings, constrained
+profiles, hardware or package/milestone/release acceptance.
+
+`cargo test --locked --offline -p clinkz-wot-binding-http --test composed_thing`
+includes real two-listener HTTP and shared test-only UDP Action cases for exact
+membership, aggregate-bank saturation, scratch release, replacement/late result,
+unread acknowledgement, lost exposure/root, extracted native owners, partial
+setup failure, pending/failed cleanup and final socket/account release.

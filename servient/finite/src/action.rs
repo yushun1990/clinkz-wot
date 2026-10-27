@@ -56,6 +56,9 @@ impl RawActionBehavior {
     pub fn name(&self) -> &str {
         &self.name
     }
+    pub(super) fn backing_bytes(&self) -> usize {
+        self.name.len() + 2 * size_of::<usize>() + core::mem::size_of_val(self.handler.as_ref())
+    }
     pub(crate) fn supports(&self, operation: Operation) -> bool {
         match operation {
             Operation::InvokeAction => true,
@@ -184,6 +187,12 @@ pub(super) struct ActionStore {
     next: u32,
     retiring: bool,
     retire_cursor: usize,
+}
+
+impl ActionStore {
+    pub(super) fn retains_instance(&self, key: ProducerInstanceKey) -> bool {
+        self.entries.iter().any(|entry| entry.instance.key() == key)
+    }
 }
 
 impl Drop for ActionStore {
