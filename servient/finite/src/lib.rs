@@ -95,6 +95,36 @@ impl RawProducerInstance {
         self.authority.key()
     }
 
+    /// Staged actual behavior coverage, queried during pure TD selection.
+    /// Controls require their own registered Action behavior; a mere described
+    /// query/cancel Form never creates a working control operation.
+    pub fn supports(&self, target: &AffordanceTarget, operation: Operation) -> bool {
+        match (target, operation) {
+            (
+                AffordanceTarget::Action(name),
+                Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction,
+            ) => self
+                .actions
+                .iter()
+                .any(|b| b.name() == name.as_ref() && b.supports(operation)),
+            _ => self
+                .behaviors
+                .iter()
+                .any(|b| b.target == *target && b.operation == operation),
+        }
+    }
+    pub fn supports_property(&self, name: &str, operation: Operation) -> bool {
+        self.behaviors.iter().any(|b| {
+            b.operation == operation
+                && matches!(&b.target, AffordanceTarget::Property(n) if n.as_ref() == name)
+        })
+    }
+    pub fn supports_action(&self, name: &str, operation: Operation) -> bool {
+        self.actions
+            .iter()
+            .any(|b| b.name() == name && b.supports(operation))
+    }
+
     /// Source-independent retained description. Raw callers remain responsible
     /// for qualification; the preparation facade supplies the checked value.
     pub fn with_description(mut self, description: Arc<str>) -> Self {

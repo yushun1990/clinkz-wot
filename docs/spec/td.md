@@ -48,6 +48,15 @@ input API; it does not establish bounded wire ingestion. ADR-0020's explicit
 strict-ingestion literal JSON/duplicate/null/Number and shared field-decoding
 contract remains a separate capability, not a prerequisite of every typed use.
 
+The bounded semantic loan now resolves a selected Form at Thing, Property,
+Action or Event scope, retaining original coordinates, effective operations,
+security, typed affordance schemas and local-context extension associations.
+Selected Combo references are reachable through the same shared security loan.
+Unknown security definitions survive TD decoding and round trips, including
+when unused; selecting one still requires an actual supporting security service.
+The older Consumer Property Read compiler remains a narrow NoSec/Property
+adapter, not a rule that limits shared TD admission or new capability compilers.
+
 Applicable standard: [TD 1.1 §§5–8](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/).
 Binding-specific defaults, such as HTTP methods and its multi-operation method
 restriction in §8.3.1, belong to Binding preparation. Shared meaning includes

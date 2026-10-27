@@ -272,6 +272,7 @@ impl Totals {
                 self.text(&v.flow);
                 &v._context
             }
+            SecurityScheme::Extension(v) => v,
         };
         if let Some(v) = &c.tags {
             self.strings(v);

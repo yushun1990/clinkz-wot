@@ -15,8 +15,25 @@ pub struct ResolvedProducerInput<'a> {
     document: &'a ResolvedSemanticDocument<'a>,
     target: &'a str,
     property: &'a str,
+    form: u32,
+    operation: Operation,
 }
 impl<'a> ResolvedProducerInput<'a> {
+    pub fn new(
+        document: &'a ResolvedSemanticDocument<'a>,
+        target: &'a str,
+        property: &'a str,
+        form: u32,
+        operation: Operation,
+    ) -> Self {
+        Self {
+            document,
+            target,
+            property,
+            form,
+            operation,
+        }
+    }
     pub fn document(&self) -> &'a ResolvedSemanticDocument<'a> {
         self.document
     }
@@ -27,10 +44,10 @@ impl<'a> ResolvedProducerInput<'a> {
         self.property
     }
     pub fn form_index(&self) -> u32 {
-        0
+        self.form
     }
     pub fn operation(&self) -> Operation {
-        Operation::ReadProperty
+        self.operation
     }
 }
 
@@ -140,11 +157,13 @@ impl<'td, 'handler> ProducerPropertyReadAdmission<'td, 'handler> {
                 .with_property_semantics(self.handler, 0, budget, |document, target, budget| {
                     let property = document.property().name;
                     lower(
-                        ResolvedProducerInput {
+                        ResolvedProducerInput::new(
                             document,
                             target,
                             property,
-                        },
+                            0,
+                            Operation::ReadProperty,
+                        ),
                         budget,
                     )
                 });

@@ -84,6 +84,23 @@ scope and resource/evidence limits belong to WP-200/WP-400/WP-600; the legacy
 installation path remains an independent restricted implementation. Runtime-only
 finite and HTTP normal dependency graphs retain their original direction.
 
+An additional whole-Thing Producer selector loans shared semantics for every
+Thing/Property/Action/Event Form and effective operation to actual linked
+preparation registrations. Its owned definitions are distinct from the logical
+registry and native participants. The preparation-dependent Servient handoff
+requalifies the complete final description against the selected definitions and
+checks each operation has exactly one ready native contributor; only then does
+the source-free owner commit one logical description, behavior set and permission
+cell. A participant can lease shared native infrastructure for multiple Things.
+HTTP Property Read plus a linked test-only real-UDP continuing Action exercises
+independent readiness, one commit, query/cancel, replacement and retirement;
+it is not a production UDP Binding or a generic Action transport.
+This manual composed path caps an individual prepared definition set but does
+not yet reserve aggregate live bytes across concurrent Things, stage a complete
+native-owner account, or independently track the original participant set for
+retirement. The caller must retain every participant and acknowledge its native
+cleanup; the test's shared UDP socket is not a fully funded Host implementation.
+
 The same execution-only logical owner can register Action behavior without a
 finite runtime. Core's raw Action contracts and Servient's bounded invocation
 store separate application continuation from the initiating Binding exchange.
@@ -95,8 +112,9 @@ Lost handles cannot orphan work: the owner has a separate paid retirement path;
 root Drop uses only the application's qualified finite local abort for unfinished
 work, not a poll or a claim of completed native delivery.
 Native correlations, replies, cancellation and infrastructure cleanup remain at
-the Binding. This Host-only manual kernel has no native Action adapter, TD
-qualification/publication, schema validation or automatic progress. It does not
+the Binding. The raw Host kernel itself has no native Action adapter or TD
+qualification; the composed handoff is separate. Production Action mapping,
+schema validation and automatic progress remain unimplemented. It does not
 model Property observation or Event notification as finite exchanges: their
 establishment, delivery, reciprocal responses and stop require separate logical
 conversation owners.
@@ -110,12 +128,13 @@ eligibility or shape for new capability families. Replacement must remove a wron
 abstraction, not preserve it through aliases or a compatibility facade.
 
 Anonymous TDs, empty affordance keys, extension security and no-atomic execution
-are target requirements; the current Consumer's id/key restriction, closed
-security enum and pointer-atomic runtime remain explicit gaps. TD vocabulary
+are target requirements; the current Consumer's id/key restriction and
+pointer-atomic runtime remain explicit gaps. Unknown security schemes are now
+preserved, but executable provider support is not implied. TD vocabulary
 availability on a no-atomic target proves tooling compilation only. Identity/shape
-result seals are not full DataSchema validation. No general runtime, shared
-native infrastructure, notification implementation or complete Action support
-is claimed here.
+result seals are not full DataSchema validation. No general runtime, production
+shared-native infrastructure, notification implementation or complete Action
+support is claimed here.
 
 The withdrawn event broker/subscription queues, old TD-at-call-time facade,
 Zenoh/pico implementations and admission prototypes remain in Git. Their deletion

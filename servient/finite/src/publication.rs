@@ -13,6 +13,7 @@ pub struct ProducerPublication {
     retired: Option<InstanceEntry>,
     key: ProducerInstanceKey,
     committed: bool,
+    cancelled: Cell<bool>,
 }
 
 impl ProducerPublication {
@@ -24,6 +25,51 @@ impl ProducerPublication {
     }
     pub fn revoke(&self) {
         self.current.set(false);
+        self.cancelled.set(true);
+    }
+    pub fn staged_description(&self) -> Option<&str> {
+        self.instance.as_ref()?.description.as_deref()
+    }
+    pub fn supports(&self, target: &AffordanceTarget, operation: Operation) -> bool {
+        self.instance
+            .as_ref()
+            .is_some_and(|i| i.supports(target, operation))
+    }
+    pub fn supports_property(&self, name: &str, operation: Operation) -> bool {
+        self.instance
+            .as_ref()
+            .is_some_and(|i| i.supports_property(name, operation))
+    }
+    pub fn supports_action(&self, name: &str, operation: Operation) -> bool {
+        self.instance
+            .as_ref()
+            .is_some_and(|i| i.supports_action(name, operation))
+    }
+    /// Every staged behavior must be described by at least one prepared Form.
+    /// Checking Forms against behavior alone would leave extra registered
+    /// handlers reachable through a native ingress without an advertised Form.
+    pub fn behaviors_described_by(
+        &self,
+        advertised: impl Fn(clinkz_wot_core::thing::AffordanceSite<'_>, Operation) -> bool,
+    ) -> bool {
+        self.instance.as_ref().is_some_and(|i| {
+            i.behaviors.iter().all(|b| match &b.target {
+                AffordanceTarget::Property(name) => advertised(
+                    clinkz_wot_core::thing::AffordanceSite::Property(name),
+                    b.operation,
+                ),
+                _ => false,
+            }) && i.actions.iter().all(|a| {
+                [
+                    Operation::InvokeAction,
+                    Operation::QueryAction,
+                    Operation::CancelAction,
+                ]
+                .into_iter()
+                .filter(|op| a.supports(*op))
+                .all(|op| advertised(clinkz_wot_core::thing::AffordanceSite::Action(a.name()), op))
+            })
+        })
     }
     /// Dispose a displaced registry reference outside publication's commit.
     /// Accepted work keeps its independent original-instance reference.
@@ -35,6 +81,61 @@ impl ProducerPublication {
 impl Drop for ProducerPublication {
     fn drop(&mut self) {
         self.revoke();
+    }
+}
+
+/// Closed participation in one logical publication. This is a readiness and
+/// local ingress-gate lease, NOT an Engine-wide native session/resource API.
+/// Bindings may implement it over a shared listener, broker or other native
+/// owner with many Things. Every participant must already have been qualified
+/// against the complete final TD; no fallible I/O or callback runs in `open`.
+pub trait ClosedProducerParticipation {
+    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool;
+    /// Exact native mapping/definition support. One participant may cover many
+    /// Forms and Things, but each selected operation has exactly one owner at
+    /// publication. This is not an Engine protocol matcher.
+    fn covers(
+        &self,
+        _key: ProducerInstanceKey,
+        _binding: (BindingId, BindingGeneration),
+        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        _form: u32,
+        _operation: Operation,
+        _definition: &dyn core::any::Any,
+    ) -> bool {
+        false
+    }
+    fn open(&mut self);
+    /// True only after this participation's native obligations and unread
+    /// settlements have retired. The physical infrastructure may remain shared.
+    fn retired(&self) -> bool;
+}
+
+impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B> {
+    fn ready_for(&self, owner: &RawProducerServient, _key: ProducerInstanceKey) -> bool {
+        self.issuer.as_ptr() == Rc::as_ptr(&owner.issuer)
+            && self.state == RawFiniteState::InstalledClosed
+            && self.pair_is_current()
+    }
+    fn covers(
+        &self,
+        key: ProducerInstanceKey,
+        binding: (BindingId, BindingGeneration),
+        site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        form: u32,
+        operation: Operation,
+        definition: &dyn core::any::Any,
+    ) -> bool {
+        binding == self.identity
+            && self
+                .binding
+                .covers_definition(key, site, form, operation, definition)
+    }
+    fn open(&mut self) {
+        self.state = RawFiniteState::Serving;
+    }
+    fn retired(&self) -> bool {
+        self.state == RawFiniteState::Closed && self.settlement.is_none()
     }
 }
 
@@ -68,6 +169,7 @@ impl RawProducerServient {
                 + size_of::<RawProducerInstance>()
                 + size_of::<RawFiniteBehavior>()
                 + size_of::<ProducerPublication>()
+                + size_of::<Cell<bool>>()
                 + size_of::<Cell<bool>>()
                 + size_of::<[usize; 8]>(),
         )
@@ -106,7 +208,7 @@ impl RawProducerServient {
         expected: Option<ProducerInstanceKey>,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
         if !Self::valid_instance(&instance, self.limits)
-            || !instance.actions.is_empty()
+            || (!instance.actions.is_empty() && self.actions.is_none())
             || instance.description.is_none()
             || self.publication_index(instance.key(), expected).is_err()
         {
@@ -121,6 +223,7 @@ impl RawProducerServient {
             retired: None,
             key,
             committed: false,
+            cancelled: Cell::new(false),
         })
     }
 
@@ -133,12 +236,26 @@ impl RawProducerServient {
         publication: &mut ProducerPublication,
         runtime: &mut RawFiniteRuntime<B>,
     ) -> CoreResult<()> {
+        self.publish_composed(publication, &mut [runtime])
+    }
+
+    /// All independently installed native participants must be ready at the
+    /// same boundary. Neither a Binding nor an individual Form owns a second
+    /// logical registry. The caller checks complete final support, collision
+    /// and endpoint facts before this non-fallible local commit.
+    pub fn publish_composed(
+        &mut self,
+        publication: &mut ProducerPublication,
+        participants: &mut [&mut dyn ClosedProducerParticipation],
+    ) -> CoreResult<()> {
         if publication.committed
+            || publication.cancelled.get()
             || publication.instance.is_none()
             || publication.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
-            || runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
-            || runtime.state != RawFiniteState::InstalledClosed
-            || !runtime.pair_is_current()
+            || participants.is_empty()
+            || !participants
+                .iter()
+                .all(|p| p.ready_for(self, publication.key))
         {
             return Err(CoreError::Validation(context()));
         }
@@ -151,7 +268,7 @@ impl RawProducerServient {
             current: Rc::clone(&publication.current),
         };
         // COMMIT: exclusive &mut access orders description, behavior, current
-        // logical permission and runtime opening. Capacity was preallocated.
+        // logical permission and native participation opening. Capacity was preallocated.
         if index == self.instances.len() {
             self.instances.push(entry);
         } else {
@@ -160,7 +277,9 @@ impl RawProducerServient {
         }
         publication.current.set(true);
         publication.committed = true;
-        runtime.state = RawFiniteState::Serving;
+        for participant in participants {
+            participant.open();
+        }
         Ok(())
     }
 
@@ -171,10 +290,23 @@ impl RawProducerServient {
         publication: &mut ProducerPublication,
         runtime: &RawFiniteRuntime<B>,
     ) -> CoreResult<()> {
+        if runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        self.retire_composed(publication, &[runtime])
+    }
+
+    /// Caller must supply every original native participant, not an arbitrary
+    /// subset of retired leases. This manual facet does not retain or audit the
+    /// original set, and is not a funded aggregate native-owner account.
+    pub fn retire_composed(
+        &mut self,
+        publication: &mut ProducerPublication,
+        participants: &[&dyn ClosedProducerParticipation],
+    ) -> CoreResult<()> {
         if publication.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
-            || runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
-            || runtime.state != RawFiniteState::Closed
-            || runtime.settlement.is_some()
+            || participants.is_empty()
+            || !participants.iter().all(|p| p.retired())
         {
             return Err(CoreError::Validation(context()));
         }

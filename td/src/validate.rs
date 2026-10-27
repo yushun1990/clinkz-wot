@@ -1368,6 +1368,10 @@ pub(crate) mod basic_kernel {
             "apikey" => Scheme::ApiKey,
             "oauth2" => Scheme::OAuth,
             "nosec" | "auto" | "basic" | "digest" | "bearer" | "psk" => Scheme::Other,
+            // TD validity does not depend on a particular executable security
+            // provider. Selection rejects unsupported *effective* schemes;
+            // an unused extension definition must survive admission.
+            _ if !scheme.is_empty() => Scheme::Other,
             _ => return Err(Rule::UnsupportedScheme(scheme)),
         })
     }
@@ -1713,6 +1717,7 @@ pub(crate) mod basic_typed {
             SecurityScheme::Bearer(v) => &v._context,
             SecurityScheme::PSK(v) => &v._context,
             SecurityScheme::OAuth2(v) => &v._context,
+            SecurityScheme::Extension(v) => v,
         }
     }
 

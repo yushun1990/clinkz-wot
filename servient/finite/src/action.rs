@@ -56,6 +56,14 @@ impl RawActionBehavior {
     pub fn name(&self) -> &str {
         &self.name
     }
+    pub(crate) fn supports(&self, operation: Operation) -> bool {
+        match operation {
+            Operation::InvokeAction => true,
+            Operation::QueryAction => self.query,
+            Operation::CancelAction => self.cancel,
+            _ => false,
+        }
+    }
 }
 
 /// Caller-funded Host envelope. Every admitted continuation reserves its

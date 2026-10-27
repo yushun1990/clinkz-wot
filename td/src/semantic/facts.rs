@@ -1,7 +1,11 @@
 //! Common WoT facts over the admitted loan. No raw TD, context or schema parser
 //! is exposed. All recursive schema handles point into the prepared arena.
 use super::*;
-use crate::{data_schema::DataSchema, data_type::MultiLanguage};
+use crate::{
+    data_schema::DataSchema,
+    data_type::MultiLanguage,
+    security_scheme::{Qop, SecurityLocation, SecurityScheme},
+};
 
 #[cfg(any(feature = "validated-thing", test))]
 const JS: &str = "https://www.w3.org/2019/wot/json-schema#";
@@ -221,10 +225,24 @@ pub struct PropertyFacts<'a> {
     pub observable: bool,
     pub schema: SchemaView<'a>,
 }
+pub struct ActionFacts<'a> {
+    pub name: &'a str,
+    pub metadata: MetadataFacts<'a>,
+    pub safe: bool,
+    pub idempotent: bool,
+    /// None makes no claim of synchronous completion.
+    pub synchronous: Option<bool>,
+}
+pub struct EventFacts<'a> {
+    pub name: &'a str,
+    pub metadata: MetadataFacts<'a>,
+}
 #[derive(Clone, Copy)]
 pub enum UriVariableScope {
     Thing,
     Property,
+    Action,
+    Event,
 }
 pub struct ResponseFacts<'a> {
     pub declared_content_type: Option<&'a str>,
@@ -243,6 +261,52 @@ pub struct SecurityFacts<'a> {
     pub description: Option<&'a str>,
     pub descriptions: Option<&'a MultiLanguage>,
     pub semantics: SemanticNode<'a>,
+    pub details: SecurityDetails<'a>,
+}
+
+/// All typed TD 1.1 security operands, including defaulted fields. The
+/// selected provider interprets these shared facts; credentials and current
+/// authorization never enter the semantic loan. Unknown extension schemes
+/// retain their resolved associations in `SecurityFacts::semantics`.
+#[derive(Clone, Copy, Debug)]
+pub enum SecurityDetails<'a> {
+    NoSec,
+    Auto,
+    Combo {
+        one_of: &'a [String],
+        all_of: &'a [String],
+    },
+    Basic {
+        name: Option<&'a str>,
+        location: &'a SecurityLocation,
+    },
+    Digest {
+        name: Option<&'a str>,
+        location: &'a SecurityLocation,
+        qop: Qop,
+    },
+    ApiKey {
+        name: Option<&'a str>,
+        location: &'a SecurityLocation,
+    },
+    Bearer {
+        name: Option<&'a str>,
+        location: &'a SecurityLocation,
+        authorization: Option<&'a str>,
+        alg: &'a str,
+        format: &'a str,
+    },
+    Psk {
+        identity: Option<&'a str>,
+    },
+    OAuth2 {
+        flow: &'a str,
+        authorization: Option<&'a str>,
+        token: Option<&'a str>,
+        refresh: Option<&'a str>,
+        scopes: Option<&'a [String]>,
+    },
+    Extension,
 }
 
 impl<'a> ResolvedSemanticDocument<'a> {
@@ -260,11 +324,82 @@ impl<'a> ResolvedSemanticDocument<'a> {
     }
     pub fn property(&self) -> PropertyFacts<'_> {
         let selected = self.selected.as_ref().unwrap();
+        let FormOwner::Property(name) = selected.owner else {
+            panic!("not a Property selection")
+        };
+        let property = &selected.thing.properties.as_ref().unwrap()[name];
         PropertyFacts {
-            name: selected.name,
-            observable: selected.property.observable,
-            schema: SchemaView(self.scope(SemanticScope::Property(selected.name)).unwrap()),
+            name,
+            observable: property.observable,
+            schema: SchemaView(self.scope(SemanticScope::Property(name)).unwrap()),
         }
+    }
+    pub fn action(&self) -> Option<ActionFacts<'_>> {
+        let selected = self.selected.as_ref()?;
+        let FormOwner::Action(name) = selected.owner else {
+            return None;
+        };
+        let action = &selected.thing.actions.as_ref()?[name];
+        Some(ActionFacts {
+            name,
+            metadata: (&action._metadata).into(),
+            safe: action.safe,
+            idempotent: action.idempotent,
+            synchronous: action.synchronous,
+        })
+    }
+    pub fn event(&self) -> Option<EventFacts<'_>> {
+        let selected = self.selected.as_ref()?;
+        let FormOwner::Event(name) = selected.owner else {
+            return None;
+        };
+        let event = &selected.thing.events.as_ref()?[name];
+        Some(EventFacts {
+            name,
+            metadata: (&event._metadata).into(),
+        })
+    }
+    /// Typed schema at an Action/Event declaration. The role remains distinct:
+    /// Action input/output and Event subscription/data/dataResponse/cancellation
+    /// cannot be mistaken for a Property value or an initiating reply.
+    pub fn affordance_schema(&self, owner: FormOwner<'_>, role: &str) -> Option<SchemaView<'_>> {
+        if self.selected.as_ref()?.owner != owner {
+            return None;
+        }
+        let suffix = match (owner, role) {
+            (FormOwner::Action(_), "input" | "output") => role,
+            (FormOwner::Event(_), "subscription" | "data" | "dataResponse" | "cancellation") => {
+                role
+            }
+            _ => return None,
+        };
+        let scope = match owner {
+            FormOwner::Action(name) => SemanticScope::Action(name),
+            FormOwner::Event(name) => SemanticScope::Event(name),
+            _ => return None,
+        };
+        self.scope(scope)?
+            .children()
+            .find(|n| {
+                // Extension nodes precede the typed schema branches. An
+                // extension with the same expanded name must not be returned
+                // as a SchemaView without a typed DataSchema backing.
+                n.nodes[n.index].schema.is_some()
+                    && n.name().is(match suffix {
+                        "input" => "https://www.w3.org/2019/wot/td#input",
+                        "output" => "https://www.w3.org/2019/wot/td#output",
+                        "subscription" => "https://www.w3.org/2019/wot/td#subscription",
+                        "data" => "https://www.w3.org/2019/wot/td#data",
+                        "dataResponse" => "https://www.w3.org/2019/wot/td#dataResponse",
+                        _ => "https://www.w3.org/2019/wot/td#cancellation",
+                    })
+            })
+            .map(SchemaView)
+    }
+    pub fn action_synchronous(&self, name: &str) -> Option<Option<bool>> {
+        let selected = self.selected.as_ref()?;
+        (selected.owner == FormOwner::Action(name))
+            .then(|| selected.thing.actions.as_ref().unwrap()[name].synchronous)
     }
     pub fn schema_definition(&self, name: &str) -> Result<SchemaView<'_>, SemanticAccessError> {
         self.scope(SemanticScope::SchemaDefinition(name))
@@ -277,20 +412,48 @@ impl<'a> ResolvedSemanticDocument<'a> {
         scope: UriVariableScope,
     ) -> Option<impl Iterator<Item = (&str, SchemaView<'_>)>> {
         let selected = self.selected.as_ref().unwrap();
-        let property = matches!(scope, UriVariableScope::Property);
-        let map = if property {
-            selected.property._interaction.uri_variables.as_ref()
-        } else {
-            selected.thing.uri_variables.as_ref()
+        let owner = match scope {
+            UriVariableScope::Thing => FormOwner::Thing,
+            UriVariableScope::Property => selected.owner,
+            UriVariableScope::Action => selected.owner,
+            UriVariableScope::Event => selected.owner,
+        };
+        let map = match (scope, owner) {
+            (UriVariableScope::Thing, _) => selected.thing.uri_variables.as_ref(),
+            (UriVariableScope::Property, FormOwner::Property(name)) => {
+                selected.thing.properties.as_ref().unwrap()[name]
+                    ._interaction
+                    .uri_variables
+                    .as_ref()
+            }
+            (UriVariableScope::Action, FormOwner::Action(name)) => {
+                selected.thing.actions.as_ref().unwrap()[name]
+                    ._interaction
+                    .uri_variables
+                    .as_ref()
+            }
+            (UriVariableScope::Event, FormOwner::Event(name)) => {
+                selected.thing.events.as_ref().unwrap()[name]
+                    ._interaction
+                    .uri_variables
+                    .as_ref()
+            }
+            _ => None,
         }?;
-        let scope = if property { Some(selected.name) } else { None };
         Some(map.keys().map(move |name| {
             (
                 name.as_str(),
                 SchemaView(
-                    self.scope(SemanticScope::UriVariable {
-                        property: scope,
-                        name,
+                    self.scope(match owner {
+                        FormOwner::Thing => SemanticScope::UriVariable {
+                            property: None,
+                            name,
+                        },
+                        FormOwner::Property(property) => SemanticScope::UriVariable {
+                            property: Some(property),
+                            name,
+                        },
+                        _ => SemanticScope::AffordanceUriVariable { owner, name },
                     })
                     .unwrap(),
                 ),
@@ -303,16 +466,44 @@ impl<'a> ResolvedSemanticDocument<'a> {
         form: u32,
         index: u32,
     ) -> Result<Option<ResponseFacts<'_>>, SemanticAccessError> {
+        self.additional_form_response(FormOwner::Property(property), form, index)
+    }
+
+    pub fn primary_response(
+        &self,
+        owner: FormOwner<'_>,
+        form: u32,
+    ) -> Result<Option<(&str, SemanticNode<'_>)>, SemanticAccessError> {
+        if self.selected.as_ref().map(|s| s.owner) != Some(owner) {
+            return Err(SemanticAccessError::OutsidePreparedScope);
+        }
         let parent = self
             .scopes
             .iter()
-            .find(|s| {
-                s.key
-                    == SemanticScope::Form {
-                        property,
-                        index: form,
-                    }
-            })
+            .find(|s| s.key == form_scope(owner, form))
+            .and_then(|s| s.form)
+            .ok_or(SemanticAccessError::OutsidePreparedScope)?;
+        Ok(parent.response.as_ref().map(|response| {
+            (
+                response.content_type.as_str(),
+                self.scope(response_scope(owner, form)).unwrap(),
+            )
+        }))
+    }
+
+    pub fn additional_form_response(
+        &self,
+        owner: FormOwner<'_>,
+        form: u32,
+        index: u32,
+    ) -> Result<Option<ResponseFacts<'_>>, SemanticAccessError> {
+        if self.selected.as_ref().map(|s| s.owner) != Some(owner) {
+            return Err(SemanticAccessError::OutsidePreparedScope);
+        }
+        let parent = self
+            .scopes
+            .iter()
+            .find(|s| s.key == form_scope(owner, form))
             .and_then(|s| s.form)
             .ok_or(SemanticAccessError::OutsidePreparedScope)?;
         Ok(
@@ -329,25 +520,19 @@ impl<'a> ResolvedSemanticDocument<'a> {
                     success: response.success,
                     schema: response.schema.as_deref(),
                     semantics: self
-                        .scope(SemanticScope::AdditionalResponse {
-                            property,
-                            form,
-                            index,
-                        })
+                        .scope(additional_response_scope(owner, form, index))
                         .unwrap(),
                 }),
         )
     }
-    /// The admitted Consumer execution scope is NoSec. Other security kinds
-    /// have not been projected as complete facts by this restricted adapter.
+    /// Security meaning is preserved independently of a particular Binding's
+    /// support. A selected security provider, not TD, decides whether a scheme
+    /// and its extension associations can be executed.
     pub fn security(&self, name: &str) -> Result<SecurityFacts<'_>, SemanticAccessError> {
         let semantics = self
             .scope(SemanticScope::Security(name))
             .ok_or(SemanticAccessError::OutsidePreparedScope)?;
         let definition = &self.selected.as_ref().unwrap().thing.security_definitions[name];
-        if definition.scheme() != "nosec" {
-            return Err(SemanticAccessError::UnsupportedDependency);
-        }
         let context = crate::validate::basic_typed::security_context(definition);
         Ok(SecurityFacts {
             scheme: definition.scheme(),
@@ -355,12 +540,109 @@ impl<'a> ResolvedSemanticDocument<'a> {
             description: context.description.as_deref(),
             descriptions: context.descriptions.as_ref(),
             semantics,
+            details: match definition {
+                SecurityScheme::NoSec(_) => SecurityDetails::NoSec,
+                SecurityScheme::Auto(_) => SecurityDetails::Auto,
+                SecurityScheme::Combo(s) => SecurityDetails::Combo {
+                    one_of: &s.one_of,
+                    all_of: &s.all_of,
+                },
+                SecurityScheme::Basic(s) => SecurityDetails::Basic {
+                    name: s.name.as_deref(),
+                    location: &s.location,
+                },
+                SecurityScheme::Digest(s) => SecurityDetails::Digest {
+                    name: s.name.as_deref(),
+                    location: &s.location,
+                    qop: s.qop,
+                },
+                SecurityScheme::APIKey(s) => SecurityDetails::ApiKey {
+                    name: s.name.as_deref(),
+                    location: &s.location,
+                },
+                SecurityScheme::Bearer(s) => SecurityDetails::Bearer {
+                    name: s.name.as_deref(),
+                    location: &s.location,
+                    authorization: s.authorization.as_ref().map(|u| u.as_str()),
+                    alg: &s.alg,
+                    format: &s.format,
+                },
+                SecurityScheme::PSK(s) => SecurityDetails::Psk {
+                    identity: s.identity.as_deref(),
+                },
+                SecurityScheme::OAuth2(s) => SecurityDetails::OAuth2 {
+                    flow: &s.flow,
+                    authorization: s.authorization.as_ref().map(|u| u.as_str()),
+                    token: s.token.as_ref().map(|u| u.as_str()),
+                    refresh: s.refresh.as_ref().map(|u| u.as_str()),
+                    scopes: s.scopes.as_deref(),
+                },
+                SecurityScheme::Extension(_) => SecurityDetails::Extension,
+            },
         })
     }
 }
 
 #[cfg(any(feature = "validated-thing", test))]
 impl<'a> Resolver<'a> {
+    pub(super) fn security_details_cost(
+        &mut self,
+        definition: &SecurityScheme,
+    ) -> Result<(), SemanticError> {
+        let mut pay_text = |value: &str| self.pay(value.len() as u64 + 1);
+        match definition {
+            SecurityScheme::Basic(s) => {
+                if let Some(name) = &s.name {
+                    pay_text(name)?;
+                }
+            }
+            SecurityScheme::Digest(s) => {
+                if let Some(name) = &s.name {
+                    pay_text(name)?;
+                }
+            }
+            SecurityScheme::APIKey(s) => {
+                if let Some(name) = &s.name {
+                    pay_text(name)?;
+                }
+            }
+            SecurityScheme::Bearer(s) => {
+                if let Some(name) = &s.name {
+                    pay_text(name)?;
+                }
+                if let Some(uri) = &s.authorization {
+                    pay_text(uri.as_str())?;
+                }
+                pay_text(&s.alg)?;
+                pay_text(&s.format)?;
+            }
+            SecurityScheme::PSK(s) => {
+                if let Some(identity) = &s.identity {
+                    pay_text(identity)?;
+                }
+            }
+            SecurityScheme::OAuth2(s) => {
+                pay_text(&s.flow)?;
+                for uri in [&s.authorization, &s.token, &s.refresh]
+                    .into_iter()
+                    .flatten()
+                {
+                    pay_text(uri.as_str())?;
+                }
+                if let Some(scopes) = &s.scopes {
+                    for scope in scopes {
+                        pay_text(scope)?;
+                    }
+                }
+            }
+            // Combo member names are paid as each reference is resolved.
+            SecurityScheme::Combo(_)
+            | SecurityScheme::NoSec(_)
+            | SecurityScheme::Auto(_)
+            | SecurityScheme::Extension(_) => {}
+        }
+        Ok(())
+    }
     pub(super) fn security_facts_cost(
         &mut self,
         security: &crate::security_scheme::SecuritySchemeContext,
@@ -468,6 +750,25 @@ impl<'a> Resolver<'a> {
                 self.pay(name.len() as u64 + 1)?;
                 self.schema_scope(
                     SemanticScope::UriVariable { property, name },
+                    schema,
+                    context,
+                )?;
+            }
+        }
+        Ok(())
+    }
+    pub(super) fn affordance_uri_variables(
+        &mut self,
+        map: Option<&'a BTreeMap<String, DataSchema>>,
+        owner: FormOwner<'a>,
+        mut context: ActiveContext<'a>,
+    ) -> Result<(), SemanticError> {
+        context.vocab = JS;
+        if let Some(map) = map {
+            for (name, schema) in map {
+                self.pay(name.len() as u64 + 1)?;
+                self.schema_scope(
+                    SemanticScope::AffordanceUriVariable { owner, name },
                     schema,
                     context,
                 )?;

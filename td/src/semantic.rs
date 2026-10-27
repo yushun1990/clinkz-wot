@@ -1,4 +1,4 @@
-//! Bounded, borrowed semantic extensions for Host Consumer compilation.
+//! Bounded, borrowed shared TD semantics for selected Forms.
 //!
 //! This is deliberately a local-context subset, not a JSON-LD processor. Remote
 //! extension contexts, containers, reverse properties and unsupported coercions
@@ -91,6 +91,23 @@ struct Node<'a> {
 pub enum SemanticScope<'a> {
     Thing,
     Property(&'a str),
+    Action(&'a str),
+    Event(&'a str),
+    /// Non-Property Form coordinates. Property coordinates retain their original
+    /// variants so existing Consumer compilers can continue using them.
+    AffordanceForm {
+        owner: FormOwner<'a>,
+        index: u32,
+    },
+    AffordanceResponse {
+        owner: FormOwner<'a>,
+        index: u32,
+    },
+    AffordanceAdditionalResponse {
+        owner: FormOwner<'a>,
+        form: u32,
+        index: u32,
+    },
     Form {
         property: &'a str,
         index: u32,
@@ -110,6 +127,19 @@ pub enum SemanticScope<'a> {
         property: Option<&'a str>,
         name: &'a str,
     },
+    AffordanceUriVariable {
+        owner: FormOwner<'a>,
+        name: &'a str,
+    },
+}
+/// The declaration site is part of the semantic identity of a Form, not a
+/// protocol route or a Thing id. Empty affordance names remain valid.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FormOwner<'a> {
+    Thing,
+    Property(&'a str),
+    Action(&'a str),
+    Event(&'a str),
 }
 struct Scope<'a> {
     key: SemanticScope<'a>,
@@ -176,8 +206,7 @@ pub struct ResolvedSemanticDocument<'a> {
 }
 struct Selected<'a> {
     thing: &'a Thing,
-    property: &'a crate::affordance::PropertyAffordance,
-    name: &'a str,
+    owner: FormOwner<'a>,
 }
 impl<'a> ResolvedSemanticDocument<'a> {
     pub const fn capacity_bytes() -> u64 {
@@ -200,28 +229,41 @@ impl<'a> ResolvedSemanticDocument<'a> {
             })
     }
     pub fn form_facts(&self, property: &str, index: u32) -> Option<ResolvedFormFacts<'_>> {
+        self.form(FormOwner::Property(property), index)
+    }
+    pub fn form(&self, owner: FormOwner<'_>, index: u32) -> Option<ResolvedFormFacts<'_>> {
+        if self.selected.as_ref()?.owner != owner {
+            return None;
+        }
         let form = self
             .scopes
             .iter()
-            .find(|s| s.key == SemanticScope::Form { property, index })?
+            .find(|s| s.key == form_scope(owner, index))?
             .form?;
+        let thing = self.selected.as_ref()?.thing;
+        let context = match owner {
+            FormOwner::Thing => crate::td_defaults::FormContext::Thing,
+            FormOwner::Property(name) => {
+                crate::td_defaults::FormContext::Property(thing.properties.as_ref()?.get(name)?)
+            }
+            FormOwner::Action(name) => {
+                crate::td_defaults::FormContext::Action(thing.actions.as_ref()?.get(name)?)
+            }
+            FormOwner::Event(name) => {
+                crate::td_defaults::FormContext::Event(thing.events.as_ref()?.get(name)?)
+            }
+        };
         Some(ResolvedFormFacts {
             href: form.href.as_str(),
             content_type: &form.content_type,
             subprotocol: form.subprotocol.as_deref(),
             declared_operations: form.op.as_deref(),
-            effective_operations: form.op.as_deref().unwrap_or_else(|| {
-                crate::td_defaults::default_operations_for_context(
-                    crate::td_defaults::FormContext::Property(
-                        self.selected.as_ref().unwrap().property,
-                    ),
-                )
-            }),
+            effective_operations: form
+                .op
+                .as_deref()
+                .unwrap_or_else(|| crate::td_defaults::default_operations_for_context(context)),
             declared_security: form.security.as_deref(),
-            effective_security: crate::td_defaults::effective_form_security(
-                self.selected.as_ref().unwrap().thing,
-                form,
-            ),
+            effective_security: crate::td_defaults::effective_form_security(thing, form),
             content_coding: form.content_coding.as_deref(),
             scopes: form.scopes.as_deref(),
             response_content_type: form.response.as_ref().map(|r| r.content_type.as_str()),
@@ -242,6 +284,14 @@ impl<'a> ResolvedSemanticDocument<'a> {
         property: &str,
         index: u32,
     ) -> (Result<Self, SemanticError>, u64) {
+        Self::resolve_form_metered(thing, FormOwner::Property(property), index)
+    }
+    #[cfg(any(feature = "validated-thing", test))]
+    pub(crate) fn resolve_form_metered(
+        thing: &'a Thing,
+        owner: FormOwner<'_>,
+        index: u32,
+    ) -> (Result<Self, SemanticError>, u64) {
         let mut resolver = match (buffer(NODES), buffer(SCOPES)) {
             (Ok(nodes), Ok(scopes)) => Resolver {
                 document: Self {
@@ -253,7 +303,7 @@ impl<'a> ResolvedSemanticDocument<'a> {
             },
             _ => return (Err(SemanticError::Allocation), 0),
         };
-        let result = resolver.prepare(thing, property, index);
+        let result = resolver.prepare(thing, owner, index);
         let work = RESOLUTION_WORK - resolver.fuel;
         (result.map(|()| resolver.document), work)
     }
@@ -263,7 +313,7 @@ impl<'a> Resolver<'a> {
     fn prepare(
         &mut self,
         thing: &'a Thing,
-        selected_property: &str,
+        selected_owner: FormOwner<'_>,
         selected_form: u32,
     ) -> Result<(), SemanticError> {
         let resolver = self;
@@ -323,42 +373,144 @@ impl<'a> Resolver<'a> {
             resolver.finish(list);
             resolver.finish(root);
         }
-        let (name, property) = thing
-            .properties
-            .as_ref()
-            .and_then(|properties| properties.get_key_value(selected_property))
-            .ok_or(SemanticError::UnsupportedContext)?;
-        resolver.pay(name.len() as u64 + 1)?;
-        let schema = property._schema.context();
+        let owner = match selected_owner {
+            FormOwner::Thing => FormOwner::Thing,
+            FormOwner::Property(n) => FormOwner::Property(
+                thing
+                    .properties
+                    .as_ref()
+                    .and_then(|m| m.get_key_value(n))
+                    .ok_or(SemanticError::UnsupportedContext)?
+                    .0,
+            ),
+            FormOwner::Action(n) => FormOwner::Action(
+                thing
+                    .actions
+                    .as_ref()
+                    .and_then(|m| m.get_key_value(n))
+                    .ok_or(SemanticError::UnsupportedContext)?
+                    .0,
+            ),
+            FormOwner::Event(n) => FormOwner::Event(
+                thing
+                    .events
+                    .as_ref()
+                    .and_then(|m| m.get_key_value(n))
+                    .ok_or(SemanticError::UnsupportedContext)?
+                    .0,
+            ),
+        };
         let mut context = root_context;
-        context.vocab = "https://www.w3.org/2019/wot/json-schema#";
-        let context = resolver.local(context, &schema._extra_fields)?;
-        resolver.scope(
-            SemanticScope::Property(name),
-            &schema._extra_fields,
-            schema._metadata.tags.as_deref(),
-            context,
-        )?;
-        let root = resolver.document.scopes.last().unwrap().root;
-        resolver.document.nodes[root].schema = Some(&property._schema);
-        resolver.schema_facts(&property._schema, 0, context)?;
-        resolver.schema_children(&property._schema, context, 0)?;
-        resolver.finish(root);
+        match owner {
+            FormOwner::Thing => {}
+            FormOwner::Property(name) => {
+                let property = &thing.properties.as_ref().unwrap()[name];
+                resolver.pay(name.len() as u64 + 1)?;
+                let schema = property._schema.context();
+                context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+                context = resolver.local(context, &schema._extra_fields)?;
+                resolver.scope(
+                    SemanticScope::Property(name),
+                    &schema._extra_fields,
+                    schema._metadata.tags.as_deref(),
+                    context,
+                )?;
+                let root = resolver.document.scopes.last().unwrap().root;
+                resolver.document.nodes[root].schema = Some(&property._schema);
+                resolver.schema_facts(&property._schema, 0, context)?;
+                resolver.schema_children(&property._schema, context, 0)?;
+                resolver.finish(root);
+            }
+            FormOwner::Action(name) => {
+                let action = &thing.actions.as_ref().unwrap()[name];
+                resolver.pay(name.len() as u64 + 1)?;
+                resolver.metadata_cost(&action._metadata)?;
+                context = resolver.local(context, &action._extra_fields)?;
+                resolver.scope(
+                    SemanticScope::Action(name),
+                    &action._extra_fields,
+                    action._metadata.tags.as_deref(),
+                    context,
+                )?;
+                let root = resolver.document.scopes.last().unwrap().root;
+                for (role, schema) in [("input", &action.input), ("output", &action.output)] {
+                    if let Some(schema) = schema {
+                        let mut schema_context = context;
+                        schema_context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+                        resolver.schema_node(
+                            SemanticName::Iri(SemanticIri {
+                                prefix: "https://www.w3.org/2019/wot/td#",
+                                suffix: role,
+                            }),
+                            schema,
+                            schema_context,
+                            0,
+                        )?;
+                    }
+                }
+                resolver.finish(root);
+            }
+            FormOwner::Event(name) => {
+                let event = &thing.events.as_ref().unwrap()[name];
+                resolver.pay(name.len() as u64 + 1)?;
+                resolver.metadata_cost(&event._metadata)?;
+                context = resolver.local(context, &event._extra_fields)?;
+                resolver.scope(
+                    SemanticScope::Event(name),
+                    &event._extra_fields,
+                    event._metadata.tags.as_deref(),
+                    context,
+                )?;
+                let root = resolver.document.scopes.last().unwrap().root;
+                for (role, schema) in [
+                    ("subscription", &event.subscription),
+                    ("data", &event.data),
+                    ("dataResponse", &event.data_response),
+                    ("cancellation", &event.cancellation),
+                ] {
+                    if let Some(schema) = schema {
+                        let mut schema_context = context;
+                        schema_context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+                        resolver.schema_node(
+                            SemanticName::Iri(SemanticIri {
+                                prefix: "https://www.w3.org/2019/wot/td#",
+                                suffix: role,
+                            }),
+                            schema,
+                            schema_context,
+                            0,
+                        )?;
+                    }
+                }
+                resolver.finish(root);
+            }
+        }
         let index = selected_form;
-        let form = property
-            ._interaction
-            .forms
-            .get(index as usize)
-            .ok_or(SemanticError::UnsupportedContext)?;
+        let form = match owner {
+            FormOwner::Thing => thing.forms.as_ref().and_then(|v| v.get(index as usize)),
+            FormOwner::Property(n) => thing
+                .properties
+                .as_ref()
+                .and_then(|m| m.get(n))
+                .and_then(|a| a._interaction.forms.get(index as usize)),
+            FormOwner::Action(n) => thing
+                .actions
+                .as_ref()
+                .and_then(|m| m.get(n))
+                .and_then(|a| a._interaction.forms.get(index as usize)),
+            FormOwner::Event(n) => thing
+                .events
+                .as_ref()
+                .and_then(|m| m.get(n))
+                .and_then(|a| a._interaction.forms.get(index as usize)),
+        }
+        .ok_or(SemanticError::UnsupportedContext)?;
         resolver.form_facts_cost(form)?;
         let mut form_context = context;
         form_context.vocab = "https://www.w3.org/2019/wot/hypermedia#";
         let form_context = resolver.local(form_context, &form._extra_fields)?;
         resolver.scope(
-            SemanticScope::Form {
-                property: name,
-                index,
-            },
+            form_scope(owner, index),
             &form._extra_fields,
             None,
             form_context,
@@ -367,10 +519,7 @@ impl<'a> Resolver<'a> {
         if let Some(response) = &form.response {
             let context = resolver.local(form_context, &response._extra_fields)?;
             resolver.scope(
-                SemanticScope::Response {
-                    property: name,
-                    index,
-                },
+                response_scope(owner, index),
                 &response._extra_fields,
                 None,
                 context,
@@ -380,11 +529,7 @@ impl<'a> Resolver<'a> {
             for (response_index, response) in responses.iter().enumerate() {
                 let context = resolver.local(form_context, &response._extra_fields)?;
                 resolver.scope(
-                    SemanticScope::AdditionalResponse {
-                        property: name,
-                        form: index,
-                        index: response_index as u32,
-                    },
+                    additional_response_scope(owner, index, response_index as u32),
                     &response._extra_fields,
                     None,
                     context,
@@ -393,29 +538,36 @@ impl<'a> Resolver<'a> {
         }
         let security_names = form.security.as_ref().unwrap_or(&thing.security);
         for name in security_names {
-            resolver.pay(name.len() as u64 + 1)?;
-            let security = thing
-                .security_definitions
-                .get(name)
-                .ok_or(SemanticError::UnsupportedContext)?;
-            let security = crate::validate::basic_typed::security_context(security);
-            resolver.security_facts_cost(security)?;
-            let mut context = root_context;
-            context.vocab = "https://www.w3.org/2019/wot/security#";
-            let context = resolver.local(context, &security._extra_fields)?;
-            resolver.scope(
-                SemanticScope::Security(name),
-                &security._extra_fields,
-                security.tags.as_deref(),
-                context,
-            )?;
+            resolver.security_scope(thing, name, root_context, 0)?;
         }
         resolver.uri_variables(thing.uri_variables.as_ref(), None, root_context)?;
-        resolver.uri_variables(
-            property._interaction.uri_variables.as_ref(),
-            Some(name),
-            context,
-        )?;
+        match owner {
+            FormOwner::Thing => {}
+            FormOwner::Property(name) => resolver.uri_variables(
+                thing.properties.as_ref().unwrap()[name]
+                    ._interaction
+                    .uri_variables
+                    .as_ref(),
+                Some(name),
+                context,
+            )?,
+            FormOwner::Action(name) => resolver.affordance_uri_variables(
+                thing.actions.as_ref().unwrap()[name]
+                    ._interaction
+                    .uri_variables
+                    .as_ref(),
+                owner,
+                context,
+            )?,
+            FormOwner::Event(name) => resolver.affordance_uri_variables(
+                thing.events.as_ref().unwrap()[name]
+                    ._interaction
+                    .uri_variables
+                    .as_ref(),
+                owner,
+                context,
+            )?,
+        }
         if let Some(responses) = &form.additional_responses {
             for response in responses {
                 if let Some(reference) = &response.schema {
@@ -442,12 +594,78 @@ impl<'a> Resolver<'a> {
                 }
             }
         }
-        resolver.document.selected = Some(Selected {
-            thing,
-            property,
-            name,
-        });
+        resolver.document.selected = Some(Selected { thing, owner });
         Ok(())
+    }
+}
+
+#[cfg(any(feature = "validated-thing", test))]
+impl<'a> Resolver<'a> {
+    fn security_scope(
+        &mut self,
+        thing: &'a Thing,
+        name: &'a str,
+        root_context: ActiveContext<'a>,
+        depth: usize,
+    ) -> Result<(), SemanticError> {
+        if depth == DEPTH {
+            return Err(SemanticError::Limit);
+        }
+        self.pay(name.len() as u64 + 1)?;
+        if self.document.scope(SemanticScope::Security(name)).is_some() {
+            return Ok(());
+        }
+        let definition = thing
+            .security_definitions
+            .get(name)
+            .ok_or(SemanticError::UnsupportedDependency)?;
+        let context = crate::validate::basic_typed::security_context(definition);
+        self.security_facts_cost(context)?;
+        self.security_details_cost(definition)?;
+        let mut vocabulary = root_context;
+        vocabulary.vocab = "https://www.w3.org/2019/wot/security#";
+        let vocabulary = self.local(vocabulary, &context._extra_fields)?;
+        self.scope(
+            SemanticScope::Security(name),
+            &context._extra_fields,
+            context.tags.as_deref(),
+            vocabulary,
+        )?;
+        if let crate::security_scheme::SecurityScheme::Combo(combo) = definition {
+            for member in combo.all_of.iter().chain(&combo.one_of) {
+                // A selected Combo exposes every required and alternative
+                // definition. Unselected extension definitions are not reached.
+                let (key, _) = thing
+                    .security_definitions
+                    .get_key_value(member)
+                    .ok_or(SemanticError::UnsupportedDependency)?;
+                self.security_scope(thing, key, root_context, depth + 1)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn form_scope<'a>(owner: FormOwner<'a>, index: u32) -> SemanticScope<'a> {
+    match owner {
+        FormOwner::Property(property) => SemanticScope::Form { property, index },
+        _ => SemanticScope::AffordanceForm { owner, index },
+    }
+}
+fn response_scope<'a>(owner: FormOwner<'a>, index: u32) -> SemanticScope<'a> {
+    match owner {
+        FormOwner::Property(property) => SemanticScope::Response { property, index },
+        _ => SemanticScope::AffordanceResponse { owner, index },
+    }
+}
+fn additional_response_scope<'a>(owner: FormOwner<'a>, form: u32, index: u32) -> SemanticScope<'a> {
+    match owner {
+        FormOwner::Property(property) => SemanticScope::AdditionalResponse {
+            property,
+            form,
+            index,
+        },
+        _ => SemanticScope::AffordanceAdditionalResponse { owner, form, index },
     }
 }
 

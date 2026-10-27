@@ -4,6 +4,7 @@ use crate::{HttpProducerConfig, HttpProducerProgram, producer_transport::NativeC
 use clinkz_wot_core::{finite::*, producer::*, *};
 use clinkz_wot_foundation::MonotonicInstant;
 use std::{
+    any::Any,
     net::TcpListener,
     sync::{Arc, Weak},
     task::{Context, Poll},
@@ -143,6 +144,19 @@ impl FiniteIngressBinding for HttpFiniteBinding {
     }
     fn configuration(&self) -> &Self::Configuration {
         &self.configuration
+    }
+    fn covers_definition(
+        &self,
+        key: ProducerInstanceKey,
+        site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        _form: u32,
+        operation: Operation,
+        definition: &dyn Any,
+    ) -> bool {
+        matches!(site, clinkz_wot_core::thing::AffordanceSite::Property(name) if name == self.configuration.property.as_ref())
+            && operation == Operation::ReadProperty
+            && key == self.configuration.instance
+            && definition.downcast_ref::<HttpProducerProgram>() == Some(&self.configuration.program)
     }
     fn output_validator(&self) -> Option<&dyn ProducerOutputValidator> {
         Some(&self.configuration.program)

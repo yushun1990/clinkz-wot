@@ -1230,6 +1230,9 @@ pub enum SecurityScheme {
     Bearer(BearerSecurityScheme),
     PSK(PSKSecurityScheme),
     OAuth2(OAuth2SecurityScheme),
+    /// Extension-defined scheme. Preservation and shared reference resolution
+    /// do not imply that any registered security service supports execution.
+    Extension(SecuritySchemeContext),
 }
 
 /// Lightweight discriminator probe used to dispatch [`SecurityScheme`] variants
@@ -1261,10 +1264,7 @@ impl<'de> Deserialize<'de> for SecurityScheme {
             "bearer" => serde_json::from_str::<BearerSecurityScheme>(raw.get()).map(Self::Bearer),
             "psk" => serde_json::from_str::<PSKSecurityScheme>(raw.get()).map(Self::PSK),
             "oauth2" => serde_json::from_str::<OAuth2SecurityScheme>(raw.get()).map(Self::OAuth2),
-            other => Err(serde::de::Error::custom(format!(
-                "unsupported security scheme '{}'",
-                other
-            ))),
+            _ => serde_json::from_str::<SecuritySchemeContext>(raw.get()).map(Self::Extension),
         }
         .map_err(serde::de::Error::custom)
     }
@@ -1474,6 +1474,7 @@ impl SecurityScheme {
             ($($variant:ident),*) => {
                 match self {
                     $(Self::$variant(s) => s._context.scheme.as_ref(),)*
+                    Self::Extension(s) => s.scheme.as_str(),
                 }
             };
         }
@@ -1515,6 +1516,7 @@ impl SecurityScheme {
             Self::Bearer(scheme) => &scheme._context,
             Self::PSK(scheme) => &scheme._context,
             Self::OAuth2(scheme) => &scheme._context,
+            Self::Extension(context) => context,
         }
     }
 

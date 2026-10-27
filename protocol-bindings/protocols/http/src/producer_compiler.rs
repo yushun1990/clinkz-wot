@@ -74,7 +74,8 @@ impl HttpProducerConfig {
         let security = document
             .security(name)
             .map_err(|_| producer_unsupported())?;
-        if security.proxy.is_some()
+        if security.scheme != "nosec"
+            || security.proxy.is_some()
             || security.semantics.children().any(|n| !class_assertion(n))
             || document
                 .scope(SemanticScope::Thing)

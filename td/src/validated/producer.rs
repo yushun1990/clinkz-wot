@@ -353,7 +353,7 @@ impl<'td> ValidatedProducerCursor<'td> {
         })
     }
 
-    /// Resolves the current paid Property Form (or the final one after Done).
+    /// Resolves the current paid Form (or the final one after Done).
     /// The callback cannot retain a source/arena loan. This is semantic input,
     /// not an installation permit or certification of a Binding's support.
     /// Arena backing is charged to this original ledger until physical Drop,
@@ -362,6 +362,26 @@ impl<'td> ValidatedProducerCursor<'td> {
     pub fn with_property_semantics<T: 'static>(
         &mut self,
         property: &str,
+        index: u32,
+        budget: &mut WorkBudget,
+        lower: impl FnOnce(&crate::semantic::ResolvedSemanticDocument<'_>, &str, &mut WorkBudget) -> T,
+    ) -> Result<Option<T>, ValidatedSemanticError> {
+        self.with_form_semantics(
+            ValidatedProducerScope::Property(property),
+            index,
+            budget,
+            lower,
+        )
+    }
+
+    /// A selected Form's shared, lossless semantic loan. Repeated Forms may
+    /// use different registered Bindings; neither their data nor their native
+    /// resources are attached to this temporary source/arena. The callback must
+    /// construct owned output before the loan and its original ledger release.
+    #[cfg(feature = "std")]
+    pub fn with_form_semantics<T: 'static>(
+        &mut self,
+        scope: ValidatedProducerScope<'_>,
         index: u32,
         budget: &mut WorkBudget,
         lower: impl FnOnce(&crate::semantic::ResolvedSemanticDocument<'_>, &str, &mut WorkBudget) -> T,
@@ -376,7 +396,12 @@ impl<'td> ValidatedProducerCursor<'td> {
             ));
         }
         let key_bytes = match self.last {
-            Some((Owner::Property(name, _), _)) => name.len() as u64,
+            Some((owner, _)) => match owner.scope() {
+                ValidatedProducerScope::Thing => 0,
+                ValidatedProducerScope::Property(name)
+                | ValidatedProducerScope::Action(name)
+                | ValidatedProducerScope::Event(name) => name.len() as u64,
+            },
             _ => 0,
         };
         if !self
@@ -393,8 +418,7 @@ impl<'td> ValidatedProducerCursor<'td> {
         {
             return Ok(None);
         }
-        if !matches!(self.last, Some((Owner::Property(name, _), i)) if name == property && i == index)
-        {
+        if !matches!(self.last, Some((owner, i)) if owner.scope() == scope && i == index) {
             return Err(ValidatedSemanticError::Resolution(
                 SemanticError::UnsupportedDependency,
             ));
@@ -453,7 +477,13 @@ impl<'td> ValidatedProducerCursor<'td> {
             .ok_or(ValidatedSemanticError::Resolution(
                 SemanticError::Allocation,
             ))?;
-        let (document, used) = Document::resolve_metered(self.owner.thing, property, index);
+        let owner = match scope {
+            ValidatedProducerScope::Thing => crate::semantic::FormOwner::Thing,
+            ValidatedProducerScope::Property(n) => crate::semantic::FormOwner::Property(n),
+            ValidatedProducerScope::Action(n) => crate::semantic::FormOwner::Action(n),
+            ValidatedProducerScope::Event(n) => crate::semantic::FormOwner::Event(n),
+        };
+        let (document, used) = Document::resolve_form_metered(self.owner.thing, owner, index);
         let unused = crate::semantic::RESOLUTION_WORK - used;
         budget.set_remaining(
             W::DocumentNodes,

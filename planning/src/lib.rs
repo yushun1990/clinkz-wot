@@ -10,6 +10,8 @@ extern crate alloc;
 #[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod finite_producer;
 #[cfg(all(feature = "std", feature = "validated-thing"))]
+pub mod producer_composition;
+#[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod producer_execution;
 #[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod type_schema;
