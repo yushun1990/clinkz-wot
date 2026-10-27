@@ -89,3 +89,13 @@ The state projection names these semantic boundaries without mandating public
 guard stages. Current Property Read implementations keep their existing linear
 carriers, final checks, result seals and funding at their measured scopes. Their
 historic success is not acceptance of the successor runtime.
+
+The owned Host composed Producer path stages original native participation
+identities before setup and reserves its controlled backing and qualification
+scratch at a shared account bank before taking the caller's pure owners. The
+original instance and each participation retain the same lifetime reservation;
+replacement, lost exposure guards and unread results cannot refund it. Complete
+native retirement and acknowledgement of retained Actions are separate checks.
+After a lost publication guard, logical reclamation requires actual disappearance
+of every original native owner and acknowledgement of all original Action work.
+Neither guard Drop nor a diagnostic instance key proves completed native drain.

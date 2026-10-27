@@ -23,6 +23,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "composed_thing/managed.rs"]
+mod managed;
+
 fn budget() -> WorkBudget {
     WorkClass::ALL
         .into_iter()
@@ -109,8 +112,15 @@ fn http_read(
     .unwrap()
 }
 
-struct UnselectedParticipant(Cell<bool>);
+struct UnselectedParticipant(Cell<bool>, ProducerParticipationId, Option<Rc<dyn Any>>);
 impl ClosedProducerParticipation for UnselectedParticipant {
+    fn participation_id(&self) -> &ProducerParticipationId {
+        &self.1
+    }
+    fn retain_owner(&mut self, owner: Rc<dyn Any>) {
+        self.2 = Some(owner);
+    }
+    fn begin_retire(&mut self) {}
     fn ready_for(&self, _: &RawProducerServient, _: ProducerInstanceKey) -> bool {
         true
     }
@@ -136,21 +146,11 @@ impl UdpActionProvider {
             identity: (BindingId::new(51), BindingGeneration::INITIAL),
         }
     }
-}
-impl ProducerCapability for UdpActionProvider {
-    fn identity(&self) -> (BindingId, BindingGeneration) {
-        self.identity
-    }
-    fn definition_bytes(&self, definition: &dyn Any) -> Option<usize> {
-        definition
-            .downcast_ref::<ActionRoute>()
-            .map(|_| std::mem::size_of::<ActionRoute>())
-    }
-    fn prepare(
+    fn compile_route(
         &self,
         input: ProducerOperationInput<'_>,
         _: &mut WorkBudget,
-    ) -> CoreResult<Option<Box<dyn Any>>> {
+    ) -> CoreResult<Option<ActionRoute>> {
         let FormSite::Action(name) = input.site else {
             return Ok(None);
         };
@@ -213,10 +213,35 @@ impl ProducerCapability for UdpActionProvider {
         if input.target != format!("udp://{}{path}", self.address) {
             return Err(unsupported());
         }
-        Ok(Some(Box::new(ActionRoute {
+        Ok(Some(ActionRoute {
             binding: self.identity,
             mapping: ActionMappingKey(input.form as u64 + 1),
-        })))
+        }))
+    }
+}
+impl ProducerCapability for UdpActionProvider {
+    fn identity(&self) -> (BindingId, BindingGeneration) {
+        self.identity
+    }
+    fn definition_bytes(&self, definition: &dyn Any) -> Option<usize> {
+        definition
+            .downcast_ref::<ActionRoute>()
+            .map(|_| std::mem::size_of::<ActionRoute>())
+    }
+    fn prepare(
+        &self,
+        input: ProducerOperationInput<'_>,
+        b: &mut WorkBudget,
+    ) -> CoreResult<Option<Box<dyn Any>>> {
+        Ok(self
+            .compile_route(input, b)?
+            .map(|route| Box::new(route) as Box<dyn Any>))
+    }
+    fn supports(&self, input: ProducerOperationInput<'_>, b: &mut WorkBudget) -> CoreResult<bool> {
+        Ok(self.compile_route(input, b)?.is_some())
+    }
+    fn final_check_temporary_bytes(&self) -> Option<usize> {
+        Some(512)
     }
     fn check_final(
         &self,
@@ -224,11 +249,10 @@ impl ProducerCapability for UdpActionProvider {
         definition: &dyn Any,
         b: &mut WorkBudget,
     ) -> CoreResult<bool> {
-        Ok(self
-            .prepare(input, b)?
-            .and_then(|p| p.downcast::<ActionRoute>().ok())
-            .as_deref()
-            == definition.downcast_ref::<ActionRoute>())
+        let Some(expected) = definition.downcast_ref::<ActionRoute>() else {
+            return Ok(false);
+        };
+        Ok(self.compile_route(input, b)?.as_ref() == Some(expected))
     }
 }
 fn unsupported() -> CoreError {
@@ -363,6 +387,8 @@ struct ActionLease {
     key: ProducerInstanceKey,
     open: Rc<Cell<bool>>,
     closed: bool,
+    participation: ProducerParticipationId,
+    retained_owner: Option<Rc<dyn Any>>,
 }
 impl ActionNative {
     fn new(address: SocketAddr) -> Rc<RefCell<Self>> {
@@ -390,6 +416,8 @@ impl ActionNative {
             key,
             open,
             closed: false,
+            participation: ProducerParticipationId::new(),
+            retained_owner: None,
         }
     }
     fn step(
@@ -499,6 +527,27 @@ impl ActionNative {
     }
 }
 impl ClosedProducerParticipation for ActionLease {
+    fn participation_id(&self) -> &ProducerParticipationId {
+        &self.participation
+    }
+    fn retain_owner(&mut self, owner: Rc<dyn Any>) {
+        self.retained_owner = Some(owner);
+    }
+    fn admission_backing_bytes(
+        &self,
+        _: &RawProducerServient,
+        key: ProducerInstanceKey,
+    ) -> Option<usize> {
+        (!self.open.get() && !self.closed && self.retained_owner.is_none() && self.key == key)
+            .then_some(
+                std::mem::size_of::<Self>()
+                    + 4 * std::mem::size_of::<usize>()
+                    + std::mem::size_of::<Cell<bool>>(),
+            )
+    }
+    fn begin_retire(&mut self) {
+        self.close();
+    }
     fn ready_for(&self, _: &RawProducerServient, key: ProducerInstanceKey) -> bool {
         !self.closed
             && self.key == key
@@ -888,6 +937,15 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
             let _ = runtime.step(&mut cx(), &mut budget(), now());
         }
     }
+    assert!(s.retire_composed(&mut publication, &[&left]).is_err());
+    assert!(
+        s.retire_composed(&mut publication, &[&left, &left])
+            .is_err()
+    );
+    assert!(
+        s.retire_composed(&mut publication, &[&left, &unrelated])
+            .is_err()
+    );
     s.retire_composed(&mut publication, &[&left, &right])
         .unwrap();
     drop(left);
@@ -956,6 +1014,7 @@ fn qualified_publication_requires_validation_and_rejects_invalid_output() {
             .ok()
             .unwrap();
         let mut runtime = http_read(&s, addr, program, k, "left", id, validation);
+        publication.bind_participants(&[&runtime]).unwrap();
         assert_eq!(
             runtime.step(&mut cx(), &mut budget(), now()),
             Poll::Ready(RawFiniteState::InstalledClosed)
@@ -1166,7 +1225,7 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     );
     // A participant that claims readiness but covers no selected Form must
     // not be opened, even when every advertised operation has an owner.
-    let mut extra = UnselectedParticipant(Cell::new(false));
+    let mut extra = UnselectedParticipant(Cell::new(false), ProducerParticipationId::new(), None);
     assert!(
         publish_prepared_thing(
             &mut s,
@@ -1596,6 +1655,7 @@ fn partial_native_failure_and_cancelled_prepublication_retire_without_dispatch()
         Poll::Ready(RawFiniteState::InstalledClosed)
     );
     let mut lease = ActionNative::lease(&native, k2);
+    pub2.bind_participants(&[&read, &lease]).unwrap();
     assert!(ActionNative::start(&native).is_err());
     assert!(
         publish_prepared_thing(

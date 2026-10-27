@@ -203,7 +203,10 @@ registered evidence establish current capabilities. The retained baseline includ
 The optional Host Producer composition path now prepares all described Forms
 against linked capabilities and publishes one qualified logical Thing across
 independently ready native participants. Real HTTP Property and test-only UDP
-continuing Action I/O exercise this boundary; production Action/Event Bindings,
+continuing Action I/O exercise this boundary. The
+[owned composition handoff](docs/work-packages/WP-400-servient.md#owned-composed-host-producer)
+reserves controlled backing at a shared Host bank and retains the complete
+original native set through acknowledged retirement. Production Action/Event Bindings,
 general schema/security services and broad deployment qualification remain open.
 
 Legacy Core event fan-out, queue/merge subscriptions, `SubscriptionAcceptance`,

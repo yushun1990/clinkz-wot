@@ -113,3 +113,14 @@ can retain many leases and Things, and closing one releases only that participat
 The HTTP finite participant is still a one-endpoint/one-route adapter; a linked
 test-only UDP Action participant exercises shared infrastructure and continuing
 work over actual I/O. This is not production qualification of UDP or Actions.
+
+The manual Host publication records bounded opaque identities of the original
+native participation owners. Publication and retirement reject duplicate,
+foreign, omitted or substituted participants. These identities retain no logical
+permission or native shutdown authority. An optional owned composition handoff
+retains the actual participants and their transferred capacity owner; typed native
+progress remains specific to each capability. A managed participation must
+declare its additional controlled backing before effects and retain the original
+reservation through native/result disposal, including when moved out of a typed
+loan. Its Drop owes the existing finite local-disposal contract. Shared native
+infrastructure keeps its Binding-owned policy and final-use lifetime.

@@ -23,11 +23,14 @@ const REGISTRY: RawProducerRegistryLimits = RawProducerRegistryLimits {
 
 // Fixed, prepaid lifetime and cleanup leases. No caller-held lock can block
 // their disposal. Extra SDK/OS backing belongs to the concrete Binding policy.
-struct Funding {
+pub(crate) struct Funding {
     _leases: [Option<HostCapacityReservation>; 8],
 }
 impl Funding {
-    fn reserve(bank: &Arc<HostResourceAccounts>, amounts: &[(K, usize)]) -> CoreResult<Self> {
+    pub(crate) fn reserve(
+        bank: &Arc<HostResourceAccounts>,
+        amounts: &[(K, usize)],
+    ) -> CoreResult<Self> {
         let mut result = Self {
             _leases: core::array::from_fn(|_| None),
         };
@@ -40,12 +43,12 @@ impl Funding {
 
 // Only setup owns qualification scratch. Behavior/result retention must never
 // keep this phase's temporary or overlapping Engine charge alive after it ends.
-struct QualificationFunding {
+pub(crate) struct QualificationFunding {
     _engine: HostCapacityReservation,
     _temporary: HostCapacityReservation,
 }
 impl QualificationFunding {
-    fn reserve(bank: &Arc<HostResourceAccounts>, bytes: usize) -> CoreResult<Self> {
+    pub(crate) fn reserve(bank: &Arc<HostResourceAccounts>, bytes: usize) -> CoreResult<Self> {
         let engine = bank
             .reserve(K::EngineLiveBytesGlobalMax, bytes as u64)
             .ok_or_else(busy)?;
