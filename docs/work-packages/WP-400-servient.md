@@ -257,11 +257,17 @@ The existing shared `HostResourceAccounts` bank reserves Engine retained bytes,
 cleanup byte/item allowances and a Thing slot before ownership handoff. Costs
 include controlled layouts, definition storage, captured reference vectors,
 declared handler indirect backing, actual participant configuration/input bounds
-and promised retained result opportunities. Qualification reserves the same
-bounded Host temporary allowance as the first joined adapter, including its
-overlapping Engine charge. It ends after final qualification and before commit,
-or on cancellation/definitive qualification failure/Drop. Pending pure work keeps
-scratch for retry. Lifetime and cleanup reservations are one shared physical
+and promised retained result opportunities. Qualification reserves the bounded
+Host common TD allowance plus the maximum declared peak temporary backing of
+the actual sequential support/final-check callbacks, with the overlapping Engine
+charge. Final comparison uses original definitions without a second retained
+set. Unknown bounds refuse admission and return the original owners before a
+callback or native setup; a current bound above the captured funded peak refuses
+publication before checking. It ends after final qualification and before commit,
+or on cancellation/definitive qualification failure/successful retirement/Drop.
+Successful retirement ends qualification even when callers closed every typed
+native owner directly. Failed retirement and pending pure work preserve their
+applicable owners for retry. Lifetime and cleanup reservations are one shared physical
 reservation owner retained by the exposure, actual participants and original
 logical instance; shared retention references do not debit the bank again.
 
@@ -291,3 +297,7 @@ includes real two-listener HTTP and shared test-only UDP Action cases for exact
 membership, aggregate-bank saturation, scratch release, replacement/late result,
 unread acknowledgement, lost exposure/root, extracted native owners, partial
 setup failure, pending/failed cleanup and final socket/account release.
+Large HTTP definition wrappers also exercise 24 MiB of original buffers through
+admission and real publication without regenerating them; declared callback
+temporaries are checked at actual bank limits before allocation, and direct
+typed-owner retirement releases scratch while retaining lifetime/cleanup backing.

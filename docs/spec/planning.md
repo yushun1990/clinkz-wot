@@ -108,3 +108,15 @@ registrations/definitions before publication. Opaque owned definitions are not
 a universal program/session ABI; native readiness and collisions remain separate
 Binding obligations. Consumer first-use coordination and broader service,
 schema and security implementations remain outstanding.
+
+Final whole-Thing checking walks the complete common meaning and compares each
+original definition at its exact scope/Form/operation and actual registration.
+The selected provider checks its existing definition and current dependencies;
+other registrations perform complete support probes to detect new ambiguity.
+This check does not construct a second retained definition set. Support probes
+and final comparisons use the same matching/refusal semantics as preparation,
+not operation/type/identity tags. Their sequential callback temporaries require
+an actual declared peak bound before managed Host invocation; callbacks retain
+no new controlled backing after return. A missing or newly excessive bound
+cannot borrow unreserved capacity. A provider may temporarily materialize data
+inside that funded bound; no allocation-free compiler representation is imposed.

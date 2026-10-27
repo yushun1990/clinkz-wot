@@ -208,6 +208,7 @@ pub struct ComposedProducerExposure {
     publication: ProducerPublication,
     limits: Arc<ResourceLimits>,
     qualification: Option<QualificationFunding>,
+    qualification_provider_bytes: usize,
     publication_failure: Option<CoreError>,
     _funding: Rc<Funding>,
 }
@@ -222,7 +223,7 @@ impl ComposedProducerExposure {
         accounts: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<ComposedProducerInput>> {
-        let admission = (|| -> CoreResult<(Rc<Funding>, QualificationFunding)> {
+        let admission = (|| -> CoreResult<(Rc<Funding>, QualificationFunding, usize)> {
             if input.participants.is_empty()
                 || input.participants.len() > MAX_PRODUCER_PARTICIPANTS
                 || input.providers.is_empty()
@@ -296,6 +297,7 @@ impl ComposedProducerExposure {
                     (K::ThingsGlobalMax, 1),
                 ],
             )?);
+            let provider_bytes = final_check_bytes(&input.providers)?;
             let temporary = usize::try_from(
                 limits
                     .get(K::AdmissionTemporaryBytesPerOperationMax)
@@ -303,6 +305,7 @@ impl ComposedProducerExposure {
             )
             .ok()
             .and_then(|n| n.checked_add(PRODUCER_DESCRIPTION_BYTES * 512))
+            .and_then(|n| n.checked_add(provider_bytes))
             .ok_or_else(busy)?;
             let qualification = QualificationFunding::reserve(&accounts, temporary)?;
             let providers: Vec<_> = input.providers.iter().map(|p| p.as_ref()).collect();
@@ -337,9 +340,9 @@ impl ComposedProducerExposure {
                 &input.prepared,
                 input.participants.iter().map(|p| p.as_participation()),
             )?;
-            Ok((funding, qualification))
+            Ok((funding, qualification, provider_bytes))
         })();
-        let (funding, qualification) = match admission {
+        let (funding, qualification, qualification_provider_bytes) = match admission {
             Ok(funding) => funding,
             Err(error) => return Err(reject(input, error)),
         };
@@ -384,6 +387,7 @@ impl ComposedProducerExposure {
             publication,
             limits,
             qualification: Some(qualification),
+            qualification_provider_bytes,
             publication_failure: None,
             _funding: funding,
         })
@@ -430,6 +434,20 @@ impl ComposedProducerExposure {
         budget
             .consume(WorkClass::HandlerSteps, units)
             .map_err(|_| busy())?;
+        // The captured allowance must still cover every actual callback before
+        // any support/check code can allocate. Growing/unknown bounds invalidate
+        // this staged qualification instead of borrowing an unfunded callback.
+        if let Err(error) = final_check_bytes(&self.providers).and_then(|bytes| {
+            if bytes <= self.qualification_provider_bytes {
+                Ok(())
+            } else {
+                Err(CoreError::Validation(context()))
+            }
+        }) {
+            self.publication_failure = Some(error.clone());
+            self.begin_close();
+            return Err(error);
+        }
         let providers: Vec<_> = self.providers.iter().map(|p| p.as_ref()).collect();
         let mut participants: Vec<_> = self
             .participants
@@ -502,7 +520,11 @@ impl ComposedProducerExposure {
             .iter()
             .map(|p| p.as_participation())
             .collect();
-        owner.retire_composed(&mut self.publication, &participants)
+        owner.retire_composed(&mut self.publication, &participants)?;
+        // Typed native close may have ended setup without begin_close() on
+        // this facade. Acknowledged retirement permanently ends qualification.
+        self.qualification = None;
+        Ok(())
     }
 }
 impl Drop for ComposedProducerExposure {
@@ -516,6 +538,14 @@ impl Drop for ComposedProducerExposure {
 
 fn busy() -> CoreError {
     CoreError::Backpressure(context())
+}
+fn final_check_bytes(providers: &[Rc<dyn ProducerCapability>]) -> CoreResult<usize> {
+    providers.iter().try_fold(0, |maximum, provider| {
+        provider
+            .final_check_temporary_bytes()
+            .map(|bytes| maximum.max(bytes))
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))
+    })
 }
 fn reject(
     input: ComposedProducerInput,

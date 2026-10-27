@@ -91,3 +91,20 @@ complete staged behavior/mapping set before native effects, reserves final
 qualification scratch and repeats complete qualification after closed setup.
 It neither changes immutable definition identity into live permission nor adds
 a general definition cache or native runtime ABI.
+
+`check_final_thing` shares the bounded common TD walk with construction but
+compares the existing owned definitions in place. It never reconstructs a full
+`PreparedThing` beside the original. Each selected provider performs its actual
+complete `check_final`; every other candidate runs `supports` to detect new
+ambiguity under the same matching/error contract as `prepare`. Original operation
+coordinates, selected registration identity, complete final operation count and
+behavior coverage remain checked. The HTTP and test-only UDP participants reuse
+their concrete lowering for these comparisons without boxing another definition.
+Work exhaustion remains Backpressure and does not silently certify support.
+
+Actual capabilities declare `final_check_temporary_bytes` for the complete peak
+of one support/comparison callback, including indirect or temporary materialized
+data. Managed WP-400 admission reserves the largest sequential callback peak
+alongside common TD scratch before executing any such callback. Unknown bounds
+refuse that managed handoff; the pure caller-provisioned construction boundary
+does not implicitly fund requalification allocations.

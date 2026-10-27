@@ -40,6 +40,18 @@ unsupported or already-started managed inputs are returned intact on refusal.
 
 ## Falsifiable completion boundary
 
+The initial final check rebuilt a whole definition set while retaining the
+original. Two actual 12 MiB HTTP-backed definitions disproved the fixed scratch
+assumption: their buffers alone reached 48 MiB against a 44 MiB bank. Merely
+adding the old definition size would not bound arbitrary provider preparation
+temporaries or a changed candidate's construction. The selected correction is
+to reuse the common TD walk, compare original definitions, and probe nonselected
+registrations through actual complete support checks. The Host owner prepays
+the maximum declared sequential callback temporary peak alongside TD scratch;
+unfundable/unknown or newly excessive bounds refuse before callback allocation.
+Successful acknowledged retirement is also a terminal qualification boundary,
+including when typed native owners were closed without the facade's close call.
+
 Real HTTP and the existing linked test-only UDP participant must exercise
 complete-set retirement, shared native sibling isolation, partial setup failure,
 replacement/late results, saturation, lost exposure/root cleanup, original-bank

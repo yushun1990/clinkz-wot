@@ -11,7 +11,7 @@ use clinkz_wot_td::{
     semantic::{FormOwner, SemanticScope},
     validate::{Validate, ValidationLevel},
 };
-use std::{any::Any, boxed::Box};
+use std::{any::Any, boxed::Box, cell::Cell};
 
 fn work() -> WorkBudget {
     WorkClass::ALL
@@ -45,11 +45,11 @@ impl ProducerCapability for Provider {
             .downcast_ref::<String>()
             .map(|s| core::mem::size_of::<String>() + s.capacity())
     }
-    fn prepare(
+    fn supports(
         &self,
         input: ProducerOperationInput<'_>,
         _: &mut WorkBudget,
-    ) -> clinkz_wot_core::CoreResult<Option<Box<dyn Any>>> {
+    ) -> clinkz_wot_core::CoreResult<bool> {
         if match (&self.1, input.site) {
             (&"property", FormSite::Property(_)) => true,
             (&"action", FormSite::Action(_)) => true,
@@ -93,9 +93,21 @@ impl ProducerCapability for Provider {
             if self.1 == "collection" {
                 assert!(input.document.scope(SemanticScope::Thing).is_some());
             }
-            return Ok(Some(Box::new(input.target.to_owned())));
+            return Ok(true);
         }
-        Ok(None)
+        Ok(false)
+    }
+    fn prepare(
+        &self,
+        input: ProducerOperationInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> clinkz_wot_core::CoreResult<Option<Box<dyn Any>>> {
+        Ok(self
+            .supports(input, budget)?
+            .then(|| Box::new(input.target.to_owned()) as Box<dyn Any>))
+    }
+    fn final_check_temporary_bytes(&self) -> Option<usize> {
+        Some(0)
     }
     fn check_final(
         &self,
@@ -103,11 +115,10 @@ impl ProducerCapability for Provider {
         definition: &dyn Any,
         budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<bool> {
-        Ok(self
-            .prepare(input, budget)?
-            .and_then(|d| d.downcast::<String>().ok())
-            .as_deref()
-            == definition.downcast_ref::<String>())
+        Ok(self.supports(input, budget)?
+            && definition
+                .downcast_ref::<String>()
+                .is_some_and(|value| value == input.target))
     }
 }
 fn covered(_: ValidatedProducerScope<'_>, _: Operation) -> bool {
@@ -240,4 +251,110 @@ fn absent_ambiguous_and_unregistered_controls_refuse_purely() {
     assert_ne!(no, text);
     let extended: clinkz_wot_td::thing::Thing = serde_json::from_str(&no).unwrap();
     assert!(extended.validate_with_level(ValidationLevel::Basic).is_ok());
+}
+
+struct SwitchProvider {
+    enabled: Cell<bool>,
+    preparations: Cell<usize>,
+}
+impl ProducerCapability for SwitchProvider {
+    fn identity(&self) -> (BindingId, BindingGeneration) {
+        (BindingId::new(5), BindingGeneration::INITIAL)
+    }
+    fn definition_bytes(&self, definition: &dyn Any) -> Option<usize> {
+        Provider(5, "property").definition_bytes(definition)
+    }
+    fn prepare(
+        &self,
+        input: ProducerOperationInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> clinkz_wot_core::CoreResult<Option<Box<dyn Any>>> {
+        self.preparations.set(self.preparations.get() + 1);
+        if self.enabled.get() {
+            Provider(5, "property").prepare(input, budget)
+        } else {
+            Ok(None)
+        }
+    }
+    fn supports(
+        &self,
+        input: ProducerOperationInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> clinkz_wot_core::CoreResult<bool> {
+        if self.enabled.get() {
+            Provider(5, "property").supports(input, budget)
+        } else {
+            Ok(false)
+        }
+    }
+    fn check_final(
+        &self,
+        input: ProducerOperationInput<'_>,
+        definition: &dyn Any,
+        budget: &mut WorkBudget,
+    ) -> clinkz_wot_core::CoreResult<bool> {
+        Provider(5, "property").check_final(input, definition, budget)
+    }
+}
+
+#[test]
+fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
+    let p = Provider(1, "property");
+    let a = Provider(2, "action");
+    let e = Provider(3, "event");
+    let c = Provider(4, "collection");
+    let candidate = SwitchProvider {
+        enabled: Cell::new(false),
+        preparations: Cell::new(0),
+    };
+    let providers: [&dyn ProducerCapability; 5] = [&p, &a, &e, &c, &candidate];
+    let text = td();
+    let prepared = prepare_thing(
+        &text,
+        key(),
+        GatewayDefaultV1::LIMITS,
+        &mut work(),
+        &providers,
+        covered,
+    )
+    .unwrap();
+    let preparations = candidate.preparations.get();
+    check_final_thing(
+        &text,
+        key(),
+        GatewayDefaultV1::LIMITS,
+        &mut work(),
+        &providers,
+        &prepared,
+        covered,
+    )
+    .unwrap();
+    candidate.enabled.set(true);
+    assert!(
+        check_final_thing(
+            &text,
+            key(),
+            GatewayDefaultV1::LIMITS,
+            &mut work(),
+            &providers,
+            &prepared,
+            covered
+        )
+        .is_err()
+    );
+    candidate.enabled.set(false);
+    let changed = text.replace("127.0.0.1:1234/p", "127.0.0.1:4321/p");
+    assert!(
+        check_final_thing(
+            &changed,
+            key(),
+            GatewayDefaultV1::LIMITS,
+            &mut work(),
+            &providers,
+            &prepared,
+            covered
+        )
+        .is_err()
+    );
+    assert_eq!(candidate.preparations.get(), preparations);
 }

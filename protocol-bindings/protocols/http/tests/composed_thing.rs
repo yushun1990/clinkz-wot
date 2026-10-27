@@ -146,21 +146,11 @@ impl UdpActionProvider {
             identity: (BindingId::new(51), BindingGeneration::INITIAL),
         }
     }
-}
-impl ProducerCapability for UdpActionProvider {
-    fn identity(&self) -> (BindingId, BindingGeneration) {
-        self.identity
-    }
-    fn definition_bytes(&self, definition: &dyn Any) -> Option<usize> {
-        definition
-            .downcast_ref::<ActionRoute>()
-            .map(|_| std::mem::size_of::<ActionRoute>())
-    }
-    fn prepare(
+    fn compile_route(
         &self,
         input: ProducerOperationInput<'_>,
         _: &mut WorkBudget,
-    ) -> CoreResult<Option<Box<dyn Any>>> {
+    ) -> CoreResult<Option<ActionRoute>> {
         let FormSite::Action(name) = input.site else {
             return Ok(None);
         };
@@ -223,10 +213,35 @@ impl ProducerCapability for UdpActionProvider {
         if input.target != format!("udp://{}{path}", self.address) {
             return Err(unsupported());
         }
-        Ok(Some(Box::new(ActionRoute {
+        Ok(Some(ActionRoute {
             binding: self.identity,
             mapping: ActionMappingKey(input.form as u64 + 1),
-        })))
+        }))
+    }
+}
+impl ProducerCapability for UdpActionProvider {
+    fn identity(&self) -> (BindingId, BindingGeneration) {
+        self.identity
+    }
+    fn definition_bytes(&self, definition: &dyn Any) -> Option<usize> {
+        definition
+            .downcast_ref::<ActionRoute>()
+            .map(|_| std::mem::size_of::<ActionRoute>())
+    }
+    fn prepare(
+        &self,
+        input: ProducerOperationInput<'_>,
+        b: &mut WorkBudget,
+    ) -> CoreResult<Option<Box<dyn Any>>> {
+        Ok(self
+            .compile_route(input, b)?
+            .map(|route| Box::new(route) as Box<dyn Any>))
+    }
+    fn supports(&self, input: ProducerOperationInput<'_>, b: &mut WorkBudget) -> CoreResult<bool> {
+        Ok(self.compile_route(input, b)?.is_some())
+    }
+    fn final_check_temporary_bytes(&self) -> Option<usize> {
+        Some(512)
     }
     fn check_final(
         &self,
@@ -234,11 +249,10 @@ impl ProducerCapability for UdpActionProvider {
         definition: &dyn Any,
         b: &mut WorkBudget,
     ) -> CoreResult<bool> {
-        Ok(self
-            .prepare(input, b)?
-            .and_then(|p| p.downcast::<ActionRoute>().ok())
-            .as_deref()
-            == definition.downcast_ref::<ActionRoute>())
+        let Some(expected) = definition.downcast_ref::<ActionRoute>() else {
+            return Ok(false);
+        };
+        Ok(self.compile_route(input, b)?.as_ref() == Some(expected))
     }
 }
 fn unsupported() -> CoreError {

@@ -35,6 +35,38 @@ impl HttpFiniteProducer {
             timeout_ticks,
         })
     }
+
+    fn compile_definition(
+        &self,
+        input: ProducerOperationInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<HttpProducerProgram>> {
+        let FormSite::Property(property) = input.site else {
+            return Ok(None);
+        };
+        if input.operation != Operation::ReadProperty {
+            return Ok(None);
+        }
+        if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
+        {
+            return Ok(None);
+        }
+        self.listen
+            .compile_property_read(
+                ResolvedProducerInput::new(
+                    input.document,
+                    input.target,
+                    property,
+                    input.form,
+                    input.operation,
+                ),
+                budget,
+            )?
+            .map(Some)
+            .ok_or_else(|| {
+                CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
+            })
+    }
 }
 
 impl FiniteProducerCompiler for HttpFiniteProducer {
@@ -113,30 +145,22 @@ impl ProducerCapability for HttpFiniteProducer {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<Box<dyn Any>>> {
-        let FormSite::Property(property) = input.site else {
-            return Ok(None);
-        };
-        if input.operation != Operation::ReadProperty {
-            return Ok(None);
-        }
-        // A registration at another listen address is not a failed selected
-        // mapping. Let the selector try the other linked HTTP registration;
-        // only a matching registration may reject unsupported TD meaning.
-        if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
-        {
-            return Ok(None);
-        }
-        let input = ResolvedProducerInput::new(
-            input.document,
-            input.target,
-            property,
-            input.form,
-            input.operation,
-        );
         Ok(self
-            .listen
-            .compile_property_read(input, budget)?
+            .compile_definition(input, budget)?
             .map(|program| Box::new(program) as Box<dyn Any>))
+    }
+    fn supports(
+        &self,
+        input: ProducerOperationInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<bool> {
+        Ok(self.compile_definition(input, budget)?.is_some())
+    }
+    fn final_check_temporary_bytes(&self) -> Option<usize> {
+        // Current lowering has a bounded 64-byte URI and fixed-size program.
+        // Cover its passive URI/compiler temporary backing without another
+        // retained definition or any native setup.
+        Some(4096)
     }
     fn check_final(
         &self,
@@ -147,9 +171,6 @@ impl ProducerCapability for HttpFiniteProducer {
         let Some(expected) = definition.downcast_ref::<HttpProducerProgram>() else {
             return Ok(false);
         };
-        let Some(program) = <Self as ProducerCapability>::prepare(self, input, budget)? else {
-            return Ok(false);
-        };
-        Ok(program.downcast_ref::<HttpProducerProgram>() == Some(expected))
+        Ok(self.compile_definition(input, budget)?.as_ref() == Some(expected))
     }
 }

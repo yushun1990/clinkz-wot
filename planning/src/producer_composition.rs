@@ -68,6 +68,7 @@ impl FormSite {
 /// Temporary common meaning. A Binding interprets native vocabularies and
 /// returns only independently owned preparation. No handler or authority is
 /// passed to a compiler, and Action/notification controls are not finite calls.
+#[derive(Clone, Copy)]
 pub struct ProducerOperationInput<'a> {
     pub document: &'a ResolvedSemanticDocument<'a>,
     pub site: &'a FormSite,
@@ -91,6 +92,25 @@ pub trait ProducerCapability {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<Box<dyn Any>>>;
+    /// Complete current support, with the same matching/refusal semantics as
+    /// prepare, without retaining a replacement definition. Final qualification
+    /// uses this for every nonselected registration to detect new ambiguity.
+    fn supports(
+        &self,
+        input: ProducerOperationInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<bool>;
+    /// Peak additional controlled backing used by one supports/check_final
+    /// callback, including any temporary definition materialization and indirect
+    /// storage. These callbacks retain no new controlled backing after return;
+    /// their complete peak must fit this bound. Callbacks are sequential.
+    /// Managed Host qualification reserves this bound before calling them;
+    /// None makes no managed resource claim.
+    fn final_check_temporary_bytes(&self) -> Option<usize> {
+        None
+    }
+    /// Compare current complete meaning/services with the existing immutable
+    /// definition. This must include support, not just a type/identity match.
     fn check_final(
         &self,
         input: ProducerOperationInput<'_>,
@@ -162,26 +182,76 @@ pub fn prepare_thing(
     providers: &[&dyn ProducerCapability],
     behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
 ) -> CoreResult<PreparedThing> {
-    prepare_checked(
+    let mut operations = Vec::new();
+    let mut retained_bytes = core::mem::size_of::<PreparedThing>();
+    visit_thing(
         description,
         instance,
         limits,
         budget,
-        providers,
         &behavior,
-        None,
-    )
+        |_, input, budget| {
+            let mut chosen = None;
+            for (i, provider) in providers.iter().enumerate() {
+                budget
+                    .consume(WorkClass::PlanningItems, 1)
+                    .map_err(|_| busy())?;
+                if let Some(definition) = provider.prepare(input, budget)? {
+                    if chosen.is_some() {
+                        return Err(unsupported());
+                    }
+                    chosen = Some((i, provider.identity(), definition));
+                }
+            }
+            let selected = chosen.ok_or_else(unsupported)?;
+            let binding_bytes = providers[selected.0]
+                .definition_bytes(selected.2.as_ref())
+                .ok_or_else(unsupported)?;
+            let old_capacity = operations.capacity();
+            operations.try_reserve(1).map_err(|_| busy())?;
+            let next = retained_bytes
+                .checked_add(
+                    (operations.capacity() - old_capacity)
+                        * core::mem::size_of::<PreparedOperation>(),
+                )
+                .and_then(|n| n.checked_add(input.site.name_bytes()))
+                .and_then(|n| n.checked_add(binding_bytes))
+                .ok_or_else(busy)?;
+            if u64::try_from(next).map_or(true, |n| {
+                n > limits
+                    .get(ResourceKind::EngineLiveBytesGlobalMax)
+                    .unwrap_or(0)
+            }) {
+                return Err(busy());
+            }
+            retained_bytes = next;
+            operations.push(PreparedOperation {
+                site: input.site.clone(),
+                form: input.form,
+                operation: input.operation,
+                binding: selected.1,
+                provider: selected.0,
+                definition: selected.2,
+            });
+            Ok(())
+        },
+    )?;
+    Ok(PreparedThing {
+        operations,
+        retained_bytes,
+    })
 }
 
-fn prepare_checked(
+// The common TD walk lends one operation at a time. Checking an existing Thing
+// never constructs an owned replacement operation/definition set.
+fn visit_thing(
     description: &str,
     instance: ProducerInstanceKey,
     limits: &ResourceLimits,
     budget: &mut WorkBudget,
-    providers: &[&dyn ProducerCapability],
     behavior: &impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
-    previous: Option<&PreparedThing>,
-) -> CoreResult<PreparedThing> {
+    mut visit: impl FnMut(usize, ProducerOperationInput<'_>, &mut WorkBudget) -> CoreResult<()>,
+) -> CoreResult<usize> {
     if description.len() > PRODUCER_DESCRIPTION_BYTES {
         return Err(unsupported());
     }
@@ -224,8 +294,7 @@ fn prepare_checked(
         }
     };
     let mut cursor = validated.into_producer();
-    let mut operations = Vec::new();
-    let mut retained_bytes = core::mem::size_of::<PreparedThing>();
+    let mut count = 0;
     loop {
         budget
             .consume(WorkClass::PlanningItems, 1)
@@ -248,90 +317,23 @@ fn prepare_checked(
                     if !behavior(site.loan(), operation) {
                         return Err(unsupported());
                     }
-                    let old = if let Some(p) = previous {
-                        Some(p.operations.get(operations.len()).ok_or_else(unsupported)?)
-                    } else {
-                        None
-                    };
-                    if let Some(old) = old {
-                        if old.site != site || old.form != index || old.operation != operation {
-                            return Err(unsupported());
-                        }
-                    }
-                    let selected = cursor
+                    cursor
                         .with_form_semantics(site.loan(), index, budget, |doc, target, budget| {
-                            let mut chosen = None;
-                            for (i, provider) in providers.iter().enumerate() {
-                                budget
-                                    .consume(WorkClass::PlanningItems, 1)
-                                    .map_err(|_| busy())?;
-                                let input = ProducerOperationInput {
+                            visit(
+                                count,
+                                ProducerOperationInput {
                                     document: doc,
                                     site: &site,
                                     form: index,
                                     operation,
                                     target,
-                                };
-                                if let Some(definition) = provider.prepare(input, budget)? {
-                                    if chosen.is_some() {
-                                        return Err(unsupported());
-                                    }
-                                    if let Some(old) = old {
-                                        if old.provider != i
-                                            || old.binding != provider.identity()
-                                            || old.definition.as_ref().type_id()
-                                                != definition.as_ref().type_id()
-                                            || !provider.check_final(
-                                                ProducerOperationInput {
-                                                    document: doc,
-                                                    site: &site,
-                                                    form: index,
-                                                    operation,
-                                                    target,
-                                                },
-                                                old.definition.as_ref(),
-                                                budget,
-                                            )?
-                                        {
-                                            return Err(unsupported());
-                                        }
-                                    }
-                                    chosen = Some((i, provider.identity(), definition));
-                                }
-                            }
-                            chosen.ok_or_else(unsupported)
+                                },
+                                budget,
+                            )
                         })
                         .map_err(semantic_error)?
                         .ok_or_else(busy)??;
-                    let binding_bytes = providers[selected.0]
-                        .definition_bytes(selected.2.as_ref())
-                        .ok_or_else(unsupported)?;
-                    let old_capacity = operations.capacity();
-                    operations.try_reserve(1).map_err(|_| busy())?;
-                    let next = retained_bytes
-                        .checked_add(
-                            (operations.capacity() - old_capacity)
-                                * core::mem::size_of::<PreparedOperation>(),
-                        )
-                        .and_then(|n| n.checked_add(site.name_bytes()))
-                        .and_then(|n| n.checked_add(binding_bytes))
-                        .ok_or_else(busy)?;
-                    if u64::try_from(next).map_or(true, |n| {
-                        n > limits
-                            .get(ResourceKind::EngineLiveBytesGlobalMax)
-                            .unwrap_or(0)
-                    }) {
-                        return Err(busy());
-                    }
-                    retained_bytes = next;
-                    operations.push(PreparedOperation {
-                        site: site.clone(),
-                        form: index,
-                        operation,
-                        binding: selected.1,
-                        provider: selected.0,
-                        definition: selected.2,
-                    });
+                    count += 1;
                 }
                 cursor.acknowledge();
             }
@@ -340,13 +342,10 @@ fn prepare_checked(
             return Err(busy());
         }
     }
-    if operations.is_empty() || previous.is_some_and(|p| p.operations.len() != operations.len()) {
+    if count == 0 {
         return Err(unsupported());
     }
-    Ok(PreparedThing {
-        operations,
-        retained_bytes,
-    })
+    Ok(count)
 }
 
 /// Reinterpret the entire final TD against the original actual registrations.
@@ -365,14 +364,46 @@ pub fn check_final_thing(
     // Requalify *all* common semantics and candidates, not only the first leaf.
     // Compare exact coordinates and selected providers, then verify their owned
     // definition with the same final semantic input.
-    let _final = prepare_checked(
+    let count = visit_thing(
         description,
         instance,
         limits,
         budget,
-        providers,
         &behavior,
-        Some(prepared),
+        |ordinal, input, budget| {
+            let old = prepared.operations.get(ordinal).ok_or_else(unsupported)?;
+            if old.site != *input.site || old.form != input.form || old.operation != input.operation
+            {
+                return Err(unsupported());
+            }
+            let mut chosen = None;
+            for (i, provider) in providers.iter().enumerate() {
+                budget
+                    .consume(WorkClass::PlanningItems, 1)
+                    .map_err(|_| busy())?;
+                let supported = if i == old.provider {
+                    if old.binding != provider.identity() {
+                        return Err(unsupported());
+                    }
+                    provider.check_final(input, old.definition.as_ref(), budget)?
+                } else {
+                    provider.supports(input, budget)?
+                };
+                if supported {
+                    if chosen.is_some() {
+                        return Err(unsupported());
+                    }
+                    chosen = Some(i);
+                }
+            }
+            if chosen != Some(old.provider) {
+                return Err(unsupported());
+            }
+            Ok(())
+        },
     )?;
+    if count != prepared.operations.len() {
+        return Err(unsupported());
+    }
     Ok(())
 }
