@@ -60,3 +60,25 @@ consider checked definition reuse only with proved compatibility. The
 type-only HTTP schema path is valid evidence for exactly its supported subset,
 not general DataSchema acceptance. Test the first composed path rather than
 introduce a universal artifact/cache/program type or a preparatory gate.
+
+## Implemented finite join
+
+`finite_producer::qualify_property_read` decodes the exact bounded retained TD,
+performs TD Basic admission, complete `ValidatedProducerCursor` coverage through
+`ProducerPropertyReadAdmission`, then lends resolved meaning to the actual
+`FiniteProducerCompiler`. The open compiler constructs the concrete native
+Binding and independent passive configuration snapshot; its final check sees
+that same Binding after closed setup. Runtime types still belong to the Binding.
+There is no `ProducerExecutor`, legacy installer or compatibility adapter in
+this join. Source/semantic loans die before native progress.
+
+The first scope is one Property, one Form, exactly effective `readproperty`, one
+actual behavior, at most 16 KiB retained JSON and 256-byte property names.
+Unsupported root Forms, siblings, operations, mapping, schema, security and
+lifecycle declarations refuse the entire input. An explicit final reduced
+description would have to run the same complete process. Work is charged before
+JSON decoding, TD steps and lowering; an unpaid step returns Backpressure without
+busy retry. Finalization may retry bounded pure qualification on work exhaustion,
+but warm Serving never reinterprets the TD. No general schema, incremental JSON
+decoder, reuse/cache, delayed materialization or constrained-profile claim is
+added. The Servient owner in WP-400 reserves finalization capacity before setup.

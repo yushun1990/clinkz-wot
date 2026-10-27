@@ -108,3 +108,31 @@ validation, late responses and actual native/cleanup retirement. Keep code and
 tests as executable proof of the claimed slice, not a new mandatory HTTP-first
 architecture phase. HTTPS/authentication/authorization and other native
 operation families require their own supported mapping and security claims.
+
+## Joined HTTP finite participant
+
+`HttpFiniteProducer` is the optional preparation facet for `HttpFiniteBinding`.
+It constructs the direct native configuration with the actual pure HTTP compiler
+and rechecks the exact mapping and actual `bound_address` after closed setup.
+Its normal runtime graph retains no TD, Planning or Servient dependency.
+HTTP protocol vocabulary, GET/path/Host matching, native correlation/reply,
+JSON/type checking and physical retirement remain in the Binding.
+
+The first supported joined TD retains one Property read, one Form, endpoint
+NoSec, JSON and primary 200 with the existing type-only schema subset. Supplied
+nonzero loopback endpoints must match the immutable listen operands. Native
+readiness is not publication: closed setup accepts/parses no stream and buffers
+only the OS-owned bounded listen backlog requested at 128; backlog saturation
+may wait/refuse peers. No native callback receives behavior/dispatch power.
+Publication occurs solely at WP-400's final local commit after complete
+requalification. Port-0 TD rewriting is refused, not silently substituted.
+
+The public `serve_property` example now uses this joined path. Real raw peers
+and the public Consumer in `joined_producer` test final TD truth, original result
+and delivery, before/after-publication cancellation, occupied-port failure,
+dependency loss, replacement, partial-write uncertainty and retained cleanup.
+The original raw HTTP and legacy installer tests continue to test their own
+ownership/resource/framing contracts; their prior acceptance does not transfer.
+HTTP write completion describes local delivery only. No remote receipt, TLS,
+authentication, shared HTTP listener, multi-Form/operation or production
+resource/performance qualification follows from these tests.

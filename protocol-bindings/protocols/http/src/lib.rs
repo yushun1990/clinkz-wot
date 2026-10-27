@@ -19,7 +19,11 @@ use std::{
 };
 #[cfg(feature = "prepare")]
 mod compiler;
+#[cfg(feature = "prepare")]
+mod finite_preparation;
 mod finite_producer;
+#[cfg(feature = "prepare")]
+pub use finite_preparation::HttpFiniteProducer;
 #[cfg(all(test, feature = "prepare"))]
 mod identity_tests;
 mod producer;

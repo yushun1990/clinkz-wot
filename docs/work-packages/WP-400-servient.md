@@ -171,3 +171,66 @@ late/stale delivery, item/byte/native loss, reciprocal responses and cardinality
 policy/configuration changes, saturation, failed cleanup and root disposal.
 This is raw Host lifecycle evidence, not real protocol I/O, TD/schema/security
 qualification, fleet scalability, hardware evidence or package/gate completion.
+
+## First joined finite Producer
+
+The optional `producer::ProducerServient<C>` captures one frozen actual
+`FiniteProducerCompiler` at construction. `prepare` captures one behavior and
+unique authority, qualifies the entire exact description, reserves Engine
+ownership and stages `ProducerPublication` before native acquisition. It creates
+`ProducerExposure<B>` over the existing source-free runtime; it never constructs
+or wraps `ProducerInstallationRuntime`. Legacy tests retain their original
+independent scope. [0092](../../workspace/0092-joined-producer-publication.md)
+records the comparison of available participants and rejected alternatives.
+
+The first paid step may acquire native resources and yields InstalledClosed.
+A subsequent step requalifies the entire final TD against the same actual
+provider, behavior coordinate, configuration, services and native endpoint/
+readiness facts. The source-free `publish` first checks issuer/current slot and
+captured runtime pairing. Its non-fallible local commit then installs the
+preallocated description/behavior/authority references and opens that runtime.
+It calls no native/service/application code, allocates nothing and destroys no
+displaced behavior inside the commit. No remote/global visibility atomicity is
+promised. Explicit endpoint meaning is retained; endpoint rewriting is not
+implemented in this slice.
+
+The publication guard and registry refer to the same logical permission cell.
+Cancellation before publication prevents it even at zero work credit; cancellation,
+native failure, deadline and lost guards fence this incarnation. A replacement
+cannot redirect old accepted work. Explicit close retains native work and the
+complete first cause/result/delivery through Pending/error; settlement must be
+acknowledged before `retire` removes its logical record. Native-only cleanup
+can continue after root loss. Drop uses the concrete Binding's finite local
+abort and reports no completed remote drain. All dispatch still occurs in the
+single source-free Servient registry, with fresh policy/current-instance checks.
+
+The Host account bank reserves controlled owner layouts, declared handler and
+configuration indirect backing, description/property backing, one input/result
+opportunity and prepaid cleanup before native setup. Original reservations are
+shared by runtime and behavior, so accepted instances and unread results retain
+them through replacement. Final TD decoding/semantic temporary capacity and its
+overlapping Engine charge are reserved separately before setup, owned only by
+the exposure's qualification phase. Pending qualification keeps them for retry;
+completed qualification releases them after its temporary owners are destroyed
+and before the local publication commit. Cancellation, timeout, setup failure,
+cleanup-only progress and exposure Drop also end that phase without releasing
+the independent lifetime/result/cleanup leases. Caller-provided
+description/handler/provider construction
+precedes admission; output construction stays application-backed until accepted.
+JSON decoding uses bounded input and serde's finite recursion limit with a
+conservative Host temporary allowance, not an allocator-intercepted heap maximum.
+Native OS/SDK allocation and finite disposal remain Binding/deployment policy.
+These are aggregate reservations for this owner, not complete qualification of
+all legacy flat resource fields or a measured maximum-RAM/performance claim.
+
+`joined_producer` exercises the public facade over real HTTP peers and the public
+Consumer using the exact published TD: complete coverage refusals, anonymous/
+empty-key and alias positives, closed traffic, repeated reads, fresh policy,
+capacity pressure, final dependency/support loss, cancellation, deadline,
+replacement, unread/late result and delivery, partial-write uncertainty, failed/
+pending cleanup, root loss, final socket release and original-bank release.
+Existing finite TCP/datagram, Action and notification regressions remain scoped
+independent evidence. This is one Host/manual/synchronous read mapping and one
+logical slot/required participant. It establishes no multi-participant atomicity,
+async behavior, Action/Event/observation publication, HTTPS/authentication,
+hardware/profile qualification or package/gate/milestone completion.

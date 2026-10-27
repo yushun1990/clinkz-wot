@@ -1,6 +1,7 @@
 //! Source-free, manually driven Producer ownership. The finite ingress facet
 //! and independent Action obligations share one logical instance registry.
-//! Neither facet publishes a TD or defines a universal native runtime.
+//! A separate local publication seam commits a supplied final description;
+//! neither execution facet qualifies TD meaning or defines a universal runtime.
 #![cfg(feature = "std")]
 #![no_std]
 
@@ -8,10 +9,13 @@ extern crate alloc;
 
 mod action;
 pub use action::*;
+mod publication;
+pub use publication::*;
 
 use alloc::{
     boxed::Box,
     rc::{Rc, Weak},
+    sync::Arc,
     vec::Vec,
 };
 use clinkz_wot_core::{
@@ -27,6 +31,7 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_foundation::{MonotonicInstant, WorkBudget, WorkClass};
 use core::{
+    cell::Cell,
     mem::size_of,
     task::{Context, Poll},
 };
@@ -63,6 +68,8 @@ impl RawFiniteBehavior {
 /// than by any Binding runtime. Accepted work may retain this exact instance.
 pub struct RawProducerInstance {
     authority: ProducerInstanceAuthority,
+    // Dispose description before its behavior's last retained funding lease.
+    description: Option<Arc<str>>,
     behaviors: Vec<RawFiniteBehavior>,
     actions: Vec<RawActionBehavior>,
 }
@@ -71,6 +78,7 @@ impl RawProducerInstance {
     pub fn new(authority: ProducerInstanceAuthority, behaviors: Vec<RawFiniteBehavior>) -> Self {
         Self {
             authority,
+            description: None,
             behaviors,
             actions: Vec::new(),
         }
@@ -86,6 +94,13 @@ impl RawProducerInstance {
     pub fn key(&self) -> ProducerInstanceKey {
         self.authority.key()
     }
+
+    /// Source-independent retained description. Raw callers remain responsible
+    /// for qualification; the preparation facade supplies the checked value.
+    pub fn with_description(mut self, description: Arc<str>) -> Self {
+        self.description = Some(description);
+        self
+    }
 }
 
 /// Fixed registration/lookup envelope at the logical owner. Construction and
@@ -100,7 +115,9 @@ pub struct RawProducerRegistryLimits {
 
 struct InstanceEntry {
     instance: Rc<RawProducerInstance>,
-    current: bool,
+    // This is the one logical permission cell, shared with its publication
+    // guard so lost roots can revoke without a lock or native callback.
+    current: Rc<Cell<bool>>,
 }
 
 struct AcceptedBehavior {
@@ -137,14 +154,13 @@ impl RawProducerServient {
         if !valid {
             return Err(rejection(instances));
         }
+        let mut entries = Vec::with_capacity(limits.instances);
+        entries.extend(instances.into_iter().map(|instance| InstanceEntry {
+            instance: Rc::new(instance),
+            current: Rc::new(Cell::new(true)),
+        }));
         Ok(Self {
-            instances: instances
-                .into_iter()
-                .map(|instance| InstanceEntry {
-                    instance: Rc::new(instance),
-                    current: true,
-                })
-                .collect(),
+            instances: entries,
             issuer: Rc::new(()),
             limits,
             actions: None,
@@ -179,9 +195,9 @@ impl RawProducerServient {
         if let Some(entry) = self
             .instances
             .iter_mut()
-            .find(|entry| entry.instance.key() == key && entry.current)
+            .find(|entry| entry.instance.key() == key && entry.current.get())
         {
-            entry.current = false;
+            entry.current.set(false);
             if let Some(actions) = &mut self.actions {
                 actions.revoke(key);
             }
@@ -210,9 +226,12 @@ impl RawProducerServient {
         {
             return Err(rejection(replacement));
         }
+        self.instances[index.expect("checked entry")]
+            .current
+            .set(false);
         self.instances[index.expect("checked entry")] = InstanceEntry {
             instance: Rc::new(replacement),
-            current: true,
+            current: Rc::new(Cell::new(true)),
         };
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);
@@ -247,7 +266,7 @@ impl RawProducerServient {
         let instance_index = self
             .instances
             .iter()
-            .position(|entry| entry.instance.key() == candidate.instance && entry.current)
+            .position(|entry| entry.instance.key() == candidate.instance && entry.current.get())
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let behavior_index = self.instances[instance_index]
             .instance
@@ -475,6 +494,16 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
         self.first_cause.as_ref()
+    }
+
+    /// A final qualification loan grants no native mutation or dispatch power.
+    pub fn closed_binding(&self) -> Option<&B> {
+        (self.state == RawFiniteState::InstalledClosed).then_some(&self.binding)
+    }
+
+    /// Fence locally while retaining the first cause and complete cleanup owner.
+    pub fn fence(&mut self, cause: CoreError) {
+        self.fail(cause);
     }
 
     /// A delivered or explicitly retired exchange must be acknowledged before

@@ -366,7 +366,7 @@ impl RawProducerServient {
         let instance = self
             .instances
             .iter()
-            .find(|e| e.current && e.instance.key() == request.instance)
+            .find(|e| e.current.get() && e.instance.key() == request.instance)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let index = instance
             .instance
@@ -500,7 +500,7 @@ impl RawProducerServient {
         if !self
             .instances
             .iter()
-            .any(|e| e.current && e.instance.key() == entry.instance.key())
+            .any(|e| e.current.get() && e.instance.key() == entry.instance.key())
         {
             return Err(CoreError::StaleHandle(context()));
         }

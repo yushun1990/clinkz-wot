@@ -285,7 +285,7 @@ its result and lends the sealed response back to the original native owner.
 `InstalledClosed` alone still issues no permit. The old `produce_td` and
 `ExposedThingHandle` staged Host facade has been removed.
 
-A minimal complete application is `examples/serve_property.rs`:
+The joined v6 application is `examples/serve_property.rs` (see the joined path below):
 
 ```sh
 cargo run --locked --offline -p clinkz-wot-binding-http --example serve_property -- 8080 30
@@ -374,8 +374,8 @@ It does **not** publish a qualified TD. This integration has caller-provisioned
 bounded finite slots, not the older root's aggregate Host account admission.
 Complete final-TD/actual-behavior/provider/service qualification, aggregate
 admission, final endpoint/dependency checks and the local publication commit
-must precede a qualified exposure API. The funded public root remains a separate
-restricted implementation until those guarantees have a real replacement.
+belong to the joined facade below. The legacy funded installer remains a
+separate restricted implementation with its own historical regression scope.
 
 Run the executable shared integration (raw independent peers and public Consumer):
 
@@ -392,3 +392,49 @@ cargo test --locked --offline -p clinkz-wot-td --features validated-thing --test
 cargo test --locked --offline -p clinkz-wot-binding-http --test producer_installation -- --test-threads=1
 cargo test --locked --offline -p clinkz-wot-servient --test producer_installation -- --test-threads=1
 ```
+
+
+## Joined v6 Producer
+
+`HttpFiniteProducer` startup-registers the actual direct finite preparation
+provider with `producer::ProducerServient`. Its `prepare` accepts the complete
+retained TD, exact behavior key and unique authority. It rejects the entire TD
+if any retained Form/operation, schema, security or lifecycle promise is outside
+the supported single-read scope. It funds the staged logical/native/result/
+cleanup owners before opening a socket. This uses no legacy installer API.
+
+The first funded step installs native participation and returns InstalledClosed.
+Until publication the Binding accepts/parses no application stream; prepublication
+traffic is buffered only in the bounded OS listen backlog (requested at 128),
+with OS wait/refusal at saturation. A following funded step reinterprets the
+entire final TD, checks the exact mapping/provider/services and actual local
+endpoint, then commits description, behavior and current logical authority with
+no allocation or fallible native call in that local commit. `description(key)`
+returns the exact final JSON only while that incarnation is current.
+
+This first scope uses explicit nonzero loopback endpoints, one Property/Form,
+effective `readproperty`, synchronous registered behavior, endpoint NoSec,
+JSON/200 and the type-only schemas described above. It supports anonymous TDs,
+empty Property keys, default/aliased GET and relative hrefs. It does not rewrite
+port-0 endpoints or silently discard alternatives. The current public Consumer
+still needs an id/nonempty key; its joined test supplies those in the original
+published TD rather than modifying the description after publication.
+
+After publication only Servient dispatches. The native Binding owns request
+matching/correlation/reply/physical release; the shared logical owner checks
+current identity and policy, validates output with the actual captured service,
+and retains original result/effect/delivery until settlement acknowledgement.
+Cancellation/lost exposure revokes the same permission cell as the registry.
+Close/failed cleanup retains owners; `retire` requires Closed and an acknowledged
+settlement. The caller drives progress; Drop guarantees finite local disposal,
+not remote rollback or completed drain. Replacement preserves old accepted work.
+
+The joined facade is Host/std/manual and contains optional preparation. The
+separate finite execution crate still links only Core/Foundation. Its generic
+source-free publication primitive relies on the facade's qualification; raw
+activation remains raw. One logical slot and one required native participant
+are implemented here. Multiple participant publication, shared HTTP listeners,
+async behaviors, other operation families, TLS/authentication, embedded devices
+and resource/performance release qualification remain unproved. Original-bank
+reservations and a conservative bounded-input decoding allowance are distinct
+from measured OS/SDK or total allocator maxima.

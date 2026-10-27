@@ -84,6 +84,15 @@ pub struct HttpFiniteBinding {
 }
 
 impl HttpFiniteBinding {
+    /// Passive actual endpoint fact for final qualification, after readiness.
+    /// This does not open semantic ingress or change the supplied Form meaning.
+    pub fn bound_address(&self) -> Option<std::net::SocketAddr> {
+        if self.closed || self.failed.is_some() {
+            return None;
+        }
+        self.listener.as_ref()?.local_addr().ok()
+    }
+
     /// Pure construction; first funded poll_start owns all native setup.
     pub fn new(
         configuration: HttpFiniteConfig,
@@ -166,6 +175,9 @@ impl FiniteIngressBinding for HttpFiniteBinding {
             let socket = socket2::SockRef::from(self.listener.as_ref().unwrap());
             socket.set_reuse_address(true)?;
             socket.bind(&address.into())?;
+            // Closed setup buffers only the bounded OS listen backlog. No
+            // stream is accepted/parsed before the Servient publication commit.
+            // The OS owns TCP buffering; peers may wait or be refused when full.
             socket.listen(128)?;
             socket.set_nonblocking(true)
         })();
