@@ -136,6 +136,12 @@ pub trait FiniteIngressBinding {
     /// progress step; an unbounded native configuration needs a different
     /// immutable revision-bearing representation.
     fn configuration(&self) -> &Self::Configuration;
+    /// Passive closed-participation recipient check. This is a native mapping
+    /// claim, not logical permission; a shared Binding may prepare several
+    /// independent Things. Raw-only Bindings gain no publication readiness.
+    fn prepared_for_instance(&self, _key: ProducerInstanceKey) -> bool {
+        false
+    }
     /// Passive exact mapping claim for a qualified Producer publication. The
     /// default is *no* coverage: existing raw-only finite Bindings do not gain
     /// advertised TD support by implementing the I/O facet alone.

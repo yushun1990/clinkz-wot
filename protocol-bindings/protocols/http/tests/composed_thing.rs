@@ -59,6 +59,68 @@ fn description(tcp: SocketAddr, udp: SocketAddr) -> Arc<str> {
     }).to_string())
 }
 
+fn http_properties(first: SocketAddr, second: SocketAddr) -> Arc<str> {
+    Arc::from(
+        serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"two listeners",
+            "security":["n"],"securityDefinitions":{"n":{"scheme":"nosec"}},
+            "properties":{
+                "left":{"type":"integer","readOnly":true,
+                    "forms":[{"href":format!("http://{first}/value")}]},
+                "right":{"type":"integer","readOnly":true,
+                    "forms":[{"href":format!("http://{second}/value")}]}
+            }
+        })
+        .to_string(),
+    )
+}
+
+fn http_read(
+    owner: &RawProducerServient,
+    address: SocketAddr,
+    program: HttpProducerProgram,
+    instance: ProducerInstanceKey,
+    name: &str,
+    id: BindingId,
+) -> RawFiniteRuntime<HttpFiniteBinding> {
+    let config = HttpFiniteConfig::try_new(
+        HttpProducerConfig::for_loopback(address).unwrap(),
+        program,
+        instance,
+        Arc::from(name),
+        100,
+    )
+    .unwrap();
+    RawFiniteRuntime::try_new(
+        HttpFiniteBinding::new(config.clone(), id, BindingGeneration::INITIAL),
+        config,
+        owner,
+        RawFiniteLimits {
+            candidates: 1,
+            input_body_bytes: 0,
+            output_body_bytes: 4096,
+            output_media_capacity: 64,
+            output_retained_bytes: 8192,
+        },
+        FiniteOutputValidation::Required,
+        Deadline::NONE,
+    )
+    .ok()
+    .unwrap()
+}
+
+struct UnselectedParticipant(Cell<bool>);
+impl ClosedProducerParticipation for UnselectedParticipant {
+    fn ready_for(&self, _: &RawProducerServient, _: ProducerInstanceKey) -> bool {
+        true
+    }
+    fn open(&mut self) {
+        self.0.set(true);
+    }
+    fn retired(&self) -> bool {
+        false
+    }
+}
+
 // Only this linked Binding interprets its UDP mapping. Each operation has an
 // independently prepared route; no generic URL-to-session or request/reply
 // Action assumption is installed in the Engine.
@@ -585,6 +647,227 @@ fn prepare_action(
 }
 
 #[test]
+fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
+    let left_addr = tcp_addr();
+    let right_addr = tcp_addr();
+    let foreign_addr = tcp_addr();
+    let a = key(1, Generation::INITIAL);
+    let b = key(2, Generation::INITIAL);
+    let ka = a.key();
+    let kb = b.key();
+    let counts = Rc::new(Counts::default());
+    let foreign_counts = Rc::new(Counts::default());
+    let foreign = RawProducerInstance::new(
+        b,
+        vec![RawFiniteBehavior::new(
+            AffordanceTarget::Property(Arc::from("left")),
+            Operation::ReadProperty,
+            Property(Rc::clone(&foreign_counts)),
+        )],
+    );
+    let mut s = RawProducerServient::try_new(
+        vec![foreign],
+        RawProducerRegistryLimits {
+            instances: 2,
+            behaviors_per_instance: 4,
+            target_name_bytes: 64,
+        },
+    )
+    .ok()
+    .unwrap();
+    let staged = RawProducerInstance::new(
+        a,
+        ["left", "right"]
+            .into_iter()
+            .map(|name| {
+                RawFiniteBehavior::new(
+                    AffordanceTarget::Property(Arc::from(name)),
+                    Operation::ReadProperty,
+                    Property(Rc::clone(&counts)),
+                )
+            })
+            .collect(),
+    );
+    let description = http_properties(left_addr, right_addr);
+    let left_id = BindingId::new(101);
+    let right_id = BindingId::new(102);
+    let left_provider = HttpFiniteProducer::try_new(
+        HttpProducerConfig::for_loopback(left_addr).unwrap(),
+        left_id,
+        BindingGeneration::INITIAL,
+        100,
+    )
+    .unwrap();
+    let right_provider = HttpFiniteProducer::try_new(
+        HttpProducerConfig::for_loopback(right_addr).unwrap(),
+        right_id,
+        BindingGeneration::INITIAL,
+        100,
+    )
+    .unwrap();
+    let providers: [&dyn ProducerCapability; 2] = [&left_provider, &right_provider];
+    let prepared = prepare_thing(
+        &description,
+        ka,
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &providers,
+        |scope, op| match scope {
+            ValidatedProducerScope::Property(n) => staged.supports_property(n, op),
+            _ => false,
+        },
+    )
+    .unwrap();
+    assert_eq!(prepared.operations().len(), 2);
+    for operation in prepared.operations() {
+        let expected = match &operation.site {
+            FormSite::Property(name) if name == "left" => left_id,
+            FormSite::Property(name) if name == "right" => right_id,
+            _ => panic!("unexpected prepared operation"),
+        };
+        assert_eq!(operation.binding, (expected, BindingGeneration::INITIAL));
+    }
+    // A matching registration still rejects unsupported meaning; probing the
+    // other listener must not turn that error into a successful fallback.
+    let mut unsupported_td: serde_json::Value = serde_json::from_str(&description).unwrap();
+    unsupported_td["properties"]["right"]["forms"][0]["contentType"] =
+        serde_json::json!("text/plain");
+    assert!(
+        prepare_thing(
+            &unsupported_td.to_string(),
+            ka,
+            &GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &providers,
+            |_, _| true,
+        )
+        .is_err()
+    );
+    let program = |name: &str| {
+        prepared
+            .operations()
+            .iter()
+            .find(|o| o.site == FormSite::Property(name.into()))
+            .unwrap()
+            .definition::<HttpProducerProgram>()
+            .unwrap()
+            .clone()
+    };
+    let mut publication = s
+        .prepare_publication(staged.with_description(Arc::clone(&description)), None)
+        .ok()
+        .unwrap();
+    let mut left = http_read(&s, left_addr, program("left"), ka, "left", left_id);
+    let mut right = http_read(&s, right_addr, program("right"), ka, "right", right_id);
+
+    // B has a live handler and a separate closed listener. It is not part of
+    // A's qualified exposure, despite sharing the same Servient owner.
+    let mut foreign_td: serde_json::Value =
+        serde_json::from_str(&http_properties(foreign_addr, right_addr)).unwrap();
+    foreign_td["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("right");
+    let foreign_td = foreign_td.to_string();
+    let foreign_id = BindingId::new(103);
+    let foreign_provider = HttpFiniteProducer::try_new(
+        HttpProducerConfig::for_loopback(foreign_addr).unwrap(),
+        foreign_id,
+        BindingGeneration::INITIAL,
+        100,
+    )
+    .unwrap();
+    let foreign_prepared = prepare_thing(
+        &foreign_td,
+        kb,
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&foreign_provider],
+        |scope, op| {
+            matches!(scope, ValidatedProducerScope::Property("left"))
+                && op == Operation::ReadProperty
+        },
+    )
+    .unwrap();
+    let mut unrelated = http_read(
+        &s,
+        foreign_addr,
+        foreign_prepared.operations()[0]
+            .definition::<HttpProducerProgram>()
+            .unwrap()
+            .clone(),
+        kb,
+        "left",
+        foreign_id,
+    );
+    for runtime in [&mut left, &mut right, &mut unrelated] {
+        assert_eq!(
+            runtime.step(&mut cx(), &mut budget(), now()),
+            Poll::Ready(RawFiniteState::InstalledClosed)
+        );
+    }
+    assert!(!unrelated.ready_for(&s, ka));
+    // Even the lower-level publication entry cannot open B for A.
+    assert!(
+        s.publish_composed(&mut publication, &mut [&mut left, &mut unrelated])
+            .is_err()
+    );
+    assert_eq!(unrelated.state(), RawFiniteState::InstalledClosed);
+    assert!(
+        publish_prepared_thing(
+            &mut s,
+            &mut publication,
+            &prepared,
+            &providers,
+            &mut [&mut left, &mut right, &mut unrelated],
+            &GatewayDefaultV1::LIMITS,
+            &mut budget(),
+        )
+        .is_err()
+    );
+    assert!(!publication.is_committed());
+    assert_eq!(s.description(ka), None);
+    assert_eq!(unrelated.state(), RawFiniteState::InstalledClosed);
+    assert_eq!(left.state(), RawFiniteState::InstalledClosed);
+    assert_eq!(right.state(), RawFiniteState::InstalledClosed);
+    publish_prepared_thing(
+        &mut s,
+        &mut publication,
+        &prepared,
+        &providers,
+        &mut [&mut left, &mut right],
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+    )
+    .unwrap();
+    assert!(read_peer(left_addr, &mut s, &mut left).starts_with(b"HTTP/1.1 200"));
+    assert!(read_peer(right_addr, &mut s, &mut right).starts_with(b"HTTP/1.1 200"));
+    assert_eq!(counts.property.get(), 2);
+    assert_eq!(foreign_counts.property.get(), 0);
+    assert_eq!(unrelated.state(), RawFiniteState::InstalledClosed);
+    for runtime in [&mut left, &mut right] {
+        assert_eq!(
+            runtime.take_settlement().unwrap().delivery,
+            FiniteDelivery::Delivered
+        );
+    }
+    for runtime in [&mut left, &mut right, &mut unrelated] {
+        runtime.begin_close();
+        while runtime.state() != RawFiniteState::Closed {
+            let _ = runtime.step(&mut cx(), &mut budget(), now());
+        }
+    }
+    s.retire_composed(&mut publication, &[&left, &right])
+        .unwrap();
+    drop(left);
+    drop(right);
+    drop(unrelated);
+    for addr in [left_addr, right_addr, foreign_addr] {
+        TcpListener::bind(addr).unwrap();
+    }
+}
+
+#[test]
 fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work() {
     let tcp = tcp_addr();
     let udp = udp_addr();
@@ -733,6 +1016,26 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
         )
         .is_err()
     );
+    // A participant that claims readiness but covers no selected Form must
+    // not be opened, even when every advertised operation has an owner.
+    let mut extra = UnselectedParticipant(Cell::new(false));
+    assert!(
+        publish_prepared_thing(
+            &mut s,
+            &mut publication,
+            &prepared,
+            &providers,
+            &mut [&mut read, &mut lease, &mut extra],
+            &GatewayDefaultV1::LIMITS,
+            &mut budget(),
+        )
+        .is_err()
+    );
+    assert!(!extra.0.get());
+    assert!(!lease.open.get());
+    assert!(!publication.is_committed());
+    assert_eq!(read.state(), RawFiniteState::InstalledClosed);
+    assert_eq!(s.description(k), None);
     // The HTTP port is live but semantic ingress remains closed.
     let mut waiting = TcpStream::connect(tcp).unwrap();
     waiting.set_nonblocking(true).unwrap();
@@ -799,8 +1102,31 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
         b"\"done\""
     );
     assert_eq!(counts.work_drops.get(), 1);
-    lease.close();
+    counts.complete.set(false);
+    assert_eq!(
+        udp_call(&peer, &native, &mut s, routes(&prepared), k, "invoke"),
+        "accepted"
+    );
+    let late = native.borrow().handles.last().unwrap().1.clone();
     publication.revoke();
+    assert_eq!(
+        s.step_raw_action(&late, &mut budget()).unwrap(),
+        Poll::Pending
+    );
+    assert_eq!(counts.cancels.get(), 2); // explicit cancel + guard revocation
+    counts.complete.set(true);
+    assert_eq!(
+        s.step_raw_action(&late, &mut budget()).unwrap(),
+        Poll::Ready(())
+    );
+    let result = s.take_raw_action_settlement(&late).unwrap().unwrap();
+    assert!(result.cancel_requested);
+    assert_eq!(
+        result.result.unwrap().data().unwrap().body.as_ref(),
+        b"\"done\""
+    );
+    assert_eq!(counts.work_drops.get(), 2);
+    lease.close();
     read.begin_close();
     while read.state() != RawFiniteState::Closed {
         let _ = read.step(&mut cx(), &mut budget(), now());
@@ -812,6 +1138,79 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     drop(native);
     assert_eq!(s.description(k), None);
     TcpListener::bind(tcp).unwrap();
+    UdpSocket::bind(udp).unwrap();
+}
+
+#[test]
+fn lost_publication_guard_requests_cancellation_on_next_funded_action_step() {
+    let udp = udp_addr();
+    let native = ActionNative::new(udp);
+    ActionNative::start(&native).unwrap();
+    let provider = UdpActionProvider::new(udp);
+    let text = action_only(udp);
+    let counts = Rc::new(Counts::default());
+    let mut s = owner();
+    let a = key(1, Generation::INITIAL);
+    let k = a.key();
+    let (prepared, mut publication) =
+        prepare_action(&s, a, &text, &provider, Rc::clone(&counts), None);
+    let mut lease = ActionNative::lease(&native, k);
+    publish_prepared_thing(
+        &mut s,
+        &mut publication,
+        &prepared,
+        &[&provider],
+        &mut [&mut lease],
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+    )
+    .unwrap();
+    let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    assert_eq!(
+        udp_call(&peer, &native, &mut s, routes(&prepared), k, "invoke"),
+        "accepted"
+    );
+    let handle = native.borrow().handles[0].1.clone();
+    drop(publication);
+    assert_eq!(s.description(k), None);
+    assert_eq!(counts.cancels.get(), 0);
+    assert_eq!(
+        s.step_raw_action(&handle, &mut WorkBudget::new()).unwrap(),
+        Poll::Pending
+    );
+    assert_eq!(counts.cancels.get(), 0);
+    assert_eq!(
+        s.step_raw_action(&handle, &mut budget()).unwrap(),
+        Poll::Pending
+    );
+    assert_eq!(counts.cancels.get(), 1);
+    assert_eq!(
+        s.step_raw_action(&handle, &mut budget()).unwrap(),
+        Poll::Pending
+    );
+    assert_eq!(counts.cancels.get(), 1);
+    assert_eq!(counts.work_drops.get(), 0);
+    assert!(s.take_raw_action_settlement(&handle).unwrap().is_none());
+    counts.complete.set(true);
+    assert_eq!(
+        s.step_raw_action(&handle, &mut budget()).unwrap(),
+        Poll::Ready(())
+    );
+    let result = s.take_raw_action_settlement(&handle).unwrap().unwrap();
+    assert_eq!(result.instance, k);
+    assert!(result.cancel_requested);
+    assert_eq!(result.effect, ActionEffect::PossiblyApplied);
+    assert_eq!(counts.cancels.get(), 1);
+    assert_eq!(counts.work_drops.get(), 1);
+    assert_eq!(
+        result.result.unwrap().data().unwrap().body.as_ref(),
+        b"\"done\""
+    );
+    lease.close();
+    drop(lease);
+    drop(s);
+    drop(native);
     UdpSocket::bind(udp).unwrap();
 }
 
@@ -905,6 +1304,14 @@ fn shared_native_socket_serves_two_things_and_replacement_does_not_retarget_old_
     assert_eq!(old.actions.get(), 1);
     assert_eq!(other.actions.get(), 1);
     assert_eq!(newer.actions.get(), 1);
+    assert_eq!(old.cancels.get(), 0); // no callback during publication
+    assert_eq!(
+        s.step_raw_action(&h1, &mut budget()).unwrap(),
+        Poll::Pending
+    );
+    assert_eq!(old.cancels.get(), 1); // displaced pending Action
+    assert_eq!(other.cancels.get(), 0);
+    assert_eq!(newer.cancels.get(), 0);
     old.complete.set(true);
     other.complete.set(true);
     newer.complete.set(true);
@@ -916,9 +1323,12 @@ fn shared_native_socket_serves_two_things_and_replacement_does_not_retarget_old_
         s.step_raw_action(&h2, &mut budget()).unwrap(),
         Poll::Ready(())
     );
+    let old_result = s.take_raw_action_settlement(&h1).unwrap().unwrap();
+    assert_eq!(old_result.instance, k1);
+    assert!(old_result.cancel_requested);
     assert_eq!(
-        s.take_raw_action_settlement(&h1).unwrap().unwrap().instance,
-        k1
+        old_result.result.unwrap().data().unwrap().body.as_ref(),
+        b"\"done\""
     );
     assert_eq!(
         s.take_raw_action_settlement(&h2).unwrap().unwrap().instance,
@@ -933,6 +1343,9 @@ fn shared_native_socket_serves_two_things_and_replacement_does_not_retarget_old_
         s.take_raw_action_settlement(&h3).unwrap().unwrap().instance,
         k3
     );
+    assert_eq!(old.cancels.get(), 1);
+    assert_eq!(other.cancels.get(), 0);
+    assert_eq!(newer.cancels.get(), 0);
     l1.close();
     s.retire_composed(&mut pub1, &[&l1]).unwrap();
     assert_eq!(
@@ -948,6 +1361,7 @@ fn shared_native_socket_serves_two_things_and_replacement_does_not_retarget_old_
         s.take_raw_action_settlement(&h4).unwrap().unwrap().instance,
         k3
     );
+    assert_eq!(newer.cancels.get(), 0); // retiring the old guard cannot cancel its successor
     l2.close();
     l3.close();
     s.retire_composed(&mut pub2, &[&l2]).unwrap();

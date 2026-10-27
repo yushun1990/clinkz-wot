@@ -145,6 +145,9 @@ impl FiniteIngressBinding for HttpFiniteBinding {
     fn configuration(&self) -> &Self::Configuration {
         &self.configuration
     }
+    fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
+        self.configuration.instance == key
+    }
     fn covers_definition(
         &self,
         key: ProducerInstanceKey,

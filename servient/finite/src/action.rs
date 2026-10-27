@@ -155,6 +155,10 @@ struct Invocation {
     // Shared with handles so step can select and debit the cleanup/handler
     // lookup lane before scanning entries. Only the owner can set this flag.
     token: Rc<Cell<bool>>,
+    // The original logical permission cell survives replacement and guard
+    // Drop. A later funded step can request cancellation even when no mutable
+    // Servient was available to the guard at revocation time.
+    current: Rc<Cell<bool>>,
     // Strong retention of the exact behavior/instance, never a successor lookup.
     instance: Rc<super::RawProducerInstance>,
     behavior: usize,
@@ -422,6 +426,7 @@ impl RawProducerServient {
         store.entries.push(Invocation {
             id,
             token,
+            current: Rc::clone(&instance.current),
             instance: Rc::clone(&instance.instance),
             behavior: index,
             binding: request.invoke.binding,
@@ -731,6 +736,9 @@ impl ActionStore {
         let entry = &mut self.entries[i];
         if entry.work.is_none() {
             return Ok(Poll::Ready(()));
+        }
+        if !entry.current.get() {
+            entry.cancel_requested = true;
         }
         let closing = entry.token.get();
         let class = if closing {

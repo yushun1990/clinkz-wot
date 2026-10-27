@@ -594,6 +594,9 @@ impl FiniteIngressBinding for ControlledBinding {
     fn configuration(&self) -> &Self::Configuration {
         self.actual.configuration()
     }
+    fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
+        self.actual.prepared_for_instance(key)
+    }
     fn output_validator(&self) -> Option<&dyn ProducerOutputValidator> {
         if self.controls.lose_service.get() {
             None

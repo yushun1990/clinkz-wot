@@ -119,6 +119,13 @@ impl ProducerCapability for HttpFiniteProducer {
         if input.operation != Operation::ReadProperty {
             return Ok(None);
         }
+        // A registration at another listen address is not a failed selected
+        // mapping. Let the selector try the other linked HTTP registration;
+        // only a matching registration may reject unsupported TD meaning.
+        if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
+        {
+            return Ok(None);
+        }
         let input = ResolvedProducerInput::new(
             input.document,
             input.target,

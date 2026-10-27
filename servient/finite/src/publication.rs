@@ -4,7 +4,8 @@ use super::*;
 
 /// Preallocated unpublished instance and its one logical permission cell.
 /// After commit, Drop revokes only this incarnation. Retained work still pins
-/// its original instance; it cannot inherit fresh acceptance or shut down I/O.
+/// its original instance and requests cancellation on its next funded step;
+/// it cannot inherit fresh acceptance or shut down I/O.
 pub struct ProducerPublication {
     instance: Option<Rc<RawProducerInstance>>,
     current: Rc<Cell<bool>>,
@@ -23,6 +24,9 @@ impl ProducerPublication {
     pub fn is_committed(&self) -> bool {
         self.committed
     }
+    /// Fence fresh acceptance immediately. Already accepted Actions observe
+    /// this same cell and request cancellation during funded progress; no
+    /// application callback or native shutdown occurs here.
     pub fn revoke(&self) {
         self.current.set(false);
         self.cancelled.set(true);
@@ -90,6 +94,8 @@ impl Drop for ProducerPublication {
 /// owner with many Things. Every participant must already have been qualified
 /// against the complete final TD; no fallible I/O or callback runs in `open`.
 pub trait ClosedProducerParticipation {
+    /// Passive readiness for this exact logical instance and Servient owner.
+    /// Readiness alone does not establish qualified Form/operation coverage.
     fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool;
     /// Exact native mapping/definition support. One participant may cover many
     /// Forms and Things, but each selected operation has exactly one owner at
@@ -112,10 +118,11 @@ pub trait ClosedProducerParticipation {
 }
 
 impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B> {
-    fn ready_for(&self, owner: &RawProducerServient, _key: ProducerInstanceKey) -> bool {
+    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool {
         self.issuer.as_ptr() == Rc::as_ptr(&owner.issuer)
             && self.state == RawFiniteState::InstalledClosed
             && self.pair_is_current()
+            && self.binding.prepared_for_instance(key)
     }
     fn covers(
         &self,
@@ -274,6 +281,11 @@ impl RawProducerServient {
         } else {
             self.instances[index].current.set(false);
             publication.retired = Some(core::mem::replace(&mut self.instances[index], entry));
+            // Fixed-size bounded Action scan, no application callback. The
+            // original invocation still owns its work and late settlement.
+            if let Some(actions) = &mut self.actions {
+                actions.revoke(publication.expected.expect("replacement checked"));
+            }
         }
         publication.current.set(true);
         publication.committed = true;

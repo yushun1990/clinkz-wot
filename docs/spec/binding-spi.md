@@ -102,9 +102,12 @@ historical contracts/evidence remain available at the pinned predecessor.
 The optional composed Host Producer handoff supplies a closed participation
 lease for each independently installed native contribution. It checks the exact
 owned definition/operation against one unambiguous participant, plus readiness,
-then locally opens all leases at the Servient publication boundary. A lease is
-not a native connection or per-Thing Binding runtime: one Binding owner can
-retain many leases and Things, and closing one releases only that participation.
+and requires every participant to cover at least one operation of that same
+qualified exposure. Finite readiness also checks the exact logical instance;
+an unrelated closed runtime cannot be opened as an extra participant. The
+handoff then locally opens all leases at the Servient publication boundary. A
+lease is not a native connection or per-Thing Binding runtime: one Binding owner
+can retain many leases and Things, and closing one releases only that participation.
 The HTTP finite participant is still a one-endpoint/one-route adapter; a linked
 test-only UDP Action participant exercises shared infrastructure and continuing
 work over actual I/O. This is not production qualification of UDP or Actions.

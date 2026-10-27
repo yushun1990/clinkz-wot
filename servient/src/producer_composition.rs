@@ -64,6 +64,22 @@ pub fn publish_prepared_thing(
             return Err(CoreError::UnsupportedOperation(context()));
         }
     }
+    // A ready but unselected participant must never be opened: it could make
+    // native ingress for a different, already-live logical Thing dispatch.
+    if participants.iter().any(|participant| {
+        !prepared.operations().iter().any(|operation| {
+            participant.covers(
+                publication.key(),
+                operation.binding,
+                operation.site.site(),
+                operation.form,
+                operation.operation,
+                operation.definition_any(),
+            )
+        })
+    }) {
+        return Err(CoreError::UnsupportedOperation(context()));
+    }
     owner.publish_composed(publication, participants)
 }
 
