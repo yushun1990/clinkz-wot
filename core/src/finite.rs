@@ -4,6 +4,7 @@
 //! can additionally require the actual provider's prepared output validator.
 
 use alloc::vec::Vec;
+use core::any::Any;
 use core::task::{Context, Poll};
 
 use crate::Deadline;
@@ -135,6 +136,25 @@ pub trait FiniteIngressBinding {
     /// progress step; an unbounded native configuration needs a different
     /// immutable revision-bearing representation.
     fn configuration(&self) -> &Self::Configuration;
+    /// Passive closed-participation recipient check. This is a native mapping
+    /// claim, not logical permission; a shared Binding may prepare several
+    /// independent Things. Raw-only Bindings gain no publication readiness.
+    fn prepared_for_instance(&self, _key: ProducerInstanceKey) -> bool {
+        false
+    }
+    /// Passive exact mapping claim for a qualified Producer publication. The
+    /// default is *no* coverage: existing raw-only finite Bindings do not gain
+    /// advertised TD support by implementing the I/O facet alone.
+    fn covers_definition(
+        &self,
+        _key: ProducerInstanceKey,
+        _site: crate::thing::AffordanceSite<'_>,
+        _form: u32,
+        _operation: Operation,
+        _definition: &dyn Any,
+    ) -> bool {
+        false
+    }
     /// Actual source-independent service for this captured native mapping.
     /// None is an absent facet, not a successful validation. A runtime requiring
     /// validation must fence progress if this service disappears. Providers with

@@ -99,4 +99,12 @@ Read APIs remain restricted: the borrowed aggregate has eager all-bounds-first
 ordering and the Host adapter accepts Copy atomic output. Their tests keep those
 narrow claims. They MUST NOT constrain the successor compiler or be multiplied
 per interaction family as its implementation. No replacement general compiler
-or first-use coordinator is implemented by this authority migration.
+or first-use coordinator was implemented by the authority migration. The Host
+Producer now also has a whole-Thing selector: each advertised Form/effective
+operation asks the actual linked capability registrations for independently
+owned concrete definitions; missing, ambiguous or behavior-less operations
+refuse before native setup. Final support is checked again against those
+registrations/definitions before publication. Opaque owned definitions are not
+a universal program/session ABI; native readiness and collisions remain separate
+Binding obligations. Consumer first-use coordination and broader service,
+schema and security implementations remain outstanding.

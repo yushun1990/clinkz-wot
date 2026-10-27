@@ -200,6 +200,12 @@ registered evidence establish current capabilities. The retained baseline includ
 - independently composed discovery clients and their in-memory reference backend;
 - payload codecs, logical clocks, resource accounting and portable shared layers.
 
+The optional Host Producer composition path now prepares all described Forms
+against linked capabilities and publishes one qualified logical Thing across
+independently ready native participants. Real HTTP Property and test-only UDP
+continuing Action I/O exercise this boundary; production Action/Event Bindings,
+general schema/security services and broad deployment qualification remain open.
+
 Legacy Core event fan-out, queue/merge subscriptions, `SubscriptionAcceptance`,
 payload-bearing `InteractionOptions`, old form-selection/template helpers, and
 the Zenoh transport/session/pico APIs are removed without compatibility wrappers.

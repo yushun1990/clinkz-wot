@@ -95,6 +95,7 @@ fn context_mut(scheme: &mut SecurityScheme) -> &mut SecuritySchemeContext {
         SecurityScheme::Bearer(v) => &mut v._context,
         SecurityScheme::PSK(v) => &mut v._context,
         SecurityScheme::OAuth2(v) => &mut v._context,
+        SecurityScheme::Extension(v) => v,
     }
 }
 
@@ -433,7 +434,7 @@ pub fn cases() -> Vec<Case> {
             serde_json::json!({"oneOf":["none",false,"other",7],"name":"key","flow":"code","authorization":"not a URI","token":"present"}),
         ] {
             let valid = match discriminator {
-                "unknown" => false,
+                "unknown" => true, // preserving an unselected extension is valid TD
                 "combo" | "apikey" | "oauth2" => !extra.as_object().unwrap().is_empty(),
                 _ => true,
             };

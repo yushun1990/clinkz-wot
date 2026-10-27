@@ -17,6 +17,16 @@ pub enum AffordanceTarget {
     Event(Arc<str>),
 }
 
+/// Borrowed declaration coordinate for preparation and native coverage checks.
+/// It is neither a Thing instance key nor a Binding's physical route identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AffordanceSite<'a> {
+    Thing,
+    Property(&'a str),
+    Action(&'a str),
+    Event(&'a str),
+}
+
 impl AffordanceTarget {
     /// Returns the affordance name when this target points at a property,
     /// action, or event, or `None` for the Thing-level target.

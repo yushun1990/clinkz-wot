@@ -248,6 +248,175 @@ fn cyclic_aliases_and_arena_overflow_have_finite_refusal() {
 }
 
 #[test]
+fn action_event_and_thing_form_loans_retain_distinct_data_roles_and_response_facts() {
+    let thing: Thing = serde_json::from_value(json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"roles",
+        "security":["n"],"securityDefinitions":{"n":{"scheme":"nosec"}},
+        "actions":{"run":{"safe":true,"synchronous":false,"input":{"type":"string"},"output":{"type":"number"},
+            "forms":[{"href":"http://127.0.0.1/run","response":{"contentType":"application/cbor"},
+                "additionalResponses":[{"success":false,"schema":"error", "urn:status":1}]}]}},
+        "events":{"alarm":{"subscription":{"type":"integer"},"data":{"type":"number"},
+            "dataResponse":{"type":"boolean"},"cancellation":{"type":"string"},
+            "forms":[{"href":"http://127.0.0.1/alarm","op":["subscribeevent","unsubscribeevent"]}]}},
+        "forms":[{"href":"http://127.0.0.1/all","op":"readallproperties"}],
+        "schemaDefinitions":{"error":{"type":"string"}}
+    })).unwrap();
+    let (action, _) =
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Action("run"), 0);
+    let action = action.unwrap();
+    assert_eq!(action.action().unwrap().synchronous, Some(false));
+    assert!(action.action().unwrap().safe);
+    assert_eq!(
+        action
+            .form(FormOwner::Action("run"), 0)
+            .unwrap()
+            .effective_operations,
+        [crate::data_type::Operation::InvokeAction]
+    );
+    assert_eq!(
+        action
+            .primary_response(FormOwner::Action("run"), 0)
+            .unwrap()
+            .unwrap()
+            .0,
+        "application/cbor"
+    );
+    let additional = action
+        .additional_form_response(FormOwner::Action("run"), 0, 0)
+        .unwrap()
+        .unwrap();
+    assert!(!additional.success);
+    assert_eq!(additional.schema, Some("error"));
+    assert!(additional.semantics.field("urn:status").is_some());
+    assert!(action.schema_definition("error").is_ok());
+    assert!(
+        action
+            .affordance_schema(FormOwner::Action("run"), "input")
+            .is_some()
+    );
+    assert!(
+        action
+            .affordance_schema(FormOwner::Action("run"), "output")
+            .is_some()
+    );
+    let (event, _) =
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Event("alarm"), 0);
+    let event = event.unwrap();
+    assert!(event.event().is_some());
+    for role in ["subscription", "data", "dataResponse", "cancellation"] {
+        assert!(
+            event
+                .affordance_schema(FormOwner::Event("alarm"), role)
+                .is_some(),
+            "{role}"
+        );
+    }
+    let (root, _) = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0);
+    let root = root.unwrap();
+    assert!(
+        root.scope(SemanticScope::AffordanceForm {
+            owner: FormOwner::Thing,
+            index: 0
+        })
+        .is_some()
+    );
+    assert_eq!(
+        root.form(FormOwner::Thing, 0).unwrap().effective_operations,
+        [crate::data_type::Operation::ReadAllProperties]
+    );
+}
+
+#[test]
+fn selected_combo_keeps_all_referenced_typed_and_extension_security_meaning() {
+    use crate::semantic::SecurityDetails;
+    let mut td = source();
+    td["security"] = json!(["combo"]);
+    td["securityDefinitions"]["combo"] =
+        json!({"scheme":"combo","allOf":["none"],"oneOf":["extended","basic"]});
+    td["securityDefinitions"]["extended"] = json!({"scheme":"vendor", "urn:vendor:key":{"n":1}});
+    td["securityDefinitions"]["basic"] =
+        json!({"scheme":"basic", "name":"Authorization","in":"header"});
+    let thing: Thing = serde_json::from_value(td.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&thing).unwrap()["securityDefinitions"]["extended"],
+        td["securityDefinitions"]["extended"]
+    );
+    let doc = ResolvedSemanticDocument::resolve(&thing, "p", 0).unwrap();
+    let combo = doc.security("combo").unwrap();
+    assert!(
+        matches!(combo.details, SecurityDetails::Combo { all_of, one_of } if all_of == ["none"] && one_of == ["extended", "basic"])
+    );
+    assert!(matches!(
+        doc.security("basic").unwrap().details,
+        SecurityDetails::Basic {
+            name: Some("Authorization"),
+            ..
+        }
+    ));
+    let extended = doc.security("extended").unwrap();
+    assert!(matches!(extended.details, SecurityDetails::Extension));
+    assert!(extended.semantics.field("urn:vendor:key").is_some());
+    assert!(matches!(
+        doc.security("none").unwrap().details,
+        SecurityDetails::NoSec
+    ));
+}
+
+#[test]
+fn selected_action_metadata_and_typed_security_obey_semantic_work_limit() {
+    let mut td = source();
+    td["actions"] = json!({"run":{"description":"x".repeat(RESOLUTION_WORK as usize),
+        "forms":[{"href":"http://127.0.0.1/run"}]}});
+    let thing: Thing = serde_json::from_value(td).unwrap();
+    let (result, used) =
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Action("run"), 0);
+    assert!(matches!(result, Err(SemanticError::Limit)));
+    assert!(used > 0 && used < RESOLUTION_WORK);
+
+    let mut td = source();
+    td["securityDefinitions"]["none"] =
+        json!({"scheme":"bearer", "alg":"x".repeat(RESOLUTION_WORK as usize)});
+    let thing: Thing = serde_json::from_value(td).unwrap();
+    let (result, used) = ResolvedSemanticDocument::resolve_metered(&thing, "p", 0);
+    assert!(matches!(result, Err(SemanticError::Limit)));
+    assert!(used > 0 && used < RESOLUTION_WORK);
+}
+
+#[test]
+fn extension_iri_cannot_displace_a_typed_action_or_event_schema() {
+    let mut td = source();
+    td["actions"] = json!({"run":{"input":{"type":"string"},
+        "https://www.w3.org/2019/wot/td#input":{"type":"number"},
+        "forms":[{"href":"http://127.0.0.1/run"}]}});
+    td["events"] = json!({"alarm":{"data":{"type":"integer"},
+        "https://www.w3.org/2019/wot/td#data":{"type":"boolean"},
+        "forms":[{"href":"http://127.0.0.1/alarm"}]}});
+    let thing: Thing = serde_json::from_value(td).unwrap();
+    let (action, _) =
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Action("run"), 0);
+    let action = action.unwrap();
+    assert_eq!(
+        action
+            .affordance_schema(FormOwner::Action("run"), "input")
+            .unwrap()
+            .facts()
+            .declared_type,
+        Some("string")
+    );
+    let (event, _) =
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Event("alarm"), 0);
+    assert_eq!(
+        event
+            .unwrap()
+            .affordance_schema(FormOwner::Event("alarm"), "data")
+            .unwrap()
+            .facts()
+            .declared_type,
+        Some("integer")
+    );
+}
+
+#[test]
 fn prefix_flags_and_absolute_iris_follow_the_supported_json_ld_rules() {
     let mut td = source();
     td["@context"] = json!(["https://www.w3.org/2022/wot/td/v1.1", {

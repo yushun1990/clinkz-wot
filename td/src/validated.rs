@@ -680,7 +680,9 @@ mod fields {
                 Self::Additional(_) => 4,
                 Self::Security(v) => {
                     1 + match v {
-                        SecurityScheme::NoSec(_) | SecurityScheme::Auto(_) => 0,
+                        SecurityScheme::NoSec(_)
+                        | SecurityScheme::Auto(_)
+                        | SecurityScheme::Extension(_) => 0,
                         SecurityScheme::Combo(_)
                         | SecurityScheme::Basic(_)
                         | SecurityScheme::APIKey(_) => 2,

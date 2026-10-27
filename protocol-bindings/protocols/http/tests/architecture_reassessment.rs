@@ -139,13 +139,18 @@ mod tests {
     }
 
     #[test]
-    fn unused_extension_security_definition_is_rejected_before_binding_selection() {
+    fn unused_extension_security_survives_td_but_selected_scheme_needs_binding_support() {
         let mut value = td();
         value["securityDefinitions"]["unused"] =
             json!({"scheme":"ex:nonce", "ex:nonceHeader":"X-Nonce"});
-        let error = serde_json::from_value::<Thing>(value).expect_err("closed scheme enum");
-        println!("{error}");
-        assert!(error.to_string().contains("unsupported security scheme"));
+        let thing: Thing = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(&thing).unwrap()["securityDefinitions"]["unused"],
+            value["securityDefinitions"]["unused"]
+        );
+        assert!(consume(value.clone()));
+        value["security"] = json!(["unused"]);
+        assert!(!consume(value));
     }
 
     #[test]

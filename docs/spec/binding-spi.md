@@ -98,3 +98,18 @@ single synchronous Property Read Producer remain restricted working adapters.
 Their actual safety checks MUST NOT be weakened while retained. No new facade,
 new Binding or interaction-family implementation is introduced. Their exact
 historical contracts/evidence remain available at the pinned predecessor.
+
+The optional composed Host Producer handoff supplies a closed participation
+lease for each independently installed native contribution. It checks the exact
+owned definition/operation against one unambiguous participant, plus readiness,
+and requires every participant to cover at least one operation of that same
+qualified exposure. Finite readiness also checks the exact logical instance,
+requires output validation to be enabled and verifies its captured service;
+an explicitly raw runtime cannot qualify a published exposure. An unrelated
+closed runtime cannot be opened as an extra participant. The
+handoff then locally opens all leases at the Servient publication boundary. A
+lease is not a native connection or per-Thing Binding runtime: one Binding owner
+can retain many leases and Things, and closing one releases only that participation.
+The HTTP finite participant is still a one-endpoint/one-route adapter; a linked
+test-only UDP Action participant exercises shared infrastructure and continuing
+work over actual I/O. This is not production qualification of UDP or Actions.

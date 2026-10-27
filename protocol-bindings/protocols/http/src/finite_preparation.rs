@@ -2,7 +2,12 @@
 //! Producer executor/installation interface.
 use crate::*;
 use clinkz_wot_core::{finite::FiniteIngressBinding, producer::ProducerInstanceKey};
-use clinkz_wot_planning::{ResolvedProducerInput, finite_producer::FiniteProducerCompiler};
+use clinkz_wot_planning::{
+    ResolvedProducerInput,
+    finite_producer::FiniteProducerCompiler,
+    producer_composition::{FormSite, ProducerCapability, ProducerOperationInput},
+};
+use std::any::Any;
 
 /// One immutable startup registration. Explicit loopback/nonzero endpoints
 /// remain fixed in this first slice; port-0 rewriting is deliberately unsupported.
@@ -68,7 +73,8 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
     ) -> CoreResult<Option<()>> {
         // Reconstruct exact supported meaning using the actual compiler, not a
         // tag/hash match. This is pure; the temporary participant opens no I/O.
-        let Some((_, config)) = self.prepare(input, instance, budget)? else {
+        let Some((_, config)) = FiniteProducerCompiler::prepare(self, input, instance, budget)?
+        else {
             return Ok(None);
         };
         if binding.identity() != (self.id, self.generation)
@@ -87,5 +93,63 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
         // The snapshot shares the native property backing; charge the complete
         // bounded Arc allocation here until all participants release it.
         256 + 2 * core::mem::size_of::<usize>()
+    }
+}
+
+// This concrete participant supports only HTTP Property Read. The general
+// composition selector asks it about *each* Form/operation; it owns no
+// interpretation of Action, Event or collection semantics.
+impl ProducerCapability for HttpFiniteProducer {
+    fn identity(&self) -> (BindingId, BindingGeneration) {
+        (self.id, self.generation)
+    }
+    fn definition_bytes(&self, definition: &dyn Any) -> Option<usize> {
+        definition
+            .downcast_ref::<HttpProducerProgram>()
+            .map(|_| core::mem::size_of::<HttpProducerProgram>())
+    }
+    fn prepare(
+        &self,
+        input: ProducerOperationInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<Box<dyn Any>>> {
+        let FormSite::Property(property) = input.site else {
+            return Ok(None);
+        };
+        if input.operation != Operation::ReadProperty {
+            return Ok(None);
+        }
+        // A registration at another listen address is not a failed selected
+        // mapping. Let the selector try the other linked HTTP registration;
+        // only a matching registration may reject unsupported TD meaning.
+        if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
+        {
+            return Ok(None);
+        }
+        let input = ResolvedProducerInput::new(
+            input.document,
+            input.target,
+            property,
+            input.form,
+            input.operation,
+        );
+        Ok(self
+            .listen
+            .compile_property_read(input, budget)?
+            .map(|program| Box::new(program) as Box<dyn Any>))
+    }
+    fn check_final(
+        &self,
+        input: ProducerOperationInput<'_>,
+        definition: &dyn Any,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<bool> {
+        let Some(expected) = definition.downcast_ref::<HttpProducerProgram>() else {
+            return Ok(false);
+        };
+        let Some(program) = <Self as ProducerCapability>::prepare(self, input, budget)? else {
+            return Ok(false);
+        };
+        Ok(program.downcast_ref::<HttpProducerProgram>() == Some(expected))
     }
 }

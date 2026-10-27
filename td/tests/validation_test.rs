@@ -317,15 +317,19 @@ fn security_scheme_deserialization_uses_scheme_to_select_the_concrete_variant() 
 }
 
 #[test]
-fn security_scheme_deserialization_rejects_unknown_scheme_values() {
+fn security_scheme_deserialization_preserves_extension_scheme_values() {
     let raw = r#"{
-        "scheme": "custom-scheme"
+        "scheme": "custom-scheme",
+        "urn:vendor:option": true
     }"#;
 
-    let err = serde_json::from_str::<SecurityScheme>(raw)
-        .expect_err("unknown security schemes should fail during deserialization");
-
-    assert!(err.to_string().contains("unsupported security scheme"));
+    let scheme: SecurityScheme = serde_json::from_str(raw).unwrap();
+    assert!(matches!(scheme, SecurityScheme::Extension(_)));
+    assert_eq!(scheme.scheme(), "custom-scheme");
+    assert_eq!(
+        serde_json::to_value(&scheme).unwrap(),
+        serde_json::from_str::<serde_json::Value>(raw).unwrap()
+    );
 }
 
 #[test]
