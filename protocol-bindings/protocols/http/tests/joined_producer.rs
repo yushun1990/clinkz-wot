@@ -883,6 +883,346 @@ fn cleanup_saturation_refuses_before_native_effects_and_preserves_original_bank(
 }
 
 #[test]
+fn publication_releases_qualification_scratch_for_another_producer() {
+    let first_addr = address();
+    let first_app = app();
+    let second_app = app();
+    let bank = accounts();
+    let mut first = root(compiler(first_addr), bank.clone());
+    let mut exposed = prepare(
+        &first,
+        document(first_addr),
+        authority(),
+        first_app.clone(),
+        None,
+    )
+    .unwrap();
+    until(&mut first, &mut exposed, RawFiniteState::InstalledClosed);
+    // The first listener now occupies its endpoint, so the second is distinct.
+    let second_addr = address();
+    let mut second = root(compiler(second_addr), bank.clone());
+    let scratch = bank
+        .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+        .used();
+    assert!(scratch > 0);
+    let other_bytes = bank
+        .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+        .limit()
+        - scratch;
+    let other_work = bank
+        .reserve(ResourceKind::AdmissionTemporaryBytesGlobalMax, other_bytes)
+        .unwrap();
+    let engine_before = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    let cleanup_before = bank.account(ResourceKind::CleanupBytesMax).used();
+
+    publish(&mut first, &mut exposed);
+    let completed_scratch = bank
+        .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+        .used()
+        - other_bytes;
+    let engine_after = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    let cleanup_after = bank.account(ResourceKind::CleanupBytesMax).used();
+    let prepared = prepare(
+        &second,
+        document(second_addr),
+        authority(),
+        second_app.clone(),
+        None,
+    );
+    assert_eq!(
+        completed_scratch, 0,
+        "completed qualification still holds {completed_scratch} temporary bytes"
+    );
+    assert_eq!(engine_after, engine_before - scratch);
+    assert_eq!(cleanup_after, cleanup_before);
+    let mut prepared = prepared.unwrap_or_else(|error| {
+        panic!("second Producer refused after completed qualification: {error:?}")
+    });
+    assert_eq!(exposed.state(), RawFiniteState::Serving);
+    assert_eq!(first_app.drops.get(), 0);
+    assert!(bank.account(ResourceKind::CleanupBytesMax).used() > cleanup_before);
+    // Warm I/O still works while the second preparation uses the released
+    // scratch and unrelated work occupies the rest of the temporary bank.
+    assert!(response(&mut first, &mut exposed, &mut request(first_addr)).ends_with(b"42"));
+    assert_eq!(
+        exposed.take_settlement().unwrap().delivery,
+        FiniteDelivery::Delivered
+    );
+    assert_eq!(first_app.calls.get(), 1);
+    close(&mut second, &mut prepared);
+    second.retire(&mut prepared, &mut work(1)).unwrap();
+    close(&mut first, &mut exposed);
+    first.retire(&mut exposed, &mut work(1)).unwrap();
+    drop((prepared, exposed, first, second, other_work));
+    assert_eq!(
+        bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+            .used(),
+        0
+    );
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    assert_eq!(bank.account(ResourceKind::CleanupBytesMax).used(), 0);
+    assert_released(first_addr);
+    assert_released(second_addr);
+}
+
+#[test]
+fn qualification_scratch_stays_reserved_while_setup_can_retry() {
+    let addr = address();
+    let bank = accounts();
+    let application = app();
+    let mut s = root(compiler(addr), bank.clone());
+    let mut e = prepare(&s, document(addr), authority(), application.clone(), None).unwrap();
+    let scratch = bank
+        .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+        .used();
+    let engine = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    let cleanup = bank.account(ResourceKind::CleanupBytesMax).used();
+    assert!(scratch > 0);
+    let _ = s
+        .step(&mut e, &mut cx(), &mut work(0), now(0), false)
+        .unwrap();
+    assert_eq!(e.state(), RawFiniteState::Starting);
+    assert_eq!(
+        bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+            .used(),
+        scratch
+    );
+    until(&mut s, &mut e, RawFiniteState::InstalledClosed);
+    // One attempt cannot decode; another completes TD interpretation but
+    // cannot pay the actual Binding compiler's complete lowering envelope.
+    for mut budget in [
+        work(0),
+        work(1_000_000).with_remaining(WorkClass::BindingPolls, 4095),
+    ] {
+        assert_eq!(
+            s.step(&mut e, &mut cx(), &mut budget, now(0), false)
+                .unwrap(),
+            Poll::Pending
+        );
+        assert_eq!(e.state(), RawFiniteState::InstalledClosed);
+        assert_eq!(
+            bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                .used(),
+            scratch
+        );
+        assert_eq!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+            engine
+        );
+        assert_eq!(bank.account(ResourceKind::CleanupBytesMax).used(), cleanup);
+        assert_eq!(application.calls.get(), 0);
+    }
+    publish(&mut s, &mut e);
+    assert_eq!(
+        bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+            .used(),
+        0
+    );
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        engine - scratch
+    );
+    assert_eq!(bank.account(ResourceKind::CleanupBytesMax).used(), cleanup);
+    close(&mut s, &mut e);
+    s.retire(&mut e, &mut work(1)).unwrap();
+    drop((e, s));
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    assert_released(addr);
+}
+
+#[test]
+fn terminal_setup_releases_scratch_but_failed_cleanup_keeps_lifetime_leases() {
+    for case in 0..6 {
+        let occupied = (case == 3).then(|| TcpListener::bind("127.0.0.1:0").unwrap());
+        let addr = occupied
+            .as_ref()
+            .map_or_else(address, |listener| listener.local_addr().unwrap());
+        let bank = accounts();
+        let application = app();
+        let controls = Rc::new(Controls::default());
+        let mut s = root(
+            ControlledCompiler {
+                actual: compiler(addr),
+                controls: controls.clone(),
+            },
+            bank.clone(),
+        );
+        let deadline = if case == 2 {
+            Deadline::at(now(1))
+        } else {
+            Deadline::NONE
+        };
+        let mut e = s
+            .prepare(
+                Arc::from(document(addr).to_string()),
+                Arc::from("level"),
+                authority(),
+                Handler(application.clone()),
+                0,
+                None,
+                deadline,
+                &mut work(1_000_000),
+            )
+            .unwrap();
+        let scratch = bank
+            .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+            .used();
+        let engine = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+        let cleanup = bank.account(ResourceKind::CleanupBytesMax).used();
+        assert!(scratch > 0);
+        if matches!(case, 1 | 4 | 5) {
+            until(&mut s, &mut e, RawFiniteState::InstalledClosed);
+        }
+        match case {
+            0 => e.begin_close(),
+            1 => e.cancel(),
+            2 => {
+                let _ = s
+                    .step(&mut e, &mut cx(), &mut work(0), now(1), false)
+                    .unwrap();
+            }
+            3 => step(&mut s, &mut e), // Real native bind failure.
+            4 => {
+                controls.refuse_final.set(true);
+                step(&mut s, &mut e);
+            }
+            _ => {
+                controls.lose_service.set(true);
+                step(&mut s, &mut e);
+            }
+        }
+        assert_eq!(e.state(), RawFiniteState::Closing, "case {case}");
+        assert!(s.description(e.key()).is_none());
+        assert_eq!(
+            bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                .used(),
+            0,
+            "case {case}"
+        );
+        assert_eq!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+            engine - scratch,
+            "case {case}"
+        );
+        assert_eq!(bank.account(ResourceKind::CleanupBytesMax).used(), cleanup);
+        assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 1);
+        assert_eq!(application.drops.get(), 0);
+        assert_eq!(application.calls.get(), 0);
+        let instant = now(u64::from(case == 2));
+        let mut cause = e.first_cause().cloned();
+        for attempt in 0..3 {
+            let _ = s
+                .step(&mut e, &mut cx(), &mut work(1_000_000), instant, false)
+                .unwrap();
+            if cause.is_none() {
+                cause = e.first_cause().cloned();
+            }
+            assert_eq!(e.first_cause(), cause.as_ref());
+            assert_eq!(
+                e.state(),
+                if attempt < 2 {
+                    RawFiniteState::Closing
+                } else {
+                    RawFiniteState::Closed
+                }
+            );
+            assert_eq!(
+                bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                    .used(),
+                0
+            );
+            assert_eq!(
+                bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+                engine - scratch
+            );
+            assert_eq!(bank.account(ResourceKind::CleanupBytesMax).used(), cleanup);
+            assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 1);
+        }
+        s.retire(&mut e, &mut work(1)).unwrap();
+        drop((e, s, occupied));
+        assert_eq!(application.drops.get(), 1);
+        assert_eq!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+            0
+        );
+        assert_eq!(bank.account(ResourceKind::CleanupBytesMax).used(), 0);
+        assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 0);
+        assert_released(addr);
+    }
+}
+
+#[test]
+fn staged_root_loss_cleanup_and_exposure_drop_release_scratch_once() {
+    for drop_exposure in [false, true] {
+        let addr = address();
+        let bank = accounts();
+        let application = app();
+        let controls = Rc::new(Controls::default());
+        let mut s = root(
+            ControlledCompiler {
+                actual: compiler(addr),
+                controls: controls.clone(),
+            },
+            bank.clone(),
+        );
+        let mut e = prepare(&s, document(addr), authority(), application.clone(), None).unwrap();
+        until(&mut s, &mut e, RawFiniteState::InstalledClosed);
+        assert!(
+            bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                .used()
+                > 0
+        );
+        if drop_exposure {
+            drop(e);
+            assert_eq!(
+                bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                    .used(),
+                0
+            );
+            assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 0);
+            drop(s);
+        } else {
+            drop(s);
+            // An unfunded cleanup poll still ends qualification, without
+            // polling native retirement or refunding its remaining owners.
+            let _ = e.poll_cleanup(&mut cx(), &mut work(0), now(0));
+            assert_eq!(e.state(), RawFiniteState::Closing);
+            assert_eq!(controls.close_polls.get(), 0);
+            assert_eq!(
+                bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                    .used(),
+                0
+            );
+            assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 1);
+            assert_eq!(application.drops.get(), 0);
+            for _ in 0..3 {
+                let _ = e.poll_cleanup(&mut cx(), &mut work(1_000_000), now(0));
+            }
+            assert_eq!(e.state(), RawFiniteState::Closed);
+            drop(e);
+        }
+        assert_eq!(application.drops.get(), 1);
+        assert_eq!(
+            bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                .used(),
+            0
+        );
+        assert_eq!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+            0
+        );
+        assert_eq!(bank.account(ResourceKind::CleanupBytesMax).used(), 0);
+        assert_released(addr);
+    }
+}
+
+#[test]
 fn unread_settlement_blocks_next_exchange_until_acknowledgement() {
     let addr = address();
     let application = app();

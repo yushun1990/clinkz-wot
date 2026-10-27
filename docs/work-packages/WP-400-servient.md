@@ -208,8 +208,14 @@ The Host account bank reserves controlled owner layouts, declared handler and
 configuration indirect backing, description/property backing, one input/result
 opportunity and prepaid cleanup before native setup. Original reservations are
 shared by runtime and behavior, so accepted instances and unread results retain
-them through replacement. Final TD decoding/semantic temporary capacity is also
-reserved before setup. Caller-provided description/handler/provider construction
+them through replacement. Final TD decoding/semantic temporary capacity and its
+overlapping Engine charge are reserved separately before setup, owned only by
+the exposure's qualification phase. Pending qualification keeps them for retry;
+completed qualification releases them after its temporary owners are destroyed
+and before the local publication commit. Cancellation, timeout, setup failure,
+cleanup-only progress and exposure Drop also end that phase without releasing
+the independent lifetime/result/cleanup leases. Caller-provided
+description/handler/provider construction
 precedes admission; output construction stays application-backed until accepted.
 JSON decoding uses bounded input and serde's finite recursion limit with a
 conservative Host temporary allowance, not an allocator-intercepted heap maximum.

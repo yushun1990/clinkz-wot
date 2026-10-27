@@ -21,7 +21,7 @@ const REGISTRY: RawProducerRegistryLimits = RawProducerRegistryLimits {
     target_name_bytes: 256,
 };
 
-// Fixed, prepaid cleanup and finalization leases. No caller-held lock can block
+// Fixed, prepaid lifetime and cleanup leases. No caller-held lock can block
 // their disposal. Extra SDK/OS backing belongs to the concrete Binding policy.
 struct Funding {
     _leases: [Option<HostCapacityReservation>; 8],
@@ -35,6 +35,27 @@ impl Funding {
             result._leases[i] = Some(bank.reserve(kind, amount as u64).ok_or_else(busy)?);
         }
         Ok(result)
+    }
+}
+
+// Only setup owns qualification scratch. Behavior/result retention must never
+// keep this phase's temporary or overlapping Engine charge alive after it ends.
+struct QualificationFunding {
+    _engine: HostCapacityReservation,
+    _temporary: HostCapacityReservation,
+}
+impl QualificationFunding {
+    fn reserve(bank: &Arc<HostResourceAccounts>, bytes: usize) -> CoreResult<Self> {
+        let engine = bank
+            .reserve(K::EngineLiveBytesGlobalMax, bytes as u64)
+            .ok_or_else(busy)?;
+        let temporary = bank
+            .reserve(K::AdmissionTemporaryBytesGlobalMax, bytes as u64)
+            .ok_or_else(busy)?;
+        Ok(Self {
+            _engine: engine,
+            _temporary: temporary,
+        })
     }
 }
 
@@ -76,6 +97,7 @@ pub struct ProducerExposure<B: FiniteIngressBinding> {
     publication: ProducerPublication,
     description: Arc<str>,
     property: Arc<str>,
+    qualification: Option<QualificationFunding>,
     _funding: Rc<Funding>,
 }
 impl<B: FiniteIngressBinding> ProducerExposure<B> {
@@ -94,13 +116,21 @@ impl<B: FiniteIngressBinding> ProducerExposure<B> {
     pub fn begin_close(&mut self) {
         self.publication.revoke();
         self.runtime.begin_close();
+        self.release_qualification();
     }
     pub fn cancel(&mut self) {
-        self.publication.revoke();
-        self.runtime.fence(CoreError::Cancelled(ErrorContext::new(
+        self.fence(CoreError::Cancelled(ErrorContext::new(
             ErrorPhase::Handler,
             RetryClass::Never,
         )));
+    }
+    fn release_qualification(&mut self) {
+        self.qualification = None;
+    }
+    fn fence(&mut self, cause: CoreError) {
+        self.publication.revoke();
+        self.runtime.fence(cause);
+        self.release_qualification();
     }
     /// Native/cleanup progress after the Servient root has gone. No dispatch or
     /// publication can occur here; original settlement remains acknowledgeable.
@@ -117,6 +147,7 @@ impl<B: FiniteIngressBinding> ProducerExposure<B> {
 impl<B: FiniteIngressBinding> Drop for ProducerExposure<B> {
     fn drop(&mut self) {
         self.publication.revoke();
+        self.release_qualification();
     }
 }
 
@@ -193,11 +224,7 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
         let funding = Rc::new(Funding::reserve(
             &self.accounts,
             &[
-                (
-                    K::EngineLiveBytesGlobalMax,
-                    retained.checked_add(temporary).ok_or_else(busy)?,
-                ),
-                (K::AdmissionTemporaryBytesGlobalMax, temporary),
+                (K::EngineLiveBytesGlobalMax, retained),
                 (K::CleanupBytesMax, retained),
                 (K::CleanupItemsMax, 1),
                 (K::ThingsGlobalMax, 1),
@@ -206,6 +233,7 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
                 (K::BindingIngressItemsGlobalMax, 1),
             ],
         )?);
+        let qualification = QualificationFunding::reserve(&self.accounts, temporary)?;
         let key = authority.key();
         let (binding, configuration) = qualify_property_read(
             &description,
@@ -245,6 +273,7 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
             publication,
             description,
             property,
+            qualification: Some(qualification),
             _funding: funding,
         })
     }
@@ -294,6 +323,7 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
             RawFiniteState::Closing | RawFiniteState::Closed
         ) {
             exposure.publication.revoke();
+            exposure.release_qualification();
         }
         if was_closed && exposure.state() == RawFiniteState::InstalledClosed {
             let binding = exposure.runtime.closed_binding().expect("closed loan");
@@ -310,16 +340,20 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
             ) {
                 Err(CoreError::Backpressure(_)) => return Ok(Poll::Pending),
                 Err(error) => {
-                    exposure.runtime.fence(error);
+                    exposure.fence(error);
                     return Ok(Poll::Ready(exposure.state()));
                 }
                 Ok(()) => {}
             }
+            // The decoding/semantic owners have been destroyed by qualification.
+            // Release scratch outside the local publication commit; only the
+            // lifetime/result/cleanup leases remain shared with behavior.
+            exposure.release_qualification();
             if let Err(error) = self
                 .logical
                 .publish(&mut exposure.publication, &mut exposure.runtime)
             {
-                exposure.runtime.fence(error);
+                exposure.fence(error);
             } else {
                 exposure.publication.release_retired();
             }
