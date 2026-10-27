@@ -95,9 +95,10 @@ invariants remain mandatory under the requirements above and Runtime Safety.
 
 Existing Core route carriers, HostBindingCall, Consumer registrations and the
 single synchronous Property Read Producer remain restricted working adapters.
-Their actual safety checks MUST NOT be weakened while retained. No new facade,
-new Binding or interaction-family implementation is introduced. Their exact
-historical contracts/evidence remain available at the pinned predecessor.
+Their actual safety checks MUST NOT be weakened while retained. The authority
+migration itself introduced no new facade or interaction-family implementation;
+later composed HTTP Action delivery uses the successor boundary below. Historical
+contracts/evidence remain available at the pinned predecessor.
 
 The optional composed Host Producer handoff supplies a closed participation
 lease for each independently installed native contribution. It checks the exact
@@ -107,12 +108,22 @@ qualified exposure. Finite readiness also checks the exact logical instance,
 requires output validation to be enabled and verifies its captured service;
 an explicitly raw runtime cannot qualify a published exposure. An unrelated
 closed runtime cannot be opened as an extra participant. The
-handoff then locally opens all leases at the Servient publication boundary. A
-lease is not a native connection or per-Thing Binding runtime: one Binding owner
+handoff installs separately owned closed ingress gates before commit and flips
+them inside the Servient publication boundary. Third-party `open` callbacks
+after logical commit are not permitted: reentrancy or partial opening would
+leave a multi-participant publication observably half-open despite a non-fallible
+contract. Gate loans and checks finish before commit; no linked callback,
+allocation or fallible native operation occurs while flipping them. Revocation
+closes all original gates without calling the native drivers. A lease is not a
+native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
 The HTTP finite participant is still a one-endpoint/one-route adapter; a linked
 test-only UDP Action participant exercises shared infrastructure and continuing
-work over actual I/O. This is not production qualification of UDP or Actions.
+work over actual I/O. The HTTP Action participant adds a production loopback
+mapping with independent invoke/status/cancel Forms, captured JSON/type
+validation, retained native correlation and manually driven continuing work.
+UDP remains test-only; HTTP's one-listener-per-Action implementation does not
+constrain other native resource layouts or cross-Binding Action routes.
 
 The manual Host publication records bounded opaque identities of the original
 native participation owners. Publication and retirement reject duplicate,

@@ -432,9 +432,70 @@ not remote rollback or completed drain. Replacement preserves old accepted work.
 The joined facade is Host/std/manual and contains optional preparation. The
 separate finite execution crate still links only Core/Foundation. Its generic
 source-free publication primitive relies on the facade's qualification; raw
-activation remains raw. One logical slot and one required native participant
-are implemented here. Multiple participant publication, shared HTTP listeners,
-async behaviors, other operation families, TLS/authentication, embedded devices
-and resource/performance release qualification remain unproved. Original-bank
+activation remains raw. Multiple independently prepared/installed participants
+can share one logical Thing. Shared HTTP listeners, TLS/authentication, Events,
+embedded devices and resource/performance release qualification remain unproved. Original-bank
 reservations and a conservative bounded-input decoding allowance are distinct
 from measured OS/SDK or total allocator maxima.
+
+## Composed HTTP Producer Actions
+
+`HttpActionProducer` selects independent source-free definitions for
+`invokeaction` (POST), `queryaction` (GET) and `cancelaction` (DELETE). This
+concrete participant requires all three Forms and registered behaviors: it has
+no cross-Binding correlation service and refuses an incomplete native set
+before publication. This is an HTTP participant limit, not a Planning or
+Servient operation-family rule. The
+HTTP mapping uses a nonzero loopback address, JSON, endpoint NoSec, a fixed
+invoke path and control paths ending in `{?id}` with an Action
+`uriVariables.id` string schema. POST returns `202` and a JSON
+`{"id":"<epoch>-<invocation>","status":"accepted"}` with the selected status
+URL in `Location`. GET returns `running`,
+`completed` (with validated `output`) or `failed`; DELETE requests cooperative
+cancellation and returns `cancelling` or `terminal`. These wire envelopes and
+correlation conventions are this Binding's documented HTTP mapping, **not** a
+new Engine semantic or a claim that a W3C Note mandates this representation.
+A displaced lease's status URL cannot address a successor's invocation. Output
+is advertised only when a query Form can expose it.
+
+All final TD Forms, effective operations, resolved security and type-only Action
+input/output schemas are qualified through the existing whole-Thing selector,
+closed installation, managed Host resource handoff and local Servient publication.
+Unsupported DataSchema constraints, executable extension assertions, synchronous
+completion promises, alternate media/codings/security, method/response mismatches,
+other URI templates, missing control mappings and multi-operation Forms refuse before publication. Pure
+definitions hold no socket or logical permission. `HttpActionRuntime` is one
+concrete native participant per Action; other Bindings may share a listener or
+use distinct control routes/Bindings. This does not constrain general Planning
+or Servient cardinality. An HTTP Property Read participant can join the *same*
+Thing with separate listeners and one logical behavior authority.
+
+Native HTTP/1.1 I/O is caller-driven, one connection at a time per participant,
+with 16 headers, 8192 head bytes, 4096 JSON input/output bytes and a 10-second
+per-exchange deadline. Native ingress has no application handler. Servient
+validates JSON/type before behavior and captures the output validator with
+continuing work. `progress_actions` fairly polls retained work after the
+initiating reply; completion stays queryable until explicit `acknowledge` or
+application-selected terminal retention expiry (`reap_completed`, five seconds
+in the example). Pending work is never expired as a completed result.
+`begin_close` revokes ingress and releases native sockets but cannot release
+unread work. `HttpActionDelivery` describes only local write progress/failure:
+local completion does not prove remote receipt and partial failure cannot erase
+possible application effects. The caller provisions the Action-store baseline
+independently of native participation backing. NoSec/loopback is not TLS or a
+remotely secure bearer-token service.
+
+Run a live example, then use curl from a second terminal:
+
+```sh
+cargo run --locked --offline -p clinkz-wot-binding-http --example serve_action -- 8081 30
+curl -i -X POST -H 'Content-Type: application/json' --data 12 http://127.0.0.1:8081/run
+# GET the returned Location, or DELETE /stop?id=<id from POST>.
+```
+
+`tests/action_producer.rs` uses real TCP peers for mixed-capability publication,
+invalid input/output, independent continuation, status/cancel, replacement,
+stale correlation, unread settlement, partial input, occupied ports and release.
+UDP Action tests remain test-only evidence for shared native infrastructure.
+HTTPS, broader DataSchema/security services, other HTTP Action response styles,
+automatic progress and remote effect certainty remain unsupported.

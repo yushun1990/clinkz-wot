@@ -54,6 +54,7 @@ fn request<'a>(
         invoke: route(1, 11),
         query: Some(route(2, 22)),
         cancel: Some(route(3, 33)),
+        validator: None,
     }
 }
 fn work_budget() -> WorkBudget {
@@ -658,6 +659,7 @@ fn action_only_instance_needs_no_finite_runtime_and_unpublished_controls_are_uns
                 invoke: route(8, 800),
                 query: None,
                 cancel: None,
+                validator: None,
             },
             &mut budget,
         )

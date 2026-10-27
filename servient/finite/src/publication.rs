@@ -5,6 +5,15 @@ use super::*;
 /// Bounded original-membership storage for this manually driven Host slice.
 pub const MAX_PRODUCER_PARTICIPANTS: usize = 32;
 
+/// Passive origin check for a native participant; cannot dispatch or publish.
+#[derive(Clone)]
+pub struct ProducerOwnerToken(Weak<()>);
+impl ProducerOwnerToken {
+    pub fn belongs_to(&self, owner: &RawProducerServient) -> bool {
+        self.0.as_ptr() == Rc::as_ptr(&owner.issuer)
+    }
+}
+
 /// Move-only identity of one native participation owner. It is neither a
 /// logical permission nor infrastructure shutdown authority. Implementations
 /// retain it until that participation's complete local disposal.
@@ -36,6 +45,7 @@ pub struct ProducerPublication {
     cancelled: Cell<bool>,
     participants: Vec<Weak<()>>,
     registry_participants: Vec<Weak<()>>,
+    gates: Vec<Weak<Cell<bool>>>,
     // Both original instances retain capacity until publication metadata ends.
     retired: Option<InstanceEntry>,
     instance: Option<Rc<RawProducerInstance>>,
@@ -45,6 +55,7 @@ impl ProducerPublication {
     pub fn staging_backing_bytes() -> usize {
         size_of::<Self>()
             + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
+            + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>()
             + size_of::<Cell<bool>>()
             + 2 * size_of::<usize>()
     }
@@ -130,6 +141,11 @@ impl ProducerPublication {
     pub fn revoke(&self) {
         self.current.set(false);
         self.cancelled.set(true);
+        for gate in &self.gates {
+            if let Some(gate) = gate.upgrade() {
+                gate.set(false);
+            }
+        }
     }
     pub fn staged_description(&self) -> Option<&str> {
         self.instance.as_ref()?.description.as_deref()
@@ -177,7 +193,8 @@ impl Drop for ProducerPublication {
 /// local ingress-gate lease, NOT an Engine-wide native session/resource API.
 /// Bindings may implement it over a shared listener, broker or other native
 /// owner with many Things. Every participant must already have been qualified
-/// against the complete final TD; no fallible I/O or callback runs in `open`.
+/// against the complete final TD. The gate is installed in native ingress
+/// before setup; publication flips it without calling into linked code.
 pub trait ClosedProducerParticipation {
     /// Immutable for this owner's entire lifetime, including retirement.
     fn participation_id(&self) -> &ProducerParticipationId;
@@ -215,7 +232,11 @@ pub trait ClosedProducerParticipation {
     ) -> bool {
         false
     }
-    fn open(&mut self);
+    /// The native owner must consult this gate before offering semantic ingress.
+    /// It must be closed until publication and must not be shared between
+    /// independently published participations. Returning a gate is a passive
+    /// loan; all callbacks, including this one, run before the commit.
+    fn ingress_gate(&self) -> &Rc<Cell<bool>>;
     /// True only after this participation's native obligations and unread
     /// settlements have retired. The physical infrastructure may remain shared.
     fn retired(&self) -> bool;
@@ -280,8 +301,8 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
                 .binding
                 .covers_definition(key, site, form, operation, definition)
     }
-    fn open(&mut self) {
-        self.state = RawFiniteState::Serving;
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        &self.ingress_gate
     }
     fn retired(&self) -> bool {
         self.state == RawFiniteState::Closed && self.settlement.is_none()
@@ -289,6 +310,9 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
 }
 
 impl RawProducerServient {
+    pub fn participation_token(&self) -> ProducerOwnerToken {
+        ProducerOwnerToken(Rc::downgrade(&self.issuer))
+    }
     /// Preback the logical registry before any native setup. Empty does not
     /// confer acceptance, unlike constructing an already active raw registry.
     pub fn try_empty(limits: RawProducerRegistryLimits) -> CoreResult<Self> {
@@ -321,7 +345,8 @@ impl RawProducerServient {
                 + size_of::<Cell<bool>>()
                 + size_of::<Cell<bool>>()
                 + size_of::<[usize; 8]>()
-                + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>(),
+                + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
+                + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>(),
         )
     }
 
@@ -389,6 +414,7 @@ impl RawProducerServient {
             cancelled: Cell::new(false),
             participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             registry_participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
+            gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
         })
     }
 
@@ -430,6 +456,20 @@ impl RawProducerServient {
             return Err(CoreError::Backpressure(context()));
         }
         publication.record_participants(participants.iter().map(|p| p.participation_id()))?;
+        // Gather gates before the local linearization boundary. Every linked
+        // callback and fallible allocation precedes the commit.
+        let mut gates = Vec::new();
+        gates
+            .try_reserve_exact(participants.len())
+            .map_err(|_| CoreError::Backpressure(context()))?;
+        gates.extend(participants.iter().map(|p| Rc::clone(p.ingress_gate())));
+        if gates
+            .iter()
+            .enumerate()
+            .any(|(i, gate)| gate.get() || gates[..i].iter().any(|prior| Rc::ptr_eq(prior, gate)))
+        {
+            return Err(CoreError::Validation(context()));
+        }
         let entry = InstanceEntry {
             instance: Rc::clone(publication.instance.as_ref().expect("uncommitted owner")),
             current: Rc::clone(&publication.current),
@@ -449,9 +489,10 @@ impl RawProducerServient {
             }
         }
         publication.current.set(true);
+        publication.gates.extend(gates.iter().map(Rc::downgrade));
         publication.committed = true;
-        for participant in participants {
-            participant.open();
+        for gate in gates {
+            gate.set(true);
         }
         Ok(())
     }

@@ -28,7 +28,7 @@ use core::{any::Any, mem::size_of};
 /// Final qualification is fallible, publication is not. Retain the prepared
 /// definitions separately from this logical publication and all physical
 /// resources. No native poll, handler, allocation or fallible callback is made
-/// between the last readiness check and the local commit.
+/// inside the local commit; native gate acquisition is checked beforehand.
 pub fn publish_prepared_thing(
     owner: &mut RawProducerServient,
     publication: &mut ProducerPublication,
@@ -479,17 +479,17 @@ impl ComposedProducerExposure {
             }
             return Err(error);
         }
-        // Decoding/semantic owners are gone. Do not pin phase scratch through
-        // accepted work, replacement or unread results.
-        self.qualification = None;
         if let Err(error) = owner.publish_composed(&mut self.publication, &mut participants) {
             self.publication_failure = Some(error.clone());
             self.publication.revoke();
+            self.qualification = None;
             for participant in &mut participants {
                 participant.begin_retire();
             }
             return Err(error);
         }
+        // No phase scratch is retained by accepted work or unread results.
+        self.qualification = None;
         self.publication.release_retired();
         Ok(())
     }

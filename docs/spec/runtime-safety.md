@@ -99,3 +99,10 @@ native retirement and acknowledgement of retained Actions are separate checks.
 After a lost publication guard, logical reclamation requires actual disappearance
 of every original native owner and acknowledgement of all original Action work.
 Neither guard Drop nor a diagnostic instance key proves completed native drain.
+
+The local publication commit flips preinstalled per-participation ingress gates
+rather than calling third-party `open()` after committing logical authority.
+Readiness, gate loans, uniqueness and all fallible setup finish before commit;
+gate writes have no callback or partial-failure branch. A revoked exposure closes
+every original gate without requiring mutable access to the native drivers.
+Accepted Action work and physical retirement retain their independent owners.

@@ -525,6 +525,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     configuration: B::Configuration,
     limits: RawFiniteLimits,
     state: RawFiniteState,
+    ingress_gate: Rc<Cell<bool>>,
     first_cause: Option<CoreError>,
     validation: FiniteOutputValidation,
     deadline: Deadline,
@@ -568,6 +569,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             configuration,
             limits,
             state: RawFiniteState::Starting,
+            ingress_gate: Rc::new(Cell::new(false)),
             first_cause: None,
             settlement: None,
             validation,
@@ -581,7 +583,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     pub fn state(&self) -> RawFiniteState {
-        self.state
+        if self.state == RawFiniteState::InstalledClosed && self.ingress_gate.get() {
+            RawFiniteState::Serving
+        } else {
+            self.state
+        }
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
         self.first_cause.as_ref()
@@ -612,7 +618,10 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     /// publish or qualify a TD, even with Required output validation. No native
     /// callback or handler runs here.
     pub fn activate_raw(&mut self) -> CoreResult<()> {
-        if self.state != RawFiniteState::InstalledClosed {
+        // A managed composed handoff cannot be opened through the raw escape
+        // hatch before its complete final TD has committed. Raw publication
+        // callers remain responsible for not interleaving these two modes.
+        if self.state != RawFiniteState::InstalledClosed || self.retained_owner.is_some() {
             return Err(CoreError::Validation(context()));
         }
         if self.issuer.strong_count() == 0 {
@@ -626,10 +635,12 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             return Err(error);
         }
         self.state = RawFiniteState::Serving;
+        self.ingress_gate.set(true);
         Ok(())
     }
 
     pub fn begin_close(&mut self) {
+        self.ingress_gate.set(false);
         if self.state != RawFiniteState::Closed {
             if (self.ingress.is_some() || self.reply.is_some()) && self.first_cause.is_none() {
                 self.first_cause = Some(CoreError::Cancelled(ErrorContext::new(
@@ -644,6 +655,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     fn fail(&mut self, error: CoreError) {
+        self.ingress_gate.set(false);
         if self.first_cause.is_none() {
             self.first_cause = Some(error);
         }
@@ -780,6 +792,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         now: MonotonicInstant,
     ) -> Poll<RawFiniteState> {
         use RawFiniteState::*;
+        if self.state == InstalledClosed && self.ingress_gate.get() {
+            self.state = Serving;
+        }
         // Local fencing requires no native work credit. Cleanup still does.
         self.check_time(now);
         if self.state == Closed

@@ -1076,8 +1076,8 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
                     .covers(key, binding, site, form, operation, &definition.program)
             })
     }
-    fn open(&mut self) {
-        self.0.open()
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        self.0.ingress_gate()
     }
     fn retired(&self) -> bool {
         self.0.retired()

@@ -82,9 +82,13 @@ identities (possibly different Bindings), the established principal id and the
 original behavior. Query/cancel require a live local handle, original route,
 current instance and fresh application permission. Cooperative cancellation,
 local abandonment, application result and native delivery are separate outcomes;
-an error after behavior entry is effect-uncertain. This is NOT an implementation
-of TD `synchronous`, qualified Forms, native control/continuation, validation or
-Producer publication. It provides no remote-terminal claim.
+an error after behavior entry is effect-uncertain. Alone this raw kernel makes
+no TD or native-I/O claim. The composed HTTP Producer captures a source-independent
+validator at invoke acceptance and retains it with the continuation, validates
+input before behavior and output before terminal exposure, and maps separately
+described HTTP query/cancel routes. Its 202 means locally admitted work, not
+remote terminal success or rollback. Other Bindings and raw users retain their
+own qualification obligations.
 
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property

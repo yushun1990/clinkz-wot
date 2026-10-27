@@ -112,7 +112,7 @@ fn http_read(
     .unwrap()
 }
 
-struct UnselectedParticipant(Cell<bool>, ProducerParticipationId, Option<Rc<dyn Any>>);
+struct UnselectedParticipant(Rc<Cell<bool>>, ProducerParticipationId, Option<Rc<dyn Any>>);
 impl ClosedProducerParticipation for UnselectedParticipant {
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.1
@@ -124,12 +124,52 @@ impl ClosedProducerParticipation for UnselectedParticipant {
     fn ready_for(&self, _: &RawProducerServient, _: ProducerInstanceKey) -> bool {
         true
     }
-    fn open(&mut self) {
-        self.0.set(true);
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        &self.0
     }
     fn retired(&self) -> bool {
         false
     }
+}
+
+#[test]
+fn publication_never_partially_opens_two_native_gates() {
+    let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
+        instances: 1,
+        behaviors_per_instance: 1,
+        target_name_bytes: 64,
+    })
+    .unwrap();
+    let authority = key(1, Generation::INITIAL);
+    let instance = RawProducerInstance::new(
+        authority,
+        vec![RawFiniteBehavior::new(
+            AffordanceTarget::Property(Arc::from("level")),
+            Operation::ReadProperty,
+            Property(Rc::new(Counts::default())),
+        )],
+    )
+    .with_description(Arc::from("closed publication gate test"));
+    let mut publication = owner.prepare_publication(instance, None).ok().unwrap();
+    let shared = Rc::new(Cell::new(false));
+    let mut first = UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
+    let mut second =
+        UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
+    assert!(
+        owner
+            .publish_composed(&mut publication, &mut [&mut first, &mut second])
+            .is_err()
+    );
+    assert!(!publication.is_committed());
+    assert!(!shared.get());
+    assert_eq!(owner.description(publication.key()), None);
+    second.0 = Rc::new(Cell::new(false));
+    owner
+        .publish_composed(&mut publication, &mut [&mut first, &mut second])
+        .unwrap();
+    assert!(first.0.get() && second.0.get());
+    publication.revoke();
+    assert!(!first.0.get() && !second.0.get());
 }
 
 // Only this linked Binding interprets its UDP mapping. Each operation has an
@@ -257,6 +297,57 @@ impl ProducerCapability for UdpActionProvider {
 }
 fn unsupported() -> CoreError {
     CoreError::UnsupportedOperation(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
+}
+
+#[test]
+fn http_action_registration_does_not_veto_a_different_bindings_action_forms() {
+    let tcp = tcp_addr();
+    let udp = udp_addr();
+    let owner = key(1, Generation::INITIAL);
+    let instance = instance(owner, Rc::new(Counts::default()));
+    let http_action = HttpActionProducer::new(
+        HttpProducerConfig::for_loopback(tcp).unwrap(),
+        BindingId::new(60),
+        BindingGeneration::INITIAL,
+    );
+    let http_read = HttpFiniteProducer::try_new(
+        HttpProducerConfig::for_loopback(tcp).unwrap(),
+        BindingId::new(7),
+        BindingGeneration::INITIAL,
+        100,
+    )
+    .unwrap();
+    let udp_action = UdpActionProvider::new(udp);
+    let prepared = prepare_thing(
+        &description(tcp, udp),
+        instance.key(),
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&http_action, &http_read, &udp_action],
+        |scope, op| match scope {
+            ValidatedProducerScope::Property(n) => instance.supports_property(n, op),
+            ValidatedProducerScope::Action(n) => instance.supports_action(n, op),
+            _ => false,
+        },
+    )
+    .unwrap();
+    assert_eq!(prepared.operations().len(), 4);
+    assert_eq!(
+        prepared
+            .operations()
+            .iter()
+            .filter(|p| p.definition::<ActionRoute>().is_some())
+            .count(),
+        3
+    );
+    assert_eq!(
+        prepared
+            .operations()
+            .iter()
+            .filter(|p| p.definition::<HttpProducerProgram>().is_some())
+            .count(),
+        1
+    );
 }
 
 #[derive(Default)]
@@ -470,6 +561,7 @@ impl ActionNative {
                         invoke: route[0],
                         query: Some(route[1]),
                         cancel: Some(route[2]),
+                        validator: None,
                     },
                     budget,
                 );
@@ -559,8 +651,8 @@ impl ClosedProducerParticipation for ActionLease {
                 .and_then(|s| s.local_addr().ok())
                 == Some(self.native.borrow().address)
     }
-    fn open(&mut self) {
-        self.open.set(true)
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        &self.open
     }
     fn covers(
         &self,
@@ -1225,7 +1317,11 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     );
     // A participant that claims readiness but covers no selected Form must
     // not be opened, even when every advertised operation has an owner.
-    let mut extra = UnselectedParticipant(Cell::new(false), ProducerParticipationId::new(), None);
+    let mut extra = UnselectedParticipant(
+        Rc::new(Cell::new(false)),
+        ProducerParticipationId::new(),
+        None,
+    );
     assert!(
         publish_prepared_thing(
             &mut s,

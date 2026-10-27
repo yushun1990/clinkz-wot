@@ -170,6 +170,7 @@ struct Invocation {
     query: Option<ActionRoute>,
     cancel: Option<ActionRoute>,
     principal: Option<PrincipalId>,
+    validator: Option<Rc<dyn clinkz_wot_core::action::ActionValidator>>,
     work: Option<Box<dyn RawActionWork>>,
     result: Option<CoreResult<InteractionOutput>>,
     cancel_requested: bool,
@@ -409,6 +410,9 @@ impl RawProducerServient {
         {
             return Err(CoreError::Backpressure(context()));
         }
+        if let Some(validator) = &request.validator {
+            validator.validate_input(request.input)?;
+        }
         let next = store
             .next
             .checked_add(1)
@@ -443,6 +447,7 @@ impl RawProducerServient {
             query: request.query,
             cancel: request.cancel,
             principal: request.input.principal.as_ref().map(|p| p.id.clone()),
+            validator: request.validator,
             work: None,
             result: None,
             cancel_requested: false,
@@ -457,7 +462,16 @@ impl RawProducerServient {
         match started {
             Ok(RawActionStart::Continue(work)) => entry.work = Some(work),
             Ok(RawActionStart::Complete(value)) => {
-                entry.result = Some(check_output(&value, limits).map(|()| value))
+                entry.result = Some(
+                    check_output(&value, limits)
+                        .and_then(|()| {
+                            entry
+                                .validator
+                                .as_ref()
+                                .map_or(Ok(()), |v| v.validate_output(&value))
+                        })
+                        .map(|()| value),
+                )
             }
             Err(error) => entry.result = Some(Err(error)),
         }
@@ -799,9 +813,16 @@ impl ActionStore {
             match work.poll() {
                 Poll::Pending => return Ok(Poll::Pending),
                 Poll::Ready(result) => {
-                    entry.result = Some(
-                        result.and_then(|value| check_output(&value, self.limits).map(|()| value)),
-                    );
+                    entry.result = Some(result.and_then(|value| {
+                        check_output(&value, self.limits)
+                            .and_then(|()| {
+                                entry
+                                    .validator
+                                    .as_ref()
+                                    .map_or(Ok(()), |v| v.validate_output(&value))
+                            })
+                            .map(|()| value)
+                    }));
                     entry.work = None;
                 }
             }
