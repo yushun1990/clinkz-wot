@@ -433,8 +433,9 @@ pub struct RawFiniteLimits {
     pub output_retained_bytes: usize,
 }
 
-/// Output checking for this participant, independent of TD publication. Raw
-/// mode claims no schema conformance; Required refuses an absent/lost service.
+/// Output checking for this participant. Raw mode claims no schema conformance
+/// and cannot satisfy qualified publication; explicit raw acceptance uses
+/// `RawFiniteRuntime::activate_raw`. Required refuses an absent/lost service.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FiniteOutputValidation {
     Raw,

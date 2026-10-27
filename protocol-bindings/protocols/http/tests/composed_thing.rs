@@ -81,6 +81,7 @@ fn http_read(
     instance: ProducerInstanceKey,
     name: &str,
     id: BindingId,
+    validation: FiniteOutputValidation,
 ) -> RawFiniteRuntime<HttpFiniteBinding> {
     let config = HttpFiniteConfig::try_new(
         HttpProducerConfig::for_loopback(address).unwrap(),
@@ -101,7 +102,7 @@ fn http_read(
             output_media_capacity: 64,
             output_retained_bytes: 8192,
         },
-        FiniteOutputValidation::Required,
+        validation,
         Deadline::NONE,
     )
     .ok()
@@ -256,6 +257,19 @@ impl RawFiniteHandler for Property {
         self.0.property.set(self.0.property.get() + 1);
         Ok(InteractionOutput::with_data(Payload::new(
             b"42".to_vec(),
+            "application/json",
+        )))
+    }
+}
+struct StringProperty(Rc<Counts>);
+impl RawFiniteHandler for StringProperty {
+    fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+        Ok(())
+    }
+    fn handle(&self, _: HandlerContext<'_>, _: &InteractionInput) -> CoreResult<InteractionOutput> {
+        self.0.property.set(self.0.property.get() + 1);
+        Ok(InteractionOutput::with_data(Payload::new(
+            b"\"wrong type\"".to_vec(),
             "application/json",
         )))
     }
@@ -757,8 +771,24 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
         .prepare_publication(staged.with_description(Arc::clone(&description)), None)
         .ok()
         .unwrap();
-    let mut left = http_read(&s, left_addr, program("left"), ka, "left", left_id);
-    let mut right = http_read(&s, right_addr, program("right"), ka, "right", right_id);
+    let mut left = http_read(
+        &s,
+        left_addr,
+        program("left"),
+        ka,
+        "left",
+        left_id,
+        FiniteOutputValidation::Required,
+    );
+    let mut right = http_read(
+        &s,
+        right_addr,
+        program("right"),
+        ka,
+        "right",
+        right_id,
+        FiniteOutputValidation::Required,
+    );
 
     // B has a live handler and a separate closed listener. It is not part of
     // A's qualified exposure, despite sharing the same Servient owner.
@@ -799,6 +829,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
         kb,
         "left",
         foreign_id,
+        FiniteOutputValidation::Required,
     );
     for runtime in [&mut left, &mut right, &mut unrelated] {
         assert_eq!(
@@ -863,6 +894,123 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
     drop(right);
     drop(unrelated);
     for addr in [left_addr, right_addr, foreign_addr] {
+        TcpListener::bind(addr).unwrap();
+    }
+}
+
+#[test]
+fn qualified_publication_requires_validation_and_rejects_invalid_output() {
+    for validation in [
+        FiniteOutputValidation::Required,
+        FiniteOutputValidation::Raw,
+    ] {
+        let addr = tcp_addr();
+        let description: Arc<str> = Arc::from(
+            serde_json::json!({
+                "@context":"https://www.w3.org/2022/wot/td/v1.1",
+                "title":"integer output",
+                "security":["n"],"securityDefinitions":{"n":{"scheme":"nosec"}},
+                "properties":{"left":{"type":"integer","readOnly":true,
+                    "forms":[{"href":format!("http://{addr}/value")}]}}
+            })
+            .to_string(),
+        );
+        let counts = Rc::new(Counts::default());
+        let authority = key(1, Generation::INITIAL);
+        let k = authority.key();
+        let staged = RawProducerInstance::new(
+            authority,
+            vec![RawFiniteBehavior::new(
+                AffordanceTarget::Property(Arc::from("left")),
+                Operation::ReadProperty,
+                StringProperty(Rc::clone(&counts)),
+            )],
+        );
+        let mut s = owner();
+        let id = BindingId::new(7);
+        let provider = HttpFiniteProducer::try_new(
+            HttpProducerConfig::for_loopback(addr).unwrap(),
+            id,
+            BindingGeneration::INITIAL,
+            100,
+        )
+        .unwrap();
+        let prepared = prepare_thing(
+            &description,
+            k,
+            &GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&provider],
+            |scope, op| match scope {
+                ValidatedProducerScope::Property(n) => staged.supports_property(n, op),
+                _ => false,
+            },
+        )
+        .unwrap();
+        let program = prepared.operations()[0]
+            .definition::<HttpProducerProgram>()
+            .unwrap()
+            .clone();
+        let mut publication = s
+            .prepare_publication(staged.with_description(Arc::clone(&description)), None)
+            .ok()
+            .unwrap();
+        let mut runtime = http_read(&s, addr, program, k, "left", id, validation);
+        assert_eq!(
+            runtime.step(&mut cx(), &mut budget(), now()),
+            Poll::Ready(RawFiniteState::InstalledClosed)
+        );
+        // Both modes have the actual validator; its mere presence cannot
+        // qualify a runtime whose dispatch policy skips that service.
+        assert!(
+            runtime
+                .closed_binding()
+                .unwrap()
+                .output_validator()
+                .is_some()
+        );
+        let published = publish_prepared_thing(
+            &mut s,
+            &mut publication,
+            &prepared,
+            &[&provider],
+            &mut [&mut runtime],
+            &GatewayDefaultV1::LIMITS,
+            &mut budget(),
+        );
+        if validation == FiniteOutputValidation::Raw {
+            assert!(
+                matches!(published, Err(CoreError::Validation(_))),
+                "{published:?}"
+            );
+            assert!(
+                s.publish_composed(&mut publication, &mut [&mut runtime])
+                    .is_err()
+            );
+            assert!(!publication.is_committed());
+            assert_eq!(s.description(k), None);
+            assert_eq!(runtime.state(), RawFiniteState::InstalledClosed);
+            assert_eq!(counts.property.get(), 0);
+            assert!(runtime.take_settlement().is_none());
+        } else {
+            published.unwrap();
+            let response = read_peer(addr, &mut s, &mut runtime);
+            assert!(response.starts_with(b"HTTP/1.1 500"));
+            assert!(response.ends_with(b"\r\n\r\nnull"));
+            assert_eq!(counts.property.get(), 1);
+            let settlement = runtime.take_settlement().unwrap();
+            assert_eq!(settlement.recipient, Some(k));
+            assert_eq!(settlement.effect, FiniteEffect::Unknown);
+            assert_eq!(settlement.delivery, FiniteDelivery::Delivered);
+            assert!(matches!(settlement.result, Err(CoreError::Validation(_))));
+        }
+        runtime.begin_close();
+        while runtime.state() != RawFiniteState::Closed {
+            let _ = runtime.step(&mut cx(), &mut budget(), now());
+        }
+        s.retire_composed(&mut publication, &[&runtime]).unwrap();
+        assert_eq!(s.description(k), None);
+        drop(runtime);
         TcpListener::bind(addr).unwrap();
     }
 }

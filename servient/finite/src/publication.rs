@@ -119,8 +119,11 @@ pub trait ClosedProducerParticipation {
 
 impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B> {
     fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool {
+        // A captured service cannot qualify dispatch that skips validation.
+        // Explicitly unvalidated execution remains at activate_raw().
         self.issuer.as_ptr() == Rc::as_ptr(&owner.issuer)
             && self.state == RawFiniteState::InstalledClosed
+            && self.validation == FiniteOutputValidation::Required
             && self.pair_is_current()
             && self.binding.prepared_for_instance(key)
     }
