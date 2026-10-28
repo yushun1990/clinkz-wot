@@ -146,7 +146,7 @@ impl HttpProducerConfig {
         Ok(Some(program))
     }
 }
-fn class_assertion(node: SemanticNode<'_>) -> bool {
+pub(crate) fn class_assertion(node: SemanticNode<'_>) -> bool {
     node.name() == SemanticName::Keyword("@type")
         && (matches!(node.value(), SemanticValue::Iri(_))
             || node.value() == SemanticValue::Array

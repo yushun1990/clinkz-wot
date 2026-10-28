@@ -13,7 +13,14 @@ pub(super) fn validate(schema: TypeSchema, output: &InteractionOutput) -> CoreRe
     {
         return Err(invalid());
     }
-    let json = std::str::from_utf8(&payload.body).map_err(|_| invalid())?;
+    validate_json(schema, &payload.body)
+}
+
+pub(super) fn validate_json(schema: TypeSchema, body: &[u8]) -> CoreResult<()> {
+    if body.len() > 4096 {
+        return Err(invalid());
+    }
+    let json = std::str::from_utf8(body).map_err(|_| invalid())?;
     // IgnoredAny skips UTF-8 checks inside strings. The check above covers the
     // complete body, including object keys and nested values.
     serde_json::from_str::<serde::de::IgnoredAny>(json).map_err(|_| invalid())?;

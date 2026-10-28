@@ -1,10 +1,10 @@
-//! Optional Host HTTP/1.1 Consumer and Producer Property Read binding.
+//! Optional Host HTTP/1.1 Consumer Property Read and Producer Property/Action binding.
 //!
 //! This slice supports cleartext IP literals, compiled JSON reads, status
 //! 200, fixed-length/chunked/close-delimited responses and bounded discarded
-//! trailers. The Producer offers a bounded loopback GET service with explicit
-//! preparation and manually progressed Servient ownership. See README.md for
-//! deployment and qualification limits.
+//! trailers. The Producer offers bounded loopback Property GET and continuing
+//! Action POST/GET/DELETE through explicit preparation and manually progressed
+//! Servient ownership. See README.md for deployment and qualification limits.
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
 use std::{
@@ -461,3 +461,10 @@ mod qualification {
 }
 
 mod producer_transport;
+
+mod action_producer;
+pub use action_producer::{HttpActionDefinition, HttpActionDelivery, HttpActionRuntime};
+#[cfg(feature = "prepare")]
+mod action_preparation;
+#[cfg(feature = "prepare")]
+pub use action_preparation::HttpActionProducer;

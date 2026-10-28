@@ -154,6 +154,78 @@ fn action_input(
     )
 }
 
+#[test]
+fn action_without_captured_validation_service_refuses_managed_handoff_before_native_setup() {
+    let owner = owner();
+    let address = udp_addr();
+    let native = ActionNative::new(address);
+    let accounts = bank();
+    let (mut input, _) = action_input(
+        &owner,
+        key(1, Generation::INITIAL),
+        &native,
+        Rc::new(Counts::default()),
+        None,
+    );
+    let key = input.instance.key();
+    input.participants[0]
+        .as_mut()
+        .as_any_mut()
+        .downcast_mut::<ActionLease>()
+        .unwrap()
+        .validator_enabled = false;
+    let rejection = ComposedProducerExposure::try_new(
+        &owner,
+        input,
+        limits(),
+        Arc::clone(&accounts),
+        &mut budget(),
+    )
+    .err()
+    .expect("a ready Action without a service cannot qualify");
+    assert_eq!(owner.description(key), None);
+    assert!(native.borrow().socket.is_none());
+    drop(rejection);
+    assert_empty(&accounts);
+    UdpSocket::bind(address).unwrap();
+}
+
+#[test]
+fn action_without_prepared_control_route_refuses_managed_handoff_before_native_setup() {
+    let owner = owner();
+    let address = udp_addr();
+    let native = ActionNative::new(address);
+    let accounts = bank();
+    let (mut input, _) = action_input(
+        &owner,
+        key(1, Generation::INITIAL),
+        &native,
+        Rc::new(Counts::default()),
+        None,
+    );
+    let key = input.instance.key();
+    input.participants[0]
+        .as_mut()
+        .as_any_mut()
+        .downcast_mut::<ActionLease>()
+        .unwrap()
+        .control_routes_enabled = false;
+    let rejection = ComposedProducerExposure::try_new(
+        &owner,
+        input,
+        limits(),
+        Arc::clone(&accounts),
+        &mut budget(),
+    )
+    .err()
+    .expect("a described control without its actual route cannot qualify");
+    assert_eq!(owner.description(key), None);
+    assert!(native.borrow().socket.is_none());
+    drop(rejection);
+    assert_empty(&accounts);
+    UdpSocket::bind(address).unwrap();
+}
+
 fn start_http(exposure: &mut ComposedProducerExposure) {
     for i in 0..2 {
         assert_eq!(
@@ -1076,8 +1148,8 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
                     .covers(key, binding, site, form, operation, &definition.program)
             })
     }
-    fn open(&mut self) {
-        self.0.open()
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        self.0.ingress_gate()
     }
     fn retired(&self) -> bool {
         self.0.retired()

@@ -112,7 +112,7 @@ fn http_read(
     .unwrap()
 }
 
-struct UnselectedParticipant(Cell<bool>, ProducerParticipationId, Option<Rc<dyn Any>>);
+struct UnselectedParticipant(Rc<Cell<bool>>, ProducerParticipationId, Option<Rc<dyn Any>>);
 impl ClosedProducerParticipation for UnselectedParticipant {
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.1
@@ -124,12 +124,52 @@ impl ClosedProducerParticipation for UnselectedParticipant {
     fn ready_for(&self, _: &RawProducerServient, _: ProducerInstanceKey) -> bool {
         true
     }
-    fn open(&mut self) {
-        self.0.set(true);
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        &self.0
     }
     fn retired(&self) -> bool {
         false
     }
+}
+
+#[test]
+fn publication_never_partially_opens_two_native_gates() {
+    let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
+        instances: 1,
+        behaviors_per_instance: 1,
+        target_name_bytes: 64,
+    })
+    .unwrap();
+    let authority = key(1, Generation::INITIAL);
+    let instance = RawProducerInstance::new(
+        authority,
+        vec![RawFiniteBehavior::new(
+            AffordanceTarget::Property(Arc::from("level")),
+            Operation::ReadProperty,
+            Property(Rc::new(Counts::default())),
+        )],
+    )
+    .with_description(Arc::from("closed publication gate test"));
+    let mut publication = owner.prepare_publication(instance, None).ok().unwrap();
+    let shared = Rc::new(Cell::new(false));
+    let mut first = UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
+    let mut second =
+        UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
+    assert!(
+        owner
+            .publish_composed(&mut publication, &mut [&mut first, &mut second])
+            .is_err()
+    );
+    assert!(!publication.is_committed());
+    assert!(!shared.get());
+    assert_eq!(owner.description(publication.key()), None);
+    second.0 = Rc::new(Cell::new(false));
+    owner
+        .publish_composed(&mut publication, &mut [&mut first, &mut second])
+        .unwrap();
+    assert!(first.0.get() && second.0.get());
+    publication.revoke();
+    assert!(!first.0.get() && !second.0.get());
 }
 
 // Only this linked Binding interprets its UDP mapping. Each operation has an
@@ -259,6 +299,57 @@ fn unsupported() -> CoreError {
     CoreError::UnsupportedOperation(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
 }
 
+#[test]
+fn http_action_registration_does_not_veto_a_different_bindings_action_forms() {
+    let tcp = tcp_addr();
+    let udp = udp_addr();
+    let owner = key(1, Generation::INITIAL);
+    let instance = instance(owner, Rc::new(Counts::default()));
+    let http_action = HttpActionProducer::new(
+        HttpProducerConfig::for_loopback(tcp).unwrap(),
+        BindingId::new(60),
+        BindingGeneration::INITIAL,
+    );
+    let http_read = HttpFiniteProducer::try_new(
+        HttpProducerConfig::for_loopback(tcp).unwrap(),
+        BindingId::new(7),
+        BindingGeneration::INITIAL,
+        100,
+    )
+    .unwrap();
+    let udp_action = UdpActionProvider::new(udp);
+    let prepared = prepare_thing(
+        &description(tcp, udp),
+        instance.key(),
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&http_action, &http_read, &udp_action],
+        |scope, op| match scope {
+            ValidatedProducerScope::Property(n) => instance.supports_property(n, op),
+            ValidatedProducerScope::Action(n) => instance.supports_action(n, op),
+            _ => false,
+        },
+    )
+    .unwrap();
+    assert_eq!(prepared.operations().len(), 4);
+    assert_eq!(
+        prepared
+            .operations()
+            .iter()
+            .filter(|p| p.definition::<ActionRoute>().is_some())
+            .count(),
+        3
+    );
+    assert_eq!(
+        prepared
+            .operations()
+            .iter()
+            .filter(|p| p.definition::<HttpProducerProgram>().is_some())
+            .count(),
+        1
+    );
+}
+
 #[derive(Default)]
 struct Counts {
     property: Cell<usize>,
@@ -386,9 +477,41 @@ struct ActionLease {
     native: Rc<RefCell<ActionNative>>,
     key: ProducerInstanceKey,
     open: Rc<Cell<bool>>,
+    validator: Rc<dyn ActionValidator>,
+    validator_enabled: bool,
+    control_routes_enabled: bool,
     closed: bool,
     participation: ProducerParticipationId,
     retained_owner: Option<Rc<dyn Any>>,
+}
+// This linked, test-only Binding has its own JSON/no-input mapping; even a TD
+// without an explicit Action output schema needs a captured media service.
+struct UdpJsonValidation;
+impl ActionValidator for UdpJsonValidation {
+    fn validate_input(&self, input: &InteractionInput) -> CoreResult<()> {
+        if input.data.is_none() {
+            Ok(())
+        } else {
+            Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            )))
+        }
+    }
+    fn validate_output(&self, output: &InteractionOutput) -> CoreResult<()> {
+        if output.data().is_some_and(|data| {
+            data.content_type == "application/json"
+                && data.content_coding.is_none()
+                && serde_json::from_slice::<serde_json::Value>(&data.body).is_ok()
+        }) {
+            Ok(())
+        } else {
+            Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            )))
+        }
+    }
 }
 impl ActionNative {
     fn new(address: SocketAddr) -> Rc<RefCell<Self>> {
@@ -415,6 +538,9 @@ impl ActionNative {
             native: Rc::clone(native),
             key,
             open,
+            validator: Rc::new(UdpJsonValidation),
+            validator_enabled: true,
+            control_routes_enabled: true,
             closed: false,
             participation: ProducerParticipationId::new(),
             retained_owner: None,
@@ -559,8 +685,8 @@ impl ClosedProducerParticipation for ActionLease {
                 .and_then(|s| s.local_addr().ok())
                 == Some(self.native.borrow().address)
     }
-    fn open(&mut self) {
-        self.open.set(true)
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        &self.open
     }
     fn covers(
         &self,
@@ -586,6 +712,44 @@ impl ClosedProducerParticipation for ActionLease {
                     binding,
                     mapping: ActionMappingKey(form as u64 + 1),
                 })
+    }
+    fn action_validation(
+        &self,
+        key: ProducerInstanceKey,
+        binding: (BindingId, BindingGeneration),
+        site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        form: u32,
+        definition: &dyn Any,
+    ) -> Option<(ActionRoute, Rc<dyn ActionValidator>)> {
+        (self.validator_enabled
+            && self.covers(
+                key,
+                binding,
+                site,
+                form,
+                Operation::InvokeAction,
+                definition,
+            ))
+        .then(|| {
+            (
+                *definition.downcast_ref::<ActionRoute>().unwrap(),
+                Rc::clone(&self.validator),
+            )
+        })
+    }
+    fn action_control_route(
+        &self,
+        key: ProducerInstanceKey,
+        binding: (BindingId, BindingGeneration),
+        site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        form: u32,
+        operation: Operation,
+        definition: &dyn Any,
+    ) -> Option<ActionRoute> {
+        (self.control_routes_enabled
+            && matches!(operation, Operation::QueryAction | Operation::CancelAction)
+            && self.covers(key, binding, site, form, operation, definition))
+        .then(|| *definition.downcast_ref::<ActionRoute>().unwrap())
     }
     fn retired(&self) -> bool {
         self.closed
@@ -1225,7 +1389,11 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     );
     // A participant that claims readiness but covers no selected Form must
     // not be opened, even when every advertised operation has an owner.
-    let mut extra = UnselectedParticipant(Cell::new(false), ProducerParticipationId::new(), None);
+    let mut extra = UnselectedParticipant(
+        Rc::new(Cell::new(false)),
+        ProducerParticipationId::new(),
+        None,
+    );
     assert!(
         publish_prepared_thing(
             &mut s,
@@ -1315,7 +1483,66 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
         "accepted"
     );
     let late = native.borrow().handles.last().unwrap().1.clone();
+    // An already accepted finite exchange keeps its reply opportunity when
+    // the publication gate closes; only a *new* receive must stop.
+    let mut in_flight = TcpStream::connect(tcp).unwrap();
+    in_flight.set_nonblocking(true).unwrap();
+    in_flight
+        .write_all(
+            format!("GET /value HTTP/1.1\r\nHost: {tcp}\r\nConnection: close\r\n\r\n").as_bytes(),
+        )
+        .unwrap();
+    let end = Instant::now() + Duration::from_secs(5);
+    while read.state() != RawFiniteState::Delivering {
+        let _ = s.step(&mut read, &mut cx(), &mut budget(), now()).unwrap();
+        assert!(Instant::now() < end, "finite ingress stalled");
+    }
+    assert_eq!(counts.property.get(), 2);
     publication.revoke();
+    while read.state() != RawFiniteState::Serving {
+        let _ = s.step(&mut read, &mut cx(), &mut budget(), now()).unwrap();
+        assert!(Instant::now() < end, "finite reply stalled");
+    }
+    let mut reply = Vec::new();
+    loop {
+        let mut buf = [0; 256];
+        match in_flight.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => reply.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => panic!("{e}"),
+        }
+        assert!(Instant::now() < end, "finite peer stalled");
+    }
+    assert!(reply.starts_with(b"HTTP/1.1 200"));
+    assert_eq!(
+        read.take_settlement().unwrap().delivery,
+        FiniteDelivery::Delivered
+    );
+    // This finite participant has already served a real request and returned
+    // to Serving. Revocation must fence a new TCP peer before native receive,
+    // rather than offering it as stale semantic ingress to the Servient.
+    let mut after_revoke = TcpStream::connect(tcp).unwrap();
+    after_revoke.set_nonblocking(true).unwrap();
+    after_revoke
+        .write_all(
+            format!("GET /value HTTP/1.1\r\nHost: {tcp}\r\nConnection: close\r\n\r\n").as_bytes(),
+        )
+        .unwrap();
+    for _ in 0..4 {
+        assert_eq!(
+            s.step(&mut read, &mut cx(), &mut budget(), now()).unwrap(),
+            Poll::Pending
+        );
+    }
+    assert_eq!(read.state(), RawFiniteState::Serving);
+    assert_eq!(counts.property.get(), 2);
+    assert!(read.take_settlement().is_none());
+    assert_eq!(
+        after_revoke.read(&mut unused).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    drop(after_revoke);
     assert_eq!(
         s.step_raw_action(&late, &mut budget()).unwrap(),
         Poll::Pending

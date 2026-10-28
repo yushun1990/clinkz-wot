@@ -170,6 +170,7 @@ struct Invocation {
     query: Option<ActionRoute>,
     cancel: Option<ActionRoute>,
     principal: Option<PrincipalId>,
+    validator: Option<Rc<dyn clinkz_wot_core::action::ActionValidator>>,
     work: Option<Box<dyn RawActionWork>>,
     result: Option<CoreResult<InteractionOutput>>,
     cancel_requested: bool,
@@ -396,6 +397,39 @@ impl RawProducerServient {
             .position(|a| a.name.as_ref() == name.as_ref())
             .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
         let behavior = &instance.instance.actions[index];
+        // A qualified incarnation cannot be downgraded by supplying a raw
+        // request. Only the service captured for its exact prepared invoke
+        // route can validate its input and retained immediate/late output.
+        let validator = match &instance.action_routes {
+            None => None, // explicitly raw registration, not TD publication
+            Some(routes) => {
+                let invoke = routes
+                    .iter()
+                    .find(|v| {
+                        v.action.as_ref() == name.as_ref()
+                            && v.operation == Operation::InvokeAction
+                            && v.route == request.invoke
+                    })
+                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+                for (operation, selected) in [
+                    (Operation::QueryAction, request.query),
+                    (Operation::CancelAction, request.cancel),
+                ] {
+                    if selected.is_some_and(|selected| {
+                        !routes.iter().any(|route| {
+                            route.action.as_ref() == name.as_ref()
+                                && route.operation == operation
+                                && route.route == selected
+                        })
+                    }) {
+                        return Err(CoreError::UnsupportedOperation(context()));
+                    }
+                }
+                Some(Rc::clone(
+                    invoke.validator.as_ref().expect("qualified invoke service"),
+                ))
+            }
+        };
         if (request.query.is_some() && !behavior.query)
             || (request.cancel.is_some() && !behavior.cancel)
         {
@@ -408,6 +442,9 @@ impl RawProducerServient {
                     .saturating_sub(store.used_work_bytes)
         {
             return Err(CoreError::Backpressure(context()));
+        }
+        if let Some(validator) = &validator {
+            validator.validate_input(request.input)?;
         }
         let next = store
             .next
@@ -443,6 +480,7 @@ impl RawProducerServient {
             query: request.query,
             cancel: request.cancel,
             principal: request.input.principal.as_ref().map(|p| p.id.clone()),
+            validator,
             work: None,
             result: None,
             cancel_requested: false,
@@ -457,7 +495,16 @@ impl RawProducerServient {
         match started {
             Ok(RawActionStart::Continue(work)) => entry.work = Some(work),
             Ok(RawActionStart::Complete(value)) => {
-                entry.result = Some(check_output(&value, limits).map(|()| value))
+                entry.result = Some(
+                    check_output(&value, limits)
+                        .and_then(|()| {
+                            entry
+                                .validator
+                                .as_ref()
+                                .map_or(Ok(()), |v| v.validate_output(&value))
+                        })
+                        .map(|()| value),
+                )
             }
             Err(error) => entry.result = Some(Err(error)),
         }
@@ -799,9 +846,16 @@ impl ActionStore {
             match work.poll() {
                 Poll::Pending => return Ok(Poll::Pending),
                 Poll::Ready(result) => {
-                    entry.result = Some(
-                        result.and_then(|value| check_output(&value, self.limits).map(|()| value)),
-                    );
+                    entry.result = Some(result.and_then(|value| {
+                        check_output(&value, self.limits)
+                            .and_then(|()| {
+                                entry
+                                    .validator
+                                    .as_ref()
+                                    .map_or(Ok(()), |v| v.validate_output(&value))
+                            })
+                            .map(|()| value)
+                    }));
                     entry.work = None;
                 }
             }

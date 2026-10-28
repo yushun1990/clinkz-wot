@@ -11,6 +11,7 @@ clinkz-wot-td = { path = "../../../td", optional = true }
 clinkz-wot-planning = { path = "../../../planning", optional = true, default-features = false, features = ["std"] }
 clinkz-wot-core = { path = "../../../core" }
 clinkz-wot-foundation = { path = "../../../foundation" }
+clinkz-wot-servient-finite = { path = "../../../servient/finite" }
 hyper = { version = "=1.12.0", default-features = false, features = ["client", "server", "http1"] }
 hyper-util = { version = "=0.1.20", default-features = false, features = ["tokio"] }
 http-body-util = { version = "=0.1.3", default-features = false }
@@ -24,7 +25,6 @@ serde = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-clinkz-wot-servient-finite = { path = "../../../servient/finite" }
 clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }
 serde_json = { workspace = true, features = ["std"] }
@@ -40,4 +40,8 @@ required-features = ["prepare"]
 
 [[example]]
 name = "serve_property"
+required-features = ["prepare"]
+
+[[example]]
+name = "serve_action"
 required-features = ["prepare"]

@@ -1,9 +1,39 @@
 //! Source-free Servient-local publication. Qualification belongs to Planning;
 //! this module owns the actual description/authority/behavior linearization.
 use super::*;
+use clinkz_wot_core::action::{ActionRoute, ActionValidator};
 
 /// Bounded original-membership storage for this manually driven Host slice.
 pub const MAX_PRODUCER_PARTICIPANTS: usize = 32;
+
+/// Qualified, source-free Action mapping. Invoke routes carry their actual
+/// validation service; query/cancel routes establish the permitted controls.
+/// Native participants supply these during setup, not individual requests.
+pub struct CapturedActionRoute {
+    pub action: Arc<str>,
+    pub operation: Operation,
+    pub route: ActionRoute,
+    pub validator: Option<Rc<dyn ActionValidator>>,
+}
+
+impl CapturedActionRoute {
+    pub fn backing_bytes(routes: &[Self], capacity: usize) -> Option<usize> {
+        routes
+            .iter()
+            .try_fold(capacity.checked_mul(size_of::<Self>())?, |sum, route| {
+                sum.checked_add(route.action.len() + 2 * size_of::<usize>())
+            })
+    }
+}
+
+/// Passive origin check for a native participant; cannot dispatch or publish.
+#[derive(Clone)]
+pub struct ProducerOwnerToken(Weak<()>);
+impl ProducerOwnerToken {
+    pub fn belongs_to(&self, owner: &RawProducerServient) -> bool {
+        self.0.as_ptr() == Rc::as_ptr(&owner.issuer)
+    }
+}
 
 /// Move-only identity of one native participation owner. It is neither a
 /// logical permission nor infrastructure shutdown authority. Implementations
@@ -36,6 +66,8 @@ pub struct ProducerPublication {
     cancelled: Cell<bool>,
     participants: Vec<Weak<()>>,
     registry_participants: Vec<Weak<()>>,
+    gates: Vec<Weak<Cell<bool>>>,
+    action_routes: Option<Vec<CapturedActionRoute>>,
     // Both original instances retain capacity until publication metadata ends.
     retired: Option<InstanceEntry>,
     instance: Option<Rc<RawProducerInstance>>,
@@ -45,6 +77,7 @@ impl ProducerPublication {
     pub fn staging_backing_bytes() -> usize {
         size_of::<Self>()
             + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
+            + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>()
             + size_of::<Cell<bool>>()
             + 2 * size_of::<usize>()
     }
@@ -81,6 +114,56 @@ impl ProducerPublication {
             return Err(CoreError::Validation(context()));
         }
         self.record_participants(participants.iter().map(|p| p.participation_id()))
+    }
+
+    /// Install actual mappings and invoke services selected by the complete
+    /// preparation. A retry may only provide the same routes and services.
+    pub fn bind_action_routes(&mut self, routes: Vec<CapturedActionRoute>) -> CoreResult<()> {
+        if self.committed || self.cancelled.get() {
+            return Err(CoreError::Validation(context()));
+        }
+        let instance = self
+            .instance
+            .as_ref()
+            .ok_or_else(|| CoreError::Validation(context()))?;
+        if routes.iter().enumerate().any(|(i, route)| {
+            !instance.supports_action(&route.action, route.operation)
+                || (route.operation == Operation::InvokeAction) != route.validator.is_some()
+                || !matches!(
+                    route.operation,
+                    Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction
+                )
+                || routes[..i].iter().any(|prior| {
+                    prior.action == route.action
+                        && prior.operation == route.operation
+                        && prior.route == route.route
+                })
+        }) || instance.actions.iter().any(|action| {
+            !routes.iter().any(|route| {
+                route.action.as_ref() == action.name() && route.operation == Operation::InvokeAction
+            })
+        }) {
+            return Err(CoreError::Validation(context()));
+        }
+        if let Some(old) = &self.action_routes {
+            if old.len() != routes.len()
+                || old.iter().zip(&routes).any(|(a, b)| {
+                    a.action != b.action
+                        || a.operation != b.operation
+                        || a.route != b.route
+                        || !match (&a.validator, &b.validator) {
+                            (None, None) => true,
+                            (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+                            _ => false,
+                        }
+                })
+            {
+                return Err(CoreError::Validation(context()));
+            }
+        } else {
+            self.action_routes = Some(routes);
+        }
+        Ok(())
     }
 
     fn same_participants<'a>(
@@ -130,6 +213,11 @@ impl ProducerPublication {
     pub fn revoke(&self) {
         self.current.set(false);
         self.cancelled.set(true);
+        for gate in &self.gates {
+            if let Some(gate) = gate.upgrade() {
+                gate.set(false);
+            }
+        }
     }
     pub fn staged_description(&self) -> Option<&str> {
         self.instance.as_ref()?.description.as_deref()
@@ -177,7 +265,8 @@ impl Drop for ProducerPublication {
 /// local ingress-gate lease, NOT an Engine-wide native session/resource API.
 /// Bindings may implement it over a shared listener, broker or other native
 /// owner with many Things. Every participant must already have been qualified
-/// against the complete final TD; no fallible I/O or callback runs in `open`.
+/// against the complete final TD. The gate is installed in native ingress
+/// before setup; publication flips it without calling into linked code.
 pub trait ClosedProducerParticipation {
     /// Immutable for this owner's entire lifetime, including retirement.
     fn participation_id(&self) -> &ProducerParticipationId;
@@ -215,7 +304,40 @@ pub trait ClosedProducerParticipation {
     ) -> bool {
         false
     }
-    fn open(&mut self);
+    /// Supply the actual source-free validation service for an invoke Form
+    /// which this participant covers. Missing service refuses publication,
+    /// including when the Action has no explicit input/output DataSchema.
+    /// Mapping and service are captured before the local commit, not borrowed
+    /// from an arbitrary RawActionRequest at ingress.
+    fn action_validation(
+        &self,
+        _key: ProducerInstanceKey,
+        _binding: (BindingId, BindingGeneration),
+        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        _form: u32,
+        _definition: &dyn core::any::Any,
+    ) -> Option<(ActionRoute, Rc<dyn ActionValidator>)> {
+        None
+    }
+    /// Supply the actual mapping for a covered query/cancel Form. This route
+    /// is captured with the invoke service before publication; native requests
+    /// cannot manufacture a control route by supplying their own key.
+    fn action_control_route(
+        &self,
+        _key: ProducerInstanceKey,
+        _binding: (BindingId, BindingGeneration),
+        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        _form: u32,
+        _operation: Operation,
+        _definition: &dyn core::any::Any,
+    ) -> Option<ActionRoute> {
+        None
+    }
+    /// The native owner must consult this gate before offering semantic ingress.
+    /// It must be closed until publication and must not be shared between
+    /// independently published participations. Returning a gate is a passive
+    /// loan; all callbacks, including this one, run before the commit.
+    fn ingress_gate(&self) -> &Rc<Cell<bool>>;
     /// True only after this participation's native obligations and unread
     /// settlements have retired. The physical infrastructure may remain shared.
     fn retired(&self) -> bool;
@@ -280,8 +402,8 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
                 .binding
                 .covers_definition(key, site, form, operation, definition)
     }
-    fn open(&mut self) {
-        self.state = RawFiniteState::Serving;
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        &self.ingress_gate
     }
     fn retired(&self) -> bool {
         self.state == RawFiniteState::Closed && self.settlement.is_none()
@@ -289,6 +411,9 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
 }
 
 impl RawProducerServient {
+    pub fn participation_token(&self) -> ProducerOwnerToken {
+        ProducerOwnerToken(Rc::downgrade(&self.issuer))
+    }
     /// Preback the logical registry before any native setup. Empty does not
     /// confer acceptance, unlike constructing an already active raw registry.
     pub fn try_empty(limits: RawProducerRegistryLimits) -> CoreResult<Self> {
@@ -321,7 +446,8 @@ impl RawProducerServient {
                 + size_of::<Cell<bool>>()
                 + size_of::<Cell<bool>>()
                 + size_of::<[usize; 8]>()
-                + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>(),
+                + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
+                + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>(),
         )
     }
 
@@ -389,6 +515,8 @@ impl RawProducerServient {
             cancelled: Cell::new(false),
             participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             registry_participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
+            gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
+            action_routes: None,
         })
     }
 
@@ -430,10 +558,33 @@ impl RawProducerServient {
             return Err(CoreError::Backpressure(context()));
         }
         publication.record_participants(participants.iter().map(|p| p.participation_id()))?;
+        if publication
+            .instance
+            .as_ref()
+            .is_some_and(|i| !i.actions.is_empty())
+            && publication.action_routes.is_none()
+        {
+            return Err(CoreError::Validation(context()));
+        }
+        // Gather gates before the local linearization boundary. Every linked
+        // callback and fallible allocation precedes the commit.
+        let mut gates = Vec::new();
+        gates
+            .try_reserve_exact(participants.len())
+            .map_err(|_| CoreError::Backpressure(context()))?;
+        gates.extend(participants.iter().map(|p| Rc::clone(p.ingress_gate())));
+        if gates
+            .iter()
+            .enumerate()
+            .any(|(i, gate)| gate.get() || gates[..i].iter().any(|prior| Rc::ptr_eq(prior, gate)))
+        {
+            return Err(CoreError::Validation(context()));
+        }
         let entry = InstanceEntry {
             instance: Rc::clone(publication.instance.as_ref().expect("uncommitted owner")),
             current: Rc::clone(&publication.current),
             participations: core::mem::take(&mut publication.registry_participants),
+            action_routes: publication.action_routes.take(),
         };
         // COMMIT: exclusive &mut access orders description, behavior, current
         // logical permission and native participation opening. Capacity was preallocated.
@@ -449,9 +600,10 @@ impl RawProducerServient {
             }
         }
         publication.current.set(true);
+        publication.gates.extend(gates.iter().map(Rc::downgrade));
         publication.committed = true;
-        for participant in participants {
-            participant.open();
+        for gate in gates {
+            gate.set(true);
         }
         Ok(())
     }

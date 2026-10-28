@@ -19,7 +19,7 @@ use clinkz_wot_planning::producer_composition::{
     PreparedThing, ProducerCapability, check_final_thing,
 };
 use clinkz_wot_servient_finite::{
-    ClosedProducerParticipation, ProducerPublication, RawProducerServient,
+    CapturedActionRoute, ClosedProducerParticipation, ProducerPublication, RawProducerServient,
 };
 use clinkz_wot_servient_finite::{MAX_PRODUCER_PARTICIPANTS, RawProducerInstance};
 use clinkz_wot_td::ValidatedProducerScope;
@@ -28,7 +28,7 @@ use core::{any::Any, mem::size_of};
 /// Final qualification is fallible, publication is not. Retain the prepared
 /// definitions separately from this logical publication and all physical
 /// resources. No native poll, handler, allocation or fallible callback is made
-/// between the last readiness check and the local commit.
+/// inside the local commit; native gate acquisition is checked beforehand.
 pub fn publish_prepared_thing(
     owner: &mut RawProducerServient,
     publication: &mut ProducerPublication,
@@ -47,7 +47,99 @@ pub fn publish_prepared_thing(
         limits,
         budget,
     )?;
+    if prepared.operations().iter().any(|o| {
+        matches!(
+            o.site,
+            clinkz_wot_planning::producer_composition::FormSite::Action(_)
+        )
+    }) {
+        let routes = capture_action_routes(
+            publication.key(),
+            prepared,
+            participants.iter().map(|p| &**p),
+        )?;
+        publication.bind_action_routes(routes)?;
+    }
     owner.publish_composed(publication, participants)
+}
+
+fn capture_action_routes<'a>(
+    key: ProducerInstanceKey,
+    prepared: &PreparedThing,
+    participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
+) -> CoreResult<Vec<CapturedActionRoute>> {
+    let mut routes = Vec::new();
+    routes
+        .try_reserve_exact(
+            prepared
+                .operations()
+                .iter()
+                .filter(|o| {
+                    matches!(
+                        o.site,
+                        clinkz_wot_planning::producer_composition::FormSite::Action(_)
+                    )
+                })
+                .count(),
+        )
+        .map_err(|_| busy())?;
+    for operation in prepared.operations() {
+        let clinkz_wot_planning::producer_composition::FormSite::Action(name) = &operation.site
+        else {
+            continue;
+        };
+        let participant = participants
+            .clone()
+            .find(|p| {
+                p.covers(
+                    key,
+                    operation.binding,
+                    operation.site.site(),
+                    operation.form,
+                    operation.operation,
+                    operation.definition_any(),
+                )
+            })
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        let (route, validator) = match operation.operation {
+            Operation::InvokeAction => {
+                let (route, validator) = participant
+                    .action_validation(
+                        key,
+                        operation.binding,
+                        operation.site.site(),
+                        operation.form,
+                        operation.definition_any(),
+                    )
+                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+                (route, Some(validator))
+            }
+            Operation::QueryAction | Operation::CancelAction => (
+                participant
+                    .action_control_route(
+                        key,
+                        operation.binding,
+                        operation.site.site(),
+                        operation.form,
+                        operation.operation,
+                        operation.definition_any(),
+                    )
+                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?,
+                None,
+            ),
+            _ => return Err(CoreError::UnsupportedOperation(context())),
+        };
+        if route.binding != operation.binding {
+            return Err(CoreError::Validation(context()));
+        }
+        routes.push(CapturedActionRoute {
+            action: Arc::from(name.as_str()),
+            operation: operation.operation,
+            route,
+            validator,
+        });
+    }
+    Ok(routes)
 }
 
 fn check_prepared_thing(
@@ -223,7 +315,7 @@ impl ComposedProducerExposure {
         accounts: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<ComposedProducerInput>> {
-        let admission = (|| -> CoreResult<(Rc<Funding>, QualificationFunding, usize)> {
+        let admission = (|| -> CoreResult<(Rc<Funding>, QualificationFunding, usize, Vec<CapturedActionRoute>)> {
             if input.participants.is_empty()
                 || input.participants.len() > MAX_PRODUCER_PARTICIPANTS
                 || input.providers.is_empty()
@@ -253,11 +345,17 @@ impl ComposedProducerExposure {
             }) {
                 return Err(CoreError::Validation(context()));
             }
+            let routes = capture_action_routes(
+                input.instance.key(),
+                &input.prepared,
+                input.participants.iter().map(|p| p.as_participation()),
+            )?;
             let mut bytes = size_of::<Self>()
                 .checked_add(input.instance.backing_bytes().ok_or_else(busy)?)
                 .and_then(|n| n.checked_add(input.prepared.retained_bytes()))
                 .and_then(|n| n.checked_add(ProducerPublication::staging_backing_bytes()))
                 .and_then(|n| n.checked_add(input.handler_backing_bytes))
+                .and_then(|n| n.checked_add(CapturedActionRoute::backing_bytes(&routes, routes.capacity())?))
                 .and_then(|n| {
                     n.checked_add(
                         input.participants.capacity()
@@ -340,9 +438,9 @@ impl ComposedProducerExposure {
                 &input.prepared,
                 input.participants.iter().map(|p| p.as_participation()),
             )?;
-            Ok((funding, qualification, provider_bytes))
+            Ok((funding, qualification, provider_bytes, routes))
         })();
-        let (funding, qualification, qualification_provider_bytes) = match admission {
+        let (funding, qualification, qualification_provider_bytes, routes) = match admission {
             Ok(funding) => funding,
             Err(error) => return Err(reject(input, error)),
         };
@@ -377,6 +475,9 @@ impl ComposedProducerExposure {
         publication
             .bind_participants(&refs)
             .expect("bounded unique original set checked before handoff");
+        publication
+            .bind_action_routes(routes)
+            .expect("selected services and exact Action behaviors checked before handoff");
         for participant in &mut participants {
             participant.retain_owner(funding.clone());
         }
@@ -479,17 +580,35 @@ impl ComposedProducerExposure {
             }
             return Err(error);
         }
-        // Decoding/semantic owners are gone. Do not pin phase scratch through
-        // accepted work, replacement or unread results.
-        self.qualification = None;
-        if let Err(error) = owner.publish_composed(&mut self.publication, &mut participants) {
+        // Recheck actual mapping/service selections before the local commit.
+        // A participant that changes routes while still claiming coverage must
+        // not make the staged qualified controls reachable under stale keys.
+        if let Err(error) = capture_action_routes(
+            self.publication.key(),
+            &self.prepared,
+            participants.iter().map(|p| &**p),
+        )
+        .and_then(|routes| self.publication.bind_action_routes(routes))
+        {
             self.publication_failure = Some(error.clone());
             self.publication.revoke();
+            self.qualification = None;
             for participant in &mut participants {
                 participant.begin_retire();
             }
             return Err(error);
         }
+        if let Err(error) = owner.publish_composed(&mut self.publication, &mut participants) {
+            self.publication_failure = Some(error.clone());
+            self.publication.revoke();
+            self.qualification = None;
+            for participant in &mut participants {
+                participant.begin_retire();
+            }
+            return Err(error);
+        }
+        // No phase scratch is retained by accepted work or unread results.
+        self.qualification = None;
         self.publication.release_retired();
         Ok(())
     }
