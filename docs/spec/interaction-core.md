@@ -83,12 +83,16 @@ original behavior. Query/cancel require a live local handle, original route,
 current instance and fresh application permission. Cooperative cancellation,
 local abandonment, application result and native delivery are separate outcomes;
 an error after behavior entry is effect-uncertain. Alone this raw kernel makes
-no TD or native-I/O claim. The composed HTTP Producer captures a source-independent
-validator at invoke acceptance and retains it with the continuation, validates
-input before behavior and output before terminal exposure, and maps separately
-described HTTP query/cancel routes. Its 202 means locally admitted work, not
-remote terminal success or rollback. Other Bindings and raw users retain their
-own qualification obligations.
+no TD or native-I/O claim; explicitly raw registrations remain unvalidated
+beyond shape/backing checks. A published Action requires a captured validation
+service for each selected invoke mapping at publication, owned by the same
+Servient incarnation as behavior and currentness. Native requests cannot omit
+or replace it: input is checked before behavior and immediate/late output before
+successful terminal exposure, retaining the original service through settlement.
+The composed HTTP Producer supplies source-independent JSON/type validation and
+separately described query/cancel routes. Its 202 means locally admitted work,
+not remote terminal success or rollback. Other qualified Bindings must provide
+their actual validation services during publication, not at individual ingress.
 
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property

@@ -477,9 +477,40 @@ struct ActionLease {
     native: Rc<RefCell<ActionNative>>,
     key: ProducerInstanceKey,
     open: Rc<Cell<bool>>,
+    validator: Rc<dyn ActionValidator>,
+    validator_enabled: bool,
     closed: bool,
     participation: ProducerParticipationId,
     retained_owner: Option<Rc<dyn Any>>,
+}
+// This linked, test-only Binding has its own JSON/no-input mapping; even a TD
+// without an explicit Action output schema needs a captured media service.
+struct UdpJsonValidation;
+impl ActionValidator for UdpJsonValidation {
+    fn validate_input(&self, input: &InteractionInput) -> CoreResult<()> {
+        if input.data.is_none() {
+            Ok(())
+        } else {
+            Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            )))
+        }
+    }
+    fn validate_output(&self, output: &InteractionOutput) -> CoreResult<()> {
+        if output.data().is_some_and(|data| {
+            data.content_type == "application/json"
+                && data.content_coding.is_none()
+                && serde_json::from_slice::<serde_json::Value>(&data.body).is_ok()
+        }) {
+            Ok(())
+        } else {
+            Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            )))
+        }
+    }
 }
 impl ActionNative {
     fn new(address: SocketAddr) -> Rc<RefCell<Self>> {
@@ -506,6 +537,8 @@ impl ActionNative {
             native: Rc::clone(native),
             key,
             open,
+            validator: Rc::new(UdpJsonValidation),
+            validator_enabled: true,
             closed: false,
             participation: ProducerParticipationId::new(),
             retained_owner: None,
@@ -561,7 +594,6 @@ impl ActionNative {
                         invoke: route[0],
                         query: Some(route[1]),
                         cancel: Some(route[2]),
-                        validator: None,
                     },
                     budget,
                 );
@@ -678,6 +710,30 @@ impl ClosedProducerParticipation for ActionLease {
                     binding,
                     mapping: ActionMappingKey(form as u64 + 1),
                 })
+    }
+    fn action_validation(
+        &self,
+        key: ProducerInstanceKey,
+        binding: (BindingId, BindingGeneration),
+        site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        form: u32,
+        definition: &dyn Any,
+    ) -> Option<(ActionRoute, Rc<dyn ActionValidator>)> {
+        (self.validator_enabled
+            && self.covers(
+                key,
+                binding,
+                site,
+                form,
+                Operation::InvokeAction,
+                definition,
+            ))
+        .then(|| {
+            (
+                *definition.downcast_ref::<ActionRoute>().unwrap(),
+                Rc::clone(&self.validator),
+            )
+        })
     }
     fn retired(&self) -> bool {
         self.closed

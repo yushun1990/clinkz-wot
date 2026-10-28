@@ -477,8 +477,11 @@ Thing with separate listeners and one logical behavior authority.
 Native HTTP/1.1 I/O is caller-driven, one connection at a time per participant,
 with 16 headers, 8192 head bytes, 4096 JSON input/output bytes and a 10-second
 per-exchange deadline. Native ingress has no application handler. Servient
-validates JSON/type before behavior and captures the output validator with
-continuing work. `progress_actions` fairly polls retained work after the
+captures the source-independent validator at publication and validates JSON/type
+before behavior; each admitted continuation retains that original output service.
+An explicitly raw Servient registration remains unvalidated, but a published
+Action cannot bypass its captured validator through `RawActionRequest`.
+`progress_actions` fairly polls retained work after the
 initiating reply; completion stays queryable until explicit `acknowledge` or
 application-selected terminal retention expiry (`reap_completed`, five seconds
 in the example). Pending work is never expired as a completed result.

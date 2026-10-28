@@ -54,7 +54,6 @@ fn request<'a>(
         invoke: route(1, 11),
         query: Some(route(2, 22)),
         cancel: Some(route(3, 33)),
-        validator: None,
     }
 }
 fn work_budget() -> WorkBudget {
@@ -659,7 +658,6 @@ fn action_only_instance_needs_no_finite_runtime_and_unpublished_controls_are_uns
                 invoke: route(8, 800),
                 query: None,
                 cancel: None,
-                validator: None,
             },
             &mut budget,
         )
@@ -688,6 +686,8 @@ fn action_only_instance_needs_no_finite_runtime_and_unpublished_controls_are_uns
     let result = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
     assert!(!result.cancel_requested); // Completed before close: no request was queued.
     assert_eq!(result.binding, route(8, 800).binding);
+    // This instance was registered through the explicitly raw API, not
+    // published: opaque non-JSON output remains legal without a TD claim.
     assert_eq!(result.result.unwrap().data().unwrap().body.as_ref(), b"now");
     assert_eq!(trace.borrow().operations, vec![Operation::InvokeAction]);
 }

@@ -123,8 +123,12 @@ can retain many leases and Things, and closing one releases only that participat
 The HTTP finite participant is still a one-endpoint/one-route adapter; a linked
 test-only UDP Action participant exercises shared infrastructure and continuing
 work over actual I/O. The HTTP Action participant adds a production loopback
-mapping with independent invoke/status/cancel Forms, captured JSON/type
-validation, retained native correlation and manually driven continuing work.
+ mapping with independent invoke/status/cancel Forms, publication-captured JSON/type
+ validation, retained native correlation and manually driven continuing work.
+ The composed handoff captures the actual invoke-route validation service from
+ each selected native participant before publication. Missing services refuse
+ qualification; after commit the Servient selects the captured service by exact
+ Action and invoke route, so a raw request cannot downgrade published execution.
 UDP remains test-only; HTTP's one-listener-per-Action implementation does not
 constrain other native resource layouts or cross-Binding Action routes.
 

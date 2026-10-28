@@ -1,7 +1,7 @@
 //! Raw Producer Action semantics. An invocation is not a finite exchange or a
 //! native session: the Binding keeps the initiating reply and wire correlation.
 //! These contracts make no TD qualification or schema-validation claim.
-use alloc::{boxed::Box, rc::Rc};
+use alloc::boxed::Box;
 use core::task::Poll;
 
 use crate::{
@@ -34,11 +34,11 @@ pub struct RawActionRequest<'a> {
     pub query: Option<ActionRoute>,
     pub cancel: Option<ActionRoute>,
     pub input: &'a InteractionInput,
-    /// Captured, source-independent validation service for this invocation.
-    /// Retained with continuing work even if native ingress retires first.
-    pub validator: Option<Rc<dyn ActionValidator>>,
 }
 
+/// A published Action's required service is captured by the logical Servient
+/// at qualification, never selected by an individual native request. Raw
+/// instances remain explicitly unvalidated beyond their shape/backing checks.
 pub trait ActionValidator {
     fn validate_input(&self, input: &InteractionInput) -> CoreResult<()>;
     fn validate_output(&self, output: &InteractionOutput) -> CoreResult<()>;

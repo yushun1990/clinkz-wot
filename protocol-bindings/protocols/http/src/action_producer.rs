@@ -597,7 +597,6 @@ impl HttpActionRuntime {
                         .find(|d| d.operation == Operation::CancelAction)
                         .map(HttpActionDefinition::route),
                     input: &input,
-                    validator: Some(Rc::clone(&self.validator)),
                 };
                 match owner.invoke_raw_action(request, budget) {
                     Ok(handle) => {
@@ -792,6 +791,32 @@ impl ClosedProducerParticipation for HttpActionRuntime {
                     && d.operation == op
                     && definition.downcast_ref::<HttpActionDefinition>() == Some(d)
             })
+    }
+    fn action_validation(
+        &self,
+        key: ProducerInstanceKey,
+        binding: (BindingId, BindingGeneration),
+        site: AffordanceSite<'_>,
+        form: u32,
+        definition: &dyn Any,
+    ) -> Option<(ActionRoute, Rc<dyn ActionValidator>)> {
+        self.covers(
+            key,
+            binding,
+            site,
+            form,
+            Operation::InvokeAction,
+            definition,
+        )
+        .then(|| {
+            (
+                definition
+                    .downcast_ref::<HttpActionDefinition>()
+                    .unwrap()
+                    .route(),
+                Rc::clone(&self.validator),
+            )
+        })
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
         &self.gate

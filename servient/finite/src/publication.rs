@@ -1,9 +1,29 @@
 //! Source-free Servient-local publication. Qualification belongs to Planning;
 //! this module owns the actual description/authority/behavior linearization.
 use super::*;
+use clinkz_wot_core::action::{ActionRoute, ActionValidator};
 
 /// Bounded original-membership storage for this manually driven Host slice.
 pub const MAX_PRODUCER_PARTICIPANTS: usize = 32;
+
+/// Qualified, source-free invoke mapping and its actual validation service.
+/// The native participant supplies it during setup; individual requests cannot
+/// replace or omit it. The Servient retains it through accepted late results.
+pub struct CapturedActionValidation {
+    pub action: Arc<str>,
+    pub route: ActionRoute,
+    pub validator: Rc<dyn ActionValidator>,
+}
+
+impl CapturedActionValidation {
+    pub fn backing_bytes(routes: &[Self], capacity: usize) -> Option<usize> {
+        routes
+            .iter()
+            .try_fold(capacity.checked_mul(size_of::<Self>())?, |sum, route| {
+                sum.checked_add(route.action.len() + 2 * size_of::<usize>())
+            })
+    }
+}
 
 /// Passive origin check for a native participant; cannot dispatch or publish.
 #[derive(Clone)]
@@ -46,6 +66,7 @@ pub struct ProducerPublication {
     participants: Vec<Weak<()>>,
     registry_participants: Vec<Weak<()>>,
     gates: Vec<Weak<Cell<bool>>>,
+    action_validation: Option<Vec<CapturedActionValidation>>,
     // Both original instances retain capacity until publication metadata ends.
     retired: Option<InstanceEntry>,
     instance: Option<Rc<RawProducerInstance>>,
@@ -92,6 +113,47 @@ impl ProducerPublication {
             return Err(CoreError::Validation(context()));
         }
         self.record_participants(participants.iter().map(|p| p.participation_id()))
+    }
+
+    /// Install services selected by the complete final preparation, before
+    /// publication. A retry may only provide the same routes and services.
+    pub fn bind_action_validation(
+        &mut self,
+        routes: Vec<CapturedActionValidation>,
+    ) -> CoreResult<()> {
+        if self.committed || self.cancelled.get() {
+            return Err(CoreError::Validation(context()));
+        }
+        let instance = self
+            .instance
+            .as_ref()
+            .ok_or_else(|| CoreError::Validation(context()))?;
+        if routes.iter().enumerate().any(|(i, route)| {
+            !instance.supports_action(&route.action, Operation::InvokeAction)
+                || routes[..i]
+                    .iter()
+                    .any(|prior| prior.action == route.action && prior.route == route.route)
+        }) || instance.actions.iter().any(|action| {
+            !routes
+                .iter()
+                .any(|route| route.action.as_ref() == action.name())
+        }) {
+            return Err(CoreError::Validation(context()));
+        }
+        if let Some(old) = &self.action_validation {
+            if old.len() != routes.len()
+                || old.iter().zip(&routes).any(|(a, b)| {
+                    a.action != b.action
+                        || a.route != b.route
+                        || !Rc::ptr_eq(&a.validator, &b.validator)
+                })
+            {
+                return Err(CoreError::Validation(context()));
+            }
+        } else {
+            self.action_validation = Some(routes);
+        }
+        Ok(())
     }
 
     fn same_participants<'a>(
@@ -231,6 +293,21 @@ pub trait ClosedProducerParticipation {
         _definition: &dyn core::any::Any,
     ) -> bool {
         false
+    }
+    /// Supply the actual source-free validation service for an invoke Form
+    /// which this participant covers. Missing service refuses publication,
+    /// including when the Action has no explicit input/output DataSchema.
+    /// Mapping and service are captured before the local commit, not borrowed
+    /// from an arbitrary RawActionRequest at ingress.
+    fn action_validation(
+        &self,
+        _key: ProducerInstanceKey,
+        _binding: (BindingId, BindingGeneration),
+        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        _form: u32,
+        _definition: &dyn core::any::Any,
+    ) -> Option<(ActionRoute, Rc<dyn ActionValidator>)> {
+        None
     }
     /// The native owner must consult this gate before offering semantic ingress.
     /// It must be closed until publication and must not be shared between
@@ -415,6 +492,7 @@ impl RawProducerServient {
             participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             registry_participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
+            action_validation: None,
         })
     }
 
@@ -456,6 +534,14 @@ impl RawProducerServient {
             return Err(CoreError::Backpressure(context()));
         }
         publication.record_participants(participants.iter().map(|p| p.participation_id()))?;
+        if publication
+            .instance
+            .as_ref()
+            .is_some_and(|i| !i.actions.is_empty())
+            && publication.action_validation.is_none()
+        {
+            return Err(CoreError::Validation(context()));
+        }
         // Gather gates before the local linearization boundary. Every linked
         // callback and fallible allocation precedes the commit.
         let mut gates = Vec::new();
@@ -474,6 +560,7 @@ impl RawProducerServient {
             instance: Rc::clone(publication.instance.as_ref().expect("uncommitted owner")),
             current: Rc::clone(&publication.current),
             participations: core::mem::take(&mut publication.registry_participants),
+            action_validation: publication.action_validation.take(),
         };
         // COMMIT: exclusive &mut access orders description, behavior, current
         // logical permission and native participation opening. Capacity was preallocated.

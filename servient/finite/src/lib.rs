@@ -200,6 +200,8 @@ struct InstanceEntry {
     // guard so lost roots can revoke without a lock or native callback.
     current: Rc<Cell<bool>>,
     participations: Vec<Weak<()>>,
+    // None is explicitly raw; published Actions have captured route services.
+    action_validation: Option<Vec<CapturedActionValidation>>,
     // Dispose registry/view backing before its last actual reservation owner.
     instance: Rc<RawProducerInstance>,
 }
@@ -243,6 +245,7 @@ impl RawProducerServient {
             instance: Rc::new(instance),
             current: Rc::new(Cell::new(true)),
             participations: Vec::new(),
+            action_validation: None,
         }));
         Ok(Self {
             instances: entries,
@@ -318,6 +321,7 @@ impl RawProducerServient {
             instance: Rc::new(replacement),
             current: Rc::new(Cell::new(true)),
             participations: Vec::new(),
+            action_validation: None,
         };
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);

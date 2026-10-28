@@ -19,7 +19,7 @@ use clinkz_wot_planning::producer_composition::{
     PreparedThing, ProducerCapability, check_final_thing,
 };
 use clinkz_wot_servient_finite::{
-    ClosedProducerParticipation, ProducerPublication, RawProducerServient,
+    CapturedActionValidation, ClosedProducerParticipation, ProducerPublication, RawProducerServient,
 };
 use clinkz_wot_servient_finite::{MAX_PRODUCER_PARTICIPANTS, RawProducerInstance};
 use clinkz_wot_td::ValidatedProducerScope;
@@ -47,7 +47,76 @@ pub fn publish_prepared_thing(
         limits,
         budget,
     )?;
+    if prepared
+        .operations()
+        .iter()
+        .any(|o| o.operation == Operation::InvokeAction)
+    {
+        let routes = capture_action_validation(
+            publication.key(),
+            prepared,
+            participants.iter().map(|p| &**p),
+        )?;
+        publication.bind_action_validation(routes)?;
+    }
     owner.publish_composed(publication, participants)
+}
+
+fn capture_action_validation<'a>(
+    key: ProducerInstanceKey,
+    prepared: &PreparedThing,
+    participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
+) -> CoreResult<Vec<CapturedActionValidation>> {
+    let mut routes = Vec::new();
+    routes
+        .try_reserve_exact(
+            prepared
+                .operations()
+                .iter()
+                .filter(|o| o.operation == Operation::InvokeAction)
+                .count(),
+        )
+        .map_err(|_| busy())?;
+    for operation in prepared.operations() {
+        if operation.operation != Operation::InvokeAction {
+            continue;
+        }
+        let clinkz_wot_planning::producer_composition::FormSite::Action(name) = &operation.site
+        else {
+            return Err(CoreError::Validation(context()));
+        };
+        let participant = participants
+            .clone()
+            .find(|p| {
+                p.covers(
+                    key,
+                    operation.binding,
+                    operation.site.site(),
+                    operation.form,
+                    operation.operation,
+                    operation.definition_any(),
+                )
+            })
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        let (route, validator) = participant
+            .action_validation(
+                key,
+                operation.binding,
+                operation.site.site(),
+                operation.form,
+                operation.definition_any(),
+            )
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        if route.binding != operation.binding {
+            return Err(CoreError::Validation(context()));
+        }
+        routes.push(CapturedActionValidation {
+            action: Arc::from(name.as_str()),
+            route,
+            validator,
+        });
+    }
+    Ok(routes)
 }
 
 fn check_prepared_thing(
@@ -223,7 +292,7 @@ impl ComposedProducerExposure {
         accounts: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<ComposedProducerInput>> {
-        let admission = (|| -> CoreResult<(Rc<Funding>, QualificationFunding, usize)> {
+        let admission = (|| -> CoreResult<(Rc<Funding>, QualificationFunding, usize, Vec<CapturedActionValidation>)> {
             if input.participants.is_empty()
                 || input.participants.len() > MAX_PRODUCER_PARTICIPANTS
                 || input.providers.is_empty()
@@ -253,11 +322,17 @@ impl ComposedProducerExposure {
             }) {
                 return Err(CoreError::Validation(context()));
             }
+            let validation = capture_action_validation(
+                input.instance.key(),
+                &input.prepared,
+                input.participants.iter().map(|p| p.as_participation()),
+            )?;
             let mut bytes = size_of::<Self>()
                 .checked_add(input.instance.backing_bytes().ok_or_else(busy)?)
                 .and_then(|n| n.checked_add(input.prepared.retained_bytes()))
                 .and_then(|n| n.checked_add(ProducerPublication::staging_backing_bytes()))
                 .and_then(|n| n.checked_add(input.handler_backing_bytes))
+                .and_then(|n| n.checked_add(CapturedActionValidation::backing_bytes(&validation, validation.capacity())?))
                 .and_then(|n| {
                     n.checked_add(
                         input.participants.capacity()
@@ -340,9 +415,9 @@ impl ComposedProducerExposure {
                 &input.prepared,
                 input.participants.iter().map(|p| p.as_participation()),
             )?;
-            Ok((funding, qualification, provider_bytes))
+            Ok((funding, qualification, provider_bytes, validation))
         })();
-        let (funding, qualification, qualification_provider_bytes) = match admission {
+        let (funding, qualification, qualification_provider_bytes, validation) = match admission {
             Ok(funding) => funding,
             Err(error) => return Err(reject(input, error)),
         };
@@ -377,6 +452,9 @@ impl ComposedProducerExposure {
         publication
             .bind_participants(&refs)
             .expect("bounded unique original set checked before handoff");
+        publication
+            .bind_action_validation(validation)
+            .expect("selected services and exact Action behaviors checked before handoff");
         for participant in &mut participants {
             participant.retain_owner(funding.clone());
         }
@@ -479,6 +557,8 @@ impl ComposedProducerExposure {
             }
             return Err(error);
         }
+        // The captured route services were retained before native acquisition;
+        // the final support/coverage check above revalidates their definitions.
         if let Err(error) = owner.publish_composed(&mut self.publication, &mut participants) {
             self.publication_failure = Some(error.clone());
             self.publication.revoke();

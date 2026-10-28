@@ -62,6 +62,7 @@ struct Counters {
     cancelled: Cell<usize>,
     complete: Cell<bool>,
     invalid: Cell<bool>,
+    immediate: Cell<bool>,
     deny_invoke: Cell<bool>,
     deny_query: Cell<bool>,
     deny_cancel: Cell<bool>,
@@ -90,6 +91,11 @@ impl RawActionHandler for Action {
     ) -> CoreResult<RawActionStart> {
         assert_eq!(input.data.as_ref().unwrap().body.as_ref(), b"12");
         self.0.invoked.set(self.0.invoked.get() + 1);
+        if self.0.immediate.get() {
+            return Ok(RawActionStart::Complete(InteractionOutput::with_data(
+                Payload::new(b"\"invalid\"".to_vec(), "application/json"),
+            )));
+        }
         Ok(RawActionStart::Continue(Box::new(Work(Rc::clone(&self.0)))))
     }
 }
@@ -729,6 +735,118 @@ fn action_wire_refusals_distinguish_policy_capacity_and_stale_authority() {
         0
     );
     TcpListener::bind(address).unwrap();
+}
+
+#[test]
+fn published_action_cannot_skip_validation_through_raw_request() {
+    let address = addr();
+    let mut owner = owner();
+    let counts = Rc::new(Counters::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let mut exposure = create(
+        &owner,
+        key(Generation::INITIAL),
+        address,
+        None,
+        Rc::clone(&counts),
+        None,
+        Arc::clone(&bank),
+    );
+    exposure
+        .participant_mut::<HttpActionRuntime>(0)
+        .unwrap()
+        .install_closed()
+        .unwrap();
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+
+    // RawActionRequest is public; a published instance must select its captured
+    // service even when the native request bypasses HTTP's own ingress code.
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let input = InteractionInput::with_data(Payload::new(b"12".to_vec(), "application/json"));
+    let invoke = ActionRoute {
+        binding: (BindingId::new(61), BindingGeneration::INITIAL),
+        mapping: ActionMappingKey(1),
+    };
+    let handle = owner
+        .invoke_raw_action(
+            RawActionRequest {
+                instance: exposure.key(),
+                target: &target,
+                invoke,
+                query: None,
+                cancel: None,
+                input: &input,
+            },
+            &mut budget(),
+        )
+        .unwrap();
+    counts.complete.set(true);
+    counts.invalid.set(true);
+    assert_eq!(
+        owner.step_raw_action(&handle, &mut budget()).unwrap(),
+        Poll::Ready(())
+    );
+    let settlement = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
+    assert!(matches!(settlement.result, Err(CoreError::Validation(_))));
+    assert_eq!(counts.invoked.get(), 1);
+    counts.immediate.set(true);
+    let handle = owner
+        .invoke_raw_action(
+            RawActionRequest {
+                instance: exposure.key(),
+                target: &target,
+                invoke,
+                query: None,
+                cancel: None,
+                input: &input,
+            },
+            &mut budget(),
+        )
+        .unwrap();
+    let settlement = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
+    assert!(matches!(settlement.result, Err(CoreError::Validation(_))));
+    assert_eq!(counts.invoked.get(), 2);
+    let invalid =
+        InteractionInput::with_data(Payload::new(b"\"bad\"".to_vec(), "application/json"));
+    assert!(matches!(
+        owner.invoke_raw_action(
+            RawActionRequest {
+                instance: exposure.key(),
+                target: &target,
+                invoke,
+                query: None,
+                cancel: None,
+                input: &invalid,
+            },
+            &mut budget(),
+        ),
+        Err(CoreError::Validation(_))
+    ));
+    assert_eq!(counts.invoked.get(), 2);
+    assert!(matches!(
+        owner.invoke_raw_action(
+            RawActionRequest {
+                instance: exposure.key(),
+                target: &target,
+                invoke: ActionRoute {
+                    mapping: ActionMappingKey(99),
+                    ..invoke
+                },
+                query: None,
+                cancel: None,
+                input: &input,
+            },
+            &mut budget(),
+        ),
+        Err(CoreError::UnsupportedOperation(_))
+    ));
+    exposure.begin_close();
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
 }
 
 #[test]

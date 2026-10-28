@@ -397,6 +397,19 @@ impl RawProducerServient {
             .position(|a| a.name.as_ref() == name.as_ref())
             .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
         let behavior = &instance.instance.actions[index];
+        // A qualified incarnation cannot be downgraded by supplying a raw
+        // request. Only the service captured for its exact prepared invoke
+        // route can validate its input and retained immediate/late output.
+        let validator = match &instance.action_validation {
+            None => None, // explicitly raw registration, not TD publication
+            Some(routes) => Some(Rc::clone(
+                &routes
+                    .iter()
+                    .find(|v| v.action.as_ref() == name.as_ref() && v.route == request.invoke)
+                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?
+                    .validator,
+            )),
+        };
         if (request.query.is_some() && !behavior.query)
             || (request.cancel.is_some() && !behavior.cancel)
         {
@@ -410,7 +423,7 @@ impl RawProducerServient {
         {
             return Err(CoreError::Backpressure(context()));
         }
-        if let Some(validator) = &request.validator {
+        if let Some(validator) = &validator {
             validator.validate_input(request.input)?;
         }
         let next = store
@@ -447,7 +460,7 @@ impl RawProducerServient {
             query: request.query,
             cancel: request.cancel,
             principal: request.input.principal.as_ref().map(|p| p.id.clone()),
-            validator: request.validator,
+            validator,
             work: None,
             result: None,
             cancel_requested: false,
