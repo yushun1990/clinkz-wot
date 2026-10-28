@@ -172,6 +172,34 @@ policy/configuration changes, saturation, failed cleanup and root disposal.
 This is raw Host lifecycle evidence, not real protocol I/O, TD/schema/security
 qualification, fleet scalability, hardware evidence or package/gate completion.
 
+## Joined Consumer execution
+
+Follow [WP-200's two working slices](WP-200-planning.md#open-consumer-integration).
+The finite slice must connect open preparation to real calls and remove the
+closed support/layout assumptions in
+[`ConsumerPropertyReadPolicy::qualify`](../../servient/src/consumer_property_read.rs).
+Preserve accepted-call/result/cleanup ownership and real parent-account retention;
+a generic compiler flag cannot replace those guarantees. Move completed output,
+reclaim and native execution owners below optional preparation so the new runtime
+can execute after source/compiler destruction without TD/Planning dependencies.
+Do not require extraction of every legacy module before a working slice.
+
+The observation slice joins selected TD facts and actual validation/security
+services to the existing raw notification lifecycle; it must not wrap a finite
+call as a subscription or expose an SSE-only Servient. Extend the same Consumer
+logical authority across selected finite and notification facets: every delivery,
+response and cancellation checks its current operation/policy, and replacement
+fences old work without redirecting it. Raw queue/stop/response/retirement owners
+remain reusable; their deterministic tests do not prove TD support or real I/O.
+
+Execute stop during establishment and delivery, dropped cursors/root, policy
+revocation, stale completion and capacity/cleanup failures over actual native
+owners. Keep local settlement, remote cancellation certainty and final physical
+release distinct. Required Event responses/optional-opportunity retirement retain
+their existing tests even when the first Property observation mapping has no
+response role. No new universal runtime, scheduler or all-family acceptance claim
+is part of these slices.
+
 ## First joined finite Producer
 
 The optional `producer::ProducerServient<C>` captures one frozen actual

@@ -15,9 +15,11 @@ The cleaned baseline retains narrow working Property Read paths and scoped
 historical evidence. v6 replaces the universal Property Read-shaped SPI, eager
 per-instance plan-set and route-scoped native model. Raw finite and Action kernels
 (and independently reviewed notification work when accepted) provide semantic
-execution primitives, not a qualified TD publication or general WoT operation.
-The working HTTP Producer paths do not yet establish a complete joined v6
-preparation/publication/execution flow.
+execution primitives, not a general WoT operation. Joined whole-Thing Producer
+composition now carries finite HTTP Property Read and continuing HTTP Actions
+through preparation, closed setup, final qualification, local publication and
+real I/O. That meaningful foothold has a deliberately restricted mapping,
+schema and security envelope; it does not close the Producer families or v1.
 
 The next engineering emphasis is **composition**: interleave semantic kernel
 work with executable end-to-end paths, falsify interface/owner assumptions at
@@ -30,19 +32,22 @@ single protocol first or freeze a cross-family ordering.
 | Horizon | Primary result | Completion evidence appropriate to that result |
 | --- | --- | --- |
 | A — Semantic ownership | Finite exchange, continuing Action, notification conversation and Producer publication retain distinct but composable controls and owners. | Executable operation/lifecycle cases, including stale identity, cancellation, late results, saturation and retained cleanup. Raw kernels alone make no TD or native I/O claim. |
-| B — First joined v6 path | One supported Producer operation travels from complete TD meaning through actual preparation, closed native setup, final qualification, atomic local publication, real Binding I/O, behavior and settlement. | Public end-to-end real-peer test plus negative support, prepublication, cancellation, replacement and final-resource-release evidence. |
-| C — Broader WoT operations | Extend the joined approach across Property read/write/observation, Action invoke/query/cancel, Event produce/subscribe/response/stop and described collections, with the corresponding Consumer and Producer roles. | Per-capability semantic + actual mapping/validation/security evidence; no family counts as complete from a raw kernel, operation enum or mock Binding alone. |
+| B — Joined Producer foothold | Whole-Thing composition supports finite Property Read and continuing Action mappings over actual native participants; broaden only with complete final support and retained ownership. | Public real-peer tests plus negative support, prepublication, cancellation, replacement and final-resource-release evidence, scoped to the implemented mappings. |
+| C — Open Consumer and broader operations | Join actual downstream Consumer registration, preparation and finite execution, then TD-driven notifications; continue Property/Action/Event and described collections in both roles. | Owned incremental third-party preparation plus real finite I/O, followed by real notification I/O through the same selection boundary and its distinct lifecycle. No family completes from a raw kernel or mock alone. |
 | D — Interoperability and product qualification | Verify downstream third-party Binding composition, selected cross-protocol contrasts, Host HTTP/HTTPS and security, Discovery/Directory client, portable shared semantics and supported profiles. | Real native peers, advertised DataSchema/security/profile checks, scoped resource/performance measurements and client Discovery behavior. |
 | E — v1 integration | Reconcile completed WP-400/500/600 capability claims through WP-700 without inheriting historical acceptance. | Independent conformance, security, integration and release evidence for the exact advertised v1 scope. |
 
 Horizons express **recommended concentration, not sequential package gates**.
-Horizon B is the preferred near-term integration target after the current raw
-lifecycle work; unrelated Discovery, HTTPS/security, preparation and protocol
-work can progress when its real dependencies are ready. Action, notification and
-publication do not acquire a mandatory internal sequence. Evidence from a
-concrete Binding refines general contracts but cannot redefine them.
+The near-term emphasis moves from the joined Producer foothold to the Consumer
+integration gap. First open actual compiler/executor registration and preparation
+and prove it with real finite execution in the same change; then use TD-driven
+`ObserveProperty`, with HTTP SSE as the first notification participant. This is
+a bounded integration repair under v6, not a prerequisite redesign of every
+Consumer lifecycle. Unrelated Discovery and HTTPS/security work can progress
+when its own dependencies are ready. Binding evidence cannot redefine general
+contracts.
 
-### First joined v6 path: falsifiable boundary
+### Joined Producer composition: retained boundary
 
 Use the existing direct real-HTTP finite Producer implementation as an economical
 integration participant where suitable, not as the universal SPI model or as a
@@ -74,13 +79,22 @@ An integrated Producer claim requires the following observable composition:
    physical release. A working HTTP exchange or raw local activation alone
    proves none of the missing publication obligations.
 
-This may be delivered in several independently useful PRs. Prove each claimed
+Broaden this foothold in independently useful changes. Prove each claimed
 boundary with proportionate tests; do not invent a global all-protocol proof
 gate, a universal runtime/session/RPC abstraction, or certification paperwork
 for unimplemented combinations. If existing preparation or runtime APIs impede
 the joined path, replace them rather than maintain compatibility facades.
 
 ### Continuing capability growth
+
+The smallest Consumer sequence is two working slices: open preparation joined
+to real finite Property Read, then real TD-driven observation. The source
+constraints, first implementation acceptance and abstraction dispositions belong
+to [WP-200](docs/work-packages/WP-200-planning.md#open-consumer-integration),
+runtime ownership to [WP-300](docs/work-packages/WP-300-bindings.md#consumer-capability-composition)
+and [WP-400](docs/work-packages/WP-400-servient.md#joined-consumer-execution),
+and notification I/O acceptance to
+[WP-600](docs/work-packages/WP-600-protocol-bindings.md#td-driven-consumer-observation).
 
 After composition has an executable foothold, extend one operation/lifecycle
 at a time using its own semantic obligations. In particular, Action invocation

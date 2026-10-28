@@ -90,24 +90,73 @@ Neither successful HTTP I/O nor required output validation is qualified TD
 publication. Multi-route HTTP matching, HTTPS/security, constrained execution,
 aggregate capacity and release qualification retain their separate boundaries.
 
-## Priority: joined v6 Producer through actual HTTP I/O
+## Integration priority after the Producer foothold
 
-[PLAN.md](../../PLAN.md) prioritizes a complete cross-layer Producer path.
-The current direct shared finite HTTP facet supplies usable real-peer evidence;
-its local raw activation and prepared type check do **not** replace complete
-final-TD support assessment, closed native setup, endpoint/dependency
-revalidation, multi-participant publication or aggregate ownership. Keep the
-legacy single-route Producer path as scoped regression evidence while replacing
-wrong physical APIs, not by wrapping its old permit/facade.
+Whole-Thing composition and the HTTP finite/Action participants now supply
+qualified publication with real I/O, within their supported envelopes. Continue
+their ownership/publication regressions while prioritizing
+[open Consumer integration](WP-200-planning.md#open-consumer-integration).
+Its first PR includes existing HTTP Property Read and an actual downstream finite
+Binding on the same open path; a new HTTP feature alone would leave the generic
+admission defect intact. Broader Producer, HTTPS/security and other protocol
+work retain their own dependencies and qualification scope.
 
-A supported deliberately narrow final TD may be used, but all its retained
-Forms and effective operations must be qualified before local publication.
-Exercise real Consumer-to-Producer traffic only after publication, together
-with prepublication refusal, unsupported alternatives, cancellation/replacement,
-validation, late responses and actual native/cleanup retirement. Keep code and
-tests as executable proof of the claimed slice, not a new mandatory HTTP-first
-architecture phase. HTTPS/authentication/authorization and other native
-operation families require their own supported mapping and security claims.
+## TD-driven Consumer observation
+
+The next implementation PR extends that working selection/preparation path to
+`ObserveProperty`, using HTTP SSE for real notification I/O. A raw SSE participant
+could be implemented now: `ConsumerNotificationBinding::Program` is unconstrained
+by `Copy`, and `RawNotificationServient` already owns establishment/flow/stop.
+Therefore a Consumer architecture rewrite is **not** a technical prerequisite.
+The reason for the ordering is narrower: TD-driven notification selection is not
+integrated, while the existing Consumer compiler admission excludes owned jobs.
+Avoid another manually selected SSE facade or enlarging `HostSemanticCompiler`
+with subscription methods.
+
+The existing [HTTP compiler](../../protocol-bindings/protocols/http/src/compiler.rs)
+accepts only `ReadProperty` without a subprotocol. Its
+[transport](../../protocol-bindings/protocols/http/src/transport.rs) validates a
+bounded JSON response and collects it to EOF. Reuse suitable HTTP/Hyper I/O
+mechanics, not that finite body collector or its total-response wire cap as the
+stream model. The Binding needs bounded streaming framing/decoding and retained
+native progress/retirement; the Engine keeps logical delivery and visible loss.
+
+Executable acceptance for this PR:
+
+- Consume a TD, select the actual registered observation capability, retain
+  resolved URL/method/subprotocol, schema/media/security facts and stop mapping,
+  then destroy the source before opening a real loopback TCP stream. Unsupported
+  Forms remain explicit; ordinary HTTP reads still run through the same common
+  selection path. No hard-coded program bypasses TD preparation.
+- Deliver multiple validated Property values while the connection remains open,
+  including fragmented UTF-8/lines, multiline data, comments, malformed/oversize
+  input and incomplete EOF. Check SSE wire `text/event-stream` separately from
+  the supported data encoding/Property schema. Start with a declared cleartext
+  NoSec/type-only subset; reject unsupported selected schemas/security before
+  effects. Establishment fabricates no initial value and performs no hidden read.
+- Bound per-poll work, frame/line/backing and queue items/bytes without a lifetime
+  byte cap on a valid continuing stream. Exercise slow consumers, visible
+  loss/termination, real peer failure, stop before/after establishment, late data,
+  policy/replacement races and lost owners. Retire the original socket/parser
+  and release accounts; two live observations demonstrate independent stop.
+- Interpret explicit `UnobserveProperty` support or a documented native implicit
+  removal mapping; do not invent DELETE from an observe URL. Report local release
+  separately from remote cancellation certainty. SSE has no application
+  dataResponse; retain the general Event response/cardinality regressions.
+
+Standards basis: [TD 1.1 Recommendation, PropertyAffordance](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#propertyaffordance)
+defines observation semantics without guaranteeing an initial value. The
+[HTTP Binding draft's SSE example](https://w3c.github.io/wot-binding-templates/bindings/protocols/http/index.html)
+is mapping guidance, not a Recommendation or an Engine SPI. Use the
+[HTML event-stream parsing rules](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream)
+for the concrete framing. Record the supported mapping and limits with its code;
+do not claim browser EventSource or WoT Profile conformance from this subset.
+
+Redirects, reconnect/replay/Last-Event-ID policy, TLS/authentication, broader
+DataSchema, Event subscribe/response, Producer notifications, broker-native
+sharing and constrained execution are deferred. The first SSE mapping terminates
+observably on disconnect and follows no redirects; it does not promise replay or
+remote receipt. These are concrete Binding limits, not new Consumer SPI rules.
 
 ## Joined HTTP finite participant
 

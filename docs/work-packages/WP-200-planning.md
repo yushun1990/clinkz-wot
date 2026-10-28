@@ -44,8 +44,9 @@ single-Property `Covered` shape marker and `PreparedProducer` adapter.
 
 ## Joined v6 preparation boundary
 
-The delivery priority in [PLAN.md](../../PLAN.md) is a complete Producer
-TD-to-runtime path, not a generalized Copy/atomic Property Read compiler. The
+The joined Producer path supplies the first composition foothold. The Consumer
+sequence below now has priority; neither path generalizes the Copy/atomic
+Property Read adapter into the v6 compiler contract. A Producer's
 selected mapping must capture the *actual* Binding/configuration and executable
 codec/schema/security services, carry independent owned facts after source TD
 destruction, and qualify every retained final Form/effective operation before
@@ -60,6 +61,85 @@ consider checked definition reuse only with proved compatibility. The
 type-only HTTP schema path is valid evidence for exactly its supported subset,
 not general DataSchema acceptance. Test the first composed path rather than
 introduce a universal artifact/cache/program type or a preparatory gate.
+
+## Open Consumer integration
+
+The smallest useful sequence is **two implementation PRs**: open registration /
+preparation with working finite I/O, then TD-driven notification I/O
+([WP-600](WP-600-protocol-bindings.md#td-driven-consumer-observation)). Combine
+opening the path and its real capability proof: an abstraction-only precursor
+would leave the important compiler-to-executor seam untested.
+
+### Source constraints and disposition
+
+This sequence implements ADR-0025 and PREP-ISOLATION/SELECT/DEFER; it does not
+replace their architecture. The relevant implementation evidence is:
+
+| Source | Constraint and implementation decision |
+| --- | --- |
+| [binding_registration.rs](../../planning/src/binding_registration.rs), `static_consumer_support` / `host_consumer_support` | Static capture downcasts to `ResolvedTargetCompiler`; Host capture requires private `consumer_support`. Generic `HostBindingCompilerRegistration::try_new` never issues that support. Replace these as **general** eligibility checks with captured actual compiler/executor/configuration/services and qualified work/storage/cleanup bounds. |
+| [binding_compiler.rs](../../planning/src/binding_compiler.rs), `HostSemanticCompiler`, `ConsumerCompilerSupport` | Atomic lowering, `Artifact: Copy` and fixed destruction/layout costs are legitimate restrictions of the inline adapter. They cannot qualify arbitrary owned output merely by removing the downcast or setting a support flag. Keep their narrow regressions; replace Consumer-wide dependence on those assumptions. |
+| [semantic_compilation.rs](../../protocol-bindings/protocols/http/tests/semantic_compilation.rs), `reply_bus` tests | Third-party inline compiler/executor composition already works, with an in-memory result. `owned_incremental_compiler_fits_generic_erasure_but_not_consumer_admission` demonstrates the exact missing admission while successfully running 512 paid pure steps outside it. General storage is available; a wholesale compiler redesign is unwarranted. |
+| [consumer_property_read.rs](../../planning/src/consumer_property_read.rs), `ConsumerPropertyReadRegistration`; [binding.rs](../../core/src/binding.rs), `BindingRegistrationCapabilities` | Sealed aggregate eligibility and Property Read role bits are restricted adapters, not the general registry. Consumer admission needs per-operation support and deterministic actual-provider selection, allowing unsupported alternatives and requiring at least one supported interaction by default. |
+| [binding_compiler.rs](../../planning/src/binding_compiler.rs), `BindingCompilerInput::resolved`; [TD semantics](../../td/src/semantic.rs) | The compiler carrier assumes a Property Read logical record and a matching TD id. Reuse TD-resolved Form/operation facts and extension associations (`FormOwner`); replace this carrier's general use, including mandatory TD identity. Do not copy Producer whole-Thing coverage rules into Consumer admission. |
+
+Reuse complete-registration/recoverable-pairing mechanics,
+`BindingCompilerExtension`'s owned cursor/output and failure-return model,
+generic Host erasure, and Core's `HostBindingArtifact` / `HostArtifactStorage`.
+Generalize their input/pairing where needed, rather than add another facade.
+Registration identity or artifact type/format alone proves neither compatibility
+nor support. Keep pure preparation above execution and hand source-independent
+facts to the selected native facet. Eager selected preparation is sufficient for
+the first slice; no new first-use coordinator, cache or universal program is
+needed. Normalize/index common meaning once, distinguish coarse eligibility from
+prepared support, and do not require an eager all-operations plan-set.
+
+### First implementation PR: open path with real finite execution
+
+Deliver public startup registration, TD admission/selection, bounded pure
+incremental construction and execution for actual downstream Consumer Bindings.
+Use finite Property Read to establish this seam and migrate the existing HTTP
+Consumer onto it. Capture actual codec/schema/security services for the supported
+subset; result shape sealing alone is not schema validation. Reuse finite result,
+first-cause, cancellation and accounting mechanisms; retire replaced closed
+public build/support entry points instead of adding compatibility aliases.
+Unchanged legacy adapters may retain
+their measured internal restrictions, with no eligibility authority over the new
+path and no copies for observation or Discovery.
+
+Acceptance requires executable evidence through the public composed path:
+
+- A Cargo-linked crate **outside workspace membership** supplies an independently
+  authored finite Binding, a non-`Copy` artifact with owned variable backing and
+  destructor, and a resumable compiler. Its real loopback peer exchanges the
+  prepared native request/result; no synthetic return or built-in protocol case
+  can substitute. The same application also executes existing HTTP Property Read.
+- A TD with multiple Forms/providers reports per-operation support; unsupported
+  alternatives remain unsupported, ambiguous matches refuse, and an explicit
+  selector cannot weaken schema/security/policy. Actual configuration/executor
+  substitutions refuse before I/O. Include an anonymous TD; a TD id is metadata.
+- Destroy TD/parser/semantic and completed compiler owners before execution;
+  repeated warm calls use retained preparation without source callbacks or
+  lowering. A source-free runtime composition has no normal TD/Planning/compiler
+  dependency; optional consume/build owners stay above that boundary.
+- Prepay callback work and actual cursor/artifact/temporary/indirect backing
+  before acquisition. Exercise zero/short credit, capacity/allocation refusal,
+  cancelled/failed construction and bounded rollback/destruction. No failed pure
+  preparation causes native I/O, partial installation or leaked funding.
+- Real calls cover validation failure, saturation, cancellation/late or unread
+  results, replacement and final socket/backing/account release. Preserve HTTP
+  method/header/context/framing behavior with `real_peer`, `semantic_compilation`
+  and affected ownership/race regressions. Replace the owned-compiler rejection
+  demonstration with successful composed execution; retain mismatch negatives.
+
+The first PR need not implement every operation or constrained runtime. Preserve
+portable compiler authoring and remove compiler-name eligibility from general
+typed/static registration too; use external compile/runtime fixtures and affected
+no-default/async checks without claiming hardware qualification. Owned callback
+costs and variable destruction are the main integration risks, not an excuse to
+retain `Copy` as a universal rule. Broader DataSchema/security, deferred first use,
+checked sharing/reuse and other capability families remain separate working
+slices, with unsupported meaning reported truthfully.
 
 ## Implemented finite join
 
