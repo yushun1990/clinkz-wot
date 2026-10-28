@@ -366,7 +366,9 @@ impl HttpActionRuntime {
         if self.closed || !self.token.belongs_to(owner) {
             return Err(producer_unsupported());
         }
-        if !self.gate.get() {
+        // Revocation fences new connections and semantic ingress, not a socket
+        // already accepted by this native owner or its pending response write.
+        if !self.gate.get() && self.exchange.is_none() {
             return Ok(Poll::Pending);
         }
         budget.consume(WorkClass::BindingPolls, 1).map_err(|_| {
@@ -525,7 +527,16 @@ impl HttpActionRuntime {
             }
             let path = request.path.unwrap().to_owned();
             let body = exchange.received[end..].to_vec();
+            // A complete request arriving on a previously accepted connection
+            // after revocation is not an accepted Action/control operation.
+            if !self.gate.get() {
+                self.exchange = None;
+                return Ok(Poll::Ready(()));
+            }
             self.answer(owner, budget, &definition, &path, body)?;
+            // Keep the reply opportunity as a separate native obligation so
+            // a gate closing after semantic admission cannot suppress delivery.
+            return Ok(Poll::Pending);
         }
         let exchange = self.exchange.as_mut().unwrap();
         match exchange
@@ -817,6 +828,25 @@ impl ClosedProducerParticipation for HttpActionRuntime {
                 Rc::clone(&self.validator),
             )
         })
+    }
+    fn action_control_route(
+        &self,
+        key: ProducerInstanceKey,
+        binding: (BindingId, BindingGeneration),
+        site: AffordanceSite<'_>,
+        form: u32,
+        operation: Operation,
+        definition: &dyn Any,
+    ) -> Option<ActionRoute> {
+        matches!(operation, Operation::QueryAction | Operation::CancelAction)
+            .then_some(())
+            .filter(|_| self.covers(key, binding, site, form, operation, definition))
+            .map(|_| {
+                definition
+                    .downcast_ref::<HttpActionDefinition>()
+                    .unwrap()
+                    .route()
+            })
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
         &self.gate

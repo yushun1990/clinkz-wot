@@ -400,15 +400,35 @@ impl RawProducerServient {
         // A qualified incarnation cannot be downgraded by supplying a raw
         // request. Only the service captured for its exact prepared invoke
         // route can validate its input and retained immediate/late output.
-        let validator = match &instance.action_validation {
+        let validator = match &instance.action_routes {
             None => None, // explicitly raw registration, not TD publication
-            Some(routes) => Some(Rc::clone(
-                &routes
+            Some(routes) => {
+                let invoke = routes
                     .iter()
-                    .find(|v| v.action.as_ref() == name.as_ref() && v.route == request.invoke)
-                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?
-                    .validator,
-            )),
+                    .find(|v| {
+                        v.action.as_ref() == name.as_ref()
+                            && v.operation == Operation::InvokeAction
+                            && v.route == request.invoke
+                    })
+                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+                for (operation, selected) in [
+                    (Operation::QueryAction, request.query),
+                    (Operation::CancelAction, request.cancel),
+                ] {
+                    if selected.is_some_and(|selected| {
+                        !routes.iter().any(|route| {
+                            route.action.as_ref() == name.as_ref()
+                                && route.operation == operation
+                                && route.route == selected
+                        })
+                    }) {
+                        return Err(CoreError::UnsupportedOperation(context()));
+                    }
+                }
+                Some(Rc::clone(
+                    invoke.validator.as_ref().expect("qualified invoke service"),
+                ))
+            }
         };
         if (request.query.is_some() && !behavior.query)
             || (request.cancel.is_some() && !behavior.cancel)

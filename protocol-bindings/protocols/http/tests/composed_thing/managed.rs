@@ -190,6 +190,42 @@ fn action_without_captured_validation_service_refuses_managed_handoff_before_nat
     UdpSocket::bind(address).unwrap();
 }
 
+#[test]
+fn action_without_prepared_control_route_refuses_managed_handoff_before_native_setup() {
+    let owner = owner();
+    let address = udp_addr();
+    let native = ActionNative::new(address);
+    let accounts = bank();
+    let (mut input, _) = action_input(
+        &owner,
+        key(1, Generation::INITIAL),
+        &native,
+        Rc::new(Counts::default()),
+        None,
+    );
+    let key = input.instance.key();
+    input.participants[0]
+        .as_mut()
+        .as_any_mut()
+        .downcast_mut::<ActionLease>()
+        .unwrap()
+        .control_routes_enabled = false;
+    let rejection = ComposedProducerExposure::try_new(
+        &owner,
+        input,
+        limits(),
+        Arc::clone(&accounts),
+        &mut budget(),
+    )
+    .err()
+    .expect("a described control without its actual route cannot qualify");
+    assert_eq!(owner.description(key), None);
+    assert!(native.borrow().socket.is_none());
+    drop(rejection);
+    assert_empty(&accounts);
+    UdpSocket::bind(address).unwrap();
+}
+
 fn start_http(exposure: &mut ComposedProducerExposure) {
     for i in 0..2 {
         assert_eq!(

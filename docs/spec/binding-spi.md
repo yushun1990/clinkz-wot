@@ -125,10 +125,11 @@ test-only UDP Action participant exercises shared infrastructure and continuing
 work over actual I/O. The HTTP Action participant adds a production loopback
  mapping with independent invoke/status/cancel Forms, publication-captured JSON/type
  validation, retained native correlation and manually driven continuing work.
- The composed handoff captures the actual invoke-route validation service from
- each selected native participant before publication. Missing services refuse
- qualification; after commit the Servient selects the captured service by exact
- Action and invoke route, so a raw request cannot downgrade published execution.
+  The composed handoff captures the actual invoke-route validation service and
+  each described query/cancel mapping from selected native participants before
+  publication. Missing services or control routes refuse qualification; after
+  commit the Servient checks the captured Action and operation routes, so a raw
+  request cannot downgrade published execution or invent a control Form.
 UDP remains test-only; HTTP's one-listener-per-Action implementation does not
 constrain other native resource layouts or cross-Binding Action routes.
 

@@ -850,6 +850,331 @@ fn published_action_cannot_skip_validation_through_raw_request() {
 }
 
 #[test]
+fn published_action_controls_cannot_be_selected_from_unprepared_routes() {
+    let address = addr();
+    let mut owner = owner();
+    let counts = Rc::new(Counters::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let mut exposure = create(
+        &owner,
+        key(Generation::INITIAL),
+        address,
+        None,
+        Rc::clone(&counts),
+        None,
+        Arc::clone(&bank),
+    );
+    exposure
+        .participant_mut::<HttpActionRuntime>(0)
+        .unwrap()
+        .install_closed()
+        .unwrap();
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let input = InteractionInput::with_data(Payload::new(b"12".to_vec(), "application/json"));
+    let binding = (BindingId::new(61), BindingGeneration::INITIAL);
+    let invoke = ActionRoute {
+        binding,
+        mapping: ActionMappingKey(1),
+    };
+    let query = ActionRoute {
+        binding,
+        mapping: ActionMappingKey(2),
+    };
+    let cancel = ActionRoute {
+        binding,
+        mapping: ActionMappingKey(3),
+    };
+    let foreign = ActionRoute {
+        binding: (BindingId::new(99), BindingGeneration::INITIAL),
+        mapping: ActionMappingKey(99),
+    };
+    let unprepared = ActionRoute {
+        binding,
+        mapping: ActionMappingKey(99),
+    };
+    for (query, cancel) in [
+        (Some(foreign), Some(cancel)),
+        (Some(query), Some(foreign)),
+        (Some(unprepared), Some(cancel)),
+        (Some(query), Some(unprepared)),
+        (Some(cancel), Some(cancel)), // an advertised cancel route is not a query route
+    ] {
+        assert!(matches!(
+            owner.invoke_raw_action(
+                RawActionRequest {
+                    instance: exposure.key(),
+                    target: &target,
+                    invoke,
+                    query,
+                    cancel,
+                    input: &input,
+                },
+                &mut budget(),
+            ),
+            Err(CoreError::UnsupportedOperation(_))
+        ));
+    }
+    assert_eq!(counts.invoked.get(), 0);
+    let handle = owner
+        .invoke_raw_action(
+            RawActionRequest {
+                instance: exposure.key(),
+                target: &target,
+                invoke,
+                query: Some(query),
+                cancel: Some(cancel),
+                input: &input,
+            },
+            &mut budget(),
+        )
+        .unwrap();
+    for (op, route) in [
+        (Operation::QueryAction, query),
+        (Operation::CancelAction, cancel),
+    ] {
+        if op == Operation::QueryAction {
+            assert!(matches!(
+                owner
+                    .query_raw_action(
+                        &handle,
+                        route.binding,
+                        route.mapping,
+                        &InteractionInput::empty(),
+                        &mut budget()
+                    )
+                    .unwrap()
+                    .state,
+                RawActionState::Running
+            ));
+        } else {
+            assert!(
+                owner
+                    .cancel_raw_action(
+                        &handle,
+                        route.binding,
+                        route.mapping,
+                        &InteractionInput::empty(),
+                        &mut budget()
+                    )
+                    .unwrap()
+            );
+        }
+    }
+    counts.complete.set(true);
+    assert_eq!(
+        owner.step_raw_action(&handle, &mut budget()).unwrap(),
+        Poll::Ready(())
+    );
+    let settlement = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
+    assert_eq!(settlement.query, Some(query));
+    assert_eq!(settlement.cancel, Some(cancel));
+    exposure.begin_close();
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+}
+
+#[test]
+fn revoked_action_gate_drains_owned_partial_tcp_without_dispatch() {
+    let address = addr();
+    let mut owner = owner();
+    let counts = Rc::new(Counters::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let mut exposure = create(
+        &owner,
+        key(Generation::INITIAL),
+        address,
+        None,
+        Rc::clone(&counts),
+        None,
+        Arc::clone(&bank),
+    );
+    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+    native.install_closed().unwrap();
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+    let mut peer = TcpStream::connect(address).unwrap();
+    peer.write_all(b"POST /run HTTP/1.1\r\nHost:").unwrap();
+    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+    assert_eq!(
+        native.step(&mut owner, &mut budget()).unwrap(),
+        Poll::Pending
+    );
+    let gate = Rc::clone(native.ingress_gate());
+    gate.set(false);
+    peer.shutdown(std::net::Shutdown::Write).unwrap();
+    let end = Instant::now() + Duration::from_secs(5);
+    loop {
+        if exposure
+            .participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .step(&mut owner, &mut budget())
+            .unwrap()
+            .is_ready()
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < end,
+            "revoked HTTP Action kept the partial exchange"
+        );
+    }
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    assert_eq!(peer.read(&mut [0; 1]).unwrap(), 0);
+    assert_eq!(counts.invoked.get(), 0);
+    assert_eq!(
+        exposure
+            .participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .records(),
+        0
+    );
+    let mut next = TcpStream::connect(address).unwrap();
+    next.write_all(format!("POST /run HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12").as_bytes()).unwrap();
+    assert_eq!(
+        exposure
+            .participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .step(&mut owner, &mut budget())
+            .unwrap(),
+        Poll::Pending
+    );
+    assert_eq!(counts.invoked.get(), 0);
+    exposure.begin_close();
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    drop(next);
+    drop(peer);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    TcpListener::bind(address).unwrap();
+}
+
+#[test]
+fn revoked_action_gate_finishes_owned_reply_and_action() {
+    let address = addr();
+    let mut owner = owner();
+    let counts = Rc::new(Counters::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let mut exposure = create(
+        &owner,
+        key(Generation::INITIAL),
+        address,
+        None,
+        Rc::clone(&counts),
+        None,
+        Arc::clone(&bank),
+    );
+    exposure
+        .participant_mut::<HttpActionRuntime>(0)
+        .unwrap()
+        .install_closed()
+        .unwrap();
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+
+    let mut peer = TcpStream::connect(address).unwrap();
+    peer.write_all(
+        format!("POST /run HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12").as_bytes(),
+    ).unwrap();
+    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+    assert_eq!(
+        native.step(&mut owner, &mut budget()).unwrap(),
+        Poll::Pending
+    );
+    assert_eq!(counts.invoked.get(), 1); // semantic admission, reply still owned
+    let gate = Rc::clone(native.ingress_gate());
+    gate.set(false);
+    assert_eq!(
+        native.step(&mut owner, &mut budget()).unwrap(),
+        Poll::Ready(())
+    );
+    assert!(native.take_delivery().unwrap().locally_written);
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    let mut response = String::new();
+    peer.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 202 Accepted"), "{response}");
+    assert_eq!(counts.invoked.get(), 1);
+    assert_eq!(native.records(), 1);
+
+    let id = native.action_ids().next().unwrap();
+    counts.complete.set(true);
+    assert_eq!(
+        native.progress_actions(&mut owner, &mut budget()).unwrap(),
+        Poll::Ready(Some(id))
+    );
+    assert!(native.acknowledge(&mut owner, id).unwrap().is_some());
+    exposure.begin_close();
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    TcpListener::bind(address).unwrap();
+}
+
+#[test]
+fn revoked_action_gate_refuses_completed_input_from_owned_connection() {
+    let address = addr();
+    let mut owner = owner();
+    let counts = Rc::new(Counters::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let mut exposure = create(
+        &owner,
+        key(Generation::INITIAL),
+        address,
+        None,
+        Rc::clone(&counts),
+        None,
+        Arc::clone(&bank),
+    );
+    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+    native.install_closed().unwrap();
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+    let mut peer = TcpStream::connect(address).unwrap();
+    peer.write_all(b"POST /run HTTP/1.1\r\nHost:").unwrap();
+    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+    assert_eq!(
+        native.step(&mut owner, &mut budget()).unwrap(),
+        Poll::Pending
+    );
+    Rc::clone(native.ingress_gate()).set(false);
+    peer.write_all(
+        format!(" {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12")
+            .as_bytes(),
+    )
+    .unwrap();
+    let end = Instant::now() + Duration::from_secs(5);
+    loop {
+        if native.step(&mut owner, &mut budget()).unwrap().is_ready() {
+            break;
+        }
+        assert!(
+            Instant::now() < end,
+            "revoked HTTP Action kept completed native input"
+        );
+    }
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    assert_eq!(peer.read(&mut [0; 1]).unwrap(), 0);
+    assert_eq!(counts.invoked.get(), 0);
+    assert_eq!(native.records(), 0);
+    exposure.begin_close();
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    TcpListener::bind(address).unwrap();
+}
+
+#[test]
 fn unsupported_action_meaning_is_refused_before_any_native_setup() {
     let address = addr();
     let provider = HttpActionProducer::new(

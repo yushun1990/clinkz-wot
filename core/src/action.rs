@@ -26,7 +26,9 @@ pub struct ActionRoute {
 /// A candidate observation. The native owner retains the input/reply opportunity;
 /// constructing this value does not grant application dispatch. Raw callers
 /// supply mapping associations; this type does not verify TD coverage or
-/// Binding readiness, which publication must qualify separately.
+/// Binding readiness, which publication must qualify separately. A published
+/// Servient checks supplied invoke and control routes against captured mappings;
+/// explicitly raw registrations have no such TD guarantee.
 pub struct RawActionRequest<'a> {
     pub instance: ProducerInstanceKey,
     pub target: &'a AffordanceTarget,

@@ -479,6 +479,7 @@ struct ActionLease {
     open: Rc<Cell<bool>>,
     validator: Rc<dyn ActionValidator>,
     validator_enabled: bool,
+    control_routes_enabled: bool,
     closed: bool,
     participation: ProducerParticipationId,
     retained_owner: Option<Rc<dyn Any>>,
@@ -539,6 +540,7 @@ impl ActionNative {
             open,
             validator: Rc::new(UdpJsonValidation),
             validator_enabled: true,
+            control_routes_enabled: true,
             closed: false,
             participation: ProducerParticipationId::new(),
             retained_owner: None,
@@ -734,6 +736,20 @@ impl ClosedProducerParticipation for ActionLease {
                 Rc::clone(&self.validator),
             )
         })
+    }
+    fn action_control_route(
+        &self,
+        key: ProducerInstanceKey,
+        binding: (BindingId, BindingGeneration),
+        site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        form: u32,
+        operation: Operation,
+        definition: &dyn Any,
+    ) -> Option<ActionRoute> {
+        (self.control_routes_enabled
+            && matches!(operation, Operation::QueryAction | Operation::CancelAction)
+            && self.covers(key, binding, site, form, operation, definition))
+        .then(|| *definition.downcast_ref::<ActionRoute>().unwrap())
     }
     fn retired(&self) -> bool {
         self.closed
