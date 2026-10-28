@@ -211,7 +211,7 @@ pub static STATIC_RUNTIME_LAYOUTS: [[usize; 2]; 8] = [
         StaticConsumerPropertyReadSlot<clinkz_wot_consumer_property_read_binding_fixture::State>,
     >(),
     layout::<clinkz_wot_consumer_property_read_binding_fixture::State>(),
-    layout::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>>(),
+    layout::<InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>>(),
     layout::<OutboundRequest>(),
     layout::<CoreResult<InteractionOutput>>(),
     layout::<(

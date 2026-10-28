@@ -10,7 +10,7 @@
 
 #[cfg(test)]
 mod tests {
-    use clinkz_wot_binding_http::{HttpConsumerConfig, try_consumer_registration};
+    use clinkz_wot_binding_http::{HttpConsumerConfig, try_inline_consumer_registration};
     use clinkz_wot_core::*;
     use clinkz_wot_foundation::*;
     use clinkz_wot_servient::consumer_property_read::*;
@@ -65,7 +65,7 @@ mod tests {
             )
             .unwrap(),
         );
-        let registration = try_consumer_registration(
+        let registration = try_inline_consumer_registration(
             HttpConsumerConfig::for_cleartext_ip().unwrap(),
             BindingId::new(800),
             BindingGeneration::INITIAL,

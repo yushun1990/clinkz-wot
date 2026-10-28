@@ -10,6 +10,8 @@ extern crate alloc;
 #[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod finite_producer;
 #[cfg(all(feature = "std", feature = "validated-thing"))]
+pub mod open_consumer;
+#[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod producer_composition;
 #[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod producer_execution;
@@ -38,9 +40,9 @@ mod consumer_property_read;
 pub use consumer_property_read::{
     ConsumerPropertyReadBuild, ConsumerPropertyReadBuildConfig, ConsumerPropertyReadBuildStep,
     ConsumerPropertyReadCleanupSlot, ConsumerPropertyReadDraft, ConsumerPropertyReadPreflight,
-    ConsumerPropertyReadRegistration, ConsumerPropertyReadRollback,
-    ConsumerPropertyReadRollbackStep, ConsumerPropertyReadSelection, PlanFootprint,
-    build_consumer_property_read_aggregate, select_consumer_property_read_aggregate,
+    ConsumerPropertyReadRollback, ConsumerPropertyReadRollbackStep, ConsumerPropertyReadSelection,
+    InlineConsumerPropertyReadRegistration, PlanFootprint, build_consumer_property_read_aggregate,
+    select_consumer_property_read_aggregate,
 };
 #[cfg(feature = "std")]
 #[cfg(feature = "validated-thing")]

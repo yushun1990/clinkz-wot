@@ -1358,7 +1358,7 @@ fn public_consumer_uses_exact_published_description_and_real_native_peer() {
             let bank = Arc::new(
                 HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap(),
             );
-            let registration = try_consumer_registration(
+            let registration = try_inline_consumer_registration(
                 HttpConsumerConfig::for_cleartext_ip().unwrap(),
                 BindingId::new(2),
                 BindingGeneration::INITIAL,

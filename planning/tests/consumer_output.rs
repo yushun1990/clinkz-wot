@@ -218,7 +218,7 @@ struct LocalOwner<A: 'static> {
     root: ConsumerPropertyReadCleanupSlot<A>,
     account: ResourceAccount,
 }
-fn prepare<R: ConsumerPropertyReadRegistration>(
+fn prepare<R: InlineConsumerPropertyReadRegistration>(
     source: &Thing,
     registration: &R,
     fail: usize,
@@ -972,7 +972,8 @@ fn static_client_only_aggregate_executes_after_source_destruction_and_explicitly
     println!(
         "static: registration={:?}, checked={:?}, slot={:?}, raw_state={:?}, retained_output={}, output_peak={}, largest={}, requests={}",
         Layout::new::<StaticConsumerBindingPreparation<Client>>(),
-        Layout::new::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>(),
+        Layout::new::<InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>(
+        ),
         Layout::new::<StaticConsumerPropertyReadSlot<State>>(),
         Layout::new::<State>(),
         memory.live,
@@ -1075,7 +1076,7 @@ fn host_client_only_aggregate_executes_after_source_destruction_and_explicitly_r
     println!(
         "Host: registration={:?}, checked={:?}, client={:?}, adapter={:?}, provisioning_bytes={}, output_bytes={}, output_peak={}, largest={}, requests={}",
         Layout::new::<HostConsumerBindingPreparation>(),
-        Layout::new::<ConsumerCompilerRegistration<HostConsumerBindingPreparation>>(),
+        Layout::new::<InlineConsumerCompilerRegistration<HostConsumerBindingPreparation>>(),
         Layout::new::<Client>(),
         Layout::new::<ResolvedTargetCompiler>(),
         provision.live,
@@ -1091,7 +1092,7 @@ fn host_client_only_aggregate_executes_after_source_destruction_and_explicitly_r
     } = owner;
     reclaim(draft.into_rollback(), root, account);
 }
-fn failure_cases<R: ConsumerPropertyReadRegistration>(r: R, stats: Arc<Stats>) {
+fn failure_cases<R: InlineConsumerPropertyReadRegistration>(r: R, stats: Arc<Stats>) {
     let source = source();
     let owner = prepare(&source, &r, usize::MAX).unwrap_or_else(|_| panic!("baseline"));
     let requests = trace().requests;

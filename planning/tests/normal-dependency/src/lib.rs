@@ -4,7 +4,7 @@
 pub use clinkz_wot_planning::{
     ConsumerPropertyReadBuild, ConsumerPropertyReadBuildConfig, ConsumerPropertyReadBuildStep,
     ConsumerPropertyReadCleanupSlot, ConsumerPropertyReadDraft, ConsumerPropertyReadPreflight,
-    ConsumerPropertyReadRegistration, ConsumerPropertyReadRollback,
+    InlineConsumerPropertyReadRegistration, ConsumerPropertyReadRollback,
     ConsumerPropertyReadRollbackStep, PlanFootprint, build_consumer_property_read_aggregate,
     select_consumer_property_read_aggregate,
 };

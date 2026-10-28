@@ -274,13 +274,7 @@ impl MockCompiler {
 
     fn route_reservation(&self, input: &BindingCompilerInput<'_>) -> RouteReservationIdentity {
         let mut endpoint = *input.candidate().configuration().as_bytes();
-        for (index, byte) in input
-            .logical_plan()
-            .resolved_target()
-            .as_bytes()
-            .iter()
-            .enumerate()
-        {
+        for (index, byte) in input.resolved_target().as_bytes().iter().enumerate() {
             let slot = index % endpoint.len();
             endpoint[slot] = endpoint[slot]
                 .wrapping_add(*byte)
@@ -308,8 +302,7 @@ impl BindingCompilerExtension for MockCompiler {
         Ok(BindingCompilerBounds::new(
             BindingArtifactFootprint::new(
                 1,
-                (core::mem::size_of::<MockArtifact>()
-                    + input.logical_plan().resolved_target().len()) as u64,
+                (core::mem::size_of::<MockArtifact>() + input.resolved_target().len()) as u64,
             ),
             core::mem::size_of::<MockCompilerCursor>() as u64,
             0,
@@ -333,7 +326,7 @@ impl BindingCompilerExtension for MockCompiler {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return BindingCompilerStep::Pending(cursor);
         }
-        let target: Box<str> = input.logical_plan().resolved_target().into();
+        let target: Box<str> = input.resolved_target().into();
         let footprint = BindingArtifactFootprint::new(
             1,
             (core::mem::size_of::<MockArtifact>() + target.len()) as u64,

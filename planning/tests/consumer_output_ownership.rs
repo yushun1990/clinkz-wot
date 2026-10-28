@@ -62,7 +62,7 @@ struct LocalOwner<A: 'static> {
     slot: ConsumerPropertyReadCleanupSlot<A>,
     account: ResourceAccount,
 }
-fn complete<R: ConsumerPropertyReadRegistration>(
+fn complete<R: InlineConsumerPropertyReadRegistration>(
     source: &Thing,
     registration: &R,
 ) -> LocalOwner<R::Artifact> {

@@ -200,6 +200,35 @@ their existing tests even when the first Property observation mapping has no
 response role. No new universal runtime, scheduler or all-family acceptance claim
 is part of these slices.
 
+## Open finite Consumer ownership
+
+The source-free `servient-finite::consumer` owner consumes Core definitions and
+pins their exact actual execution/configuration and services. It accepts no
+call-time executor, codec, validator, security or configuration override. Managed
+call admission refuses a foreign parent bank and funds native lifetime, complete
+result backing, callback temporary and cleanup before invocation. The immutable
+startup registry itself remains caller-provisioned Host construction.
+
+Calls and abandoned-handle cleanup retain their original native owner and first
+cause through cancellation errors/Pending, policy/service loss, revocation and
+late completion. Every native/cleanup callback needs credit. A successful raw
+result is validated by the captured codec/type service before logical success;
+invalid output remains retained separately until settlement disposal. The
+settlement's `result()` is the application outcome; `native_outcome()` preserves
+original late evidence and cannot override the first cause. Revocation also
+fences terminal results still unread at the owner. A transfer request without a
+granted named owner is retained as refused evidence while the same original call
+continues manual cleanup; it never becomes a fabricated transfer acknowledgement
+or terminal release. A returned settlement retains
+its native/result/definition/account owners through its final disposal.
+
+Root loss revokes this incarnation. Existing handles can finish original cleanup;
+lost handles can be drained by root progress. Final Drop uses the captured
+ConsumerOwnedHostV2 finite nonblocking local disposal contract, with no assertion
+of remote cancellation or completed network drain. The bank and original leases
+are shared with retained legacy Consumer/Producer owners, whose existing resource
+and transfer regressions remain applicable. Notifications are not finite calls.
+
 ## First joined finite Producer
 
 The optional `producer::ProducerServient<C>` captures one frozen actual

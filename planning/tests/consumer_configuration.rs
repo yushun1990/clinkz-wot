@@ -192,7 +192,7 @@ fn static_capture_rejects_a_distinguishing_key_and_recovers_the_complete_owner()
             BindingStatusPolicy::new(2, 17),
         ))
         .unwrap_or_else(|_| panic!("complete registration accepts consistent compatibility"));
-    let rejected = match registration.try_into_consumer_compiler() {
+    let rejected = match registration.try_into_inline_consumer_compiler() {
         Err(e) => e,
         Ok(_) => panic!("capacity-only support accepted a distinct binding configuration"),
     };
@@ -231,7 +231,7 @@ fn host_capture_and_supported_adapter_reject_a_distinguishing_binding_key() {
         candidate(&c, distinguishing_key()),
         BindingArtifactRole::ConsumerCall,
     );
-    let compiler = HostBindingCompilerRegistration::try_new_consumer(c).unwrap();
+    let compiler = HostBindingCompilerRegistration::try_new_inline_consumer(c).unwrap();
     assert!(matches!(
         compiler.bounds(&distinct),
         Err(CoreError::Validation(_))
@@ -255,7 +255,7 @@ fn host_capture_and_supported_adapter_reject_a_distinguishing_binding_key() {
     let original_client = input.client() as *const dyn binding::ClientBinding as *const () as usize;
     let registration = HostConsumerBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("complete Host registration"));
-    let rejected = match registration.try_into_consumer_compiler() {
+    let rejected = match registration.try_into_inline_consumer_compiler() {
         Err(e) => e,
         Ok(_) => panic!("supported Host adapter accepted a distinct binding configuration"),
     };

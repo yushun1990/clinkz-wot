@@ -509,3 +509,14 @@ settlement, partial input, occupied ports and release.
 UDP Action tests remain test-only evidence for shared native infrastructure.
 HTTPS, broader DataSchema/security services, other HTTP Action response styles,
 automatic progress and remote effect certainty remain unsupported.
+
+
+The `read_property` example now uses open startup registration through
+`planning::open_consumer::ConsumerRegistry` and the source-free
+`servient_finite::consumer::ConsumerRuntime`. `try_consumer_registration` returns
+the actual compiler/executor/configuration and JSON/type plus cleartext-IP access
+services. Complete type-only schema and NoSec support is checked in preparation;
+codec/type validation runs on normal and late output. Unsupported schema/security
+meaning is reported unsupported instead of trusting result-shape sealing alone.
+The lower-level `try_inline_consumer_registration` exists for the retained
+restricted aggregate regression/measurement path. HTTP SSE is not implemented.

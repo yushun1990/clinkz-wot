@@ -7,29 +7,42 @@ use clinkz_wot_planning::{
 };
 use std::sync::{Mutex, MutexGuard};
 
-type Registration = ConsumerCompilerRegistration<HostConsumerBindingPreparation>;
-#[derive(Clone)]
-struct HostParent(Arc<crate::host_accounts::HostResourceAccounts>);
+type Registration = InlineConsumerCompilerRegistration<HostConsumerBindingPreparation>;
+struct HostParent {
+    bank: Arc<crate::host_accounts::HostResourceAccounts>,
+    leases: [clinkz_wot_core::host_accounts::HostCapacityReservation; N],
+}
+impl HostParent {
+    fn new(bank: Arc<crate::host_accounts::HostResourceAccounts>) -> Self {
+        let leases = core::array::from_fn(|i| bank.reserve(KINDS[i], 0).unwrap());
+        Self { bank, leases }
+    }
+}
+impl Clone for HostParent {
+    fn clone(&self) -> Self {
+        Self::new(self.bank.clone())
+    }
+}
 impl Parent for HostParent {
     fn snapshot(&self) -> [ResourceAccount; N] {
-        self.0.snapshot(KINDS)
+        self.bank.snapshot(KINDS)
     }
-    fn reserve(&self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)> {
+    fn reserve(&mut self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)> {
         for i in 0..N {
-            if !self.0.try_reserve(KINDS[i], amount[i]) {
+            if !self.leases[i].try_grow(amount[i]) {
                 for j in 0..i {
-                    self.0.release(KINDS[j], amount[j]);
+                    self.leases[j].release_part(amount[j]);
                 }
-                let a = self.0.account(KINDS[i]);
-                let (slot, generation) = self.0.coordinates(KINDS[i]);
+                let mut a = self.bank.account(KINDS[i]);
+                let (slot, generation) = a.try_reserve(0).unwrap().owner();
                 return Some((i, slot, generation, a.limit(), a.used()));
             }
         }
         None
     }
-    fn release(&self, amount: [u64; N]) {
-        for (kind, n) in KINDS.into_iter().zip(amount) {
-            self.0.release(kind, n);
+    fn release(&mut self, amount: [u64; N]) {
+        for (lease, n) in self.leases.iter_mut().zip(amount) {
+            lease.release_part(n);
         }
     }
 }
@@ -267,7 +280,7 @@ impl ConsumerPropertyReadRuntime {
             Ok(now) => now,
             Err(error) => return Err(reject((registration, policy, clock, parent), error)),
         };
-        let parent = HostParent(parent);
+        let parent = HostParent::new(parent);
         let scratch = registration
             .registration()
             .resources()
@@ -329,7 +342,7 @@ impl ConsumerPropertyReadRuntime {
         })();
         let (report, provision) = match provision {
             Ok(v) => v,
-            Err(e) => return Err(reject((registration, policy, clock, parent.0), e)),
+            Err(e) => return Err(reject((registration, policy, clock, parent.bank), e)),
         };
         let observer = report.retain();
         let fixed = policy.terminal_fixed_work().expect("checked startup");
@@ -361,7 +374,7 @@ impl ConsumerPropertyReadRuntime {
                 cell.kernel.shutdown = true;
                 let policy = root.policy.take().expect("original checked policy");
                 let clock = Arc::clone(&root.clock);
-                let parent = Arc::clone(&root.parent.0);
+                let parent = Arc::clone(&root.parent.bank);
                 drop(root);
                 drop(observer);
                 let error = policy.resource_error(busy(), ResourceFailureDomain::DeploymentFailure);
@@ -1548,7 +1561,7 @@ mod tests {
             Layout::new::<StaticConsumerPropertyReadSlot<State>>(),
             Layout::new::<State>(),
             Layout::new::<
-                ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>,
+                InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>,
             >(),
             Layout::new::<Draft<ResolvedTargetArtifact>>(),
             Layout::new::<Rollback<ResolvedTargetArtifact>>(),

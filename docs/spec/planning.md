@@ -98,8 +98,10 @@ is available at the v5.1 basis in the authority map. Current Planning Property
 Read APIs remain restricted: the borrowed aggregate has eager all-bounds-first
 ordering and the Host adapter accepts Copy atomic output. Their tests keep those
 narrow claims. They MUST NOT constrain the successor compiler or be multiplied
-per interaction family as its implementation. No replacement general compiler
-or first-use coordinator was implemented by the authority migration. The Host
+per interaction family as its implementation. The authority migration itself implemented no replacement compiler or first-use
+coordinator. The open finite Consumer path now uses the portable
+`ConsumerCompiler` contract and generic owned Host erasure; the old support
+carrier and sealed aggregate are explicitly named `InlineConsumer*`. The Host
 Producer now also has a whole-Thing selector: each advertised Form/effective
 operation asks the actual linked capability registrations for independently
 owned concrete definitions; missing, ambiguous or behavior-less operations
@@ -120,3 +122,40 @@ an actual declared peak bound before managed Host invocation; callbacks retain
 no new controlled backing after return. A missing or newly excessive bound
 cannot borrow unreserved capacity. A provider may temporarily materialize data
 inside that funded bound; no allocation-free compiler representation is imposed.
+
+## Open finite Consumer implementation
+
+`open_consumer::ConsumerRegistry` captures actual startup compiler/executor and
+codec/validation/access service owners. `ConsumerCompiler` declares cooperative
+inspection, start, per-step, lifetime, abort and artifact-destruction bounds;
+`Copy` and atomic output are not eligibility rules. General typed/static pairing
+uses the same actual configuration contract without compiler-name tests. The
+restricted `InlineConsumerCompilerSupport` is neither consulted nor issued by
+open admission. Its old general public names and conversion methods are removed.
+
+Basic admission and the existing common whole-description Form walk are reused
+without Producer publication qualification. One paid semantic arena per Form
+lends resolved `FormOwner`/operation facts to the actual candidates. The general
+compiler input has no logical Property Read record or mandatory TD id. The
+Consumer reports each Form/effective operation, including unsupported alternatives;
+at least one selected interaction is required. TD Form order is the default
+preference; multiple actual supporting providers within one admitted Form refuse.
+An explicit binding/Form selector only narrows candidates after common services
+have accepted the meaning. The current executing facet is finite Property Read.
+
+Eager `prepare` lends each `ConsumerCompilation` to a caller driver. Native
+`step` is resumable under small caller credits while that single common semantic
+loan lives. The entire native lifetime allowance is prepaid from the transaction
+budget shared by alternatives; per-step credit cannot renew it. Early driver
+return, cancellation, failure or invalid output aborts under prepaid rollback.
+Cursor/output slots, declared indirect backing, callback scratch, original parent
+leases and aggregate retained destructor work are acquired/qualified before
+start. There is no partial installation or native I/O during preparation.
+
+Completed `Core::consumer::ConsumerDefinition` is immutable owned data with the
+actual runtime registration/configuration/services and original leases; it has
+no native start method, TD, parser, semantic arena or compiler. The source-free
+Servient owner consumes it. Host startup registration/reference construction uses
+the existing trusted Host allocation policy; fallible native compiler-slot and
+owned-cursor allocations are exercised independently. This is not an allocator
+interceptor or a claim of recoverable process-wide OOM.

@@ -19,7 +19,7 @@ fn consume_source(value: Value) -> Engine<impl Fn() -> (Option<CleanupOutcome>, 
         )
         .unwrap(),
     );
-    let registration = try_consumer_registration(
+    let registration = try_inline_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(600),
         BindingGeneration::INITIAL,
@@ -553,7 +553,7 @@ fn failed_resolution_or_unsupported_security_reclaims_the_original_accounts() {
             )
             .unwrap(),
         );
-        let registration = try_consumer_registration(
+        let registration = try_inline_consumer_registration(
             HttpConsumerConfig::for_cleartext_ip().unwrap(),
             BindingId::new(600),
             BindingGeneration::INITIAL,
@@ -812,167 +812,6 @@ mod reply_bus {
     }
 
     #[test]
-    fn owned_incremental_compiler_fits_generic_erasure_but_not_consumer_admission() {
-        // Counterexample to general compiler openness: variable-sized owned
-        // instructions, a destructor, and 512 independently budgeted steps.
-        const CHUNKS: usize = 512;
-        struct OwnedProgram {
-            bytes: Vec<u8>,
-            dropped: Arc<AtomicUsize>,
-        }
-        impl Drop for OwnedProgram {
-            fn drop(&mut self) {
-                self.dropped.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-        struct OwnedCompiler(Arc<AtomicUsize>);
-        impl BindingCompilerExtension for OwnedCompiler {
-            type Cursor = Vec<u8>;
-            type Artifact = OwnedProgram;
-            fn compatibility(&self) -> BindingArtifactCompatibility {
-                COMPAT
-            }
-            fn bounds(&self, _: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
-                Ok(BindingCompilerBounds::new(
-                    BindingArtifactFootprint::new(
-                        1,
-                        (size_of::<OwnedProgram>() + CHUNKS * 128) as u64,
-                    ),
-                    (size_of::<Vec<u8>>() + CHUNKS * 128) as u64,
-                    128,
-                    WorkBudget::new().with_remaining(WorkClass::BindingPolls, CHUNKS as u64),
-                ))
-            }
-            fn start(&self, _: &BindingCompilerInput<'_>) -> CoreResult<Vec<u8>> {
-                Ok(Vec::with_capacity(CHUNKS * 128))
-            }
-            fn step(
-                &self,
-                _: &BindingCompilerInput<'_>,
-                mut cursor: Vec<u8>,
-                budget: &mut WorkBudget,
-            ) -> BindingCompilerStep<Vec<u8>, OwnedProgram> {
-                if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                    return BindingCompilerStep::Pending(cursor);
-                }
-                cursor.extend_from_slice(&[7; 128]);
-                if cursor.len() < CHUNKS * 128 {
-                    return BindingCompilerStep::Pending(cursor);
-                }
-                let footprint = (size_of::<OwnedProgram>() + cursor.capacity()) as u64;
-                BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
-                    COMPAT,
-                    BindingArtifactFootprint::new(1, footprint),
-                    OwnedProgram {
-                        bytes: cursor,
-                        dropped: self.0.clone(),
-                    },
-                )))
-            }
-            fn abort(&self, _: Vec<u8>) {}
-        }
-        let dropped = Arc::new(AtomicUsize::new(0));
-        let config = ConsumerBindingConfiguration::for_semantic_host(
-            64,
-            BindingConfigurationDigest::new([92; 32]),
-            COMPAT,
-            4096,
-            16,
-        )
-        .unwrap();
-        let owner = HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
-            BindingRegistrationIdentity::new(
-                BindingId::new(902),
-                BindingGeneration::INITIAL,
-                config.configuration(),
-                COMPAT,
-                902,
-            ),
-            BindingExecutionSupport::host_erased(),
-            HostBindingCompilerRegistration::try_new(OwnedCompiler(dropped.clone()))
-                .unwrap_or_else(|_| panic!("generic capture")),
-            Box::new(Client(config)),
-            BindingResourceDeclarations::new(
-                BindingLifetimeFootprint::new(3, 1024),
-                BindingLifetimeFootprint::new(16, 8192),
-            )
-            .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
-            .with_consumer_result_limits(4096, 16),
-            BindingStatusPolicy::new(2, 17),
-        ))
-        .unwrap_or_else(|_| panic!("complete owner"));
-        let owner = owner
-            .try_into_consumer_compiler()
-            .err()
-            .expect("generic owned compiler is structurally excluded from Consumer planning")
-            .into_input();
-        let plan = LogicalInteractionPlan::try_property_read(
-            PlanId::new(SlotIndex::new(0), Generation::INITIAL),
-            ThingId::from("urn:owned"),
-            "a".into(),
-            0,
-            "replybus:temperature".into(),
-            Some("application/json".into()),
-            None,
-        )
-        .unwrap();
-        let id = owner.identity();
-        let input = BindingCompilerInput::new(
-            &plan,
-            BindingCandidate::new(
-                id.binding_id(),
-                id.binding_generation(),
-                id.configuration(),
-                COMPAT,
-                902,
-                0,
-            ),
-            BindingArtifactRole::ConsumerCall,
-        );
-        let compiler = owner.compiler();
-        assert_eq!(
-            compiler
-                .bounds(&input)
-                .unwrap()
-                .work()
-                .remaining(WorkClass::BindingPolls),
-            CHUNKS as u64
-        );
-        let mut cursor = compiler.start(&input).unwrap();
-        for index in 0..CHUNKS {
-            cursor = match compiler.step(&input, cursor, &mut WorkBudget::new()) {
-                BindingCompilerStep::Pending(cursor) => cursor,
-                _ => panic!("zero credit progressed"),
-            };
-            let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
-            match compiler.step(&input, cursor, &mut budget) {
-                BindingCompilerStep::Pending(next) => {
-                    assert!(index + 1 < CHUNKS);
-                    cursor = next;
-                }
-                BindingCompilerStep::Complete(output) => {
-                    assert_eq!(index + 1, CHUNKS);
-                    assert_eq!(budget.remaining(WorkClass::BindingPolls), 0);
-                    assert_eq!(
-                        output
-                            .artifact()
-                            .try_payload::<OwnedProgram>(COMPAT)
-                            .unwrap()
-                            .bytes
-                            .len(),
-                        CHUNKS * 128
-                    );
-                    drop(output);
-                    assert_eq!(dropped.load(Ordering::Relaxed), 1);
-                    return;
-                }
-                _ => panic!("incremental compilation failed"),
-            }
-            assert_eq!(budget.remaining(WorkClass::BindingPolls), 0);
-        }
-        panic!("compiler did not complete");
-    }
-    #[test]
     fn third_party_request_reply_compiler_and_executor_use_the_same_production_path() {
         let config = ConsumerBindingConfiguration::for_semantic_host(
             64,
@@ -994,7 +833,7 @@ mod reply_bus {
         assert_ne!(wider.configuration(), config.configuration());
         assert!(wider.with_default_json_forms().is_err());
         let compiled = Arc::new(AtomicUsize::new(0));
-        let compiler = HostBindingCompilerRegistration::try_new_semantic(Compiler {
+        let compiler = HostBindingCompilerRegistration::try_new_inline_semantic(Compiler {
             config,
             compiled: compiled.clone(),
         })
@@ -1019,7 +858,7 @@ mod reply_bus {
             BindingStatusPolicy::new(2, 17),
         ))
         .unwrap_or_else(|_| panic!("complete owner capture"))
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("open compiler capture"));
         let policy = policy();
         let parent = Arc::new(

@@ -23,8 +23,8 @@ use clinkz_wot_planning::{
     ConsumerPropertyReadBuild as PlanningBuild, ConsumerPropertyReadBuildConfig,
     ConsumerPropertyReadBuildStep as PlanningStep, ConsumerPropertyReadCleanupSlot as PlanRoot,
     ConsumerPropertyReadDraft as Draft, ConsumerPropertyReadPreflight as Preflight,
-    ConsumerPropertyReadRegistration, ConsumerPropertyReadRollback as Rollback,
-    ConsumerPropertyReadRollbackStep as ReclaimStep, build_consumer_property_read_aggregate,
+    ConsumerPropertyReadRollback as Rollback, ConsumerPropertyReadRollbackStep as ReclaimStep,
+    InlineConsumerPropertyReadRegistration, build_consumer_property_read_aggregate,
     select_consumer_property_read_aggregate,
 };
 use clinkz_wot_td::{
@@ -443,7 +443,7 @@ impl ConsumerPropertyReadPolicy {
             )
         })
     }
-    fn qualify<R: ConsumerPropertyReadRegistration>(
+    fn qualify<R: InlineConsumerPropertyReadRegistration>(
         &self,
         r: &R,
         resources: BindingResourceDeclarations,
@@ -761,8 +761,8 @@ impl ConsumerPropertyReadPolicy {
 
 trait Parent: Clone {
     fn snapshot(&self) -> [ResourceAccount; N];
-    fn reserve(&self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)>;
-    fn release(&self, amount: [u64; N]);
+    fn reserve(&mut self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)>;
+    fn release(&mut self, amount: [u64; N]);
 }
 #[derive(Clone, Copy)]
 struct StaticParent<'a>(&'a RefCell<[ResourceAccount; N]>);
@@ -785,10 +785,10 @@ impl Parent for StaticParent<'_> {
             copy
         })
     }
-    fn reserve(&self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)> {
+    fn reserve(&mut self, amount: [u64; N]) -> Option<(usize, SlotIndex, Generation, u64, u64)> {
         self.edit(|a| reserve_accounts(a, amount))
     }
-    fn release(&self, amount: [u64; N]) {
+    fn release(&mut self, amount: [u64; N]) {
         self.edit(|a| {
             for (a, n) in a.iter_mut().zip(amount) {
                 assert!(a.release_committed(n));
@@ -1322,12 +1322,12 @@ impl<A: 'static, P: Parent> Drop for BuildStorage<A, P> {
 
 // Inline caller storage deliberately avoids a new allocation at every phase.
 #[allow(clippy::large_enum_variant)]
-enum Building<'td, 'env, R: ConsumerPropertyReadRegistration> {
+enum Building<'td, 'env, R: InlineConsumerPropertyReadRegistration> {
     Td(ValidatedThingCursor<'td>, &'env mut PlanRoot<R::Artifact>),
     Planning(PlanningBuild<'td, 'env, R>),
     End,
 }
-struct Build<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> {
+struct Build<'td, 'env, R: InlineConsumerPropertyReadRegistration, P: Parent> {
     state: Building<'td, 'env, R>,
     registration: &'env R,
     policy: &'env ConsumerPropertyReadPolicy,
@@ -1341,7 +1341,7 @@ struct Build<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> {
     cause: &'env mut Option<CoreError>,
     td_cause: &'env mut Option<ValidatedThingCause>,
 }
-impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env, R, P> {
+impl<'td, 'env, R: InlineConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env, R, P> {
     fn step(&mut self, budget: &mut WorkBudget, cancel: bool) -> StepStatus<()> {
         let state = core::mem::replace(&mut self.state, Building::End);
         match state {
@@ -1462,7 +1462,8 @@ impl<'td, 'env, R: ConsumerPropertyReadRegistration, P: Parent> Build<'td, 'env,
     }
 }
 
-type StaticRegistration<C> = ConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>;
+type StaticRegistration<C> =
+    InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>;
 type Artifact<C> = <<C as PrepareClientBinding>::Compiler as BindingCompilerExtension>::Artifact;
 
 /// Caller-owned build adapter; it cannot outlive its `consume` progress scope.

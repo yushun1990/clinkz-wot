@@ -191,7 +191,7 @@ fn slot<A: 'static>(
         .unwrap_or_else(|_| panic!("slot"));
     (slot, account)
 }
-fn finish<'td, 'env, R: ConsumerPropertyReadRegistration>(
+fn finish<'td, 'env, R: InlineConsumerPropertyReadRegistration>(
     build: ConsumerPropertyReadBuild<'td, 'env, R>,
     runtime: u64,
     fail: usize,
@@ -201,7 +201,7 @@ fn finish<'td, 'env, R: ConsumerPropertyReadRegistration>(
 > {
     finish_for(build, runtime, fail, BindingId::new(203))
 }
-fn finish_for<'td, 'env, R: ConsumerPropertyReadRegistration>(
+fn finish_for<'td, 'env, R: InlineConsumerPropertyReadRegistration>(
     mut build: ConsumerPropertyReadBuild<'td, 'env, R>,
     runtime: u64,
     fail: usize,
@@ -271,7 +271,7 @@ fn reclaim<A: 'static>(mut owner: ConsumerPropertyReadRollback<A>) -> CoreError 
     }
     panic!("cleanup stalled")
 }
-fn success<R: ConsumerPropertyReadRegistration>(
+fn success<R: InlineConsumerPropertyReadRegistration>(
     r: R,
     target: impl Fn(&BindingArtifact<R::Artifact>) -> &str,
 ) {
@@ -404,10 +404,10 @@ fn host_public_aggregate_owns_every_coordinate_and_bounded_cleanup() {
     });
 }
 
-fn failures<R: ConsumerPropertyReadRegistration>(r: &R) {
+fn failures<R: InlineConsumerPropertyReadRegistration>(r: &R) {
     failures_for(r, &source());
 }
-fn failures_for<R: ConsumerPropertyReadRegistration>(r: &R, source: &Thing) {
+fn failures_for<R: InlineConsumerPropertyReadRegistration>(r: &R, source: &Thing) {
     let c = config();
     let (mut root, mut account) = slot::<R::Artifact>(&c);
     let draft = finish_for(
@@ -584,7 +584,7 @@ fn wrong_phase_admission_returns_unchanged_build_and_child() {
     assert!(account.release_committed(bytes));
 }
 
-fn traced_failures<R: checked_program::ConsumerPropertyReadRegistration>(
+fn traced_failures<R: checked_program::InlineConsumerPropertyReadRegistration>(
     factory: impl Fn() -> R,
     host: bool,
 ) {
@@ -756,7 +756,7 @@ fn owned_complete_registrations_preserve_all_bounds_and_paid_continuations() {
             )))
         })
     };
-    fn check<R: checked_program::ConsumerPropertyReadRegistration>(
+    fn check<R: checked_program::InlineConsumerPropertyReadRegistration>(
         source: &Thing,
         factory: impl Fn() -> R,
     ) {
@@ -825,10 +825,11 @@ fn restricted_policy() -> clinkz_wot_consumer_property_read_binding_fixture::own
     .with_default_json_forms()
 }
 fn restricted_forms<
-    R: checked_program::ConsumerPropertyReadRegistration + ConsumerPropertyReadRegistration,
+    R: checked_program::InlineConsumerPropertyReadRegistration
+        + InlineConsumerPropertyReadRegistration,
 >(
     factory: impl Fn(std::sync::Arc<clinkz_wot_consumer_property_read_binding_fixture::Stats>) -> R,
-    target: impl Fn(&BindingArtifact<<R as ConsumerPropertyReadRegistration>::Artifact>) -> &str,
+    target: impl Fn(&BindingArtifact<<R as InlineConsumerPropertyReadRegistration>::Artifact>) -> &str,
 ) {
     use clinkz_wot_consumer_property_read_binding_fixture as binding;
     use serde_json::json;
@@ -837,14 +838,15 @@ fn restricted_forms<
     let stats = Arc::new(binding::Stats::default());
     let r = factory(stats.clone());
     assert!(
-        ConsumerPropertyReadRegistration::support(&r)
+        InlineConsumerPropertyReadRegistration::support(&r)
             .consumer_configuration()
             .unwrap()
             .requires_default_json_forms()
     );
     let cfg = config();
-    let (mut root, mut account) = slot::<<R as ConsumerPropertyReadRegistration>::Artifact>(&cfg);
-    let binding = ConsumerPropertyReadRegistration::identity(&r).binding_id();
+    let (mut root, mut account) =
+        slot::<<R as InlineConsumerPropertyReadRegistration>::Artifact>(&cfg);
+    let binding = InlineConsumerPropertyReadRegistration::identity(&r).binding_id();
     for fields in [
         json!({"htv:methodName":"GET"}),
         json!({"htv:methodName":"POST"}),
@@ -905,7 +907,7 @@ fn restricted_forms<
             cause.context().binding(),
             Some((
                 binding,
-                ConsumerPropertyReadRegistration::identity(&r).binding_generation()
+                InlineConsumerPropertyReadRegistration::identity(&r).binding_generation()
             ))
         );
         assert_eq!(
@@ -1004,7 +1006,7 @@ fn restricted_host_later_form_rejects_whole_transaction_then_retries() {
     );
 }
 
-fn invalid_inputs<R: ConsumerPropertyReadRegistration>(r: R) {
+fn invalid_inputs<R: InlineConsumerPropertyReadRegistration>(r: R) {
     let cfg = config();
     for case in 0..4 {
         let mut source = source();
@@ -1080,7 +1082,7 @@ fn host_missing_id_and_effective_security_fail_before_output_allocation() {
     invalid_inputs(registration::production_host_registration(c, id));
 }
 
-fn output_boundaries<R: ConsumerPropertyReadRegistration>(r: R) {
+fn output_boundaries<R: InlineConsumerPropertyReadRegistration>(r: R) {
     let cfg = config();
     let source = source();
     let (mut root, mut account) = slot::<R::Artifact>(&cfg);
@@ -1280,7 +1282,7 @@ fn public_aggregate_keeps_one_td_lifetime_across_both_passes() {
 
 type Terminal<A> =
     Result<ConsumerPropertyReadDraft<A>, (CoreError, ConsumerPropertyReadRollback<A>)>;
-fn cut<'td, 'env, R: ConsumerPropertyReadRegistration>(
+fn cut<'td, 'env, R: InlineConsumerPropertyReadRegistration>(
     mut build: ConsumerPropertyReadBuild<'td, 'env, R>,
     at: usize,
     cancel: bool,
@@ -1313,7 +1315,7 @@ fn cut<'td, 'env, R: ConsumerPropertyReadRegistration>(
     }
     panic!("stalled")
 }
-fn all_boundaries<R: ConsumerPropertyReadRegistration>(r: R) {
+fn all_boundaries<R: InlineConsumerPropertyReadRegistration>(r: R) {
     let source = source();
     let cfg = config();
     let (mut root, mut account) = slot::<R::Artifact>(&cfg);

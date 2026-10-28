@@ -1357,10 +1357,12 @@ fn static_native_layouts_and_original_td_diagnostic() {
         ),
         (size_of::<binding::State>(), align_of::<binding::State>()),
         (
-            size_of::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>>(
-            ),
-            align_of::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>>(
-            )
+            size_of::<
+                InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>,
+            >(),
+            align_of::<
+                InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>>,
+            >()
         ),
         (size_of::<OutboundRequest>(), align_of::<OutboundRequest>()),
         (

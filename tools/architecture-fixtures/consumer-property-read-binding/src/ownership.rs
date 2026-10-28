@@ -267,7 +267,7 @@ impl PollClientBinding for SecondClient {
 pub fn second_registration(
     policy: OwnedPolicy,
     output: InteractionOutput,
-) -> ConsumerCompilerRegistration<StaticConsumerBindingPreparation<SecondClient>> {
+) -> InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<SecondClient>> {
     let mut policy = policy;
     let c = policy.configuration();
     let mut private = *c.private_policy().as_bytes();
@@ -307,6 +307,6 @@ pub fn second_registration(
         BindingStatusPolicy::new(2, 17),
     ))
     .unwrap_or_else(|_| panic!("second author registration"))
-    .try_into_consumer_compiler()
+    .try_into_inline_consumer_compiler()
     .unwrap_or_else(|_| panic!("second author support"))
 }

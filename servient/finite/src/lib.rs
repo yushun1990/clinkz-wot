@@ -7,6 +7,8 @@
 
 extern crate alloc;
 
+pub mod consumer;
+
 mod action;
 pub use action::*;
 mod publication;

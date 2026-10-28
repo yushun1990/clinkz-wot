@@ -46,8 +46,8 @@ mod private {
 
 /// Aggregate eligibility is issued only by Planning's checked complete owner.
 /// ```compile_fail,E0277
-/// use clinkz_wot_planning::{ConsumerPropertyReadRegistration, ResolvedTargetCompiler};
-/// fn eligible<R: ConsumerPropertyReadRegistration>(_: &R) {}
+/// use clinkz_wot_planning::{InlineConsumerPropertyReadRegistration, ResolvedTargetCompiler};
+/// fn eligible<R: InlineConsumerPropertyReadRegistration>(_: &R) {}
 /// eligible(&ResolvedTargetCompiler::try_new(64).unwrap());
 /// ```
 /// The compiler itself remains constructible without aggregate eligibility:
@@ -55,14 +55,14 @@ mod private {
 /// use clinkz_wot_planning::ResolvedTargetCompiler;
 /// let _compiler = ResolvedTargetCompiler::try_new(64).unwrap();
 /// ```
-pub trait ConsumerPropertyReadRegistration: private::Sealed {
+pub trait InlineConsumerPropertyReadRegistration: private::Sealed {
     type Artifact: 'static;
     #[doc(hidden)]
     type Cursor;
     #[doc(hidden)]
     fn identity(&self) -> BindingRegistrationIdentity;
     #[doc(hidden)]
-    fn support(&self) -> &ConsumerCompilerSupport;
+    fn support(&self) -> &InlineConsumerCompilerSupport;
     #[doc(hidden)]
     fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds>;
     #[doc(hidden)]
@@ -79,14 +79,14 @@ pub trait ConsumerPropertyReadRegistration: private::Sealed {
 }
 
 impl<B: PrepareServerBinding> private::Sealed
-    for ConsumerCompilerRegistration<StaticBindingPreparation<B>>
+    for InlineConsumerCompilerRegistration<StaticBindingPreparation<B>>
 where
     B::Compiler: 'static,
     <B::Compiler as BindingCompilerExtension>::Artifact: 'static,
 {
 }
-impl<B: PrepareServerBinding> ConsumerPropertyReadRegistration
-    for ConsumerCompilerRegistration<StaticBindingPreparation<B>>
+impl<B: PrepareServerBinding> InlineConsumerPropertyReadRegistration
+    for InlineConsumerCompilerRegistration<StaticBindingPreparation<B>>
 where
     B::Compiler: 'static,
     <B::Compiler as BindingCompilerExtension>::Artifact: 'static,
@@ -96,7 +96,7 @@ where
     fn identity(&self) -> BindingRegistrationIdentity {
         self.registration().identity()
     }
-    fn support(&self) -> &ConsumerCompilerSupport {
+    fn support(&self) -> &InlineConsumerCompilerSupport {
         self.support()
     }
     fn bounds(&self, i: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
@@ -118,15 +118,17 @@ where
     }
 }
 #[cfg(feature = "std")]
-impl private::Sealed for ConsumerCompilerRegistration<HostBindingPreparation> {}
+impl private::Sealed for InlineConsumerCompilerRegistration<HostBindingPreparation> {}
 #[cfg(feature = "std")]
-impl ConsumerPropertyReadRegistration for ConsumerCompilerRegistration<HostBindingPreparation> {
+impl InlineConsumerPropertyReadRegistration
+    for InlineConsumerCompilerRegistration<HostBindingPreparation>
+{
     type Artifact = HostBindingArtifact;
     type Cursor = HostBindingCompilerCursor;
     fn identity(&self) -> BindingRegistrationIdentity {
         self.registration().identity()
     }
-    fn support(&self) -> &ConsumerCompilerSupport {
+    fn support(&self) -> &InlineConsumerCompilerSupport {
         self.support()
     }
     fn bounds(&self, i: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
@@ -149,14 +151,14 @@ impl ConsumerPropertyReadRegistration for ConsumerCompilerRegistration<HostBindi
 }
 
 impl<C: PrepareClientBinding> private::Sealed
-    for ConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>
+    for InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>
 where
     C::Compiler: 'static,
     <C::Compiler as BindingCompilerExtension>::Artifact: 'static,
 {
 }
-impl<C: PrepareClientBinding> ConsumerPropertyReadRegistration
-    for ConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>
+impl<C: PrepareClientBinding> InlineConsumerPropertyReadRegistration
+    for InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<C>>
 where
     C::Compiler: 'static,
     <C::Compiler as BindingCompilerExtension>::Artifact: 'static,
@@ -166,7 +168,7 @@ where
     fn identity(&self) -> BindingRegistrationIdentity {
         self.registration().identity()
     }
-    fn support(&self) -> &ConsumerCompilerSupport {
+    fn support(&self) -> &InlineConsumerCompilerSupport {
         self.support()
     }
     fn bounds(&self, i: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
@@ -188,17 +190,17 @@ where
     }
 }
 #[cfg(feature = "std")]
-impl private::Sealed for ConsumerCompilerRegistration<HostConsumerBindingPreparation> {}
+impl private::Sealed for InlineConsumerCompilerRegistration<HostConsumerBindingPreparation> {}
 #[cfg(feature = "std")]
-impl ConsumerPropertyReadRegistration
-    for ConsumerCompilerRegistration<HostConsumerBindingPreparation>
+impl InlineConsumerPropertyReadRegistration
+    for InlineConsumerCompilerRegistration<HostConsumerBindingPreparation>
 {
     type Artifact = HostBindingArtifact;
     type Cursor = HostBindingCompilerCursor;
     fn identity(&self) -> BindingRegistrationIdentity {
         self.registration().identity()
     }
-    fn support(&self) -> &ConsumerCompilerSupport {
+    fn support(&self) -> &InlineConsumerCompilerSupport {
         self.support()
     }
     fn bounds(&self, i: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
@@ -1197,7 +1199,7 @@ struct Census {
 /// use clinkz_wot_core::PlanSetGeneration;
 /// use clinkz_wot_foundation::AdmissionLedger;
 /// use clinkz_wot_td::thing::Thing;
-/// fn invalid<R: ConsumerPropertyReadRegistration>(source: &Thing, r: &R,
+/// fn invalid<R: InlineConsumerPropertyReadRegistration>(source: &Thing, r: &R,
 ///     config: &ConsumerPropertyReadBuildConfig, ledger: AdmissionLedger,
 ///     slot: &mut ConsumerPropertyReadCleanupSlot<R::Artifact>) {
 ///     let _ = build_consumer_property_read_aggregate(source, r, config,
@@ -1211,7 +1213,7 @@ struct Census {
 /// use clinkz_wot_foundation::{AdmissionLedger, WorkBudget};
 /// use clinkz_wot_td::{thing::Thing, ValidatedThingAdmissionConfig,
 ///     ValidatedThingCursor, ValidatedThingProgress};
-/// fn invalid<R: ConsumerPropertyReadRegistration>(source: Thing, r: &R,
+/// fn invalid<R: InlineConsumerPropertyReadRegistration>(source: Thing, r: &R,
 ///     config: &ConsumerPropertyReadBuildConfig, td_config: &ValidatedThingAdmissionConfig,
 ///     td_ledger: AdmissionLedger, ledger: AdmissionLedger,
 ///     slot: &mut ConsumerPropertyReadCleanupSlot<R::Artifact>) {
@@ -1231,7 +1233,7 @@ struct Census {
 /// use clinkz_wot_core::PlanSetGeneration;
 /// use clinkz_wot_foundation::AdmissionLedger;
 /// use clinkz_wot_td::ValidatedThing;
-/// fn invalid<R: ConsumerPropertyReadRegistration>(proof: ValidatedThing<'_>, r: R,
+/// fn invalid<R: InlineConsumerPropertyReadRegistration>(proof: ValidatedThing<'_>, r: R,
 ///     config: &ConsumerPropertyReadBuildConfig, ledger: AdmissionLedger,
 ///     slot: &mut ConsumerPropertyReadCleanupSlot<R::Artifact>) {
 ///     let build = build_consumer_property_read_aggregate(proof, &r, config,
@@ -1248,7 +1250,7 @@ struct Census {
 /// use clinkz_wot_foundation::{AdmissionLedger, WorkBudget};
 /// use clinkz_wot_td::{thing::Thing, ValidatedThingAdmissionConfig,
 ///     ValidatedThingCursor, ValidatedThingProgress};
-/// fn valid<R: ConsumerPropertyReadRegistration>(source: Thing, r: R,
+/// fn valid<R: InlineConsumerPropertyReadRegistration>(source: Thing, r: R,
 ///     config: &ConsumerPropertyReadBuildConfig, td_config: &ValidatedThingAdmissionConfig,
 ///     td_ledger: AdmissionLedger, ledger: AdmissionLedger,
 ///     slot: &mut ConsumerPropertyReadCleanupSlot<R::Artifact>) {
@@ -1264,7 +1266,7 @@ struct Census {
 /// }
 /// ```
 #[must_use]
-pub struct ConsumerPropertyReadBuild<'td, 'environment, R: ConsumerPropertyReadRegistration> {
+pub struct ConsumerPropertyReadBuild<'td, 'environment, R: InlineConsumerPropertyReadRegistration> {
     td: Option<ValidatedPropertyReadCursor<'td>>,
     #[cfg(feature = "std")]
     semantics: Option<clinkz_wot_td::semantic::ResolvedSemanticDocument<'td>>,
@@ -1288,7 +1290,8 @@ pub struct ConsumerPropertyReadBuild<'td, 'environment, R: ConsumerPropertyReadR
     host_backing: u64,
 }
 #[must_use]
-pub enum ConsumerPropertyReadBuildStep<'td, 'environment, R: ConsumerPropertyReadRegistration> {
+pub enum ConsumerPropertyReadBuildStep<'td, 'environment, R: InlineConsumerPropertyReadRegistration>
+{
     Pending(ConsumerPropertyReadBuild<'td, 'environment, R>),
     Preflight {
         build: ConsumerPropertyReadBuild<'td, 'environment, R>,
@@ -1304,7 +1307,7 @@ pub enum ConsumerPropertyReadBuildStep<'td, 'environment, R: ConsumerPropertyRea
 pub fn build_consumer_property_read_aggregate<
     'td,
     'environment,
-    R: ConsumerPropertyReadRegistration,
+    R: InlineConsumerPropertyReadRegistration,
 >(
     td: ValidatedThing<'td>,
     registration: &'environment R,
@@ -1435,7 +1438,7 @@ fn form_size(form: &ValidatedPropertyReadForm<'_>) -> CoreResult<(u64, u64, u64)
         scopes.len() as u64,
     ))
 }
-impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
+impl<'td, 'environment, R: InlineConsumerPropertyReadRegistration>
     ConsumerPropertyReadBuild<'td, 'environment, R>
 {
     pub fn admit_runtime(
@@ -2099,7 +2102,7 @@ enum Advance {
     Complete,
 }
 
-impl<'td, 'environment, R: ConsumerPropertyReadRegistration>
+impl<'td, 'environment, R: InlineConsumerPropertyReadRegistration>
     ConsumerPropertyReadBuild<'td, 'environment, R>
 {
     fn collect_bound(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
@@ -2643,7 +2646,7 @@ mod tests {
 #[allow(dead_code)]
 pub(crate) mod test_support;
 
-impl<R: ConsumerPropertyReadRegistration> Drop for ConsumerPropertyReadBuild<'_, '_, R> {
+impl<R: InlineConsumerPropertyReadRegistration> Drop for ConsumerPropertyReadBuild<'_, '_, R> {
     fn drop(&mut self) {
         self.stop_inputs();
         if let Some(root) = self.root.take() {

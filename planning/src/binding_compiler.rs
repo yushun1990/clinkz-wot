@@ -63,78 +63,121 @@ impl BindingCompilerBounds {
 /// Complete generation-qualified identity of one admitted binding artifact.
 #[derive(Clone, Copy)]
 pub struct BindingCompilerInput<'a> {
-    logical_plan: &'a LogicalInteractionPlan,
+    plan: PlanId,
     candidate: BindingCandidate,
     role: BindingArtifactRole,
+    operation: Operation,
+    property: &'a str,
+    form: u32,
+    target: &'a str,
+    content_type: Option<&'a str>,
+    subprotocol: Option<&'a str>,
+    additional_metadata: Option<bool>,
     #[cfg(feature = "std")]
-    semantics: Option<&'a clinkz_wot_td::semantic::ResolvedSemanticDocument<'a>>,
+    semantics: Option<ResolvedBindingInput<'a>>,
 }
 
 impl<'a> BindingCompilerInput<'a> {
-    /// Creates a compiler input from one resolved plan and indexed candidate.
-    pub const fn new(
-        logical_plan: &'a LogicalInteractionPlan,
+    /// Restricted logical-record adapter. General preparation uses `operation_input`.
+    pub fn new(
+        plan: &'a LogicalInteractionPlan,
         candidate: BindingCandidate,
         role: BindingArtifactRole,
     ) -> Self {
         Self {
-            logical_plan,
+            plan: plan.plan_id(),
             candidate,
             role,
+            operation: plan.operation(),
+            property: plan.property_name(),
+            form: plan.form_index(),
+            target: plan.resolved_target(),
+            content_type: plan.content_type(),
+            subprotocol: plan.subprotocol(),
+            additional_metadata: plan.has_additional_form_metadata(),
             #[cfg(feature = "std")]
             semantics: None,
         }
     }
-
-    /// Returns the resolved immutable logical plan.
-    pub const fn logical_plan(&self) -> &'a LogicalInteractionPlan {
-        self.logical_plan
+    pub const fn plan_id(&self) -> PlanId {
+        self.plan
     }
-
-    /// Returns the captured candidate identity.
     pub const fn candidate(&self) -> BindingCandidate {
         self.candidate
     }
-
-    /// Returns the required artifact role.
     pub const fn role(&self) -> BindingArtifactRole {
         self.role
     }
+    pub const fn operation(&self) -> Operation {
+        self.operation
+    }
+    pub const fn form_index(&self) -> u32 {
+        self.form
+    }
+    pub const fn resolved_target(&self) -> &'a str {
+        self.target
+    }
+    pub const fn property_name(&self) -> &'a str {
+        self.property
+    }
+    pub const fn content_type(&self) -> Option<&'a str> {
+        self.content_type
+    }
+    pub const fn subprotocol(&self) -> Option<&'a str> {
+        self.subprotocol
+    }
+    pub const fn has_additional_form_metadata(&self) -> Option<bool> {
+        self.additional_metadata
+    }
 
-    /// Attaches common resolved semantics for a native Host compiler. The
-    /// legacy logical record remains engine storage, not the native input API.
+    /// Resolved Form/operation input, independent of source TD identity or a logical record.
+    #[cfg(feature = "std")]
+    pub fn operation_input(
+        plan: PlanId,
+        candidate: BindingCandidate,
+        role: BindingArtifactRole,
+        facts: ResolvedBindingInput<'a>,
+    ) -> Self {
+        let property = match facts.owner {
+            clinkz_wot_td::semantic::FormOwner::Property(n) => n,
+            _ => "",
+        };
+        Self {
+            plan,
+            candidate,
+            role,
+            operation: facts.operation,
+            property,
+            form: facts.form_index,
+            target: facts.target,
+            content_type: facts.content_type,
+            subprotocol: facts.subprotocol,
+            additional_metadata: None,
+            semantics: Some(facts),
+        }
+    }
     #[cfg(feature = "std")]
     pub fn with_semantics(
         mut self,
-        semantics: &'a clinkz_wot_td::semantic::ResolvedSemanticDocument<'a>,
+        document: &'a clinkz_wot_td::semantic::ResolvedSemanticDocument<'a>,
     ) -> Self {
-        self.semantics = Some(semantics);
+        if document.form_facts(self.property, self.form).is_some() {
+            self.semantics = Some(ResolvedBindingInput {
+                operation: self.operation,
+                owner: clinkz_wot_td::semantic::FormOwner::Property(self.property),
+                property: self.property,
+                form_index: self.form,
+                target: self.target,
+                content_type: self.content_type,
+                subprotocol: self.subprotocol,
+                document,
+            });
+        }
         self
     }
-
     #[cfg(feature = "std")]
-    pub fn resolved(&self) -> Option<ResolvedBindingInput<'a>> {
-        let document = self.semantics?;
-        if document.thing_id() != Some(self.logical_plan.thing_id().as_str())
-            || document.property().name != self.logical_plan.property_name()
-            || document
-                .form_facts(
-                    self.logical_plan.property_name(),
-                    self.logical_plan.form_index(),
-                )
-                .is_none()
-        {
-            return None;
-        }
-        Some(ResolvedBindingInput {
-            operation: self.logical_plan.operation(),
-            property: self.logical_plan.property_name(),
-            form_index: self.logical_plan.form_index(),
-            target: self.logical_plan.resolved_target(),
-            content_type: self.logical_plan.content_type(),
-            subprotocol: self.logical_plan.subprotocol(),
-            document,
-        })
+    pub const fn resolved(&self) -> Option<ResolvedBindingInput<'a>> {
+        self.semantics
     }
 }
 
@@ -144,6 +187,8 @@ impl<'a> BindingCompilerInput<'a> {
 #[derive(Clone, Copy)]
 pub struct ResolvedBindingInput<'a> {
     pub operation: clinkz_wot_td::data_type::Operation,
+    pub owner: clinkz_wot_td::semantic::FormOwner<'a>,
+    /// Property-only inline adapter convenience; use `owner` for general input.
     pub property: &'a str,
     pub form_index: u32,
     pub target: &'a str,
@@ -156,7 +201,7 @@ impl fmt::Debug for BindingCompilerInput<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BindingCompilerInput")
-            .field("logical_plan", &self.logical_plan)
+            .field("plan", &self.plan)
             .field("candidate", &self.candidate)
             .field("role", &self.role)
             .finish()
@@ -254,6 +299,34 @@ pub trait BindingCompilerExtension {
     fn abort(&self, cursor: Self::Cursor);
 }
 
+/// Trusted portable compiler contract, independent of compiler name, atomicity
+/// or output Copy semantics. Costs include cursor/output/indirect destruction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ConsumerCompilerContract {
+    pub inspection_work: u64,
+    pub start_work: u64,
+    pub step_work: u64,
+    pub max_steps: u64,
+    pub abort_work: u64,
+    pub artifact_drop_work: u64,
+    /// Maximum temporary backing during configuration/bounds inspection.
+    pub inspection_temporary_bytes: u64,
+}
+/// Native compiler callbacks charge BindingPolls. Their complete lifetime
+/// allowance is prepaid by admission; per-step credit cannot renew it.
+pub trait ConsumerCompiler: BindingCompilerExtension {
+    const CONTRACT: ConsumerCompilerContract;
+    /// Actual immutable policy paired with the executor, not a support tag.
+    fn configuration(&self) -> ConsumerBindingConfiguration;
+}
+#[cfg(feature = "std")]
+#[derive(Clone, Copy, Debug)]
+pub struct ConsumerCompilerMetadata {
+    pub configuration: ConsumerBindingConfiguration,
+    pub contract: ConsumerCompilerContract,
+    pub slot: Layout,
+}
+
 /// Independently authored, pure, bounded atomic Host lowering for Property Read.
 /// WORK bounds native inspection/copy/destruction under the TD arena limits.
 /// Implementations are trusted linked code and require executable qualification;
@@ -263,7 +336,7 @@ pub trait BindingCompilerExtension {
 ///
 /// This is a restricted adapter, not the target general compiler SPI. Generic
 /// `BindingCompilerExtension` erasure supports owned artifacts and resumable
-/// jobs, but those generic registrations cannot enter Consumer planning yet.
+/// jobs. ConsumerCompiler declares their bounded Consumer admission contract.
 #[cfg(feature = "std")]
 pub trait HostSemanticCompiler: Send + Sync + 'static {
     /// This first Host slice stores source-free inline native instructions.
@@ -317,7 +390,7 @@ impl<C: HostSemanticCompiler> BindingCompilerExtension for SemanticCompilerAdapt
     fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<Self::Cursor> {
         self.check(input)?;
         Ok(SemanticCompilerCursor {
-            plan: input.logical_plan().plan_id(),
+            plan: input.plan_id(),
             candidate: input.candidate(),
         })
     }
@@ -331,9 +404,7 @@ impl<C: HostSemanticCompiler> BindingCompilerExtension for SemanticCompilerAdapt
             return BindingCompilerStep::Pending(cursor);
         }
         let result = self.check(input).and_then(|()| {
-            if cursor.plan != input.logical_plan().plan_id()
-                || cursor.candidate != input.candidate()
-            {
+            if cursor.plan != input.plan_id() || cursor.candidate != input.candidate() {
                 return Err(resolved_target_error(input));
             }
             self.0.compile(
@@ -372,6 +443,22 @@ impl<C: HostSemanticCompiler> SemanticCompilerAdapter<C> {
             return Err(resolved_target_error(input));
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl<C: HostSemanticCompiler> ConsumerCompiler for SemanticCompilerAdapter<C> {
+    const CONTRACT: ConsumerCompilerContract = ConsumerCompilerContract {
+        inspection_work: 1,
+        start_work: 1,
+        step_work: C::WORK,
+        max_steps: 1,
+        abort_work: 1,
+        artifact_drop_work: 1,
+        inspection_temporary_bytes: 0,
+    };
+    fn configuration(&self) -> ConsumerBindingConfiguration {
+        self.0.configuration()
     }
 }
 
@@ -455,13 +542,13 @@ impl ResolvedTargetCompiler {
         if input.role() != BindingArtifactRole::ConsumerCall
             || input.candidate().configuration() != self.configuration()
             || input.candidate().compatibility() != RESOLVED_TARGET_COMPATIBILITY
-            || input.logical_plan().resolved_target().len() > usize::from(self.capacity)
+            || input.resolved_target().len() > usize::from(self.capacity)
         {
             return Err(resolved_target_error(input));
         }
         if form_eligibility_work(self.owned) != 0
-            && (input.logical_plan().has_additional_form_metadata() != Some(false)
-                || input.logical_plan().content_type() != Some("application/json"))
+            && (input.has_additional_form_metadata() != Some(false)
+                || input.content_type() != Some("application/json"))
         {
             return Err(CoreError::UnsupportedOperation(
                 resolved_target_context(input)
@@ -471,8 +558,8 @@ impl ResolvedTargetCompiler {
         Ok(())
     }
 
-    pub(crate) fn support(&self, host_erased: bool) -> ConsumerCompilerSupport {
-        ConsumerCompilerSupport {
+    pub(crate) fn support(&self, host_erased: bool) -> InlineConsumerCompilerSupport {
+        InlineConsumerCompilerSupport {
             capacity: self.capacity,
             host_erased,
             owned: self.owned,
@@ -515,9 +602,9 @@ fn resolved_target_error(input: &BindingCompilerInput<'_>) -> CoreError {
 
 fn resolved_target_context(input: &BindingCompilerInput<'_>) -> ErrorContext {
     ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-        .with_operation(input.logical_plan().operation())
-        .with_form_index(input.logical_plan().form_index())
-        .with_plan(input.logical_plan().plan_id())
+        .with_operation(input.operation())
+        .with_form_index(input.form_index())
+        .with_plan(input.plan_id())
         .with_binding(
             input.candidate().binding_id(),
             input.candidate().binding_generation(),
@@ -554,7 +641,7 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
         consumer_trace::hit(2);
         self.check(input)?;
         Ok(ResolvedTargetCompilerCursor {
-            plan: input.logical_plan().plan_id(),
+            plan: input.plan_id(),
             candidate: input.candidate(),
             remaining: 2,
             pending: true,
@@ -586,7 +673,7 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
         if let Err(cause) = self.check(input) {
             return BindingCompilerStep::Failed(BindingCompilerFailure::new(cause, cursor));
         }
-        if cursor.plan != input.logical_plan().plan_id() || cursor.candidate != input.candidate() {
+        if cursor.plan != input.plan_id() || cursor.candidate != input.candidate() {
             return BindingCompilerStep::Failed(BindingCompilerFailure::new(
                 resolved_target_error(input),
                 cursor,
@@ -596,7 +683,7 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
             cursor.pending = false;
             return BindingCompilerStep::Pending(cursor);
         }
-        let target = input.logical_plan().resolved_target().as_bytes();
+        let target = input.resolved_target().as_bytes();
         let mut payload = ResolvedTargetArtifact {
             bytes: [0; RESOLVED_TARGET_CAPACITY],
             len: target.len() as u8,
@@ -625,11 +712,11 @@ impl BindingCompilerExtension for ResolvedTargetCompiler {
 /// Startup storage and per-coordinate storage are separate accounts.
 ///
 /// ```compile_fail
-/// # use clinkz_wot_planning::ConsumerCompilerSupport;
-/// let unsupported = ConsumerCompilerSupport { capacity: 64, host_erased: false };
+/// # use clinkz_wot_planning::InlineConsumerCompilerSupport;
+/// let unsupported = InlineConsumerCompilerSupport { capacity: 64, host_erased: false };
 /// ```
 #[derive(Debug)]
-pub struct ConsumerCompilerSupport {
+pub struct InlineConsumerCompilerSupport {
     #[cfg(feature = "std")]
     native: Option<NativeConsumerSupport>,
     capacity: u8,
@@ -637,7 +724,7 @@ pub struct ConsumerCompilerSupport {
     owned: Option<ConsumerBindingConfiguration>,
 }
 
-impl ConsumerCompilerSupport {
+impl InlineConsumerCompilerSupport {
     #[cfg(feature = "std")]
     pub(crate) const fn configuration(&self) -> BindingConfigurationDigest {
         match self.owned {
@@ -1071,9 +1158,9 @@ fn host_cursor_mismatch(input: &BindingCompilerInput<'_>) -> CoreError {
     let candidate = input.candidate();
     CoreError::InternalInvariant(
         ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-            .with_operation(input.logical_plan().operation())
-            .with_form_index(input.logical_plan().form_index())
-            .with_plan(input.logical_plan().plan_id())
+            .with_operation(input.operation())
+            .with_form_index(input.form_index())
+            .with_plan(input.plan_id())
             .with_binding(candidate.binding_id(), candidate.binding_generation()),
     )
 }
@@ -1082,14 +1169,15 @@ fn host_cursor_mismatch(input: &BindingCompilerInput<'_>) -> CoreError {
 /// Host compiler component with Planning-owned compiler erasure.
 pub struct HostBindingCompilerRegistration {
     compiler: Box<dyn ErasedBindingCompiler>,
-    consumer_support: Option<ConsumerCompilerSupport>,
+    consumer_support: Option<InlineConsumerCompilerSupport>,
+    open_consumer: Option<ConsumerCompilerMetadata>,
 }
 
 #[cfg(feature = "std")]
 impl HostBindingCompilerRegistration {
     /// Captures an independently authored native compiler with actual layouts.
     /// The complete registration subsequently checks its client/config pairing.
-    pub fn try_new_semantic<C: HostSemanticCompiler>(
+    pub fn try_new_inline_semantic<C: HostSemanticCompiler>(
         compiler: C,
     ) -> Result<Self, clinkz_wot_core::BindingInputRejection<C>> {
         let configuration = compiler.configuration();
@@ -1121,15 +1209,18 @@ impl HostBindingCompilerRegistration {
             adapter: Layout::new::<SemanticCompilerAdapter<C>>(),
             slot: Layout::new::<HostCompilerSlot<SemanticCompilerAdapter<C>>>(),
         };
-        let support = ConsumerCompilerSupport {
+        let support = InlineConsumerCompilerSupport {
             native: Some(native),
             capacity: configuration.target_capacity() as u8,
             host_erased: true,
             owned: Some(configuration),
         };
-        match Self::try_new(SemanticCompilerAdapter(compiler)) {
+        match Self::try_new_consumer_extension(SemanticCompilerAdapter(compiler)) {
             Ok(mut registration) => {
                 registration.consumer_support = Some(support);
+                // The inline wrapper adds different progress costs. Its
+                // original generic metadata must not claim open eligibility.
+                registration.open_consumer = None;
                 Ok(registration)
             }
             Err(rejected) => {
@@ -1152,6 +1243,7 @@ impl HostBindingCompilerRegistration {
         Self {
             compiler: Box::new(HostCompilerAdapter(compiler)),
             consumer_support: None,
+            open_consumer: None,
         }
     }
 
@@ -1167,6 +1259,7 @@ impl HostBindingCompilerRegistration {
             Ok(compiler) => Ok(Self {
                 compiler,
                 consumer_support: None,
+                open_consumer: None,
             }),
             Err(HostCompilerAdapter(compiler)) => Err(clinkz_wot_core::BindingInputRejection::new(
                 compiler,
@@ -1175,9 +1268,55 @@ impl HostBindingCompilerRegistration {
         }
     }
 
+    /// General semantic input with the explicitly atomic adapter's own bounds.
+    /// Consumer admission does not depend on its private inline support record.
+    pub fn try_new_semantic<C: HostSemanticCompiler>(
+        compiler: C,
+    ) -> Result<Self, BindingInputRejection<C>> {
+        Self::try_new_consumer_extension(SemanticCompilerAdapter(compiler)).map_err(|rejected| {
+            let (adapter, error) = rejected.into_parts();
+            BindingInputRejection::new(adapter.0, error)
+        })
+    }
+
+    /// Capture an independently authored owned/incremental compiler. No callback
+    /// eligibility certificate or builtin compiler type is involved.
+    pub fn try_new_consumer_extension<C>(compiler: C) -> Result<Self, BindingInputRejection<C>>
+    where
+        C: ConsumerCompiler + Send + Sync + 'static,
+        C::Cursor: Send + 'static,
+        C::Artifact: Send + Sync + 'static,
+    {
+        let configuration = compiler.configuration();
+        #[cfg(feature = "std")]
+        if configuration
+            .native_compatibility()
+            .is_some_and(|native| native != compiler.compatibility())
+        {
+            return Err(BindingInputRejection::new(
+                compiler,
+                BindingOperationalError::new(CoreError::Validation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ))),
+            ));
+        }
+        let metadata = ConsumerCompilerMetadata {
+            configuration,
+            contract: C::CONTRACT,
+            slot: Layout::new::<HostCompilerSlot<C>>(),
+        };
+        let mut registration = Self::try_new(compiler)?;
+        registration.open_consumer = Some(metadata);
+        Ok(registration)
+    }
+    pub const fn consumer_metadata(&self) -> Option<ConsumerCompilerMetadata> {
+        self.open_consumer
+    }
+
     /// Captures the existing closed Consumer contract using the generic adapter.
     /// This constructor does not widen Consumer compiler eligibility.
-    pub fn try_new_consumer(
+    pub fn try_new_inline_consumer(
         compiler: ResolvedTargetCompiler,
     ) -> Result<Self, clinkz_wot_core::BindingInputRejection<ResolvedTargetCompiler>> {
         let support = compiler.support(true);
@@ -1186,10 +1325,10 @@ impl HostBindingCompilerRegistration {
         Ok(registration)
     }
 
-    pub(crate) fn consumer_support(&self) -> Option<ConsumerCompilerSupport> {
+    pub(crate) fn consumer_support(&self) -> Option<InlineConsumerCompilerSupport> {
         self.consumer_support
             .as_ref()
-            .map(|support| ConsumerCompilerSupport {
+            .map(|support| InlineConsumerCompilerSupport {
                 capacity: support.capacity,
                 host_erased: support.host_erased,
                 owned: support.owned,
@@ -1674,10 +1813,11 @@ mod consumer_trace {
         let input = BindingCompilerInput::new(&plan, candidate, BindingArtifactRole::ConsumerCall);
         CALLS.with(|cell| cell.set([0; 5]));
         FAIL_NEXT.with(|cell| cell.set(true));
-        let rejection = HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap_err();
+        let rejection =
+            HostBindingCompilerRegistration::try_new_inline_consumer(compiler).unwrap_err();
         assert_eq!(calls(), [0; 5]);
-        let host =
-            HostBindingCompilerRegistration::try_new_consumer(rejection.into_input()).unwrap();
+        let host = HostBindingCompilerRegistration::try_new_inline_consumer(rejection.into_input())
+            .unwrap();
         let support = host.consumer_support().unwrap();
         assert_eq!(host.compatibility(), RESOLVED_TARGET_COMPATIBILITY);
         assert_eq!(support.target_capacity(), 64);

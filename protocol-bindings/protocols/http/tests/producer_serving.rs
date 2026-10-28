@@ -782,7 +782,7 @@ fn consumer(
     impl Fn() -> (Option<CleanupOutcome>, [u64; 4]) + use<>,
 ) {
     use clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime;
-    let registration = try_consumer_registration(
+    let registration = try_inline_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(602),
         BindingGeneration::INITIAL,
@@ -1237,7 +1237,7 @@ fn a_live_producer_exhausts_the_same_cleanup_capacity_used_by_public_consumer() 
     let a = address();
     let mut s = server(a, bank.clone(), Arc::new(AtomicUsize::new(0)), b"42", false);
     installed(&mut s);
-    let registration = try_consumer_registration(
+    let registration = try_inline_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(602),
         BindingGeneration::INITIAL,

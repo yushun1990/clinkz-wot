@@ -21,6 +21,8 @@ pub mod action;
 pub mod artifact;
 #[cfg(target_has_atomic = "ptr")]
 pub mod binding;
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod consumer;
 #[cfg(target_has_atomic = "ptr")]
 pub mod deadline;
 #[cfg(target_has_atomic = "ptr")]
@@ -29,6 +31,8 @@ pub mod error;
 pub mod finite;
 #[cfg(target_has_atomic = "ptr")]
 pub mod handler;
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod host_accounts;
 #[cfg(target_has_atomic = "ptr")]
 pub mod identity;
 #[cfg(target_has_atomic = "ptr")]

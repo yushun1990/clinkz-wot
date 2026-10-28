@@ -68,7 +68,7 @@ fn engine_with_clock(
 ) -> Engine<impl Fn() -> (Option<CleanupOutcome>, [u64; 4])> {
     let policy = policy();
     let parent = Arc::new(clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap());
-    let registration = try_consumer_registration(
+    let registration = try_inline_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(600),
         BindingGeneration::INITIAL,

@@ -38,30 +38,30 @@ fn registration_error(identity: BindingRegistrationIdentity, code: u16) -> Bindi
 /// owner. Only consuming capture below can construct this carrier.
 ///
 /// ```compile_fail
-/// # use clinkz_wot_planning::{ConsumerCompilerRegistration, ConsumerCompilerSupport};
-/// let forged = ConsumerCompilerRegistration { registration: (), support: unsafe { core::mem::zeroed::<ConsumerCompilerSupport>() } };
+/// # use clinkz_wot_planning::{InlineConsumerCompilerRegistration, InlineConsumerCompilerSupport};
+/// let forged = InlineConsumerCompilerRegistration { registration: (), support: unsafe { core::mem::zeroed::<InlineConsumerCompilerSupport>() } };
 /// ```
 ///
 /// ```compile_fail
-/// # use clinkz_wot_planning::ConsumerCompilerRegistration;
-/// # fn reuse<R>(checked: ConsumerCompilerRegistration<R>) {
+/// # use clinkz_wot_planning::InlineConsumerCompilerRegistration;
+/// # fn reuse<R>(checked: InlineConsumerCompilerRegistration<R>) {
 /// let original = checked.into_registration();
 /// let reused = checked.support();
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct ConsumerCompilerRegistration<R> {
+pub struct InlineConsumerCompilerRegistration<R> {
     registration: R,
-    support: ConsumerCompilerSupport,
+    support: InlineConsumerCompilerSupport,
 }
 
-impl<R> ConsumerCompilerRegistration<R> {
+impl<R> InlineConsumerCompilerRegistration<R> {
     /// Borrows the original validated complete registration.
     pub const fn registration(&self) -> &R {
         &self.registration
     }
     /// Borrows its read-only, source-owned support descriptor.
-    pub const fn support(&self) -> &ConsumerCompilerSupport {
+    pub const fn support(&self) -> &InlineConsumerCompilerSupport {
         &self.support
     }
     /// Consumes support and returns the original complete registration.
@@ -77,7 +77,7 @@ fn static_consumer_support<C: BindingCompilerExtension + 'static>(
     compiler: &StaticBindingCompilerRegistration<C>,
     resources: BindingResourceDeclarations,
     client: Option<ConsumerBindingConfiguration>,
-) -> Option<ConsumerCompilerSupport> {
+) -> Option<InlineConsumerCompilerSupport> {
     let actual =
         (compiler.compiler() as &dyn core::any::Any).downcast_ref::<ResolvedTargetCompiler>();
     if capabilities.supports_consumer_property_read()
@@ -103,7 +103,7 @@ fn host_consumer_support(
     compiler: &HostBindingCompilerRegistration,
     resources: BindingResourceDeclarations,
     client: Option<ConsumerBindingConfiguration>,
-) -> Option<ConsumerCompilerSupport> {
+) -> Option<InlineConsumerCompilerSupport> {
     if capabilities.supports_consumer_property_read()
         && execution.supports_host_erased()
         && let Some(support) = compiler.consumer_support()
@@ -211,9 +211,9 @@ impl<B: PrepareServerBinding> StaticBindingPreparation<B> {
             runtime: self.runtime.into_input(),
         }
     }
-    pub fn try_into_consumer_compiler(
+    pub fn try_into_inline_consumer_compiler(
         self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>
+    ) -> Result<InlineConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>
     where
         B::Compiler: 'static,
     {
@@ -225,7 +225,7 @@ impl<B: PrepareServerBinding> StaticBindingPreparation<B> {
             self.resources(),
             None,
         ) {
-            return Ok(ConsumerCompilerRegistration {
+            return Ok(InlineConsumerCompilerRegistration {
                 registration: self,
                 support,
             });
@@ -322,9 +322,9 @@ impl HostBindingPreparation {
             runtime: self.runtime.into_input(),
         }
     }
-    pub fn try_into_consumer_compiler(
+    pub fn try_into_inline_consumer_compiler(
         self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
+    ) -> Result<InlineConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
         if let Some(support) = host_consumer_support(
             self.identity(),
             self.execution(),
@@ -333,7 +333,7 @@ impl HostBindingPreparation {
             self.resources(),
             None,
         ) {
-            return Ok(ConsumerCompilerRegistration {
+            return Ok(InlineConsumerCompilerRegistration {
                 registration: self,
                 support,
             });
@@ -426,9 +426,9 @@ impl<B: PrepareClientBinding> StaticConsumerBindingPreparation<B> {
             runtime: self.runtime.into_input(),
         }
     }
-    pub fn try_into_consumer_compiler(
+    pub fn try_into_inline_consumer_compiler(
         self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>
+    ) -> Result<InlineConsumerCompilerRegistration<Self>, BindingInputRejection<Self>>
     where
         B::Compiler: 'static,
     {
@@ -440,7 +440,7 @@ impl<B: PrepareClientBinding> StaticConsumerBindingPreparation<B> {
             self.resources(),
             self.runtime.consumer_configuration(),
         ) {
-            return Ok(ConsumerCompilerRegistration {
+            return Ok(InlineConsumerCompilerRegistration {
                 registration: self,
                 support,
             });
@@ -529,9 +529,9 @@ impl HostConsumerBindingPreparation {
             runtime: self.runtime.into_input(),
         }
     }
-    pub fn try_into_consumer_compiler(
+    pub fn try_into_inline_consumer_compiler(
         self,
-    ) -> Result<ConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
+    ) -> Result<InlineConsumerCompilerRegistration<Self>, BindingInputRejection<Self>> {
         if let Some(support) = host_consumer_support(
             self.identity(),
             self.execution(),
@@ -540,7 +540,7 @@ impl HostConsumerBindingPreparation {
             self.resources(),
             self.runtime.consumer_configuration(),
         ) {
-            return Ok(ConsumerCompilerRegistration {
+            return Ok(InlineConsumerCompilerRegistration {
                 registration: self,
                 support,
             });
@@ -641,6 +641,10 @@ impl HostConsumerBindingPreparation {
     > {
         let identity = runtime.identity();
         if identity.artifact_compatibility() != compiler.compatibility()
+            || compiler.consumer_metadata().is_some_and(|metadata| {
+                metadata.configuration.configuration() != identity.configuration()
+                    || Some(metadata.configuration) != runtime.consumer_configuration()
+            })
             || compiler.consumer_support().is_some_and(|support| {
                 support.configuration() != identity.configuration()
                     || support.consumer_configuration() != runtime.consumer_configuration()
@@ -785,5 +789,69 @@ impl<C: PrepareClientBinding> StaticConsumerBindingPreparation<C> {
         slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
     ) -> CoreResult<()> {
         self.runtime.acknowledge_consumer_property_read(slot)
+    }
+}
+
+#[cfg(feature = "std")]
+impl HostConsumerBindingPreparation {
+    /// Consume the optional preparation half; only execution survives below it.
+    pub fn into_parts(
+        self,
+    ) -> (
+        HostConsumerBindingRegistration,
+        HostBindingCompilerRegistration,
+    ) {
+        (self.runtime, self.compiler)
+    }
+}
+
+impl<C: PrepareClientBinding> StaticConsumerBindingPreparation<C>
+where
+    C::Compiler: ConsumerCompiler,
+{
+    /// General typed/static capture uses the actual portable compiler contract,
+    /// never ResolvedTargetCompiler identity or the inline support descriptor.
+    pub fn consumer_contract(&self) -> CoreResult<ConsumerCompilerContract> {
+        if self.compiler.compiler().configuration().configuration()
+            != self.runtime.identity().configuration()
+            || Some(self.compiler.compiler().configuration())
+                != self.runtime.consumer_configuration()
+        {
+            return Err(registration_error(self.runtime.identity(), 330)
+                .error()
+                .clone());
+        }
+        Ok(<C::Compiler as ConsumerCompiler>::CONTRACT)
+    }
+}
+
+impl<C: PrepareClientBinding> StaticConsumerBindingPreparation<C>
+where
+    C::Compiler: ConsumerCompiler,
+{
+    /// Recoverably pairs any portable Consumer compiler with its actual typed
+    /// executor/configuration. No private inline support or compiler-name test.
+    pub fn try_pair(
+        runtime: StaticConsumerBindingRegistration<C>,
+        compiler: StaticBindingCompilerRegistration<C::Compiler>,
+    ) -> Result<
+        Self,
+        BindingInputRejection<(
+            StaticConsumerBindingRegistration<C>,
+            StaticBindingCompilerRegistration<C::Compiler>,
+        )>,
+    > {
+        let identity = runtime.identity();
+        let configuration = compiler.compiler().configuration();
+        if Some(configuration) != runtime.consumer_configuration()
+            || configuration.configuration() != identity.configuration()
+            || compiler.compiler().compatibility() != identity.artifact_compatibility()
+        {
+            return Err(BindingInputRejection::new(
+                (runtime, compiler),
+                registration_error(identity, 330),
+            ));
+        }
+        Ok(Self { runtime, compiler })
     }
 }
