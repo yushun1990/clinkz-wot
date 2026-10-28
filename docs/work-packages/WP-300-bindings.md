@@ -42,3 +42,29 @@ cardinality and cancellation. A real downstream Cargo-linked registration
 must be possible without Core protocol cases/whitelists. These are
 claim-scoped integration checks, not a required number of protocols, new
 universal matcher/session layer or separate generality-proof gate.
+
+## Consumer capability composition
+
+The [first open Consumer slice](WP-200-planning.md#open-consumer-integration)
+replaces Property Read-only eligibility as the general registration model.
+Capture actual startup-linked capabilities/configuration and required services;
+selection indexes only narrow candidates and never certify execution. Bindings
+may supply one facet without dummy server/notification methods. Preserve exact
+owner/input recovery on refusal and immutable compiler/executor pairing.
+Runtime-only registration remains compiler-free; HTTP's existing
+`try_consumer_execution` already supplies that half of the boundary.
+
+Reuse `PollClientBinding` / Host `ClientBinding` only for the working finite
+facet. Reuse [ConsumerNotificationBinding](../../core/src/notification.rs) and
+`NotificationParticipation` for continuing conversations; their owned `Program`
+already has no `Copy` bound. Common selection/preparation hands off to these
+distinct controls, never to a universal call/session. Discovery remains an
+explicit workflow under WP-500, even when it uses a selected Consumer operation.
+
+HTTP SSE does not determine general fields, thread/atomic requirements, retry,
+reply cardinality or one-connection-per-subscription policy. Native streams,
+correlation, framing, reconnect and shared-service leases stay Binding-owned.
+Test that stopping one logical participant cannot retire siblings and that final
+physical destruction waits for remaining native work. The initial real finite
+and subsequent notification slices supply this evidence at their claimed scopes;
+an operation enum or registration flag is insufficient.
