@@ -804,6 +804,12 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         {
             return Poll::Ready(self.state);
         }
+        // Serving is only a native state, not a lasting grant of publication
+        // authority. A revoked gate must fence every subsequent receive, while
+        // Dispatching/Delivering/Closing still own their original work.
+        if self.state == Serving && !self.ingress_gate.get() {
+            return Poll::Pending;
+        }
         let class = match self.state {
             Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
@@ -848,7 +854,17 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     }
                     Poll::Ready(Ok(ingress)) => {
                         self.ingress = Some(ingress);
-                        self.state = Dispatching;
+                        // A linked Binding can revoke publication while its
+                        // receive callback runs. Retain its original ingress
+                        // for native retirement, never offer it for dispatch.
+                        if self.ingress_gate.get() {
+                            self.state = Dispatching;
+                        } else {
+                            self.fail(CoreError::Cancelled(ErrorContext::new(
+                                ErrorPhase::Cleanup,
+                                RetryClass::Never,
+                            )));
+                        }
                         Poll::Ready(self.state)
                     }
                 }

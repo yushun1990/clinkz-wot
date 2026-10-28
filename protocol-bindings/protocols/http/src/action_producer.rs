@@ -84,6 +84,19 @@ fn io_error() -> CoreError {
             .with_redacted_cause(640, "HTTP Action native I/O failed"),
     )
 }
+fn refused(error: &CoreError) -> (u16, &'static str) {
+    match error {
+        CoreError::Security { .. } => (403, "{\"status\":\"denied\"}"),
+        CoreError::Backpressure(_) | CoreError::LimitExceeded { .. } => {
+            (503, "{\"status\":\"busy\"}")
+        }
+        CoreError::StaleHandle(_) | CoreError::NotFound(_) => (410, "{\"status\":\"gone\"}"),
+        CoreError::Validation(_) | CoreError::Payload(_) | CoreError::InvalidDocument(_) => {
+            (400, "{\"status\":\"invalid\"}")
+        }
+        _ => (500, "{\"status\":\"failed\"}"),
+    }
+}
 
 struct Record {
     id: u32,
@@ -99,6 +112,7 @@ struct Exchange {
     response: Vec<u8>,
     written: usize,
     invoked: Option<u32>,
+    request_error: Option<CoreError>,
 }
 
 /// A completed exchange's local write is separate from application effect and
@@ -109,6 +123,8 @@ pub struct HttpActionDelivery {
     pub locally_written: bool,
     pub write_started: bool,
     pub cause: Option<CoreError>,
+    /// Original semantic refusal, independent of native write success/failure.
+    pub request_error: Option<CoreError>,
 }
 
 /// One HTTP native participant for one Action and its *actually prepared*
@@ -265,6 +281,7 @@ impl HttpActionRuntime {
                     ErrorPhase::Cleanup,
                     RetryClass::Never,
                 ))),
+                request_error: exchange.request_error,
             });
         }
     }
@@ -374,6 +391,7 @@ impl HttpActionRuntime {
                         response: Vec::new(),
                         written: 0,
                         invoked: None,
+                        request_error: None,
                     });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(Poll::Pending),
@@ -394,6 +412,7 @@ impl HttpActionRuntime {
                     ErrorPhase::Binding,
                     RetryClass::Never,
                 ))),
+                request_error: exchange.request_error,
             });
             return Ok(Poll::Ready(()));
         }
@@ -522,6 +541,7 @@ impl HttpActionRuntime {
                         locally_written: true,
                         write_started: true,
                         cause: None,
+                        request_error: exchange.request_error.take(),
                     });
                     self.exchange = None;
                     Ok(Poll::Ready(()))
@@ -536,6 +556,7 @@ impl HttpActionRuntime {
                     locally_written: false,
                     write_started: exchange.written != 0,
                     cause: Some(io_error()),
+                    request_error: exchange.request_error.take(),
                 });
                 self.exchange = None;
                 Ok(Poll::Ready(()))
@@ -550,8 +571,8 @@ impl HttpActionRuntime {
         path: &str,
         body: Vec<u8>,
     ) -> CoreResult<()> {
-        let mut status = 500;
-        let mut result = String::from("{\"status\":\"failed\"}");
+        let status: u16;
+        let result: String;
         let mut location = None;
         let input = if body.is_empty() {
             InteractionInput::empty()
@@ -599,26 +620,40 @@ impl HttpActionRuntime {
                                 Some(format!("http://{}{}?id={token}", query.address, query.path));
                         }
                     }
-                    Err(CoreError::Validation(_)) => {
-                        status = 400;
-                        result = "{\"status\":\"invalid\"}".into();
+                    Err(error) => {
+                        let (code, response) = refused(&error);
+                        status = code;
+                        result = response.into();
+                        self.exchange.as_mut().unwrap().request_error = Some(error);
                     }
-                    Err(CoreError::Backpressure(_)) => {
-                        status = 503;
-                        result = "{\"status\":\"busy\"}".into();
-                    }
-                    Err(_) => {}
                 }
             } else {
-                status = 503;
-                result = "{\"status\":\"busy\"}".into();
+                let error = CoreError::Backpressure(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ));
+                let (code, response) = refused(&error);
+                status = code;
+                result = response.into();
+                self.exchange.as_mut().unwrap().request_error = Some(error);
             }
-        } else if let Some(number) = path
-            .strip_prefix(&format!("{}?id={:016x}-", definition.path, self.nonce))
-            .and_then(|n| (!n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())).then_some(n))
-            .and_then(|n| n.parse::<u32>().ok())
+        } else if let Some((epoch, number)) = path
+            .strip_prefix(&format!("{}?id=", definition.path))
+            .and_then(|token| token.split_once('-'))
+            .and_then(|(epoch, n)| {
+                if epoch.len() != 16
+                    || !epoch.bytes().all(|c| c.is_ascii_hexdigit())
+                    || n.is_empty()
+                    || !n.bytes().all(|c| c.is_ascii_digit())
+                {
+                    return None;
+                }
+                Some((u64::from_str_radix(epoch, 16).ok()?, n.parse::<u32>().ok()?))
+            })
         {
-            if let Some(handle) = self.handle(number) {
+            if epoch == self.nonce
+                && let Some(handle) = self.handle(number)
+            {
                 let input = InteractionInput::empty();
                 let control = if definition.operation == Operation::QueryAction {
                     owner
@@ -663,12 +698,17 @@ impl HttpActionRuntime {
                             .into()
                         })
                 };
-                if let Ok(value) = control {
-                    status = 200;
-                    result = value;
-                } else {
-                    status = 403;
-                    result = "{\"status\":\"denied\"}".into();
+                match control {
+                    Ok(value) => {
+                        status = 200;
+                        result = value;
+                    }
+                    Err(error) => {
+                        let (code, response) = refused(&error);
+                        status = code;
+                        result = response.into();
+                        self.exchange.as_mut().unwrap().request_error = Some(error);
+                    }
                 }
             } else {
                 status = 404;
@@ -681,7 +721,7 @@ impl HttpActionRuntime {
         let exchange = self.exchange.as_mut().unwrap();
         exchange.invoked = id;
         exchange.response = format!("HTTP/1.1 {status} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n{}\r\n{result}",
-            match status { 200 => "OK", 202 => "Accepted", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 503 => "Service Unavailable", _ => "Internal Server Error" },
+            match status { 200 => "OK", 202 => "Accepted", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 410 => "Gone", 503 => "Service Unavailable", _ => "Internal Server Error" },
             result.len(), location.map_or(String::new(), |url| format!("Location: {url}\r\n"))).into_bytes();
         Ok(())
     }

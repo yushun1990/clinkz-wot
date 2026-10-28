@@ -62,11 +62,26 @@ struct Counters {
     cancelled: Cell<usize>,
     complete: Cell<bool>,
     invalid: Cell<bool>,
+    deny_invoke: Cell<bool>,
+    deny_query: Cell<bool>,
+    deny_cancel: Cell<bool>,
 }
 struct Action(Rc<Counters>);
 impl RawActionHandler for Action {
-    fn authorize(&self, _: Operation, _: &InteractionInput) -> CoreResult<()> {
-        Ok(())
+    fn authorize(&self, op: Operation, _: &InteractionInput) -> CoreResult<()> {
+        if match op {
+            Operation::InvokeAction => self.0.deny_invoke.get(),
+            Operation::QueryAction => self.0.deny_query.get(),
+            Operation::CancelAction => self.0.deny_cancel.get(),
+            _ => false,
+        } {
+            Err(CoreError::Security {
+                reason: SecurityFailureReason::AuthorizationDenied,
+                context: ErrorContext::new(ErrorPhase::Handler, RetryClass::Never),
+            })
+        } else {
+            Ok(())
+        }
     }
     fn invoke(
         &self,
@@ -270,6 +285,17 @@ fn send(
     path: &str,
     body: &str,
 ) -> String {
+    send_report(owner, exposure, address, method, path, body, &mut budget()).0
+}
+fn send_report(
+    owner: &mut RawProducerServient,
+    exposure: &mut ComposedProducerExposure,
+    address: SocketAddr,
+    method: &str,
+    path: &str,
+    body: &str,
+    credits: &mut WorkBudget,
+) -> (String, HttpActionDelivery) {
     let mut peer = TcpStream::connect(address).unwrap();
     peer.set_nonblocking(true).unwrap();
     let head = format!(
@@ -286,8 +312,8 @@ fn send(
     let mut bytes = Vec::new();
     loop {
         let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-        let _ = native.step(owner, &mut budget()).unwrap();
-        if native.take_delivery().is_some() {
+        let _ = native.step(owner, credits).unwrap();
+        if let Some(delivery) = native.take_delivery() {
             loop {
                 let mut buf = [0; 512];
                 match peer.read(&mut buf) {
@@ -298,7 +324,7 @@ fn send(
                 }
                 assert!(Instant::now() < end);
             }
-            return String::from_utf8(bytes).unwrap();
+            return (String::from_utf8(bytes).unwrap(), delivery);
         }
         assert!(Instant::now() < end, "HTTP Action stalled");
     }
@@ -488,6 +514,224 @@ fn qualified_http_action_and_property_share_one_authority_with_independent_conti
 }
 
 #[test]
+fn action_wire_refusals_distinguish_policy_capacity_and_stale_authority() {
+    let address = addr();
+    let mut owner = owner();
+    let counts = Rc::new(Counters::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let mut exposure = create(
+        &owner,
+        key(Generation::INITIAL),
+        address,
+        None,
+        Rc::clone(&counts),
+        None,
+        Arc::clone(&bank),
+    );
+    let key = exposure.key();
+    exposure
+        .participant_mut::<HttpActionRuntime>(0)
+        .unwrap()
+        .install_closed()
+        .unwrap();
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+
+    counts.deny_invoke.set(true);
+    let (response, report) = send_report(
+        &mut owner,
+        &mut exposure,
+        address,
+        "POST",
+        "/run",
+        "12",
+        &mut budget(),
+    );
+    assert!(response.starts_with("HTTP/1.1 403 Forbidden"), "{response}");
+    assert!(response.ends_with("{\"status\":\"denied\"}"));
+    assert!(report.locally_written && report.cause.is_none());
+    assert!(matches!(
+        report.request_error,
+        Some(CoreError::Security { .. })
+    ));
+    counts.deny_invoke.set(false);
+
+    // Native receive/write still have ample credit, but Servient handler
+    // admission has none. This is retryable pressure, not policy denial.
+    let mut low = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1000);
+    let (response, report) = send_report(
+        &mut owner,
+        &mut exposure,
+        address,
+        "POST",
+        "/run",
+        "12",
+        &mut low,
+    );
+    assert!(
+        response.starts_with("HTTP/1.1 503 Service Unavailable"),
+        "{response}"
+    );
+    assert!(matches!(
+        report.request_error,
+        Some(CoreError::Backpressure(_))
+    ));
+    assert_eq!(counts.invoked.get(), 0);
+
+    let accepted = send(&mut owner, &mut exposure, address, "POST", "/run", "12");
+    assert!(accepted.starts_with("HTTP/1.1 202"), "{accepted}");
+    let wire =
+        serde_json::from_str::<serde_json::Value>(accepted.split("\r\n\r\n").nth(1).unwrap())
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+    let query = format!("/status?id={wire}");
+    let cancel = format!("/stop?id={wire}");
+
+    for (op, path) in [
+        (Operation::QueryAction, &query),
+        (Operation::CancelAction, &cancel),
+    ] {
+        match op {
+            Operation::QueryAction => counts.deny_query.set(true),
+            Operation::CancelAction => counts.deny_cancel.set(true),
+            _ => unreachable!(),
+        }
+        let method = if op == Operation::QueryAction {
+            "GET"
+        } else {
+            "DELETE"
+        };
+        let (response, report) = send_report(
+            &mut owner,
+            &mut exposure,
+            address,
+            method,
+            path,
+            "",
+            &mut budget(),
+        );
+        assert!(response.starts_with("HTTP/1.1 403 Forbidden"), "{response}");
+        assert!(matches!(
+            report.request_error,
+            Some(CoreError::Security { .. })
+        ));
+        match op {
+            Operation::QueryAction => counts.deny_query.set(false),
+            Operation::CancelAction => counts.deny_cancel.set(false),
+            _ => unreachable!(),
+        }
+        let mut low = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1000);
+        let (response, report) = send_report(
+            &mut owner,
+            &mut exposure,
+            address,
+            method,
+            path,
+            "",
+            &mut low,
+        );
+        assert!(
+            response.starts_with("HTTP/1.1 503 Service Unavailable"),
+            "{response}"
+        );
+        assert!(matches!(
+            report.request_error,
+            Some(CoreError::Backpressure(_))
+        ));
+    }
+    assert_eq!(counts.cancelled.get(), 0);
+    assert!(send(&mut owner, &mut exposure, address, "GET", &query, "").contains("running"));
+
+    // The participant's own record cap is also a capacity refusal, not a
+    // forged application authorization result.
+    for _ in 0..3 {
+        assert!(
+            send(&mut owner, &mut exposure, address, "POST", "/run", "12")
+                .starts_with("HTTP/1.1 202")
+        );
+    }
+    let (response, report) = send_report(
+        &mut owner,
+        &mut exposure,
+        address,
+        "POST",
+        "/run",
+        "12",
+        &mut budget(),
+    );
+    assert!(
+        response.starts_with("HTTP/1.1 503 Service Unavailable"),
+        "{response}"
+    );
+    assert!(matches!(
+        report.request_error,
+        Some(CoreError::Backpressure(_))
+    ));
+    assert_eq!(counts.invoked.get(), 4);
+
+    // Direct logical revocation leaves a native gate open until the exposure
+    // guard is retired; the Servient still refuses fresh access as stale.
+    assert!(owner.revoke(key));
+    for (method, path, body) in [("GET", query.as_str(), ""), ("DELETE", cancel.as_str(), "")] {
+        let (response, report) = send_report(
+            &mut owner,
+            &mut exposure,
+            address,
+            method,
+            path,
+            body,
+            &mut budget(),
+        );
+        assert!(response.starts_with("HTTP/1.1 410 Gone"), "{response}");
+        assert!(matches!(
+            report.request_error,
+            Some(CoreError::StaleHandle(_))
+        ));
+    }
+    // Free a native slot so the invoke reaches the same stale-authority check.
+    let ids: Vec<_> = exposure
+        .participant_mut::<HttpActionRuntime>(0)
+        .unwrap()
+        .action_ids()
+        .collect();
+    counts.complete.set(true);
+    for id in ids {
+        let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+        let handle = native.handle(id).unwrap();
+        assert_eq!(
+            owner.step_raw_action(&handle, &mut budget()).unwrap(),
+            Poll::Ready(())
+        );
+        native.acknowledge(&mut owner, id).unwrap().unwrap();
+    }
+    let (response, report) = send_report(
+        &mut owner,
+        &mut exposure,
+        address,
+        "POST",
+        "/run",
+        "12",
+        &mut budget(),
+    );
+    assert!(response.starts_with("HTTP/1.1 410 Gone"), "{response}");
+    assert!(matches!(
+        report.request_error,
+        Some(CoreError::StaleHandle(_))
+    ));
+    assert_eq!(counts.invoked.get(), 4);
+
+    exposure.begin_close();
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    TcpListener::bind(address).unwrap();
+}
+
+#[test]
 fn unsupported_action_meaning_is_refused_before_any_native_setup() {
     let address = addr();
     let provider = HttpActionProducer::new(
@@ -628,9 +872,22 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
         .unwrap();
     second.publish(&mut owner, &mut budget()).unwrap();
     assert_eq!(owner.description(old_key), None);
-    assert!(
-        send(&mut owner, &mut first, old_addr, "POST", "/run", "12").starts_with("HTTP/1.1 500")
+    // Replacement displaces the old logical authority; its still-live native
+    // lease cannot turn a stale request into an authorized Action.
+    let (stale, report) = send_report(
+        &mut owner,
+        &mut first,
+        old_addr,
+        "POST",
+        "/run",
+        "12",
+        &mut budget(),
     );
+    assert!(stale.starts_with("HTTP/1.1 410 Gone"), "{stale}");
+    assert!(matches!(
+        report.request_error,
+        Some(CoreError::StaleHandle(_))
+    ));
     assert_eq!(old.invoked.get(), 1);
     assert_eq!(newer.invoked.get(), 0);
     let new_accepted = send(&mut owner, &mut second, new_addr, "POST", "/run", "12");
@@ -650,7 +907,7 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
             &format!("/status?id={old_wire}"),
             ""
         )
-        .starts_with("HTTP/1.1 400")
+        .starts_with("HTTP/1.1 404")
     );
     assert_eq!(
         owner.step_raw_action(&old_handle, &mut budget()).unwrap(),

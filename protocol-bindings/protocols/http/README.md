@@ -457,6 +457,10 @@ correlation conventions are this Binding's documented HTTP mapping, **not** a
 new Engine semantic or a claim that a W3C Note mandates this representation.
 A displaced lease's status URL cannot address a successor's invocation. Output
 is advertised only when a query Form can expose it.
+Invalid requests/input receive 400, policy refusal 403, missing or foreign
+correlation 404, stale logical authority 410 and exhausted admission/work
+capacity 503; unexpected failures receive 500. None of these statuses proves
+that an already accepted Action was undone.
 
 All final TD Forms, effective operations, resolved security and type-only Action
 input/output schemas are qualified through the existing whole-Thing selector,
@@ -479,9 +483,11 @@ initiating reply; completion stays queryable until explicit `acknowledge` or
 application-selected terminal retention expiry (`reap_completed`, five seconds
 in the example). Pending work is never expired as a completed result.
 `begin_close` revokes ingress and releases native sockets but cannot release
-unread work. `HttpActionDelivery` describes only local write progress/failure:
-local completion does not prove remote receipt and partial failure cannot erase
-possible application effects. The caller provisions the Action-store baseline
+unread work. `HttpActionDelivery` reports local write progress/failure in
+`cause` and separately retains any original Servient refusal in
+`request_error` for diagnostics, even if the write fails. Local completion does
+not prove remote receipt and partial failure cannot erase possible application
+effects. The caller provisions the Action-store baseline
 independently of native participation backing. NoSec/loopback is not TLS or a
 remotely secure bearer-token service.
 
@@ -494,8 +500,9 @@ curl -i -X POST -H 'Content-Type: application/json' --data 12 http://127.0.0.1:8
 ```
 
 `tests/action_producer.rs` uses real TCP peers for mixed-capability publication,
-invalid input/output, independent continuation, status/cancel, replacement,
-stale correlation, unread settlement, partial input, occupied ports and release.
+invalid input/output, independent continuation, status/cancel, policy refusal,
+low-budget and record capacity, replacement, stale correlation, unread
+settlement, partial input, occupied ports and release.
 UDP Action tests remain test-only evidence for shared native infrastructure.
 HTTPS, broader DataSchema/security services, other HTTP Action response styles,
 automatic progress and remote effect certainty remain unsupported.

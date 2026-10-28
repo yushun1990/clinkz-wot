@@ -1411,7 +1411,66 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
         "accepted"
     );
     let late = native.borrow().handles.last().unwrap().1.clone();
+    // An already accepted finite exchange keeps its reply opportunity when
+    // the publication gate closes; only a *new* receive must stop.
+    let mut in_flight = TcpStream::connect(tcp).unwrap();
+    in_flight.set_nonblocking(true).unwrap();
+    in_flight
+        .write_all(
+            format!("GET /value HTTP/1.1\r\nHost: {tcp}\r\nConnection: close\r\n\r\n").as_bytes(),
+        )
+        .unwrap();
+    let end = Instant::now() + Duration::from_secs(5);
+    while read.state() != RawFiniteState::Delivering {
+        let _ = s.step(&mut read, &mut cx(), &mut budget(), now()).unwrap();
+        assert!(Instant::now() < end, "finite ingress stalled");
+    }
+    assert_eq!(counts.property.get(), 2);
     publication.revoke();
+    while read.state() != RawFiniteState::Serving {
+        let _ = s.step(&mut read, &mut cx(), &mut budget(), now()).unwrap();
+        assert!(Instant::now() < end, "finite reply stalled");
+    }
+    let mut reply = Vec::new();
+    loop {
+        let mut buf = [0; 256];
+        match in_flight.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => reply.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => panic!("{e}"),
+        }
+        assert!(Instant::now() < end, "finite peer stalled");
+    }
+    assert!(reply.starts_with(b"HTTP/1.1 200"));
+    assert_eq!(
+        read.take_settlement().unwrap().delivery,
+        FiniteDelivery::Delivered
+    );
+    // This finite participant has already served a real request and returned
+    // to Serving. Revocation must fence a new TCP peer before native receive,
+    // rather than offering it as stale semantic ingress to the Servient.
+    let mut after_revoke = TcpStream::connect(tcp).unwrap();
+    after_revoke.set_nonblocking(true).unwrap();
+    after_revoke
+        .write_all(
+            format!("GET /value HTTP/1.1\r\nHost: {tcp}\r\nConnection: close\r\n\r\n").as_bytes(),
+        )
+        .unwrap();
+    for _ in 0..4 {
+        assert_eq!(
+            s.step(&mut read, &mut cx(), &mut budget(), now()).unwrap(),
+            Poll::Pending
+        );
+    }
+    assert_eq!(read.state(), RawFiniteState::Serving);
+    assert_eq!(counts.property.get(), 2);
+    assert!(read.take_settlement().is_none());
+    assert_eq!(
+        after_revoke.read(&mut unused).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    drop(after_revoke);
     assert_eq!(
         s.step_raw_action(&late, &mut budget()).unwrap(),
         Poll::Pending

@@ -463,7 +463,7 @@ mod qualification {
 mod producer_transport;
 
 mod action_producer;
-pub use action_producer::{HttpActionDefinition, HttpActionRuntime};
+pub use action_producer::{HttpActionDefinition, HttpActionDelivery, HttpActionRuntime};
 #[cfg(feature = "prepare")]
 mod action_preparation;
 #[cfg(feature = "prepare")]

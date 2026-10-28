@@ -115,6 +115,9 @@ leave a multi-participant publication observably half-open despite a non-fallibl
 contract. Gate loans and checks finish before commit; no linked callback,
 allocation or fallible native operation occurs while flipping them. Revocation
 closes all original gates without calling the native drivers. A lease is not a
+permanent receive grant: a Serving participant checks its gate before every
+new semantic ingress, including after an earlier exchange. Owned replies and
+native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
 The HTTP finite participant is still a one-endpoint/one-route adapter; a linked
