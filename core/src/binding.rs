@@ -2833,7 +2833,7 @@ fn consumer_request_matches_registration<A>(
 fn consumer_request_error(request: &OutboundRequest, code: u16, cause: &str) -> CoreError {
     CoreError::Validation(
         ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-            .with_operation(Operation::ReadProperty)
+            .with_operation(request.operation())
             .with_plan(request.plan_id())
             .with_binding(request.binding_id(), request.binding_generation())
             .with_redacted_cause(code, cause),
@@ -2989,6 +2989,7 @@ fn start_static_consumer_property_read<C: PollClientBinding>(
 ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>> {
     if !slot.is_vacant()
         || !capabilities.supports_consumer_property_read()
+        || request.operation() != Operation::ReadProperty
         || !consumer_request_matches_registration(identity, &request, artifact)
     {
         return Err(reject_consumer_request(
@@ -3812,6 +3813,8 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for RejectedAcceptedHostCons
 /// returns an owned `'static` call before its first protocol side effect; a
 /// rejected invocation returns the exact request unchanged.
 pub trait ClientBinding: Send + Sync {
+    /// Passive coarse facet eligibility, never complete Form/schema support.
+    fn supports_operation(&self, operation: Operation) -> bool;
     /// Passive metadata of the actual captured immutable Consumer policy.
     /// This bounded, allocation-free read must have no operational effects.
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
@@ -3820,7 +3823,8 @@ pub trait ClientBinding: Send + Sync {
     /// Returns the compatibility identity consumed at registration and call acceptance.
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
 
-    /// Creates one owned Property Read call from the exact selected artifact.
+    /// Creates one owned finite call from the exact selected artifact. This
+    /// callback constructs only local work; effects begin in the returned call.
     fn invoke(
         &self,
         request: OutboundRequest,
@@ -4152,7 +4156,7 @@ fn start_host_consumer_property_read(
 ) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
 {
     if !capabilities.supports_consumer_property_read()
-        || !consumer_request_matches_registration(identity, &request, artifact)
+        || request.operation() != Operation::ReadProperty
     {
         return Err(reject_consumer_request(
             request,
@@ -4161,6 +4165,27 @@ fn start_host_consumer_property_read(
         ));
     }
 
+    start_host_consumer_finite(identity, client, resources, request, artifact)
+}
+
+#[cfg(feature = "std")]
+fn start_host_consumer_finite(
+    identity: BindingRegistrationIdentity,
+    client: Option<&dyn ClientBinding>,
+    resources: BindingResourceDeclarations,
+    request: OutboundRequest,
+    artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
+{
+    if !consumer_request_matches_registration(identity, &request, artifact)
+        || !client.is_some_and(|c| c.supports_operation(request.operation()))
+    {
+        return Err(reject_consumer_request(
+            request,
+            312,
+            "Consumer request does not match the installed registration",
+        ));
+    }
     let resource_error = consumer_request_error(
         &request,
         313,
@@ -4173,7 +4198,7 @@ fn start_host_consumer_property_read(
             Err(_) => {
                 let error = BindingOperationalError::new(CoreError::Backpressure(
                     ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
-                        .with_operation(crate::Operation::ReadProperty)
+                        .with_operation(request.operation())
                         .with_plan(request.plan_id())
                         .with_binding(request.binding_id(), request.binding_generation())
                         .with_redacted_cause(314, "Host Consumer call backing unavailable"),
@@ -4472,6 +4497,11 @@ pub struct HostConsumerBindingRegistration {
 }
 #[cfg(feature = "std")]
 impl HostConsumerBindingRegistration {
+    /// Coarse eligibility of the actual captured executor. The selected
+    /// compiler and data/security services still assess complete support.
+    pub fn supports_operation(&self, operation: Operation) -> bool {
+        self.input.client.supports_operation(operation)
+    }
     /// Immutable policy of the captured executor.
     pub fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
         self.input.client.consumer_configuration()
@@ -4510,8 +4540,11 @@ impl HostConsumerBindingRegistration {
         self.input.identity
     }
     /// Returns the Consumer-only capability metadata.
-    pub const fn capabilities(&self) -> BindingRegistrationCapabilities {
-        BindingRegistrationCapabilities::consumer_property_read()
+    pub fn capabilities(&self) -> BindingRegistrationCapabilities {
+        BindingRegistrationCapabilities {
+            producer_property_read: false,
+            consumer_property_read: self.supports_operation(Operation::ReadProperty),
+        }
     }
     /// Returns selected execution metadata.
     pub const fn execution(&self) -> BindingExecutionSupport {
@@ -4532,7 +4565,7 @@ impl HostConsumerBindingRegistration {
     }
 
     /// Starts an installed Consumer call through the shared Core seal/decorator.
-    pub fn start_consumer_property_read(
+    pub fn start_finite(
         &self,
         request: OutboundRequest,
         artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
@@ -4540,9 +4573,8 @@ impl HostConsumerBindingRegistration {
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
     > {
-        start_host_consumer_property_read(
+        start_host_consumer_finite(
             self.input.identity,
-            self.capabilities(),
             Some(&*self.input.client),
             self.input.resources,
             request,

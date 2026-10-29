@@ -256,6 +256,9 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     }
 }
 impl TargetClientBinding for Client {
+    fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
+        operation == clinkz_wot_core::Operation::ReadProperty
+    }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         COMPATIBILITY
     }
@@ -321,7 +324,7 @@ impl Owner {
     ) -> Result<ConsumerHostCall, BindingInputRejection<OutboundRequest>> {
         match self {
             Self::Dual(o) => o.start_consumer_property_read(request, artifact),
-            Self::Consumer(o) => o.start_consumer_property_read(request, artifact),
+            Self::Consumer(o) => o.start_finite(request, artifact),
         }
     }
 }

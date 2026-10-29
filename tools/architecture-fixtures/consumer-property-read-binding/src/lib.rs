@@ -546,6 +546,9 @@ impl Drop for HostClient {
 }
 #[cfg(feature = "std")]
 impl binding::ClientBinding for HostClient {
+    fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
+        operation == clinkz_wot_core::Operation::ReadProperty
+    }
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
         self.owned.as_ref().map(|p| p.configuration())
     }

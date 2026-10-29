@@ -192,6 +192,9 @@ impl Drop for Call {
 }
 
 impl binding::ClientBinding for Client {
+    fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
+        operation == clinkz_wot_core::Operation::ReadProperty
+    }
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
         Some(self.config.configuration)
     }
@@ -505,9 +508,11 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
     fn validate(
         &self,
         schema: clinkz_wot_core::value_type::TypeSchema,
-        output: &InteractionOutput,
+        payload: &Payload,
     ) -> CoreResult<()> {
-        producer_validation::validate(schema, output)
+        // The JSON service evaluates a payload independently of its finite
+        // input/output role. The operation owner checks result metadata/shape.
+        producer_validation::validate_payload(schema, payload)
     }
     fn policy(&self) -> clinkz_wot_core::consumer::ConsumerDataPolicy {
         clinkz_wot_core::consumer::ConsumerDataPolicy {
@@ -522,6 +527,17 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
 }
 struct HttpConsumerAccess(HttpConsumerConfig);
 impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
+    fn authorize_instance(
+        &self,
+        _consumer: &clinkz_wot_core::consumer::ConsumerInstanceRef,
+        binding: BindingRegistrationIdentity,
+        target: &str,
+        operation: Operation,
+    ) -> CoreResult<()> {
+        clinkz_wot_core::consumer::ConsumerAccessService::authorize(
+            self, binding, target, operation,
+        )
+    }
     fn authorize(
         &self,
         binding: BindingRegistrationIdentity,

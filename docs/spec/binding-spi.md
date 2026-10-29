@@ -154,5 +154,11 @@ owned cursor/output/failure-return mechanisms. A compiler's inspected footprint
 includes variable backing and destruction, not merely its erased slot Layout.
 The actual data and destination/access services remain captured through execution;
 a caller supplies no replacement executor, codec, validator or configuration to a
-read. Existing inline aggregate and raw finite APIs retain their explicitly
-restricted purposes. No notification or universal runtime facet is added.
+finite operation. `ClientBinding::supports_operation` is only coarse eligibility;
+the actual compiler and captured services prove complete Form support. The Host
+Consumer entry is `start_finite`; the incorrect Property Read-only entry is
+removed there. Retained dual-role/static Property Read adapters still reject other
+operations explicitly. Finite requests carry their selected operation and optional
+application input; they do not represent continuing Action or notification
+conversations. Existing inline aggregate and raw finite APIs retain their
+restricted purposes. Notification preparation remains separate and incomplete.

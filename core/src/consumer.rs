@@ -5,6 +5,7 @@ use crate::value_type::TypeSchema;
 use crate::*;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use clinkz_wot_foundation::{ResourceKind, WorkBudget, WorkClass};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Actual codec and type-validation implementation. Preparation checks the
 /// entire schema subset; this service validates bytes on every normal/late result.
@@ -13,7 +14,7 @@ use clinkz_wot_foundation::{ResourceKind, WorkBudget, WorkClass};
 /// inspection; they acquire no credentials, source documents or native I/O.
 pub trait ConsumerDataService: Send + Sync {
     fn content_type(&self) -> &str;
-    fn validate(&self, schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()>;
+    fn validate(&self, schema: TypeSchema, payload: &Payload) -> CoreResult<()>;
     fn policy(&self) -> ConsumerDataPolicy;
     /// Complete support of the already prepared type-only assertion.
     fn supports_schema(&self, _schema: TypeSchema) -> bool {
@@ -41,6 +42,15 @@ pub trait ConsumerAccessService: Send + Sync {
         target: &str,
         operation: Operation,
     ) -> CoreResult<()>;
+    /// Fresh application permission for this original logical incarnation.
+    /// Preparation's destination check alone grants no execution authority.
+    fn authorize_instance(
+        &self,
+        consumer: &ConsumerInstanceRef,
+        binding: BindingRegistrationIdentity,
+        target: &str,
+        operation: Operation,
+    ) -> CoreResult<()>;
     fn retained_bytes(&self) -> u64;
     fn work(&self) -> u64;
 }
@@ -51,18 +61,94 @@ pub struct ConsumerServices {
     pub access: Arc<dyn ConsumerAccessService>,
 }
 
+/// One local logical Consumer authority, independent of any capability, TD or
+/// physical connection. Startup construction is caller-funded Host work.
+/// Drop/revoke is immediate and allocation/callback free; there is no reactivation.
+///
+/// ```compile_fail
+/// fn duplicate(instance: clinkz_wot_core::consumer::ConsumerInstance) {
+///     let _second_owner = instance.clone();
+/// }
+/// ```
+pub struct ConsumerInstance(ConsumerInstanceRef);
+impl ConsumerInstance {
+    pub fn new(slot: ThingSlotId) -> Self {
+        Self(ConsumerInstanceRef {
+            slot,
+            current: Arc::new(AtomicBool::new(true)),
+        })
+    }
+    pub fn reference(&self) -> ConsumerInstanceRef {
+        self.0.clone()
+    }
+    pub fn revoke(&self) {
+        self.0.current.store(false, Ordering::Release);
+    }
+}
+impl Drop for ConsumerInstance {
+    fn drop(&mut self) {
+        self.revoke();
+    }
+}
+/// Retention/identity and passive currentness only. Cloning cannot revoke the
+/// instance, keep it current after its owner disappears, or shut down native I/O.
+#[derive(Clone)]
+pub struct ConsumerInstanceRef {
+    slot: ThingSlotId,
+    current: Arc<AtomicBool>,
+}
+impl ConsumerInstanceRef {
+    pub fn slot(&self) -> ThingSlotId {
+        self.slot
+    }
+    pub fn is_current(&self) -> bool {
+        self.current.load(Ordering::Acquire)
+    }
+}
+impl PartialEq for ConsumerInstanceRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.slot == other.slot && Arc::ptr_eq(&self.current, &other.current)
+    }
+}
+impl Eq for ConsumerInstanceRef {}
+impl core::fmt::Debug for ConsumerInstanceRef {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ConsumerInstanceRef")
+            .field("slot", &self.slot)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Distinct finite application-data roles. None means no application payload;
+/// an unconstrained present payload uses Some(TypeSchema::Any).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ConsumerSchemas {
+    pub input: Option<TypeSchema>,
+    pub output: Option<TypeSchema>,
+}
+
+/// Conservative remote-operation certainty, independent of local cancellation
+/// and validated result delivery. Any native progress may cross the effect edge;
+/// failure or cancellation afterwards cannot authorize implicit replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConsumerEffect {
+    NotAttempted,
+    Unknown,
+}
+
 /// One immutable selected executor, native definition, actual services and
 /// original resource leases. Constructor refusal returns all original owners.
 /// This carrier does not itself perform TD support assessment.
 pub struct ConsumerDefinition {
-    name: Arc<str>,
+    affordance: AffordanceTarget,
+    operation: Operation,
     form: u32,
     target: Box<str>,
     artifact: BindingArtifactEnvelope<HostBindingArtifact>,
     execution: Arc<HostConsumerBindingRegistration>,
     configuration: ConsumerBindingConfiguration,
     services: ConsumerServices,
-    schema: TypeSchema,
+    schemas: ConsumerSchemas,
     data_policy: ConsumerDataPolicy,
     access_work: u64,
     // Last to drop: artifact destructors, executor/services and backing are
@@ -71,14 +157,15 @@ pub struct ConsumerDefinition {
     bank: Arc<HostResourceAccounts>,
 }
 pub struct ConsumerDefinitionInput {
-    pub name: Arc<str>,
+    pub affordance: AffordanceTarget,
+    pub operation: Operation,
     pub form: u32,
     pub target: Box<str>,
     pub artifact: BindingArtifactEnvelope<HostBindingArtifact>,
     pub execution: Arc<HostConsumerBindingRegistration>,
     pub configuration: ConsumerBindingConfiguration,
     pub services: ConsumerServices,
-    pub schema: TypeSchema,
+    pub schemas: ConsumerSchemas,
     pub funding: Vec<HostCapacityReservation>,
     pub bank: Arc<HostResourceAccounts>,
 }
@@ -96,7 +183,19 @@ impl ConsumerDefinition {
             || id.role() != BindingArtifactRole::ConsumerCall
             || input.execution.consumer_configuration() != Some(input.configuration)
             || !input.services.data.available()
-            || !input.services.data.supports_schema(input.schema)
+            || !input
+                .schemas
+                .input
+                .into_iter()
+                .chain(input.schemas.output)
+                .all(|s| input.services.data.supports_schema(s))
+            || !matches!(
+                (&input.affordance, input.operation),
+                (AffordanceTarget::Property(_), Operation::ReadProperty)
+                    | (AffordanceTarget::Action(_), Operation::InvokeAction)
+            )
+            || (input.operation == Operation::ReadProperty
+                && (input.schemas.input.is_some() || input.schemas.output.is_none()))
             || policy.validation_work == 0
             || input.services.access.work() == 0
         {
@@ -107,14 +206,15 @@ impl ConsumerDefinition {
         }
         let access_work = input.services.access.work();
         Ok(Self {
-            name: input.name,
+            affordance: input.affordance,
+            operation: input.operation,
             form: input.form,
             target: input.target,
             artifact: input.artifact,
             execution: input.execution,
             configuration: input.configuration,
             services: input.services,
-            schema: input.schema,
+            schemas: input.schemas,
             data_policy: policy,
             access_work,
             _funding: input.funding,
@@ -122,7 +222,13 @@ impl ConsumerDefinition {
         })
     }
     pub fn name(&self) -> &str {
-        &self.name
+        self.affordance.name().unwrap()
+    }
+    pub fn affordance(&self) -> &AffordanceTarget {
+        &self.affordance
+    }
+    pub fn operation(&self) -> Operation {
+        self.operation
     }
     pub fn form(&self) -> u32 {
         self.form
@@ -153,14 +259,15 @@ impl ConsumerDefinition {
     pub fn into_parts(self) -> (ConsumerDefinitionInput, ConsumerDataPolicy, u64) {
         (
             ConsumerDefinitionInput {
-                name: self.name,
+                affordance: self.affordance,
+                operation: self.operation,
                 form: self.form,
                 target: self.target,
                 artifact: self.artifact,
                 execution: self.execution,
                 configuration: self.configuration,
                 services: self.services,
-                schema: self.schema,
+                schemas: self.schemas,
                 funding: self._funding,
                 bank: self.bank,
             },

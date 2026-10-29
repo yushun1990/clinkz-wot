@@ -541,7 +541,7 @@ fn public_output_and_partially_paid_rollback_cross_threads() {
         let request =
             OutboundRequest::property_read(selected.artifact_ref(), BTreeMap::new(), None).unwrap();
         let mut call = registration
-            .start_consumer_property_read(request, selected.artifact())
+            .start_finite(request, selected.artifact())
             .unwrap();
         let Poll::Ready(Ok(result)) = call
             .as_pin_mut()
@@ -1032,7 +1032,7 @@ fn host_client_only_aggregate_executes_after_source_destruction_and_explicitly_r
         let request =
             OutboundRequest::property_read(selected.artifact_ref(), BTreeMap::new(), None).unwrap();
         let mut call = registration
-            .start_consumer_property_read(request, selected.artifact())
+            .start_finite(request, selected.artifact())
             .unwrap();
         let footprint = call.as_pin_mut().lifetime_footprint();
         assert_eq!(footprint.retained_items(), 4);

@@ -9,7 +9,7 @@ states = ["Private", "Live", "Revoked", "Draining", "Released"]
 initial = "Private"
 terminal = ["Released"]
 required_events = []
-invariant = "Description/content identity is not authority; replacement cannot retarget old accepted work; physical infrastructure has its own lifetime."
+invariant = "Description/content identity is not authority; finite Consumer calls and notifications share one independently owned currentness reference; facet close is local, authority revoke fences all facets, and replacement cannot retarget old accepted work; physical infrastructure has its own lifetime."
 
 [[machine.transition]]
 from = "Private"

@@ -145,8 +145,8 @@ aggregate Host resource qualification is claimed.
 
 `core::notification` separates subscription input, raw Property/Event data,
 Event dataResponse opportunity, cancellation input and native delivery/retirement.
-`servient::notification::RawNotificationServient` owns one Consumer incarnation
-and a captured Binding/configuration, with independently admitted logical slots,
+`servient-finite::notification::RawNotificationServient` retains the independent
+Consumer authority reference and a captured Binding/configuration, with independently admitted logical slots,
 non-cloneable cursors, fresh application permission, stop intent and retained
 cleanup. The existing finite and compiled Property Read adapters are not reused:
 neither owns the required long-lived control/response lifetime. Per-logical native
@@ -164,7 +164,7 @@ original data, reply jobs, first cause and capacity; bounded owner cleanup can
 return complete terminal reports after all cursors are lost. Host-root Drop uses
 the native owners' required finite local abort and reports no completed drain.
 
-`cargo test --locked -p clinkz-wot-servient --test notification` exercises actual
+`cargo test --locked -p clinkz-wot-servient-finite --test notification` exercises actual
 Core/Servient lifecycle code through deterministic external in-memory Binding
 capabilities: compatible sharing, independent stop/cursors, tenant separation,
 late/stale delivery, item/byte/native loss, reciprocal responses and cardinality,
@@ -174,31 +174,34 @@ qualification, fleet scalability, hardware evidence or package/gate completion.
 
 ## Joined Consumer execution
 
-Follow [WP-200's two working slices](WP-200-planning.md#open-consumer-integration).
-The finite slice must connect open preparation to real calls and remove the
-closed support/layout assumptions in
-[`ConsumerPropertyReadPolicy::qualify`](../../servient/src/consumer_property_read.rs).
-Preserve accepted-call/result/cleanup ownership and real parent-account retention;
-a generic compiler flag cannot replace those guarantees. Move completed output,
-reclaim and native execution owners below optional preparation so the new runtime
-can execute after source/compiler destruction without TD/Planning dependencies.
-Do not require extraction of every legacy module before a working slice.
+Prioritize [operation/instance composition](WP-200-planning.md#consumer-operation-composition)
+over the previously scheduled HTTP SSE implementation. Finite and raw notification
+owners now share a separate move-only Core `ConsumerInstance` authority through
+passive retained references. Prepared definitions and native resources contain no
+such permission. Equal numeric slots do not identify the same incarnation.
 
-The observation slice joins selected TD facts and actual validation/security
-services to the existing raw notification lifecycle; it must not wrap a finite
-call as a subscription or expose an SSE-only Servient. Extend the same Consumer
-logical authority across selected finite and notification facets: every delivery,
-response and cancellation checks its current operation/policy, and replacement
-fences old work without redirecting it. Raw queue/stop/response/retirement owners
-remain reusable; their deterministic tests do not prove TD support or real I/O.
+Finite execution supports Property Read and explicitly synchronous Actions with
+separate input/output checks and operation-aware instance authorization. Callback
+work, input/result backing, unread/late settlement and cleanup remain funded by
+the original bank. Closing a finite facet or stopping a subscription is local;
+finite settlements expose conservative remote-effect uncertainty after native
+progress, independently of local cancellation and result delivery. There is no
+implicit replay. Revoking/dropping the Consumer authority fences every facet,
+even after callbacks or with no native progress credit. Replacement cannot
+retarget old work.
 
-Execute stop during establishment and delivery, dropped cursors/root, policy
-revocation, stale completion and capacity/cleanup failures over actual native
-owners. Keep local settlement, remote cancellation certainty and final physical
-release distinct. Required Event responses/optional-opportunity retirement retain
-their existing tests even when the first Property observation mapping has no
-response role. No new universal runtime, scheduler or all-family acceptance claim
-is part of these slices.
+The notification executor and its existing Event/overflow/response/cleanup tests
+move into the execution-only crate, without an old-path re-export. Its independent
+raw lifecycle remains distinct from finite calls. A downstream test-only native
+observation Binding exercises shared socket ownership, real delivery, sibling
+retention, callback revocation and final release alongside the finite owner.
+Raw notification limits remain owner-scoped: this does not claim TD/schema
+qualification or shared aggregate Host-bank accounting for notification queues.
+
+TD-driven notification preparation still needs actual selected services and
+establishment/data/control roles. Continuing Consumer Action associations,
+constrained execution and automatic progress remain unimplemented. No universal
+runtime, session or all-family acceptance gate is introduced.
 
 ## Open finite Consumer ownership
 
@@ -222,7 +225,8 @@ continues manual cleanup; it never becomes a fabricated transfer acknowledgement
 or terminal release. A returned settlement retains
 its native/result/definition/account owners through its final disposal.
 
-Root loss revokes this incarnation. Existing handles can finish original cleanup;
+Finite facet loss closes its own acceptance. Consumer authority loss revokes the
+incarnation across all attached facets. Existing handles can finish original cleanup;
 lost handles can be drained by root progress. Final Drop uses the captured
 ConsumerOwnedHostV2 finite nonblocking local disposal contract, with no assertion
 of remote cancellation or completed network drain. The bank and original leases

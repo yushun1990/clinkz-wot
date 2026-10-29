@@ -33,19 +33,24 @@ single protocol first or freeze a cross-family ordering.
 | --- | --- | --- |
 | A — Semantic ownership | Finite exchange, continuing Action, notification conversation and Producer publication retain distinct but composable controls and owners. | Executable operation/lifecycle cases, including stale identity, cancellation, late results, saturation and retained cleanup. Raw kernels alone make no TD or native I/O claim. |
 | B — Joined Producer foothold | Whole-Thing composition supports finite Property Read and continuing Action mappings over actual native participants; broaden only with complete final support and retained ownership. | Public real-peer tests plus negative support, prepublication, cancellation, replacement and final-resource-release evidence, scoped to the implemented mappings. |
-| C — Open Consumer and broader operations | Join actual downstream Consumer registration, preparation and finite execution, then TD-driven notifications; continue Property/Action/Event and described collections in both roles. | Owned incremental third-party preparation plus real finite I/O, followed by real notification I/O through the same selection boundary and its distinct lifecycle. No family completes from a raw kernel or mock alone. |
+| C — Open Consumer and broader operations | Complete protocol-neutral Consumer operation and instance composition across distinct finite and notification lifecycles; continue Property/Action/Event and described collections in both roles. | Owned third-party preparation and multi-family finite I/O, shared logical authority across independent lifecycles, then TD-driven notifications. No family completes from a raw kernel or mock alone. |
 | D — Interoperability and product qualification | Verify downstream third-party Binding composition, selected cross-protocol contrasts, Host HTTP/HTTPS and security, Discovery/Directory client, portable shared semantics and supported profiles. | Real native peers, advertised DataSchema/security/profile checks, scoped resource/performance measurements and client Discovery behavior. |
 | E — v1 integration | Reconcile completed WP-400/500/600 capability claims through WP-700 without inheriting historical acceptance. | Independent conformance, security, integration and release evidence for the exact advertised v1 scope. |
 
 Horizons express **recommended concentration, not sequential package gates**.
-The near-term emphasis moves from the joined Producer foothold to the Consumer
-integration gap. First open actual compiler/executor registration and preparation
-and prove it with real finite execution in the same change; then use TD-driven
-`ObserveProperty`, with HTTP SSE as the first notification participant. This is
-a bounded integration repair under v6, not a prerequisite redesign of every
-Consumer lifecycle. Unrelated Discovery and HTTPS/security work can progress
-when its own dependencies are ready. Binding evidence cannot redefine general
-contracts.
+The immediate emphasis is **protocol-neutral Engine composition**, following the
+open Consumer preparation/finite foothold. Challenge operation, schema-role and
+logical-owner assumptions before extending a production protocol. Property Read
+and explicitly synchronous Action invocation now exercise the finite preparation
+boundary; finite and raw notification facets share one independent Consumer
+authority while retaining distinct controls and cleanup. These are bounded Host
+subsets, not completion of all capability families.
+
+**HTTP SSE is deferred.** TD-driven notification selection, service validation and
+control mappings remain valuable subsequent Engine work; production streaming
+framing is not the immediate implementation priority. Independent test Bindings
+and actual I/O may expose composition defects without introducing another
+production protocol. Discovery and HTTPS/security retain their own dependencies.
 
 ### Joined Producer composition: retained boundary
 
@@ -87,13 +92,12 @@ the joined path, replace them rather than maintain compatibility facades.
 
 ### Continuing capability growth
 
-The smallest Consumer sequence is two working slices: open preparation joined
-to real finite Property Read, then real TD-driven observation. The source
-constraints, first implementation acceptance and abstraction dispositions belong
-to [WP-200](docs/work-packages/WP-200-planning.md#open-consumer-integration),
-runtime ownership to [WP-300](docs/work-packages/WP-300-bindings.md#consumer-capability-composition)
+Consumer growth follows demonstrated architectural gaps rather than a fixed
+finite-then-SSE sequence. Operation-scoped preparation and shared instance
+authority belong to [WP-200](docs/work-packages/WP-200-planning.md#consumer-operation-composition)
 and [WP-400](docs/work-packages/WP-400-servient.md#joined-consumer-execution),
-and notification I/O acceptance to
+with separate native facets in [WP-300](docs/work-packages/WP-300-bindings.md#consumer-capability-composition).
+Deferred production observation scope remains in
 [WP-600](docs/work-packages/WP-600-protocol-bindings.md#td-driven-consumer-observation).
 
 After composition has an executable foothold, extend one operation/lifecycle

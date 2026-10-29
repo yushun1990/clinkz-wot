@@ -186,9 +186,7 @@ fn prepared_http_program_executes_after_all_preparation_owners_are_dropped() {
         .build()
         .unwrap()
         .block_on(async {
-            let mut call = execution
-                .start_consumer_property_read(request(&program), &program)
-                .unwrap();
+            let mut call = execution.start_finite(request(&program), &program).unwrap();
             drop(program);
             let output = tokio::time::timeout(
                 Duration::from_secs(5),
@@ -232,7 +230,7 @@ fn v6_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
     // No runtime is entered. Reaching the actual client rejects with the v6
     // diagnostic before raw acceptance, never opening a connection.
     let rejection = owner
-        .start_consumer_property_read(request(&artifact), &artifact)
+        .start_finite(request(&artifact), &artifact)
         .err()
         .unwrap();
     assert_eq!(
@@ -303,14 +301,14 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
             let foreign_artifact = artifact(&foreign_owner, &plan);
             let original = request(&foreign_artifact);
             let rejected = owner
-                .start_consumer_property_read(original, &foreign_artifact)
+                .start_finite(original, &foreign_artifact)
                 .err()
                 .unwrap();
             assert_eq!(rejected.input(), &request(&foreign_artifact));
             assert!(matches!(rejected.error().error(), CoreError::Validation(_)));
             let own_artifact = artifact(&owner, &plan);
             let rejected = owner
-                .start_consumer_property_read(request(&own_artifact), &foreign_artifact)
+                .start_finite(request(&own_artifact), &foreign_artifact)
                 .err()
                 .unwrap();
             assert_eq!(rejected.input(), &request(&own_artifact));
@@ -376,7 +374,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
         .into_registration();
     let foreign = artifact(&next_owner, &plan);
     let rejected = current_owner
-        .start_consumer_property_read(request(&foreign), &foreign)
+        .start_finite(request(&foreign), &foreign)
         .err()
         .unwrap();
     assert_eq!(rejected.input(), &request(&foreign));

@@ -592,6 +592,9 @@ impl<C: BindingCompilerExtension + Send + Sync> RouteServerBinding for Endpoint<
 
 #[cfg(feature = "std")]
 impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for Endpoint<C> {
+    fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
+        operation == clinkz_wot_core::Operation::ReadProperty
+    }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.compatibility
     }
@@ -2131,6 +2134,9 @@ mod consumer_only_support {
 
     #[cfg(feature = "std")]
     impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for CaptureClient<C> {
+        fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
+            operation == clinkz_wot_core::Operation::ReadProperty
+        }
         fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
             self.owned
         }
@@ -2718,9 +2724,8 @@ mod consumer_only_support {
                     None,
                 )
                 .unwrap();
-                let (rejected, requests) = observe(false, || {
-                    owner.start_consumer_property_read(request, &envelope)
-                });
+                let (rejected, requests) =
+                    observe(false, || owner.start_finite(request, &envelope));
                 no_requests(requests);
                 let rejected = rejected.err().expect("Host artifact substitution");
                 assert_eq!(rejected.input(), &expected);

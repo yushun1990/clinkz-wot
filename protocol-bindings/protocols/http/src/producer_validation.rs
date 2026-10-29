@@ -7,6 +7,13 @@ use clinkz_wot_core::{
 
 pub(super) fn validate(schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {
     let payload = output.data().ok_or_else(invalid)?;
+    validate_payload(schema, payload)
+}
+
+pub(super) fn validate_payload(
+    schema: TypeSchema,
+    payload: &clinkz_wot_core::Payload,
+) -> CoreResult<()> {
     if payload.body.len() > 4096
         || payload.content_type != "application/json"
         || payload.content_coding.is_some()

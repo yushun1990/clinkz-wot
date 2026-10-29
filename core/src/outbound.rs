@@ -1,12 +1,13 @@
 //! Selected execution requests; no TD or selection authority.
 use crate::*;
-use alloc::{collections::BTreeMap, string::String};
-/// Owned execution envelope for one already-selected Consumer Property Read.
+use alloc::{boxed::Box, collections::BTreeMap, string::String};
+/// Owned execution envelope for an already-selected finite Consumer operation.
 ///
 /// Static target and protocol facts remain in the immutable binding artifact.
 /// This request is name-free: it carries no `ThingId`, `ThingSlotId`, or
 /// `AffordanceTarget`. It holds only the selected artifact reference plus
-/// call-varying URI variables and deadline intent; it contains no TD, Form,
+/// operation, optional application input, call-varying URI variables and deadline
+/// intent; it contains no TD, Form,
 /// options, security provider, candidate list, or fallback authority.
 /// Human-readable Thing/property identity remains only at API/admission
 /// boundaries or in immutable plan/diagnostic storage.
@@ -27,6 +28,8 @@ use alloc::{collections::BTreeMap, string::String};
 #[derive(Debug, Eq, PartialEq)]
 pub struct OutboundRequest {
     artifact: BindingArtifactRef,
+    operation: Operation,
+    input: Option<Box<Payload>>,
     uri_variables: BTreeMap<String, String>,
     deadline: Option<Deadline>,
 }
@@ -64,20 +67,59 @@ impl OutboundRequest {
         uri_variables: BTreeMap<String, String>,
         deadline: Option<Deadline>,
     ) -> CoreResult<Self> {
+        Self::finite(
+            artifact,
+            Operation::ReadProperty,
+            None,
+            uri_variables,
+            deadline,
+        )
+        .map_err(|e| e.error().error().clone())
+    }
+
+    /// Selected finite application intent. This carrier has no selection or
+    /// logical authority. Continuing Action/notification controls have separate
+    /// owners and cannot be encoded as an initiating finite result here.
+    pub fn finite(
+        artifact: BindingArtifactRef,
+        operation: Operation,
+        input: Option<Payload>,
+        uri_variables: BTreeMap<String, String>,
+        deadline: Option<Deadline>,
+    ) -> Result<Self, BindingInputRejection<Option<Payload>>> {
         let identity = artifact.identity();
         if identity.role() != BindingArtifactRole::ConsumerCall
             || identity.plan_id().generation() != identity.plan_set_generation().get()
+            || !matches!(operation, Operation::ReadProperty | Operation::InvokeAction)
+            || (operation == Operation::ReadProperty && input.is_some())
         {
-            return Err(CoreError::Validation(
-                ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-                    .with_operation(Operation::ReadProperty)
-                    .with_plan(identity.plan_id())
-                    .with_binding(identity.binding_id(), identity.binding_generation()),
+            return Err(BindingInputRejection::new(
+                input,
+                BindingOperationalError::new(CoreError::Validation(
+                    ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+                        .with_operation(operation)
+                        .with_plan(identity.plan_id())
+                        .with_binding(identity.binding_id(), identity.binding_generation()),
+                )),
             ));
         }
 
+        let input = input
+            .map(crate::artifact::try_box)
+            .transpose()
+            .map_err(|input| {
+                BindingInputRejection::new(
+                    Some(input),
+                    BindingOperationalError::new(CoreError::Backpressure(
+                        ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+                            .with_operation(operation),
+                    )),
+                )
+            })?;
         Ok(Self {
             artifact,
+            operation,
+            input,
             uri_variables,
             deadline,
         })
@@ -85,7 +127,14 @@ impl OutboundRequest {
 
     /// Returns the operation frozen by this request constructor.
     pub const fn operation(&self) -> Operation {
-        Operation::ReadProperty
+        self.operation
+    }
+
+    pub fn input(&self) -> Option<&Payload> {
+        self.input.as_deref()
+    }
+    pub fn into_input(self) -> Option<Payload> {
+        self.input.map(|input| *input)
     }
 
     /// Returns the exact immutable artifact reference selected by Planning.
