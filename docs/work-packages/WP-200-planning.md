@@ -44,9 +44,10 @@ single-Property `Covered` shape marker and `PreparedProducer` adapter.
 
 ## Joined v6 preparation boundary
 
-The joined Producer path supplies the first composition foothold. Protocol-neutral Consumer
-composition now has priority; neither path generalizes the Copy/atomic
-Property Read adapter into the v6 compiler contract. A Producer's
+The joined Producer and open Consumer paths supply composition footholds for
+[the roadmap's capability growth](../../PLAN.md#near-term-capability-growth-and-priority).
+Neither path generalizes the Copy/atomic Property Read adapter into the v6
+compiler contract. A Producer's
 selected mapping must capture the *actual* Binding/configuration and executable
 codec/schema/security services, carry independent owned facts after source TD
 destruction, and qualify every retained final Form/effective operation before
@@ -64,11 +65,13 @@ introduce a universal artifact/cache/program type or a preparatory gate.
 
 ## Open Consumer integration
 
-The open finite Property Read foothold is implemented. Immediate priority is
-[protocol-neutral operation composition](#consumer-operation-composition),
-replacing the former mandatory second HTTP SSE slice. The earlier source
-diagnosis and initial slice boundary below remain scoped implementation history.
-TD-driven observation and production SSE are deferred under WP-600.
+The open finite Property Read foothold and
+[protocol-neutral operation composition](#consumer-operation-composition) are
+implemented at the scopes below. Further ordering follows
+[PLAN.md](../../PLAN.md#near-term-capability-growth-and-priority) across both roles
+and all Affordance families. The earlier source diagnosis and initial slice
+boundary below remain scoped implementation history. TD-driven notification
+preparation remains open; HTTP SSE is an optional mapping under WP-600.
 
 ### Source constraints and disposition
 
@@ -182,7 +185,8 @@ The service subset is type-only schemas plus actual codec and NoSec destination
 policy, with unsupported assertions/security refused. Portable authoring and
 typed/static pairing are preserved, without claiming a constrained TD runtime.
 Deferred first use and additional schemas/security remain incremental
-capabilities; HTTP SSE is deferred behind Engine composition. Producer complete publication qualification is unchanged.
+capabilities. Notification mapping choices follow the roadmap's capability
+priorities; Producer complete publication qualification is unchanged.
 
 ## Consumer operation composition
 

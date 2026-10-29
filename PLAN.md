@@ -4,28 +4,61 @@ Design target: v6.0 semantic Engine over Binding-owned native runtimes, selected
 by ADR-0025 and active on master. Architecture activation does not transfer
 implementation acceptance or release qualification.
 
-Release target remains v1 with both WoT roles and Property/Action/Event capability
-families, described collections, security, client-only Discovery/Directory,
-portable shared semantics and Host HTTP/HTTPS production delivery. Zenoh/pico and
-real embedded protocol/hardware qualification remain separate future work.
+The enduring [product goals](docs/architecture/00-system-goals-and-context.md)
+remain unchanged. Release target remains v1 with both WoT roles and
+Property/Action/Event capability families, described collections, security,
+client-only Discovery/Directory, portable shared semantics and Host HTTP/HTTPS
+production delivery. Zenoh/pico and real embedded protocol/hardware qualification
+remain separate future work.
 
-## Delivery strategy: alternate semantic kernels and joined execution
+## Delivery strategy: basic capability breadth through joined execution
 
-The cleaned baseline retains narrow working Property Read paths and scoped
-historical evidence. v6 replaces the universal Property Read-shaped SPI, eager
-per-instance plan-set and route-scoped native model. Raw finite and Action kernels
-(and independently reviewed notification work when accepted) provide semantic
-execution primitives, not a general WoT operation. Joined whole-Thing Producer
-composition now carries finite HTTP Property Read and continuing HTTP Actions
-through preparation, closed setup, final qualification, local publication and
-real I/O. That meaningful foothold has a deliberately restricted mapping,
-schema and security envelope; it does not close the Producer families or v1.
+The near-term engineering objective is **basic executable coverage of Property,
+Action and Event in both Consumer and Producer roles, including described
+collection operations**. Existing composition footholds are means to that result.
+Interleave semantic kernels with public TD-driven paths and actual Binding I/O;
+use those paths to challenge interface and ownership assumptions. An operation
+enum, unit test or raw kernel cannot complete a WoT capability.
 
-The next engineering emphasis is **composition**: interleave semantic kernel
-work with executable end-to-end paths, falsify interface/owner assumptions at
-the seams, and correct wrong abstractions instead of accumulating independent
-raw operation kernels. This is a priority rule, not an obligation to implement a
-single protocol first or freeze a cross-family ordering.
+### Capability coverage
+
+This coarse baseline is grounded in source and integration fixtures at
+`dbf81f55536b8789c253b1f90199cee85d3ed6af`; linked implementation and scoped
+evidence remain the availability authority. It is not a package acceptance record.
+
+**Semantic representation:** [TD models and shared interpretation](td/src/semantic.rs)
+cover all three families and Thing-root collection Forms, including operation
+applicability/defaults and distinct schema roles. The
+[operation vocabulary](core/src/operation.rs) represents all 18 TD 1.1 operations.
+These facts do not establish executable support; schema and extension processing
+still have supported-subset limits.
+
+| Capability | Raw execution kernels | TD-driven Consumer composition | TD-driven Producer composition | Actual Binding I/O evidence |
+| --- | --- | --- | --- | --- |
+| Property read | Finite Consumer/Producer paths | Owned preparation and captured services | Qualified final TD and local publication | HTTP in both roles; independent test datagram Consumer |
+| Property write | Producer finite read/write dispatch | Open | Open | Raw test TCP Producer only |
+| Property observe / unobserve | Consumer notification conversation and stop | Open | Open | Raw test datagram observation only; no TD qualification |
+| Action invoke | Consumer finite call; Producer continuing invocation store | Explicit `synchronous: true` subset only | Continuing HTTP mapping with captured validation and controls | Test datagram synchronous Consumer; HTTP and test datagram Producer |
+| Action query / cancel | Producer retained invocation controls | Open | Qualified described HTTP control routes | HTTP and test datagram Producer; no composed Consumer control path |
+| Event subscribe / unsubscribe and Producer emission | Raw Consumer Event controls, data, reciprocal response and cleanup | Open | Open | In-memory Consumer lifecycle fixtures; no joined Event native I/O |
+| Described collection operations | No collection execution path | Open | Open | No joined native collection evidence |
+
+Here **Open** means no joined implementation for that role/operation, even when
+a raw primitive exists. Finite read/write evidence is in
+[native ingress](servient/finite/tests/native_ingress.rs); composed Producer
+read/Action evidence is in
+[composed Thing](protocol-bindings/protocols/http/tests/composed_thing.rs) and
+[HTTP Actions](protocol-bindings/protocols/http/tests/action_producer.rs).
+[Downstream Consumer composition](tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
+distinguishes prepared finite I/O from raw observation; the
+[notification fixtures](servient/finite/tests/notification.rs) exercise Event
+lifecycle semantics in memory. Test Bindings are not production protocols.
+
+**Production qualification:** narrow HTTP Property Read evidence retains its
+[recorded scope](docs/evidence/WP-600-http-consumer-property-read.toml).
+Current joined paths are bounded Host/manual, type-only schema and NoSec subsets;
+their real I/O does not establish complete family, general DataSchema/security,
+HTTPS, constrained-profile or v1 qualification. Those remain delivery work.
 
 ### Capability horizons
 
@@ -33,24 +66,65 @@ single protocol first or freeze a cross-family ordering.
 | --- | --- | --- |
 | A — Semantic ownership | Finite exchange, continuing Action, notification conversation and Producer publication retain distinct but composable controls and owners. | Executable operation/lifecycle cases, including stale identity, cancellation, late results, saturation and retained cleanup. Raw kernels alone make no TD or native I/O claim. |
 | B — Joined Producer foothold | Whole-Thing composition supports finite Property Read and continuing Action mappings over actual native participants; broaden only with complete final support and retained ownership. | Public real-peer tests plus negative support, prepublication, cancellation, replacement and final-resource-release evidence, scoped to the implemented mappings. |
-| C — Open Consumer and broader operations | Complete protocol-neutral Consumer operation and instance composition across distinct finite and notification lifecycles; continue Property/Action/Event and described collections in both roles. | Owned third-party preparation and multi-family finite I/O, shared logical authority across independent lifecycles, then TD-driven notifications. No family completes from a raw kernel or mock alone. |
+| C — Open Consumer and broader operations | Establish basic executable Property/Action/Event and described collection coverage in both roles through open composition with distinct finite, Action and notification lifecycles. | TD-driven selection or qualified publication, actual services and real Binding I/O for each claimed role/operation subset, with its control and cleanup evidence. Raw kernels and mocks alone do not complete a family. |
 | D — Interoperability and product qualification | Verify downstream third-party Binding composition, selected cross-protocol contrasts, Host HTTP/HTTPS and security, Discovery/Directory client, portable shared semantics and supported profiles. | Real native peers, advertised DataSchema/security/profile checks, scoped resource/performance measurements and client Discovery behavior. |
 | E — v1 integration | Reconcile completed WP-400/500/600 capability claims through WP-700 without inheriting historical acceptance. | Independent conformance, security, integration and release evidence for the exact advertised v1 scope. |
 
 Horizons express **recommended concentration, not sequential package gates**.
-The immediate emphasis is **protocol-neutral Engine composition**, following the
-open Consumer preparation/finite foothold. Challenge operation, schema-role and
-logical-owner assumptions before extending a production protocol. Property Read
-and explicitly synchronous Action invocation now exercise the finite preparation
-boundary; finite and raw notification facets share one independent Consumer
-authority while retaining distinct controls and cleanup. These are bounded Host
-subsets, not completion of all capability families.
+The present frontier spans A–C: extend working composition into the missing
+role/operation paths while retaining existing lifecycle guarantees. Basic coverage
+is narrower than D's production qualification and E's release integration.
 
-**HTTP SSE is deferred.** TD-driven notification selection, service validation and
-control mappings remain valuable subsequent Engine work; production streaming
-framing is not the immediate implementation priority. Independent test Bindings
-and actual I/O may expose composition defects without introducing another
-production protocol. Discovery and HTTPS/security retain their own dependencies.
+### Near-term capability growth and priority
+
+The objective covers the following distinct semantics, delivered in coherent,
+independently reviewable increments:
+
+- **Property:** retain reads and add TD-driven write and observation/stop paths
+  in both roles. Validate written and delivered values; observation establishment
+  fabricates no initial value and performs no hidden read.
+- **Action:** extend the synchronous Consumer subset to continuing invocation
+  and described query/cancel, preserving Producer controls. Retain the original
+  mapping, principal, result and cleanup independently of the initiating exchange;
+  local cancellation does not prove remote rollback.
+- **Event:** join Producer emission and Consumer subscription/unsubscription to
+  TD-driven preparation/publication and real I/O. Keep subscription, data,
+  optional dataResponse and cancellation roles distinct; described reciprocal
+  responses require actual native support and cardinality. Event loss is not
+  Property coalescing.
+- **Collections:** deliver described Thing-root operations alongside family
+  growth: Property read/write all or multiple and observe/unobserve all, Action
+  query all, and Event subscribe/unsubscribe all. Preserve all-versus-selected
+  scope, combined schemas, logical attribution, partial failure and supported
+  atomicity; never silently lower a native group operation into N calls or
+  subscriptions. [TD 1.1 collection Forms](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing)
+  and [Core collection semantics](docs/spec/interaction-core.md) retain authority.
+
+For a basic executable claim, use public TD-driven selection or complete Producer
+qualification, captured actual services, source-independent execution and a real
+Binding peer for the declared subset. Exercise the relevant refusal, validation,
+cancellation, replacement, late-result and final-release paths. Semantic breadth,
+raw lifecycle evidence and production qualification remain separate claims. The
+objective neither requires all operations in one PR nor every Binding to support
+every operation.
+
+Select subsequent increments against the **whole roadmap and remaining product
+gaps**, using the coverage above and exact work-package dependencies. Prefer
+missing executable roles/operations over another mapping of an already exercised
+path unless a concrete interoperability need or defect justifies that choice.
+The implementation PR should explain the capability advanced, why it is valuable
+relative to remaining gaps, its dependencies and the scope of its evidence.
+Correct prerequisite schema, security or ownership defects with the affected
+slice; do not accumulate speculative kernels or universal runtime abstractions.
+This does not impose a fixed cross-family sequence or postpone independent
+Discovery, HTTPS/security and portable-profile work until every operation exists.
+
+**HTTP SSE is an optional notification mapping**, selected when it advances the
+chosen capability. It is neither a mandatory predecessor nor a standing next
+task. Existing HTTP or independent test Bindings with real I/O may be economical
+participants; other native interactions may better expose an unproved boundary.
+Protocol choice follows capability and interoperability needs, while Host
+HTTP/HTTPS remains the selected first production direction.
 
 ### Joined Producer composition: retained boundary
 
@@ -92,20 +166,13 @@ the joined path, replace them rather than maintain compatibility facades.
 
 ### Continuing capability growth
 
-Consumer growth follows demonstrated architectural gaps rather than a fixed
-finite-then-SSE sequence. Operation-scoped preparation and shared instance
-authority belong to [WP-200](docs/work-packages/WP-200-planning.md#consumer-operation-composition)
+Operation-scoped preparation and shared instance authority belong to
+[WP-200](docs/work-packages/WP-200-planning.md#consumer-operation-composition)
 and [WP-400](docs/work-packages/WP-400-servient.md#joined-consumer-execution),
 with separate native facets in [WP-300](docs/work-packages/WP-300-bindings.md#consumer-capability-composition).
-Deferred production observation scope remains in
+The optional HTTP observation mapping remains in
 [WP-600](docs/work-packages/WP-600-protocol-bindings.md#td-driven-consumer-observation).
 
-After composition has an executable foothold, extend one operation/lifecycle
-at a time using its own semantic obligations. In particular, Action invocation
-outlives initiating finite transport exchanges; notification establishment,
-flow/loss, reciprocal Event responses and stop differ from finite calls.
-Property observation has no fabricated initial value. Described collection
-operations preserve native group semantics instead of implicit N-call lowering.
 Bindings keep native matching, multicast/distribution, correlation, session
 sharing, retries and physical infrastructure; the Engine owns independent
 logical acceptance and application dispatch.

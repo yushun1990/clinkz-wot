@@ -76,5 +76,5 @@ operation and optional application input. Retained static/dual-role adapters sta
 explicitly Property Read-only. Neither facet owns Consumer currentness: finite
 calls and `ConsumerNotificationBinding` participants retain the same externally
 owned logical instance reference. Production HTTP remains Property Read-only on
-this Consumer path. HTTP SSE is deferred; the real datagram participants are test
-Bindings, not a new production protocol.
+this Consumer path. HTTP SSE remains an optional mapping; the real datagram
+participants are test Bindings, not a new production protocol.

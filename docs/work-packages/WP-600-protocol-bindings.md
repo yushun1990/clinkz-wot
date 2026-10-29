@@ -93,24 +93,30 @@ aggregate capacity and release qualification retain their separate boundaries.
 ## Integration priority after the Producer foothold
 
 Whole-Thing composition and the HTTP finite/Action participants now supply
-qualified publication with real I/O, within their supported envelopes. Continue
-their ownership/publication regressions while prioritizing
-[open Consumer integration](WP-200-planning.md#open-consumer-integration).
-Its first PR includes existing HTTP Property Read and an actual downstream finite
-Binding on the same open path; a new HTTP feature alone would leave the generic
-admission defect intact. Broader Producer, HTTPS/security and other protocol
-work retain their own dependencies and qualification scope.
+qualified publication with real I/O, within their supported envelopes.
+[Open Consumer integration](WP-200-planning.md#open-consumer-integration) also has
+an executable finite foothold. Further protocol work follows
+[PLAN.md's capability priorities](../../PLAN.md#near-term-capability-growth-and-priority)
+across both roles and Property/Action/Event, retaining ownership/publication
+regressions. Choose a mapping for the capability or interoperability gap it
+addresses; a convenient protocol feature is not its own roadmap priority.
+HTTPS/security and other work retain their dependencies and qualification scope.
 
 ## TD-driven Consumer observation
 
-**Deferred:** HTTP SSE is no longer the next implementation priority. The open
-owned compiler is integrated, but finite operation keys/requests/data roles and
-independent Consumer authority needed correction first. WP-200/WP-400 now prove
-those boundaries using existing HTTP and independently authored test Bindings.
-A raw notification participant alone does not establish TD-driven composition.
-The future slice extends actual selection/preparation to `ObserveProperty` with
-captured validation/security and stop mappings; it must preserve separate finite
-and notification lifecycles rather than impose an SSE-shaped Engine interface.
+TD-driven notification selection/preparation, captured validation/security and
+control mappings remain open capabilities in WP-200/WP-400. A raw notification
+participant alone does not establish them. Their implementation follows the
+roadmap's basic coverage objective; production HTTP streaming is not a
+prerequisite for that Engine work. Preserve separate finite and notification
+lifecycles. Event subscription/response and Producer notifications retain their
+own semantics and delivery increments.
+
+### Optional HTTP SSE mapping
+
+HTTP SSE is one candidate for Consumer Property observation, not the prescribed
+next slice or a dependency of other Affordance families. The concrete scope below
+applies if this mapping is selected against the roadmap's remaining gaps.
 
 The existing [HTTP compiler](../../protocol-bindings/protocols/http/src/compiler.rs)
 accepts only `ReadProperty` without a subprotocol. Its
@@ -120,7 +126,7 @@ mechanics, not that finite body collector or its total-response wire cap as the
 stream model. The Binding needs bounded streaming framing/decoding and retained
 native progress/retirement; the Engine keeps logical delivery and visible loss.
 
-Executable acceptance when this deferred capability is implemented:
+Executable evidence for this mapping when selected:
 
 - Consume a TD, select the actual registered observation capability, retain
   resolved URL/method/subprotocol, schema/media/security facts and stop mapping,
@@ -153,7 +159,8 @@ do not claim browser EventSource or WoT Profile conformance from this subset.
 
 Redirects, reconnect/replay/Last-Event-ID policy, TLS/authentication, broader
 DataSchema, Event subscribe/response, Producer notifications, broker-native
-sharing and constrained execution are deferred. The first SSE mapping terminates
+sharing and constrained execution are outside this proposed SSE subset; their
+roadmap priority is independent of it. The proposed mapping terminates
 observably on disconnect and follows no redirects; it does not promise replay or
 remote receipt. These are concrete Binding limits, not new Consumer SPI rules.
 
