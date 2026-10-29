@@ -324,7 +324,7 @@ impl ConsumerRuntime {
         for offset in 0..slots {
             let slot = &mut state.slots[(start + offset) % slots];
             if let Some(call) = slot {
-                call.step(active, cx, now, budget);
+                let _ = call.step(active, cx, now, budget);
                 if call.abandoned && call.terminal {
                     *slot = None;
                 }
@@ -369,8 +369,7 @@ impl ConsumerCall {
         let Some(call) = slot.as_mut().filter(|c| c.sequence == self.sequence) else {
             return Poll::Pending;
         };
-        call.step(active, cx, now, budget);
-        if !call.terminal {
+        if call.step(active, cx, now, budget).is_pending() {
             return Poll::Pending;
         }
         Poll::Ready(ConsumerSettlement {
@@ -436,13 +435,15 @@ impl Call {
             self.cancelling = true;
         }
     }
+    /// Ready requires a terminal outcome and paid current-policy checks in this
+    /// step. A previously terminal, unread result alone cannot authorize delivery.
     fn step(
         &mut self,
         active: bool,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
-    ) {
+    ) -> Poll<()> {
         match now.checked_cmp(self.last_time) {
             Some(Ordering::Equal | Ordering::Greater) => self.last_time = now,
             _ => self.cancel(CoreError::InternalInvariant(ErrorContext::new(
@@ -462,27 +463,27 @@ impl Call {
             self.cancel(stale());
         }
         if !pay(budget, W::ProviderProbes, self.definition.access_work()) {
-            return;
+            return Poll::Pending;
         }
         if let Err(e) = self.definition.check_current() {
             self.cancel(e);
         }
         if self.terminal {
-            return;
+            return Poll::Ready(());
         }
         if self.outcome.is_none() {
             // Raw callbacks receive only isolated native credit after Engine
             // bookkeeping prepayment; no zero-credit callback is invoked.
             if !pay(budget, W::HandlerSteps, 1) {
-                return;
+                return Poll::Pending;
             }
             if self.cancelling {
                 if !pay(budget, W::CleanupItems, 1) {
-                    return;
+                    return Poll::Pending;
                 }
                 let mut native = native_budget(budget);
                 if native.is_exhausted() {
-                    return;
+                    return Poll::Pending;
                 }
                 let raw = self.raw.as_mut().unwrap();
                 let outcome = if self.cancel_started {
@@ -523,7 +524,7 @@ impl Call {
             } else {
                 let mut native = native_budget(budget);
                 if native.is_exhausted() {
-                    return;
+                    return Poll::Pending;
                 }
                 if let Poll::Ready(result) = self
                     .raw
@@ -563,7 +564,7 @@ impl Call {
                     RetryClass::Never,
                 )));
             self.cancel_started = true;
-            return;
+            return Poll::Pending;
         }
         if let Some(outcome) = self.outcome.as_mut() {
             if let BindingCallSettlement::Returned(Ok(output)) = outcome {
@@ -572,7 +573,7 @@ impl Call {
                     W::CodecInputBytes,
                     self.definition.data_policy().validation_work,
                 ) {
-                    return;
+                    return Poll::Pending;
                 }
                 // Authorization/service loss fences application success while
                 // preserving the original result in the settlement owner.
@@ -586,7 +587,9 @@ impl Call {
                 }
             }
             self.terminal = true;
+            return Poll::Ready(());
         }
+        Poll::Pending
     }
 }
 fn native_budget(b: &mut WorkBudget) -> WorkBudget {

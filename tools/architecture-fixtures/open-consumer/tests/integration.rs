@@ -1307,3 +1307,296 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
         }
     }
 }
+
+#[test]
+fn rereview_unread_success_cannot_bypass_changed_access_with_short_credit() {
+    for short_credit in [false, true] {
+        let p = Arc::new(Probe::default());
+        let (peer, target) = udp();
+        let registry = registry(vec![registration(1, p.clone())]);
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let thing = source(json!([{"href":target}]));
+        let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
+        let mut call = rt
+            .read_property("a", Deadline::NONE, now(), &mut work())
+            .unwrap();
+        assert!(
+            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                .is_pending()
+        );
+        exchange(&peer, b"7");
+        let start = Instant::now();
+        while p.validates.load(Ordering::Relaxed) == 0 {
+            rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+            assert!(start.elapsed() < Duration::from_secs(5));
+        }
+        p.denied.store(true, Ordering::Relaxed);
+        let mut budget = work();
+        if short_credit {
+            budget.set_remaining(WorkClass::ProviderProbes, 0);
+        }
+        let accepted = match call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut budget)
+        {
+            Poll::Ready(result) => {
+                if !short_credit {
+                    assert!(
+                        matches!(result.result(), Err(CoreError::Validation(_))),
+                        "fully paid control must enforce the changed policy"
+                    );
+                }
+                result.result().is_ok()
+            }
+            Poll::Pending => {
+                assert!(short_credit, "fully paid terminal control must settle");
+                false
+            }
+        };
+        drop(call);
+        drop(rt);
+        drop(registry);
+        clean(&bank);
+        assert!(
+            !accepted,
+            "short_credit={short_credit}: delivered success without the current access policy check"
+        );
+    }
+}
+
+#[test]
+fn rereview_inspection_scratch_must_obey_the_admission_limit() {
+    use clinkz_wot_planning::*;
+    const INSPECTION_BYTES: u64 = 8_388_609;
+    struct LargeInspection(Compiler);
+    impl ConsumerCompiler for LargeInspection {
+        const CONTRACT: ConsumerCompilerContract = ConsumerCompilerContract {
+            inspection_temporary_bytes: INSPECTION_BYTES,
+            ..<Compiler as ConsumerCompiler>::CONTRACT
+        };
+        fn configuration(&self) -> ConsumerBindingConfiguration {
+            ConsumerCompiler::configuration(&self.0)
+        }
+    }
+    impl BindingCompilerExtension for LargeInspection {
+        type Cursor = <Compiler as BindingCompilerExtension>::Cursor;
+        type Artifact = <Compiler as BindingCompilerExtension>::Artifact;
+        fn compatibility(&self) -> BindingArtifactCompatibility {
+            self.0.compatibility()
+        }
+        fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+            let mut scratch = Vec::<u8>::new();
+            scratch
+                .try_reserve_exact(INSPECTION_BYTES as usize)
+                .unwrap();
+            std::hint::black_box(scratch.capacity());
+            self.0.bounds(input)
+        }
+        fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<Self::Cursor> {
+            self.0.start(input)
+        }
+        fn step(
+            &self,
+            input: &BindingCompilerInput<'_>,
+            cursor: Self::Cursor,
+            budget: &mut WorkBudget,
+        ) -> BindingCompilerStep<Self::Cursor, Self::Artifact> {
+            self.0.step(input, cursor, budget)
+        }
+        fn abort(&self, cursor: Self::Cursor) {
+            self.0.abort(cursor)
+        }
+    }
+    let p = Arc::new(Probe::default());
+    let (_peer, target) = udp();
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let thing = source(json!([{"href":target}]));
+    let control = registry(vec![registration(1, p.clone())]);
+    drop(prepare(&control, &thing, bank.clone()));
+    drop(control);
+    clean(&bank);
+    p.bounds.store(0, Ordering::Relaxed);
+    let compiler =
+        HostBindingCompilerRegistration::try_new_consumer_extension(LargeInspection(Compiler {
+            probe: p.clone(),
+            config: configuration(),
+            oversized_work: false,
+        }))
+        .unwrap_or_else(|_| panic!("compiler capture"));
+    let preparation = HostConsumerBindingPreparation::try_pair(execution(1, p.clone()), compiler)
+        .unwrap_or_else(|_| panic!("pairing"));
+    let registry = registry(vec![ConsumerRegistrationInput {
+        preparation,
+        services: services(p.clone()),
+    }]);
+    let cap = GatewayDefaultV1::LIMITS
+        .get(ResourceKind::AdmissionTemporaryBytesPerOperationMax)
+        .unwrap();
+    assert!(INSPECTION_BYTES > cap);
+    let result = registry.prepare(
+        &thing,
+        &GatewayDefaultV1::LIMITS,
+        bank.clone(),
+        ConsumerSelector::default(),
+        &mut work(),
+        drive,
+    );
+    assert!(matches!(
+        &result,
+        Err(CoreError::LimitExceeded {
+            resource: ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+            limit,
+            requested: Some(requested),
+            ..
+        }) if *limit == cap && *requested == INSPECTION_BYTES
+    ));
+    drop(result);
+    clean(&bank);
+    assert_eq!(p.bounds.load(Ordering::Relaxed), 0, "no bounds callback");
+
+    // At and below the local envelope, inspection still reserves its backing
+    // together with the live common arena in both global accounts.
+    for cap in [INSPECTION_BYTES, INSPECTION_BYTES + 1] {
+        let limits = GatewayDefaultV1::LIMITS.clone().with_limit(
+            ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+            Some(cap),
+        );
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let result = registry
+            .prepare(
+                &thing,
+                &limits,
+                bank.clone(),
+                ConsumerSelector::default(),
+                &mut work(),
+                drive,
+            )
+            .unwrap();
+        assert!(
+            bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+                .peak()
+                >= cap + INSPECTION_BYTES
+        );
+        assert!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).peak() >= cap + INSPECTION_BYTES
+        );
+        drop(result);
+        clean(&bank);
+    }
+    assert_eq!(p.bounds.load(Ordering::Relaxed), 2);
+
+    // A locally valid callback cannot run if the overlapping common/inspection
+    // backing would exceed the global temporary account.
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(
+            ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+            Some(INSPECTION_BYTES),
+        )
+        .with_limit(
+            ResourceKind::AdmissionTemporaryBytesGlobalMax,
+            Some(2 * INSPECTION_BYTES - 1),
+        );
+    let bank = Arc::new(HostResourceAccounts::new(&limits));
+    assert!(
+        registry
+            .prepare(
+                &thing,
+                &limits,
+                bank.clone(),
+                ConsumerSelector::default(),
+                &mut work(),
+                drive,
+            )
+            .is_err()
+    );
+    assert_eq!(p.bounds.load(Ordering::Relaxed), 2, "no unpaid callback");
+    assert_eq!(p.native.load(Ordering::Relaxed), 0, "pure preparation");
+    drop(registry);
+    clean(&bank);
+}
+
+#[test]
+fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
+    for change in ["none", "access", "configuration", "data"] {
+        let p = Arc::new(Probe::default());
+        let (peer, target) = udp();
+        let registry = registry(vec![registration(1, p.clone())]);
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let rt = runtime(
+            prepare(&registry, &source(json!([{"href":target}])), bank.clone()),
+            bank.clone(),
+        );
+        let mut call = rt
+            .read_property("a", Deadline::NONE, now(), &mut work())
+            .unwrap();
+        assert!(
+            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                .is_pending()
+        );
+        exchange(&peer, b"7");
+        let start = Instant::now();
+        while p.validates.load(Ordering::Relaxed) == 0 {
+            rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+            assert!(start.elapsed() < Duration::from_secs(5));
+        }
+        match change {
+            "none" => {}
+            "access" => p.denied.store(true, Ordering::Relaxed),
+            "configuration" => p.changed.store(true, Ordering::Relaxed),
+            "data" => p.data_lost.store(true, Ordering::Relaxed),
+            _ => unreachable!(),
+        }
+        let charged: Vec<_> = ResourceKind::ALL
+            .iter()
+            .map(|&kind| bank.account(kind).used())
+            .collect();
+        for credit in [0, 1] {
+            let mut budget = work();
+            budget.set_remaining(WorkClass::ProviderProbes, credit);
+            assert!(
+                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut budget)
+                    .is_pending(),
+                "{change}, credit={credit}: handoff must wait for the full current check"
+            );
+            assert!(!rt.is_idle());
+            assert_eq!(p.calls.load(Ordering::Relaxed), 0);
+            assert_eq!(
+                charged,
+                ResourceKind::ALL
+                    .iter()
+                    .map(|&kind| bank.account(kind).used())
+                    .collect::<Vec<_>>()
+            );
+        }
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 2);
+        let Poll::Ready(settlement) =
+            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut budget)
+        else {
+            panic!("{change}: a paid terminal check must allow handoff");
+        };
+        if change == "none" {
+            assert!(settlement.result().is_ok());
+            assert!(settlement.first_cause().is_none());
+        } else {
+            assert!(matches!(settlement.result(), Err(CoreError::Validation(_))));
+            assert!(matches!(
+                settlement.first_cause(),
+                Some(CoreError::Validation(_))
+            ));
+        }
+        assert!(matches!(
+            settlement.native_outcome(),
+            BindingCallSettlement::Returned(Ok(_))
+        ));
+        assert!(rt.is_idle());
+        assert_eq!(p.calls.load(Ordering::Relaxed), 0);
+        drop(settlement);
+        assert_eq!(p.calls.load(Ordering::Relaxed), 1);
+        drop(call);
+        drop(rt);
+        drop(registry);
+        clean(&bank);
+        for &port in p.ports.lock().unwrap().iter() {
+            drop(UdpSocket::bind(port).unwrap());
+        }
+    }
+}

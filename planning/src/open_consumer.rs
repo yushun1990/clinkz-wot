@@ -795,6 +795,11 @@ fn qualify_contract(m: ConsumerCompilerMetadata, limits: &ResourceLimits) -> Cor
     {
         return Err(invalid());
     }
+    check_limit(
+        limits,
+        K::AdmissionTemporaryBytesPerOperationMax,
+        c.inspection_temporary_bytes,
+    )?;
     for amount in [c.inspection_work, c.start_work, c.step_work] {
         check_limit(
             limits,
