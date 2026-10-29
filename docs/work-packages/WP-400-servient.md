@@ -174,10 +174,11 @@ qualification, fleet scalability, hardware evidence or package/gate completion.
 
 ## Joined Consumer execution
 
-Prioritize [operation/instance composition](WP-200-planning.md#consumer-operation-composition)
-over the previously scheduled HTTP SSE implementation. Finite and raw notification
-owners now share a separate move-only Core `ConsumerInstance` authority through
-passive retained references. Prepared definitions and native resources contain no
+The implemented [operation/instance composition](WP-200-planning.md#consumer-operation-composition)
+is a foothold for [the roadmap's broader capability objective](../../PLAN.md#near-term-capability-growth-and-priority).
+Finite and raw notification owners now share a separate move-only Core
+`ConsumerInstance` authority through passive retained references. Prepared
+definitions and native resources contain no
 such permission. Equal numeric slots do not identify the same incarnation.
 
 Finite execution supports Property Read and explicitly synchronous Actions with
