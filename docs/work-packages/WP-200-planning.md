@@ -73,13 +73,14 @@ would leave the important compiler-to-executor seam untested.
 ### Source constraints and disposition
 
 This sequence implements ADR-0025 and PREP-ISOLATION/SELECT/DEFER; it does not
-replace their architecture. The relevant implementation evidence is:
+replace their architecture. The approved diagnosis used source basis `9c38d2a`; the following table records
+those constraints and dispositions. The implemented successor is described below.
 
 | Source | Constraint and implementation decision |
 | --- | --- |
 | [binding_registration.rs](../../planning/src/binding_registration.rs), `static_consumer_support` / `host_consumer_support` | Static capture downcasts to `ResolvedTargetCompiler`; Host capture requires private `consumer_support`. Generic `HostBindingCompilerRegistration::try_new` never issues that support. Replace these as **general** eligibility checks with captured actual compiler/executor/configuration/services and qualified work/storage/cleanup bounds. |
 | [binding_compiler.rs](../../planning/src/binding_compiler.rs), `HostSemanticCompiler`, `ConsumerCompilerSupport` | Atomic lowering, `Artifact: Copy` and fixed destruction/layout costs are legitimate restrictions of the inline adapter. They cannot qualify arbitrary owned output merely by removing the downcast or setting a support flag. Keep their narrow regressions; replace Consumer-wide dependence on those assumptions. |
-| [semantic_compilation.rs](../../protocol-bindings/protocols/http/tests/semantic_compilation.rs), `reply_bus` tests | Third-party inline compiler/executor composition already works, with an in-memory result. `owned_incremental_compiler_fits_generic_erasure_but_not_consumer_admission` demonstrates the exact missing admission while successfully running 512 paid pure steps outside it. General storage is available; a wholesale compiler redesign is unwarranted. |
+| [semantic_compilation.rs](../../protocol-bindings/protocols/http/tests/semantic_compilation.rs), `reply_bus` tests | Third-party inline compiler/executor composition already works, with an in-memory result. The former `owned_incremental_compiler_fits_generic_erasure_but_not_consumer_admission` demonstrated the exact missing admission while successfully running 512 paid pure steps outside it. General storage is available; a wholesale compiler redesign is unwarranted. |
 | [consumer_property_read.rs](../../planning/src/consumer_property_read.rs), `ConsumerPropertyReadRegistration`; [binding.rs](../../core/src/binding.rs), `BindingRegistrationCapabilities` | Sealed aggregate eligibility and Property Read role bits are restricted adapters, not the general registry. Consumer admission needs per-operation support and deterministic actual-provider selection, allowing unsupported alternatives and requiring at least one supported interaction by default. |
 | [binding_compiler.rs](../../planning/src/binding_compiler.rs), `BindingCompilerInput::resolved`; [TD semantics](../../td/src/semantic.rs) | The compiler carrier assumes a Property Read logical record and a matching TD id. Reuse TD-resolved Form/operation facts and extension associations (`FormOwner`); replace this carrier's general use, including mandatory TD identity. Do not copy Producer whole-Thing coverage rules into Consumer admission. |
 
@@ -140,6 +141,48 @@ costs and variable destruction are the main integration risks, not an excuse to
 retain `Copy` as a universal rule. Broader DataSchema/security, deferred first use,
 checked sharing/reuse and other capability families remain separate working
 slices, with unsupported meaning reported truthfully.
+
+## Implemented open finite Consumer slice
+
+The public entry is `open_consumer::ConsumerRegistry`; HTTP's
+`try_consumer_registration` supplies a complete registration and actual services.
+The existing generic Host compiler erasure now captures `ConsumerCompiler` work,
+configuration and actual Layout metadata for owned incremental authoring. Typed
+static capture uses `StaticConsumerBindingPreparation::try_pair` and the same
+portable contract. `BindingCompilerInput::operation_input` carries resolved
+Form/operation facts rather than a Property Read logical record or source TD id.
+
+Core retains completed definitions, service contracts and the shared opaque Host
+bank. `servient-finite::consumer::ConsumerRuntime` owns only finite logical calls,
+current authority, captured definitions, native calls, unread/late outcomes and
+original leases. Its normal dependency graph contains Core and Foundation only.
+The HTTP example uses this path; method/header/context/framing and prior finite
+ownership regressions continue on the explicitly restricted inline helper.
+`InlineConsumerCompilerSupport`, `InlineConsumerCompilerRegistration`,
+`InlineConsumerPropertyReadRegistration`, `try_into_inline_consumer_compiler` and
+`try_inline_consumer_registration` replace their misleading general public names;
+there are no compatibility aliases for those removed names.
+
+The standalone [downstream crate](../../tools/architecture-fixtures/open-consumer/README.md)
+is outside workspace membership and supplies its own real datagram finite
+Binding, variable owned request program/destructor, incremental compiler and
+integer codec/access service. One application selects and executes both it and
+HTTP after dropping the source/compiler owners. It covers actual pairing,
+unsupported operations/alternatives, ambiguity, selectors, anonymous TDs, short
+credit, allocation/capacity refusal, compilation failure/cancellation, original
+results/accounts, replacement, validation/service loss, cleanup and final release.
+It replaces the old owned-compiler admission-rejection demonstration with successful
+composed real execution. Commands and exact author results belong to the PR;
+this does not grant independent acceptance or package/milestone closure.
+
+This Host/manual slice bounds registration count to 32, reported Form/operations
+to 128 and concurrent logical slots to 32. It eagerly prepares each selected
+candidate while the common semantic Form loan lives; early driver return aborts.
+The service subset is type-only schemas plus actual codec and NoSec destination
+policy, with unsupported assertions/security refused. Portable authoring and
+typed/static pairing are preserved, without claiming a constrained TD runtime.
+Deferred first use, additional schemas/security and HTTP SSE remain subsequent
+working capabilities. Producer complete publication qualification is unchanged.
 
 ## Implemented finite join
 

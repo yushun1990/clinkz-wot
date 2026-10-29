@@ -405,7 +405,7 @@ fn error() -> CoreError {
 pub fn production_static_registration(
     compiler: ResolvedTargetCompiler,
     identity: BindingRegistrationIdentity,
-) -> ConsumerCompilerRegistration<
+) -> InlineConsumerCompilerRegistration<
     StaticBindingPreparation<
         impl PrepareServerBinding<Compiler = ResolvedTargetCompiler, Artifact = ResolvedTargetArtifact>,
     >,
@@ -425,7 +425,7 @@ pub fn production_static_registration(
     );
     StaticBindingPreparation::producer_and_consumer_property_read(input)
         .unwrap_or_else(|_| panic!("production complete static registration"))
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("production static support capture"))
 }
 
@@ -433,9 +433,9 @@ pub fn production_static_registration(
 pub fn production_host_registration(
     compiler: ResolvedTargetCompiler,
     identity: BindingRegistrationIdentity,
-) -> ConsumerCompilerRegistration<HostBindingPreparation> {
+) -> InlineConsumerCompilerRegistration<HostBindingPreparation> {
     let compatibility = identity.artifact_compatibility();
-    let compiler = HostBindingCompilerRegistration::try_new_consumer(compiler)
+    let compiler = HostBindingCompilerRegistration::try_new_inline_consumer(compiler)
         .unwrap_or_else(|_| panic!("production supported Host adapter"));
     let input = HostBindingPreparationInput::producer_and_consumer_property_read(
         identity,
@@ -453,7 +453,7 @@ pub fn production_host_registration(
     );
     HostBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("production complete Host registration"))
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("production Host support capture"))
 }
 

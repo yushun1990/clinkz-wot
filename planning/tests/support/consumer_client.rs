@@ -234,7 +234,7 @@ pub fn identity(c: &ResolvedTargetCompiler) -> BindingRegistrationIdentity {
 pub fn static_registration(
     c: ResolvedTargetCompiler,
     stats: Arc<Stats>,
-) -> ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>> {
+) -> InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>> {
     let compatibility = c.compatibility();
     let input = StaticConsumerBindingPreparationInput::new(
         identity(&c),
@@ -249,19 +249,19 @@ pub fn static_registration(
     );
     StaticConsumerBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("static registration"))
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("static capture"))
 }
 #[cfg(feature = "std")]
 pub fn host_registration(
     c: ResolvedTargetCompiler,
     stats: Arc<Stats>,
-) -> ConsumerCompilerRegistration<HostConsumerBindingPreparation> {
+) -> InlineConsumerCompilerRegistration<HostConsumerBindingPreparation> {
     let compatibility = c.compatibility();
     let input = HostConsumerBindingPreparationInput::new(
         identity(&c),
         BindingExecutionSupport::host_erased(),
-        HostBindingCompilerRegistration::try_new_consumer(c).unwrap(),
+        HostBindingCompilerRegistration::try_new_inline_consumer(c).unwrap(),
         Box::new(Client {
             compatibility,
             stats,
@@ -271,16 +271,18 @@ pub fn host_registration(
     );
     HostConsumerBindingPreparation::new(input)
         .unwrap_or_else(|_| panic!("Host registration"))
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("Host capture"))
 }
 
 // Normal-library compilation checks the actual adapters in both ARM cells.
-fn aggregate_eligible<R: clinkz_wot_planning::ConsumerPropertyReadRegistration>() {}
+fn aggregate_eligible<R: clinkz_wot_planning::InlineConsumerPropertyReadRegistration>() {}
 pub fn check_normal_graph() {
-    aggregate_eligible::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>();
+    aggregate_eligible::<
+        InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>,
+    >();
     #[cfg(feature = "std")]
-    aggregate_eligible::<ConsumerCompilerRegistration<HostConsumerBindingPreparation>>();
+    aggregate_eligible::<InlineConsumerCompilerRegistration<HostConsumerBindingPreparation>>();
 }
 
 const fn layout<T>() -> [usize; 2] {
@@ -293,7 +295,7 @@ const fn layout<T>() -> [usize; 2] {
 #[used]
 pub static CONSUMER_ONLY_STATIC_LAYOUTS: [[usize; 2]; 12] = [
     layout::<StaticConsumerBindingPreparation<Client>>(),
-    layout::<ConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>(),
+    layout::<InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<Client>>>(),
     layout::<StaticConsumerPropertyReadSlot<State>>(),
     layout::<State>(),
     layout::<Client>(),
@@ -301,7 +303,7 @@ pub static CONSUMER_ONLY_STATIC_LAYOUTS: [[usize; 2]; 12] = [
     layout::<clinkz_wot_planning::ConsumerPropertyReadDraft<ResolvedTargetArtifact>>(),
     layout::<ResolvedTargetArtifact>(),
     layout::<ResolvedTargetCompiler>(),
-    layout::<ConsumerCompilerSupport>(),
+    layout::<InlineConsumerCompilerSupport>(),
     layout::<ConsumerBindingConfiguration>(),
     layout::<ErrorContext>(),
 ];

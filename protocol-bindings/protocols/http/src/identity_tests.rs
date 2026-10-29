@@ -8,8 +8,8 @@ fn work() -> WorkBudget {
 fn registration(
     config: HttpConsumerConfig,
     generation: BindingGeneration,
-) -> ConsumerCompilerRegistration<HostConsumerBindingPreparation> {
-    try_consumer_registration(config, BindingId::new(600), generation, 600).unwrap()
+) -> InlineConsumerCompilerRegistration<HostConsumerBindingPreparation> {
+    try_inline_consumer_registration(config, BindingId::new(600), generation, 600).unwrap()
 }
 fn plan(target: String) -> LogicalInteractionPlan {
     LogicalInteractionPlan::try_property_read(
@@ -326,7 +326,8 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
             let input = HostConsumerBindingPreparationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(actual)).unwrap(),
+                HostBindingCompilerRegistration::try_new_inline_semantic(HttpCompiler(actual))
+                    .unwrap(),
                 client,
                 BindingResourceDeclarations::new(
                     BindingLifetimeFootprint::new(3, 1024),
@@ -348,7 +349,8 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
             let input = HostConsumerBindingPreparationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(foreign)).unwrap(),
+                HostBindingCompilerRegistration::try_new_inline_semantic(HttpCompiler(foreign))
+                    .unwrap(),
                 Box::new(Client {
                     config: actual,
                     busy: Arc::new(AtomicBool::new(false)),
@@ -363,7 +365,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
             );
             let owner = HostConsumerBindingPreparation::new(input).unwrap_or_else(|_| panic!());
             let rejected = owner
-                .try_into_consumer_compiler()
+                .try_into_inline_consumer_compiler()
                 .err()
                 .expect("foreign compiler support capture");
             assert_eq!(rejected.input().identity(), original.identity());

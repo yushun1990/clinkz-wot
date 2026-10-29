@@ -40,28 +40,21 @@ pub fn producer_installation_accounts(limits: &ResourceLimits) -> ProducerInstal
 }
 
 struct Charge {
-    parent: Arc<ProducerInstallationAccounts>,
-    held: [u64; 19],
+    leases: [Option<crate::host_accounts::HostCapacityReservation>; 19],
 }
 impl Charge {
     fn retain_status(&mut self, bytes: u64, status: u64) {
         let keep = [
             bytes, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, status, 0, 0, 0, 0, 0, 0, 0,
         ];
-        for (i, remaining) in keep.into_iter().enumerate() {
-            self.parent
-                .release(INSTALLATION_ACCOUNT_KINDS[i], self.held[i] - remaining);
-            self.held[i] = remaining;
+        for (lease, keep) in self.leases.iter_mut().zip(keep) {
+            if let Some(lease) = lease {
+                lease.release_part(lease.amount() - keep);
+            }
         }
     }
 }
-impl Drop for Charge {
-    fn drop(&mut self) {
-        for (i, amount) in self.held.iter().copied().enumerate() {
-            self.parent.release(INSTALLATION_ACCOUNT_KINDS[i], amount);
-        }
-    }
-}
+
 fn check(limits: &ResourceLimits, kind: K, amount: u64, context: ErrorContext) -> CoreResult<()> {
     let limit = limits.get(kind).unwrap_or(0);
     if amount > limit {
@@ -309,8 +302,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
             }
         };
         let mut charge = Charge {
-            parent: parent.clone(),
-            held: [0; 19],
+            leases: core::array::from_fn(|_| None),
         };
         let reserve = (|| -> CoreResult<()> {
             for i in 0..19 {
@@ -320,8 +312,8 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                     amounts[i],
                     quota_context,
                 )?;
-                let limit = parent.limit(INSTALLATION_ACCOUNT_KINDS[i]);
-                if !parent.try_reserve(INSTALLATION_ACCOUNT_KINDS[i], amounts[i]) {
+                let limit = parent.account(INSTALLATION_ACCOUNT_KINDS[i]).limit();
+                let Some(lease) = parent.reserve(INSTALLATION_ACCOUNT_KINDS[i], amounts[i]) else {
                     return Err(CoreError::LimitExceeded {
                         context: quota_context,
                         resource: INSTALLATION_ACCOUNT_KINDS[i],
@@ -329,8 +321,8 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler + Send + 'static>
                         requested: Some(amounts[i]),
                         observed: None,
                     });
-                }
-                charge.held[i] = amounts[i];
+                };
+                charge.leases[i] = Some(lease);
             }
             Ok(())
         })();

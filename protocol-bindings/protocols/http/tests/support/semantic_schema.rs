@@ -307,13 +307,13 @@ mod standard_schema {
             for variant in 0..7 {
                 let compiled = Arc::new(AtomicUsize::new(0));
                 let config = ConsumerBindingConfiguration::for_semantic_host(64, BindingConfigurationDigest::new([93;32]), COMPAT,4096,16).unwrap();
-                let compiler = HostBindingCompilerRegistration::try_new_semantic(SchemaCompiler { base:Compiler { config, compiled:compiled.clone() }, security_seen:security_seen.clone() }).unwrap_or_else(|_| panic!("capture"));
+                let compiler = HostBindingCompilerRegistration::try_new_inline_semantic(SchemaCompiler { base:Compiler { config, compiled:compiled.clone() }, security_seen:security_seen.clone() }).unwrap_or_else(|_| panic!("capture"));
                 let owner = HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
                     BindingRegistrationIdentity::new(BindingId::new(903), BindingGeneration::INITIAL, config.configuration(),COMPAT,903),
                     BindingExecutionSupport::host_erased(), compiler, Box::new(SchemaClient { config, seen:seen.clone() }),
                     BindingResourceDeclarations::new(BindingLifetimeFootprint::new(3,1024),BindingLifetimeFootprint::new(16,8192))
                         .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2).with_consumer_result_limits(4096,16), BindingStatusPolicy::new(2,17)
-                )).unwrap_or_else(|_| panic!("registration")).try_into_consumer_compiler().unwrap_or_else(|_| panic!("admission"));
+                )).unwrap_or_else(|_| panic!("registration")).try_into_inline_consumer_compiler().unwrap_or_else(|_| panic!("admission"));
                 let policy = policy(); let parent = Arc::new(clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap());
                 let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(owner,policy,Arc::new(Clock(Instant::now())),parent.clone()).unwrap_or_else(|_| panic!("runtime"));
                 let mut td = source(json!([]));

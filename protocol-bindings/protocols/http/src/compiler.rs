@@ -20,7 +20,8 @@ impl HostSemanticCompiler for HttpCompiler {
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         use clinkz_wot_td::data_type::Operation;
-        if input.operation != Operation::ReadProperty
+        if !matches!(input.owner, clinkz_wot_td::semantic::FormOwner::Property(_))
+            || input.operation != Operation::ReadProperty
             || input.content_type != Some("application/json")
             || input.subprotocol.is_some()
         {

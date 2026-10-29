@@ -123,7 +123,7 @@ fn invalid() -> CoreError {
     CoreError::Validation(
         ErrorContext::new(ErrorPhase::Validate, RetryClass::Never).with_redacted_cause(
             625,
-            "HTTP Producer payload violates prepared schema or encoding",
+            "HTTP JSON payload violates prepared schema or encoding",
         ),
     )
 }

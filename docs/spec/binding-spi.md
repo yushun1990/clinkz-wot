@@ -143,3 +143,16 @@ declare its additional controlled backing before effects and retain the original
 reservation through native/result disposal, including when moved out of a typed
 loan. Its Drop owes the existing finite local-disposal contract. Shared native
 infrastructure keeps its Binding-owned policy and final-use lifetime.
+
+
+Open finite Consumer registration pairs the actual portable `ConsumerCompiler`
+with the immutable `HostConsumerBindingRegistration`; refusal returns both
+original owners. Typed/static pairing has the corresponding public generic path.
+Eligibility does not downcast to a built-in compiler, require private inline
+support, or require a Copy artifact. Generic compiler erasure keeps its original
+owned cursor/output/failure-return mechanisms. A compiler's inspected footprint
+includes variable backing and destruction, not merely its erased slot Layout.
+The actual data and destination/access services remain captured through execution;
+a caller supplies no replacement executor, codec, validator or configuration to a
+read. Existing inline aggregate and raw finite APIs retain their explicitly
+restricted purposes. No notification or universal runtime facet is added.

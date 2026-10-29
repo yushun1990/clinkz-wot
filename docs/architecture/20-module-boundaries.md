@@ -140,3 +140,14 @@ The withdrawn event broker/subscription queues, old TD-at-call-time facade,
 Zenoh/pico implementations and admission prototypes remain in Git. Their deletion
 withdrew availability, not the enduring product goals. Historical evidence and
 commands stay tied to their original revisions.
+
+
+The same source-free execution crate also contains the independent finite
+`consumer::ConsumerRuntime`. Planning owns open registration/selection and paid
+owned compilation; Core owns immutable completed Consumer definitions and service
+contracts. Execution consumes those definitions without an upward TD/Planning
+edge. The shared opaque Host bank now lives in Core; existing Servient account
+users retain their module re-export. Legacy owners use move-only partial-release
+leases instead of access to the bank's private reserve/release operations. No
+Planning-to-Servient dependency or Binding runtime dependency is added by this
+Consumer path. Finite calls and notification conversations remain separate.

@@ -488,7 +488,7 @@ fn identity(c: &ResolvedTargetCompiler) -> BindingRegistrationIdentity {
 }
 pub fn static_registration(
     client: StaticClient,
-) -> ConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>> {
+) -> InlineConsumerCompilerRegistration<StaticConsumerBindingPreparation<StaticClient>> {
     let owned = client.owned.as_ref().map(|p| p.configuration());
     let compiler = owned.map_or_else(
         || ResolvedTargetCompiler::try_new(64).unwrap(),
@@ -508,7 +508,7 @@ pub fn static_registration(
         BindingStatusPolicy::new(2, 17),
     ))
     .unwrap_or_else(|_| panic!("static complete registration"))
-    .try_into_consumer_compiler()
+    .try_into_inline_consumer_compiler()
     .unwrap_or_else(|_| panic!("closed static support"))
 }
 
@@ -664,7 +664,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for State {
 #[cfg(feature = "std")]
 pub fn host_registration(
     client: HostClient,
-) -> ConsumerCompilerRegistration<HostConsumerBindingPreparation> {
+) -> InlineConsumerCompilerRegistration<HostConsumerBindingPreparation> {
     let owned = client.owned.as_ref().map(|p| p.configuration());
     let compiler = owned.map_or_else(
         || ResolvedTargetCompiler::try_new(64).unwrap(),
@@ -678,12 +678,12 @@ pub fn host_registration(
     HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
         identity(&compiler),
         BindingExecutionSupport::host_erased(),
-        HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),
+        HostBindingCompilerRegistration::try_new_inline_consumer(compiler).unwrap(),
         alloc::boxed::Box::new(client),
         resources,
         BindingStatusPolicy::new(2, 17),
     ))
     .unwrap_or_else(|_| panic!("Host complete registration"))
-    .try_into_consumer_compiler()
+    .try_into_inline_consumer_compiler()
     .unwrap_or_else(|_| panic!("closed Host support"))
 }

@@ -400,24 +400,24 @@ pub fn try_consumer_execution(
 }
 /// Pairs optional preparation with the exact runtime policy before any effects.
 #[cfg(feature = "prepare")]
-pub fn try_consumer_registration(
+pub fn try_inline_consumer_registration(
     config: HttpConsumerConfig,
     binding_id: BindingId,
     binding_generation: BindingGeneration,
     diagnostic_ordinal: u32,
 ) -> CoreResult<
-    clinkz_wot_planning::ConsumerCompilerRegistration<
+    clinkz_wot_planning::InlineConsumerCompilerRegistration<
         clinkz_wot_planning::HostConsumerBindingPreparation,
     >,
 > {
     use clinkz_wot_planning::*;
-    let compiler = HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(config))
+    let compiler = HostBindingCompilerRegistration::try_new_inline_semantic(HttpCompiler(config))
         .map_err(|e| e.error().error().clone())?;
     let runtime =
         try_consumer_execution(config, binding_id, binding_generation, diagnostic_ordinal)?;
     HostConsumerBindingPreparation::try_pair(runtime, compiler)
         .map_err(|e| e.error().error().clone())?
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .map_err(|e| e.error().error().clone())
 }
 
@@ -468,3 +468,77 @@ pub use action_producer::{HttpActionDefinition, HttpActionDelivery, HttpActionRu
 mod action_preparation;
 #[cfg(feature = "prepare")]
 pub use action_preparation::HttpActionProducer;
+
+/// Public open Consumer registration: actual compiler/executor/configuration
+/// plus the concrete JSON/type and cleartext-IP policy services.
+#[cfg(feature = "prepare")]
+pub fn try_consumer_registration(
+    config: HttpConsumerConfig,
+    binding_id: BindingId,
+    generation: BindingGeneration,
+    ordinal: u32,
+) -> CoreResult<clinkz_wot_planning::open_consumer::ConsumerRegistrationInput> {
+    use clinkz_wot_planning::*;
+    let compiler = HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(config))
+        .map_err(|e| e.error().error().clone())?;
+    let runtime = try_consumer_execution(config, binding_id, generation, ordinal)?;
+    let preparation = HostConsumerBindingPreparation::try_pair(runtime, compiler)
+        .map_err(|e| e.error().error().clone())?;
+    Ok(open_consumer::ConsumerRegistrationInput {
+        preparation,
+        services: config.consumer_services(),
+    })
+}
+impl HttpConsumerConfig {
+    pub fn consumer_services(self) -> clinkz_wot_core::consumer::ConsumerServices {
+        clinkz_wot_core::consumer::ConsumerServices {
+            data: Arc::new(HttpConsumerData),
+            access: Arc::new(HttpConsumerAccess(self)),
+        }
+    }
+}
+struct HttpConsumerData;
+impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
+    fn content_type(&self) -> &str {
+        "application/json"
+    }
+    fn validate(
+        &self,
+        schema: clinkz_wot_core::value_type::TypeSchema,
+        output: &InteractionOutput,
+    ) -> CoreResult<()> {
+        producer_validation::validate(schema, output)
+    }
+    fn policy(&self) -> clinkz_wot_core::consumer::ConsumerDataPolicy {
+        clinkz_wot_core::consumer::ConsumerDataPolicy {
+            retained_bytes: 32,
+            // Conservative bounded Host decoder scratch/stack allowance;
+            // no allocator-intercepted or process-wide RAM claim.
+            temporary_bytes: 65_536,
+            body_bytes: BODY,
+            validation_work: BODY * 5 + MEDIA * 2,
+        }
+    }
+}
+struct HttpConsumerAccess(HttpConsumerConfig);
+impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
+    fn authorize(
+        &self,
+        binding: BindingRegistrationIdentity,
+        target: &str,
+        operation: Operation,
+    ) -> CoreResult<()> {
+        if binding.configuration() != self.0.configuration.configuration()
+            || operation != Operation::ReadProperty
+        {
+            return Err(error(641, "HTTP Consumer policy/configuration mismatch"));
+        }
+        Target::parse(target).map(|_| ())
+    }
+    fn retained_bytes(&self) -> u64 {
+        std::mem::size_of::<Self>() as u64 + 32
+    }
+    fn work(&self) -> u64 {
+        256
+    }
+}

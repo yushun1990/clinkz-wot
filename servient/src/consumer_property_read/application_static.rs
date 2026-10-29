@@ -862,7 +862,7 @@ where
 }
 struct InstallPermit;
 
-// ConsumerCompilerRegistration intentionally exposes no installed-client
+// InlineConsumerCompilerRegistration intentionally exposes no installed-client
 // mutation. Move the unchanged complete registration into execution, then
 // recapture its closed compiler support. Capture allocates and calls no client.
 // RAII preserves the owner even if a caller's progress adapter unwinds.
@@ -896,7 +896,7 @@ where
             self.raw
                 .take()
                 .unwrap()
-                .try_into_consumer_compiler()
+                .try_into_inline_consumer_compiler()
                 .unwrap_or_else(|_| panic!("unchanged closed compiler registration")),
         );
     }

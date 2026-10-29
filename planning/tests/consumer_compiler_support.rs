@@ -805,12 +805,9 @@ fn assert_form_rejected(error: &CoreError, input: &BindingCompilerInput<'_>) {
     let context = error.context();
     assert_eq!(context.phase(), ErrorPhase::Admission);
     assert_eq!(context.retry_class(), RetryClass::Never);
-    assert_eq!(context.operation(), Some(input.logical_plan().operation()));
-    assert_eq!(
-        context.form_index(),
-        Some(input.logical_plan().form_index())
-    );
-    assert_eq!(context.plan(), Some(input.logical_plan().plan_id()));
+    assert_eq!(context.operation(), Some(input.operation()));
+    assert_eq!(context.form_index(), Some(input.form_index()));
+    assert_eq!(context.plan(), Some(input.plan_id()));
     assert_eq!(
         context.binding(),
         Some((
@@ -934,7 +931,7 @@ fn restricted_public_host_compiler_preserves_slot_on_short_credit_and_eligibilit
     .unwrap();
     let native = ResolvedTargetCompiler::new_owned(configuration);
     let id = identity(&native, 2);
-    let compiler = HostBindingCompilerRegistration::try_new_consumer(native).unwrap();
+    let compiler = HostBindingCompilerRegistration::try_new_inline_consumer(native).unwrap();
     let valid = json_plan(Some(false), Some("application/json"));
     let valid_input =
         BindingCompilerInput::new(&valid, candidate(id), BindingArtifactRole::ConsumerCall);
@@ -1146,7 +1143,7 @@ fn host(
     drops: &Arc<AtomicUsize>,
 ) -> HostBindingPreparation {
     host_registration(
-        HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),
+        HostBindingCompilerRegistration::try_new_inline_consumer(compiler).unwrap(),
         id,
         true,
         BindingExecutionSupport::host_erased(),
@@ -1154,7 +1151,7 @@ fn host(
     )
     .unwrap_or_else(|_| panic!("complete Host construction"))
 }
-fn check_descriptor(support: &ConsumerCompilerSupport, capacity: usize, host: bool) {
+fn check_descriptor(support: &InlineConsumerCompilerSupport, capacity: usize, host: bool) {
     assert_eq!(support.consumer_configuration(), None);
     assert_eq!(support.target_capacity(), capacity);
     assert_eq!(
@@ -1222,7 +1219,7 @@ fn typed_complete_owner_and_nondefault_identity_survive_actual_source_destructio
         let complete = typed(compiler, id, &drops);
         let (checked, requests) = observe(false, || {
             let checked = complete
-                .try_into_consumer_compiler()
+                .try_into_inline_consumer_compiler()
                 .unwrap_or_else(|_| panic!("typed capture"));
             check_descriptor(checked.support(), capacity, false);
             assert_eq!(checked.registration().identity(), id);
@@ -1314,7 +1311,7 @@ fn public_host_complete_owner_retains_one_actual_slot_through_completion() {
         let complete = host(compiler, id, &drops);
         let (checked, requests) = observe(false, || {
             complete
-                .try_into_consumer_compiler()
+                .try_into_inline_consumer_compiler()
                 .unwrap_or_else(|_| panic!("Host capture"))
         });
         no_requests(requests);
@@ -1487,7 +1484,7 @@ fn capture_rejects_foreign_configuration_and_role_without_losing_complete_owners
     assert_eq!(callbacks.load(Ordering::SeqCst), 1); // Startup compatibility only.
     let (rejection, requests) = observe(false, || {
         foreign
-            .try_into_consumer_compiler()
+            .try_into_inline_consumer_compiler()
             .err()
             .expect("foreign must be unsupported")
     });
@@ -1513,7 +1510,7 @@ fn capture_rejects_foreign_configuration_and_role_without_losing_complete_owners
         let before = drops.load(Ordering::SeqCst);
         let (rejection, requests) = observe(false, || {
             complete
-                .try_into_consumer_compiler()
+                .try_into_inline_consumer_compiler()
                 .err()
                 .expect("configuration/capability mismatch")
         });
@@ -1575,7 +1572,7 @@ fn public_host_capture_requires_private_supported_kind_and_matching_actual_confi
     .unwrap_or_else(|_| panic!("foreign complete Host"));
     let (rejection, requests) = observe(false, || {
         complete
-            .try_into_consumer_compiler()
+            .try_into_inline_consumer_compiler()
             .err()
             .expect("foreign Host rejected")
     });
@@ -1586,14 +1583,14 @@ fn public_host_capture_requires_private_supported_kind_and_matching_actual_confi
     for (compiler, consumer) in [
         (HostBindingCompilerRegistration::new(compiler), true),
         (
-            HostBindingCompilerRegistration::try_new_consumer(
+            HostBindingCompilerRegistration::try_new_inline_consumer(
                 ResolvedTargetCompiler::try_new(32).unwrap(),
             )
             .unwrap(),
             true,
         ),
         (
-            HostBindingCompilerRegistration::try_new_consumer(
+            HostBindingCompilerRegistration::try_new_inline_consumer(
                 ResolvedTargetCompiler::try_new(64).unwrap(),
             )
             .unwrap(),
@@ -1611,7 +1608,7 @@ fn public_host_capture_requires_private_supported_kind_and_matching_actual_confi
         let before = drops.load(Ordering::SeqCst);
         let (rejection, requests) = observe(false, || {
             complete
-                .try_into_consumer_compiler()
+                .try_into_inline_consumer_compiler()
                 .err()
                 .expect("Host support must reject")
         });
@@ -1631,7 +1628,7 @@ fn public_host_capture_requires_private_supported_kind_and_matching_actual_confi
     }
     assert!(
         host_registration(
-            HostBindingCompilerRegistration::try_new_consumer(
+            HostBindingCompilerRegistration::try_new_inline_consumer(
                 ResolvedTargetCompiler::try_new(64).unwrap()
             )
             .unwrap(),
@@ -1667,11 +1664,11 @@ fn qualified_owner_mismatches_are_detectable_before_preparation_and_capture_is_c
     let id = identity(&compiler, 3);
     let complete = typed(compiler, id, &drops);
     let checked = complete
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("capture"));
     #[cfg(feature = "std")]
     let checked_host = host(ResolvedTargetCompiler::try_new(64).unwrap(), id, &drops)
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("Host capture"));
     let source = plan("mock://s/temperature");
     let input =
@@ -1754,7 +1751,7 @@ fn qualified_owner_mismatches_are_detectable_before_preparation_and_capture_is_c
     let original = checked.into_registration();
     assert_eq!(original.identity(), id);
     let checked = original
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("recapture original"));
     assert_eq!(checked.registration().identity(), id);
     assert_eq!(drops.load(Ordering::SeqCst), 0);
@@ -1804,12 +1801,12 @@ fn every_new_actual_allocation_can_fail_and_slot_rollback_retains_ledger_history
     let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
     let id = identity(&compiler, 3);
     let (rejection, requests) = observe(true, || {
-        HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap_err()
+        HostBindingCompilerRegistration::try_new_inline_consumer(compiler).unwrap_err()
     });
     acquired(requests, Layout::new::<ResolvedTargetCompiler>(), false);
     assert_eq!(rejection.input().configuration(), id.configuration());
     let (adapter, requests) = observe(false, || {
-        HostBindingCompilerRegistration::try_new_consumer(rejection.into_input()).unwrap()
+        HostBindingCompilerRegistration::try_new_inline_consumer(rejection.into_input()).unwrap()
     });
     let startup = acquired(requests, Layout::new::<ResolvedTargetCompiler>(), true);
     let drops = Arc::new(AtomicUsize::new(0));
@@ -1822,7 +1819,7 @@ fn every_new_actual_allocation_can_fail_and_slot_rollback_retains_ledger_history
     )
     .unwrap_or_else(|_| panic!("Host"));
     let checked = complete
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("capture"));
     let layout = checked.support().host_slot_layout().unwrap();
     let source = plan("mock://s/temperature");
@@ -1932,7 +1929,7 @@ fn host_failed_retries_abort_drop_and_type_mismatch_preserve_original_slot() {
     let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
     let id = identity(&compiler, 2);
     let checked = host(compiler, id, &drops)
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("capture"));
     let source = plan("mock://s/temperature");
     let input =
@@ -2019,7 +2016,7 @@ fn dropping_a_completed_host_artifact_releases_backing_once_without_extraction()
     let native = ResolvedTargetCompiler::try_new(64).unwrap();
     let id = identity(&native, 2);
     let checked = host(native, id, &drops)
-        .try_into_consumer_compiler()
+        .try_into_inline_consumer_compiler()
         .unwrap_or_else(|_| panic!("capture"));
     let source = plan("mock://s/temperature");
     let input =
@@ -2201,7 +2198,7 @@ mod consumer_only_support {
         drops: &Arc<AtomicUsize>,
     ) -> HostConsumerBindingPreparation {
         host_registration(
-            HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap(),
+            HostBindingCompilerRegistration::try_new_inline_consumer(compiler).unwrap(),
             id,
             true,
             BindingExecutionSupport::host_erased(),
@@ -2219,7 +2216,7 @@ mod consumer_only_support {
             let id = identity(&c, variant);
             let (checked, trace) = observe(false, || {
                 typed(c, id, &drops)
-                    .try_into_consumer_compiler()
+                    .try_into_inline_consumer_compiler()
                     .unwrap_or_else(|_| panic!("capture"))
             });
             no_requests(trace);
@@ -2282,7 +2279,7 @@ mod consumer_only_support {
             let owner = host(c, id, &drops);
             let (checked, trace) = observe(false, || {
                 owner
-                    .try_into_consumer_compiler()
+                    .try_into_inline_consumer_compiler()
                     .unwrap_or_else(|_| panic!("capture"))
             });
             no_requests(trace);
@@ -2349,12 +2346,13 @@ mod consumer_only_support {
         let compiler = ResolvedTargetCompiler::try_new(64).unwrap();
         let id = identity(&compiler, 3);
         let (rejection, requests) = observe(true, || {
-            HostBindingCompilerRegistration::try_new_consumer(compiler).unwrap_err()
+            HostBindingCompilerRegistration::try_new_inline_consumer(compiler).unwrap_err()
         });
         acquired(requests, Layout::new::<ResolvedTargetCompiler>(), false);
         assert_eq!(rejection.input().configuration(), id.configuration());
         let (adapter, requests) = observe(false, || {
-            HostBindingCompilerRegistration::try_new_consumer(rejection.into_input()).unwrap()
+            HostBindingCompilerRegistration::try_new_inline_consumer(rejection.into_input())
+                .unwrap()
         });
         let startup = acquired(requests, Layout::new::<ResolvedTargetCompiler>(), true);
         let drops = Arc::new(AtomicUsize::new(0));
@@ -2367,7 +2365,7 @@ mod consumer_only_support {
         )
         .unwrap_or_else(|_| panic!("Host"));
         let checked = complete
-            .try_into_consumer_compiler()
+            .try_into_inline_consumer_compiler()
             .unwrap_or_else(|_| panic!("capture"));
         let layout = checked.support().host_slot_layout().unwrap();
         let source = plan("mock://s/temperature");
@@ -2480,7 +2478,10 @@ mod consumer_only_support {
         let owner = typed(ForeignCompiler(callbacks.clone()), id, &drops);
         assert_eq!(callbacks.load(Ordering::SeqCst), 1);
         let (rejected, trace) = observe(false, || {
-            owner.try_into_consumer_compiler().err().expect("impostor")
+            owner
+                .try_into_inline_consumer_compiler()
+                .err()
+                .expect("impostor")
         });
         no_requests(trace);
         assert_eq!(callbacks.load(Ordering::SeqCst), 1);
@@ -2495,7 +2496,7 @@ mod consumer_only_support {
         let owner = typed(ResolvedTargetCompiler::try_new(32).unwrap(), id, &drops);
         let (rejected, trace) = observe(false, || {
             owner
-                .try_into_consumer_compiler()
+                .try_into_inline_consumer_compiler()
                 .err()
                 .expect("actual config")
         });
@@ -2519,7 +2520,7 @@ mod consumer_only_support {
         for compiler in [
             HostBindingCompilerRegistration::new(compiler),
             HostBindingCompilerRegistration::new(ForeignCompiler(callbacks.clone())),
-            HostBindingCompilerRegistration::try_new_consumer(
+            HostBindingCompilerRegistration::try_new_inline_consumer(
                 ResolvedTargetCompiler::try_new(32).unwrap(),
             )
             .unwrap(),
@@ -2541,7 +2542,7 @@ mod consumer_only_support {
             let before = drops.load(Ordering::SeqCst);
             let (rejected, trace) = observe(false, || {
                 owner
-                    .try_into_consumer_compiler()
+                    .try_into_inline_consumer_compiler()
                     .err()
                     .expect("unsupported capture")
             });
@@ -2676,7 +2677,7 @@ mod consumer_only_support {
                     HostConsumerBindingPreparation::new(HostConsumerBindingPreparationInput::new(
                         id,
                         BindingExecutionSupport::host_erased(),
-                        HostBindingCompilerRegistration::try_new_consumer(
+                        HostBindingCompilerRegistration::try_new_inline_consumer(
                             ResolvedTargetCompiler::new_owned(actual),
                         )
                         .unwrap(),
@@ -2686,7 +2687,8 @@ mod consumer_only_support {
                     ))
                     .unwrap_or_else(|_| panic!());
                 let foreign_compiler =
-                    HostBindingCompilerRegistration::try_new_consumer(foreign_compiler).unwrap();
+                    HostBindingCompilerRegistration::try_new_inline_consumer(foreign_compiler)
+                        .unwrap();
                 let cursor = foreign_compiler.start(&foreign_input).unwrap();
                 let BindingCompilerStep::Pending(cursor) =
                     foreign_compiler.step(&foreign_input, cursor, &mut work(4))
@@ -2782,7 +2784,7 @@ mod consumer_only_support {
             });
             no_requests(requests);
             let owner = owner.unwrap_or_else(|_| panic!("owned construction"));
-            let (owner, requests) = observe(false, || owner.try_into_consumer_compiler());
+            let (owner, requests) = observe(false, || owner.try_into_inline_consumer_compiler());
             no_requests(requests);
             let owner = owner.unwrap_or_else(|_| panic!("owned capture"));
             let (projection, requests) =
@@ -2816,7 +2818,7 @@ mod consumer_only_support {
             println!(
                 "owned compiler/support/cursor/output/temporary layouts: {:?} {:?} {:?} {:?} {:?}",
                 Layout::new::<ResolvedTargetCompiler>(),
-                Layout::new::<ConsumerCompilerSupport>(),
+                Layout::new::<InlineConsumerCompilerSupport>(),
                 owner.support().cursor_layout(),
                 owner.support().output_layout(),
                 owner.support().temporary_layout()
@@ -2831,7 +2833,7 @@ mod consumer_only_support {
             let drops = Arc::new(AtomicUsize::new(0));
             let compiler = ResolvedTargetCompiler::new_owned(actual);
             let (returned, requests) = observe(true, || {
-                HostBindingCompilerRegistration::try_new_consumer(compiler)
+                HostBindingCompilerRegistration::try_new_inline_consumer(compiler)
             });
             acquired(requests, Layout::new::<ResolvedTargetCompiler>(), false);
             assert_eq!(
@@ -2841,7 +2843,7 @@ mod consumer_only_support {
             for match_client in [false, true] {
                 let c = ResolvedTargetCompiler::new_owned(actual);
                 let id = identity(&c, 7);
-                let adapter = HostBindingCompilerRegistration::try_new_consumer(c).unwrap();
+                let adapter = HostBindingCompilerRegistration::try_new_inline_consumer(c).unwrap();
                 let mut client = CaptureClient::<ResolvedTargetCompiler>::new(
                     id.artifact_compatibility(),
                     &drops,
@@ -2879,7 +2881,7 @@ mod consumer_only_support {
                 }
                 let owner = owner
                     .unwrap_or_else(|_| panic!())
-                    .try_into_consumer_compiler()
+                    .try_into_inline_consumer_compiler()
                     .unwrap_or_else(|_| panic!());
                 let (projection, requests) =
                     observe(false, || owner.support().consumer_configuration());

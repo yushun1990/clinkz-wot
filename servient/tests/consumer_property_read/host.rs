@@ -1262,6 +1262,56 @@ fn host_unwind_reparks_the_original_owner_and_explicit_shutdown_can_finish() {
 
 #[test]
 fn host_two_roots_exhaust_real_parent_at_build_output_and_call_peaks() {
+    // Measure one actual owner/compiled-output peak. Native input and account
+    // lease Layouts can legitimately change without changing this pressure
+    // invariant: two roots fit, while two overlapping builds/outputs do not.
+    let baseline_policy = policy();
+    let baseline_parent = Arc::new(
+        clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
+            baseline_policy.parent_accounts(),
+        )
+        .unwrap(),
+    );
+    let (baseline, baseline_observer) = ConsumerPropertyReadRuntime::try_new(
+        binding::host_registration(binding::HostClient::new(
+            Arc::new(Stats::default()),
+            outputs(),
+        )),
+        baseline_policy,
+        Arc::new(Clock::default()),
+        baseline_parent.clone(),
+    )
+    .unwrap_or_else(|_| panic!());
+    let initial_temporary = baseline_parent
+        .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+        .used();
+    let initial_runtime = baseline_parent
+        .account(ResourceKind::CompiledRuntimeBytesGlobalMax)
+        .used();
+    let baseline_source = source();
+    let baseline_handle = baseline
+        .consume(&baseline_source, &mut work(100000), |build| {
+            for _ in 0..100000 {
+                build.step(&mut work(4096));
+                if build.is_finished() {
+                    return;
+                }
+            }
+            panic!("baseline compilation stalled");
+        })
+        .unwrap();
+    let temporary_cap = baseline_parent
+        .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+        .peak()
+        + initial_temporary;
+    let runtime_cap = baseline_parent
+        .account(ResourceKind::CompiledRuntimeBytesGlobalMax)
+        .peak()
+        + initial_runtime;
+    drop(baseline_handle);
+    shutdown(&baseline);
+    drop(baseline);
+    drop(baseline_observer);
     for resource in [
         ResourceKind::AdmissionTemporaryBytesGlobalMax,
         ResourceKind::CompiledRuntimeBytesGlobalMax,
@@ -1275,8 +1325,8 @@ fn host_two_roots_exhaust_real_parent_at_build_output_and_call_peaks() {
             .position(|&k| k == resource)
             .unwrap();
         let cap = match resource {
-            ResourceKind::AdmissionTemporaryBytesGlobalMax => 69000,
-            ResourceKind::CompiledRuntimeBytesGlobalMax => 6000,
+            ResourceKind::AdmissionTemporaryBytesGlobalMax => temporary_cap,
+            ResourceKind::CompiledRuntimeBytesGlobalMax => runtime_cap,
             _ => 1,
         };
         accounts[index] =
@@ -1321,8 +1371,9 @@ fn host_two_roots_exhaust_real_parent_at_build_output_and_call_peaks() {
                 }
                 panic!();
             })
-            .unwrap()
-        {
+            .unwrap_or_else(|error| {
+                panic!("{resource:?}: {error:?}; {:?}", parent.account(resource))
+            }) {
             StartStatus::Ready(h) => h,
             _ => panic!(),
         };
@@ -2029,7 +2080,7 @@ fn host_actual_provisioning_build_call_and_final_root_measurements() {
         layout::<ConsumerPropertyReadHandle>(),
         layout::<ConsumerPropertyReadCall>(),
         layout::<HostConsumerPropertyReadBuild<'static, 'static>>(),
-        layout::<ConsumerCompilerRegistration<HostConsumerBindingPreparation>>(),
+        layout::<InlineConsumerCompilerRegistration<HostConsumerBindingPreparation>>(),
         layout::<HostBindingCallBox<CoreResult<InteractionOutput>>>(),
         layout::<
             Result<

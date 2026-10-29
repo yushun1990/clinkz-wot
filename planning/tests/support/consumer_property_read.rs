@@ -27,14 +27,16 @@ struct Traced<R> {
     counts: Rc<Cell<Counts>>,
     bad_bound: Option<usize>,
 }
-impl<R: ConsumerPropertyReadRegistration> private::Sealed for Traced<R> {}
-impl<R: ConsumerPropertyReadRegistration> ConsumerPropertyReadRegistration for Traced<R> {
+impl<R: InlineConsumerPropertyReadRegistration> private::Sealed for Traced<R> {}
+impl<R: InlineConsumerPropertyReadRegistration> InlineConsumerPropertyReadRegistration
+    for Traced<R>
+{
     type Artifact = R::Artifact;
     type Cursor = R::Cursor;
     fn identity(&self) -> BindingRegistrationIdentity {
         self.registration.identity()
     }
-    fn support(&self) -> &ConsumerCompilerSupport {
+    fn support(&self) -> &InlineConsumerCompilerSupport {
         self.registration.support()
     }
     fn bounds(&self, i: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
@@ -78,7 +80,7 @@ impl<R: ConsumerPropertyReadRegistration> ConsumerPropertyReadRegistration for T
         self.registration.abort(cursor)
     }
 }
-pub fn traced<R: ConsumerPropertyReadRegistration>(
+pub fn traced<R: InlineConsumerPropertyReadRegistration>(
     proof: ValidatedThing<'_>,
     registration: R,
     bad_bound: Option<usize>,
@@ -86,7 +88,7 @@ pub fn traced<R: ConsumerPropertyReadRegistration>(
 ) -> Counts {
     traced_after_admit(proof, registration, bad_bound, cancel_pending, || {})
 }
-pub fn traced_after_admit<R: ConsumerPropertyReadRegistration>(
+pub fn traced_after_admit<R: InlineConsumerPropertyReadRegistration>(
     proof: ValidatedThing<'_>,
     registration: R,
     bad_bound: Option<usize>,
@@ -185,7 +187,7 @@ pub fn traced_after_admit<R: ConsumerPropertyReadRegistration>(
     counts.get()
 }
 
-pub fn ready_retries<R: ConsumerPropertyReadRegistration>(
+pub fn ready_retries<R: InlineConsumerPropertyReadRegistration>(
     proof: ValidatedThing<'_>,
     r: R,
     spare: u64,
