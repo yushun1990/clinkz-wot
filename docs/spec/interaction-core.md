@@ -13,6 +13,12 @@ owner through settlement; slot replacement cannot redirect them. Bindings also
 fence replaced sessions/correlation namespaces. Diagnostic context grants no
 permission and MUST redact payloads/credentials under bounded formatting.
 
+The Host Consumer implementation uses a move-only `ConsumerInstance` authority
+and retained `ConsumerInstanceRef` identities. Equal numeric slots from separate
+owners are distinct. A reference retains identity and passive currentness, not
+revocation power or liveness after authority Drop. Finite calls and raw
+notifications retain that same reference through their separate settlements.
+
 `EXEC-HANDLER-001`: Servient MUST select and capture actual registered behavior
 for the accepted target/operation; Bindings MUST NOT call application handlers.
 Requests contain dynamic data and context contains dispatch identity, not mutable
@@ -33,6 +39,14 @@ additional response and its declared schema/data role. Unsupported required
 schema/encoding/stream combinations refuse the guarantee. An explicitly raw
 API reports unvalidated data as such. Identity/shape sealing alone MUST NOT be
 represented as schema conformance. Native status mapping remains Binding-owned.
+
+Consumer data services validate a payload independently of direction. Prepared
+`ConsumerSchemas` keep finite input and output distinct; absence of a data role
+is different from a present unconstrained value. The current finite path supports
+Property Read and explicitly synchronous Action invocation, including empty Action
+input/output roles. Shape/identity seals require terminal primary application
+results and refuse continuing status/invocation references; captured codec/schema
+checks separately precede input effects and validated result handoff.
 
 The implemented `value_type::TypeSchema` is a fixed-size type-only subset, not
 the general schema representation. Planning must refuse every required assertion
@@ -118,7 +132,7 @@ reservation and reports its first local cause without claiming remote effects;
 after native setup starts, its owner remains responsible for bounded cleanup.
 
 The raw Host Consumer facet implements these roles in `core::notification` and
-`servient::notification`. One source-free capability registration may serve many
+`servient-finite::notification`. One source-free capability registration may serve many
 independent logical subscriptions; separate roots may share compatible native
 infrastructure. A non-cloneable cursor borrows retained raw data until explicit
 advance; cloneable stop intent grants no receive/response or shutdown authority.
@@ -153,6 +167,11 @@ cause, selected identity and effect certainty. Pre-effect candidate fallback
 and post-effect retry are different decisions. Unknown or possibly committed
 write/Action/publication effects require an explicit new policy decision;
 transient failure and TD safe/idempotent flags alone do not prove safe replay.
+
+The finite Consumer settlement retains `ConsumerEffect` separately from its
+first local cause, original native outcome and validated application result.
+Native progress conservatively marks remote execution uncertain; cancellation
+or a communication/validation failure does not establish remote rollback.
 
 Exact v5.1 payload/error/handler carrier schemas remain restricted implementation
 records, not a universal envelope or an active eighteen-handler ABI. The public

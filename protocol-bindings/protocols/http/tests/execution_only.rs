@@ -60,8 +60,6 @@ fn runtime_registration_rejects_foreign_native_data_without_an_io_runtime() {
     .unwrap();
     // The metadata matches, but it cannot turn foreign bytes into an admitted
     // native program. No Tokio runtime or network service is installed.
-    let refused = runtime
-        .start_consumer_property_read(request, &artifact)
-        .unwrap_err();
+    let refused = runtime.start_finite(request, &artifact).unwrap_err();
     assert_eq!(refused.into_input(), original);
 }

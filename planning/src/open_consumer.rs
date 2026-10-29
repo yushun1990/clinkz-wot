@@ -1,6 +1,7 @@
 //! Open startup Consumer composition. Common TD admission is shared; native
 //! compilation is portable, owned and incremental. Only completed source-free
-//! definitions cross into execution. Finite Property Read is the first facet.
+//! definitions cross into execution. Finite and notification lifecycles remain
+//! separate; this registry prepares only the implemented finite facets.
 use crate::producer_composition::FormSite;
 use crate::*;
 use alloc::{sync::Arc, vec::Vec};
@@ -193,9 +194,12 @@ impl ConsumerRegistry {
                                 }
                                 let mut chosen = None;
                                 let mut chosen_budget = (0u64, 0u64, 0u64);
-                                let mut reason = if operation != Operation::ReadProperty
-                                    || !matches!(site, FormSite::Property(_))
-                                {
+                                let finite = matches!(
+                                    (&site, operation),
+                                    (FormSite::Property(_), Operation::ReadProperty)
+                                        | (FormSite::Action(_), Operation::InvokeAction)
+                                );
+                                let mut reason = if !finite {
                                     ConsumerUnsupported::Operation
                                 } else if selector.form.is_some_and(|f| f != index) {
                                     ConsumerUnsupported::Selector
@@ -204,8 +208,7 @@ impl ConsumerRegistry {
                                 } else {
                                     ConsumerUnsupported::CommonMeaning
                                 };
-                                if operation == Operation::ReadProperty
-                                    && matches!(site, FormSite::Property(_))
+                                if finite
                                     && selector.form.is_none_or(|f| f == index)
                                     && target.len() <= 256
                                 {
@@ -215,8 +218,9 @@ impl ConsumerRegistry {
                                     if !pay(budget, W::PlanningItems, 256) {
                                         return Err(busy());
                                     }
-                                    let schema = common_services(document, &site, index);
-                                    if let Ok(schema) = schema {
+                                    let schemas =
+                                        common_services(document, &site, index, operation);
+                                    if let Ok(schemas) = schemas {
                                         reason = ConsumerUnsupported::NoCompleteProvider;
                                         for registration in &self.registrations {
                                             let id = registration.execution.identity();
@@ -230,9 +234,14 @@ impl ConsumerRegistry {
                                                 return Err(busy());
                                             }
                                             let data = &registration.services.data;
-                                            if data.content_type() != facts.content_type
+                                            if !registration.execution.supports_operation(operation)
+                                                || data.content_type() != facts.content_type
                                                 || !data.available()
-                                                || !data.supports_schema(schema)
+                                                || !schemas
+                                                    .input
+                                                    .into_iter()
+                                                    .chain(schemas.output)
+                                                    .all(|s| data.supports_schema(s))
                                             {
                                                 continue;
                                             }
@@ -403,14 +412,15 @@ impl ConsumerRegistry {
                                             chosen = Some(
                                                 ConsumerDefinition::try_new(
                                                     ConsumerDefinitionInput {
-                                                        name: Arc::from(site_name(&site)),
+                                                        affordance: site_target(&site).unwrap(),
+                                                        operation,
                                                         form: index,
                                                         target: target.into(),
                                                         artifact: compiled.artifact,
                                                         execution: registration.execution.clone(),
                                                         configuration: m.configuration,
                                                         services: registration.services.clone(),
-                                                        schema,
+                                                        schemas,
                                                         funding: compiled.funding,
                                                         bank: bank.clone(),
                                                     },
@@ -430,10 +440,12 @@ impl ConsumerRegistry {
                                 ) {
                                     return Err(busy());
                                 }
-                                let selected = chosen.is_some()
-                                    && !definitions.iter().any(|old: &ConsumerDefinition| {
-                                        old.name() == site_name(&site)
-                                    });
+                                let selected = chosen.as_ref().is_some_and(|candidate| {
+                                    !definitions.iter().any(|old: &ConsumerDefinition| {
+                                        old.affordance() == candidate.affordance()
+                                            && old.operation() == operation
+                                    })
+                                });
                                 if selected {
                                     definitions.push(chosen.unwrap());
                                 } else {
@@ -758,7 +770,8 @@ fn common_services(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
     site: &FormSite,
     index: u32,
-) -> CoreResult<clinkz_wot_core::value_type::TypeSchema> {
+    operation: Operation,
+) -> CoreResult<ConsumerSchemas> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
     let [security] = facts.effective_security else {
         return Err(unsupported());
@@ -779,10 +792,38 @@ fn common_services(
         || doc
             .uri_variables(UriVariableScope::Property)
             .is_some_and(|mut vars| vars.next().is_some())
+        || doc
+            .uri_variables(UriVariableScope::Action)
+            .is_some_and(|mut vars| vars.next().is_some())
     {
         return Err(unsupported());
     }
-    crate::type_schema::prepare_type_schema(doc.property().schema)
+    match (site, operation) {
+        (FormSite::Property(_), Operation::ReadProperty) => Ok(ConsumerSchemas {
+            input: None,
+            output: Some(crate::type_schema::prepare_type_schema(
+                doc.property().schema,
+            )?),
+        }),
+        (FormSite::Action(_), Operation::InvokeAction) => {
+            // Absence makes no synchronous claim. Continuing invocations need
+            // their own retained association and controls, not a finite facade.
+            if doc.action().is_none_or(|a| a.synchronous != Some(true)) {
+                return Err(unsupported());
+            }
+            Ok(ConsumerSchemas {
+                input: doc
+                    .affordance_schema(site.owner(), "input")
+                    .map(crate::type_schema::prepare_type_schema)
+                    .transpose()?,
+                output: doc
+                    .affordance_schema(site.owner(), "output")
+                    .map(crate::type_schema::prepare_type_schema)
+                    .transpose()?,
+            })
+        }
+        _ => Err(unsupported()),
+    }
 }
 fn qualify_contract(m: ConsumerCompilerMetadata, limits: &ResourceLimits) -> CoreResult<()> {
     let c = m.contract;
@@ -833,6 +874,13 @@ fn site_name(site: &FormSite) -> &str {
     match site {
         FormSite::Thing => "",
         FormSite::Property(n) | FormSite::Action(n) | FormSite::Event(n) => n,
+    }
+}
+fn site_target(site: &FormSite) -> Option<AffordanceTarget> {
+    match site {
+        FormSite::Property(n) => Some(AffordanceTarget::Property(Arc::from(n.as_str()))),
+        FormSite::Action(n) => Some(AffordanceTarget::Action(Arc::from(n.as_str()))),
+        _ => None,
     }
 }
 fn credits(b: &WorkBudget) -> [u64; W::ALL.len()] {

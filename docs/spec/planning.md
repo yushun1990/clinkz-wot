@@ -141,7 +141,14 @@ Consumer reports each Form/effective operation, including unsupported alternativ
 at least one selected interaction is required. TD Form order is the default
 preference; multiple actual supporting providers within one admitted Form refuse.
 An explicit binding/Form selector only narrows candidates after common services
-have accepted the meaning. The current executing facet is finite Property Read.
+have accepted the meaning. Selection keys include affordance kind/name and
+operation, so same-named
+Properties and Actions do not collide. The current finite facets are Property
+Read and `InvokeAction` with explicit `synchronous: true`; absent/false
+synchronous claims and query/cancel/collection operations remain unsupported.
+Action input/output use distinct prepared type-only schemas; absent roles
+permit no application data. Only one captured media service is currently
+supported for both directions; differing response media is refused.
 
 Eager `prepare` lends each `ConsumerCompilation` to a caller driver. Native
 `step` is resumable under small caller credits while that single common semantic
@@ -152,8 +159,9 @@ Cursor/output slots, declared indirect backing, callback scratch, original paren
 leases and aggregate retained destructor work are acquired/qualified before
 start. There is no partial installation or native I/O during preparation.
 
-Completed `Core::consumer::ConsumerDefinition` is immutable owned data with the
-actual runtime registration/configuration/services and original leases; it has
+Completed `Core::consumer::ConsumerDefinition` includes the exact affordance and
+operation and is immutable owned data with the actual runtime
+registration/configuration/services and original leases; it has
 no native start method, TD, parser, semantic arena or compiler. The source-free
 Servient owner consumes it. Host startup registration/reference construction uses
 the existing trusted Host allocation policy; fallible native compiler-slot and

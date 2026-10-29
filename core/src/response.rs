@@ -16,10 +16,11 @@ pub fn validate_untrusted_binding_output(
     request: &OutboundRequest,
     output: InteractionOutput,
 ) -> CoreResult<InteractionOutput> {
-    validate_property_read_binding_output(
+    validate_finite_binding_output(
         request.binding_id(),
         request.binding_generation(),
         request.plan_id(),
+        request.operation(),
         output,
     )
 }
@@ -32,6 +33,7 @@ pub fn validate_untrusted_binding_output(
 /// binding author or runtime caller.
 pub(crate) struct ConsumerResultSeal {
     artifact: BindingArtifactRef,
+    operation: Operation,
     result_limits: Option<(u64, u64)>,
 }
 
@@ -60,17 +62,18 @@ impl ConsumerResultSeal {
     ) -> Self {
         Self {
             artifact: request.artifact(),
+            operation: request.operation(),
             result_limits,
         }
     }
 
     pub(crate) fn matches_request(&self, request: &OutboundRequest) -> bool {
-        self.artifact == request.artifact()
+        self.artifact == request.artifact() && self.operation == request.operation()
     }
 
     pub(crate) fn validate(self, output: InteractionOutput) -> CoreResult<InteractionOutput> {
         if let Some((body, media)) = self.result_limits {
-            let fits = output.data().is_some_and(|payload| {
+            let fits = output.data().is_none_or(|payload| {
                 payload.body.len() as u64 <= body
                     && payload.content_type.capacity() as u64 <= media
                     && payload
@@ -85,10 +88,11 @@ impl ConsumerResultSeal {
             }
         }
         let identity = self.artifact.identity();
-        validate_property_read_binding_output(
+        validate_finite_binding_output(
             identity.binding_id(),
             identity.binding_generation(),
             identity.plan_id(),
+            self.operation,
             output,
         )
     }
@@ -109,7 +113,7 @@ impl ConsumerResultSeal {
         let identity = self.artifact.identity();
         CoreError::Validation(
             ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
-                .with_operation(Operation::ReadProperty)
+                .with_operation(self.operation)
                 .with_plan(identity.plan_id())
                 .with_binding(identity.binding_id(), identity.binding_generation())
                 .with_redacted_cause(code, cause),
@@ -122,10 +126,27 @@ impl ConsumerResultSeal {
 /// The expected identities come from the selected call owner. This kernel stays
 /// private until the admitted WP-300 `OutboundRequest` wrapper can derive them
 /// from that trusted live request.
+#[cfg(test)]
 pub(crate) fn validate_property_read_binding_output(
     expected_binding_id: BindingId,
     expected_binding_generation: BindingGeneration,
     expected_plan_id: PlanId,
+    output: InteractionOutput,
+) -> CoreResult<InteractionOutput> {
+    validate_finite_binding_output(
+        expected_binding_id,
+        expected_binding_generation,
+        expected_plan_id,
+        Operation::ReadProperty,
+        output,
+    )
+}
+
+fn validate_finite_binding_output(
+    expected_binding_id: BindingId,
+    expected_binding_generation: BindingGeneration,
+    expected_plan_id: PlanId,
+    operation: Operation,
     output: InteractionOutput,
 ) -> CoreResult<InteractionOutput> {
     let metadata = output.metadata();
@@ -137,7 +158,8 @@ pub(crate) fn validate_property_read_binding_output(
     });
 
     if valid_binding_response
-        && output.data().is_some()
+        && matches!(operation, Operation::ReadProperty | Operation::InvokeAction)
+        && (operation != Operation::ReadProperty || output.data().is_some())
         && output.status() == InteractionStatus::Ok
         && metadata.payload_role() == ResponsePayloadRole::Application
         && metadata.action_invocation().is_none()
@@ -147,7 +169,7 @@ pub(crate) fn validate_property_read_binding_output(
 
     Err(CoreError::Validation(
         ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
-            .with_operation(Operation::ReadProperty)
+            .with_operation(operation)
             .with_plan(expected_plan_id)
             .with_binding(expected_binding_id, expected_binding_generation),
     ))
@@ -371,6 +393,42 @@ mod tests {
             .expect("generic output accepts an action invocation reference");
 
         assert_validation_failure(output);
+    }
+
+    #[test]
+    fn finite_action_seals_only_terminal_primary_results_and_allows_empty_data() {
+        let check = |output| {
+            super::validate_finite_binding_output(
+                EXPECTED_BINDING_ID,
+                EXPECTED_BINDING_GENERATION,
+                expected_plan_id(),
+                Operation::InvokeAction,
+                output,
+            )
+        };
+        assert!(check(valid_output(200)).is_ok());
+        let metadata = valid_output(200).metadata().clone();
+        assert!(
+            check(
+                InteractionOutput::empty()
+                    .try_with_metadata(metadata.clone())
+                    .unwrap()
+            )
+            .is_ok()
+        );
+        assert!(check(valid_output(200).with_status(InteractionStatus::Accepted)).is_err());
+        assert!(
+            check(
+                valid_output(200)
+                    .try_with_metadata(metadata.with_action_invocation(ActionInvocationRef::new(
+                        SlotIndex::new(31),
+                        Generation::INITIAL
+                    )))
+                    .unwrap()
+            )
+            .is_err()
+        );
+        assert!(check(InteractionOutput::empty()).is_err());
     }
 }
 

@@ -1,5 +1,6 @@
 //! Independently authored datagram finite Binding, with an owned byte-by-byte
 //! compiler. Its native protocol is `READ /path\n` -> one JSON integer datagram.
+//! Synchronous Actions add `INVOKE /path [integer]\n` and an optional result.
 //! Only the optional preparation module imports TD/Planning.
 use clinkz_wot_core::{consumer::*, *};
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
@@ -53,6 +54,7 @@ pub fn configuration() -> ConsumerBindingConfiguration {
     .unwrap()
 }
 pub struct Program {
+    operation: Operation,
     address: SocketAddr,
     request: Vec<u8>,
     probe: Arc<Probe>,
@@ -73,6 +75,9 @@ struct Client {
     probe: Arc<Probe>,
 }
 impl binding::ClientBinding for Client {
+    fn supports_operation(&self, operation: Operation) -> bool {
+        matches!(operation, Operation::ReadProperty | Operation::InvokeAction)
+    }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         FORMAT
     }
@@ -90,11 +95,24 @@ impl binding::ClientBinding for Client {
         let Some(program) = artifact.artifact().try_payload::<Program>(FORMAT) else {
             return Err(reject(request));
         };
+        if request.operation() != program.operation {
+            return Err(reject(request));
+        }
         let mut bytes = Vec::new();
-        if bytes.try_reserve_exact(program.request.len()).is_err() {
+        let input_len = request.input().map_or(0, |p| p.body.len() + 1);
+        if bytes
+            .try_reserve_exact(program.request.len() + input_len)
+            .is_err()
+        {
             return Err(reject(request));
         }
         bytes.extend_from_slice(&program.request);
+        if let Some(input) = request.input() {
+            bytes.pop(); // replace the prepared newline with this call's input
+            bytes.push(b' ');
+            bytes.extend_from_slice(&input.body);
+            bytes.push(b'\n');
+        }
         let selected = (
             request.binding_id(),
             request.binding_generation(),
@@ -155,14 +173,17 @@ impl Call {
         match socket.recv_from(&mut bytes) {
             Ok((n, source)) if source == self.address && n <= 1024 => {
                 let (binding, generation, plan) = self.selected;
-                let output =
+                let output = (if n == 0 {
+                    InteractionOutput::empty()
+                } else {
                     InteractionOutput::with_data(Payload::new(&bytes[..n], "application/json"))
-                        .try_with_metadata(
-                            InteractionOutputMetadata::default().with_untrusted_binding_response(
-                                BindingResponseMetadata::primary(binding, generation, plan, 0),
-                            ),
-                        )
-                        .unwrap();
+                })
+                .try_with_metadata(
+                    InteractionOutputMetadata::default().with_untrusted_binding_response(
+                        BindingResponseMetadata::primary(binding, generation, plan, 0),
+                    ),
+                )
+                .unwrap();
                 Poll::Ready(Ok(output))
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Poll::Pending,
@@ -203,9 +224,13 @@ impl Call {
 }
 impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+        let input = clinkz_wot_core::notification::notification_payload_backing(
+            self.request.as_ref().and_then(OutboundRequest::input),
+        )
+        .unwrap_or(usize::MAX);
         BindingLifetimeFootprint::new(
-            4,
-            (std::mem::size_of::<Self>() + self.bytes.capacity()) as u64,
+            4 + u32::from(self.request.as_ref().is_some_and(|r| r.input().is_some())),
+            (std::mem::size_of::<Self>() + self.bytes.capacity()).saturating_add(input) as u64,
         )
     }
     fn next_deadline(&self) -> Option<Deadline> {
@@ -305,13 +330,8 @@ impl ConsumerDataService for Data {
     fn available(&self) -> bool {
         !self.0.data_lost.load(Ordering::Relaxed)
     }
-    fn validate(
-        &self,
-        schema: value_type::TypeSchema,
-        output: &InteractionOutput,
-    ) -> CoreResult<()> {
+    fn validate(&self, schema: value_type::TypeSchema, data: &Payload) -> CoreResult<()> {
         self.0.validates.fetch_add(1, Ordering::Relaxed);
-        let data = output.data().ok_or_else(invalid)?;
         let integer = std::str::from_utf8(&data.body)
             .ok()
             .and_then(|s| s.parse::<i64>().ok());
@@ -327,6 +347,15 @@ impl ConsumerDataService for Data {
 }
 struct Access(Arc<Probe>);
 impl ConsumerAccessService for Access {
+    fn authorize_instance(
+        &self,
+        _consumer: &ConsumerInstanceRef,
+        id: BindingRegistrationIdentity,
+        target: &str,
+        op: Operation,
+    ) -> CoreResult<()> {
+        self.authorize(id, target, op)
+    }
     fn authorize(
         &self,
         id: BindingRegistrationIdentity,
@@ -335,7 +364,7 @@ impl ConsumerAccessService for Access {
     ) -> CoreResult<()> {
         if self.0.denied.load(Ordering::Relaxed)
             || id.configuration() != configuration().configuration()
-            || op != Operation::ReadProperty
+            || !matches!(op, Operation::ReadProperty | Operation::InvokeAction)
             || !target.starts_with("linkedudp://127.0.0.1:")
         {
             return Err(invalid());
@@ -369,6 +398,7 @@ pub mod prepare {
         pub oversized_work: bool,
     }
     pub struct Cursor {
+        operation: Operation,
         bytes: Vec<u8>,
         copied: usize,
         address: SocketAddr,
@@ -401,7 +431,11 @@ pub mod prepare {
         fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
             self.probe.bounds.fetch_add(1, Ordering::Relaxed);
             let target = input.resolved_target();
-            if input.operation() != Operation::ReadProperty || !target.starts_with("linkedudp://") {
+            if !matches!(
+                input.operation(),
+                Operation::ReadProperty | Operation::InvokeAction
+            ) || !target.starts_with("linkedudp://")
+            {
                 return Err(CoreError::UnsupportedOperation(context()));
             }
             address(target)?;
@@ -428,8 +462,13 @@ pub mod prepare {
             self.probe.starts.fetch_add(1, Ordering::Relaxed);
             let mut bytes = Vec::new();
             bytes.try_reserve_exact(256).map_err(|_| busy())?;
-            bytes.extend_from_slice(b"READ ");
+            bytes.extend_from_slice(if input.operation() == Operation::ReadProperty {
+                b"READ "
+            } else {
+                b"INVOKE "
+            });
             Ok(Cursor {
+                operation: input.operation(),
                 bytes,
                 copied: 0,
                 address: address(input.resolved_target())?,
@@ -480,6 +519,7 @@ pub mod prepare {
                 FORMAT,
                 footprint,
                 Program {
+                    operation: cursor.operation,
                     address: cursor.address,
                     request: cursor.bytes,
                     probe: self.probe.clone(),

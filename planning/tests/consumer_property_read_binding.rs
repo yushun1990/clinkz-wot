@@ -911,6 +911,9 @@ struct HostClient {
 
 #[cfg(feature = "std")]
 impl TargetClientBinding for HostClient {
+    fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
+        operation == clinkz_wot_core::Operation::ReadProperty
+    }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.compatibility
     }
@@ -2472,9 +2475,7 @@ mod consumer_only {
                 let (owner, accepted, effects) = host_registration_with(mode, kind, 2048);
                 assert!(!owner.capabilities().supports_producer_property_read());
                 assert_eq!(accepted.load(Ordering::SeqCst), 0);
-                let mut call = owner
-                    .start_consumer_property_read(request(72), &artifact)
-                    .unwrap();
+                let mut call = owner.start_finite(request(72), &artifact).unwrap();
                 assert_eq!(accepted.load(Ordering::SeqCst), 1);
                 let fp = call.as_pin_mut().lifetime_footprint();
                 assert_eq!(fp.retained_items(), 2);
@@ -2513,9 +2514,7 @@ mod consumer_only {
         }
         let (owner, accepted, effects) =
             host_registration_with(HostMode::Result, OutputKind::Valid, 1);
-        let mut call = owner
-            .start_consumer_property_read(request(72), &artifact)
-            .unwrap();
+        let mut call = owner.start_finite(request(72), &artifact).unwrap();
         assert_eq!(accepted.load(Ordering::SeqCst), 1);
         assert!(call.as_pin_mut().lifetime_footprint().retained_bytes() > 1);
         assert!(matches!(
@@ -2530,18 +2529,14 @@ mod consumer_only {
     fn new_host_transfer_moves_the_complete_decorator_and_failure_is_opaque() {
         let artifact = host_artifact(72);
         let (owner, _, _) = host_registration_with(HostMode::Failure, OutputKind::Valid, 2048);
-        let mut call = owner
-            .start_consumer_property_read(request(72), &artifact)
-            .unwrap();
+        let mut call = owner.start_finite(request(72), &artifact).unwrap();
         assert!(matches!(
             call.as_pin_mut()
                 .poll_result(&mut context(), &mut binding_budget(1)),
             Poll::Ready(Err(CoreError::Binding(_)))
         ));
         let (owner, _, _) = host_registration_with(HostMode::Transfer, OutputKind::Valid, 2048);
-        let mut call = owner
-            .start_consumer_property_read(request(72), &artifact)
-            .unwrap();
+        let mut call = owner.start_finite(request(72), &artifact).unwrap();
         let footprint = call.as_pin_mut().lifetime_footprint();
         let StartStatus::Ready(BindingCallSettlement::Cancelled {
             disposition: BindingCancellationDisposition::TransferRequired(transfer),
@@ -2575,9 +2570,7 @@ mod consumer_only {
     #[test]
     fn consumer_only_execution_accepts_a_valid_result() {
         let (owner, _, _) = host_registration_with(HostMode::Result, OutputKind::Valid, 2048);
-        let mut call = owner
-            .start_consumer_property_read(request(72), &host_artifact(72))
-            .unwrap();
+        let mut call = owner.start_finite(request(72), &host_artifact(72)).unwrap();
         assert!(matches!(
             call.as_pin_mut()
                 .poll_result(&mut context(), &mut binding_budget(1)),
@@ -2726,14 +2719,10 @@ fn execution_outlives_compiler_with_owned_native_program_and_keeps_result_seal()
     drop(plan);
     assert_eq!(dropped.load(Ordering::SeqCst), 1);
     assert_eq!(effects.load(Ordering::SeqCst), 0);
-    let refused = runtime
-        .start_consumer_property_read(request(72), &artifact)
-        .unwrap_err();
+    let refused = runtime.start_finite(request(72), &artifact).unwrap_err();
     assert_eq!(refused.into_input(), request(72));
     assert_eq!(accepted.load(Ordering::SeqCst), 0);
-    let mut call = runtime
-        .start_consumer_property_read(request(73), &artifact)
-        .unwrap();
+    let mut call = runtime.start_finite(request(73), &artifact).unwrap();
     assert!(matches!(
         call.as_pin_mut()
             .poll_result(&mut context(), &mut binding_budget(0)),

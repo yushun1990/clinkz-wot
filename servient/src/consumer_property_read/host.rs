@@ -987,7 +987,7 @@ impl ConsumerPropertyReadHandle {
             .as_ref()
             .unwrap()
             .registration()
-            .start_consumer_property_read(request, selected.artifact());
+            .start_finite(request, selected.artifact());
         drop(selection); // Repark the unchanged graph before root reference release.
         match started {
             Err(rejection) => {

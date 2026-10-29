@@ -73,3 +73,41 @@ fn allocation_refusal_before_start_and_inside_owned_cursor_releases_reserved_bac
         );
     }
 }
+
+#[test]
+fn action_input_box_refusal_recovers_original_payload_and_empty_read_needs_no_allocation() {
+    use clinkz_wot_core::*;
+    let id = BindingArtifactIdentity::new(
+        PlanSetGeneration::INITIAL,
+        PlanId::new(SlotIndex::new(0), Generation::INITIAL),
+        BindingId::new(1),
+        BindingGeneration::INITIAL,
+        configuration().configuration(),
+        BindingArtifactCompatibility::new(*b"external-udp-v01"),
+        BindingArtifactRole::ConsumerCall,
+    );
+    let artifact = BindingArtifactRef::new(id, SlotIndex::new(0));
+    let payload = Payload::new(b"7".as_slice(), "application/json");
+    let original = payload.clone();
+    FAIL_AFTER.with(|n| n.set(Some(0)));
+    let rejected = OutboundRequest::finite(
+        artifact,
+        Operation::InvokeAction,
+        Some(payload),
+        Default::default(),
+        None,
+    )
+    .err()
+    .unwrap();
+    FAIL_AFTER.with(|n| assert!(n.get().is_none()));
+    let returned = rejected.into_input().unwrap();
+    assert!(Arc::ptr_eq(&returned.body, &original.body));
+    assert_eq!(returned, original);
+    FAIL_AFTER.with(|n| n.set(Some(0)));
+    let read = OutboundRequest::property_read(artifact, Default::default(), None);
+    FAIL_AFTER.with(|n| {
+        assert_eq!(n.get(), Some(0));
+        n.set(None);
+    });
+    assert!(read.is_ok());
+}

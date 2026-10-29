@@ -150,4 +150,8 @@ edge. The shared opaque Host bank now lives in Core; existing Servient account
 users retain their module re-export. Legacy owners use move-only partial-release
 leases instead of access to the bank's private reserve/release operations. No
 Planning-to-Servient dependency or Binding runtime dependency is added by this
-Consumer path. Finite calls and notification conversations remain separate.
+Consumer path. Finite calls and notification conversations remain separate. The notification
+executor and its lifecycle tests now also live in `servient/finite`, with no
+TD/Planning dependency or old-path compatibility re-export. Both facets retain
+the independent Core Consumer authority reference. A finite facet no longer
+manufactures the logical Consumer incarnation.

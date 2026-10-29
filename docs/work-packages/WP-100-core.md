@@ -22,3 +22,13 @@ v6. Exact successor source scope/API/state/resource changes, removals, checks an
 independent review are determined from the current repository for each material
 slice, not from a saved next-action list. New interaction families and Bindings
 are outside this architecture migration.
+
+## Consumer composition scope
+
+Core now carries operation-scoped finite definitions, distinct input/output
+payload schema roles, and a separate move-only Consumer authority/passive
+reference. The implementation and independent Binding evidence are scoped in
+WP-200/WP-400. The type-only schema and NoSec service envelope remain supported
+subsets; general DataSchema constraints, security composition/credentials,
+continuing Consumer Actions and TD-driven Event/observation preparation remain
+open. Existing raw Event control/response/retirement evidence is retained.

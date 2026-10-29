@@ -7,9 +7,10 @@ use core::{
     task::{Context, Poll},
 };
 
+use crate::consumer::ConsumerInstanceRef;
 use crate::{
     AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, CoreResult, Operation,
-    Payload, SubscriptionId, ThingSlotId,
+    Payload, SubscriptionId,
 };
 
 /// A retained issuer distinguishes even identical slots in different roots.
@@ -17,7 +18,7 @@ use crate::{
 #[derive(Clone)]
 pub struct NotificationIdentity {
     issuer: Rc<()>,
-    pub consumer: ThingSlotId,
+    pub consumer: ConsumerInstanceRef,
     pub subscription: SubscriptionId,
 }
 impl PartialEq for NotificationIdentity {
@@ -45,7 +46,7 @@ impl Default for NotificationIssuer {
 impl NotificationIssuer {
     pub fn identity(
         &self,
-        consumer: ThingSlotId,
+        consumer: ConsumerInstanceRef,
         subscription: SubscriptionId,
     ) -> NotificationIdentity {
         NotificationIdentity {

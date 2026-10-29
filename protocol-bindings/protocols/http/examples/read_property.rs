@@ -46,8 +46,14 @@ fn main() {
     let (definitions, funding) = prepared.into_execution();
     drop(thing);
     drop(registry);
-    let runtime = ConsumerRuntime::try_new(definitions, funding, bank.clone(), 1)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let consumer =
+        clinkz_wot_core::consumer::ConsumerInstance::new(clinkz_wot_core::ThingSlotId::new(
+            clinkz_wot_foundation::SlotIndex::new(0),
+            clinkz_wot_foundation::Generation::INITIAL,
+        ));
+    let runtime =
+        ConsumerRuntime::try_new(consumer.reference(), definitions, funding, bank.clone(), 1)
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let clock = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(600), clock.elapsed().as_millis() as u64);
     let io = tokio::runtime::Builder::new_current_thread()

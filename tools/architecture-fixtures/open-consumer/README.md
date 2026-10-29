@@ -33,3 +33,13 @@ The datagram mapping and integer codec are test participants, not a production
 protocol or general JSON/schema implementation. The Host runtime is manually
 progressed. These checks do not qualify notification I/O, SSE, constrained device
 execution, authentication, every DataSchema assertion, or package/release gates.
+
+The same compiler/finite owner also executes explicitly synchronous Actions with
+separate input/output type schemas, including a Property and Action sharing a
+name. `tests/support/composition.rs` authors a separate raw observation Binding
+over a shared real datagram socket. One independent Consumer authority fences
+both lifecycles while local facet close and sibling native ownership remain
+independent. These are test protocols, not new production Bindings or TD-qualified
+notification support. The moved notification lifecycle regressions run in
+`clinkz-wot-servient-finite`, with Core/Foundation as the only normal project
+dependencies. HTTP SSE is deferred.

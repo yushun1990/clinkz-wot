@@ -1,7 +1,8 @@
-//! Caller-driven raw Host Consumer notifications. One root represents one
-//! logical Consumer incarnation and one captured native capability. Roots may
-//! share Binding-owned infrastructure, but never application cursors/authority.
+//! Caller-driven raw Host Consumer notifications. Each facet retains the one
+//! Consumer authority's reference and one captured native capability. Native
+//! infrastructure may be shared; cursors and logical stop remain independent.
 use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
+use clinkz_wot_core::consumer::ConsumerInstanceRef;
 use clinkz_wot_core::{notification::*, *};
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
 use core::{
@@ -29,7 +30,7 @@ pub struct RawNotificationLimits {
 /// and leaves the complete owner in its prepaid root slot for manual progress.
 ///
 /// ```compile_fail,E0599
-/// fn duplicate(cursor: clinkz_wot_servient::notification::NotificationCursor) {
+/// fn duplicate(cursor: clinkz_wot_servient_finite::notification::NotificationCursor) {
 ///     let _other_receiver = cursor.clone();
 /// }
 /// ```
@@ -189,10 +190,13 @@ impl<P: NotificationParticipation> Entry<P> {
         if self.stopped.get() {
             self.fence(cancelled());
         }
+        if !self.identity.consumer.is_current() {
+            self.fence(stale());
+        }
     }
     fn check_live(&mut self, paired: bool) -> CoreResult<()> {
         self.sync_stop();
-        if !paired {
+        if !paired || !self.identity.consumer.is_current() {
             self.fence(stale());
         }
         if matches!(
@@ -235,7 +239,7 @@ pub struct RawNotificationServient<B: ConsumerNotificationBinding, A: Notificati
     configuration: B::Configuration,
     binding_identity: (BindingId, BindingGeneration),
     authorizer: A,
-    consumer: ThingSlotId,
+    consumer: ConsumerInstanceRef,
     issuer: NotificationIssuer,
     slots: Vec<Slot<B::Participation>>,
     limits: RawNotificationLimits,
@@ -282,14 +286,14 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         binding: B,
         configuration: B::Configuration,
         authorizer: A,
-        consumer: ThingSlotId,
+        consumer: ConsumerInstanceRef,
         limits: RawNotificationLimits,
     ) -> Result<Self, BindingInputRejection<(B, B::Configuration, A)>> {
         let needed = limits
             .subscriptions
             .checked_mul(size_of::<Slot<B::Participation>>())
             .and_then(|n| n.checked_add(size_of::<Self>() + 2 * size_of::<usize>()));
-        if binding.configuration() != &configuration {
+        if !consumer.is_current() || binding.configuration() != &configuration {
             return Err(reject((binding, configuration, authorizer), invalid()));
         }
         if limits.subscriptions > u32::MAX as usize
@@ -335,7 +339,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         self.retained
     }
     fn paired(&self) -> bool {
-        self.current && binding_paired(&self.binding, &self.configuration, self.binding_identity)
+        self.current
+            && self.consumer.is_current()
+            && binding_paired(&self.binding, &self.configuration, self.binding_identity)
     }
     fn index(&self, identity: &NotificationIdentity) -> CoreResult<usize> {
         let i = identity.subscription.slot().get() as usize;
@@ -414,7 +420,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 .position(|s| s.entry.is_none() && s.generation.is_some())
                 .ok_or_else(capacity)?;
             let id = self.issuer.identity(
-                self.consumer,
+                self.consumer.clone(),
                 SubscriptionId::new(SlotIndex::new(i as u32), self.slots[i].generation.unwrap()),
             );
             debit(budget, WorkClass::ProviderProbes, 2)?;
@@ -526,8 +532,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         Ok(())
     }
 
-    /// Revocation is local and immediate, even with zero native work budget.
-    /// The root cannot be reactivated as a replacement Consumer incarnation.
+    /// Revocation of this facet is local and immediate, even with zero native
+    /// work credit. ConsumerInstance::revoke fences all attached facets.
     pub fn revoke(&mut self) {
         self.current = false;
         for slot in &mut self.slots {
@@ -536,7 +542,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             }
         }
     }
-    /// Whole logical-owner close; native service shutdown remains Binding-owned.
+    /// Close this notification facet; sibling facets and native infrastructure
+    /// retain their independent owners.
     pub fn begin_close(&mut self) {
         self.current = false;
         for slot in &mut self.slots {
@@ -616,7 +623,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 &e.identity,
                 &e.request.target,
                 NotificationPermission::Cancel,
-            )
+            )?;
+            if !e.identity.consumer.is_current() {
+                return Err(stale());
+            }
+            Ok(())
         })();
         if let Err(error) = result {
             e.cancellation_error.get_or_insert(error.clone());
@@ -628,7 +639,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
 
     pub fn status(&self, identity: &NotificationIdentity) -> CoreResult<NotificationStatus<'_>> {
         let e = self.entry(identity)?;
-        let state = if e.stopped.get() && e.state != NotificationState::Closed {
+        let state = if (e.stopped.get() || !e.identity.consumer.is_current())
+            && e.state != NotificationState::Closed
+        {
             NotificationState::Closing
         } else {
             e.state
@@ -812,11 +825,12 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                     Err(stale())
                 } {
                     Ok(())
-                        if binding_paired(
-                            &self.binding,
-                            &self.configuration,
-                            self.binding_identity,
-                        ) =>
+                        if e.identity.consumer.is_current()
+                            && binding_paired(
+                                &self.binding,
+                                &self.configuration,
+                                self.binding_identity,
+                            ) =>
                     {
                         e.cancel_admitted = true
                     }
@@ -1115,7 +1129,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         e.close_started = true;
         match e.participant.as_mut().unwrap().poll_close(
             cx,
-            if e.cancel_admitted {
+            if e.cancel_admitted && e.identity.consumer.is_current() {
                 e.cancellation.as_ref()
             } else {
                 None

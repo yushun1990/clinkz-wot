@@ -65,6 +65,16 @@ HTTP SSE does not determine general fields, thread/atomic requirements, retry,
 reply cardinality or one-connection-per-subscription policy. Native streams,
 correlation, framing, reconnect and shared-service leases stay Binding-owned.
 Test that stopping one logical participant cannot retire siblings and that final
-physical destruction waits for remaining native work. The initial real finite
-and subsequent notification slices supply this evidence at their claimed scopes;
+physical destruction waits for remaining native work. Multi-family finite execution and raw notification composition with independent
+test Bindings supply this evidence at their claimed scopes;
 an operation enum or registration flag is insufficient.
+
+The Host finite `ClientBinding` declares coarse operation eligibility explicitly;
+complete support still comes from actual compiler/services. `start_finite` replaces
+the Host Consumer-only Property Read entry, and requests carry the selected
+operation and optional application input. Retained static/dual-role adapters stay
+explicitly Property Read-only. Neither facet owns Consumer currentness: finite
+calls and `ConsumerNotificationBinding` participants retain the same externally
+owned logical instance reference. Production HTTP remains Property Read-only on
+this Consumer path. HTTP SSE is deferred; the real datagram participants are test
+Bindings, not a new production protocol.

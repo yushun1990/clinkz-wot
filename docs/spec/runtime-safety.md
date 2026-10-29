@@ -11,6 +11,16 @@ behavior owner. Currentness cannot be copied into per-Binding registries. A
 retention reference for original accepted work grants neither fresh acceptance
 nor native shutdown authority.
 
+The Host Consumer's finite and raw notification owners capture the same independent
+`ConsumerInstance` reference. Revocation or authority Drop fences both, including
+unread finite results and callback-time late notifications. Each owner rechecks
+currentness after permission, codec and native callbacks before successful local
+handoff. Closing/dropping one facet or stopping one call/subscription revokes only
+its own acceptance; sibling facets retain their authority and native leases.
+Execution authorization receives the original instance and selected operation;
+preparation's destination check alone is insufficient. This implementation remains
+Host/manual and does not establish constrained or automatic-progress support.
+
 `SAFE-PUBLISH-001`: Producer setup MUST validate the draft/known dependencies,
 capture actual providers/behavior and reserve setup/ingress/finalization/cleanup
 before acquiring native resources. Owned closed native participation may determine

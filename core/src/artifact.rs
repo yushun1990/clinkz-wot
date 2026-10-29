@@ -1,12 +1,12 @@
 //! Source-free native artifacts, compatibility and owned runtime storage.
 use crate::*;
-#[cfg(feature = "std")]
 use alloc::boxed::Box;
 use clinkz_wot_foundation::SlotIndex;
+use core::alloc::Layout;
 #[cfg(feature = "std")]
 use core::any::Any;
 #[cfg(feature = "std")]
-use core::{alloc::Layout, fmt};
+use core::fmt;
 /// Stable compatibility identity shared by one compiler and its artifacts.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -603,7 +603,8 @@ impl HostBindingArtifact {
     }
 }
 
-#[cfg(feature = "std")]
+/// Fallible owned storage for an alloc-backed representation. No native work
+/// is acquired and allocator refusal returns the complete original value.
 pub fn try_box<T>(value: T) -> Result<Box<T>, T> {
     let layout = Layout::new::<T>();
     if layout.size() == 0 {

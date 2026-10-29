@@ -103,15 +103,14 @@ work retain their own dependencies and qualification scope.
 
 ## TD-driven Consumer observation
 
-The next implementation PR extends that working selection/preparation path to
-`ObserveProperty`, using HTTP SSE for real notification I/O. A raw SSE participant
-could be implemented now: `ConsumerNotificationBinding::Program` is unconstrained
-by `Copy`, and `RawNotificationServient` already owns establishment/flow/stop.
-Therefore a Consumer architecture rewrite is **not** a technical prerequisite.
-The reason for the ordering is narrower: TD-driven notification selection is not
-integrated, while the existing Consumer compiler admission excludes owned jobs.
-Avoid another manually selected SSE facade or enlarging `HostSemanticCompiler`
-with subscription methods.
+**Deferred:** HTTP SSE is no longer the next implementation priority. The open
+owned compiler is integrated, but finite operation keys/requests/data roles and
+independent Consumer authority needed correction first. WP-200/WP-400 now prove
+those boundaries using existing HTTP and independently authored test Bindings.
+A raw notification participant alone does not establish TD-driven composition.
+The future slice extends actual selection/preparation to `ObserveProperty` with
+captured validation/security and stop mappings; it must preserve separate finite
+and notification lifecycles rather than impose an SSE-shaped Engine interface.
 
 The existing [HTTP compiler](../../protocol-bindings/protocols/http/src/compiler.rs)
 accepts only `ReadProperty` without a subprotocol. Its
@@ -121,7 +120,7 @@ mechanics, not that finite body collector or its total-response wire cap as the
 stream model. The Binding needs bounded streaming framing/decoding and retained
 native progress/retirement; the Engine keeps logical delivery and visible loss.
 
-Executable acceptance for this PR:
+Executable acceptance when this deferred capability is implemented:
 
 - Consume a TD, select the actual registered observation capability, retain
   resolved URL/method/subprotocol, schema/media/security facts and stop mapping,

@@ -380,6 +380,9 @@ impl<C: BindingCompilerExtension + Send + Sync> RouteServerBinding for Endpoint<
 
 #[cfg(feature = "std")]
 impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for Endpoint<C> {
+    fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
+        operation == clinkz_wot_core::Operation::ReadProperty
+    }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.1
     }

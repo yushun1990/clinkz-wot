@@ -1,9 +1,10 @@
 #![cfg(feature = "std")]
 //! Deterministic native capability tests. The in-memory Binding, not the
 //! Engine, matches sources, distributes data and owns physical retirement.
+use clinkz_wot_core::consumer::ConsumerInstance;
 use clinkz_wot_core::{notification::*, *};
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
-use clinkz_wot_servient::notification::*;
+use clinkz_wot_servient_finite::notification::*;
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, VecDeque},
@@ -487,7 +488,43 @@ impl NotificationAuthorizer for Policy {
         }
     }
 }
-type Root = RawNotificationServient<Binding, Policy>;
+struct Root {
+    inner: RawNotificationServient<Binding, Policy>,
+    _instance: ConsumerInstance,
+}
+impl core::ops::Deref for Root {
+    type Target = RawNotificationServient<Binding, Policy>;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl core::ops::DerefMut for Root {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+impl Root {
+    fn try_new(
+        binding: Binding,
+        configuration: Cell<u64>,
+        policy: Policy,
+        slot: ThingSlotId,
+        limits: RawNotificationLimits,
+    ) -> Result<Self, BindingInputRejection<(Binding, Cell<u64>, Policy)>> {
+        let instance = ConsumerInstance::new(slot);
+        RawNotificationServient::try_new(
+            binding,
+            configuration,
+            policy,
+            instance.reference(),
+            limits,
+        )
+        .map(|inner| Self {
+            inner,
+            _instance: instance,
+        })
+    }
+}
 fn binding_error() -> CoreError {
     CoreError::Binding(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))
 }

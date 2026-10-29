@@ -41,6 +41,8 @@ id = "WP-400"
 status = "in-progress"
 document = "docs/work-packages/WP-400-servient.md"
 owner_crates = ["servient", "servient/finite", "core"]
+# Operation-scoped finite Consumer and raw notifications compose below preparation;
+# shared instance authority is independent of native facets (WP-400).
 depends_on = ["WP-100", "WP-300"]
 
 [[package]]
@@ -54,6 +56,8 @@ depends_on = ["WP-100"]
 id = "WP-600"
 status = "planned"
 document = "docs/work-packages/WP-600-protocol-bindings.md"
+# Protocol-neutral Engine composition precedes deferred HTTP SSE; no new
+# production Binding is required for the WP-200/WP-400 composition evidence.
 # The real optional HTTP member implements the admitted Consumer tranche.
 # Deferred Zenoh/pico implementations are recoverable from Git, not maintained owners.
 owner_crates = ["planning", "protocol-bindings/protocols/http"]

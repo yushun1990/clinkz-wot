@@ -1,5 +1,7 @@
 #![cfg(feature = "prepare")]
-use clinkz_wot_core::{host_accounts::HostResourceAccounts, *};
+#[path = "support/composition.rs"]
+mod composition;
+use clinkz_wot_core::{consumer::ConsumerInstance, host_accounts::HostResourceAccounts, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::*;
 use clinkz_wot_servient_finite::consumer::*;
@@ -60,9 +62,28 @@ fn prepare(
         )
         .unwrap()
 }
-fn runtime(prepared: PreparedConsumer, bank: Arc<HostResourceAccounts>) -> ConsumerRuntime {
+fn instance() -> ConsumerInstance {
+    ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL))
+}
+struct Runtime {
+    inner: ConsumerRuntime,
+    _instance: ConsumerInstance,
+}
+impl core::ops::Deref for Runtime {
+    type Target = ConsumerRuntime;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+fn runtime(prepared: PreparedConsumer, bank: Arc<HostResourceAccounts>) -> Runtime {
     let (defs, funding) = prepared.into_execution();
-    ConsumerRuntime::try_new(defs, funding, bank, 1).unwrap_or_else(|e| panic!("{:?}", e.error()))
+    let owner = instance();
+    let inner = ConsumerRuntime::try_new(owner.reference(), defs, funding, bank, 1)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    Runtime {
+        inner,
+        _instance: owner,
+    }
 }
 fn poll(call: &mut ConsumerCall) -> ConsumerSettlement {
     let start = Instant::now();
@@ -479,7 +500,7 @@ fn real_late_result_after_revocation_retains_first_cause_and_original_binding() 
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
     );
-    rt.revoke();
+    rt.begin_close();
     assert!(
         rt.read_property("a", Deadline::NONE, now(), &mut work())
             .is_err()
@@ -611,12 +632,14 @@ fn later_failure_reclaims_earlier_owned_output_and_runtime_rejects_a_foreign_ban
     let prepared = prepare(&registry, &thing, bank.clone());
     let (defs, funding) = prepared.into_execution();
     let foreign = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
-    let rejected = ConsumerRuntime::try_new(defs, funding, foreign.clone(), 1)
+    let owner = instance();
+    let rejected = ConsumerRuntime::try_new(owner.reference(), defs, funding, foreign.clone(), 1)
         .err()
         .unwrap();
     clean(&foreign);
     let (defs, funding) = rejected.into_input();
-    let rt = ConsumerRuntime::try_new(defs, funding, bank.clone(), 1).unwrap_or_else(|_| panic!());
+    let rt = ConsumerRuntime::try_new(owner.reference(), defs, funding, bank.clone(), 1)
+        .unwrap_or_else(|_| panic!());
     drop(rt);
     clean(&bank);
 }
@@ -712,7 +735,7 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
             .poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
     );
-    old.revoke();
+    old.begin_close();
     exchange(&peer, b"7");
     let old_result = poll(&mut old_call);
     assert_eq!(old_result.binding().binding_id(), BindingId::new(1));
@@ -728,7 +751,7 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
     exchange(&peer, b"9");
     // Drive to an unread terminal slot, then revoke before handoff.
     new.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-    new.revoke();
+    new.begin_close();
     let new_result = poll(&mut new_call);
     assert_eq!(new_result.binding().binding_id(), BindingId::new(2));
     assert!(new_result.result().is_err());
@@ -998,7 +1021,8 @@ fn review_cleanup_progress_is_fair_with_one_native_credit() {
     let (mut defs_b, mut funding_b) = prepare(&reg_b, &source_b, bank.clone()).into_execution();
     defs_a.append(&mut defs_b);
     funding_a.append(&mut funding_b);
-    let rt = ConsumerRuntime::try_new(defs_a, funding_a, bank.clone(), 2)
+    let owner = instance();
+    let rt = ConsumerRuntime::try_new(owner.reference(), defs_a, funding_a, bank.clone(), 2)
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let mut a = rt
         .read_property("a", Deadline::NONE, now(), &mut work())
@@ -1093,7 +1117,7 @@ fn service_accounting_arithmetic_and_definition_refusals_keep_original_artifact_
         fn content_type(&self) -> &str {
             self.inner.content_type()
         }
-        fn validate(&self, schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {
+        fn validate(&self, schema: TypeSchema, output: &Payload) -> CoreResult<()> {
             self.inner.validate(schema, output)
         }
         fn policy(&self) -> ConsumerDataPolicy {
@@ -1247,7 +1271,8 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
             prepare(&reg_b, &source_b, bank.clone()).into_execution();
         definitions.append(&mut second_definitions);
         funding.append(&mut second_funding);
-        let rt = ConsumerRuntime::try_new(definitions, funding, bank.clone(), 2)
+        let owner = instance();
+        let rt = ConsumerRuntime::try_new(owner.reference(), definitions, funding, bank.clone(), 2)
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         drop(reg_a);
         drop(reg_b);

@@ -44,8 +44,8 @@ single-Property `Covered` shape marker and `PreparedProducer` adapter.
 
 ## Joined v6 preparation boundary
 
-The joined Producer path supplies the first composition foothold. The Consumer
-sequence below now has priority; neither path generalizes the Copy/atomic
+The joined Producer path supplies the first composition foothold. Protocol-neutral Consumer
+composition now has priority; neither path generalizes the Copy/atomic
 Property Read adapter into the v6 compiler contract. A Producer's
 selected mapping must capture the *actual* Binding/configuration and executable
 codec/schema/security services, carry independent owned facts after source TD
@@ -64,11 +64,11 @@ introduce a universal artifact/cache/program type or a preparatory gate.
 
 ## Open Consumer integration
 
-The smallest useful sequence is **two implementation PRs**: open registration /
-preparation with working finite I/O, then TD-driven notification I/O
-([WP-600](WP-600-protocol-bindings.md#td-driven-consumer-observation)). Combine
-opening the path and its real capability proof: an abstraction-only precursor
-would leave the important compiler-to-executor seam untested.
+The open finite Property Read foothold is implemented. Immediate priority is
+[protocol-neutral operation composition](#consumer-operation-composition),
+replacing the former mandatory second HTTP SSE slice. The earlier source
+diagnosis and initial slice boundary below remain scoped implementation history.
+TD-driven observation and production SSE are deferred under WP-600.
 
 ### Source constraints and disposition
 
@@ -181,8 +181,33 @@ candidate while the common semantic Form loan lives; early driver return aborts.
 The service subset is type-only schemas plus actual codec and NoSec destination
 policy, with unsupported assertions/security refused. Portable authoring and
 typed/static pairing are preserved, without claiming a constrained TD runtime.
-Deferred first use, additional schemas/security and HTTP SSE remain subsequent
-working capabilities. Producer complete publication qualification is unchanged.
+Deferred first use and additional schemas/security remain incremental
+capabilities; HTTP SSE is deferred behind Engine composition. Producer complete publication qualification is unchanged.
+
+## Consumer operation composition
+
+Confirmed defects and alternatives are recorded in
+[0095](../../workspace/0095-consumer-operation-and-instance-composition.md).
+The shared registry now selects exact affordance kind/name/operation coordinates;
+it prepares Property Read and explicitly synchronous Action invocation using the
+same owned compiler/actual service boundary. Same-named Properties and Actions
+remain independent. Required input and output schemas are captured separately;
+missing roles prohibit data, and each present schema must fit the supported
+shared type-only subset. Binding operation metadata only narrows eligibility.
+
+The independent downstream Binding executes both families over real datagrams
+after TD/compiler destruction, including warm calls, rejected/unpaid inputs,
+empty Action roles, policy/replacement/cancellation and retained late results.
+Continuing/unspecified Action synchronicity, control operations, collections,
+additional/different response formats and unsupported schema/security assertions
+remain explicit unsupported alternatives. This is not a universal finite model
+for every WoT operation, notification preparation, or complete Action support.
+
+The existing registry/erasure is retained because the owned compiler is usable;
+its Property-shaped keys, requests and validator contract are replaced rather
+than repeated for each family. A general schema IR, security verifier framework,
+first-use cache or protocol-specific stream adds no necessary functionality to
+this composition proof and is not introduced.
 
 ## Implemented finite join
 
