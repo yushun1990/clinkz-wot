@@ -160,24 +160,38 @@ fn action_absent_data_roles_allow_empty_success_but_reject_unexpected_output() {
             .unwrap()
             .remove("output");
         let td = serde_json::from_value(value).unwrap();
-        let registrations = registry(vec![registration(1, p)]);
+        let registrations = registry(vec![registration(1, p.clone())]);
         let owner = instance();
         let rt = finite(
             &owner,
             prepare(&registrations, &td, bank.clone()),
             bank.clone(),
         );
-        let peer = std::thread::spawn(move || {
-            let mut bytes = [0; 256];
-            let (n, from) = peer.recv_from(&mut bytes).unwrap();
-            assert_eq!(&bytes[..n], b"INVOKE /temperature\n");
-            peer.send_to(reply, from).unwrap();
-        });
         let mut call = rt
             .invoke_action("a", None, Deadline::NONE, now(), &mut work())
             .unwrap_or_else(|_| panic!());
-        let result = poll(&mut call);
+        let mut cx = Context::from_waker(Waker::noop());
+        let no_codec = || {
+            let mut budget = work();
+            budget.set_remaining(WorkClass::CodecInputBytes, 0);
+            budget
+        };
+        assert!(call.poll(&mut cx, now(), &mut no_codec()).is_pending());
+        let mut bytes = [0; 256];
+        let (n, from) = peer.recv_from(&mut bytes).unwrap();
+        assert_eq!(&bytes[..n], b"INVOKE /temperature\n");
+        peer.send_to(reply, from).unwrap();
+        let mut result = None;
+        for _ in 0..100 {
+            if let Poll::Ready(settlement) = call.poll(&mut cx, now(), &mut no_codec()) {
+                result = Some(settlement);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let result = result.expect("absent output role must settle without codec credit");
         assert_eq!(result.result().is_ok(), reply.is_empty());
+        assert_eq!(p.validates.load(Ordering::Relaxed), 0);
         if !reply.is_empty() {
             assert!(result.rejected_output().is_some());
         }
@@ -185,7 +199,117 @@ fn action_absent_data_roles_allow_empty_success_but_reject_unexpected_output() {
         drop(call);
         drop(rt);
         clean(&bank);
-        peer.join().unwrap();
+    }
+}
+
+#[test]
+fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_phases() {
+    for change in [
+        "none",
+        "revoke",
+        "drop",
+        "cancel",
+        "access",
+        "configuration",
+        "data",
+    ] {
+        let p = Arc::new(Probe::default());
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let (peer, target) = udp();
+        let registrations = registry(vec![registration(1, p.clone())]);
+        let mut owner = Some(instance());
+        let original = owner.as_ref().unwrap().reference();
+        let rt = finite(
+            owner.as_ref().unwrap(),
+            prepare(
+                &registrations,
+                &source(json!([{"href":target}])),
+                bank.clone(),
+            ),
+            bank.clone(),
+        );
+        let mut call = rt
+            .read_property("a", Deadline::NONE, now(), &mut work())
+            .unwrap();
+        let mut cx = Context::from_waker(Waker::noop());
+        let quantum = || {
+            let mut budget = work();
+            budget.set_remaining(WorkClass::ProviderProbes, 2);
+            budget
+        };
+        assert!(call.poll(&mut cx, now(), &mut quantum()).is_pending());
+        exchange(&peer, b"7");
+        for _ in 0..100 {
+            assert!(call.poll(&mut cx, now(), &mut quantum()).is_pending());
+            if p.validates.load(Ordering::Relaxed) != 0 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(
+            p.validates.load(Ordering::Relaxed),
+            1,
+            "{change}: result validated once before final-probe yield"
+        );
+        match change {
+            "none" => {}
+            "revoke" => owner.as_ref().unwrap().revoke(),
+            "drop" => drop(owner.take()),
+            "cancel" => call.cancel(),
+            "access" => p.denied.store(true, Ordering::Relaxed),
+            "configuration" => p.changed.store(true, Ordering::Relaxed),
+            "data" => p.data_lost.store(true, Ordering::Relaxed),
+            _ => unreachable!(),
+        }
+        let charged: Vec<_> = ResourceKind::ALL
+            .iter()
+            .map(|&kind| bank.account(kind).used())
+            .collect();
+        for credit in [0, 1] {
+            let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, credit);
+            assert!(call.poll(&mut cx, now(), &mut budget).is_pending());
+            assert!(!rt.is_idle());
+            assert_eq!(p.calls.load(Ordering::Relaxed), 0);
+            assert_eq!(p.validates.load(Ordering::Relaxed), 1);
+            assert_eq!(
+                charged,
+                ResourceKind::ALL
+                    .iter()
+                    .map(|&kind| bank.account(kind).used())
+                    .collect::<Vec<_>>()
+            );
+        }
+        // Only the remaining authorization callback has credit. Completed
+        // decoding must not be repeated, including when authority/services changed.
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 2);
+        let Poll::Ready(result) = call.poll(&mut cx, now(), &mut budget) else {
+            panic!("{change}: validated result must resume with one authorization quantum");
+        };
+        assert_eq!(result.consumer(), &original);
+        match change {
+            "none" => assert!(result.result().is_ok()),
+            "revoke" | "drop" => assert!(matches!(result.result(), Err(CoreError::StaleHandle(_)))),
+            "cancel" => assert!(matches!(result.result(), Err(CoreError::Cancelled(_)))),
+            _ => assert!(matches!(result.result(), Err(CoreError::Validation(_)))),
+        }
+        assert!(matches!(
+            result.native_outcome(),
+            BindingCallSettlement::Returned(Ok(_))
+        ));
+        assert_eq!(p.validates.load(Ordering::Relaxed), 1);
+        assert_eq!(p.calls.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            charged,
+            ResourceKind::ALL
+                .iter()
+                .map(|&kind| bank.account(kind).used())
+                .collect::<Vec<_>>()
+        );
+        drop(result);
+        assert_eq!(p.calls.load(Ordering::Relaxed), 1);
+        drop(call);
+        drop(rt);
+        clean(&bank);
     }
 }
 
@@ -619,6 +743,78 @@ fn deliver(root: &mut RawNotificationServient<Observe, Access>, cursor: &mut Not
         }
         assert!(start.elapsed() < Duration::from_secs(5));
         std::thread::yield_now();
+    }
+}
+
+#[test]
+fn owner_cleanup_drains_external_revocation_with_retained_cursor_and_preserves_sibling() {
+    for cause in ["revoke", "drop", "stop_then_revoke"] {
+        let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let hub = hub(peer.local_addr().unwrap());
+        let local = hub.socket.local_addr().unwrap();
+        let mut owner = Some(instance());
+        let sibling_owner = instance();
+        let mut root = observations(owner.as_ref().unwrap(), hub.clone());
+        let baseline = root.reserved_engine_bytes();
+        let cursor = subscribe(&mut root);
+        assert_eq!(progress(&mut root, &cursor), NotificationState::Active);
+        let mut sibling = observations(&sibling_owner, hub.clone());
+        let mut sibling_cursor = subscribe(&mut sibling);
+        assert_eq!(
+            progress(&mut sibling, &sibling_cursor),
+            NotificationState::Active
+        );
+        match cause {
+            "revoke" => owner.as_ref().unwrap().revoke(),
+            "drop" => drop(owner.take()),
+            "stop_then_revoke" => {
+                cursor.stop_handle().request_stop();
+                owner.as_ref().unwrap().revoke();
+            }
+            _ => unreachable!(),
+        }
+        let mut cx = Context::from_waker(Waker::noop());
+        assert_eq!(
+            root.status(cursor.identity()).unwrap().state,
+            NotificationState::Closing
+        );
+        assert!(root.step_cleanup(&mut cx, &mut WorkBudget::new()).is_err());
+        assert_eq!(hub.closes.get(), 0);
+        assert_eq!(root.retained_subscriptions(), 1);
+        let mut result = None;
+        for _ in 0..8 {
+            if let Some(settlement) = root.step_cleanup(&mut cx, &mut work()).unwrap() {
+                result = Some(settlement);
+                break;
+            }
+        }
+        let result = result.expect("owner cleanup must observe independent Consumer revocation");
+        assert_eq!(
+            &result.identity,
+            cursor.identity(),
+            "the original cursor is still retained"
+        );
+        if cause == "stop_then_revoke" {
+            assert!(matches!(result.first_cause, Some(CoreError::Cancelled(_))));
+        } else {
+            assert!(matches!(
+                result.first_cause,
+                Some(CoreError::StaleHandle(_))
+            ));
+        }
+        assert_eq!(result.remote_cancellation, RemoteCancellation::Unsupported);
+        assert_eq!(hub.closes.get(), 1);
+        assert_eq!(root.retained_subscriptions(), 0);
+        assert_eq!(root.reserved_engine_bytes(), baseline);
+        assert!(root.status(cursor.identity()).is_err());
+        assert_eq!(hub.receivers.borrow().len(), 1);
+        assert!(hub.receivers.borrow().contains_key(&1));
+        peer.send_to(b"1:17", local).unwrap();
+        deliver(&mut sibling, &mut sibling_cursor);
+        drop(root);
+        drop(sibling);
+        drop(hub);
+        drop(UdpSocket::bind(local).expect("shared physical owner releases its final socket"));
     }
 }
 

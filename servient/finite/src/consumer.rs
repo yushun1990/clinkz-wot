@@ -80,28 +80,36 @@ impl Definition {
         }
         Ok(())
     }
-    fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
+    fn validate(
+        &self,
+        output: &InteractionOutput,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<()>> {
         if !self.input.services.data.available()
             || self.input.services.data.policy() != self.data_policy
         {
-            return Err(invalid());
+            return Poll::Ready(Err(invalid()));
         }
-        self.validate_payload(self.input.schemas.output, output.data())
+        self.validate_payload(self.input.schemas.output, output.data(), budget)
     }
     fn validate_payload(
         &self,
         schema: Option<clinkz_wot_core::value_type::TypeSchema>,
         payload: Option<&Payload>,
-    ) -> CoreResult<()> {
-        match (schema, payload) {
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<()>> {
+        Poll::Ready(match (schema, payload) {
             (None, None) => Ok(()),
             (Some(schema), Some(payload))
                 if payload.body.len() as u64 <= self.data_policy.body_bytes =>
             {
+                if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
+                    return Poll::Pending;
+                }
                 self.input.services.data.validate(schema, payload)
             }
             _ => Err(invalid()),
-        }
+        })
     }
     fn start(
         &self,
@@ -159,6 +167,7 @@ struct Call {
     cancelling: bool,
     cancel_started: bool,
     terminal: bool,
+    output_validated: bool,
     abandoned: bool,
     deadline: Deadline,
     last_time: MonotonicInstant,
@@ -355,10 +364,14 @@ impl ConsumerRuntime {
             }
             budget.consume(W::BindingPolls, 1).unwrap();
             budget.consume(W::CleanupItems, 1).unwrap();
-            if input.is_some() && !pay(budget, W::CodecInputBytes, policy.validation_work) {
-                return Err(busy());
+            match definition.validate_payload(
+                definition.input.schemas.input,
+                input.as_ref(),
+                budget,
+            ) {
+                Poll::Ready(result) => result?,
+                Poll::Pending => return Err(busy()),
             }
-            definition.validate_payload(definition.input.schemas.input, input.as_ref())?;
             // Codec callbacks may change current policy as well as authority.
             if input.is_some() {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
@@ -390,6 +403,7 @@ impl ConsumerRuntime {
             cancelling: false,
             cancel_started: false,
             terminal: false,
+            output_validated: false,
             abandoned: false,
             deadline,
             last_time: now,
@@ -579,7 +593,11 @@ impl Call {
         if let Err(e) = self.definition.check_current(&self.consumer) {
             self.cancel(e);
         }
-        if self.terminal {
+        // A completed validation survives a yield for the final policy check.
+        // The check above is fresh in this step; no codec/native callback can
+        // change policy between it and this retained-result handoff.
+        if self.terminal || self.output_validated {
+            self.terminal = true;
             return Poll::Ready(());
         }
         if self.outcome.is_none() {
@@ -684,21 +702,18 @@ impl Call {
         }
         if let Some(outcome) = self.outcome.as_mut() {
             if let BindingCallSettlement::Returned(Ok(output)) = outcome {
-                if !pay(
-                    budget,
-                    W::CodecInputBytes,
-                    self.definition.data_policy().validation_work,
-                ) {
-                    return Poll::Pending;
-                }
                 // Authorization/service loss fences application success while
                 // preserving the original result in the settlement owner.
-                if let Err(error) = self.definition.validate(output) {
-                    self.first_cause.get_or_insert(error.clone());
-                    if let BindingCallSettlement::Returned(Ok(original)) =
-                        core::mem::replace(outcome, BindingCallSettlement::Returned(Err(error)))
-                    {
-                        self.rejected_output = Some(original);
+                match self.definition.validate(output, budget) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Ok(())) => self.output_validated = true,
+                    Poll::Ready(Err(error)) => {
+                        self.first_cause.get_or_insert(error.clone());
+                        if let BindingCallSettlement::Returned(Ok(original)) =
+                            core::mem::replace(outcome, BindingCallSettlement::Returned(Err(error)))
+                        {
+                            self.rejected_output = Some(original);
+                        }
                     }
                 }
             }

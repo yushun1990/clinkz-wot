@@ -567,9 +567,12 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         debit(budget, WorkClass::CleanupItems, 1)?;
         let i = self.cleanup_cursor;
         self.cleanup_cursor = (i + 1) % self.slots.len();
-        let Some(e) = &self.slots[i].entry else {
+        let Some(e) = &mut self.slots[i].entry else {
             return Ok(None);
         };
+        // Independent authority may end while the receive cursor is retained.
+        // Observe that fence before deciding whether this entry needs cleanup.
+        e.sync_stop();
         if !e.stopped.get() && e.state != NotificationState::Closed {
             return Ok(None);
         }
