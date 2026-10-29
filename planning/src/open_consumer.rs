@@ -188,10 +188,7 @@ impl ConsumerRegistry {
                         budget,
                         |document, target, budget| -> CoreResult<()> {
                             for operation in ops {
-                                if support.len() == MAX_OPERATIONS
-                                    || target.len() > 256
-                                    || site_name(&site).len() > 256
-                                {
+                                if support.len() == MAX_OPERATIONS || site_name(&site).len() > 256 {
                                     return Err(unsupported());
                                 }
                                 let mut chosen = None;
@@ -202,12 +199,15 @@ impl ConsumerRegistry {
                                     ConsumerUnsupported::Operation
                                 } else if selector.form.is_some_and(|f| f != index) {
                                     ConsumerUnsupported::Selector
+                                } else if target.len() > 256 {
+                                    ConsumerUnsupported::Target
                                 } else {
                                     ConsumerUnsupported::CommonMeaning
                                 };
                                 if operation == Operation::ReadProperty
                                     && matches!(site, FormSite::Property(_))
                                     && selector.form.is_none_or(|f| f == index)
+                                    && target.len() <= 256
                                 {
                                     let facts = document
                                         .form(site.owner(), index)
@@ -354,7 +354,7 @@ impl ConsumerRegistry {
                                                 budget,
                                             )?;
                                             drive(&mut job);
-                                            let artifact = match job.finish() {
+                                            let mut compiled = match job.finish() {
                                                 Ok(a) => a,
                                                 Err(CoreError::UnsupportedOperation(_)) => {
                                                     continue;
@@ -364,7 +364,6 @@ impl ConsumerRegistry {
                                             if chosen.is_some() {
                                                 return Err(ambiguous());
                                             }
-                                            let (artifact, mut funding) = artifact;
                                             let service_bytes = data
                                                 .policy()
                                                 .retained_bytes
@@ -390,7 +389,7 @@ impl ConsumerRegistry {
                                                 &bank,
                                                 &[(K::EngineLiveBytesGlobalMax, retained_services)],
                                             )?;
-                                            funding.append(&mut service_funding);
+                                            compiled.funding.append(&mut service_funding);
                                             retained_artifact_items += artifact_budget.0;
                                             retained_artifact_bytes += artifact_budget.1;
                                             chosen_budget = (
@@ -407,12 +406,12 @@ impl ConsumerRegistry {
                                                         name: Arc::from(site_name(&site)),
                                                         form: index,
                                                         target: target.into(),
-                                                        artifact,
+                                                        artifact: compiled.artifact,
                                                         execution: registration.execution.clone(),
                                                         configuration: m.configuration,
                                                         services: registration.services.clone(),
                                                         schema,
-                                                        funding,
+                                                        funding: compiled.funding,
                                                         bank: bank.clone(),
                                                     },
                                                 )
@@ -507,6 +506,7 @@ pub struct ConsumerSelector {
 pub enum ConsumerUnsupported {
     Operation,
     Selector,
+    Target,
     CommonMeaning,
     NoCompleteProvider,
     SemanticMeaning,
@@ -551,6 +551,13 @@ pub struct ConsumerCompilation<'a> {
     native_remaining: u64,
     funding: Vec<HostCapacityReservation>,
     _temporary: Vec<HostCapacityReservation>,
+}
+// Keep the physical artifact and its original leases in one drop-ordered owner
+// until every fallible accounting step has completed. Destructuring into locals
+// earlier would refund the later-bound leases before dropping the artifact.
+struct CompletedCompilation {
+    artifact: BindingArtifactEnvelope<HostBindingArtifact>,
+    funding: Vec<HostCapacityReservation>,
 }
 impl<'a> ConsumerCompilation<'a> {
     fn new(
@@ -724,17 +731,15 @@ impl<'a> ConsumerCompilation<'a> {
             .native_remaining
             .saturating_sub(allowance.saturating_sub(unused));
     }
-    fn finish(
-        mut self,
-    ) -> CoreResult<(
-        BindingArtifactEnvelope<HostBindingArtifact>,
-        Vec<HostCapacityReservation>,
-    )> {
+    fn finish(mut self) -> CoreResult<CompletedCompilation> {
         if let Some(error) = self.error.take() {
             return Err(error);
         }
         let output = self.output.take().ok_or_else(busy)?;
-        Ok((output, ::core::mem::take(&mut self.funding)))
+        Ok(CompletedCompilation {
+            artifact: output,
+            funding: ::core::mem::take(&mut self.funding),
+        })
     }
 }
 impl Drop for ConsumerCompilation<'_> {

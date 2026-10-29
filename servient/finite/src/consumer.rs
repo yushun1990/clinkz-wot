@@ -102,6 +102,7 @@ struct State {
     bank: Arc<HostResourceAccounts>,
     active: bool,
     sequence: u64,
+    next_slot: usize,
     // Last to drop, after all definitions, calls, native/result backing.
     _funding: Vec<HostCapacityReservation>,
 }
@@ -180,6 +181,7 @@ impl ConsumerRuntime {
                 bank,
                 active: true,
                 sequence: 0,
+                next_slot: 0,
                 _funding: funding,
             })),
         })
@@ -313,7 +315,14 @@ impl ConsumerRuntime {
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
         let mut state = self.state.borrow_mut();
         let active = state.active;
-        for slot in &mut state.slots {
+        let slots = state.slots.len();
+        let start = state.next_slot;
+        // Rotate priority across steps even when one native poll exhausts the
+        // available credit. Still visit every slot for local fencing; an unpaid
+        // later visit must not reset the next step's scheduling position.
+        state.next_slot = (start + 1) % slots;
+        for offset in 0..slots {
+            let slot = &mut state.slots[(start + offset) % slots];
             if let Some(call) = slot {
                 call.step(active, cx, now, budget);
                 if call.abandoned && call.terminal {

@@ -17,6 +17,9 @@ const FORMAT: BindingArtifactCompatibility =
     BindingArtifactCompatibility::new(*b"external-udp-v01");
 #[derive(Default)]
 pub struct Probe {
+    pub review_bank:
+        std::sync::Mutex<Option<Arc<clinkz_wot_core::host_accounts::HostResourceAccounts>>>,
+    pub review_drop_charge: AtomicUsize,
     pub ports: std::sync::Mutex<Vec<SocketAddr>>,
     pub bounds: AtomicUsize,
     pub starts: AtomicUsize,
@@ -56,6 +59,13 @@ pub struct Program {
 }
 impl Drop for Program {
     fn drop(&mut self) {
+        if let Some(bank) = self.probe.review_bank.lock().unwrap().as_ref() {
+            self.probe.review_drop_charge.store(
+                bank.account(clinkz_wot_foundation::ResourceKind::BindingArtifactBytesGlobalMax)
+                    .used() as usize,
+                Ordering::Relaxed,
+            );
+        }
         self.probe.programs.fetch_add(1, Ordering::Relaxed);
     }
 }

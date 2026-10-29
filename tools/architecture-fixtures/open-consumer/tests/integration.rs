@@ -949,3 +949,361 @@ fn unavailable_selected_codec_is_never_called_for_a_late_native_result() {
     drop(rt);
     clean(&bank);
 }
+
+#[test]
+fn review_long_unselected_alternative_does_not_hide_supported_form() {
+    let p = Arc::new(Probe::default());
+    let (_peer, target) = udp();
+    let registry = registry(vec![registration(1, p)]);
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let control = source(json!([{"href":format!("unknown:{}", "x".repeat(100))},{"href":target}]));
+    drop(prepare(&registry, &control, bank.clone()));
+    clean(&bank);
+    let long = format!("unknown:{}", "x".repeat(300));
+    let thing = source(json!([{"href":long},{"href":target}]));
+    let prepared = registry.prepare(
+        &thing,
+        &GatewayDefaultV1::LIMITS,
+        bank.clone(),
+        ConsumerSelector {
+            binding: None,
+            form: Some(1),
+        },
+        &mut work(),
+        drive,
+    );
+    assert!(
+        prepared.is_ok(),
+        "explicitly selected short Form was rejected: {:?}",
+        prepared.err()
+    );
+}
+
+#[test]
+fn review_cleanup_progress_is_fair_with_one_native_credit() {
+    let first = Arc::new(Probe::default());
+    let second = Arc::new(Probe::default());
+    first.fail_close.store(true, Ordering::Relaxed);
+    let (_peer_a, target_a) = udp();
+    let (_peer_b, target_b) = udp();
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let reg_a = registry(vec![registration(1, first.clone())]);
+    let reg_b = registry(vec![registration(2, second.clone())]);
+    let source_a = source(json!([{"href":target_a}]));
+    let mut value_b = serde_json::to_value(source(json!([{"href":target_b}]))).unwrap();
+    value_b["properties"]["b"] = value_b["properties"]["a"].take();
+    value_b["properties"].as_object_mut().unwrap().remove("a");
+    let source_b = serde_json::from_value(value_b).unwrap();
+    let (mut defs_a, mut funding_a) = prepare(&reg_a, &source_a, bank.clone()).into_execution();
+    let (mut defs_b, mut funding_b) = prepare(&reg_b, &source_b, bank.clone()).into_execution();
+    defs_a.append(&mut defs_b);
+    funding_a.append(&mut funding_b);
+    let rt = ConsumerRuntime::try_new(defs_a, funding_a, bank.clone(), 2)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut a = rt
+        .read_property("a", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    let mut b = rt
+        .read_property("b", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    assert!(
+        a.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            .is_pending()
+    );
+    assert!(
+        b.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            .is_pending()
+    );
+    drop(a);
+    drop(b);
+    for _ in 0..64 {
+        let mut budget = work();
+        budget.set_remaining(WorkClass::BindingPolls, 1);
+        rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
+    }
+    let second_released = second.calls.load(Ordering::Relaxed);
+    first.fail_close.store(false, Ordering::Relaxed);
+    rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    assert_eq!(
+        second.calls.load(Ordering::Relaxed),
+        1,
+        "larger credit control"
+    );
+    drop(rt);
+    drop(reg_a);
+    drop(reg_b);
+    clean(&bank);
+    assert_eq!(
+        second_released, 1,
+        "second abandoned call never receives cleanup credit"
+    );
+}
+
+#[test]
+fn review_service_capacity_failure_keeps_artifact_charged_through_destructor() {
+    let p = Arc::new(Probe::default());
+    let (_peer, target) = udp();
+    let registry = registry(vec![registration(1, p.clone())]);
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    *p.review_bank.lock().unwrap() = Some(bank.clone());
+    let thing = source(json!([{"href":target}]));
+    drop(prepare(&registry, &thing, bank.clone()));
+    assert!(
+        p.review_drop_charge.load(Ordering::Relaxed) > 0,
+        "normal destruction control"
+    );
+    p.programs.store(0, Ordering::Relaxed);
+    p.review_drop_charge.store(0, Ordering::Relaxed);
+    let mut competing = None;
+    let result = registry.prepare(
+        &thing,
+        &GatewayDefaultV1::LIMITS,
+        bank.clone(),
+        ConsumerSelector::default(),
+        &mut work(),
+        |job| {
+            drive(job);
+            let account = bank.account(ResourceKind::EngineLiveBytesGlobalMax);
+            competing = bank.reserve(
+                ResourceKind::EngineLiveBytesGlobalMax,
+                account.limit() - account.used(),
+            );
+            assert!(competing.is_some());
+        },
+    );
+    assert!(result.is_err());
+    assert_eq!(p.programs.load(Ordering::Relaxed), 1);
+    drop(competing);
+    clean(&bank);
+    assert!(
+        p.review_drop_charge.load(Ordering::Relaxed) > 0,
+        "artifact funding was released before its destructor ran"
+    );
+}
+
+#[test]
+fn service_accounting_arithmetic_and_definition_refusals_keep_original_artifact_funding() {
+    use clinkz_wot_core::consumer::{ConsumerDataPolicy, ConsumerDataService};
+    use clinkz_wot_core::value_type::TypeSchema;
+    struct DeclaredBacking {
+        inner: Arc<dyn ConsumerDataService>,
+        bytes: u64,
+    }
+    impl ConsumerDataService for DeclaredBacking {
+        fn content_type(&self) -> &str {
+            self.inner.content_type()
+        }
+        fn validate(&self, schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {
+            self.inner.validate(schema, output)
+        }
+        fn policy(&self) -> ConsumerDataPolicy {
+            ConsumerDataPolicy {
+                retained_bytes: self.bytes,
+                ..self.inner.policy()
+            }
+        }
+        fn supports_schema(&self, schema: TypeSchema) -> bool {
+            self.inner.supports_schema(schema)
+        }
+        fn available(&self) -> bool {
+            self.inner.available()
+        }
+    }
+    let (_peer, target) = udp();
+    let thing = source(json!([{"href":target}]));
+    for failure in ["service_sum", "owner_sum", "definition"] {
+        let p = Arc::new(Probe::default());
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        *p.review_bank.lock().unwrap() = Some(bank.clone());
+        let mut input = registration(1, p.clone());
+        if failure != "definition" {
+            let bytes = if failure == "service_sum" {
+                u64::MAX
+            } else {
+                u64::MAX - input.services.access.retained_bytes()
+            };
+            input.services.data = Arc::new(DeclaredBacking {
+                inner: input.services.data,
+                bytes,
+            });
+        }
+        let registry = registry(vec![input]);
+        let result = registry.prepare(
+            &thing,
+            &GatewayDefaultV1::LIMITS,
+            bank.clone(),
+            ConsumerSelector::default(),
+            &mut work(),
+            |job| {
+                drive(job);
+                if failure == "definition" {
+                    p.changed.store(true, Ordering::Relaxed);
+                }
+            },
+        );
+        assert!(matches!(result, Err(CoreError::Validation(_))), "{failure}");
+        assert_eq!(p.programs.load(Ordering::Relaxed), 1, "{failure}");
+        assert!(
+            p.review_drop_charge.load(Ordering::Relaxed) > 0,
+            "{failure} refunded the original artifact before destruction"
+        );
+        assert_eq!(p.native.load(Ordering::Relaxed), 0);
+        clean(&bank);
+    }
+}
+
+#[test]
+fn target_envelope_is_partial_support_and_selected_short_form_still_executes() {
+    let p = Arc::new(Probe::default());
+    let (peer, target) = udp();
+    let registry = registry(vec![registration(1, p.clone())]);
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    for target_bytes in [256, 257, 308] {
+        for form in [None, Some(1)] {
+            let long = format!("unknown:{}", "x".repeat(target_bytes - "unknown:".len()));
+            let thing = source(json!([{"href":long},{"href":target}]));
+            let prepared = registry
+                .prepare(
+                    &thing,
+                    &GatewayDefaultV1::LIMITS,
+                    bank.clone(),
+                    ConsumerSelector {
+                        binding: None,
+                        form,
+                    },
+                    &mut work(),
+                    drive,
+                )
+                .unwrap();
+            let excluded = prepared
+                .support()
+                .iter()
+                .find(|s| s.form == 0 && s.operation == Operation::ReadProperty)
+                .unwrap();
+            assert_eq!(
+                excluded.unsupported,
+                Some(match form {
+                    Some(_) => ConsumerUnsupported::Selector,
+                    None if target_bytes > 256 => ConsumerUnsupported::Target,
+                    None => ConsumerUnsupported::NoCompleteProvider,
+                })
+            );
+            assert!(
+                prepared
+                    .support()
+                    .iter()
+                    .any(|s| s.form == 1 && s.operation == Operation::ReadProperty && s.selected)
+            );
+            drop(prepared);
+            clean(&bank);
+        }
+    }
+    let long = format!("unknown:{}", "x".repeat(300));
+    let thing = source(json!([{"href":long,"op":"writeproperty"},{"href":target}]));
+    let prepared = prepare(&registry, &thing, bank.clone());
+    assert!(prepared.support().iter().any(|s| s.form == 0
+        && s.operation == Operation::WriteProperty
+        && s.unsupported == Some(ConsumerUnsupported::Operation)));
+    let rt = runtime(prepared, bank.clone());
+    drop(thing);
+    drop(registry);
+    let mut call = rt
+        .read_property("a", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    assert!(
+        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            .is_pending()
+    );
+    exchange(&peer, b"7");
+    let result = poll(&mut call);
+    assert!(result.result().is_ok());
+    drop(result);
+    drop(call);
+    drop(rt);
+    clean(&bank);
+    for &port in p.ports.lock().unwrap().iter() {
+        drop(UdpSocket::bind(port).unwrap());
+    }
+}
+
+#[test]
+fn pending_native_read_cannot_starve_an_independent_ready_result() {
+    for minimal in [false, true] {
+        let first = Arc::new(Probe::default());
+        let second = Arc::new(Probe::default());
+        let (_peer_a, target_a) = udp();
+        let (peer_b, target_b) = udp();
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let reg_a = registry(vec![registration(1, first.clone())]);
+        let reg_b = registry(vec![registration(2, second.clone())]);
+        let source_a = source(json!([{"href":target_a}]));
+        let mut value_b = serde_json::to_value(source(json!([{"href":target_b}]))).unwrap();
+        value_b["properties"]["b"] = value_b["properties"]["a"].take();
+        value_b["properties"].as_object_mut().unwrap().remove("a");
+        let source_b = serde_json::from_value(value_b).unwrap();
+        let (mut definitions, mut funding) =
+            prepare(&reg_a, &source_a, bank.clone()).into_execution();
+        let (mut second_definitions, mut second_funding) =
+            prepare(&reg_b, &source_b, bank.clone()).into_execution();
+        definitions.append(&mut second_definitions);
+        funding.append(&mut second_funding);
+        let rt = ConsumerRuntime::try_new(definitions, funding, bank.clone(), 2)
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        drop(reg_a);
+        drop(reg_b);
+        drop(source_a);
+        drop(source_b);
+        let mut a = rt
+            .read_property("a", Deadline::NONE, now(), &mut work())
+            .unwrap();
+        let mut b = rt
+            .read_property("b", Deadline::NONE, now(), &mut work())
+            .unwrap();
+        assert!(
+            a.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                .is_pending()
+        );
+        assert!(
+            b.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                .is_pending()
+        );
+        exchange(&peer_b, b"9");
+        for _ in 0..2 {
+            let mut budget = work();
+            budget.set_remaining(WorkClass::BindingPolls, 1);
+            if minimal {
+                budget.set_remaining(WorkClass::ProviderProbes, 2);
+                budget.set_remaining(WorkClass::HandlerSteps, 1);
+            }
+            rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
+        }
+        assert_eq!(
+            second.validates.load(Ordering::Relaxed),
+            1,
+            "minimal={minimal}: ready result starved behind the pending read"
+        );
+        let mut no_native = work();
+        no_native.set_remaining(WorkClass::BindingPolls, 0);
+        let Poll::Ready(result) = b.poll(
+            &mut Context::from_waker(Waker::noop()),
+            now(),
+            &mut no_native,
+        ) else {
+            panic!("background progress did not retain the ready result");
+        };
+        assert!(result.result().is_ok());
+        assert_eq!(result.binding().binding_id(), BindingId::new(2));
+        drop(result);
+        drop(b);
+        drop(a);
+        rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+        assert!(rt.is_idle());
+        drop(rt);
+        clean(&bank);
+        for probe in [first, second] {
+            for &port in probe.ports.lock().unwrap().iter() {
+                drop(UdpSocket::bind(port).unwrap());
+            }
+        }
+    }
+}

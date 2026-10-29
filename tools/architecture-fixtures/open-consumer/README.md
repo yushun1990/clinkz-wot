@@ -22,7 +22,10 @@ semantic and compiler owners before repeated real calls. Other cases exercise
 per-operation support, ambiguity, selectors, schema/security refusals, source-free
 funding, typed/static generic registration, failed/cancelled compilation, invalid
 artifacts, bounded lifetime, actual allocator refusal, service/configuration loss,
-late/unread results, replacement and pending/failed cleanup. The library's normal
+late/unread results, replacement and pending/failed cleanup. Failure-path
+artifact destructors must observe their original byte funding; oversized
+alternatives retain per-operation unsupported/selector reports; rotating runtime
+priority must progress independent I/O and cleanup with one native credit. The library's normal
 `--no-default-features` graph has no TD/Planning/compiler dependency. Dev-only
 integration participants are deliberately outside that normal graph.
 
