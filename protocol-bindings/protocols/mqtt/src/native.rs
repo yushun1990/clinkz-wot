@@ -309,17 +309,22 @@ impl MqttEventService {
         // A staged successor may reuse its old numeric slot/topic, but cannot
         // inherit its original mapping identity or pending publication.
         if session.leases.iter().filter_map(Weak::upgrade).any(|l| {
-            !l.closing.get()
-                && l.key.slot().slot() != key.slot().slot()
-                && l.events
-                    .iter()
-                    .any(|a| events.iter().any(|b| a.topic == b.topic))
+            if l.closing.get() {
+                return false;
+            }
+            if l.token.belongs_to(owner) && l.key.slot().slot() == key.slot().slot() {
+                return false;
+            }
+            l.events
+                .iter()
+                .any(|a| events.iter().any(|b| a.topic == b.topic))
         }) {
             return Err(unsupported());
         }
         let gate = Rc::new(Cell::new(false));
         let lease = Rc::new(Lease {
             session: Rc::clone(&self.session),
+            token: owner.participation_token(),
             key,
             events,
             definitions,
@@ -365,6 +370,7 @@ struct EventMapping {
 }
 struct Lease {
     session: Rc<RefCell<Session>>,
+    token: ProducerOwnerToken,
     key: ProducerInstanceKey,
     events: Vec<EventMapping>,
     definitions: Vec<MqttEventDefinition>,

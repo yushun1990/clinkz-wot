@@ -6,6 +6,52 @@ use services::*;
 use support::*;
 
 #[test]
+fn same_numeric_slot_in_another_servient_is_not_topic_replacement_authority() {
+    let addr = address();
+    let provider = MqttEventProducer::new(
+        MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
+        BindingId::new(7),
+        BindingGeneration::INITIAL,
+    );
+    let service = MqttEventService::new(&provider).unwrap();
+    let first = owner();
+    let second = owner();
+    let original = input(
+        &first,
+        authority(1),
+        &provider,
+        &service,
+        &td(addr, "owned/alarm").to_string(),
+        None,
+    );
+    let foreign = instance(authority(1), &td(addr, "owned/alarm").to_string());
+    let prepared = prepare(&foreign, &[&provider]).unwrap();
+    let definitions = prepared
+        .operations()
+        .iter()
+        .map(|o| o.definition::<MqttEventDefinition>().unwrap().clone())
+        .collect();
+    assert!(
+        service
+            .participation(&second, foreign.key(), definitions)
+            .is_err()
+    );
+    // Explicit service sharing for a distinct source is still supported.
+    let sibling = input(
+        &second,
+        authority(1),
+        &provider,
+        &service,
+        &td(addr, "other/alarm").to_string(),
+        None,
+    );
+    assert!(!service.connected());
+    drop(original);
+    drop(sibling);
+    assert!(!service.connected());
+}
+
+#[test]
 fn cancellation_before_native_setup_closes_qualification_and_releases_all_funding() {
     let addr = address();
     let provider = MqttEventProducer::new(
