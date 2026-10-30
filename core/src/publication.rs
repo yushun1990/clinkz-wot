@@ -1,4 +1,4 @@
-//! Producer Event emission is independent of finite exchanges and Consumer
+//! Producer notification publication is independent of finite exchanges and Consumer
 //! subscription conversations. Native distribution never enumerates Engine
 //! subscribers. These are manually driven Host contracts.
 use crate::{BindingGeneration, BindingId, BindingInputRejection, CoreError, CoreResult, Payload};
@@ -9,17 +9,17 @@ use core::task::{Context, Poll};
 /// Actual native mapping identity. Copying its reference grants no logical
 /// authority; publication captures the original mapping and services together.
 #[derive(Clone, Debug)]
-pub struct EventRoute {
+pub struct NotificationRoute {
     binding: (BindingId, BindingGeneration),
     identity: Rc<()>,
 }
-impl PartialEq for EventRoute {
+impl PartialEq for NotificationRoute {
     fn eq(&self, other: &Self) -> bool {
         self.same_mapping(other)
     }
 }
-impl Eq for EventRoute {}
-impl EventRoute {
+impl Eq for NotificationRoute {}
+impl NotificationRoute {
     pub fn new(binding: (BindingId, BindingGeneration)) -> Self {
         Self {
             binding,
@@ -34,19 +34,36 @@ impl EventRoute {
     }
 }
 
-/// Event data only, never subscription/cancellation input or dataResponse.
+/// Property values and Event data remain distinct through admission and native
+/// publication. Neither variant carries subscription/cancellation or dataResponse.
 #[derive(Debug)]
-pub struct EventData(pub Payload);
+pub enum PublicationData {
+    PropertyValue(Payload),
+    EventData(Payload),
+}
+impl PublicationData {
+    pub fn kind(&self) -> crate::notification::NotificationKind {
+        match self {
+            Self::PropertyValue(_) => crate::notification::NotificationKind::PropertyObservation,
+            Self::EventData(_) => crate::notification::NotificationKind::Event,
+        }
+    }
+    pub fn payload(&self) -> &Payload {
+        match self {
+            Self::PropertyValue(p) | Self::EventData(p) => p,
+        }
+    }
+}
 
 /// Actual prepared data and security services. The Engine invokes both before
 /// admission. A native implementation cannot substitute services per emission.
-pub trait ProducerEventServices {
-    fn authorize(&self, data: &EventData, budget: &mut WorkBudget) -> CoreResult<()>;
-    fn validate(&self, data: &EventData, budget: &mut WorkBudget) -> CoreResult<()>;
+pub trait ProducerNotificationServices {
+    fn authorize(&self, data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()>;
+    fn validate(&self, data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EventPublishEffect {
+pub enum PublicationEffect {
     NotPublished,
     /// A native publication may have escaped; cancellation is not rollback.
     Uncertain,
@@ -55,21 +72,21 @@ pub enum EventPublishEffect {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeEventOutcome {
-    pub effect: EventPublishEffect,
+pub struct NativePublicationOutcome {
+    pub effect: PublicationEffect,
     pub cause: Option<CoreError>,
 }
 
 /// One admitted native publication, including late work and final disposal.
 /// Pending/error retains its backing and original capacity. Drop must perform
 /// bounded local disposal, without claiming successful delivery or drain.
-pub trait NativeEventPublication {
+pub trait NativeNotificationPublication {
     fn poll_publish(
         &mut self,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
         cancel: bool,
-    ) -> Poll<NativeEventOutcome>;
+    ) -> Poll<NativePublicationOutcome>;
     /// Pending/error retains the complete owner. Only Ready(Ok) proves local
     /// disposal; an error must not authorize settlement acknowledgement.
     fn poll_retire(
@@ -79,14 +96,14 @@ pub trait NativeEventPublication {
     ) -> Poll<CoreResult<()>>;
 }
 
-pub trait ProducerEventBinding {
-    type Publication: NativeEventPublication;
-    fn event_route(&self, event: &str) -> Option<&EventRoute>;
+pub trait ProducerNotificationBinding {
+    type Publication: NativeNotificationPublication;
+    fn notification_route(&self, target: &crate::AffordanceTarget) -> Option<&NotificationRoute>;
     /// Before acceptance, refusal returns the original complete data carrier.
     /// After acceptance the publication owns the native slot through disposal.
-    fn start_event(
+    fn start_publication(
         &mut self,
-        route: &EventRoute,
-        data: EventData,
-    ) -> Result<Self::Publication, BindingInputRejection<EventData>>;
+        route: &NotificationRoute,
+        data: PublicationData,
+    ) -> Result<Self::Publication, BindingInputRejection<PublicationData>>;
 }

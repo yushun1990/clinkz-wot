@@ -20,8 +20,8 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
-The composed Event owner captures the actual data/access services and separately
-prepared schema roles, prepays validation before native handoff and checks data
+The composed notification owner captures the actual data/access services and separately
+prepared Property value or Event schema roles, prepays validation before native handoff and checks data
 before queue acceptance. Invalid/late data and first causes remain with the
 original subscription through cleanup. Its original Host bank conservatively
 funds the root queue and validation envelope until root disposal; raw owner-scoped
@@ -125,7 +125,7 @@ gate writes have no callback or partial-failure branch. A revoked exposure close
 every original gate without requiring mutable access to the native drivers.
 Accepted Action work and physical retirement retain their independent owners.
 
-Producer Event emission owns an independent native publication and pins the
+Producer Property value/Event data publication owns an independent native publication and pins the
 original logical instance/reservation, including through replacement and loss of
 the exposure or Servient root. Data admission invokes the publication-captured
 policy/validator and checks the complete retained carrier backing. The native
@@ -133,11 +133,11 @@ participant's declared bounded slot covers emission, frame, data, result and
 cleanup backing; refusal returns the original data. Cancellation records first
 local cause without work credit; funded progress retains any late native effect
 and completes retirement. Unread terminal settlement still holds its native slot
-and funding. Logical retirement additionally checks outstanding Event work, even
+and funding. Logical retirement additionally checks outstanding notification work, even
 if a participant incorrectly reports itself retired. Native publication errors
 fence affected logical currentness, and actual native service failure fences its
 dependent participations on progress. Drop performs bounded local disposal and
-never claims delivered Event data or completed remote cancellation.
+never claims delivered Property values/Event data or completed remote cancellation.
 
 Native retirement Pending/error retains the complete emission and prevents
 acknowledgement. The first cleanup error remains observable alongside the first

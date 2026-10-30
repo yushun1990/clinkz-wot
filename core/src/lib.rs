@@ -28,8 +28,6 @@ pub mod deadline;
 #[cfg(target_has_atomic = "ptr")]
 pub mod error;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
-pub mod event;
-#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod finite;
 #[cfg(target_has_atomic = "ptr")]
 pub mod handler;
@@ -50,6 +48,8 @@ pub mod payload;
 pub mod plan;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod producer;
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod publication;
 #[cfg(target_has_atomic = "ptr")]
 mod response;
 #[cfg(target_has_atomic = "ptr")]

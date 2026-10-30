@@ -51,3 +51,9 @@ execution. Its in-memory response-capable Binding verifies that the composed
 permits advance and the next Event without a send or subscription stop. Required
 and already submitted responses remain non-declinable. This is composed API and
 lifecycle evidence, not protocol response interoperability or MQTT response support.
+
+The downstream observation Binding also implements the typed notification
+preparation facet. Its TD-selected observable Property receives a real datagram
+after the source TD and registry are dropped, through captured value validation
+and Property operation authorization. This is external Binding SPI evidence;
+the test protocol remains unqualified for production use.

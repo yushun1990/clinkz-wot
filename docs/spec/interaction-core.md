@@ -152,30 +152,41 @@ lost; terminal acknowledgement releases the logical reservation. Native physical
 retirement and remote cancellation/response outcomes remain separate.
 
 The composed `ConsumerNotificationRuntime` consumes the selected source-free
-Event definition and captures actual services around that same raw lifecycle.
+Property or Event definition and captures actual services around that same raw
+lifecycle.
 It exposes the same paid `decline_response` operation for admitted optional
 opportunities, retaining native retirement before advance without sending or
 stopping; required and submitted responses remain non-declinable.
-Its immutable validation hook keeps subscription/data/dataResponse/cancellation
-roles separate, prepays data validation before native handoff, and validates each
+Its immutable validation hook distinguishes a Property's value schema from
+Event subscription/data/dataResponse/cancellation roles, prepays data validation
+before native handoff, and validates each
 candidate before logical queue acceptance. Invalid or late data remains owned
 through cleanup and is never exposed. Currentness is rechecked after validation
 callbacks as well as native/policy callbacks. Each composed root prepays its
 Engine queue/validation envelope from the original bank; native queue/connection
-policy retains its separate Binding owner. This adds TD-driven Event execution
-for the declared MQTT subset, without granting TD qualification to raw calls or
-implementing Property observation, collections or native Event response rights.
+policy retains its separate Binding owner. This supplies TD-driven Property
+observation and Event execution for the
+declared MQTT subset. Property establishment has empty control input, fabricates
+no initial value and performs no implicit Read. Mapped stop authorizes
+`UnobserveProperty`; shared native cleanup does not revoke a sibling. Current
+queues report dropped values or terminate, without coalescing. Raw calls gain no
+TD qualification; collections and native Event response rights remain outside
+this subset.
 
-Producer emission has its own Host facet in `core::event` and
-`servient-finite::event`; it is neither a finite request nor a Consumer
-subscription conversation. An application registers an Event source on the
-same logical Producer instance as other behavior. Complete publication captures
-each selected native emission mapping and its actual data/security services.
-`emit_event` checks current instance authority, exact captured mapping, backing
-allowance, fresh policy and data validation before native acceptance. Explicitly
-raw registries cannot bypass qualified Event service capture. No Engine local
-record is created for a remote broker subscriber, and no Engine subscriber loop
-replicates an emission.
+Producer notification publication has its own Host facet in `core::publication`
+and `servient-finite::notification_publication`; it remains separate from finite
+requests and Consumer conversations. An application registers a
+`ProducerNotificationSource::Property` or `Event` on the same logical Producer
+instance as other behavior. Complete publication captures each selected observe
+or subscribe mapping and its actual data/security services. A Property source is
+not a Read handler, and an Event of the same name cannot satisfy it.
+`publish_notification` checks current authority, exact captured target/mapping,
+backing, fresh policy and validation before native acceptance. `PublicationData`
+distinguishes PropertyValue from EventData; mismatched family/data refuse before
+native acceptance and return the original carrier. Source registration alone
+cannot bypass complete TD qualification or captured services. No Engine record
+is created for a remote broker subscriber and no Engine subscriber loop
+replicates a publication.
 
 Each admitted emission retains its original instance, native publication and
 capacity until native retirement and settlement acknowledgement (or bounded
@@ -187,7 +198,7 @@ already escaped native publication retains its original effect. Native failure
 fences affected authority and keeps its failure/cleanup evidence. The concrete
 MQTT mapping's supported subset and real-peer evidence are recorded in
 [its README](../../protocol-bindings/protocols/mqtt/README.md); it establishes no
-TD-driven Consumer subscription/dataResponse path.
+general MQTT interoperability or Event dataResponse path.
 
 `EXEC-COLLECTION-001`: Described root collection operations MUST preserve native
 semantics and logical attribution, including partial failure and supported

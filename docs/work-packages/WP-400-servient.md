@@ -200,16 +200,17 @@ Raw notification limits remain owner-scoped: this does not claim TD/schema
 qualification or shared aggregate Host-bank accounting for notification queues.
 
 `consumer_notification::ConsumerNotificationRuntime` now consumes the typed
-TD-selected Event definition and captures its actual data/access services around
+TD-selected Property or Event definition and captures its actual data/access services around
 this same lifecycle. Validation prepays work before native handoff and checks
 each candidate before logical acceptance, with post-callback authority checks.
 Original bank leases fund the root's queue and validation envelope until runtime
-disposal. Event subscription/data/dataResponse/cancellation roles remain distinct;
+disposal. Property value schemas and Event subscription/data/dataResponse/cancellation
+roles remain distinct;
 the MQTT subset explicitly rejects unsupported application control/response data.
 Real broker tests join the qualified Engine Producer to these independent
 Consumers and exercise stop/unsubscribe, loss, replacement and cleanup. Native
 matching/distribution/sharing and physical release remain Binding-owned.
-TD-driven observation, continuing Consumer Action associations, constrained
+Continuing Consumer Action associations, constrained
 execution and automatic progress remain unimplemented. No universal runtime,
 session or all-family acceptance gate is introduced.
 
@@ -308,15 +309,19 @@ hardware/profile qualification or package/gate/milestone completion.
 
 ## Owned composed Host Producer
 
-The joined Event extension uses the same instance registry and closed whole-TD
-publication, with registered `ProducerEventSource` values and separately captured
-Event mappings/services. `emit_event` admits application data to a distinct
-native publication owner rather than dispatching a finite handler. Emissions
-retain original instance/capacity, first local cause, native effect, cleanup and
-unread settlement through acknowledgement; outstanding Event work independently
-blocks logical retirement. The [MQTT slice](../../protocol-bindings/protocols/mqtt/README.md)
-exercises actual broker distribution and shared native lifetime. It does not
-complete TD-driven Consumer notification execution or general Event semantics.
+Property values and Event data use the same instance registry and closed
+whole-TD publication with explicit `ProducerNotificationSource` families and
+captured notification mappings/services. `publish_notification` checks the
+family-qualified target and `PublicationData` before native acceptance. Native
+publication work retains original authority/capacity, first cause, effect,
+cleanup and unread settlement through acknowledgement; outstanding work blocks
+logical retirement. This replaces the Event-only publication assumption without
+adding a second observation kernel or a session abstraction.
+The [MQTT Property tests](../../protocol-bindings/protocols/mqtt/tests/property_observation.rs)
+join qualified Producer values to TD-selected Consumers, including same-named
+Property/Event separation, cancellation, replacement, resource retention and
+physical release. Existing Event regressions reaffirm their distinct semantics.
+This is a bounded Host subset, not general family or production qualification.
 
 `producer_composition::ComposedProducerExposure` takes a complete pure
 `ComposedProducerInput`: actual staged instance/behavior/description, prepared

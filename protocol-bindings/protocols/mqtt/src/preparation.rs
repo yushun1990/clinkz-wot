@@ -12,22 +12,25 @@ use clinkz_wot_td::semantic::{
 use std::any::Any;
 
 const TD_DATA: &str = "https://www.w3.org/2019/wot/td#data";
-impl MqttEventProducer {
+impl MqttNotificationProducer {
     fn lower(
         &self,
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
-    ) -> CoreResult<Option<MqttEventDefinition>> {
-        let Some((topic, schema)) = lower_event(self.registration.config.address, input, budget)?
+    ) -> CoreResult<Option<MqttNotificationDefinition>> {
+        let Some((topic, schema)) =
+            lower_notification(self.registration.config.address, input, budget)?
         else {
             return Ok(None);
         };
-        let FormSite::Event(name) = input.site else {
-            return Ok(None);
+        let target = match input.site {
+            FormSite::Property(n) => AffordanceTarget::Property(Arc::from(n.as_str())),
+            FormSite::Event(n) => AffordanceTarget::Event(Arc::from(n.as_str())),
+            _ => return Ok(None),
         };
-        Ok(Some(MqttEventDefinition {
+        Ok(Some(MqttNotificationDefinition {
             registration: Rc::clone(&self.registration),
-            event: Arc::from(name.as_str()),
+            target,
             topic,
             form: input.form,
             operation: input.operation,
@@ -36,13 +39,25 @@ impl MqttEventProducer {
     }
 }
 /// Common bounded MQTT vocabulary interpretation, with no physical owners.
-pub(crate) fn lower_event(
+pub(crate) fn lower_notification(
     configured_address: SocketAddr,
     input: ProducerOperationInput<'_>,
     budget: &mut WorkBudget,
 ) -> CoreResult<Option<(Arc<str>, TypeSchema)>> {
-    let FormSite::Event(name) = input.site else {
-        return Ok(None);
+    let (name, owner, kind, variables) = match input.site {
+        FormSite::Property(n) => (
+            n,
+            FormOwner::Property(n),
+            NotificationKind::PropertyObservation,
+            UriVariableScope::Property,
+        ),
+        FormSite::Event(n) => (
+            n,
+            FormOwner::Event(n),
+            NotificationKind::Event,
+            UriVariableScope::Event,
+        ),
+        _ => return Ok(None),
     };
     if !input.target.starts_with("mqtt:") {
         return Ok(None);
@@ -62,15 +77,12 @@ pub(crate) fn lower_event(
     budget
         .consume(WorkClass::BindingPolls, 4096)
         .map_err(|_| unsupported())?;
-    if !matches!(
-        input.operation,
-        Operation::SubscribeEvent | Operation::UnsubscribeEvent
-    ) || name.len() > 64
+    if (input.operation != kind.start_operation() && input.operation != kind.stop_operation())
+        || name.len() > 64
     {
         return Err(unsupported());
     }
     let doc = input.document;
-    let owner = FormOwner::Event(name);
     let form = doc.form(owner, input.form).ok_or_else(unsupported)?;
     if form.content_type != "application/json"
         || form.content_coding.is_some()
@@ -78,40 +90,46 @@ pub(crate) fn lower_event(
         || form.scopes.is_some()
         || form.additional_responses
         || form.response_content_type.is_some()
-        || doc
-            .scope(SemanticScope::AffordanceResponse {
-                owner,
-                index: input.form,
-            })
-            .is_some()
         || doc.uri_variables(UriVariableScope::Thing).is_some()
-        || doc.uri_variables(UriVariableScope::Event).is_some()
+        || doc.uri_variables(variables).is_some()
         || doc
             .scope(SemanticScope::Thing)
             .is_none_or(|s| s.children().any(|n| !annotation(n)))
     {
         return Err(unsupported());
     }
-    let event_scope = doc
-        .scope(SemanticScope::Event(name))
-        .ok_or_else(unsupported)?;
-    // Reject subscription/cancellation data and *all* dataResponse schemas,
-    // including optional ones: MQTT ACKs are not reciprocal Event data.
-    if event_scope
-        .children()
-        .any(|n| !annotation(n) && !n.name().is(TD_DATA))
-        || event_scope
-            .children()
-            .filter(|n| n.name().is(TD_DATA))
-            .count()
-            != 1
-    {
-        return Err(unsupported());
-    }
-    let schema = prepare_type_schema(
-        doc.affordance_schema(owner, "data")
-            .ok_or_else(unsupported)?,
-    )?;
+    let schema = match kind {
+        NotificationKind::PropertyObservation => {
+            let property = doc.property();
+            if !property.observable {
+                return Err(unsupported());
+            }
+            // The Property DataSchema includes extension assertions. Unknown
+            // semantics refuse in the shared type-only validator.
+            prepare_type_schema(property.schema)?
+        }
+        NotificationKind::Event => {
+            let event_scope = doc
+                .scope(SemanticScope::Event(name))
+                .ok_or_else(unsupported)?;
+            // MQTT control ACKs are never Event subscription/cancel/dataResponse.
+            if event_scope
+                .children()
+                .any(|n| !annotation(n) && !n.name().is(TD_DATA))
+                || event_scope
+                    .children()
+                    .filter(|n| n.name().is(TD_DATA))
+                    .count()
+                    != 1
+            {
+                return Err(unsupported());
+            }
+            prepare_type_schema(
+                doc.affordance_schema(owner, "data")
+                    .ok_or_else(unsupported)?,
+            )?
+        }
+    };
     let [security_name] = form.effective_security else {
         return Err(unsupported());
     };
@@ -126,9 +144,15 @@ pub(crate) fn lower_event(
     let mut explicit_topic = None;
     let mut seen = 0u8;
     let form_scope = doc
-        .scope(SemanticScope::AffordanceForm {
-            owner,
-            index: input.form,
+        .scope(match owner {
+            FormOwner::Property(property) => SemanticScope::Form {
+                property,
+                index: input.form,
+            },
+            _ => SemanticScope::AffordanceForm {
+                owner,
+                index: input.form,
+            },
         })
         .ok_or_else(unsupported)?;
     for node in form_scope.children() {
@@ -162,7 +186,7 @@ pub(crate) fn lower_event(
             ("retain", SemanticValue::Bool(false)) => {}
             ("controlPacket", SemanticValue::Text(s))
                 if form.effective_operations.len() == 1
-                    && s == if input.operation == Operation::SubscribeEvent {
+                    && s == if input.operation == kind.start_operation() {
                         "subscribe"
                     } else {
                         "unsubscribe"
@@ -191,15 +215,15 @@ fn annotation(node: SemanticNode<'_>) -> bool {
                     .children()
                     .all(|n| matches!(n.value(), SemanticValue::Iri(_))))
 }
-impl ProducerCapability for MqttEventProducer {
+impl ProducerCapability for MqttNotificationProducer {
     fn identity(&self) -> (BindingId, BindingGeneration) {
         self.registration.binding
     }
     fn definition_bytes(&self, d: &dyn Any) -> Option<usize> {
-        let d = d.downcast_ref::<MqttEventDefinition>()?;
+        let d = d.downcast_ref::<MqttNotificationDefinition>()?;
         Some(
-            std::mem::size_of::<MqttEventDefinition>()
-                + d.event.len()
+            std::mem::size_of::<MqttNotificationDefinition>()
+                + target_name(&d.target).len()
                 + d.topic.len()
                 + 4 * std::mem::size_of::<usize>(),
         )
@@ -223,7 +247,7 @@ impl ProducerCapability for MqttEventProducer {
         d: &dyn Any,
         b: &mut WorkBudget,
     ) -> CoreResult<bool> {
-        let Some(expected) = d.downcast_ref::<MqttEventDefinition>() else {
+        let Some(expected) = d.downcast_ref::<MqttNotificationDefinition>() else {
             return Ok(false);
         };
         Ok(self.lower(input, b)?.as_ref() == Some(expected))

@@ -37,9 +37,10 @@ impl NotificationAuthorizer for CapturedAuthorizer {
         {
             return Err(CoreError::StaleHandle(context()));
         }
+        let kind = captured.schemas.kind();
         let operation = match permission {
-            NotificationPermission::Cancel => Operation::UnsubscribeEvent,
-            _ => Operation::SubscribeEvent,
+            NotificationPermission::Cancel => kind.stop_operation(),
+            _ => kind.start_operation(),
         };
         captured.services.access.authorize_instance(
             &id.consumer,
@@ -77,35 +78,35 @@ impl CapturedServices {
 }
 impl NotificationValidation for CapturedServices {
     fn subscription(&self, input: &SubscriptionInput, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.schemas.subscription.is_some() {
+        if self.schemas.subscription().is_some() {
             self.prepay(budget)?;
         }
-        self.validate(self.schemas.subscription, input.0.as_ref())
+        self.validate(self.schemas.subscription(), input.0.as_ref())
     }
     fn cancellation(&self, input: &CancellationInput, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.schemas.cancellation.is_some() {
+        if self.schemas.cancellation().is_some() {
             self.prepay(budget)?;
         }
-        self.validate(self.schemas.cancellation, input.0.as_ref())
+        self.validate(self.schemas.cancellation(), input.0.as_ref())
     }
     fn response(&self, input: &EventDataResponse, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.schemas.data_response.is_some() {
+        if self.schemas.data_response().is_some() {
             self.prepay(budget)?;
         }
-        self.validate(self.schemas.data_response, input.0.as_ref())
+        self.validate(self.schemas.data_response(), input.0.as_ref())
     }
     fn prepay_data(&self, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.schemas.data.is_some() {
+        if self.schemas.data().is_some() {
             self.prepay(budget)?;
         }
         Ok(())
     }
     fn data(&self, data: Option<&Payload>) -> CoreResult<()> {
-        self.validate(self.schemas.data, data)
+        self.validate(self.schemas.data(), data)
     }
 }
 
-/// One reusable selected Event definition, with independent logical cursors.
+/// One reusable selected Property or Event definition with independent cursors.
 /// Several such facets may share one ConsumerInstance and native Binding service.
 pub struct ConsumerNotificationRuntime<B: ConsumerNotificationBinding> {
     root: RawNotificationServient<B, CapturedAuthorizer>,
@@ -131,15 +132,15 @@ where
             if !consumer.is_current()
                 || input.binding.identity() != (id.binding_id(), id.binding_generation())
                 || input.binding.configuration() != &input.configuration
-                || !matches!(input.target, AffordanceTarget::Event(_))
+                || NotificationKind::for_target(&input.target) != Some(input.schemas.kind())
                 || !data.available()
                 || policy.validation_work == 0
                 || input.services.access.work() == 0
                 || ![
-                    input.schemas.subscription,
-                    input.schemas.data,
-                    input.schemas.data_response,
-                    input.schemas.cancellation,
+                    input.schemas.subscription(),
+                    input.schemas.data(),
+                    input.schemas.data_response(),
+                    input.schemas.cancellation(),
                 ]
                 .into_iter()
                 .flatten()
@@ -149,7 +150,7 @@ where
             }
             input
                 .binding
-                .support(&input.program, NotificationKind::Event)?;
+                .support(&input.program, input.schemas.kind())?;
             let funding = reserve(
                 &input.bank,
                 &[

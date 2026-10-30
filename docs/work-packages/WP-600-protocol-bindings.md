@@ -27,7 +27,7 @@ are outside this architecture migration.
 
 The JSON/type validator is shared in `codecs/json`; moving it out of HTTP does
 not broaden its supported DataSchema subset or retire its existing regression
-obligations. MQTT Event data uses the same actual decoder/type service.
+obligations. MQTT Property values/Event data use the same actual decoder/type service.
 
 The existing single-route HTTP service implements the prepared type-only schema
 subset from WP-200 using its actual JSON decoder and Core's value-type relation.
@@ -108,13 +108,19 @@ HTTPS/security and other work retain their dependencies and qualification scope.
 
 ## TD-driven Consumer observation
 
-TD-driven Event preparation and captured services now execute through the
-bounded MQTT Consumer facet below. TD-driven Property observation remains open
-in WP-200/WP-400; a raw notification participant alone does not establish it.
-Its implementation follows the roadmap's basic coverage objective; production
-HTTP streaming is not a prerequisite for that Engine work. Preserve separate finite and notification
-lifecycles. Event subscription/response and Producer notifications retain their
-own semantics and delivery increments.
+TD-driven Property observation and Event preparation now execute through the
+bounded MQTT Consumer facet. Qualified Producer Property sources publish actual
+values through the same narrow native publication lifecycle as Event data, with
+explicit family discrimination. The mapping follows MQTT observe/unobserve
+SUBSCRIBE/UNSUBSCRIBE guidance for non-retained QoS 0; establishment neither
+performs a Read nor invents an initial value. The
+[real broker tests](../../protocol-bindings/protocols/mqtt/tests/property_observation.rs)
+exercise both Engine roles, validation, independent stop, cancellation,
+replacement, failure, capacity and final physical cleanup. Current loss policy
+reports drops or terminates and makes no coalescing/replay guarantee.
+The [MQTT README](../../protocol-bindings/protocols/mqtt/README.md) owns exact limits.
+HTTP streaming remains an optional additional mapping; this does not qualify
+that unimplemented path, broad security/schema support or a production profile.
 
 ### Optional HTTP SSE mapping
 

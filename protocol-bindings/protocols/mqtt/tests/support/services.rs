@@ -1,11 +1,12 @@
+#![allow(dead_code)]
 use super::*;
 use std::{any::Any, cell::Cell};
 
 /// Linked participant with selectable actual services, used to challenge the
 /// neutral qualification boundary, rather than bypassing it with raw requests.
 pub struct ServicesParticipant {
-    pub native: MqttEventRuntime,
-    pub services: Option<Rc<dyn ProducerEventServices>>,
+    pub native: MqttNotificationRuntime,
+    pub services: Option<Rc<dyn ProducerNotificationServices>>,
 }
 impl ClosedProducerParticipation for ServicesParticipant {
     fn participation_id(&self) -> &ProducerParticipationId {
@@ -40,17 +41,21 @@ impl ClosedProducerParticipation for ServicesParticipant {
     ) -> bool {
         self.native.covers(key, binding, site, form, op, definition)
     }
-    fn event_publication(
+    fn notification_publication(
         &self,
         key: ProducerInstanceKey,
         binding: (BindingId, BindingGeneration),
         site: clinkz_wot_core::thing::AffordanceSite<'_>,
         form: u32,
         definition: &dyn Any,
-    ) -> Option<(EventRoute, Rc<dyn ProducerEventServices>, usize)> {
+    ) -> Option<(
+        NotificationRoute,
+        Rc<dyn ProducerNotificationServices>,
+        usize,
+    )> {
         let (route, _, bytes) = self
             .native
-            .event_publication(key, binding, site, form, definition)?;
+            .notification_publication(key, binding, site, form, definition)?;
         Some((route, Rc::clone(self.services.as_ref()?), bytes))
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
@@ -61,13 +66,13 @@ impl ClosedProducerParticipation for ServicesParticipant {
     }
 }
 pub struct ProbeServices {
-    pub original: Rc<dyn ProducerEventServices>,
+    pub original: Rc<dyn ProducerNotificationServices>,
     pub denied: Cell<bool>,
     pub authorized: Cell<usize>,
     pub validated: Cell<usize>,
 }
-impl ProducerEventServices for ProbeServices {
-    fn authorize(&self, data: &EventData, budget: &mut WorkBudget) -> CoreResult<()> {
+impl ProducerNotificationServices for ProbeServices {
+    fn authorize(&self, data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
         self.authorized.set(self.authorized.get() + 1);
         if self.denied.get() {
             return Err(CoreError::Security {
@@ -77,7 +82,7 @@ impl ProducerEventServices for ProbeServices {
         }
         self.original.authorize(data, budget)
     }
-    fn validate(&self, data: &EventData, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn validate(&self, data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
         self.validated.set(self.validated.get() + 1);
         self.original.validate(data, budget)
     }
@@ -85,17 +90,30 @@ impl ProducerEventServices for ProbeServices {
 pub fn intercept(
     owner: &RawProducerServient,
     authority: ProducerInstanceAuthority,
-    provider: &MqttEventProducer,
-    service: &MqttEventService,
+    provider: &MqttNotificationProducer,
+    service: &MqttNotificationService,
     text: &str,
     missing: bool,
 ) -> (ComposedProducerInput, Rc<ProbeServices>) {
     let instance = instance(authority, text);
+    intercept_with_instance(owner, instance, provider, service, missing)
+}
+pub fn intercept_with_instance(
+    owner: &RawProducerServient,
+    instance: RawProducerInstance,
+    provider: &MqttNotificationProducer,
+    service: &MqttNotificationService,
+    missing: bool,
+) -> (ComposedProducerInput, Rc<ProbeServices>) {
     let prepared = prepare(&instance, &[provider]).unwrap();
     let definitions = prepared
         .operations()
         .iter()
-        .map(|o| o.definition::<MqttEventDefinition>().unwrap().clone())
+        .map(|o| {
+            o.definition::<MqttNotificationDefinition>()
+                .unwrap()
+                .clone()
+        })
         .collect();
     let runtime = service
         .participation(owner, instance.key(), definitions)
@@ -103,10 +121,15 @@ pub fn intercept(
     let op = prepared
         .operations()
         .iter()
-        .find(|o| o.operation == Operation::SubscribeEvent)
+        .find(|o| {
+            matches!(
+                o.operation,
+                Operation::SubscribeEvent | Operation::ObserveProperty
+            )
+        })
         .unwrap();
     let (_, original, _) = runtime
-        .event_publication(
+        .notification_publication(
             instance.key(),
             op.binding,
             op.site.site(),
@@ -123,7 +146,7 @@ pub fn intercept(
     let services = if missing {
         None
     } else {
-        Some(probe.clone() as Rc<dyn ProducerEventServices>)
+        Some(probe.clone() as Rc<dyn ProducerNotificationServices>)
     };
     (
         ComposedProducerInput {

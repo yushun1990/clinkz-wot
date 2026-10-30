@@ -2,7 +2,7 @@
 //! This facet deliberately does not force subscriptions through finite calls.
 use super::*;
 use clinkz_wot_core::notification::{ConsumerNotificationBinding, NotificationKind};
-use clinkz_wot_td::semantic::{ResolvedSemanticDocument, SemanticScope};
+use clinkz_wot_td::semantic::ResolvedSemanticDocument;
 
 /// Bounded pure compilation on the actual execution registration. Implementors
 /// may be external crates. No socket, callback, task or source loan may escape.
@@ -23,7 +23,7 @@ pub struct NotificationPreparationBounds {
 }
 pub struct ConsumerNotificationInput<'a> {
     pub document: &'a ResolvedSemanticDocument<'a>,
-    pub event: &'a str,
+    pub target: &'a AffordanceTarget,
     pub form: u32,
     pub endpoint: &'a str,
     pub schemas: ConsumerNotificationSchemas,
@@ -61,20 +61,33 @@ where
         Ok(Self { registrations })
     }
 
-    /// Select one Event subscribe Form, in TD order by default. Ambiguity within
-    /// a Form refuses. Unsupported alternatives remain eligible for later Forms.
+    /// Select one Property observe or Event subscribe Form, in TD order by
+    /// default. Ambiguity within a Form refuses. Unsupported alternatives remain eligible for later Forms.
     /// All control schemas are inspected separately before native compilation.
     #[allow(clippy::too_many_arguments)]
-    pub fn prepare_event(
+    pub fn prepare_notification(
         &self,
         thing: &Thing,
-        event: &str,
+        target: &AffordanceTarget,
         selector: ConsumerSelector,
         limits: &ResourceLimits,
         bank: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerNotificationDefinition<B>> {
-        if event.len() > 256 {
+        let (name, scope, kind) = match target {
+            AffordanceTarget::Property(n) => (
+                n.as_ref(),
+                ValidatedProducerScope::Property(n.as_ref()),
+                NotificationKind::PropertyObservation,
+            ),
+            AffordanceTarget::Event(n) => (
+                n.as_ref(),
+                ValidatedProducerScope::Event(n.as_ref()),
+                NotificationKind::Event,
+            ),
+            _ => return Err(unsupported()),
+        };
+        if name.len() > 256 {
             return Err(unsupported());
         }
         let common = limits
@@ -132,22 +145,20 @@ where
                 }
                 ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form)) => {
                     let index = form.index;
-                    let eligible = matches!(form.scope, ValidatedProducerScope::Event(n) if n == event)
-                        && form
-                            .effective_operations
-                            .contains(&Operation::SubscribeEvent)
+                    let eligible = form.scope == scope
+                        && form.effective_operations.contains(&kind.start_operation())
                         && selector.form.is_none_or(|f| f == index);
                     if !eligible {
                         cursor.acknowledge();
                         continue;
                     }
                     let result = cursor.with_form_semantics(
-                        ValidatedProducerScope::Event(event),
+                        scope,
                         index,
                         budget,
                         |document, endpoint, budget| {
                             self.select_form(
-                                document, event, index, endpoint, selector, limits, &bank, budget,
+                                document, target, index, endpoint, selector, limits, &bank, budget,
                             )
                         },
                     );
@@ -173,7 +184,7 @@ where
     fn select_form(
         &self,
         document: &ResolvedSemanticDocument<'_>,
-        event: &str,
+        target: &AffordanceTarget,
         index: u32,
         endpoint: &str,
         selector: ConsumerSelector,
@@ -184,13 +195,36 @@ where
         if endpoint.len() > 256 {
             return Ok(None);
         }
-        let owner = clinkz_wot_td::semantic::FormOwner::Event(event);
+        use clinkz_wot_td::semantic::FormOwner;
+        let (owner, name, variables) = match target {
+            AffordanceTarget::Property(n) => (
+                FormOwner::Property(n),
+                n.as_ref(),
+                UriVariableScope::Property,
+            ),
+            AffordanceTarget::Event(n) => {
+                (FormOwner::Event(n), n.as_ref(), UriVariableScope::Event)
+            }
+            _ => return Err(unsupported()),
+        };
+        let kind = NotificationKind::for_target(target).unwrap();
         let facts = document.form(owner, index).ok_or_else(unsupported)?;
-        let schemas = ConsumerNotificationSchemas {
-            subscription: schema(document, owner, "subscription")?,
-            data: schema(document, owner, "data")?,
-            data_response: schema(document, owner, "dataResponse")?,
-            cancellation: schema(document, owner, "cancellation")?,
+        let schemas = match kind {
+            NotificationKind::PropertyObservation => {
+                let property = document.property();
+                if !property.observable {
+                    return Ok(None);
+                }
+                ConsumerNotificationSchemas::PropertyValue(crate::type_schema::prepare_type_schema(
+                    property.schema,
+                )?)
+            }
+            NotificationKind::Event => ConsumerNotificationSchemas::Event {
+                subscription: schema(document, owner, "subscription")?,
+                data: schema(document, owner, "data")?,
+                data_response: schema(document, owner, "dataResponse")?,
+                cancellation: schema(document, owner, "cancellation")?,
+            },
         };
         // Common policy remains deliberately NoSec/type-only.
         let [security] = facts.effective_security else {
@@ -204,11 +238,8 @@ where
             || facts.content_coding.is_some()
             || facts.additional_responses
             || facts.response_content_type.is_some()
-            || document
-                .scope(SemanticScope::AffordanceResponse { owner, index })
-                .is_some()
             || document.uri_variables(UriVariableScope::Thing).is_some()
-            || document.uri_variables(UriVariableScope::Event).is_some()
+            || document.uri_variables(variables).is_some()
         {
             return Ok(None);
         }
@@ -225,10 +256,10 @@ where
             if !data.available()
                 || data.content_type() != facts.content_type
                 || ![
-                    schemas.subscription,
-                    schemas.data,
-                    schemas.data_response,
-                    schemas.cancellation,
+                    schemas.subscription(),
+                    schemas.data(),
+                    schemas.data_response(),
+                    schemas.cancellation(),
                 ]
                 .into_iter()
                 .flatten()
@@ -241,7 +272,7 @@ where
             }
             if r.services
                 .access
-                .authorize(id, endpoint, Operation::SubscribeEvent)
+                .authorize(id, endpoint, kind.start_operation())
                 .is_err()
             {
                 continue;
@@ -270,7 +301,7 @@ where
             )?;
             let retained = bounds
                 .retained_bytes
-                .checked_add(1024 + endpoint.len() as u64 + event.len() as u64)
+                .checked_add(1024 + endpoint.len() as u64 + name.len() as u64)
                 .and_then(|n| n.checked_add(data.policy().retained_bytes))
                 .and_then(|n| n.checked_add(r.services.access.retained_bytes()))
                 .ok_or_else(invalid)?;
@@ -283,7 +314,7 @@ where
             )?;
             let program = match r.binding.compile_notification(ConsumerNotificationInput {
                 document,
-                event,
+                target,
                 form: index,
                 endpoint,
                 schemas,
@@ -292,7 +323,7 @@ where
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
                 Err(e) => return Err(e),
             };
-            r.binding.support(&program, NotificationKind::Event)?;
+            r.binding.support(&program, kind)?;
             if chosen.is_some() {
                 return Err(ambiguous());
             }
@@ -302,7 +333,7 @@ where
                     program,
                     configuration: r.binding.configuration().clone(),
                     identity: id,
-                    target: AffordanceTarget::Event(Arc::from(event)),
+                    target: target.clone(),
                     endpoint: endpoint.into(),
                     form: index,
                     schemas,

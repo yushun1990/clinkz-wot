@@ -133,16 +133,16 @@ work over actual I/O. The HTTP Action participant adds a production loopback
 UDP remains test-only; HTTP's one-listener-per-Action implementation does not
 constrain other native resource layouts or cross-Binding Action routes.
 
-Producer Event participants additionally supply their exact emission mapping
-and actual validation/security services for each selected subscribe Form before
+Producer notification participants additionally supply their exact emission mapping
+and actual validation/security services for each selected Property observe or Event subscribe Form before
 publication. These services and the complete data allowance are recaptured and
-compared before commit; missing or substituted services refuse. Native Event
+compared before commit; missing or substituted services refuse. Native notification
 publication has separate start, progress and retirement controls, not a finite
 reply opportunity. Native subscriber matching, subscribe/unsubscribe control and
 distribution stay at the Binding/broker; no physical subscription cardinality is
 inferred from logical source or recipient counts.
 
-The current manual Host publication bounds the captured Event mapping table at
+The current manual Host publication bounds the captured notification mapping table at
 32 entries, independently of its 16-source per-instance registration envelope.
 Larger mappings require a separately bounded lookup/progress representation.
 
@@ -155,7 +155,7 @@ frame cancellation invalidates the shared native service, reports uncertainty
 and fences dependents rather than appending a sibling frame to truncated bytes.
 Only its unique service owner can explicitly shut down the whole infrastructure.
 QoS 0 local write completion carries no subscriber-delivery acknowledgement.
-This is a concrete mapping policy, not a requirement on all Event Bindings.
+This is a concrete mapping policy, not a requirement on all notification Bindings.
 
 The manual Host publication records bounded opaque identities of the original
 native participation owners. Publication and retirement reject duplicate,
@@ -187,10 +187,13 @@ application input; they do not represent continuing Action or notification
 conversations. Existing inline aggregate and raw finite APIs retain their
 restricted purposes. Notification preparation uses a separate typed facet:
 `ConsumerNotificationPreparation` compiles owned programs on the actual
-`ConsumerNotificationBinding` registration. Its operation-scoped Event registry
+`ConsumerNotificationBinding` registration. Its operation-scoped Property/Event registry
 captures actual services and configuration without adding finite methods or
 passing TD/compiler owners into execution. MQTT supplies that real native facet;
 its shared topic interests, queues, control correlation, wakers and final socket
 release remain Binding-owned. Each Engine recipient retains independent logical
-acceptance, validation, loss and stop. Separate control/response capabilities
+acceptance, value/data validation, loss and stop. A native program retains its
+Property/Event kind, so source-free pairing cannot relabel an Event subscription
+as Property observation. The Property DataSchema is distinct from all Event
+roles; no native subscription ACK is a Property value. Separate control/response capabilities
 must be supported explicitly; protocol ACKs cannot stand in for application data.

@@ -127,13 +127,49 @@ pub struct ConsumerSchemas {
     pub output: Option<TypeSchema>,
 }
 
-/// Distinct Event application roles. Native SUBACK/UNSUBACK are not schemas.
+/// A Property's value schema is not Event data. Event control/response roles
+/// stay distinct; native SUBACK/UNSUBACK packets never become application data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ConsumerNotificationSchemas {
-    pub subscription: Option<TypeSchema>,
-    pub data: Option<TypeSchema>,
-    pub data_response: Option<TypeSchema>,
-    pub cancellation: Option<TypeSchema>,
+pub enum ConsumerNotificationSchemas {
+    PropertyValue(TypeSchema),
+    Event {
+        subscription: Option<TypeSchema>,
+        data: Option<TypeSchema>,
+        data_response: Option<TypeSchema>,
+        cancellation: Option<TypeSchema>,
+    },
+}
+impl ConsumerNotificationSchemas {
+    pub fn kind(self) -> crate::notification::NotificationKind {
+        match self {
+            Self::PropertyValue(_) => crate::notification::NotificationKind::PropertyObservation,
+            Self::Event { .. } => crate::notification::NotificationKind::Event,
+        }
+    }
+    pub fn subscription(self) -> Option<TypeSchema> {
+        match self {
+            Self::Event { subscription, .. } => subscription,
+            _ => None,
+        }
+    }
+    pub fn data(self) -> Option<TypeSchema> {
+        match self {
+            Self::PropertyValue(s) => Some(s),
+            Self::Event { data, .. } => data,
+        }
+    }
+    pub fn data_response(self) -> Option<TypeSchema> {
+        match self {
+            Self::Event { data_response, .. } => data_response,
+            _ => None,
+        }
+    }
+    pub fn cancellation(self) -> Option<TypeSchema> {
+        match self {
+            Self::Event { cancellation, .. } => cancellation,
+            _ => None,
+        }
+    }
 }
 
 /// Source-free typed notification handoff. The actual linked Binding checks
@@ -169,15 +205,16 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
                     input.identity.binding_generation(),
                 )
                 || input.binding.configuration() != &input.configuration
-                || !matches!(input.target, AffordanceTarget::Event(_))
+                || crate::notification::NotificationKind::for_target(&input.target)
+                    != Some(input.schemas.kind())
                 || !input.services.data.available()
                 || input.services.data.policy().validation_work == 0
                 || input.services.access.work() == 0
                 || ![
-                    input.schemas.subscription,
-                    input.schemas.data,
-                    input.schemas.data_response,
-                    input.schemas.cancellation,
+                    input.schemas.subscription(),
+                    input.schemas.data(),
+                    input.schemas.data_response(),
+                    input.schemas.cancellation(),
                 ]
                 .into_iter()
                 .flatten()
@@ -187,7 +224,7 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
             }
             input
                 .binding
-                .support(&input.program, crate::notification::NotificationKind::Event)?;
+                .support(&input.program, input.schemas.kind())?;
             Ok(())
         })();
         match check {

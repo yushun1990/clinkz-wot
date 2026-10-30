@@ -13,8 +13,8 @@ pub mod notification;
 
 mod action;
 pub use action::*;
-mod event;
-pub use event::*;
+mod notification_publication;
+pub use notification_publication::*;
 mod publication;
 pub use publication::*;
 
@@ -78,8 +78,8 @@ pub struct RawProducerInstance {
     description: Option<Arc<str>>,
     behaviors: Vec<RawFiniteBehavior>,
     actions: Vec<RawActionBehavior>,
-    events: Vec<ProducerEventSource>,
-    event_work: Cell<usize>,
+    notification_sources: Vec<ProducerNotificationSource>,
+    notification_work: Cell<usize>,
     // Last to drop: original accepted work retains the actual shared capacity
     // owner through behavior/native/result disposal and acknowledgement.
     retained_owner: Option<Rc<dyn core::any::Any>>,
@@ -92,8 +92,8 @@ impl RawProducerInstance {
             description: None,
             behaviors,
             actions: Vec::new(),
-            events: Vec::new(),
-            event_work: Cell::new(0),
+            notification_sources: Vec::new(),
+            notification_work: Cell::new(0),
             retained_owner: None,
         }
     }
@@ -105,15 +105,19 @@ impl RawProducerInstance {
         self
     }
 
-    pub fn with_events(mut self, events: Vec<ProducerEventSource>) -> Self {
-        self.events = events;
+    pub fn with_notification_sources(mut self, sources: Vec<ProducerNotificationSource>) -> Self {
+        self.notification_sources = sources;
         self
     }
-    pub fn supports_event(&self, name: &str, operation: Operation) -> bool {
-        matches!(
-            operation,
-            Operation::SubscribeEvent | Operation::UnsubscribeEvent
-        ) && self.events.iter().any(|e| e.name() == name)
+    pub fn supports_notification(&self, target: &AffordanceTarget, operation: Operation) -> bool {
+        let Some(kind) = clinkz_wot_core::notification::NotificationKind::for_target(target) else {
+            return false;
+        };
+        (operation == kind.start_operation() || operation == kind.stop_operation())
+            && self
+                .notification_sources
+                .iter()
+                .any(|s| s.target() == *target)
     }
 
     pub fn key(&self) -> ProducerInstanceKey {
@@ -143,10 +147,17 @@ impl RawProducerInstance {
             .into_iter()
             .filter(|op| a.supports(*op))
             .all(|op| advertised(clinkz_wot_core::thing::AffordanceSite::Action(a.name()), op))
-        }) && self.events.iter().all(|e| {
+        }) && self.notification_sources.iter().all(|e| {
             advertised(
-                clinkz_wot_core::thing::AffordanceSite::Event(e.name()),
-                Operation::SubscribeEvent,
+                match e {
+                    ProducerNotificationSource::Property(n) => {
+                        clinkz_wot_core::thing::AffordanceSite::Property(n)
+                    }
+                    ProducerNotificationSource::Event(n) => {
+                        clinkz_wot_core::thing::AffordanceSite::Event(n)
+                    }
+                },
+                e.kind().start_operation(),
             )
         })
     }
@@ -156,7 +167,13 @@ impl RawProducerInstance {
     /// query/cancel Form never creates a working control operation.
     pub fn supports(&self, target: &AffordanceTarget, operation: Operation) -> bool {
         match (target, operation) {
-            (AffordanceTarget::Event(name), _) => self.supports_event(name, operation),
+            (
+                _,
+                Operation::ObserveProperty
+                | Operation::UnobserveProperty
+                | Operation::SubscribeEvent
+                | Operation::UnsubscribeEvent,
+            ) => self.supports_notification(target, operation),
             (
                 AffordanceTarget::Action(name),
                 Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction,
@@ -171,10 +188,26 @@ impl RawProducerInstance {
         }
     }
     pub fn supports_property(&self, name: &str, operation: Operation) -> bool {
-        self.behaviors.iter().any(|b| {
-            b.operation == operation
-                && matches!(&b.target, AffordanceTarget::Property(n) if n.as_ref() == name)
-        })
+        (matches!(
+            operation,
+            Operation::ObserveProperty | Operation::UnobserveProperty
+        ) && self
+            .notification_sources
+            .iter()
+            .any(|s| matches!(s, ProducerNotificationSource::Property(n) if n.as_ref() == name)))
+            || self.behaviors.iter().any(|b| {
+                b.operation == operation
+                    && matches!(&b.target, AffordanceTarget::Property(n) if n.as_ref() == name)
+            })
+    }
+    pub fn supports_event(&self, name: &str, operation: Operation) -> bool {
+        matches!(
+            operation,
+            Operation::SubscribeEvent | Operation::UnsubscribeEvent
+        ) && self
+            .notification_sources
+            .iter()
+            .any(|s| matches!(s, ProducerNotificationSource::Event(n) if n.as_ref() == name))
     }
     pub fn supports_action(&self, name: &str, operation: Operation) -> bool {
         self.actions
@@ -196,7 +229,9 @@ impl RawProducerInstance {
             .checked_add(2 * size_of::<usize>())?
             .checked_add(self.behaviors.capacity() * size_of::<RawFiniteBehavior>())?
             .checked_add(self.actions.capacity() * size_of::<RawActionBehavior>())?
-            .checked_add(self.events.capacity() * size_of::<ProducerEventSource>())?;
+            .checked_add(
+                self.notification_sources.capacity() * size_of::<ProducerNotificationSource>(),
+            )?;
         if let Some(description) = &self.description {
             bytes = bytes.checked_add(description.len() + 2 * size_of::<usize>())?;
         }
@@ -209,7 +244,7 @@ impl RawProducerInstance {
         for behavior in &self.actions {
             bytes = bytes.checked_add(behavior.backing_bytes())?;
         }
-        for event in &self.events {
+        for event in &self.notification_sources {
             bytes = bytes.checked_add(event.backing_bytes())?;
         }
         Some(bytes)
@@ -233,7 +268,7 @@ struct InstanceEntry {
     participations: Vec<Weak<()>>,
     // None is explicitly raw; published Actions have captured routes/services.
     action_routes: Option<Vec<CapturedActionRoute>>,
-    event_routes: Option<Vec<CapturedEventRoute>>,
+    notification_routes: Option<Vec<CapturedNotificationRoute>>,
     // Dispose registry/view backing before its last actual reservation owner.
     instance: Rc<RawProducerInstance>,
 }
@@ -278,7 +313,7 @@ impl RawProducerServient {
             current: Rc::new(Cell::new(true)),
             participations: Vec::new(),
             action_routes: None,
-            event_routes: None,
+            notification_routes: None,
         }));
         Ok(Self {
             instances: entries,
@@ -291,15 +326,21 @@ impl RawProducerServient {
     fn valid_instance(instance: &RawProducerInstance, limits: RawProducerRegistryLimits) -> bool {
         (!instance.behaviors.is_empty()
             || !instance.actions.is_empty()
-            || !instance.events.is_empty())
-            && instance.behaviors.len() + instance.actions.len() + instance.events.len()
+            || !instance.notification_sources.is_empty())
+            && instance.behaviors.len()
+                + instance.actions.len()
+                + instance.notification_sources.len()
                 <= limits.behaviors_per_instance
-            && instance.events.iter().enumerate().all(|(i, e)| {
-                e.name().len() <= limits.target_name_bytes
-                    && !instance.events[..i]
-                        .iter()
-                        .any(|prior| prior.name() == e.name())
-            })
+            && instance
+                .notification_sources
+                .iter()
+                .enumerate()
+                .all(|(i, e)| {
+                    e.name().len() <= limits.target_name_bytes
+                        && !instance.notification_sources[..i]
+                            .iter()
+                            .any(|prior| prior.target() == e.target())
+                })
             && instance.actions.iter().enumerate().all(|(j, action)| {
                 action.name().len() <= limits.target_name_bytes
                     && !instance.actions[..j]
@@ -364,7 +405,7 @@ impl RawProducerServient {
             current: Rc::new(Cell::new(true)),
             participations: Vec::new(),
             action_routes: None,
-            event_routes: None,
+            notification_routes: None,
         };
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);

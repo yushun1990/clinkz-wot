@@ -93,8 +93,10 @@ one-off operation resource schema is mandated without an actual cache contract.
 
 ## Existing implementation disposition
 
-Whole-Thing Producer preparation also selects Event subscribe/unsubscribe Forms
-against actual Event source registration. The MQTT capability interprets its
+Whole-Thing Producer preparation also selects Property observe/unobserve and
+Event subscribe/unsubscribe Forms against actual family-qualified notification
+source registration. A Property source supplies no finite Read/Write behavior.
+The MQTT capability interprets its
 own resolved vocabulary, captures type-only data meaning and the exact startup
 registration, and rejects unsupported control data, dataResponse, response
 branches, security or other effective operations. It creates no native subscriber
@@ -178,12 +180,13 @@ the existing trusted Host allocation policy; fallible native compiler-slot and
 owned-cursor allocations are exercised independently. This is not an allocator
 interceptor or a claim of recoverable process-wide OOM.
 
-## Open Consumer Event preparation
+## Open Consumer notification preparation
 
 The typed `open_consumer::ConsumerNotificationRegistry` is the notification
-facet beside finite preparation. Its operation-scoped `prepare_event` reuses
-common TD admission and the resolved Form loan, selecting one named Event's
-subscribe Form in TD order or by explicit selector. Unsupported alternatives
+facet beside finite preparation. Its operation-scoped `prepare_notification` reuses
+common TD admission and the resolved Form loan, selecting one named observable
+Property's observe Form or Event's subscribe Form in TD order or by explicit
+selector. Unsupported alternatives
 are skipped; missing support and multiple complete actual providers refuse.
 It does not claim whole-Thing Consumer support or Producer qualification.
 
@@ -196,10 +199,19 @@ compiler, asynchronous preparation coordinator or first-use cache. Metadata,
 support and clone/drop callbacks remain trusted finite local work.
 
 The selected `ConsumerNotificationDefinition` owns the actual Binding/program,
-configuration, endpoint/Form, all four distinct schema roles, concrete data and
-access services and original Host funding. Neither its program nor runtime
+configuration, family-qualified target, endpoint/Form, concrete data and
+access services and original Host funding.
+`ConsumerNotificationSchemas::PropertyValue` captures the Property's
+own DataSchema and requires `observable: true`; it cannot acquire Event control
+or reciprocal-response schemas. The `Event` variant retains separate
+subscription/data/dataResponse/cancellation schemas. Neither its program nor runtime
 retains a source TD/semantic loan/compiler. Each present role requires complete
 supported schema/media meaning. Required native responses still need actual
 support/cardinality; a schema alone cannot invent it. No native I/O occurs in
 preparation. Current MQTT support and its explicit control/response refusals are
 defined in [the MQTT subset](../../protocol-bindings/protocols/mqtt/README.md).
+
+Property selection authorizes `ObserveProperty`; captured runtime policy uses
+that operation for establishment/delivery and `UnobserveProperty` for mapped
+stop. Preparation neither executes a Read nor captures an initial value. Native
+Form semantics and stop support remain the concrete Binding's responsibility.

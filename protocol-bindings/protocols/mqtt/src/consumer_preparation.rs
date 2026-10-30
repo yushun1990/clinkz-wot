@@ -5,7 +5,7 @@ use clinkz_wot_planning::{
     open_consumer::*,
     producer_composition::{FormSite, ProducerOperationInput},
 };
-impl ConsumerNotificationPreparation for MqttEventConsumer {
+impl ConsumerNotificationPreparation for MqttNotificationConsumer {
     fn registration_identity(&self) -> clinkz_wot_core::BindingRegistrationIdentity {
         consumer_identity(self)
     }
@@ -22,22 +22,30 @@ impl ConsumerNotificationPreparation for MqttEventConsumer {
     ) -> CoreResult<Option<MqttConsumerProgram>> {
         // Same supported description as the Producer; Consumer application-data
         // roles are still captured independently by Planning and execution.
-        if input.schemas.subscription.is_some()
-            || input.schemas.cancellation.is_some()
-            || input.schemas.data_response.is_some()
-            || input.schemas.data.is_none()
+        if input.schemas.subscription().is_some()
+            || input.schemas.cancellation().is_some()
+            || input.schemas.data_response().is_some()
+            || input.schemas.data().is_none()
         {
             return Err(unsupported());
         }
-        let site = FormSite::Event(input.event.into());
+        let site = match input.target {
+            AffordanceTarget::Property(n) => FormSite::Property(n.to_string()),
+            AffordanceTarget::Event(n) => FormSite::Event(n.to_string()),
+            _ => return Err(unsupported()),
+        };
+        let kind = NotificationKind::for_target(input.target).unwrap();
+        if input.schemas.kind() != kind {
+            return Err(unsupported());
+        }
         let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 4096);
-        let Some((topic, schema)) = preparation::lower_event(
+        let Some((topic, schema)) = preparation::lower_notification(
             self.configuration().address,
             ProducerOperationInput {
                 document: input.document,
                 site: &site,
                 form: input.form,
-                operation: Operation::SubscribeEvent,
+                operation: kind.start_operation(),
                 target: input.endpoint,
             },
             &mut budget,
@@ -45,19 +53,22 @@ impl ConsumerNotificationPreparation for MqttEventConsumer {
         else {
             return Ok(None);
         };
-        if Some(schema) != input.schemas.data {
+        if Some(schema) != input.schemas.data() {
             return Err(unsupported());
         }
         let cancellation = input
             .document
             .form(
-                clinkz_wot_td::semantic::FormOwner::Event(input.event),
+                match input.target {
+                    AffordanceTarget::Property(n) => {
+                        clinkz_wot_td::semantic::FormOwner::Property(n)
+                    }
+                    AffordanceTarget::Event(n) => clinkz_wot_td::semantic::FormOwner::Event(n),
+                    _ => unreachable!(),
+                },
                 input.form,
             )
-            .is_some_and(|f| {
-                f.effective_operations
-                    .contains(&Operation::UnsubscribeEvent)
-            });
-        Ok(Some(consumer_program(self, topic, cancellation)))
+            .is_some_and(|f| f.effective_operations.contains(&kind.stop_operation()));
+        Ok(Some(consumer_program(self, topic, cancellation, kind)))
     }
 }

@@ -121,15 +121,15 @@ impl ConsumerNotificationPreparation for EventBinding {
         &self,
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<Self::Program>> {
-        assert_eq!(input.event, "alarm");
+        assert_eq!(input.target, &AffordanceTarget::Event(Arc::from("alarm")));
         assert_eq!(input.endpoint, ENDPOINT);
-        assert!(input.schemas.subscription.is_none());
-        assert!(input.schemas.cancellation.is_none());
+        assert!(input.schemas.subscription().is_none());
+        assert!(input.schemas.cancellation().is_none());
         assert_eq!(
-            input.schemas.data,
+            input.schemas.data(),
             Some(value_type::TypeSchema::Type(value_type::ValueType::Integer))
         );
-        assert_eq!(input.schemas.data_response, input.schemas.data);
+        assert_eq!(input.schemas.data_response(), input.schemas.data());
         Ok(Some(self.0.clone()))
     }
 }
@@ -233,9 +233,9 @@ fn runtime(
             }])
             .unwrap();
         registry
-            .prepare_event(
+            .prepare_notification(
                 &source,
-                "alarm",
+                &AffordanceTarget::Event(Arc::from("alarm")),
                 ConsumerSelector::default(),
                 GatewayDefaultV1::LIMITS,
                 bank.clone(),
