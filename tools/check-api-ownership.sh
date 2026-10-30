@@ -19,6 +19,7 @@ awk -F, '
         packages["clinkz-wot-discovery"] = packages["clinkz-wot-servient"] = 1
         packages["clinkz-wot-servient-finite"] = 1
         packages["clinkz-wot-binding-http"] = 1
+        packages["clinkz-wot-binding-mqtt"] = packages["clinkz-wot-codec-json"] = 1
         kinds["type"] = kinds["trait"] = kinds["registration"] = 1
         kinds["state_record"] = kinds["function"] = kinds["profile"] = 1
         migrations["add"] = migrations["keep"] = migrations["replace"] = 1
@@ -42,6 +43,8 @@ awk -F, '
         prefixes["clinkz-wot-servient"] = "clinkz_wot_servient::"
         prefixes["clinkz-wot-servient-finite"] = "clinkz_wot_servient_finite::"
         prefixes["clinkz-wot-binding-http"] = "clinkz_wot_binding_http::"
+        prefixes["clinkz-wot-binding-mqtt"] = "clinkz_wot_binding_mqtt::"
+        prefixes["clinkz-wot-codec-json"] = "clinkz_wot_codec_json::"
     }
     NF != 14 { fail("wrong column count", NF) }
     NR > 1 {

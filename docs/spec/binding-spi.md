@@ -133,6 +133,30 @@ work over actual I/O. The HTTP Action participant adds a production loopback
 UDP remains test-only; HTTP's one-listener-per-Action implementation does not
 constrain other native resource layouts or cross-Binding Action routes.
 
+Producer Event participants additionally supply their exact emission mapping
+and actual validation/security services for each selected subscribe Form before
+publication. These services and the complete data allowance are recaptured and
+compared before commit; missing or substituted services refuse. Native Event
+publication has separate start, progress and retirement controls, not a finite
+reply opportunity. Native subscriber matching, subscribe/unsubscribe control and
+distribution stay at the Binding/broker; no physical subscription cardinality is
+inferred from logical source or recipient counts.
+
+The current manual Host publication bounds the captured Event mapping table at
+32 entries, independently of its 16-source per-instance registration envelope.
+Larger mappings require a separately bounded lookup/progress representation.
+
+The bounded MQTT Host participant uses one application-owned service across
+Thing participations, with one shared in-flight publication slot retained through
+unread settlement acknowledgement. Native resource policy permits no reconnect,
+replay or idle pooling. Dropping/retiring one participation preserves siblings;
+last actual participation/work disposal releases the connection. Partial TCP
+frame cancellation invalidates the shared native service, reports uncertainty
+and fences dependents rather than appending a sibling frame to truncated bytes.
+Only its unique service owner can explicitly shut down the whole infrastructure.
+QoS 0 local write completion carries no subscriber-delivery acknowledgement.
+This is a concrete mapping policy, not a requirement on all Event Bindings.
+
 The manual Host publication records bounded opaque identities of the original
 native participation owners. Publication and retirement reject duplicate,
 foreign, omitted or substituted participants. These identities retain no logical

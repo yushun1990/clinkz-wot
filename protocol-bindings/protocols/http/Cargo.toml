@@ -10,6 +10,7 @@ result_large_err = "allow"
 clinkz-wot-td = { path = "../../../td", optional = true }
 clinkz-wot-planning = { path = "../../../planning", optional = true, default-features = false, features = ["std"] }
 clinkz-wot-core = { path = "../../../core" }
+clinkz-wot-codec-json = { path = "../../../codecs/json" }
 clinkz-wot-foundation = { path = "../../../foundation" }
 clinkz-wot-servient-finite = { path = "../../../servient/finite" }
 hyper = { version = "=1.12.0", default-features = false, features = ["client", "server", "http1"] }

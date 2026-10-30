@@ -12,6 +12,8 @@ pub mod notification;
 
 mod action;
 pub use action::*;
+mod event;
+pub use event::*;
 mod publication;
 pub use publication::*;
 
@@ -75,6 +77,8 @@ pub struct RawProducerInstance {
     description: Option<Arc<str>>,
     behaviors: Vec<RawFiniteBehavior>,
     actions: Vec<RawActionBehavior>,
+    events: Vec<ProducerEventSource>,
+    event_work: Cell<usize>,
     // Last to drop: original accepted work retains the actual shared capacity
     // owner through behavior/native/result disposal and acknowledgement.
     retained_owner: Option<Rc<dyn core::any::Any>>,
@@ -87,6 +91,8 @@ impl RawProducerInstance {
             description: None,
             behaviors,
             actions: Vec::new(),
+            events: Vec::new(),
+            event_work: Cell::new(0),
             retained_owner: None,
         }
     }
@@ -96,6 +102,17 @@ impl RawProducerInstance {
     pub fn with_actions(mut self, actions: Vec<RawActionBehavior>) -> Self {
         self.actions = actions;
         self
+    }
+
+    pub fn with_events(mut self, events: Vec<ProducerEventSource>) -> Self {
+        self.events = events;
+        self
+    }
+    pub fn supports_event(&self, name: &str, operation: Operation) -> bool {
+        matches!(
+            operation,
+            Operation::SubscribeEvent | Operation::UnsubscribeEvent
+        ) && self.events.iter().any(|e| e.name() == name)
     }
 
     pub fn key(&self) -> ProducerInstanceKey {
@@ -125,6 +142,11 @@ impl RawProducerInstance {
             .into_iter()
             .filter(|op| a.supports(*op))
             .all(|op| advertised(clinkz_wot_core::thing::AffordanceSite::Action(a.name()), op))
+        }) && self.events.iter().all(|e| {
+            advertised(
+                clinkz_wot_core::thing::AffordanceSite::Event(e.name()),
+                Operation::SubscribeEvent,
+            )
         })
     }
 
@@ -133,6 +155,7 @@ impl RawProducerInstance {
     /// query/cancel Form never creates a working control operation.
     pub fn supports(&self, target: &AffordanceTarget, operation: Operation) -> bool {
         match (target, operation) {
+            (AffordanceTarget::Event(name), _) => self.supports_event(name, operation),
             (
                 AffordanceTarget::Action(name),
                 Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction,
@@ -171,7 +194,8 @@ impl RawProducerInstance {
         let mut bytes = size_of::<Self>()
             .checked_add(2 * size_of::<usize>())?
             .checked_add(self.behaviors.capacity() * size_of::<RawFiniteBehavior>())?
-            .checked_add(self.actions.capacity() * size_of::<RawActionBehavior>())?;
+            .checked_add(self.actions.capacity() * size_of::<RawActionBehavior>())?
+            .checked_add(self.events.capacity() * size_of::<ProducerEventSource>())?;
         if let Some(description) = &self.description {
             bytes = bytes.checked_add(description.len() + 2 * size_of::<usize>())?;
         }
@@ -183,6 +207,9 @@ impl RawProducerInstance {
         }
         for behavior in &self.actions {
             bytes = bytes.checked_add(behavior.backing_bytes())?;
+        }
+        for event in &self.events {
+            bytes = bytes.checked_add(event.backing_bytes())?;
         }
         Some(bytes)
     }
@@ -205,6 +232,7 @@ struct InstanceEntry {
     participations: Vec<Weak<()>>,
     // None is explicitly raw; published Actions have captured routes/services.
     action_routes: Option<Vec<CapturedActionRoute>>,
+    event_routes: Option<Vec<CapturedEventRoute>>,
     // Dispose registry/view backing before its last actual reservation owner.
     instance: Rc<RawProducerInstance>,
 }
@@ -249,6 +277,7 @@ impl RawProducerServient {
             current: Rc::new(Cell::new(true)),
             participations: Vec::new(),
             action_routes: None,
+            event_routes: None,
         }));
         Ok(Self {
             instances: entries,
@@ -259,8 +288,17 @@ impl RawProducerServient {
     }
 
     fn valid_instance(instance: &RawProducerInstance, limits: RawProducerRegistryLimits) -> bool {
-        (!instance.behaviors.is_empty() || !instance.actions.is_empty())
-            && instance.behaviors.len() + instance.actions.len() <= limits.behaviors_per_instance
+        (!instance.behaviors.is_empty()
+            || !instance.actions.is_empty()
+            || !instance.events.is_empty())
+            && instance.behaviors.len() + instance.actions.len() + instance.events.len()
+                <= limits.behaviors_per_instance
+            && instance.events.iter().enumerate().all(|(i, e)| {
+                e.name().len() <= limits.target_name_bytes
+                    && !instance.events[..i]
+                        .iter()
+                        .any(|prior| prior.name() == e.name())
+            })
             && instance.actions.iter().enumerate().all(|(j, action)| {
                 action.name().len() <= limits.target_name_bytes
                     && !instance.actions[..j]
@@ -325,6 +363,7 @@ impl RawProducerServient {
             current: Rc::new(Cell::new(true)),
             participations: Vec::new(),
             action_routes: None,
+            event_routes: None,
         };
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);

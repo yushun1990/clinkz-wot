@@ -68,6 +68,7 @@ pub struct ProducerPublication {
     registry_participants: Vec<Weak<()>>,
     gates: Vec<Weak<Cell<bool>>>,
     action_routes: Option<Vec<CapturedActionRoute>>,
+    event_routes: Option<Vec<CapturedEventRoute>>,
     // Both original instances retain capacity until publication metadata ends.
     retired: Option<InstanceEntry>,
     instance: Option<Rc<RawProducerInstance>>,
@@ -99,6 +100,45 @@ impl ProducerPublication {
     }
     pub fn key(&self) -> ProducerInstanceKey {
         self.key
+    }
+    /// Capture the original Event publication mapping, validation and security
+    /// services. Requalification cannot replace any one of these independently.
+    pub fn bind_event_routes(&mut self, routes: Vec<CapturedEventRoute>) -> CoreResult<()> {
+        if self.committed || self.cancelled.get() || routes.len() > MAX_PRODUCER_PARTICIPANTS {
+            return Err(CoreError::Validation(context()));
+        }
+        let instance = self
+            .instance
+            .as_ref()
+            .ok_or_else(|| CoreError::Validation(context()))?;
+        if routes.iter().enumerate().any(|(i, r)| {
+            !instance.supports_event(&r.event, Operation::SubscribeEvent)
+                || r.data_bytes == 0
+                || routes[..i]
+                    .iter()
+                    .any(|p| p.event == r.event && p.route.same_mapping(&r.route))
+        }) || instance
+            .events
+            .iter()
+            .any(|e| !routes.iter().any(|r| r.event.as_ref() == e.name()))
+        {
+            return Err(CoreError::Validation(context()));
+        }
+        if let Some(old) = &self.event_routes {
+            if old.len() != routes.len()
+                || old.iter().zip(&routes).any(|(a, b)| {
+                    a.event != b.event
+                        || !a.route.same_mapping(&b.route)
+                        || !Rc::ptr_eq(&a.services, &b.services)
+                        || a.data_bytes != b.data_bytes
+                })
+            {
+                return Err(CoreError::Validation(context()));
+            }
+        } else {
+            self.event_routes = Some(routes);
+        }
+        Ok(())
     }
     pub fn is_committed(&self) -> bool {
         self.committed
@@ -237,6 +277,11 @@ impl ProducerPublication {
             .as_ref()
             .is_some_and(|i| i.supports_action(name, operation))
     }
+    pub fn supports_event(&self, name: &str, operation: Operation) -> bool {
+        self.instance
+            .as_ref()
+            .is_some_and(|i| i.supports_event(name, operation))
+    }
     /// Every staged behavior must be described by at least one prepared Form.
     /// Checking Forms against behavior alone would leave extra registered
     /// handlers reachable through a native ingress without an advertised Form.
@@ -331,6 +376,22 @@ pub trait ClosedProducerParticipation {
         _operation: Operation,
         _definition: &dyn core::any::Any,
     ) -> Option<ActionRoute> {
+        None
+    }
+    /// Actual selected publication services and mapping for a covered Event
+    /// subscribe Form. No native subscription or Engine subscriber is created.
+    fn event_publication(
+        &self,
+        _key: ProducerInstanceKey,
+        _binding: (BindingId, BindingGeneration),
+        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
+        _form: u32,
+        _definition: &dyn core::any::Any,
+    ) -> Option<(
+        clinkz_wot_core::event::EventRoute,
+        Rc<dyn clinkz_wot_core::event::ProducerEventServices>,
+        usize,
+    )> {
         None
     }
     /// The native owner must consult this gate before offering semantic ingress.
@@ -517,6 +578,7 @@ impl RawProducerServient {
             registry_participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             action_routes: None,
+            event_routes: None,
         })
     }
 
@@ -566,6 +628,14 @@ impl RawProducerServient {
         {
             return Err(CoreError::Validation(context()));
         }
+        if publication
+            .instance
+            .as_ref()
+            .is_some_and(|i| !i.events.is_empty())
+            && publication.event_routes.is_none()
+        {
+            return Err(CoreError::Validation(context()));
+        }
         // Gather gates before the local linearization boundary. Every linked
         // callback and fallible allocation precedes the commit.
         let mut gates = Vec::new();
@@ -585,6 +655,7 @@ impl RawProducerServient {
             current: Rc::clone(&publication.current),
             participations: core::mem::take(&mut publication.registry_participants),
             action_routes: publication.action_routes.take(),
+            event_routes: publication.event_routes.take(),
         };
         // COMMIT: exclusive &mut access orders description, behavior, current
         // logical permission and native participation opening. Capacity was preallocated.
@@ -636,6 +707,10 @@ impl RawProducerServient {
             || participants.is_empty()
             || !publication.same_participants(participants.iter().map(|p| p.participation_id()))
             || !participants.iter().all(|p| p.retired())
+            || publication
+                .instance
+                .as_ref()
+                .is_some_and(|i| i.event_work.get() != 0)
             || self
                 .actions
                 .as_ref()
@@ -678,6 +753,7 @@ impl RawProducerServient {
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let entry = &self.instances[index];
         if entry.current.get()
+            || entry.instance.event_work.get() != 0
             || entry.participations.is_empty()
             || entry.participations.iter().any(|p| p.strong_count() != 0)
             || self

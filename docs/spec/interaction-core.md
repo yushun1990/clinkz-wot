@@ -151,6 +151,29 @@ the item/byte queue is full. Explicit owner cleanup works after every cursor is
 lost; terminal acknowledgement releases the logical reservation. Native physical
 retirement and remote cancellation/response outcomes remain separate.
 
+Producer emission has its own Host facet in `core::event` and
+`servient-finite::event`; it is neither a finite request nor a Consumer
+subscription conversation. An application registers an Event source on the
+same logical Producer instance as other behavior. Complete publication captures
+each selected native emission mapping and its actual data/security services.
+`emit_event` checks current instance authority, exact captured mapping, backing
+allowance, fresh policy and data validation before native acceptance. Explicitly
+raw registries cannot bypass qualified Event service capture. No Engine local
+record is created for a remote broker subscriber, and no Engine subscriber loop
+replicates an emission.
+
+Each admitted emission retains its original instance, native publication and
+capacity until native retirement and settlement acknowledgement (or bounded
+local disposal). The settlement preserves first local cause separately from
+native effect: not published, uncertain, or locally published. Local publication
+does not prove broker acceptance, subscriber presence or recipient delivery.
+Cancellation/replacement/root loss stops pending work without redirecting it;
+already escaped native publication retains its original effect. Native failure
+fences affected authority and keeps its failure/cleanup evidence. The concrete
+MQTT mapping's supported subset and real-peer evidence are recorded in
+[its README](../../protocol-bindings/protocols/mqtt/README.md); it establishes no
+TD-driven Consumer subscription/dataResponse path.
+
 `EXEC-COLLECTION-001`: Described root collection operations MUST preserve native
 semantics and logical attribution, including partial failure and supported
 atomicity. They MUST NOT silently become N individual calls/subscriptions.

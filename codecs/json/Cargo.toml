@@ -1,0 +1,13 @@
+[package]
+name = "clinkz-wot-codec-json"
+version.workspace = true
+edition.workspace = true
+
+[lints.clippy]
+# CoreError is the shared inline, allocation-free error carrier.
+result_large_err = "allow"
+
+[dependencies]
+clinkz-wot-core = { path = "../../core" }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }

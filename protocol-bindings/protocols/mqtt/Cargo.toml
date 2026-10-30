@@ -1,0 +1,31 @@
+[package]
+name = "clinkz-wot-binding-mqtt"
+version.workspace = true
+edition.workspace = true
+
+[lints.clippy]
+result_large_err = "allow"
+
+[dependencies]
+clinkz-wot-core = { path = "../../../core" }
+clinkz-wot-foundation = { path = "../../../foundation" }
+clinkz-wot-servient-finite = { path = "../../../servient/finite" }
+clinkz-wot-codec-json = { path = "../../../codecs/json" }
+clinkz-wot-planning = { path = "../../../planning", optional = true }
+clinkz-wot-td = { path = "../../../td", optional = true }
+tokio = { version = "=1.52.3", default-features = false, features = ["net", "rt"] }
+
+[dev-dependencies]
+clinkz-wot-servient = { path = "../../../servient" }
+serde_json = { workspace = true, features = ["std"] }
+tokio = { version = "=1.52.3", default-features = false, features = ["net", "rt", "time"] }
+
+[features]
+default = ["prepare"]
+prepare = ["dep:clinkz-wot-planning", "dep:clinkz-wot-td"]
+# Real Mosquitto process required. Never substitutes a fake or silently skips.
+broker-tests = ["prepare"]
+
+[[example]]
+name = "emit_event"
+required-features = ["prepare"]

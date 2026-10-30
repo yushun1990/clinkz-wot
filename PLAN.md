@@ -22,9 +22,11 @@ enum, unit test or raw kernel cannot complete a WoT capability.
 
 ### Capability coverage
 
-This coarse baseline is grounded in source and integration fixtures at
-`dbf81f55536b8789c253b1f90199cee85d3ed6af`; linked implementation and scoped
-evidence remain the availability authority. It is not a package acceptance record.
+This coarse coverage is grounded in the linked source and integration fixtures.
+The original baseline was recorded at
+`dbf81f55536b8789c253b1f90199cee85d3ed6af`; implemented increments update their
+affected cells. Source and scoped evidence remain the availability authority;
+this is not a package acceptance record.
 
 **Semantic representation:** [TD models and shared interpretation](td/src/semantic.rs)
 cover all three families and Thing-root collection Forms, including operation
@@ -40,7 +42,7 @@ still have supported-subset limits.
 | Property observe / unobserve | Consumer notification conversation and stop | Open | Open | Raw test datagram observation only; no TD qualification |
 | Action invoke | Consumer finite call; Producer continuing invocation store | Explicit `synchronous: true` subset only | Continuing HTTP mapping with captured validation and controls | Test datagram synchronous Consumer; HTTP and test datagram Producer |
 | Action query / cancel | Producer retained invocation controls | Open | Qualified described HTTP control routes | HTTP and test datagram Producer; no composed Consumer control path |
-| Event subscribe / unsubscribe and Producer emission | Raw Consumer Event controls, data, reciprocal response and cleanup | Open | Open | In-memory Consumer lifecycle fixtures; no joined Event native I/O |
+| Event subscribe / unsubscribe and Producer emission | Consumer Event conversation; distinct Producer emission and settlement | Open | Qualified MQTT Event sources and emission; broker-native subscribe/unsubscribe without control data or dataResponse | Mosquitto and independent native subscribers, including matching/distribution; no joined Engine Consumer path |
 | Described collection operations | No collection execution path | Open | Open | No joined native collection evidence |
 
 Here **Open** means no joined implementation for that role/operation, even when
@@ -49,6 +51,9 @@ a raw primitive exists. Finite read/write evidence is in
 read/Action evidence is in
 [composed Thing](protocol-bindings/protocols/http/tests/composed_thing.rs) and
 [HTTP Actions](protocol-bindings/protocols/http/tests/action_producer.rs).
+[Producer Events](protocol-bindings/protocols/mqtt/tests/producer_events.rs)
+exercise the [declared MQTT subset](protocol-bindings/protocols/mqtt/README.md)
+through complete TD qualification and native broker delivery.
 [Downstream Consumer composition](tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
 distinguishes prepared finite I/O from raw observation; the
 [notification fixtures](servient/finite/tests/notification.rs) exercise Event

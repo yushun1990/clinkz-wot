@@ -44,6 +44,10 @@ echo "=== protocol-bindings-http ==="
 check "http preparation"        -p clinkz-wot-binding-http
 check "http execution-only"     -p clinkz-wot-binding-http --no-default-features
 
+echo "=== protocol-bindings-mqtt ==="
+check "mqtt preparation"        -p clinkz-wot-binding-mqtt
+check "mqtt execution-only"     -p clinkz-wot-binding-mqtt --no-default-features
+
 echo "=== discovery ==="
 check "discovery default"       -p clinkz-wot-discovery
 check "discovery no-features"   -p clinkz-wot-discovery --no-default-features
