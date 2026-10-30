@@ -177,3 +177,29 @@ Servient owner consumes it. Host startup registration/reference construction use
 the existing trusted Host allocation policy; fallible native compiler-slot and
 owned-cursor allocations are exercised independently. This is not an allocator
 interceptor or a claim of recoverable process-wide OOM.
+
+## Open Consumer Event preparation
+
+The typed `open_consumer::ConsumerNotificationRegistry` is the notification
+facet beside finite preparation. Its operation-scoped `prepare_event` reuses
+common TD admission and the resolved Form loan, selecting one named Event's
+subscribe Form in TD order or by explicit selector. Unsupported alternatives
+are skipped; missing support and multiple complete actual providers refuse.
+It does not claim whole-Thing Consumer support or Producer qualification.
+
+`ConsumerNotificationPreparation` extends the actual source-free notification
+Binding registration with a bounded pure compilation callback. External linked
+Bindings can implement it without a finite capability, compiler-name test or
+Core protocol case. The current eager typed facet prepays the complete declared
+callback/temporary/retained bounds and rollback; it introduces no universal
+compiler, asynchronous preparation coordinator or first-use cache. Metadata,
+support and clone/drop callbacks remain trusted finite local work.
+
+The selected `ConsumerNotificationDefinition` owns the actual Binding/program,
+configuration, endpoint/Form, all four distinct schema roles, concrete data and
+access services and original Host funding. Neither its program nor runtime
+retains a source TD/semantic loan/compiler. Each present role requires complete
+supported schema/media meaning. Required native responses still need actual
+support/cardinality; a schema alone cannot invent it. No native I/O occurs in
+preparation. Current MQTT support and its explicit control/response refusals are
+defined in [the MQTT subset](../../protocol-bindings/protocols/mqtt/README.md).

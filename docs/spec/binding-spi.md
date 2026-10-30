@@ -185,4 +185,12 @@ removed there. Retained dual-role/static Property Read adapters still reject oth
 operations explicitly. Finite requests carry their selected operation and optional
 application input; they do not represent continuing Action or notification
 conversations. Existing inline aggregate and raw finite APIs retain their
-restricted purposes. Notification preparation remains separate and incomplete.
+restricted purposes. Notification preparation uses a separate typed facet:
+`ConsumerNotificationPreparation` compiles owned programs on the actual
+`ConsumerNotificationBinding` registration. Its operation-scoped Event registry
+captures actual services and configuration without adding finite methods or
+passing TD/compiler owners into execution. MQTT supplies that real native facet;
+its shared topic interests, queues, control correlation, wakers and final socket
+release remain Binding-owned. Each Engine recipient retains independent logical
+acceptance, validation, loss and stop. Separate control/response capabilities
+must be supported explicitly; protocol ACKs cannot stand in for application data.

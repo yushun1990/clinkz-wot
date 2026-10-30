@@ -1,3 +1,4 @@
+#![allow(dead_code)] // Shared by distinct Producer and Consumer integration crates.
 use super::*;
 use std::{
     fs::{self, File},
@@ -9,6 +10,8 @@ use std::{
     time::{Duration, Instant},
 };
 static NEXT: AtomicUsize = AtomicUsize::new(0);
+// Reserve-a-free-port and broker bind must not race another fixture startup.
+static START: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// A real independently implemented broker process, never a test stand-in.
 pub struct Broker {
@@ -18,6 +21,7 @@ pub struct Broker {
 }
 impl Broker {
     pub fn start() -> Self {
+        let _startup = START.lock().unwrap();
         let address = address();
         let dir = std::env::temp_dir().join(format!(
             "clinkz-mqtt-{}-{}",
@@ -73,6 +77,9 @@ impl Broker {
 }
 impl Drop for Broker {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            eprintln!("broker {}: {}", self.address, self.logs());
+        }
         self.stop();
         let _ = fs::remove_dir_all(&self.dir);
     }
@@ -147,6 +154,12 @@ impl Peer {
         string(&mut body, filter);
         self.send(0xA2, &body);
         assert_eq!(self.packet(), (0xB0, vec![0, 2]));
+    }
+    pub fn publish_raw(&mut self, topic: &str, bytes: &[u8], retained: bool) {
+        let mut body = Vec::new();
+        string(&mut body, topic);
+        body.extend_from_slice(bytes);
+        self.send(if retained { 0x31 } else { 0x30 }, &body);
     }
     pub fn event(&mut self, topic: &str, value: &[u8]) {
         let (header, body) = self.packet();

@@ -1,8 +1,12 @@
-//! Bounded Host MQTT 3.1.1 Producer Event mapping. No Consumer execution,
-//! subscriber registry, reconnect/replay, retained messages or reciprocal data
-//! responses are supplied. Mosquitto real-peer tests define the evidence scope.
+//! Bounded Host MQTT 3.1.1 Producer and Consumer Event mappings.
+//! Native sharing/distribution stays here; each Engine conversation is separate.
+//! No reconnect/replay or reciprocal data responses are supplied.
 mod native;
 pub use native::*;
+mod consumer;
+pub use consumer::*;
+#[cfg(feature = "prepare")]
+mod consumer_preparation;
 #[cfg(feature = "prepare")]
 mod preparation;
 

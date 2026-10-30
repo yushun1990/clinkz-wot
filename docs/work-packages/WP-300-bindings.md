@@ -66,7 +66,14 @@ reply cardinality or one-connection-per-subscription policy. Native streams,
 correlation, framing, reconnect and shared-service leases stay Binding-owned.
 Test that stopping one logical participant cannot retire siblings and that final
 physical destruction waits for remaining native work. Multi-family finite execution and raw notification composition with independent
-test Bindings supply this evidence at their claimed scopes;
+test Bindings supply this evidence at their claimed scopes. The typed
+`ConsumerNotificationPreparation` facet now hands TD-selected Event programs and
+actual services to the same notification participation API. The registered MQTT
+Consumer shares native topic interests and distribution across independent
+logical Consumers; real Mosquitto integration joins the existing qualified
+Engine Producer to those Consumers, including stop, loss, replacement and final
+release. The [MQTT subset](../../protocol-bindings/protocols/mqtt/README.md) retains
+its concrete limits and control/response refusals;
 an operation enum or registration flag is insufficient.
 
 The Host finite `ClientBinding` declares coarse operation eligibility explicitly;

@@ -239,6 +239,7 @@ pub struct RawNotificationServient<B: ConsumerNotificationBinding, A: Notificati
     configuration: B::Configuration,
     binding_identity: (BindingId, BindingGeneration),
     authorizer: A,
+    validation: Option<Rc<dyn NotificationValidation>>,
     consumer: ConsumerInstanceRef,
     issuer: NotificationIssuer,
     slots: Vec<Slot<B::Participation>>,
@@ -269,8 +270,10 @@ fn unsupported() -> CoreError {
 fn reject<T>(input: T, error: CoreError) -> BindingInputRejection<T> {
     BindingInputRejection::new(input, BindingOperationalError::new(error))
 }
-fn debit(budget: &mut WorkBudget, class: WorkClass, n: usize) -> CoreResult<()> {
-    budget.consume(class, n as u64).map_err(|_| capacity())
+fn debit(budget: &mut WorkBudget, class: WorkClass, n: impl TryInto<u64>) -> CoreResult<()> {
+    budget
+        .consume(class, n.try_into().map_err(|_| capacity())?)
+        .map_err(|_| capacity())
 }
 fn binding_paired<B: ConsumerNotificationBinding>(
     binding: &B,
@@ -322,6 +325,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             configuration,
             binding_identity,
             authorizer,
+            validation: None,
             consumer,
             issuer: NotificationIssuer::default(),
             slots,
@@ -334,6 +338,29 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     }
     pub fn reserved_engine_bytes(&self) -> usize {
         self.reserved_bytes
+    }
+    /// Install immutable actual validation before any subscription exists.
+    /// The composed owner retains its backing and prepaid validation scratch.
+    #[allow(clippy::type_complexity)]
+    pub fn try_new_validated(
+        binding: B,
+        configuration: B::Configuration,
+        authorizer: A,
+        consumer: ConsumerInstanceRef,
+        limits: RawNotificationLimits,
+        validation: Rc<dyn NotificationValidation>,
+    ) -> Result<Self, BindingInputRejection<(B, B::Configuration, A, Rc<dyn NotificationValidation>)>>
+    {
+        match Self::try_new(binding, configuration, authorizer, consumer, limits) {
+            Ok(mut root) => {
+                root.validation = Some(validation);
+                Ok(root)
+            }
+            Err(e) => {
+                let ((b, c, a), error) = e.into_parts();
+                Err(BindingInputRejection::new((b, c, a, validation), error))
+            }
+        }
     }
     pub fn retained_subscriptions(&self) -> usize {
         self.retained
@@ -423,7 +450,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 self.consumer.clone(),
                 SubscriptionId::new(SlotIndex::new(i as u32), self.slots[i].generation.unwrap()),
             );
-            debit(budget, WorkClass::ProviderProbes, 2)?;
+            debit(
+                budget,
+                WorkClass::ProviderProbes,
+                self.authorizer.work().checked_add(1).ok_or_else(capacity)?,
+            )?;
             self.authorizer
                 .authorize(&id, &request.target, NotificationPermission::Establish)?;
             let support = self.binding.support(&program, kind)?;
@@ -432,6 +463,12 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             }
             if request.responses == ResponseRequirement::Required && !support.event_responses {
                 return Err(unsupported());
+            }
+            if let Some(validation) = &self.validation {
+                validation.subscription(&request.subscription, budget)?;
+            }
+            if !self.paired() {
+                return Err(stale());
             }
             let reservation = self
                 .reservation(
@@ -519,7 +556,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
         entry.check_live(paired)?;
-        debit(budget, WorkClass::ProviderProbes, 1)?;
+        debit(budget, WorkClass::ProviderProbes, authorizer.work())?;
         let result = authorizer.authorize(&entry.identity, &entry.request.target, permission);
         entry.sync_stop();
         if entry.state == NotificationState::Closing {
@@ -621,7 +658,10 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             {
                 return Err(capacity());
             }
-            debit(budget, WorkClass::ProviderProbes, 1)?;
+            debit(budget, WorkClass::ProviderProbes, self.authorizer.work())?;
+            if let Some(validation) = &self.validation {
+                validation.cancellation(cancellation.as_ref().unwrap(), budget)?;
+            }
             self.authorizer.authorize(
                 &e.identity,
                 &e.request.target,
@@ -728,7 +768,15 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             if !item.exposed || item.response_state != EventResponseState::Awaiting {
                 return Err(unsupported());
             }
-            item.response_state = EventResponseState::Pending;
+            if let Some(validation) = &self.validation {
+                validation.response(&input, budget)?;
+            }
+            e.check_live(binding_paired(
+                &self.binding,
+                &self.configuration,
+                self.binding_identity,
+            ))?;
+            e.queue.front_mut().unwrap().response_state = EventResponseState::Pending;
             Ok(i)
         })();
         match result {
@@ -817,7 +865,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         }
         if e.state == NotificationState::Closing {
             if !e.close_started && e.cancellation.is_some() && !e.cancel_admitted {
-                debit(budget, WorkClass::ProviderProbes, 1)?;
+                debit(budget, WorkClass::ProviderProbes, self.authorizer.work())?;
                 match if paired {
                     self.authorizer.authorize(
                         &e.identity,
@@ -974,9 +1022,12 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         // Prepay the independent post-callback policy probe before asking the
         // Binding for an owned value. A short work quantum never strands a
         // staged value or accidentally terminates a healthy conversation.
-        debit(budget, WorkClass::ProviderProbes, 1)?;
+        debit(budget, WorkClass::ProviderProbes, self.authorizer.work())?;
         debit(budget, WorkClass::QueueOperations, 1)?;
         debit(budget, WorkClass::BindingPolls, 1)?;
+        if let Some(validation) = &self.validation {
+            validation.prepay_data(budget)?;
+        }
         let signal = e
             .participant
             .as_mut()
@@ -1033,8 +1084,22 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 }
                 let item = e.staged.as_ref().unwrap();
                 let kind = NotificationKind::for_target(&e.request.target).unwrap();
+                let validation = self
+                    .validation
+                    .as_ref()
+                    .map_or(Ok(()), |v| v.data(item.native.data.as_ref()));
+                e.sync_stop();
+                if !binding_paired(&self.binding, &self.configuration, self.binding_identity) {
+                    e.fence(stale());
+                }
+                if e.state == NotificationState::Closing {
+                    return Ok(e.state);
+                }
+                let item = e.staged.as_ref().unwrap();
                 if item.native.recipient != e.identity {
                     e.fence(stale());
+                } else if let Err(error) = validation {
+                    e.fence(error);
                 } else if bytes.is_none_or(|n| n > self.limits.payload_backing_bytes)
                     || (kind == NotificationKind::PropertyObservation
                         && (item.native.data.is_none() || has_response))
@@ -1063,6 +1128,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 } else {
                     e.fence(CoreError::Backpressure(context(ErrorPhase::Delivery)));
                 }
+                // A linked validator may revoke the original Consumer too.
+                e.sync_stop();
             }
             Poll::Ready(Ok(NotificationSignal::Loss(n))) => {
                 if n == 0 {

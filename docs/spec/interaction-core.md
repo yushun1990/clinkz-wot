@@ -151,6 +151,21 @@ the item/byte queue is full. Explicit owner cleanup works after every cursor is
 lost; terminal acknowledgement releases the logical reservation. Native physical
 retirement and remote cancellation/response outcomes remain separate.
 
+The composed `ConsumerNotificationRuntime` consumes the selected source-free
+Event definition and captures actual services around that same raw lifecycle.
+It exposes the same paid `decline_response` operation for admitted optional
+opportunities, retaining native retirement before advance without sending or
+stopping; required and submitted responses remain non-declinable.
+Its immutable validation hook keeps subscription/data/dataResponse/cancellation
+roles separate, prepays data validation before native handoff, and validates each
+candidate before logical queue acceptance. Invalid or late data remains owned
+through cleanup and is never exposed. Currentness is rechecked after validation
+callbacks as well as native/policy callbacks. Each composed root prepays its
+Engine queue/validation envelope from the original bank; native queue/connection
+policy retains its separate Binding owner. This adds TD-driven Event execution
+for the declared MQTT subset, without granting TD qualification to raw calls or
+implementing Property observation, collections or native Event response rights.
+
 Producer emission has its own Host facet in `core::event` and
 `servient-finite::event`; it is neither a finite request nor a Consumer
 subscription conversation. An application registers an Event source on the

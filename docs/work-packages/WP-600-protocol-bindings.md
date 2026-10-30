@@ -108,11 +108,11 @@ HTTPS/security and other work retain their dependencies and qualification scope.
 
 ## TD-driven Consumer observation
 
-TD-driven notification selection/preparation, captured validation/security and
-control mappings remain open capabilities in WP-200/WP-400. A raw notification
-participant alone does not establish them. Their implementation follows the
-roadmap's basic coverage objective; production HTTP streaming is not a
-prerequisite for that Engine work. Preserve separate finite and notification
+TD-driven Event preparation and captured services now execute through the
+bounded MQTT Consumer facet below. TD-driven Property observation remains open
+in WP-200/WP-400; a raw notification participant alone does not establish it.
+Its implementation follows the roadmap's basic coverage objective; production
+HTTP streaming is not a prerequisite for that Engine work. Preserve separate finite and notification
 lifecycles. Event subscription/response and Producer notifications retain their
 own semantics and delivery increments.
 
@@ -223,8 +223,18 @@ Default qualification tests need no broker; execution-only compilation retains
 no Planning/TD dependency. The runnable `emit_event` example uses the same
 qualified public composition.
 
-TD-driven Consumer subscription establishment, selected native Consumer services,
-per-item validation, logical cursors/permission, unsubscribe/stop and cleanup
-remain required for a complete Engine Producer-to-Consumer Event path. Broader
-schema/security, TLS, QoS 1/2, replay/reconnect, Event responses with real native
-cardinality, collections and constrained execution remain outside this slice.
+The [Consumer MQTT integration](../../protocol-bindings/protocols/mqtt/tests/consumer_events.rs)
+now joins this Producer through TD-selected subscription establishment, actual
+captured validation/access services, per-item validation, independent logical
+cursors/permission, stop/unsubscribe and final socket/account release. The
+typed registry uses the open notification facet and owns source-independent
+definitions. Native topic refcounts, distribution, bounded queues and original
+control frames remain in MQTT. Focused real-broker cases cover replacement,
+authorization, invalid data, loss/overflow, retained data, cancellation, partial
+controls, broker failure and Drop cleanup; pure qualification tests cover
+unsupported semantics, ambiguity/selectors and actual registration/service pairing.
+The [MQTT README](../../protocol-bindings/protocols/mqtt/README.md) owns concrete
+scope and policies, including retained-data loss and the absence of replay.
+Broader schema/security, TLS, QoS 1/2, reconnect, Event responses with real native
+cardinality, separate control Forms, collections and constrained execution remain
+outside this slice. No package, architecture gate or milestone closes here.
