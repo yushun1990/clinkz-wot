@@ -164,7 +164,11 @@ impl Session {
         }
     }
 }
-fn write(stream: &TcpStream, cx: &mut Context<'_>, data: &[u8]) -> Poll<io::Result<usize>> {
+pub(crate) fn write(
+    stream: &TcpStream,
+    cx: &mut Context<'_>,
+    data: &[u8],
+) -> Poll<io::Result<usize>> {
     match stream.poll_write_ready(cx) {
         Poll::Pending => Poll::Pending,
         Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
@@ -175,7 +179,11 @@ fn write(stream: &TcpStream, cx: &mut Context<'_>, data: &[u8]) -> Poll<io::Resu
         },
     }
 }
-fn read(stream: &TcpStream, cx: &mut Context<'_>, data: &mut [u8]) -> Poll<io::Result<usize>> {
+pub(crate) fn read(
+    stream: &TcpStream,
+    cx: &mut Context<'_>,
+    data: &mut [u8],
+) -> Poll<io::Result<usize>> {
     match stream.poll_read_ready(cx) {
         Poll::Pending => Poll::Pending,
         Poll::Ready(Err(e)) => Poll::Ready(Err(e)),

@@ -8,6 +8,7 @@
 extern crate alloc;
 
 pub mod consumer;
+pub mod consumer_notification;
 pub mod notification;
 
 mod action;

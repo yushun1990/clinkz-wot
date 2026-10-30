@@ -205,7 +205,9 @@ empty Action roles, policy/replacement/cancellation and retained late results.
 Continuing/unspecified Action synchronicity, control operations, collections,
 additional/different response formats and unsupported schema/security assertions
 remain explicit unsupported alternatives. This is not a universal finite model
-for every WoT operation, notification preparation, or complete Action support.
+for every WoT operation or complete Action support. Notification preparation uses
+the separate typed facet described in the
+[Planning contract](../spec/planning.md#open-consumer-event-preparation).
 
 The existing registry/erasure is retained because the owned compiler is usable;
 its Property-shaped keys, requests and validator contract are replaced rather

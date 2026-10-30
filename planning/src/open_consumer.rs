@@ -1,7 +1,8 @@
 //! Open startup Consumer composition. Common TD admission is shared; native
 //! compilation is portable, owned and incremental. Only completed source-free
 //! definitions cross into execution. Finite and notification lifecycles remain
-//! separate; this registry prepares only the implemented finite facets.
+//! separate. Typed notification preparation is in the sibling facet below.
+mod notification;
 use crate::producer_composition::FormSite;
 use crate::*;
 use alloc::{sync::Arc, vec::Vec};
@@ -14,6 +15,7 @@ use clinkz_wot_td::{
     thing::Thing,
     *,
 };
+pub use notification::*;
 
 const MAX_REGISTRATIONS: usize = 32;
 const MAX_OPERATIONS: usize = 128;

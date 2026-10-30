@@ -11,7 +11,7 @@ behavior owner. Currentness cannot be copied into per-Binding registries. A
 retention reference for original accepted work grants neither fresh acceptance
 nor native shutdown authority.
 
-The Host Consumer's finite and raw notification owners capture the same independent
+The Host Consumer's finite and composed/raw notification owners capture the same independent
 `ConsumerInstance` reference. Revocation or authority Drop fences both, including
 unread finite results and callback-time late notifications. Each owner rechecks
 currentness after permission, codec and native callbacks before successful local
@@ -20,6 +20,14 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
+The composed Event owner captures the actual data/access services and separately
+prepared schema roles, prepays validation before native handoff and checks data
+before queue acceptance. Invalid/late data and first causes remain with the
+original subscription through cleanup. Its original Host bank conservatively
+funds the root queue and validation envelope until root disposal; raw owner-scoped
+limits alone are not an aggregate-accounting claim. Native topic sharing,
+distribution, bounded queues and connection/control-frame disposal remain in
+the Binding, independently of each logical recipient's authority and stop.
 
 `SAFE-PUBLISH-001`: Producer setup MUST validate the draft/known dependencies,
 capture actual providers/behavior and reserve setup/ingress/finalization/cleanup

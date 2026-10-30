@@ -199,10 +199,19 @@ retention, callback revocation and final release alongside the finite owner.
 Raw notification limits remain owner-scoped: this does not claim TD/schema
 qualification or shared aggregate Host-bank accounting for notification queues.
 
-TD-driven notification preparation still needs actual selected services and
-establishment/data/control roles. Continuing Consumer Action associations,
-constrained execution and automatic progress remain unimplemented. No universal
-runtime, session or all-family acceptance gate is introduced.
+`consumer_notification::ConsumerNotificationRuntime` now consumes the typed
+TD-selected Event definition and captures its actual data/access services around
+this same lifecycle. Validation prepays work before native handoff and checks
+each candidate before logical acceptance, with post-callback authority checks.
+Original bank leases fund the root's queue and validation envelope until runtime
+disposal. Event subscription/data/dataResponse/cancellation roles remain distinct;
+the MQTT subset explicitly rejects unsupported application control/response data.
+Real broker tests join the qualified Engine Producer to these independent
+Consumers and exercise stop/unsubscribe, loss, replacement and cleanup. Native
+matching/distribution/sharing and physical release remain Binding-owned.
+TD-driven observation, continuing Consumer Action associations, constrained
+execution and automatic progress remain unimplemented. No universal runtime,
+session or all-family acceptance gate is introduced.
 
 ## Open finite Consumer ownership
 

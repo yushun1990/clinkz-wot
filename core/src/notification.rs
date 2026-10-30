@@ -244,12 +244,38 @@ pub enum NotificationPermission {
 /// Actual captured application policy, rechecked at long-lived delivery and
 /// response/cancel. Native trust/credential services remain Binding-owned.
 pub trait NotificationAuthorizer {
+    fn work(&self) -> u64 {
+        1
+    }
     fn authorize(
         &self,
         recipient: &NotificationIdentity,
         target: &AffordanceTarget,
         permission: NotificationPermission,
     ) -> CoreResult<()>;
+}
+
+/// Optional captured validation for the raw lifecycle. Data work is prepaid
+/// before native handoff; validation cannot strand an unowned late candidate.
+/// Implementations are trusted, pure and finite, like ConsumerDataService.
+pub trait NotificationValidation {
+    fn subscription(
+        &self,
+        input: &SubscriptionInput,
+        budget: &mut clinkz_wot_foundation::WorkBudget,
+    ) -> CoreResult<()>;
+    fn cancellation(
+        &self,
+        input: &CancellationInput,
+        budget: &mut clinkz_wot_foundation::WorkBudget,
+    ) -> CoreResult<()>;
+    fn response(
+        &self,
+        input: &EventDataResponse,
+        budget: &mut clinkz_wot_foundation::WorkBudget,
+    ) -> CoreResult<()>;
+    fn prepay_data(&self, budget: &mut clinkz_wot_foundation::WorkBudget) -> CoreResult<()>;
+    fn data(&self, payload: Option<&Payload>) -> CoreResult<()>;
 }
 
 /// Full retained payload backing, including both String capacities and the Arc

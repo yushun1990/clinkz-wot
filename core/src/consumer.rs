@@ -127,6 +127,85 @@ pub struct ConsumerSchemas {
     pub output: Option<TypeSchema>,
 }
 
+/// Distinct Event application roles. Native SUBACK/UNSUBACK are not schemas.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ConsumerNotificationSchemas {
+    pub subscription: Option<TypeSchema>,
+    pub data: Option<TypeSchema>,
+    pub data_response: Option<TypeSchema>,
+    pub cancellation: Option<TypeSchema>,
+}
+
+/// Source-free typed notification handoff. The actual linked Binding checks
+/// its owned program/configuration; numeric tags alone grant no capability.
+/// Field order retains original funding until every executable owner is gone.
+pub struct ConsumerNotificationDefinition<B: crate::notification::ConsumerNotificationBinding> {
+    input: ConsumerNotificationDefinitionInput<B>,
+}
+pub struct ConsumerNotificationDefinitionInput<B: crate::notification::ConsumerNotificationBinding>
+{
+    pub binding: B,
+    pub program: B::Program,
+    pub configuration: B::Configuration,
+    pub identity: BindingRegistrationIdentity,
+    pub target: AffordanceTarget,
+    pub endpoint: Box<str>,
+    pub form: u32,
+    pub schemas: ConsumerNotificationSchemas,
+    pub services: ConsumerServices,
+    pub funding: Vec<HostCapacityReservation>,
+    pub bank: Arc<HostResourceAccounts>,
+}
+impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDefinition<B> {
+    /// Trusted source-free construction, not a TD support certificate. Refusal
+    /// returns every original owner; successful definitions expose no mutation.
+    pub fn try_new(
+        input: ConsumerNotificationDefinitionInput<B>,
+    ) -> Result<Self, BindingInputRejection<ConsumerNotificationDefinitionInput<B>>> {
+        let check = (|| {
+            if input.binding.identity()
+                != (
+                    input.identity.binding_id(),
+                    input.identity.binding_generation(),
+                )
+                || input.binding.configuration() != &input.configuration
+                || !matches!(input.target, AffordanceTarget::Event(_))
+                || !input.services.data.available()
+                || input.services.data.policy().validation_work == 0
+                || input.services.access.work() == 0
+                || ![
+                    input.schemas.subscription,
+                    input.schemas.data,
+                    input.schemas.data_response,
+                    input.schemas.cancellation,
+                ]
+                .into_iter()
+                .flatten()
+                .all(|s| input.services.data.supports_schema(s))
+            {
+                return Err(invalid());
+            }
+            input
+                .binding
+                .support(&input.program, crate::notification::NotificationKind::Event)?;
+            Ok(())
+        })();
+        match check {
+            Ok(()) => Ok(Self { input }),
+            Err(e) => Err(BindingInputRejection::new(
+                input,
+                BindingOperationalError::new(e),
+            )),
+        }
+    }
+    pub fn input(&self) -> &ConsumerNotificationDefinitionInput<B> {
+        &self.input
+    }
+    pub fn into_input(self) -> ConsumerNotificationDefinitionInput<B> {
+        self.input
+    }
+}
+
 /// Conservative remote-operation certainty, independent of local cancellation
 /// and validated result delivery. Any native progress may cross the effect edge;
 /// failure or cancellation afterwards cannot authorize implicit replay.

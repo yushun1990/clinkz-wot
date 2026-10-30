@@ -1,10 +1,12 @@
-# MQTT Producer Events
+# MQTT Producer and Consumer Events
 
 This bounded Host mapping joins an Event declared in a TD to pure preparation,
 closed native setup, complete final qualification, logical publication,
 application emission and actual MQTT broker distribution. It is the first
-executable Producer Event slice, not complete Event-family or production
-qualification. The Engine has no remote subscriber registry or fan-out loop.
+executable Producer Event slice. A TD-selected Consumer now joins it through
+real subscription, validated delivery, logical stop/unsubscribe and physical
+release. This remains a bounded Event subset, without complete Event-family or
+production qualification. The Engine has no remote subscriber fan-out loop.
 
 The [MQTT Binding draft](https://w3c.github.io/wot-binding-templates/bindings/protocols/mqtt/index.html)
 is an evolving work in progress, not a W3C Recommendation. This implementation
@@ -120,12 +122,97 @@ saturation, cancellation/deadline, replacement, late effects, broker failure,
 shared participation, original-bank retention and broker-observed final socket
 release. The opt-in manual workspace/feature/full CI runs this suite explicitly.
 
-A complete Producer-to-Consumer Event path still needs TD-driven Consumer
-notification preparation with the actual selected Binding/services, a real native
-Consumer subscription participant, establishment and per-item data validation,
-independent logical permission/cursors, unsubscribe/stop and retained cleanup.
-The existing raw Consumer notification kernel supplies lifecycle roles, not that
-integration. General DataSchema/security, QoS 1/2, TLS, reconnect/loss policies,
-dataResponse with actual response cardinality, collections and constrained
-profiles remain separate work. Native peer subscription/unsubscription here
-does not claim the missing Engine Consumer path.
+## TD-selected Consumer
+
+`MqttConsumerService` provisions a distinct Consumer connection service and
+supplies the actual startup-linked `MqttEventConsumer` registration. Typed
+`open_consumer::ConsumerNotificationRegistry` prepares one named Event, selecting
+the first completely supported subscribe Form in TD order, or the explicit
+Binding/Form selector. Multiple actual providers for one Form refuse. It uses
+the common admitted TD semantics and the same MQTT vocabulary interpretation as
+the Producer. The registry captures the actual `ConsumerDataService` (for example
+`MqttJsonData`) and application `ConsumerAccessService`; NoSec is not destination
+or application authorization. Registrations may come from external linked crates.
+The Consumer NoSec security definition admits no extra semantic fields.
+No dummy finite capability, native setup or logical permission is needed to compile.
+
+The owned `ConsumerNotificationDefinition` contains all four distinct Event
+schema roles, the actual native program/configuration, services and original
+funding. TD, semantic arena and registry can be destroyed before execution.
+The current MQTT subset requires Event `data` and rejects subscription and
+cancellation schemas, **any** dataResponse schema, response branches and the
+other unsupported assertions listed above. Mere presence of a dataResponse
+schema never creates a response right. A caller requiring native Event responses
+is refused before native acquisition; protocol SUBACK is not a dataResponse.
+
+`ConsumerNotificationRuntime` consumes the definition and an independent
+`ConsumerInstance` reference. It composes the existing raw notification lifecycle;
+it is not another execution kernel. Every subscription gets its own move-only
+cursor, identity, policy checks, queue, loss/stop state and settlement. The
+captured JSON/schema service validates each candidate before logical queue
+acceptance. Original authority is checked after native/validation callbacks and
+again at application delivery. No codec, executor or configuration is supplied
+per operation. Runtime construction reserves the owner-scoped Engine queue and
+validation envelope at the original Host bank; these conservative root leases
+last until runtime disposal. Pure compilation requires a per-step Planning work
+allowance of at least 4096 (the stock Gateway preset has 256); callers must
+explicitly provision that allowance, compilation temporary capacity and runtime
+limits. This does not qualify the unmodified Gateway resource profile.
+
+Native policy is fixed and bounded: at most 32 actual participation leases and
+32 exact topics per service, four queued payloads per participant, 4096 payload
+bytes per item, a bounded frame, one control in flight and two-second connect/
+control timeouts. Native socket, queues, frame, waker and control backing belong
+to this Binding policy, separate from Engine bank accounting. Compatible logical
+subscribers share a single native topic subscription and connection. The Binding
+matches and distributes received payloads (sharing immutable body storage);
+the Engine does no subscriber loop. Each recipient still validates independently.
+Native queue overflow drops the newest Event and reports loss to that recipient;
+Engine queue overflow follows its explicit DropNewest/Terminate policy.
+
+Native establishment waits for successful QoS 0 SUBACK. It fabricates no initial
+Event. Broker deliveries with RETAIN set are discarded and counted as loss;
+Terminate therefore closes on such loss. Under MQTT 3.1.1 a live retained
+publication is forwarded to existing subscribers with RETAIN cleared, so this
+policy cannot identify the original publisher's retained flag. A later logical
+join to an existing subscription receives no sibling's queued data. Matching is
+by reception at the native service, without a cross-incarnation wire-history,
+publisher identity, global ordering, replay or loss-recovery guarantee.
+
+Stop fences local delivery immediately, even with zero work or denied/malformed
+mapped cancellation. An empty `CancellationInput` requests the selected described
+unsubscribe; application data is refused with its original input. The current
+mapping supports that request only when the selected subscribe Form also includes
+`unsubscribeevent` (including TD defaults); separate control Forms are outside
+this Consumer subset. Local stop remains available otherwise. Cancellation is
+reauthorized before native control acceptance. Native lease cleanup releases
+interest without application control data: the final topic interest sends
+UNSUBSCRIBE and waits for UNSUBACK, while a sibling retains the shared interest.
+`Confirmed` refers to that original mapped removal's ACK, `Unknown` preserves an
+attempt without a known ACK, and `NotAttempted` covers local-only cleanup or a
+shared interest that required no mapped broker unsubscribe. Infrastructure
+housekeeping alone never claims authorized application cancellation.
+
+Control frames remain owned by the native service if their initiating logical
+owner drops; siblings can finish them without corrupting framing. Connection/
+protocol failure is terminal and is propagated to dependents. There is no retry,
+reconnect, replay or idle pool. Last actual participation disposal closes the
+socket even while service objects, definitions or settlements remain retained.
+A later explicit subscription may start a fresh clean connection on a healthy
+service; it resumes no old conversation or queue. A failed service requires a
+fresh service owner. Root Drop aborts
+locally without claiming remote drain. Manual progress is required.
+Progress runs inside a Tokio runtime with I/O and time enabled.
+
+`tests/consumer_events.rs` uses the existing qualified Engine Producer and a real
+Mosquitto broker for joined delivery, independent shared Consumers, replacement,
+schema mismatch, overflow and final release. Additional real broker wire inputs
+challenge invalid JSON and retained data. Focused cases also cover authorization,
+pre-effect refusal/stop, cancellation acceptance, partial-control cleanup, broker
+failure and original funding. `tests/consumer_qualification.rs` exercises pure
+selection, actual service pairing and unsupported descriptions without a broker.
+The same `broker-tests` command and manual CI step run both roles.
+
+General DataSchema/security, QoS 1/2, TLS, broader loss/reconnect policies,
+dataResponse with actual response cardinality, separate control mappings,
+collections and constrained profiles remain separate work.

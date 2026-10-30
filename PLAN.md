@@ -42,7 +42,7 @@ still have supported-subset limits.
 | Property observe / unobserve | Consumer notification conversation and stop | Open | Open | Raw test datagram observation only; no TD qualification |
 | Action invoke | Consumer finite call; Producer continuing invocation store | Explicit `synchronous: true` subset only | Continuing HTTP mapping with captured validation and controls | Test datagram synchronous Consumer; HTTP and test datagram Producer |
 | Action query / cancel | Producer retained invocation controls | Open | Qualified described HTTP control routes | HTTP and test datagram Producer; no composed Consumer control path |
-| Event subscribe / unsubscribe and Producer emission | Consumer Event conversation; distinct Producer emission and settlement | Open | Qualified MQTT Event sources and emission; broker-native subscribe/unsubscribe without control data or dataResponse | Mosquitto and independent native subscribers, including matching/distribution; no joined Engine Consumer path |
+| Event subscribe / unsubscribe and Producer emission | Consumer Event conversation; distinct Producer emission and settlement | Selected MQTT Event Form, captured services, validated delivery and logical stop/unsubscribe | Qualified MQTT Event sources and emission; broker-native subscribe/unsubscribe without control data or dataResponse | Engine Producer-to-Engine Consumers through Mosquitto, shared native subscriptions, independent logical authority and final release; independent wire peers also exercised |
 | Described collection operations | No collection execution path | Open | Open | No joined native collection evidence |
 
 Here **Open** means no joined implementation for that role/operation, even when
@@ -54,6 +54,11 @@ read/Action evidence is in
 [Producer Events](protocol-bindings/protocols/mqtt/tests/producer_events.rs)
 exercise the [declared MQTT subset](protocol-bindings/protocols/mqtt/README.md)
 through complete TD qualification and native broker delivery.
+[Consumer Events](protocol-bindings/protocols/mqtt/tests/consumer_events.rs)
+join the existing Producer to TD-selected Consumer subscriptions, per-item
+validation, stop/unsubscribe and cleanup, with native matching/distribution and
+shared connection ownership inside MQTT. Retained deliveries are discarded with
+visible loss; no replay or reciprocal response capability is claimed.
 [Downstream Consumer composition](tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
 distinguishes prepared finite I/O from raw observation; the
 [notification fixtures](servient/finite/tests/notification.rs) exercise Event

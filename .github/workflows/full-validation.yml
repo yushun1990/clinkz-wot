@@ -45,7 +45,7 @@ jobs:
         if: inputs.level != 'authority'
         run: cargo test --workspace --locked
 
-      - name: Exercise qualified Producer Events with a real MQTT broker
+      - name: Exercise qualified Producer and Consumer Events with a real MQTT broker
         if: inputs.level != 'authority'
         run: |
           sudo apt-get update -qq
