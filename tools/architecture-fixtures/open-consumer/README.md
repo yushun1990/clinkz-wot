@@ -43,3 +43,11 @@ independent. These are test protocols, not new production Bindings or TD-qualifi
 notification support. The moved notification lifecycle regressions run in
 `clinkz-wot-servient-finite`, with Core/Foundation as the only normal project
 dependencies. HTTP SSE is deferred.
+
+`tests/notification.rs` prepares an Event with a `dataResponse` schema through
+the public typed notification registry and destroys TD/registry owners before
+execution. Its in-memory response-capable Binding verifies that the composed
+`decline_response` path retains pending reply ownership, data and funding, then
+permits advance and the next Event without a send or subscription stop. Required
+and already submitted responses remain non-declinable. This is composed API and
+lifecycle evidence, not protocol response interoperability or MQTT response support.

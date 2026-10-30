@@ -153,6 +153,9 @@ retirement and remote cancellation/response outcomes remain separate.
 
 The composed `ConsumerNotificationRuntime` consumes the selected source-free
 Event definition and captures actual services around that same raw lifecycle.
+It exposes the same paid `decline_response` operation for admitted optional
+opportunities, retaining native retirement before advance without sending or
+stopping; required and submitted responses remain non-declinable.
 Its immutable validation hook keeps subscription/data/dataResponse/cancellation
 roles separate, prepays data validation before native handoff, and validates each
 candidate before logical queue acceptance. Invalid or late data remains owned

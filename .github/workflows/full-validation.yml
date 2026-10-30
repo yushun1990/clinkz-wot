@@ -45,6 +45,10 @@ jobs:
         if: inputs.level != 'authority'
         run: cargo test --workspace --locked
 
+      - name: Run independently linked Consumer composition regressions
+        if: inputs.level != 'authority'
+        run: cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml
+
       - name: Exercise qualified Producer and Consumer Events with a real MQTT broker
         if: inputs.level != 'authority'
         run: |

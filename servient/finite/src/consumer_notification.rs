@@ -241,6 +241,16 @@ where
     ) -> CoreResult<()> {
         self.root.advance(cursor, budget)
     }
+    /// Retire the exposed item's unused optional response without sending or
+    /// stopping. Progress must finish native retirement before cursor advance;
+    /// required or already submitted responses cannot be declined.
+    pub fn decline_response(
+        &mut self,
+        cursor: &mut NotificationCursor,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        self.root.decline_response(cursor, budget)
+    }
     pub fn stop(
         &mut self,
         cursor: &NotificationCursor,
