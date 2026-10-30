@@ -61,7 +61,7 @@ document = "docs/work-packages/WP-600-protocol-bindings.md"
 # evidence.
 # The real optional HTTP member implements the admitted Consumer tranche.
 # Deferred Zenoh/pico implementations are recoverable from Git, not maintained owners.
-owner_crates = ["planning", "protocol-bindings/protocols/http"]
+owner_crates = ["planning", "protocol-bindings/protocols/http", "protocol-bindings/protocols/mqtt", "codecs/json"]
 depends_on = ["WP-200", "WP-300", "WP-400"]
 
 [[package]]

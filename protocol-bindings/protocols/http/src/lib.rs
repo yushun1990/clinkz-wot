@@ -27,8 +27,8 @@ pub use finite_preparation::HttpFiniteProducer;
 #[cfg(all(test, feature = "prepare"))]
 mod identity_tests;
 mod producer;
+use clinkz_wot_codec_json as producer_validation;
 pub use finite_producer::{HttpFiniteBinding, HttpFiniteConfig, HttpFiniteReply};
-mod producer_validation;
 mod program;
 pub use producer::{
     HttpProducerConfig, HttpProducerExecutor, HttpProducerInstallation, HttpProducerProgram,

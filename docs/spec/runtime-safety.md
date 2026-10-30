@@ -105,9 +105,9 @@ identities before setup and reserves its controlled backing and qualification
 scratch at a shared account bank before taking the caller's pure owners. The
 original instance and each participation retain the same lifetime reservation;
 replacement, lost exposure guards and unread results cannot refund it. Complete
-native retirement and acknowledgement of retained Actions are separate checks.
+native retirement and acknowledgement of retained Actions/Events are separate checks.
 After a lost publication guard, logical reclamation requires actual disappearance
-of every original native owner and acknowledgement of all original Action work.
+of every original native owner and acknowledgement of all original Action/Event work.
 Neither guard Drop nor a diagnostic instance key proves completed native drain.
 
 The local publication commit flips preinstalled per-participation ingress gates
@@ -116,3 +116,23 @@ Readiness, gate loans, uniqueness and all fallible setup finish before commit;
 gate writes have no callback or partial-failure branch. A revoked exposure closes
 every original gate without requiring mutable access to the native drivers.
 Accepted Action work and physical retirement retain their independent owners.
+
+Producer Event emission owns an independent native publication and pins the
+original logical instance/reservation, including through replacement and loss of
+the exposure or Servient root. Data admission invokes the publication-captured
+policy/validator and checks the complete retained carrier backing. The native
+participant's declared bounded slot covers emission, frame, data, result and
+cleanup backing; refusal returns the original data. Cancellation records first
+local cause without work credit; funded progress retains any late native effect
+and completes retirement. Unread terminal settlement still holds its native slot
+and funding. Logical retirement additionally checks outstanding Event work, even
+if a participant incorrectly reports itself retired. Native publication errors
+fence affected logical currentness, and actual native service failure fences its
+dependent participations on progress. Drop performs bounded local disposal and
+never claims delivered Event data or completed remote cancellation.
+
+Native retirement Pending/error retains the complete emission and prevents
+acknowledgement. The first cleanup error remains observable alongside the first
+local cause and native publication effect; later successful local disposal is
+required before terminal acknowledgement. Linked native callbacks are followed
+by fresh authority checks before successful local settlement.

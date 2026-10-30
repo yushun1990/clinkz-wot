@@ -3,11 +3,13 @@ resolver = "3"
 members = [
     "clinkz-wot",
     "codecs/cbor",
+    "codecs/json",
     "core",
     "discovery",
     "foundation",
     "planning",
     "protocol-bindings/protocols/http",
+    "protocol-bindings/protocols/mqtt",
     "servient",
     "servient/finite",
     "td",

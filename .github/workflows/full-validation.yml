@@ -45,6 +45,13 @@ jobs:
         if: inputs.level != 'authority'
         run: cargo test --workspace --locked
 
+      - name: Exercise qualified Producer Events with a real MQTT broker
+        if: inputs.level != 'authority'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mosquitto
+          cargo test --locked -p clinkz-wot-binding-mqtt --features broker-tests
+
       - name: Run supported feature matrix
         if: inputs.level == 'feature-matrix' || inputs.level == 'full'
         run: sh scripts/check-feature-matrix.sh

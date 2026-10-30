@@ -299,6 +299,16 @@ hardware/profile qualification or package/gate/milestone completion.
 
 ## Owned composed Host Producer
 
+The joined Event extension uses the same instance registry and closed whole-TD
+publication, with registered `ProducerEventSource` values and separately captured
+Event mappings/services. `emit_event` admits application data to a distinct
+native publication owner rather than dispatching a finite handler. Emissions
+retain original instance/capacity, first local cause, native effect, cleanup and
+unread settlement through acknowledgement; outstanding Event work independently
+blocks logical retirement. The [MQTT slice](../../protocol-bindings/protocols/mqtt/README.md)
+exercises actual broker distribution and shared native lifetime. It does not
+complete TD-driven Consumer notification execution or general Event semantics.
+
 `producer_composition::ComposedProducerExposure` takes a complete pure
 `ComposedProducerInput`: actual staged instance/behavior/description, prepared
 definitions, captured immutable startup registrations and independently typed

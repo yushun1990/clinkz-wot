@@ -5,15 +5,12 @@ use clinkz_wot_core::{
     value_type::{TypeSchema, ValueType},
 };
 
-pub(super) fn validate(schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {
+pub fn validate(schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {
     let payload = output.data().ok_or_else(invalid)?;
     validate_payload(schema, payload)
 }
 
-pub(super) fn validate_payload(
-    schema: TypeSchema,
-    payload: &clinkz_wot_core::Payload,
-) -> CoreResult<()> {
+pub fn validate_payload(schema: TypeSchema, payload: &clinkz_wot_core::Payload) -> CoreResult<()> {
     if payload.body.len() > 4096
         || payload.content_type != "application/json"
         || payload.content_coding.is_some()
@@ -23,7 +20,7 @@ pub(super) fn validate_payload(
     validate_json(schema, &payload.body)
 }
 
-pub(super) fn validate_json(schema: TypeSchema, body: &[u8]) -> CoreResult<()> {
+pub fn validate_json(schema: TypeSchema, body: &[u8]) -> CoreResult<()> {
     if body.len() > 4096 {
         return Err(invalid());
     }
@@ -128,9 +125,7 @@ fn integral(token: &str) -> bool {
 
 fn invalid() -> CoreError {
     CoreError::Validation(
-        ErrorContext::new(ErrorPhase::Validate, RetryClass::Never).with_redacted_cause(
-            625,
-            "HTTP JSON payload violates prepared schema or encoding",
-        ),
+        ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+            .with_redacted_cause(625, "JSON payload violates prepared schema or encoding"),
     )
 }

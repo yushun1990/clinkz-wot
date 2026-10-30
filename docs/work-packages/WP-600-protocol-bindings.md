@@ -25,6 +25,10 @@ are outside this architecture migration.
 
 ## HTTP Producer data prerequisite
 
+The JSON/type validator is shared in `codecs/json`; moving it out of HTTP does
+not broaden its supported DataSchema subset or retire its existing regression
+obligations. MQTT Event data uses the same actual decoder/type service.
+
 The existing single-route HTTP service implements the prepared type-only schema
 subset from WP-200 using its actual JSON decoder and Core's value-type relation.
 The source-independent native program retains the assertion. Serving requires an
@@ -191,3 +195,36 @@ ownership/resource/framing contracts; their prior acceptance does not transfer.
 HTTP write completion describes local delivery only. No remote receipt, TLS,
 authentication, shared HTTP listener, multi-Form/operation or production
 resource/performance qualification follows from these tests.
+
+## TD-driven Producer Event emission
+
+The bounded Host [MQTT Event mapping](../../protocol-bindings/protocols/mqtt/README.md)
+adds pure operation preparation, actual startup-registration pairing, closed
+native installation and complete final TD qualification to the distinct
+Producer Event emission capability. It captures actual JSON/type and NoSec
+services and native publication identities before the local commit. Every
+advertised Event operation/Form is supported or publication refuses; control
+schemas, dataResponse and required response branches are not silently dropped.
+
+MQTT is selected for native broker matching/distribution: one application Event
+publication reaches zero or many independent subscribers without Engine fan-out.
+One application-owned native service can share a connection across Things;
+logical close preserves siblings and pending work pins physical resources.
+The shared JSON validator is extracted from HTTP without broadening its subset.
+This is basic executable capability evidence, not WP-600 production closure or
+a change to the selected Host HTTP/HTTPS release direction.
+
+`cargo test --locked -p clinkz-wot-binding-mqtt --features broker-tests` starts
+real Mosquitto peers and exercises actual delivery, native unsubscribe, NoSec/
+data refusal, actual service capture/substitution, prepublication fencing,
+slot/account saturation, cancellation/deadline, replacement, partial-write
+uncertainty, late success, broker failure and final socket/account release.
+Default qualification tests need no broker; execution-only compilation retains
+no Planning/TD dependency. The runnable `emit_event` example uses the same
+qualified public composition.
+
+TD-driven Consumer subscription establishment, selected native Consumer services,
+per-item validation, logical cursors/permission, unsubscribe/stop and cleanup
+remain required for a complete Engine Producer-to-Consumer Event path. Broader
+schema/security, TLS, QoS 1/2, replay/reconnect, Event responses with real native
+cardinality, collections and constrained execution remain outside this slice.

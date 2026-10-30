@@ -95,6 +95,7 @@ name = "clinkz-wot-binding-http"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "clinkz-wot-codec-json",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
  "clinkz-wot-planning",
@@ -109,6 +110,15 @@ dependencies = [
  "sha2-const-stable",
  "socket2",
  "tokio",
+]
+
+[[package]]
+name = "clinkz-wot-codec-json"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

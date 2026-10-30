@@ -93,6 +93,16 @@ one-off operation resource schema is mandated without an actual cache contract.
 
 ## Existing implementation disposition
 
+Whole-Thing Producer preparation also selects Event subscribe/unsubscribe Forms
+against actual Event source registration. The MQTT capability interprets its
+own resolved vocabulary, captures type-only data meaning and the exact startup
+registration, and rejects unsupported control data, dataResponse, response
+branches, security or other effective operations. It creates no native subscriber
+or socket during preparation. Composed publication binds the original native
+mapping and actual validation/security services and rechecks complete final
+meaning after closed installation. The concrete supported subset is owned by
+[the MQTT README](../../protocol-bindings/protocols/mqtt/README.md).
+
 The previous 2,180-line plan-set/API projection is superseded; its exact revision
 is available at the v5.1 basis in the authority map. Current Planning Property
 Read APIs remain restricted: the borrowed aggregate has eager all-bounds-first

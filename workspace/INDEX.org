@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0095-td-driven-producer-events.md][0095 TD-driven Producer Events over Native Distribution]]
+
 - [[file:0094-open-consumer-finite-integration.md][0094 Open Finite Consumer Preparation and Execution]]
 
 - [[file:0093-composed-producer-resource-retirement.md][0093 Composed Producer Resource and Retirement Ownership]]

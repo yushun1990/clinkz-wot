@@ -232,9 +232,9 @@ impl ProducerCapability for HttpActionProducer {
         definition: &dyn Any,
         budget: &mut WorkBudget,
     ) -> CoreResult<bool> {
-        Ok(
-            self.lower(input, budget)?.as_ref()
-                == definition.downcast_ref::<HttpActionDefinition>(),
-        )
+        let Some(expected) = definition.downcast_ref::<HttpActionDefinition>() else {
+            return Ok(false);
+        };
+        Ok(self.lower(input, budget)?.as_ref() == Some(expected))
     }
 }
