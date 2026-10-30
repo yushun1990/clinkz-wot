@@ -208,6 +208,9 @@ impl ProducerCapability for MqttEventProducer {
         d: &dyn Any,
         b: &mut WorkBudget,
     ) -> CoreResult<bool> {
-        Ok(self.lower(input, b)?.as_ref() == d.downcast_ref::<MqttEventDefinition>())
+        let Some(expected) = d.downcast_ref::<MqttEventDefinition>() else {
+            return Ok(false);
+        };
+        Ok(self.lower(input, b)?.as_ref() == Some(expected))
     }
 }

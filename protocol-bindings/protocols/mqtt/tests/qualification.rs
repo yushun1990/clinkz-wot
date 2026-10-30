@@ -6,6 +6,109 @@ use services::*;
 use support::*;
 
 #[test]
+fn final_qualification_rejects_foreign_definitions_with_matching_numeric_identity() {
+    use clinkz_wot_binding_http::{HttpActionProducer, HttpFiniteProducer, HttpProducerConfig};
+
+    fn behavior(scope: ValidatedProducerScope<'_>, operation: Operation) -> bool {
+        matches!(scope, ValidatedProducerScope::Property("level"))
+            && operation == Operation::ReadProperty
+    }
+
+    let addr = "127.0.0.1:18883".parse().unwrap();
+    let identity = (BindingId::new(7), BindingGeneration::INITIAL);
+    let config = HttpProducerConfig::for_loopback(addr).unwrap();
+    let http = HttpFiniteProducer::try_new(config, identity.0, identity.1, 100).unwrap();
+    let mqtt = MqttEventProducer::new(
+        MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
+        identity.0,
+        identity.1,
+    );
+    let action = HttpActionProducer::new(config, identity.0, identity.1);
+    let instance = authority(1);
+    let original = serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Final qualification",
+        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "properties":{"level":{"type":"integer","readOnly":true,
+            "forms":[{"href":format!("http://{addr}/level")}]}}
+    })
+    .to_string();
+    let prepared = prepare_thing(
+        &original,
+        instance.key(),
+        GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&http],
+        behavior,
+    )
+    .unwrap();
+    check_final_thing(
+        &original,
+        instance.key(),
+        GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&http],
+        &prepared,
+        behavior,
+    )
+    .unwrap();
+    let changed = original
+        .replace("integer", "string")
+        .replace("/level", "/changed");
+    assert!(
+        check_final_thing(
+            &changed,
+            instance.key(),
+            GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&http],
+            &prepared,
+            behavior,
+        )
+        .is_err(),
+        "the original registration must reject changed schema and path"
+    );
+
+    let mut accepted = Vec::new();
+    for (name, substitute) in [
+        ("MQTT Event", &mqtt as &dyn ProducerCapability),
+        ("HTTP Action", &action as &dyn ProducerCapability),
+    ] {
+        assert_eq!(substitute.identity(), http.identity());
+        assert!(
+            prepare_thing(
+                &original,
+                instance.key(),
+                GatewayDefaultV1::LIMITS,
+                &mut budget(),
+                &[substitute],
+                behavior,
+            )
+            .is_err(),
+            "{name} cannot prepare the original HTTP Property Read"
+        );
+        for (revision, text) in [("original", &original), ("changed", &changed)] {
+            if check_final_thing(
+                text,
+                instance.key(),
+                GatewayDefaultV1::LIMITS,
+                &mut budget(),
+                &[substitute],
+                &prepared,
+                behavior,
+            )
+            .is_ok()
+            {
+                accepted.push((name, revision));
+            }
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "foreign definitions passed final qualification: {accepted:?}"
+    );
+}
+
+#[test]
 fn same_numeric_slot_in_another_servient_is_not_topic_replacement_authority() {
     let addr = address();
     let provider = MqttEventProducer::new(

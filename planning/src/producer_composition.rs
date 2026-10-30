@@ -111,6 +111,8 @@ pub trait ProducerCapability {
     }
     /// Compare current complete meaning/services with the existing immutable
     /// definition. This must include support, not just a type/identity match.
+    /// A foreign definition or unsupported input returns false; two missing
+    /// mappings do not establish equivalent prepared meaning.
     fn check_final(
         &self,
         input: ProducerOperationInput<'_>,

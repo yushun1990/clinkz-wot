@@ -161,6 +161,7 @@ dependencies = [
 name = "clinkz-wot-binding-mqtt"
 version = "0.1.0"
 dependencies = [
+ "clinkz-wot-binding-http",
  "clinkz-wot-codec-json",
  "clinkz-wot-core",
  "clinkz-wot-foundation",

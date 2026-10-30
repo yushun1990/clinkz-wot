@@ -16,6 +16,7 @@ clinkz-wot-td = { path = "../../../td", optional = true }
 tokio = { version = "=1.52.3", default-features = false, features = ["net", "rt"] }
 
 [dev-dependencies]
+clinkz-wot-binding-http = { path = "../http" }
 clinkz-wot-servient = { path = "../../../servient" }
 serde_json = { workspace = true, features = ["std"] }
 tokio = { version = "=1.52.3", default-features = false, features = ["net", "rt", "time"] }
