@@ -160,9 +160,15 @@ fn validate_finite_binding_output(
     if valid_binding_response
         && matches!(
             operation,
-            Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+            Operation::ReadProperty
+                | Operation::WriteProperty
+                | Operation::InvokeAction
+                | Operation::ReadAllProperties
         )
-        && (operation != Operation::ReadProperty || output.data().is_some())
+        && (!matches!(
+            operation,
+            Operation::ReadProperty | Operation::ReadAllProperties
+        ) || output.data().is_some())
         && (operation != Operation::WriteProperty || output.data().is_none())
         && output.status() == InteractionStatus::Ok
         && metadata.payload_role() == ResponsePayloadRole::Application

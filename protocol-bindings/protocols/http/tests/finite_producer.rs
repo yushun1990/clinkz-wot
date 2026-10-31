@@ -103,7 +103,7 @@ fn native(addr: SocketAddr, key: ProducerInstanceKey, id: u32, schema: &str) -> 
             listen,
             program,
             key,
-            Arc::from("level"),
+            clinkz_wot_core::AffordanceTarget::Property(Arc::from("level")),
             10,
         )),
         BindingId::new(id),

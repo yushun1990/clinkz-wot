@@ -98,12 +98,14 @@ impl core::fmt::Debug for RawFiniteSettlement {
     }
 }
 
-/// Basic Property result shape. Raw mode permits unvalidated data bytes, not
+/// Basic Property/collection-read result shape. Raw mode permits unvalidated data bytes, not
 /// Action status/invocation metadata, untrusted Binding response claims, or a
 /// missing Read value. This initial Write facet supports empty success only.
 pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutput) -> bool {
     match operation {
-        Operation::ReadProperty => crate::response::property_read_handler_shape(output),
+        Operation::ReadProperty | Operation::ReadAllProperties => {
+            crate::response::property_read_handler_shape(output)
+        }
         Operation::WriteProperty => {
             let metadata = output.metadata();
             output.data().is_none()
@@ -215,6 +217,12 @@ pub trait FiniteIngressBinding {
 /// in the Engine. Callbacks are pure and bounded by the runtime input/output
 /// envelope and must not acquire native effects or application authority.
 pub trait FiniteValidator {
+    /// Complete additional callback work beyond the runtime's declared maximum
+    /// input/output body and media traversals. Passive bounded metadata, captured
+    /// at admission and rechecked before effects. Zero retains that base policy.
+    fn additional_validation_work(&self) -> u64 {
+        0
+    }
     fn validate_input(
         &self,
         candidate: &FiniteCandidate,

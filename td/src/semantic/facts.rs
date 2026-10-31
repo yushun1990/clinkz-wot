@@ -334,6 +334,34 @@ impl<'a> ResolvedSemanticDocument<'a> {
             schema: SchemaView(self.scope(SemanticScope::Property(name)).unwrap()),
         }
     }
+    /// Property schema loans in a ReadAllProperties root Form's semantic closure.
+    /// Individual Forms are not lent and need not support the root operation.
+    pub fn collection_properties(&self) -> Option<impl Iterator<Item = PropertyFacts<'_>>> {
+        if self.selected.as_ref()?.owner != FormOwner::Thing {
+            return None;
+        }
+        // Only the selected Form has a Form backing in this closure. Other
+        // root operations do not acquire unrelated Property schema obligations.
+        let form = self.scopes.iter().find_map(|scope| scope.form)?;
+        if !form
+            .op
+            .as_ref()?
+            .contains(&crate::data_type::Operation::ReadAllProperties)
+        {
+            return None;
+        }
+        Some(self.scopes.iter().filter_map(|scope| {
+            let SemanticScope::Property(name) = scope.key else {
+                return None;
+            };
+            let property = &self.selected.as_ref()?.thing.properties.as_ref()?[name];
+            Some(PropertyFacts {
+                name,
+                observable: property.observable,
+                schema: SchemaView(self.scope(SemanticScope::Property(name))?),
+            })
+        }))
+    }
     pub fn action(&self) -> Option<ActionFacts<'_>> {
         let selected = self.selected.as_ref()?;
         let FormOwner::Action(name) = selected.owner else {

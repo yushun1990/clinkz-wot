@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0099-thing-root-read-all-properties.md][0099 Executable Thing-root ReadAllProperties]]
+
 - [[file:0097-td-driven-property-write.md][0097 TD-driven Property Write]]
 
 - [[file:0096-td-driven-property-observation.md][0096 TD-driven Property observation]]

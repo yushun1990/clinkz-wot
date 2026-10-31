@@ -24,7 +24,8 @@ impl HttpProducerConfig {
 }
 
 /// Owned immutable native instructions, without a Copy/inline requirement on
-/// any shared compiler interface. This concrete first program is inline.
+/// any shared compiler interface. Collection schema backing is shared by its
+/// prepared definition and native configuration snapshots.
 /// Possession grants no installation, publication, dispatch or accept authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpProducerProgram {
@@ -37,8 +38,16 @@ pub struct HttpProducerProgram {
     pub(super) origin: [u8; 64],
     pub(super) origin_len: u8,
     pub(super) value_schema: clinkz_wot_core::value_type::TypeSchema,
+    pub(super) property_map: Option<Arc<clinkz_wot_core::collection::PropertyCollectionSchema>>,
 }
 impl HttpProducerProgram {
+    pub(crate) fn schema_backing_bytes(&self) -> usize {
+        self.property_map.as_ref().map_or(0, |s| {
+            s.retained_bytes()
+                + core::mem::size_of_val(s.as_ref())
+                + 2 * core::mem::size_of::<usize>()
+        })
+    }
     pub fn operation(&self) -> Operation {
         self.operation
     }
@@ -179,6 +188,12 @@ impl ProducerExecutor for HttpProducerExecutor {
 }
 impl ProducerOutputValidator for HttpProducerProgram {
     fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
+        if let Some(schema) = &self.property_map {
+            return super::producer_validation::validate_property_map(
+                schema,
+                output.data().ok_or_else(producer_unsupported)?,
+            );
+        }
         super::producer_validation::validate(self.value_schema, output)
     }
 }

@@ -324,7 +324,9 @@ pub fn publication_supports(
     op: Operation,
 ) -> bool {
     match scope {
-        ValidatedProducerScope::Thing => false, // no collection behavior registered yet
+        ValidatedProducerScope::Thing => {
+            publication.supports(&clinkz_wot_core::AffordanceTarget::Thing, op)
+        }
         ValidatedProducerScope::Property(n) => publication.supports_property(n, op),
         ValidatedProducerScope::Action(n) => publication.supports_action(n, op),
         ValidatedProducerScope::Event(n) => publication.supports_event(n, op),
@@ -523,10 +525,12 @@ impl ComposedProducerExposure {
                 &providers,
                 &input.prepared,
                 |scope, op| match scope {
+                    ValidatedProducerScope::Thing => input
+                        .instance
+                        .supports(&clinkz_wot_core::AffordanceTarget::Thing, op),
                     ValidatedProducerScope::Property(n) => input.instance.supports_property(n, op),
                     ValidatedProducerScope::Action(n) => input.instance.supports_action(n, op),
                     ValidatedProducerScope::Event(n) => input.instance.supports_event(n, op),
-                    _ => false,
                 },
             )?;
             if !input.instance.behaviors_described_by(|site, op| {

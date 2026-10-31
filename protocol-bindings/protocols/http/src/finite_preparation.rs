@@ -41,28 +41,29 @@ impl HttpFiniteProducer {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<HttpProducerProgram>> {
-        let FormSite::Property(property) = input.site else {
-            return Ok(None);
+        let property = match (input.site, input.operation) {
+            (FormSite::Property(p), Operation::ReadProperty | Operation::WriteProperty) => {
+                p.as_str()
+            }
+            (FormSite::Thing, Operation::ReadAllProperties) => "",
+            _ => return Ok(None),
         };
-        if !matches!(
-            input.operation,
-            Operation::ReadProperty | Operation::WriteProperty
-        ) {
-            return Ok(None);
-        }
         if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
         {
             return Ok(None);
         }
         self.listen
-            .compile_property(
-                ResolvedProducerInput::new(
-                    input.document,
-                    input.target,
+            .compile_mapping(
+                clinkz_wot_planning::ResolvedBindingInput {
+                    document: input.document,
+                    target: input.target,
                     property,
-                    input.form,
-                    input.operation,
-                ),
+                    form_index: input.form,
+                    operation: input.operation,
+                    owner: input.site.owner(),
+                    content_type: None,
+                    subprotocol: None,
+                },
                 budget,
             )?
             .map(Some)
@@ -89,7 +90,7 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
             self.listen,
             program,
             instance,
-            Arc::from(property),
+            clinkz_wot_core::AffordanceTarget::Property(Arc::from(property)),
             self.timeout_ticks,
         )
         .map_err(|_| crate::producer::producer_unsupported())?;
@@ -127,15 +128,15 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
     fn retained_bytes(&self) -> usize {
         // The snapshot shares the native property backing; charge the complete
         // bounded Arc allocation here until all participants release it.
-        256 + core::mem::size_of::<(Arc<str>, HttpProducerProgram)>()
+        256 + core::mem::size_of::<(AffordanceTarget, HttpProducerProgram)>()
             + 6 * core::mem::size_of::<usize>()
             + 64
     }
 }
 
-// This concrete participant supports HTTP Property Read/Write. The general
-// composition selector asks it about *each* Form/operation; it owns no
-// interpretation of Action, Event or collection semantics.
+// This concrete participant supports HTTP Property Read/Write and the native
+// Thing-root ReadAllProperties mapping. The composition selector asks it about
+// each actual Form/operation; it interprets no Action/Event lifecycle.
 impl ProducerCapability for HttpFiniteProducer {
     fn identity(&self) -> (BindingId, BindingGeneration) {
         (self.id, self.generation)
@@ -143,7 +144,7 @@ impl ProducerCapability for HttpFiniteProducer {
     fn definition_bytes(&self, definition: &dyn Any) -> Option<usize> {
         definition
             .downcast_ref::<HttpProducerProgram>()
-            .map(|_| core::mem::size_of::<HttpProducerProgram>())
+            .map(|p| core::mem::size_of::<HttpProducerProgram>() + p.schema_backing_bytes())
     }
     fn prepare(
         &self,
@@ -162,10 +163,10 @@ impl ProducerCapability for HttpFiniteProducer {
         Ok(self.compile_definition(input, budget)?.is_some())
     }
     fn final_check_temporary_bytes(&self) -> Option<usize> {
-        // Current lowering has a bounded 64-byte URI and fixed-size program.
-        // Cover its passive URI/compiler temporary backing without another
-        // retained definition or any native setup.
-        Some(4096)
+        // Cover the bounded URI/program and collection member/name backing used
+        // by a sequential pure support/final-check callback, including its Arc.
+        // No replacement definition survives and no native setup occurs.
+        Some(16_384)
     }
     fn check_final(
         &self,

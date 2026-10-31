@@ -121,7 +121,7 @@ native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
 The HTTP finite participant can share one listener across up to 32 independently
-prepared Property Read/Write mappings; native method/path collisions refuse before
+prepared Property Read/Write and Thing-root ReadAllProperties mappings; native method/path collisions refuse before
 setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`
 that checks the original candidate's separate input/output roles. There is no
 HTTP method, status or retry case in this SPI. A linked
@@ -226,3 +226,27 @@ A normal poll error and an original late observation from retirement are separat
 outcomes. The Consumer retains the poll error immediately, then retains and
 validates any late completion returned by `poll_close`; an existing error cannot
 be used to discard that observation or promote it to successful handoff.
+
+## Native Thing-root ReadAllProperties
+
+The implemented finite subset includes a root collection read; operation flags
+alone do not establish support. The actual compiler qualifies its own root Form,
+codec/collection service, native mapping and configuration. The HTTP participant
+retains an explicit `AffordanceTarget` for every native mapping, preserving Thing
+versus Property scope without a sentinel name. Native method/path collisions,
+including two different GET operations, refuse before acquisition. Required
+coverage compares the original root Form/operation/definition and actual participant.
+
+The captured `FiniteValidator::additional_validation_work` declares complete
+additional callback work beyond the finite owner's base maximum body/media
+traversals. Admission captures that passive bound; a changed bound fences the
+pair. Dispatch prepays the complete allowance before either validation or handler
+entry. HTTP declares its bounded named-member traversal; Consumer data policy
+likewise covers the complete collection callback. Short credit retains the
+original exchange and invokes no partially funded traversal.
+
+HTTP owns its single GET/200 JSON group mapping and complete-result refusal
+policy, documented in [its README](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).
+Other Bindings decline collection operations unless their actual native
+capabilities support them. The Engine does not call individual reads, interpret
+HTTP aggregation, or grant snapshot/atomicity guarantees.

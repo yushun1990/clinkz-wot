@@ -1,6 +1,7 @@
 //! Manually driven finite Consumer calls. This module depends only on Core and
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
+use clinkz_wot_core::thing::AffordanceSite;
 use clinkz_wot_core::{consumer::*, host_accounts::*, *};
 use clinkz_wot_foundation::{
     Generation, MonotonicInstant, ResourceKind as K, SlotIndex, WorkBudget, WorkClass as W,
@@ -27,8 +28,14 @@ impl Definition {
             access_work,
         }
     }
-    fn matches(&self, name: &str, operation: Operation) -> bool {
-        self.input.operation == operation && self.input.affordance.name() == Some(name)
+    fn matches(&self, target: AffordanceSite<'_>, operation: Operation) -> bool {
+        self.input.operation == operation
+            && match (&self.input.affordance, target) {
+                (AffordanceTarget::Thing, AffordanceSite::Thing) => true,
+                (AffordanceTarget::Property(a), AffordanceSite::Property(b))
+                | (AffordanceTarget::Action(a), AffordanceSite::Action(b)) => a.as_ref() == b,
+                _ => false,
+            }
     }
     fn binding(&self) -> BindingRegistrationIdentity {
         self.input.execution.identity()
@@ -58,10 +65,7 @@ impl Definition {
             || !self
                 .input
                 .schemas
-                .input
-                .into_iter()
-                .chain(self.input.schemas.output)
-                .all(|s| self.input.services.data.supports_schema(s))
+                .supports(self.input.services.data.as_ref())
             || !self
                 .input
                 .execution
@@ -90,7 +94,32 @@ impl Definition {
         {
             return Poll::Ready(Err(invalid()));
         }
-        self.validate_payload(self.input.schemas.output, output.data(), budget)
+        let has_output = match &self.input.schemas {
+            ConsumerFiniteSchemas::Value(s) => s.output.is_some(),
+            ConsumerFiniteSchemas::ReadAllProperties(_) => true,
+        };
+        if output.data().is_some() != has_output {
+            return Poll::Ready(Err(invalid()));
+        }
+        // An absent data role has no decoding work. Preserve empty finite
+        // Action/Write completion under zero codec credit.
+        if !has_output {
+            return Poll::Ready(Ok(()));
+        }
+        if output
+            .data()
+            .is_some_and(|p| p.body.len() as u64 > self.data_policy.body_bytes)
+        {
+            return Poll::Ready(Err(invalid()));
+        }
+        if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
+            return Poll::Pending;
+        }
+        Poll::Ready(
+            self.input
+                .schemas
+                .validate_output(self.input.services.data.as_ref(), output.data()),
+        )
     }
     fn validate_payload(
         &self,
@@ -246,8 +275,32 @@ impl ConsumerRuntime {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
-        self.start(name, Operation::ReadProperty, None, deadline, now, budget)
-            .map_err(|e| e.error().error().clone())
+        self.start(
+            AffordanceSite::Property(name),
+            Operation::ReadProperty,
+            None,
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| e.error().error().clone())
+    }
+    /// One selected Thing-root native interaction; never individual reads.
+    pub fn read_all_properties(
+        &self,
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        self.start(
+            AffordanceSite::Thing,
+            Operation::ReadAllProperties,
+            None,
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| e.error().error().clone())
     }
     /// A finite, explicitly synchronous Action. Rejection before native
     /// acceptance returns the original input, including all backing.
@@ -259,7 +312,14 @@ impl ConsumerRuntime {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
-        self.start(name, Operation::InvokeAction, input, deadline, now, budget)
+        self.start(
+            AffordanceSite::Action(name),
+            Operation::InvokeAction,
+            input,
+            deadline,
+            now,
+            budget,
+        )
     }
     /// Validate and authorize a selected Property value before native effects.
     /// Local refusal returns the original value. An admitted call is never
@@ -273,7 +333,7 @@ impl ConsumerRuntime {
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start(
-            name,
+            AffordanceSite::Property(name),
             Operation::WriteProperty,
             Some(input),
             deadline,
@@ -287,7 +347,7 @@ impl ConsumerRuntime {
     }
     fn start(
         &self,
-        name: &str,
+        target: AffordanceSite<'_>,
         operation: Operation,
         input: Option<Payload>,
         deadline: Deadline,
@@ -299,20 +359,26 @@ impl ConsumerRuntime {
             if !state.active || !state.consumer.is_current() {
                 return Err(stale());
             }
-            if name.len() > 256 {
+            let name_len = match target {
+                AffordanceSite::Thing => 0,
+                AffordanceSite::Property(n)
+                | AffordanceSite::Action(n)
+                | AffordanceSite::Event(n) => n.len(),
+            };
+            if name_len > 256 {
                 return Err(invalid());
             }
             if !pay(
                 budget,
                 W::PlanningItems,
-                (state.definitions.len() * (name.len() + 1)) as u64,
+                (state.definitions.len() * (name_len + 1)) as u64,
             ) {
                 return Err(busy());
             }
             let definition = state
                 .definitions
                 .iter()
-                .find(|d| d.matches(name, operation))
+                .find(|d| d.matches(target, operation))
                 .ok_or_else(unsupported)?
                 .clone();
             match deadline.checked_is_elapsed_at(now) {
@@ -389,7 +455,7 @@ impl ConsumerRuntime {
             budget.consume(W::BindingPolls, 1).unwrap();
             budget.consume(W::CleanupItems, 1).unwrap();
             match definition.validate_payload(
-                definition.input.schemas.input,
+                definition.input.schemas.input(),
                 input.as_ref(),
                 budget,
             ) {

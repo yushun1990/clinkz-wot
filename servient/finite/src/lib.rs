@@ -134,6 +134,9 @@ impl RawProducerInstance {
         advertised: impl Fn(clinkz_wot_core::thing::AffordanceSite<'_>, Operation) -> bool,
     ) -> bool {
         self.behaviors.iter().all(|b| match &b.target {
+            AffordanceTarget::Thing => {
+                advertised(clinkz_wot_core::thing::AffordanceSite::Thing, b.operation)
+            }
             AffordanceTarget::Property(name) => advertised(
                 clinkz_wot_core::thing::AffordanceSite::Property(name),
                 b.operation,
@@ -349,11 +352,13 @@ impl RawProducerServient {
                         .any(|prior| prior.name() == action.name())
             })
             && instance.behaviors.iter().enumerate().all(|(j, behavior)| {
-                matches!(
+                (matches!(
                     behavior.operation,
                     Operation::ReadProperty | Operation::WriteProperty
                 ) && matches!(&behavior.target, AffordanceTarget::Property(name)
                         if name.len() <= limits.target_name_bytes)
+                    || behavior.operation == Operation::ReadAllProperties
+                        && behavior.target == AffordanceTarget::Thing)
                     && !instance.behaviors[..j].iter().any(|prior| {
                         prior.operation == behavior.operation && prior.target == behavior.target
                     })
@@ -435,7 +440,7 @@ impl RawProducerServient {
             AffordanceTarget::Property(name) if name.len() > self.limits.target_name_bytes => {
                 return Err(CoreError::Backpressure(context()));
             }
-            AffordanceTarget::Property(_) => {}
+            AffordanceTarget::Property(_) | AffordanceTarget::Thing => {}
             _ => return Err(CoreError::UnsupportedOperation(context())),
         }
         let instance_index = self
@@ -483,6 +488,7 @@ impl RawProducerServient {
                 .and_then(|media| runtime.limits.output_body_bytes.checked_add(media))
                 .and_then(|n| n.checked_add(runtime.limits.input_body_bytes))
                 .and_then(|n| u64::try_from(n).ok())
+                .and_then(|n| n.checked_add(runtime.validation_work))
                 .and_then(|n| units.checked_add(n));
             let Some(total) = bytes else {
                 runtime.fail(CoreError::Backpressure(context()));
@@ -627,6 +633,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     ingress_gate: Rc<Cell<bool>>,
     first_cause: Option<CoreError>,
     validation: FiniteValidation,
+    validation_work: u64,
     deadline: Deadline,
     io_deadline: Deadline,
     last_now: Option<MonotonicInstant>,
@@ -651,6 +658,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         deadline: Deadline,
     ) -> Result<Self, BindingInputRejection<(B, B::Configuration)>> {
         let identity = binding.identity();
+        let validation_work = binding
+            .validator()
+            .map_or(0, |v| v.additional_validation_work());
         let valid = binding.configuration() == &configuration
             && limits.candidates > 0
             && limits.output_retained_bytes >= size_of::<InteractionOutput>()
@@ -672,6 +682,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             first_cause: None,
             settlement: None,
             validation,
+            validation_work,
             deadline,
             io_deadline: Deadline::NONE,
             last_now: None,
@@ -764,7 +775,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     fn pair_is_current(&self) -> bool {
         self.binding.identity() == self.identity
             && self.binding.configuration() == &self.configuration
-            && (self.validation == FiniteValidation::Raw || self.binding.validator().is_some())
+            && (self.validation == FiniteValidation::Raw
+                || self
+                    .binding
+                    .validator()
+                    .is_some_and(|v| v.additional_validation_work() == self.validation_work))
     }
 
     fn check_time(&mut self, now: MonotonicInstant) {
