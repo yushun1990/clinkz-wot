@@ -1,13 +1,15 @@
-# Host HTTP Property Read
+# Host HTTP Properties and Actions
 
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
-`ConsumerPropertyReadRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
+open `ConsumerRegistry`/`ConsumerRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
 permits cleartext IP access; `try_consumer_registration` constructs one complete,
 Consumer-only registration without I/O. Its native compiler implements the
-bounded NoSec / effective `application/json` Property Read mapping below from
-TD-resolved semantic input, through the existing public Consumer lifecycle.
+bounded NoSec / effective `application/json` Property Read/Write mapping from
+TD-resolved semantic input. The [composed Write subset](#composed-property-readwrite)
+uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
+uses `try_inline_consumer_registration` and remains a restricted Read adapter.
 
-The binding supports HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
+Reads support HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
 chunked and close-delimited bodies. One registration admits one call, including
 its unread terminal result. Each read owns a fresh connection and its driver.
 The selected immutable artifact supplies the exact path/query and Host authority.
@@ -108,8 +110,9 @@ owned native instructions after the TD is dropped; it is not a real alternate
 transport or general conformance proof. HTTP keeps its existing execution limits,
 including no URI-template/coding/additional-response execution. Common fact access
 does not imply support for those capabilities.
-The public native compiler adapter still requires `Copy` inline artifacts and one
-atomic compile callback; general owned/resumable Consumer compilation is unfinished.
+This concrete HTTP compiler uses inline artifacts and one atomic compile callback;
+the open Consumer SPI also supports owned resumable compilers, exercised by the
+independently linked datagram fixture.
 
 Native method/header interpretation is private to this package. The Engine filters
 Forms by declared scheme and effective WoT operation/security and owns publication,
@@ -119,9 +122,10 @@ described below; Consumer and Producer support policies remain role-specific.
 
 ## Identity, buffering and ownership
 
-The private encoding is `clinkz-http-ip-v6\0` followed by the exact ASCII policy
-in `src/lib.rs::PRIVATE_POLICY`. V6 includes the native read mapping and bounded
-request-header policy. The separate native configuration digest includes its
+The private encoding is `clinkz-http-ip-v7\0` followed by the exact ASCII policy
+in `src/lib.rs::PRIVATE_POLICY`. V7 includes operation-scoped Read/Write programs,
+bounded JSON input and the strict empty-204 Write completion mapping.
+The separate native configuration digest includes its
 artifact compatibility, target capacity and result limits. Client, compiler,
 complete registration, selected artifact and diagnostics agree. Historical private
 policies cannot substitute in either direction; identity tests recover original
@@ -353,8 +357,8 @@ then implements Core's native finite facet directly. It retains no handler,
 logical authority, compiler or TD. The old `HttpProducerInstallation` is not
 under this path. Both paths reuse the HTTP parser/socket/reply mechanics.
 
-Use `RawFiniteRuntime::try_new` with `FiniteOutputValidation::Required` to require
-the program's actual JSON/type validator. The associated `RawProducerServient`
+Use `RawFiniteRuntime::try_new` with `FiniteValidation::Required` to require
+the captured mapping's actual input/output JSON/type validator. The associated `RawProducerServient`
 owns the sole logical behavior and can drive independently typed native owners.
 Pass caller-clock time to progress. Native request deadlines do not reset with
 polls; dispatch prepays the declared complete result traversal before the codec.
@@ -433,10 +437,87 @@ The joined facade is Host/std/manual and contains optional preparation. The
 separate finite execution crate still links only Core/Foundation. Its generic
 source-free publication primitive relies on the facade's qualification; raw
 activation remains raw. Multiple independently prepared/installed participants
-can share one logical Thing. Shared HTTP listeners, TLS/authentication, Events,
+can share one logical Thing. This restricted facade does not exercise shared HTTP listeners; TLS/authentication, Events,
 embedded devices and resource/performance release qualification remain unproved. Original-bank
 reservations and a conservative bounded-input decoding allowance are distinct
 from measured OS/SDK or total allocator maxima.
+
+## Composed Property Read/Write
+
+The open `ConsumerRegistry` prepares separate `ReadProperty` and `WriteProperty`
+definitions from each effective TD Form operation. `ConsumerRuntime::write_property`
+takes the Property value as a `Payload`, validates it with the captured actual
+data service and authorizes the original Consumer/operation before native I/O.
+Its recoverable local rejection returns the original payload. Execution retains
+no source TD or preparation registry. Read and Write can coexist on one Property;
+neither consumes or replaces the other's definition.
+
+The Producer uses the existing whole-Thing `prepare_thing` and
+`ComposedProducerExposure` publication path. `HttpFiniteProducer` returns one
+owned `HttpProducerProgram` per operation/Form, including the Property value
+schema. `HttpFiniteConfig::try_from_mappings` shares one listener across up to
+32 native Property mappings and rejects duplicate method/path pairs before
+setup; `try_new` also permits a single mapping. Each selected definition must
+have exactly one actual participant, required validation service and behavior.
+No advertised operation or Form is silently discarded. Required input validation
+precedes fresh application authorization and handler entry; malformed or denied
+input cannot call the write behavior.
+
+The supported mapping is Host/std/manual HTTP/1.1 to nonzero loopback Producer
+addresses, cleartext IP Consumer targets, endpoint NoSec and JSON/type-only
+values up to 4096 bytes. The existing unsupported schema/security assertions
+refuse preparation. Default methods follow [TD 1.1 section 8.3.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#http-binding-assertions):
+GET for Read and PUT for Write. Explicit single-operation methods must match on
+the Producer; Write currently supports PUT on both roles. Explicit multiple-op
+Forms cannot supply one `htv:methodName`. Omitted/default and explicit Read/Write
+operation sets are exercised on the same endpoint. Property `readOnly` and
+`writeOnly` declarations constrain eligibility even with contradictory explicit
+Forms. Unsupported alternatives may remain visible in a Consumer support report;
+the complete retained Producer TD must qualify.
+
+One native exchange occupies the listener. Requests have an exact path and Host,
+at most 16 headers/8192 header bytes and 4096 read/write bytes per native poll.
+PUT requires exactly one nonzero Content-Length (<=4096) and exactly one
+`Content-Type: application/json`; chunked input, content coding, trailers,
+Expect, upgrades, pipelining and credential headers are refused. Native parsing
+collects the entire bounded input before offering a candidate. The shared Engine
+validator then checks its prepared Property schema before effects.
+
+Write handlers report empty `InteractionStatus::Ok` completion. HTTP maps this to
+an empty 204; handler/validation errors retain the existing 500/null mapping.
+The Consumer accepts only an empty primary 204 without Content-Length or
+Transfer-Encoding. Read-shaped 200, asynchronous 202, truncated/malformed
+responses and unexpected data do not establish Write success. This strict
+response subset is a concrete Binding contract, not a universal WoT requirement
+or an HTTP status switch in Core. It neither performs hidden Read nor confirms
+the physical state independently of the application's reported completion.
+
+Constructor refusal, native exchange, validated application completion and
+remote effect remain separate. `ConsumerSettlement::native_outcome` retains
+late results; `result` also requires original authority and fresh policy.
+`ConsumerEffect::Unknown` after native progress does not imply rollback on error
+or cancellation. Producer result, `FiniteEffect` and `FiniteDelivery` similarly
+retain separate facts. No owner automatically retries a write. Unread settlements
+pin original capacity/native occupancy; cancellation, replacement and root loss
+preserve accepted work until bounded retirement and final acknowledgement.
+
+`property_write` proves actual Consumer-to-Producer state changes and subsequent
+Read, independent definitions, readOnly/writeOnly and explicit operation
+applicability, full-description refusal, untrusted input, ambiguous native replies,
+handler error after effects, cancellation/timeout, replacement, lost services,
+unread capacity and final socket/account release. The independently Cargo-linked
+Consumer fixture executes Write over real datagrams using its own `WRITTEN`
+completion marker and opaque Core status 0, including retained late success.
+It is test-only and adds no production protocol.
+
+```sh
+cargo test --locked --offline -p clinkz-wot-binding-http --test property_write
+cargo test --locked --offline --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml
+```
+
+The restricted legacy single-read Consumer/Producer adapters retain their scope.
+This increment makes no general DataSchema/security, HTTPS, collection,
+constrained profile, automatic-progress or production qualification claim.
 
 ## Composed HTTP Producer Actions
 

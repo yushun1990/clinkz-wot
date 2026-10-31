@@ -1,8 +1,8 @@
-//! Optional Host HTTP/1.1 Consumer Property Read and Producer Property/Action binding.
+//! Optional Host HTTP/1.1 Consumer Property Read/Write and Producer Property/Action binding.
 //!
 //! This slice supports cleartext IP literals, compiled JSON reads, status
-//! 200, fixed-length/chunked/close-delimited responses and bounded discarded
-//! trailers. The Producer offers bounded loopback Property GET and continuing
+//! 200 reads and empty 204 writes. Read responses support fixed/chunked/close
+//! framing and bounded discarded trailers. The Producer offers Property GET/PUT and continuing
 //! Action POST/GET/DELETE through explicit preparation and manually progressed
 //! Servient ownership. See README.md for deployment and qualification limits.
 use clinkz_wot_core::*;
@@ -48,10 +48,10 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v6\0",
+    "clinkz-http-ip-v7\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
-    "GET-default;explicit-GET,POST,PUT,PATCH,DELETE;header8/1024;NoSec;200;json-exact;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
+    "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
     "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
     "fresh;concurrency1-until-release;header32/8192inclusive;body4096;",
     "trailer32/8192exclusive-duplicates-count;hyper-cumulative-extensions<16384;",
@@ -174,7 +174,7 @@ struct Client {
     config: HttpConsumerConfig,
     busy: Arc<AtomicBool>,
 }
-type Exchange = Pin<Box<dyn Future<Output = CoreResult<Vec<u8>>> + Send>>;
+type Exchange = Pin<Box<dyn Future<Output = CoreResult<(u16, Vec<u8>)>> + Send>>;
 struct Call {
     request: Option<OutboundRequest>,
     target: Option<(Target, HttpArtifact)>,
@@ -193,7 +193,10 @@ impl Drop for Call {
 
 impl binding::ClientBinding for Client {
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
-        operation == clinkz_wot_core::Operation::ReadProperty
+        matches!(
+            operation,
+            Operation::ReadProperty | Operation::WriteProperty
+        )
     }
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
         Some(self.config.configuration)
@@ -229,6 +232,24 @@ impl binding::ClientBinding for Client {
                 true,
             ));
         };
+        if target.1.operation != request.operation()
+            || match (request.operation(), request.input()) {
+                (Operation::ReadProperty, None) => false,
+                (Operation::WriteProperty, Some(payload)) => producer_validation::validate_payload(
+                    clinkz_wot_core::value_type::TypeSchema::Any,
+                    payload,
+                )
+                .is_err(),
+                _ => true,
+            }
+        {
+            return Err(reject(
+                request,
+                self.config,
+                ResourceFailureDomain::BindingPolicy,
+                true,
+            ));
+        }
         let handle = match transport::runtime() {
             Ok(h) => h,
             Err(_) => {
@@ -311,6 +332,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
             self.future = Some(Box::pin(transport::exchange(
                 target,
                 instructions,
+                self.request.as_ref().unwrap().input().cloned(),
                 self.allowance.clone(),
             )));
         }
@@ -328,15 +350,20 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
                             .with_binding(request.binding_id(), request.binding_generation()),
                     )
                 });
-                Poll::Ready(result.and_then(|body| {
-                    InteractionOutput::with_data(Payload::new(body, "application/json"))
+                Poll::Ready(result.and_then(|(status, body)| {
+                    let output = if request.operation() == Operation::WriteProperty {
+                        InteractionOutput::empty()
+                    } else {
+                        InteractionOutput::with_data(Payload::new(body, "application/json"))
+                    };
+                    output
                         .try_with_metadata(
                             InteractionOutputMetadata::default().with_untrusted_binding_response(
                                 BindingResponseMetadata::primary(
                                     request.binding_id(),
                                     request.binding_generation(),
                                     request.plan_id(),
-                                    200,
+                                    status,
                                 ),
                             ),
                         )
@@ -433,6 +460,7 @@ mod qualification {
         let future = transport::exchange(
             target,
             HttpArtifact::default(),
+            None,
             Arc::new(AtomicUsize::new(0)),
         );
         println!(
@@ -545,7 +573,10 @@ impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
         operation: Operation,
     ) -> CoreResult<()> {
         if binding.configuration() != self.0.configuration.configuration()
-            || operation != Operation::ReadProperty
+            || !matches!(
+                operation,
+                Operation::ReadProperty | Operation::WriteProperty
+            )
         {
             return Err(error(641, "HTTP Consumer policy/configuration mismatch"));
         }

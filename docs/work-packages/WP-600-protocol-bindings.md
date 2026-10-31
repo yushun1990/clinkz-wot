@@ -129,7 +129,7 @@ next slice or a dependency of other Affordance families. The concrete scope belo
 applies if this mapping is selected against the roadmap's remaining gaps.
 
 The existing [HTTP compiler](../../protocol-bindings/protocols/http/src/compiler.rs)
-accepts only `ReadProperty` without a subprotocol. Its
+accepts finite `ReadProperty`/`WriteProperty` without a subprotocol. Its
 [transport](../../protocol-bindings/protocols/http/src/transport.rs) validates a
 bounded JSON response and collects it to EOF. Reuse suitable HTTP/Hyper I/O
 mechanics, not that finite body collector or its total-response wire cap as the
@@ -183,8 +183,11 @@ Its normal runtime graph retains no TD, Planning or Servient dependency.
 HTTP protocol vocabulary, GET/path/Host matching, native correlation/reply,
 JSON/type checking and physical retirement remain in the Binding.
 
-The first supported joined TD retains one Property read, one Form, endpoint
-NoSec, JSON and primary 200 with the existing type-only schema subset. Supplied
+The restricted single-read facade retains one Property/Form. Whole-Thing
+composition additionally supports independently prepared Read/Write mappings
+on a shared HTTP listener, with endpoint NoSec, JSON and the existing type-only
+schema subset. GET returns primary 200 with a value; PUT requires validated
+input and reports empty terminal 204 only after handler success. Supplied
 nonzero loopback endpoints must match the immutable listen operands. Native
 readiness is not publication: closed setup accepts/parses no stream and buffers
 only the OS-owned bounded listen backlog requested at 128; backlog saturation
@@ -198,9 +201,15 @@ and delivery, before/after-publication cancellation, occupied-port failure,
 dependency loss, replacement, partial-write uncertainty and retained cleanup.
 The original raw HTTP and legacy installer tests continue to test their own
 ownership/resource/framing contracts; their prior acceptance does not transfer.
-HTTP write completion describes local delivery only. No remote receipt, TLS,
-authentication, shared HTTP listener, multi-Form/operation or production
-resource/performance qualification follows from these tests.
+Producer native response delivery does not prove remote receipt. The
+[Property Write target](../../protocol-bindings/protocols/http/tests/property_write.rs)
+adds Engine-to-Engine and independent-peer evidence for shared Read/Write,
+complete advertisement, input/authority refusals, uncertain effects, replacement,
+late results, bounded retained owners and final socket/account release.
+The [HTTP README](../../protocol-bindings/protocols/http/README.md#composed-property-readwrite)
+owns the exact supported mapping. TLS, authentication, general schemas,
+constrained/automatic execution and production resource/performance qualification
+remain open; no family, package, milestone or architecture gate is closed.
 
 ## TD-driven Producer Event emission
 

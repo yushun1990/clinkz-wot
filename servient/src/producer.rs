@@ -251,7 +251,7 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
             configuration,
             &self.logical,
             finite,
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             deadline,
         )
         .map_err(|_| CoreError::Validation(context()))?;

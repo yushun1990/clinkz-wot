@@ -90,8 +90,12 @@ impl OutboundRequest {
         let identity = artifact.identity();
         if identity.role() != BindingArtifactRole::ConsumerCall
             || identity.plan_id().generation() != identity.plan_set_generation().get()
-            || !matches!(operation, Operation::ReadProperty | Operation::InvokeAction)
+            || !matches!(
+                operation,
+                Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+            )
             || (operation == Operation::ReadProperty && input.is_some())
+            || (operation == Operation::WriteProperty && input.is_none())
         {
             return Err(BindingInputRejection::new(
                 input,

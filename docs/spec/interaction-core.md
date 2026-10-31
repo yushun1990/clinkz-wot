@@ -43,10 +43,17 @@ represented as schema conformance. Native status mapping remains Binding-owned.
 Consumer data services validate a payload independently of direction. Prepared
 `ConsumerSchemas` keep finite input and output distinct; absence of a data role
 is different from a present unconstrained value. The current finite path supports
-Property Read and explicitly synchronous Action invocation, including empty Action
+Property Read/Write and explicitly synchronous Action invocation, including empty Action
 input/output roles. Shape/identity seals require terminal primary application
 results and refuse continuing status/invocation references; captured codec/schema
 checks separately precede input effects and validated result handoff.
+
+A prepared Write requires the Property value as input and supports empty terminal
+application completion. It cannot reuse a Read definition or result schema.
+`readOnly` excludes Write and `writeOnly` excludes Read even with an explicit
+contradictory Form operation. Explicit Forms never acquire omitted operations.
+Required value constraints and effective security must be supported in full
+before selecting that operation; unimplemented assertions are not ignored.
 
 The implemented `value_type::TypeSchema` is a fixed-size type-only subset, not
 the general schema representation. Planning must refuse every required assertion
@@ -56,9 +63,12 @@ encodings and is a subset of `number`; binary floating-point rounding cannot
 establish integrality. The restricted Host Producer executor must check output
 with its captured program/services before successful delivery. Finite raw mode
 remains explicitly unvalidated. The shared finite owner can require the actual
-captured provider's output-validation facet: it checks complete result shape/
-backing before entering that service and retains its result through native
-delivery/retirement. This proves only that participant's output check, not
+captured provider's `FiniteValidator` input/output facet, replacing the finite
+output-only interface. It checks the original candidate's input before fresh
+application authorization and behavior entry, and complete result shape/backing
+before output validation. Both roles belong to the captured configuration and
+remain tied to the original operation through native delivery/retirement.
+This proves only that participant's data checks, not
 complete TD support or publication. Missing/lost required services fence progress.
 Serving requires an actual validation-service facet; numeric service limits do
 not establish it. Native installation alone need not provide that facet. Result
@@ -221,6 +231,14 @@ The finite Consumer settlement retains `ConsumerEffect` separately from its
 first local cause, original native outcome and validated application result.
 Native progress conservatively marks remote execution uncertain; cancellation
 or a communication/validation failure does not establish remote rollback.
+An admitted native success is not by itself a successful application outcome:
+`native_outcome()` retains normal/late native results independently of
+`result()`, which also requires terminal shape, captured validation, live original
+authority and fresh policy. A successful Write result reports completion under
+the selected mapping; it is not a Read or independent confirmation of physical
+state. Producer `FiniteEffect::NotInvoked/Unknown`, application result and native
+`FiniteDelivery` are separate axes. A handler error or invalid result after entry
+cannot downgrade Unknown to NotInvoked. No finite owner replays a write.
 
 Exact v5.1 payload/error/handler carrier schemas remain restricted implementation
 records, not a universal envelope or an active eighteen-handler ABI. The public

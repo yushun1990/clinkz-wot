@@ -201,7 +201,7 @@ fn prepared_http_program_executes_after_all_preparation_owners_are_dropped() {
 }
 
 #[test]
-fn v6_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
+fn v7_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
     let current = HttpConsumerConfig::for_cleartext_ip().unwrap();
     let captured = registration(current, BindingGeneration::INITIAL);
     assert_eq!(
@@ -227,7 +227,7 @@ fn v6_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
         artifact.identity().configuration(),
         current.configuration.configuration()
     );
-    // No runtime is entered. Reaching the actual client rejects with the v6
+    // No runtime is entered. Reaching the actual client rejects with the v7
     // diagnostic before raw acceptance, never opening a connection.
     let rejection = owner
         .start_finite(request(&artifact), &artifact)
@@ -248,7 +248,7 @@ fn v6_configuration_support_client_compiler_artifact_and_diagnostics_agree() {
         BindingConfigurationDigest::new(PRIVATE)
     );
     println!(
-        "v6 private={:02x?} configuration={:02x?}",
+        "v7 private={:02x?} configuration={:02x?}",
         PRIVATE,
         current.configuration.configuration().as_bytes()
     );

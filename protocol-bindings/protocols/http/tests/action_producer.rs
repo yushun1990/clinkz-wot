@@ -259,7 +259,7 @@ fn create(
                     output_media_capacity: 64,
                     output_retained_bytes: 8192,
                 },
-                FiniteOutputValidation::Required,
+                FiniteValidation::Required,
                 Deadline::NONE,
             )
             .ok()

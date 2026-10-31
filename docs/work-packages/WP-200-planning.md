@@ -193,13 +193,17 @@ priorities; Producer complete publication qualification is unchanged.
 Confirmed defects and alternatives are recorded in
 [0095](../../workspace/0095-consumer-operation-and-instance-composition.md).
 The shared registry now selects exact affordance kind/name/operation coordinates;
-it prepares Property Read and explicitly synchronous Action invocation using the
+it prepares Property Read/Write and explicitly synchronous Action invocation using the
 same owned compiler/actual service boundary. Same-named Properties and Actions
 remain independent. Required input and output schemas are captured separately;
 missing roles prohibit data, and each present schema must fit the supported
 shared type-only subset. Binding operation metadata only narrows eligibility.
+Read/Write on one Property retain separate definitions, Forms and schema roles.
+ReadOnly/writeOnly declarations and explicit operation applicability constrain
+selection before native preparation. Consumer unsupported alternatives remain
+visible; whole-TD Producer qualification never drops an unsupported Write.
 
-The independent downstream Binding executes both families over real datagrams
+The independent downstream Binding executes these finite interactions over real datagrams
 after TD/compiler destruction, including warm calls, rejected/unpaid inputs,
 empty Action roles, policy/replacement/cancellation and retained late results.
 Continuing/unspecified Action synchronicity, control operations, collections,

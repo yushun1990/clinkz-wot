@@ -261,6 +261,30 @@ impl ConsumerRuntime {
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
         self.start(name, Operation::InvokeAction, input, deadline, now, budget)
     }
+    /// Validate and authorize a selected Property value before native effects.
+    /// Local refusal returns the original value. An admitted call is never
+    /// automatically replayed, even if its remote effect remains uncertain.
+    pub fn write_property(
+        &self,
+        name: &str,
+        input: Payload,
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
+        self.start(
+            name,
+            Operation::WriteProperty,
+            Some(input),
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| {
+            let (input, error) = e.into_parts();
+            BindingInputRejection::new(input.expect("write input retained"), error)
+        })
+    }
     fn start(
         &self,
         name: &str,

@@ -2,7 +2,7 @@
 //! httparse inspects the raw head; Hyper owns request/response/body framing.
 use super::*;
 use bytes::Bytes;
-use http_body_util::{BodyExt, Empty};
+use http_body_util::{BodyExt, Full};
 use hyper_util::rt::TokioIo;
 use std::{future::poll_fn, io};
 use tokio::{
@@ -36,6 +36,7 @@ struct Ingress {
     head_done: bool,
     wire: usize,
     allowance: Arc<AtomicUsize>,
+    write: bool,
 }
 fn forbidden_trailer(name: &str) -> bool {
     [
@@ -78,8 +79,10 @@ impl Ingress {
                     return Err(invalid());
                 }
             }
-            httparse::Status::Complete(_) => {
-                if response.version != Some(1) || response.code != Some(200) {
+            httparse::Status::Complete(end) => {
+                if response.version != Some(1)
+                    || response.code != Some(if self.write { 204 } else { 200 })
+                {
                     return Err(invalid());
                 }
                 let mut media = 0;
@@ -133,7 +136,13 @@ impl Ingress {
                         }
                     }
                 }
-                if media != 1
+                if (!self.write && media != 1)
+                    || (self.write
+                        && (media > 1
+                            || transfer != 0
+                            || lengths != 0
+                            || declares_trailers
+                            || self.head_len != end))
                     || transfer > 1
                     || lengths > 1
                     || (transfer != 0 && lengths != 0)
@@ -203,8 +212,10 @@ impl AsyncWrite for Ingress {
 pub(super) async fn exchange(
     target: Target,
     instructions: HttpArtifact,
+    input: Option<Payload>,
     allowance: Arc<AtomicUsize>,
-) -> CoreResult<Vec<u8>> {
+) -> CoreResult<(u16, Vec<u8>)> {
+    let write = instructions.operation == Operation::WriteProperty;
     let socket = TcpStream::connect(target.address).await.map_err(|_| {
         // Socket/process/network availability is not a captured ingress or
         // concurrency limit. Keep returned I/O failure structured even when
@@ -222,13 +233,14 @@ pub(super) async fn exchange(
         head_done: false,
         wire: 0,
         allowance,
+        write,
     });
     let (mut sender, connection) = hyper::client::conn::http1::Builder::new()
         .max_headers(32)
         .max_header_size(8192)
         .max_buf_size(8192)
         .writev(false)
-        .handshake::<_, Empty<Bytes>>(io)
+        .handshake::<_, Full<Bytes>>(io)
         .await
         .map_err(|_| error(605, "HTTP handshake failed"))?;
     let mut request = hyper::Request::builder()
@@ -245,8 +257,19 @@ pub(super) async fn exchange(
     for (name, value) in instructions.headers() {
         request = request.header(name, value);
     }
+    if write
+        && !instructions
+            .headers()
+            .any(|(n, _)| n.eq_ignore_ascii_case("content-type"))
+    {
+        request = request.header("content-type", "application/json");
+    }
     let request = request
-        .body(Empty::<Bytes>::new())
+        .body(Full::new(
+            input
+                .as_ref()
+                .map_or_else(Bytes::new, |p| Bytes::copy_from_slice(&p.body)),
+        ))
         .map_err(|_| error(605, "HTTP request failed"))?;
     let operation = async {
         let response = sender
@@ -255,7 +278,8 @@ pub(super) async fn exchange(
             .map_err(|_| error(606, "HTTP response rejected"))?;
         // Defense in depth; the raw-head guard rejects before Hyper can hide
         // informational messages, normalize whitespace or remove framing fields.
-        if response.status() != hyper::StatusCode::OK {
+        let status = response.status().as_u16();
+        if status != if write { 204 } else { 200 } {
             return Err(error(606, "HTTP status rejected"));
         }
         let mut body = response.into_body();
@@ -290,7 +314,10 @@ pub(super) async fn exchange(
                 }
             }
         }
-        Ok(result)
+        if write && !result.is_empty() {
+            return Err(error(606, "HTTP write response body rejected"));
+        }
+        Ok((status, result))
     };
     let mut operation = std::pin::pin!(operation);
     let mut connection = std::pin::pin!(connection);
@@ -353,6 +380,7 @@ mod tests {
                     head_done: false,
                     wire: 0,
                     allowance: allowance.clone(),
+                    write: false,
                 };
                 let mut storage = [0; 16384];
                 let mut cx = Context::from_waker(Waker::noop());

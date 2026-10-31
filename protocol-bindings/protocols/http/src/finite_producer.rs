@@ -17,9 +17,8 @@ use std::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpFiniteConfig {
     listen: HttpProducerConfig,
-    program: HttpProducerProgram,
+    mappings: Arc<[(Arc<str>, HttpProducerProgram)]>,
     instance: ProducerInstanceKey,
-    property: Arc<str>,
     request_timeout_ticks: u64,
 }
 
@@ -44,9 +43,43 @@ impl HttpFiniteConfig {
         }
         Ok(Self {
             listen,
-            program,
+            mappings: Arc::from([(property, program)]),
             instance,
-            property,
+            request_timeout_ticks,
+        })
+    }
+
+    /// One native listener with independently prepared Property mappings.
+    /// Native method/path collisions refuse before socket acquisition. The
+    /// complete mapping set shares immutable backing across configuration loans.
+    #[allow(clippy::type_complexity)] // Refusal returns the complete original mapping owners.
+    pub fn try_from_mappings(
+        listen: HttpProducerConfig,
+        mappings: Vec<(Arc<str>, HttpProducerProgram)>,
+        instance: ProducerInstanceKey,
+        request_timeout_ticks: u64,
+    ) -> Result<Self, BindingInputRejection<Vec<(Arc<str>, HttpProducerProgram)>>> {
+        if mappings.is_empty()
+            || mappings.len() > 32
+            || request_timeout_ticks == 0
+            || mappings.iter().enumerate().any(|(i, (name, program))| {
+                name.len() > 256
+                    || program.listen_address() != listen.listen_address()
+                    || mappings[..i].iter().any(|(_, old)| {
+                        old.path_and_query() == program.path_and_query()
+                            && old.operation() == program.operation()
+                    })
+            })
+        {
+            return Err(BindingInputRejection::new(
+                mappings,
+                BindingOperationalError::new(crate::producer::producer_unsupported()),
+            ));
+        }
+        Ok(Self {
+            listen,
+            mappings: mappings.into(),
+            instance,
             request_timeout_ticks,
         })
     }
@@ -67,9 +100,9 @@ pub struct HttpFiniteReply {
 /// FiniteIngressBinding. Its only interaction with behavior is an owned candidate
 /// and a borrowed result; native polling cannot dispatch application code.
 ///
-/// Limits match the retained HTTP transport: one connection/exchange, GET,
-/// bodyless HTTP/1.1, exact path/Host, 16 headers/8192 bytes, 4096 I/O bytes per
-/// native poll, JSON output <=4096 bytes. Hyper/socket allocations are native
+/// At most 32 native Property mappings share one listener and one exchange.
+/// HTTP/1.1 GET/PUT, exact path/Host, 16 headers/8192 bytes, JSON input/output
+/// <=4096 bytes and 4096 I/O bytes per native poll. Hyper/socket allocations are native
 /// Host backing, not a transitive allocation-free or aggregate-RAM guarantee.
 /// Drop performs finite local socket/parser disposal without a task/network wait.
 pub struct HttpFiniteBinding {
@@ -146,10 +179,24 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         &self.configuration
     }
     fn engine_backing_bytes(&self) -> Option<usize> {
-        // Both configuration snapshots and accepted candidates share this
-        // original property Arc. HTTP input has no body/principal/fields.
+        // Both configuration snapshots and accepted candidates share the
+        // original mapping/name backing. Input body capacity is charged by the
+        // runtime; include its Arc header/alignment and media backing here.
         // The native issuer allocation is retained until replies are disposed.
-        Some(self.configuration.property.len() + 4 * core::mem::size_of::<usize>())
+        Some(
+            self.configuration
+                .mappings
+                .iter()
+                .map(|(name, _)| {
+                    name.len().next_multiple_of(core::mem::size_of::<usize>())
+                        + 2 * core::mem::size_of::<usize>()
+                })
+                .sum::<usize>()
+                + self.configuration.mappings.len()
+                    * core::mem::size_of::<(Arc<str>, HttpProducerProgram)>()
+                + 4 * core::mem::size_of::<usize>()
+                + 64,
+        )
     }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.configuration.instance == key
@@ -158,17 +205,18 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         &self,
         key: ProducerInstanceKey,
         site: clinkz_wot_core::thing::AffordanceSite<'_>,
-        _form: u32,
+        form: u32,
         operation: Operation,
         definition: &dyn Any,
     ) -> bool {
-        matches!(site, clinkz_wot_core::thing::AffordanceSite::Property(name) if name == self.configuration.property.as_ref())
-            && operation == Operation::ReadProperty
-            && key == self.configuration.instance
-            && definition.downcast_ref::<HttpProducerProgram>() == Some(&self.configuration.program)
+        key == self.configuration.instance && self.configuration.mappings.iter().any(|(name, program)| {
+            matches!(site, clinkz_wot_core::thing::AffordanceSite::Property(n) if n == name.as_ref())
+                && operation == program.operation && form == program.form
+                && definition.downcast_ref::<HttpProducerProgram>() == Some(program)
+        })
     }
-    fn output_validator(&self) -> Option<&dyn ProducerOutputValidator> {
-        Some(&self.configuration.program)
+    fn validator(&self) -> Option<&dyn FiniteValidator> {
+        Some(&self.configuration)
     }
     fn request_deadline(&self) -> Deadline {
         self.request_deadline
@@ -241,8 +289,14 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                     };
                     self.correlation = next;
                     self.request_deadline = Deadline::at(expires);
-                    self.connection =
-                        Some(NativeConnection::new(stream, &self.configuration.program));
+                    self.connection = Some(NativeConnection::from_programs(
+                        stream,
+                        self.configuration
+                            .mappings
+                            .iter()
+                            .map(|(_, p)| p.clone())
+                            .collect(),
+                    ));
                 }
             }
         }
@@ -255,19 +309,24 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                 self.request_deadline = Deadline::NONE;
                 Poll::Pending
             }
-            Poll::Pending if connection.take_candidate() => Poll::Ready(Ok(FiniteIngress {
-                candidates: vec![FiniteCandidate {
-                    instance: self.configuration.instance,
-                    target: AffordanceTarget::Property(self.configuration.property.clone()),
-                    operation: Operation::ReadProperty,
-                }],
-                input: InteractionInput::default(),
-                reply: HttpFiniteReply {
-                    correlation: self.correlation,
-                    issuer: Arc::downgrade(&self.issuer),
-                },
-            })),
-            Poll::Pending => Poll::Pending,
+            Poll::Pending => {
+                let Some((index, input)) = connection.take_request() else {
+                    return Poll::Pending;
+                };
+                let (property, program) = &self.configuration.mappings[index];
+                Poll::Ready(Ok(FiniteIngress {
+                    candidates: vec![FiniteCandidate {
+                        instance: self.configuration.instance,
+                        target: AffordanceTarget::Property(property.clone()),
+                        operation: program.operation,
+                    }],
+                    input,
+                    reply: HttpFiniteReply {
+                        correlation: self.correlation,
+                        issuer: Arc::downgrade(&self.issuer),
+                    },
+                }))
+            }
         }
     }
 
@@ -317,5 +376,57 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         drop(self.connection.take());
         drop(self.listener.take());
         Poll::Ready(Ok(delivery))
+    }
+}
+
+impl HttpFiniteConfig {
+    fn program_for(&self, candidate: &FiniteCandidate) -> CoreResult<&HttpProducerProgram> {
+        if candidate.instance != self.instance {
+            return Err(crate::producer::producer_unsupported());
+        }
+        self.mappings
+            .iter()
+            .find(|(name, p)| {
+                matches!(&candidate.target, AffordanceTarget::Property(n) if n == name)
+                    && candidate.operation == p.operation
+            })
+            .map(|(_, program)| program)
+            .ok_or_else(crate::producer::producer_unsupported)
+    }
+}
+impl FiniteValidator for HttpFiniteConfig {
+    fn validate_input(
+        &self,
+        candidate: &FiniteCandidate,
+        input: &InteractionInput,
+    ) -> CoreResult<()> {
+        let program = self.program_for(candidate)?;
+        match (program.operation, input.data.as_ref()) {
+            (Operation::ReadProperty, None) => Ok(()),
+            (Operation::WriteProperty, Some(payload)) => {
+                crate::producer_validation::validate_payload(program.value_schema, payload)
+            }
+            _ => Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            ))),
+        }
+    }
+    fn validate_output(
+        &self,
+        candidate: &FiniteCandidate,
+        output: &InteractionOutput,
+    ) -> CoreResult<()> {
+        let program = self.program_for(candidate)?;
+        match program.operation {
+            Operation::ReadProperty => program.validate(output),
+            Operation::WriteProperty if raw_finite_property_shape(program.operation, output) => {
+                Ok(())
+            }
+            _ => Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            ))),
+        }
     }
 }

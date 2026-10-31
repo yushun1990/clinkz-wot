@@ -3,9 +3,10 @@
 use super::producer::HttpProducerProgram;
 use bytes::Bytes;
 use clinkz_wot_core::{
-    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass,
+    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionInput, InteractionOutput,
+    Operation, Payload, RetryClass,
 };
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, body::Incoming, server::conn::http1, service::Service};
 use std::{
     convert::Infallible,
@@ -25,6 +26,9 @@ struct Bridge {
     read_left: usize,
     write_left: usize,
     wrote: bool,
+    mapping: Option<usize>,
+    operation: Option<Operation>,
+    input: Option<InteractionInput>,
 }
 struct ReplyFuture(Arc<Mutex<Bridge>>);
 impl Future for ReplyFuture {
@@ -40,12 +44,37 @@ struct BridgeService(Arc<Mutex<Bridge>>);
 impl Service<Request<Incoming>> for BridgeService {
     type Response = Reply;
     type Error = Infallible;
-    type Future = ReplyFuture;
-    fn call(&self, _request: Request<Incoming>) -> Self::Future {
-        // Raw head policy has already refused unsupported requests. Dropping
-        // Incoming is safe because only a bodyless request can reach here.
-        self.0.lock().unwrap().candidate = true;
-        ReplyFuture(self.0.clone())
+    type Future = Pin<Box<dyn Future<Output = Result<Reply, Infallible>> + Send>>;
+    fn call(&self, request: Request<Incoming>) -> Self::Future {
+        let bridge = self.0.clone();
+        let write = request.method() == hyper::Method::PUT;
+        Box::pin(async move {
+            let mut body = request.into_body();
+            let mut bytes = Vec::new();
+            while let Some(frame) = body.frame().await {
+                match frame.ok().and_then(|f| f.into_data().ok()) {
+                    Some(data) if data.len() <= 4096 - bytes.len() => {
+                        bytes.extend_from_slice(&data)
+                    }
+                    _ => {
+                        return Ok(Response::builder()
+                            .status(400)
+                            .body(Full::new(Bytes::new()))
+                            .unwrap());
+                    }
+                }
+            }
+            {
+                let mut state = bridge.lock().unwrap();
+                state.input = Some(if write {
+                    InteractionInput::with_data(Payload::new(bytes, "application/json"))
+                } else {
+                    InteractionInput::empty()
+                });
+                state.candidate = true;
+            }
+            ReplyFuture(bridge).await
+        })
     }
 }
 struct Ingress {
@@ -54,10 +83,9 @@ struct Ingress {
     head: [u8; 8192],
     len: usize,
     complete: bool,
-    authority: [u8; 64],
-    authority_len: usize,
-    path: [u8; 64],
-    path_len: usize,
+    programs: Vec<HttpProducerProgram>,
+    body_length: usize,
+    body_received: usize,
 }
 fn invalid() -> io::Error {
     io::Error::from(io::ErrorKind::InvalidData)
@@ -65,17 +93,16 @@ fn invalid() -> io::Error {
 impl Ingress {
     fn inspect(&mut self, bytes: &[u8]) -> io::Result<()> {
         if self.complete {
-            return if bytes.is_empty() {
+            self.body_received += bytes.len();
+            return if self.body_received <= self.body_length {
                 Ok(())
             } else {
                 Err(invalid())
             };
         }
-        if bytes.len() > self.head.len() - self.len {
-            return Err(invalid());
-        }
-        self.head[self.len..self.len + bytes.len()].copy_from_slice(bytes);
-        self.len += bytes.len();
+        let copied = bytes.len().min(self.head.len() - self.len);
+        self.head[self.len..self.len + copied].copy_from_slice(&bytes[..copied]);
+        self.len += copied;
         let mut headers = [httparse::EMPTY_HEADER; 16];
         let mut request = httparse::Request::new(&mut headers);
         let end = match request
@@ -86,25 +113,50 @@ impl Ingress {
             httparse::Status::Partial => return Ok(()),
             httparse::Status::Complete(end) => end,
         };
-        if end != self.len
-            || request.version != Some(1)
-            || request.method != Some("GET")
-            || request.path.map(str::as_bytes) != Some(&self.path[..self.path_len])
-        {
+        if request.version != Some(1) {
             return Err(invalid());
         }
+        let mapping = self
+            .programs
+            .iter()
+            .position(|p| {
+                request.path == Some(p.path_and_query())
+                    && request.method
+                        == Some(if p.operation == Operation::WriteProperty {
+                            "PUT"
+                        } else {
+                            "GET"
+                        })
+            })
+            .ok_or_else(invalid)?;
+        let program = &self.programs[mapping];
+        let write = program.operation == Operation::WriteProperty;
         let mut host = 0;
         let mut length = 0;
+        let mut media = 0;
         for h in request.headers.iter() {
             if h.name.eq_ignore_ascii_case("host") {
                 host += 1;
-                if h.value != &self.authority[..self.authority_len] {
+                if h.value != program.authority().as_bytes() {
                     return Err(invalid());
                 }
             }
             if h.name.eq_ignore_ascii_case("content-length") {
                 length += 1;
-                if h.value.is_empty() || !h.value.iter().all(|b| *b == b'0') {
+                if h.value.is_empty() || !h.value.iter().all(u8::is_ascii_digit) {
+                    return Err(invalid());
+                }
+                self.body_length = std::str::from_utf8(h.value)
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(invalid)?;
+                if self.body_length > if write { 4096 } else { 0 } {
+                    return Err(invalid());
+                }
+            }
+            if h.name.eq_ignore_ascii_case("content-type") {
+                media += 1;
+                if write && h.value != b"application/json" {
                     return Err(invalid());
                 }
             }
@@ -114,6 +166,9 @@ impl Ingress {
                 "upgrade",
                 "content-encoding",
                 "trailer",
+                "authorization",
+                "proxy-authorization",
+                "cookie",
             ]
             .iter()
             .any(|n| h.name.eq_ignore_ascii_case(n))
@@ -125,9 +180,20 @@ impl Ingress {
                 return Err(invalid());
             }
         }
-        if host != 1 || length > 1 {
+        if host != 1
+            || length > 1
+            || media > 1
+            || (write && (length != 1 || self.body_length == 0 || media != 1))
+        {
             return Err(invalid());
         }
+        self.body_received = self.len - end + bytes.len() - copied;
+        if self.body_received > self.body_length {
+            return Err(invalid());
+        }
+        let mut bridge = self.bridge.lock().unwrap();
+        bridge.mapping = Some(mapping);
+        bridge.operation = Some(program.operation);
         self.complete = true;
         Ok(())
     }
@@ -207,20 +273,20 @@ pub(super) struct NativeConnection {
 }
 impl NativeConnection {
     pub(super) fn new(socket: TcpStream, program: &HttpProducerProgram) -> Self {
+        Self::from_programs(socket, vec![program.clone()])
+    }
+    pub(super) fn from_programs(socket: TcpStream, programs: Vec<HttpProducerProgram>) -> Self {
         let bridge = Arc::new(Mutex::new(Bridge::default()));
-        let mut ingress = Ingress {
+        let ingress = Ingress {
             socket,
             bridge: bridge.clone(),
             head: [0; 8192],
             len: 0,
             complete: false,
-            authority: [0; 64],
-            authority_len: program.authority().len(),
-            path: [0; 64],
-            path_len: program.path_and_query().len(),
+            programs,
+            body_length: 0,
+            body_received: 0,
         };
-        ingress.authority[..ingress.authority_len].copy_from_slice(program.authority().as_bytes());
-        ingress.path[..ingress.path_len].copy_from_slice(program.path_and_query().as_bytes());
         let driver = Box::pin(
             http1::Builder::new()
                 .keep_alive(false)
@@ -246,11 +312,15 @@ impl NativeConnection {
         self.driver.as_mut().poll(cx)
     }
     pub(super) fn take_candidate(&mut self) -> bool {
+        self.take_request().is_some()
+    }
+    pub(super) fn take_request(&mut self) -> Option<(usize, InteractionInput)> {
         if !self.offered && self.bridge.lock().unwrap().candidate {
             self.offered = true;
-            true
+            let mut bridge = self.bridge.lock().unwrap();
+            Some((bridge.mapping.unwrap(), bridge.input.take().unwrap()))
         } else {
-            false
+            None
         }
     }
     pub(super) fn write_started(&self) -> bool {
@@ -272,7 +342,11 @@ impl NativeConnection {
                 && std::str::from_utf8(&p.body)
                     .is_ok_and(|json| serde_json::from_str::<serde::de::IgnoredAny>(json).is_ok())
         });
-        if result.is_ok() && body.is_none() {
+        let write_success = self.bridge.lock().unwrap().operation == Some(Operation::WriteProperty)
+            && result.is_ok_and(|o| {
+                clinkz_wot_core::finite::raw_finite_property_shape(Operation::WriteProperty, o)
+            });
+        if result.is_ok() && body.is_none() && !write_success {
             // Raw results still need an executable native encoding. Refuse
             // before queuing/writing anything; a replacement 500 would not be
             // delivery of this retained successful value. Its original owner
@@ -285,6 +359,7 @@ impl NativeConnection {
         self.replied = true;
         let (status, bytes) = match body {
             Some(p) => (200, Bytes::copy_from_slice(&p.body)),
+            None if write_success => (204, Bytes::new()),
             None => (500, Bytes::from_static(b"null")),
         };
         self.bridge.lock().unwrap().reply = Some(

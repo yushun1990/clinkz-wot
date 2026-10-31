@@ -44,7 +44,10 @@ impl HttpFiniteProducer {
         let FormSite::Property(property) = input.site else {
             return Ok(None);
         };
-        if input.operation != Operation::ReadProperty {
+        if !matches!(
+            input.operation,
+            Operation::ReadProperty | Operation::WriteProperty
+        ) {
             return Ok(None);
         }
         if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
@@ -52,7 +55,7 @@ impl HttpFiniteProducer {
             return Ok(None);
         }
         self.listen
-            .compile_property_read(
+            .compile_property(
                 ResolvedProducerInput::new(
                     input.document,
                     input.target,
@@ -124,11 +127,13 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
     fn retained_bytes(&self) -> usize {
         // The snapshot shares the native property backing; charge the complete
         // bounded Arc allocation here until all participants release it.
-        256 + 2 * core::mem::size_of::<usize>()
+        256 + core::mem::size_of::<(Arc<str>, HttpProducerProgram)>()
+            + 6 * core::mem::size_of::<usize>()
+            + 64
     }
 }
 
-// This concrete participant supports only HTTP Property Read. The general
+// This concrete participant supports HTTP Property Read/Write. The general
 // composition selector asks it about *each* Form/operation; it owns no
 // interpretation of Action, Event or collection semantics.
 impl ProducerCapability for HttpFiniteProducer {

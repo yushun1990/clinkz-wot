@@ -28,6 +28,84 @@ fn integer(n: &str) -> Option<Payload> {
 }
 
 #[test]
+fn downstream_write_uses_its_own_native_completion_and_retains_late_success_without_replay() {
+    for late in [false, true] {
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let probe = Arc::new(Probe::default());
+        let (peer, target) = udp();
+        let mut td = serde_json::to_value(source(json!([{"href":target}]))).unwrap();
+        td["properties"]["a"]
+            .as_object_mut()
+            .unwrap()
+            .remove("readOnly");
+        let td = serde_json::from_value(td).unwrap();
+        let registrations = registry(vec![registration(1, probe.clone())]);
+        let prepared = prepare(&registrations, &td, bank.clone());
+        assert_eq!(prepared.support().iter().filter(|s| s.selected).count(), 2);
+        drop(td);
+        drop(registrations);
+        let owner = instance();
+        let rt = finite(&owner, prepared, bank.clone());
+        let mut read = rt
+            .read_property("a", Deadline::NONE, now(), &mut work())
+            .unwrap();
+        assert!(
+            read.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                .is_pending()
+        );
+        exchange(&peer, b"11");
+        drop(poll(&mut read));
+        drop(read);
+        let mut call = rt
+            .write_property(
+                "a",
+                Payload::new(b"7".as_slice(), "application/json"),
+                Deadline::NONE,
+                now(),
+                &mut work(),
+            )
+            .unwrap_or_else(|_| panic!());
+        assert!(
+            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                .is_pending()
+        );
+        let mut bytes = [0; 256];
+        let (n, from) = peer.recv_from(&mut bytes).unwrap();
+        assert_eq!(&bytes[..n], b"WRITE /temperature 7\n");
+        if late {
+            probe.late_on_cancel.store(true, Ordering::Relaxed);
+            call.cancel();
+        }
+        peer.send_to(b"WRITTEN", from).unwrap();
+        let settlement = poll(&mut call);
+        assert_eq!(settlement.result().is_ok(), !late);
+        assert_eq!(settlement.operation(), Operation::WriteProperty);
+        assert_eq!(settlement.consumer(), &owner.reference());
+        assert_eq!(settlement.effect(), ConsumerEffect::Unknown);
+        assert!(
+            matches!(settlement.native_outcome(),BindingCallSettlement::Returned(Ok(o)) if o.data().is_none() && o.metadata().binding_response().unwrap().status_code()==0)
+        );
+        assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
+        drop(rt);
+        assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+        drop(call);
+        drop(settlement);
+        clean(&bank);
+        let port = *probe.ports.lock().unwrap().last().unwrap();
+        drop(UdpSocket::bind(port).unwrap());
+        peer.set_nonblocking(true).unwrap();
+        assert!(
+            matches!(peer.recv_from(&mut bytes),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock)
+        );
+        assert_eq!(
+            probe.starts.load(Ordering::Relaxed),
+            2,
+            "no warm recompilation or replay"
+        );
+    }
+}
+
+#[test]
 fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_warm_io() {
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let p = Arc::new(Probe::default());

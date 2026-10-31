@@ -423,7 +423,7 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
         if self.state != RawFiniteState::Starting
             || self.native_started
             || self.retained_owner.is_some()
-            || self.validation != FiniteOutputValidation::Required
+            || self.validation != FiniteValidation::Required
             || self.issuer.as_ptr() != Rc::as_ptr(&owner.issuer)
             || !self.pair_is_current()
             || !self.binding.prepared_for_instance(key)
@@ -449,7 +449,7 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
         // Explicitly unvalidated execution remains at activate_raw().
         self.issuer.as_ptr() == Rc::as_ptr(&owner.issuer)
             && self.state == RawFiniteState::InstalledClosed
-            && self.validation == FiniteOutputValidation::Required
+            && self.validation == FiniteValidation::Required
             && self.pair_is_current()
             && self.binding.prepared_for_instance(key)
     }

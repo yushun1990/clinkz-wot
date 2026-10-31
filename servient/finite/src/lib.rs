@@ -471,7 +471,7 @@ impl RawProducerServient {
         let mut units = (self.limits.instances
             + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
             + 1) as u64;
-        if runtime.validation == FiniteOutputValidation::Required {
+        if runtime.validation == FiniteValidation::Required {
             // Prepay the complete declared value/media traversal, before
             // behavior entry or a codec callback. Linked validators still owe
             // bounded cooperative work; this is not callback preemption.
@@ -480,6 +480,7 @@ impl RawProducerServient {
                 .output_media_capacity
                 .checked_mul(2)
                 .and_then(|media| runtime.limits.output_body_bytes.checked_add(media))
+                .and_then(|n| n.checked_add(runtime.limits.input_body_bytes))
                 .and_then(|n| u64::try_from(n).ok())
                 .and_then(|n| units.checked_add(n));
             let Some(total) = bytes else {
@@ -506,6 +507,15 @@ impl RawProducerServient {
         let result = self.resolve(&ingress, runtime.limits).and_then(|(i, b)| {
             let instance = &self.instances[i].instance;
             let behavior = &instance.behaviors[b];
+            if runtime.validation == FiniteValidation::Required {
+                runtime
+                    .binding
+                    .validator()
+                    .ok_or_else(|| CoreError::Validation(context()))?
+                    .validate_input(&ingress.candidates[0], &ingress.input)?;
+            }
+            // Validation is a trusted callback, but fresh authorization still
+            // precedes handler entry and cannot be replaced by native parsing.
             behavior.handler.authorize(&ingress.input)?;
             // Policy is application code and can invalidate an externally
             // mutable provider. Recheck before behavior entry, then retain the
@@ -513,11 +523,11 @@ impl RawProducerServient {
             if !runtime.pair_is_current() {
                 return Err(CoreError::Validation(context()));
             }
-            let validator = if runtime.validation == FiniteOutputValidation::Required {
+            let validator = if runtime.validation == FiniteValidation::Required {
                 Some(
                     runtime
                         .binding
-                        .output_validator()
+                        .validator()
                         .ok_or_else(|| CoreError::Validation(context()))?,
                 )
             } else {
@@ -548,7 +558,7 @@ impl RawProducerServient {
                 ));
             }
             if let Some(validator) = validator {
-                validator.validate(&output)?;
+                validator.validate_output(&ingress.candidates[0], &output)?;
             }
             Ok(output)
         });
@@ -577,11 +587,11 @@ pub struct RawFiniteLimits {
     pub output_retained_bytes: usize,
 }
 
-/// Output checking for this participant. Raw mode claims no schema conformance
+/// Input and output checking for this participant. Raw mode claims no schema conformance
 /// and cannot satisfy qualified publication; explicit raw acceptance uses
 /// `RawFiniteRuntime::activate_raw`. Required refuses an absent/lost service.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FiniteOutputValidation {
+pub enum FiniteValidation {
     Raw,
     Required,
 }
@@ -615,7 +625,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     state: RawFiniteState,
     ingress_gate: Rc<Cell<bool>>,
     first_cause: Option<CoreError>,
-    validation: FiniteOutputValidation,
+    validation: FiniteValidation,
     deadline: Deadline,
     io_deadline: Deadline,
     last_now: Option<MonotonicInstant>,
@@ -636,14 +646,14 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         configuration: B::Configuration,
         servient: &RawProducerServient,
         limits: RawFiniteLimits,
-        validation: FiniteOutputValidation,
+        validation: FiniteValidation,
         deadline: Deadline,
     ) -> Result<Self, BindingInputRejection<(B, B::Configuration)>> {
         let identity = binding.identity();
         let valid = binding.configuration() == &configuration
             && limits.candidates > 0
             && limits.output_retained_bytes >= size_of::<InteractionOutput>()
-            && (validation == FiniteOutputValidation::Raw || binding.output_validator().is_some());
+            && (validation == FiniteValidation::Raw || binding.validator().is_some());
         if !valid {
             return Err(rejection((binding, configuration)));
         }
@@ -753,8 +763,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     fn pair_is_current(&self) -> bool {
         self.binding.identity() == self.identity
             && self.binding.configuration() == &self.configuration
-            && (self.validation == FiniteOutputValidation::Raw
-                || self.binding.output_validator().is_some())
+            && (self.validation == FiniteValidation::Raw || self.binding.validator().is_some())
     }
 
     fn check_time(&mut self, now: MonotonicInstant) {

@@ -198,8 +198,10 @@ impl ConsumerRegistry {
                                 let mut chosen_budget = (0u64, 0u64, 0u64);
                                 let finite = matches!(
                                     (&site, operation),
-                                    (FormSite::Property(_), Operation::ReadProperty)
-                                        | (FormSite::Action(_), Operation::InvokeAction)
+                                    (
+                                        FormSite::Property(_),
+                                        Operation::ReadProperty | Operation::WriteProperty
+                                    ) | (FormSite::Action(_), Operation::InvokeAction)
                                 );
                                 let mut reason = if !finite {
                                     ConsumerUnsupported::Operation
@@ -801,12 +803,26 @@ fn common_services(
         return Err(unsupported());
     }
     match (site, operation) {
-        (FormSite::Property(_), Operation::ReadProperty) => Ok(ConsumerSchemas {
-            input: None,
-            output: Some(crate::type_schema::prepare_type_schema(
-                doc.property().schema,
-            )?),
-        }),
+        (FormSite::Property(_), Operation::ReadProperty)
+            if !doc.property().schema.facts().write_only =>
+        {
+            Ok(ConsumerSchemas {
+                input: None,
+                output: Some(crate::type_schema::prepare_type_schema(
+                    doc.property().schema,
+                )?),
+            })
+        }
+        (FormSite::Property(_), Operation::WriteProperty)
+            if !doc.property().schema.facts().read_only =>
+        {
+            Ok(ConsumerSchemas {
+                input: Some(crate::type_schema::prepare_type_schema(
+                    doc.property().schema,
+                )?),
+                output: None,
+            })
+        }
         (FormSite::Action(_), Operation::InvokeAction) => {
             // Absence makes no synchronous claim. Continuing invocations need
             // their own retained association and controls, not a finite facade.

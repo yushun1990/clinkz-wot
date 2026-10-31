@@ -82,8 +82,13 @@ the Host Consumer-only Property Read entry, and requests carry the selected
 operation and optional application input. Retained static/dual-role adapters stay
 explicitly Property Read-only. Neither facet owns Consumer currentness: finite
 calls and `ConsumerNotificationBinding` participants retain the same externally
-owned logical instance reference. Production HTTP remains Property Read-only on
-this Consumer path. HTTP SSE remains an optional mapping; the real datagram
+owned logical instance reference. Production HTTP supports Property Read/Write on
+this Consumer path, with native GET/PUT selection and separate 200 value/empty 204
+completion mappings. The finite Producer validation SPI now checks both original
+candidate input and output; a shared HTTP listener retains independently qualified
+Read/Write definitions and refuses native collisions. Concrete limits and
+response refusals are in the [HTTP README](../../protocol-bindings/protocols/http/README.md#composed-property-readwrite).
+HTTP SSE remains an optional mapping; the real datagram
 participants are test Bindings, not a new production protocol.
 
 The Producer publication facet now uses explicit Property/Event sources and

@@ -193,7 +193,7 @@ fn owner(authority: ProducerInstanceAuthority, app: Rc<Application>) -> RawProdu
 fn runtime<B: FiniteIngressBinding>(
     binding: B,
     owner: &RawProducerServient,
-    validation: FiniteOutputValidation,
+    validation: FiniteValidation,
 ) -> RawFiniteRuntime<B>
 where
     B::Configuration: Clone,
@@ -305,10 +305,27 @@ impl ControlledHttp {
         }
     }
 }
-impl ProducerOutputValidator for ControlledHttp {
-    fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
+impl FiniteValidator for ControlledHttp {
+    fn validate_input(
+        &self,
+        candidate: &FiniteCandidate,
+        input: &InteractionInput,
+    ) -> CoreResult<()> {
+        self.native
+            .validator()
+            .unwrap()
+            .validate_input(candidate, input)
+    }
+    fn validate_output(
+        &self,
+        candidate: &FiniteCandidate,
+        output: &InteractionOutput,
+    ) -> CoreResult<()> {
         self.validations.set(self.validations.get() + 1);
-        self.native.output_validator().unwrap().validate(output)
+        self.native
+            .validator()
+            .unwrap()
+            .validate_output(candidate, output)
     }
 }
 impl FiniteIngressBinding for ControlledHttp {
@@ -320,7 +337,7 @@ impl FiniteIngressBinding for ControlledHttp {
     fn configuration(&self) -> &Self::Configuration {
         self.native.configuration()
     }
-    fn output_validator(&self) -> Option<&dyn ProducerOutputValidator> {
+    fn validator(&self) -> Option<&dyn FiniteValidator> {
         self.live.get().then_some(self)
     }
     fn request_deadline(&self) -> Deadline {
@@ -380,12 +397,12 @@ fn one_logical_behavior_serves_independent_http_owners_and_survives_retirement()
     let mut first = runtime(
         native(a, key, 1, "integer"),
         &owner,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     let mut second = runtime(
         ControlledHttp::new(native(b, key, 2, "integer")),
         &owner,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     assert_eq!(first.step(&mut cx(), &mut work(0), now(0)), Poll::Pending);
     drop(TcpListener::bind(a).unwrap()); // Zero credit did not bind.
@@ -433,37 +450,37 @@ fn prepared_schema_is_enforced_on_real_http_without_claiming_raw_activation_is_p
         (
             "integer",
             b"\"not a number\"".as_slice(),
-            FiniteOutputValidation::Raw,
+            FiniteValidation::Raw,
             200,
         ),
         (
             "integer",
             b"\"not a number\"".as_slice(),
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             500,
         ),
         (
             "integer",
             b"1.00000000000000000000000001".as_slice(),
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             500,
         ),
         (
             "integer",
             b"100e-2".as_slice(),
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             200,
         ),
         (
             "number",
             b"-12.25e1".as_slice(),
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             200,
         ),
         (
             "string",
             b"\"\\uD800\"".as_slice(),
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             500,
         ),
     ] {
@@ -508,7 +525,7 @@ fn missing_or_lost_service_fences_start_dispatch_and_delivery_with_retained_clea
                     config,
                     &owner,
                     limits(),
-                    FiniteOutputValidation::Required,
+                    FiniteValidation::Required,
                     Deadline::NONE
                 )
                 .is_err()
@@ -516,7 +533,7 @@ fn missing_or_lost_service_fences_start_dispatch_and_delivery_with_retained_clea
             drop(TcpListener::bind(addr).unwrap());
             continue;
         }
-        let mut runtime = runtime(binding, &owner, FiniteOutputValidation::Required);
+        let mut runtime = runtime(binding, &owner, FiniteValidation::Required);
         ready(&mut owner, &mut runtime);
         let peer = if phase >= 2 {
             let peer = request(addr);
@@ -582,7 +599,7 @@ fn callback_dependency_loss_fences_entry_and_preserves_the_original_validated_la
         } else {
             *app.lose_on_handle.borrow_mut() = Some(binding.live.clone());
         }
-        let mut runtime = runtime(binding, &owner, FiniteOutputValidation::Required);
+        let mut runtime = runtime(binding, &owner, FiniteValidation::Required);
         ready(&mut owner, &mut runtime);
         let _peer = request(addr);
         until(&mut owner, &mut runtime, RawFiniteState::Dispatching);
@@ -680,7 +697,7 @@ fn incomplete_native_request_and_accepted_reply_keep_original_deadline_and_owner
         let mut owner = owner(authority, app.clone());
         let binding = ControlledHttp::new(native(addr, key, 1, "integer"));
         binding.stall_send.set(true);
-        let mut runtime = runtime(binding, &owner, FiniteOutputValidation::Required);
+        let mut runtime = runtime(binding, &owner, FiniteValidation::Required);
         ready(&mut owner, &mut runtime);
         let mut peer = if accepted {
             request(addr)
@@ -742,7 +759,7 @@ fn replacement_cannot_redirect_a_received_http_request() {
     let mut runtime = runtime(
         native(addr, key, 1, "integer"),
         &owner,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     ready(&mut owner, &mut runtime);
     let peer = request(addr);
@@ -770,7 +787,7 @@ fn native_setup_failure_and_last_runtime_drop_release_real_sockets() {
     let mut failed = runtime(
         native(addr, key, 1, "integer"),
         &owner,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     step(&mut owner, &mut failed);
     assert_eq!(failed.state(), RawFiniteState::Closing);
@@ -780,7 +797,7 @@ fn native_setup_failure_and_last_runtime_drop_release_real_sockets() {
     let mut live = runtime(
         native(addr, key, 2, "integer"),
         &owner,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     ready(&mut owner, &mut live);
     let mut peer = TcpStream::connect(addr).unwrap();
@@ -806,7 +823,7 @@ fn validation_traversal_is_prepaid_and_oversize_never_enters_the_codec() {
         let mut owner = owner(authority, app.clone());
         let binding = ControlledHttp::new(native(addr, key, 1, "integer"));
         let validations = binding.validations.clone();
-        let mut runtime = runtime(binding, &owner, FiniteOutputValidation::Required);
+        let mut runtime = runtime(binding, &owner, FiniteValidation::Required);
         ready(&mut owner, &mut runtime);
         let peer = request(addr);
         until(&mut owner, &mut runtime, RawFiniteState::Dispatching);
@@ -847,7 +864,7 @@ fn closed_gate_and_malformed_native_input_never_dispatch_and_listener_recovers()
     let mut runtime = runtime(
         native(addr, key, 1, "integer"),
         &owner,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     step(&mut owner, &mut runtime);
     let peer = request(addr);
@@ -918,7 +935,7 @@ fn deadline_and_clock_fencing_before_start_require_only_funded_native_cleanup() 
             config,
             &owner,
             limits(),
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             deadline,
         ));
         assert_eq!(
@@ -955,7 +972,7 @@ fn deadline_and_clock_fencing_before_start_require_only_funded_native_cleanup() 
     let mut owner = owner(authority, Rc::new(Application::default()));
     let binding = ControlledHttp::new(native(addr, key, 1, "integer"));
     let live = binding.live.clone();
-    let mut runtime = runtime(binding, &owner, FiniteOutputValidation::Required);
+    let mut runtime = runtime(binding, &owner, FiniteValidation::Required);
     step(&mut owner, &mut runtime);
     live.set(false);
     assert!(runtime.activate_raw().is_err());
@@ -993,7 +1010,7 @@ fn raw_http_mapping_rejection_preserves_the_undelivered_original_result() {
             config,
             &owner,
             envelope,
-            FiniteOutputValidation::Raw,
+            FiniteValidation::Raw,
             Deadline::NONE,
         ));
         ready(&mut owner, &mut runtime);
@@ -1064,7 +1081,7 @@ fn http_clock_failure_after_admission_preserves_phase_first_cause_and_late_resul
                 config,
                 &owner,
                 limits(),
-                FiniteOutputValidation::Required,
+                FiniteValidation::Required,
                 deadline,
             ));
             step(&mut owner, &mut runtime);
@@ -1167,7 +1184,7 @@ fn cleanup_clock_failure_is_attributed_and_completed_delivery_clears_request_dea
         let mut owner = owner(authority, Rc::new(Application::default()));
         let binding = ControlledHttp::new(native(addr, key, 1, "integer"));
         binding.close_failures.set(u32::from(cleanup_fault));
-        let mut runtime = runtime(binding, &owner, FiniteOutputValidation::Required);
+        let mut runtime = runtime(binding, &owner, FiniteValidation::Required);
         ready(&mut owner, &mut runtime);
         let instant = if cleanup_fault {
             MonotonicInstant::new(ClockId::new(92), 11)
@@ -1223,7 +1240,7 @@ fn cancelling_an_actual_partial_http_write_reports_unknown_delivery_and_keeps_th
     let mut runtime = runtime(
         native(addr, key, 1, "integer"),
         &owner,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     ready(&mut owner, &mut runtime);
     let mut peer = request(addr);
@@ -1272,7 +1289,7 @@ fn public_consumer_reads_the_shared_http_participant_after_sources_are_dropped()
     io.block_on(async {
         let authority = new_authority(); let key = authority.key(); let addr = address();
         let mut owner = owner(authority, Rc::new(Application::default()));
-        let mut server = runtime(native(addr, key, 1, "integer"), &owner, FiniteOutputValidation::Required);
+        let mut server = runtime(native(addr, key, 1, "integer"), &owner, FiniteValidation::Required);
         ready(&mut owner, &mut server);
         let policy = ConsumerPropertyReadPolicy::try_new_owned(
             BindingResourceContract::ConsumerOwnedHostV2, ResourceProfileId::GATEWAY_DEFAULT_V1,
