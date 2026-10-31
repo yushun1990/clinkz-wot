@@ -67,7 +67,7 @@ correlation, framing, reconnect and shared-service leases stay Binding-owned.
 Test that stopping one logical participant cannot retire siblings and that final
 physical destruction waits for remaining native work. Multi-family finite execution and raw notification composition with independent
 test Bindings supply this evidence at their claimed scopes. The typed
-`ConsumerNotificationPreparation` facet now hands TD-selected Event programs and
+`ConsumerNotificationPreparation` facet now hands TD-selected Property/Event programs and
 actual services to the same notification participation API. The registered MQTT
 Consumer shares native topic interests and distribution across independent
 logical Consumers; real Mosquitto integration joins the existing qualified
@@ -85,3 +85,12 @@ calls and `ConsumerNotificationBinding` participants retain the same externally
 owned logical instance reference. Production HTTP remains Property Read-only on
 this Consumer path. HTTP SSE remains an optional mapping; the real datagram
 participants are test Bindings, not a new production protocol.
+
+The Producer publication facet now uses explicit Property/Event sources and
+`PublicationData` variants over one narrow native publication lifecycle. Actual
+observe/subscribe mappings retain separate targets, schemas and captured services;
+they do not become finite calls or universal sessions. The MQTT mapping justifies
+observe/unobserve as SUBSCRIBE/UNSUBSCRIBE under its non-retained QoS 0 subset.
+Property and Event tests reaffirm native sharing, partial-control ownership,
+publication uncertainty and final physical release. The
+[MQTT README](../../protocol-bindings/protocols/mqtt/README.md) owns that subset.

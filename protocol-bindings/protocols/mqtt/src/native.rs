@@ -1,11 +1,11 @@
 use super::*;
 use clinkz_wot_core::{
-    BindingInputRejection, BindingOperationalError, CoreResult, event::*,
-    producer::ProducerInstanceKey, thing::AffordanceSite,
+    BindingInputRejection, BindingOperationalError, CoreResult, producer::ProducerInstanceKey,
+    publication::*, thing::AffordanceSite,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use clinkz_wot_servient_finite::{
-    ClosedProducerParticipation, ProducerEventEmission, ProducerOwnerToken,
+    ClosedProducerParticipation, ProducerNotificationPublication, ProducerOwnerToken,
     ProducerParticipationId, RawProducerServient,
 };
 use std::{
@@ -23,8 +23,8 @@ use std::{
 use tokio::net::TcpStream;
 
 const MAX_LEASES: usize = 32;
-const MAX_PACKET: usize = MAX_EVENT_BYTES + MAX_TOPIC_BYTES + 7;
-const DATA_BACKING: usize = MAX_EVENT_BYTES + 256;
+const MAX_PACKET: usize = MAX_NOTIFICATION_BYTES + MAX_TOPIC_BYTES + 7;
+const DATA_BACKING: usize = MAX_NOTIFICATION_BYTES + 256;
 static NEXT_CLIENT: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -198,11 +198,11 @@ pub(crate) fn read(
 /// Unique application-owned native service. Participations may share its one
 /// connection across Things/Servients; polling a lease grants no shutdown right.
 /// Last actual lease/work disposal closes the socket. No idle pool or reconnect.
-pub struct MqttEventService {
+pub struct MqttNotificationService {
     session: Rc<RefCell<Session>>,
 }
-impl MqttEventService {
-    pub fn new(producer: &MqttEventProducer) -> CoreResult<Self> {
+impl MqttNotificationService {
+    pub fn new(producer: &MqttNotificationProducer) -> CoreResult<Self> {
         let id = NEXT_CLIENT
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
             .map_err(|_| unsupported())?;
@@ -265,8 +265,8 @@ impl MqttEventService {
         &self,
         owner: &RawProducerServient,
         key: ProducerInstanceKey,
-        definitions: Vec<MqttEventDefinition>,
-    ) -> CoreResult<MqttEventRuntime> {
+        definitions: Vec<MqttNotificationDefinition>,
+    ) -> CoreResult<MqttNotificationRuntime> {
         if definitions.is_empty() || definitions.len() > 32 {
             return Err(unsupported());
         }
@@ -280,35 +280,39 @@ impl MqttEventService {
         {
             return Err(unsupported());
         }
-        let mut events: Vec<EventMapping> = Vec::new();
+        let mut mappings: Vec<NotificationMapping> = Vec::new();
         for d in &definitions {
-            if d.operation != Operation::SubscribeEvent {
+            if d.operation
+                != NotificationKind::for_target(&d.target)
+                    .unwrap()
+                    .start_operation()
+            {
                 continue;
             }
-            if events.len() == 16
-                || events
+            if mappings.len() == 16
+                || mappings
                     .iter()
-                    .any(|e| e.event == d.event || e.topic == d.topic)
+                    .any(|e| e.target == d.target || e.topic == d.topic)
             {
                 return Err(unsupported());
             }
-            events.push(EventMapping {
-                event: Arc::clone(&d.event),
+            mappings.push(NotificationMapping {
+                target: d.target.clone(),
                 topic: Arc::clone(&d.topic),
-                route: EventRoute::new(session.registration.binding),
+                route: NotificationRoute::new(session.registration.binding),
                 services: Rc::new(JsonNoSec { schema: d.schema }),
             });
         }
-        if events.is_empty()
+        if mappings.is_empty()
             || definitions.iter().any(|d| {
-                !events.iter().any(|e| {
-                    e.event == d.event && e.topic == d.topic && e.services.schema == d.schema
+                !mappings.iter().any(|e| {
+                    e.target == d.target && e.topic == d.topic && e.services.schema == d.schema
                 })
             })
             || definitions.iter().enumerate().any(|(i, d)| {
                 definitions[..i]
                     .iter()
-                    .any(|p| p.event == d.event && p.operation == d.operation)
+                    .any(|p| p.target == d.target && p.operation == d.operation)
             })
         {
             return Err(unsupported());
@@ -323,9 +327,9 @@ impl MqttEventService {
             if l.token.belongs_to(owner) && l.key.slot().slot() == key.slot().slot() {
                 return false;
             }
-            l.events
+            l.mappings
                 .iter()
-                .any(|a| events.iter().any(|b| a.topic == b.topic))
+                .any(|a| mappings.iter().any(|b| a.topic == b.topic))
         }) {
             return Err(unsupported());
         }
@@ -334,14 +338,14 @@ impl MqttEventService {
             session: Rc::clone(&self.session),
             token: owner.participation_token(),
             key,
-            events,
+            mappings,
             definitions,
             closing: Cell::new(false),
             gate: Rc::clone(&gate),
             funding: RefCell::new(None),
         });
         session.leases.push(Rc::downgrade(&lease));
-        Ok(MqttEventRuntime {
+        Ok(MqttNotificationRuntime {
             lease: Some(lease),
             token: owner.participation_token(),
             key,
@@ -357,31 +361,31 @@ impl MqttEventService {
 struct JsonNoSec {
     schema: TypeSchema,
 }
-impl ProducerEventServices for JsonNoSec {
-    fn authorize(&self, _data: &EventData, budget: &mut WorkBudget) -> CoreResult<()> {
+impl ProducerNotificationServices for JsonNoSec {
+    fn authorize(&self, _data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
         budget
             .consume(WorkClass::SecurityBranches, 1)
             .map_err(|_| busy())
     }
-    fn validate(&self, data: &EventData, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn validate(&self, data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
         budget
-            .consume(WorkClass::CodecInputBytes, data.0.body.len() as u64)
+            .consume(WorkClass::CodecInputBytes, data.payload().body.len() as u64)
             .map_err(|_| busy())?;
-        clinkz_wot_codec_json::validate_payload(self.schema, &data.0)
+        clinkz_wot_codec_json::validate_payload(self.schema, data.payload())
     }
 }
-struct EventMapping {
-    event: Arc<str>,
+struct NotificationMapping {
+    target: AffordanceTarget,
     topic: Arc<str>,
-    route: EventRoute,
+    route: NotificationRoute,
     services: Rc<JsonNoSec>,
 }
 struct Lease {
     session: Rc<RefCell<Session>>,
     token: ProducerOwnerToken,
     key: ProducerInstanceKey,
-    events: Vec<EventMapping>,
-    definitions: Vec<MqttEventDefinition>,
+    mappings: Vec<NotificationMapping>,
+    definitions: Vec<MqttNotificationDefinition>,
     closing: Cell<bool>,
     gate: Rc<Cell<bool>>,
     // Last disposal includes native publications which outlive the exposure.
@@ -400,7 +404,7 @@ impl Drop for Lease {
     }
 }
 
-pub struct MqttEventRuntime {
+pub struct MqttNotificationRuntime {
     lease: Option<Rc<Lease>>,
     token: ProducerOwnerToken,
     key: ProducerInstanceKey,
@@ -410,7 +414,7 @@ pub struct MqttEventRuntime {
     closed: bool,
     first_cause: Option<CoreError>,
 }
-impl MqttEventRuntime {
+impl MqttNotificationRuntime {
     /// Drive native preparation/health and local lease retirement. This checks
     /// the actual logical issuer; native failure fences this Thing's authority.
     pub fn step(
@@ -464,18 +468,18 @@ impl MqttEventRuntime {
         let Some(l) = &self.lease else {
             return false;
         };
-        let Some(d) = definition.downcast_ref::<MqttEventDefinition>() else {
+        let Some(d) = definition.downcast_ref::<MqttNotificationDefinition>() else {
             return false;
         };
         self.key == key
             && binding == d.registration.binding
-            && site == AffordanceSite::Event(&d.event)
+            && site == target_site(&d.target)
             && form == d.form
             && operation == d.operation
             && l.definitions.contains(d)
     }
 }
-impl ClosedProducerParticipation for MqttEventRuntime {
+impl ClosedProducerParticipation for MqttNotificationRuntime {
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.id
     }
@@ -501,17 +505,22 @@ impl ClosedProducerParticipation for MqttEventRuntime {
         }
         let mut bytes = size_of::<Self>()
             + size_of::<Lease>()
-            + size_of::<ProducerEventEmission<MqttPublication>>()
+            + size_of::<ProducerNotificationPublication<MqttPublication>>()
             + DATA_BACKING
             + 32 * size_of::<usize>()
-            + l.events.capacity() * size_of::<EventMapping>()
-            + l.definitions.capacity() * size_of::<MqttEventDefinition>();
+            + l.mappings.capacity() * size_of::<NotificationMapping>()
+            + l.definitions.capacity() * size_of::<MqttNotificationDefinition>();
         for d in &l.definitions {
-            bytes = bytes.checked_add(d.event.len() + d.topic.len() + 4 * size_of::<usize>())?;
-        }
-        for e in &l.events {
             bytes = bytes.checked_add(
-                e.event.len() + e.topic.len() + size_of::<JsonNoSec>() + 10 * size_of::<usize>(),
+                target_name(&d.target).len() + d.topic.len() + 4 * size_of::<usize>(),
+            )?;
+        }
+        for e in &l.mappings {
+            bytes = bytes.checked_add(
+                target_name(&e.target).len()
+                    + e.topic.len()
+                    + size_of::<JsonNoSec>()
+                    + 10 * size_of::<usize>(),
             )?;
         }
         Some(bytes)
@@ -544,33 +553,39 @@ impl ClosedProducerParticipation for MqttEventRuntime {
     ) -> bool {
         self.covers_definition(key, binding, site, form, operation, definition)
     }
-    fn event_publication(
+    fn notification_publication(
         &self,
         key: ProducerInstanceKey,
         binding: (BindingId, BindingGeneration),
         site: AffordanceSite<'_>,
         form: u32,
         definition: &dyn Any,
-    ) -> Option<(EventRoute, Rc<dyn ProducerEventServices>, usize)> {
+    ) -> Option<(
+        NotificationRoute,
+        Rc<dyn ProducerNotificationServices>,
+        usize,
+    )> {
+        let target = match site {
+            AffordanceSite::Property(n) => AffordanceTarget::Property(Arc::from(n)),
+            AffordanceSite::Event(n) => AffordanceTarget::Event(Arc::from(n)),
+            _ => return None,
+        };
         if !self.covers_definition(
             key,
             binding,
             site,
             form,
-            Operation::SubscribeEvent,
+            NotificationKind::for_target(&target)?.start_operation(),
             definition,
         ) {
             return None;
         }
-        let AffordanceSite::Event(name) = site else {
-            return None;
-        };
         let e = self
             .lease
             .as_ref()?
-            .events
+            .mappings
             .iter()
-            .find(|e| e.event.as_ref() == name)?;
+            .find(|e| e.target == target)?;
         Some((e.route.clone(), e.services.clone(), DATA_BACKING))
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
@@ -580,26 +595,26 @@ impl ClosedProducerParticipation for MqttEventRuntime {
         self.closed && self.lease.is_none()
     }
 }
-impl Drop for MqttEventRuntime {
+impl Drop for MqttNotificationRuntime {
     fn drop(&mut self) {
         self.begin_retire();
     }
 }
-impl ProducerEventBinding for MqttEventRuntime {
+impl ProducerNotificationBinding for MqttNotificationRuntime {
     type Publication = MqttPublication;
-    fn event_route(&self, event: &str) -> Option<&EventRoute> {
+    fn notification_route(&self, target: &AffordanceTarget) -> Option<&NotificationRoute> {
         self.lease
             .as_ref()?
-            .events
+            .mappings
             .iter()
-            .find(|e| e.event.as_ref() == event)
+            .find(|e| e.target == *target)
             .map(|e| &e.route)
     }
-    fn start_event(
+    fn start_publication(
         &mut self,
-        route: &EventRoute,
-        data: EventData,
-    ) -> Result<MqttPublication, BindingInputRejection<EventData>> {
+        route: &NotificationRoute,
+        data: PublicationData,
+    ) -> Result<MqttPublication, BindingInputRejection<PublicationData>> {
         let Some(l) = self
             .lease
             .as_ref()
@@ -607,9 +622,12 @@ impl ProducerEventBinding for MqttEventRuntime {
         else {
             return Err(reject(data, unsupported()));
         };
-        let Some(e) = l.events.iter().find(|e| e.route.same_mapping(route)) else {
+        let Some(e) = l.mappings.iter().find(|e| e.route.same_mapping(route)) else {
             return Err(reject(data, unsupported()));
         };
+        if Some(data.kind()) != NotificationKind::for_target(&e.target) {
+            return Err(reject(data, unsupported()));
+        }
         let mut s = l.session.borrow_mut();
         if s.phase != Phase::Ready {
             return Err(reject(data, s.first_cause.clone().unwrap_or_else(io_error)));
@@ -617,12 +635,12 @@ impl ProducerEventBinding for MqttEventRuntime {
         if s.busy {
             return Err(reject(data, busy()));
         }
-        if data.0.body.len() > MAX_EVENT_BYTES {
+        if data.payload().body.len() > MAX_NOTIFICATION_BYTES {
             return Err(reject(data, busy()));
         }
         let mut frame = [0; MAX_PACKET];
         frame[0] = 0x30; // QoS 0, DUP 0, RETAIN 0; no MQTT ACK or dataResponse.
-        let remaining = 2 + e.topic.len() + data.0.body.len();
+        let remaining = 2 + e.topic.len() + data.payload().body.len();
         let mut n = remaining;
         let mut at = 1;
         loop {
@@ -641,8 +659,8 @@ impl ProducerEventBinding for MqttEventRuntime {
         at += 2;
         frame[at..at + e.topic.len()].copy_from_slice(e.topic.as_bytes());
         at += e.topic.len();
-        frame[at..at + data.0.body.len()].copy_from_slice(&data.0.body);
-        at += data.0.body.len();
+        frame[at..at + data.payload().body.len()].copy_from_slice(&data.payload().body);
+        at += data.payload().body.len();
         s.busy = true;
         Ok(MqttPublication {
             lease: Rc::clone(l),
@@ -661,17 +679,17 @@ pub struct MqttPublication {
     frame: [u8; MAX_PACKET],
     len: usize,
     written: usize,
-    outcome: Option<NativeEventOutcome>,
-    data: EventData,
+    outcome: Option<NativePublicationOutcome>,
+    data: PublicationData,
     lease: Rc<Lease>,
 }
-impl NativeEventPublication for MqttPublication {
+impl NativeNotificationPublication for MqttPublication {
     fn poll_publish(
         &mut self,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
         cancel: bool,
-    ) -> Poll<NativeEventOutcome> {
+    ) -> Poll<NativePublicationOutcome> {
         if let Some(outcome) = &self.outcome {
             return Poll::Ready(outcome.clone());
         }
@@ -680,22 +698,22 @@ impl NativeEventPublication for MqttPublication {
             if self.written != 0 {
                 s.fail(io_error());
             }
-            self.outcome = Some(NativeEventOutcome {
+            self.outcome = Some(NativePublicationOutcome {
                 effect: if self.written == 0 {
-                    EventPublishEffect::NotPublished
+                    PublicationEffect::NotPublished
                 } else {
-                    EventPublishEffect::Uncertain
+                    PublicationEffect::Uncertain
                 },
                 cause: s.first_cause.clone(),
             });
         } else {
             let _ = s.step(cx, budget);
             if s.phase == Phase::Failed || s.phase == Phase::Closed {
-                self.outcome = Some(NativeEventOutcome {
+                self.outcome = Some(NativePublicationOutcome {
                     effect: if self.written == 0 {
-                        EventPublishEffect::NotPublished
+                        PublicationEffect::NotPublished
                     } else {
-                        EventPublishEffect::Uncertain
+                        PublicationEffect::Uncertain
                     },
                     cause: Some(s.first_cause.clone().unwrap_or_else(io_error)),
                 });
@@ -713,19 +731,19 @@ impl NativeEventPublication for MqttPublication {
                         self.written += n;
                         if self.written == self.len {
                             s.locally_published = s.locally_published.saturating_add(1);
-                            self.outcome = Some(NativeEventOutcome {
-                                effect: EventPublishEffect::LocallyPublished,
+                            self.outcome = Some(NativePublicationOutcome {
+                                effect: PublicationEffect::LocallyPublished,
                                 cause: None,
                             });
                         }
                     }
                     Poll::Ready(Err(_)) => {
                         s.fail(io_error());
-                        self.outcome = Some(NativeEventOutcome {
+                        self.outcome = Some(NativePublicationOutcome {
                             effect: if self.written == 0 {
-                                EventPublishEffect::NotPublished
+                                PublicationEffect::NotPublished
                             } else {
-                                EventPublishEffect::Uncertain
+                                PublicationEffect::Uncertain
                             },
                             cause: s.first_cause.clone(),
                         });
@@ -764,6 +782,6 @@ impl Drop for MqttPublication {
 fn busy() -> CoreError {
     CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
 }
-fn reject(data: EventData, cause: CoreError) -> BindingInputRejection<EventData> {
+fn reject(data: PublicationData, cause: CoreError) -> BindingInputRejection<PublicationData> {
     BindingInputRejection::new(data, BindingOperationalError::new(cause))
 }

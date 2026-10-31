@@ -18,7 +18,7 @@ fn final_qualification_rejects_foreign_definitions_with_matching_numeric_identit
     let identity = (BindingId::new(7), BindingGeneration::INITIAL);
     let config = HttpProducerConfig::for_loopback(addr).unwrap();
     let http = HttpFiniteProducer::try_new(config, identity.0, identity.1, 100).unwrap();
-    let mqtt = MqttEventProducer::new(
+    let mqtt = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         identity.0,
         identity.1,
@@ -111,12 +111,12 @@ fn final_qualification_rejects_foreign_definitions_with_matching_numeric_identit
 #[test]
 fn same_numeric_slot_in_another_servient_is_not_topic_replacement_authority() {
     let addr = address();
-    let provider = MqttEventProducer::new(
+    let provider = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
     );
-    let service = MqttEventService::new(&provider).unwrap();
+    let service = MqttNotificationService::new(&provider).unwrap();
     let first = owner();
     let second = owner();
     let original = input(
@@ -132,7 +132,11 @@ fn same_numeric_slot_in_another_servient_is_not_topic_replacement_authority() {
     let definitions = prepared
         .operations()
         .iter()
-        .map(|o| o.definition::<MqttEventDefinition>().unwrap().clone())
+        .map(|o| {
+            o.definition::<MqttNotificationDefinition>()
+                .unwrap()
+                .clone()
+        })
         .collect();
     assert!(
         service
@@ -157,12 +161,12 @@ fn same_numeric_slot_in_another_servient_is_not_topic_replacement_authority() {
 #[test]
 fn cancellation_before_native_setup_closes_qualification_and_releases_all_funding() {
     let addr = address();
-    let provider = MqttEventProducer::new(
+    let provider = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
     );
-    let service = MqttEventService::new(&provider).unwrap();
+    let service = MqttNotificationService::new(&provider).unwrap();
     let accounts = bank();
     let mut owner = owner();
     let mut exposure = stage(
@@ -203,12 +207,12 @@ fn cancellation_before_native_setup_closes_qualification_and_releases_all_fundin
 #[test]
 fn missing_actual_event_services_and_unfunded_handoffs_refuse_before_setup() {
     let addr = address();
-    let provider = MqttEventProducer::new(
+    let provider = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
     );
-    let service = MqttEventService::new(&provider).unwrap();
+    let service = MqttNotificationService::new(&provider).unwrap();
     let owner = owner();
     let accounts = bank();
     let (missing, _) = intercept(
@@ -260,7 +264,7 @@ fn missing_actual_event_services_and_unfunded_handoffs_refuse_before_setup() {
 #[test]
 fn default_operations_aliases_and_actual_registration_are_prepared_without_io() {
     let addr = address();
-    let provider = MqttEventProducer::new(
+    let provider = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
@@ -282,18 +286,22 @@ fn default_operations_aliases_and_actual_registration_are_prepared_without_io() 
         prepared.operations()[1].operation,
         Operation::UnsubscribeEvent
     );
-    let service = MqttEventService::new(&provider).unwrap();
+    let service = MqttNotificationService::new(&provider).unwrap();
     assert!(!service.connected());
-    let other = MqttEventProducer::new(
+    let other = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
     );
-    let foreign_service = MqttEventService::new(&other).unwrap();
+    let foreign_service = MqttNotificationService::new(&other).unwrap();
     let definitions = prepared
         .operations()
         .iter()
-        .map(|p| p.definition::<MqttEventDefinition>().unwrap().clone())
+        .map(|p| {
+            p.definition::<MqttNotificationDefinition>()
+                .unwrap()
+                .clone()
+        })
         .collect();
     assert!(
         foreign_service
@@ -307,7 +315,7 @@ fn default_operations_aliases_and_actual_registration_are_prepared_without_io() 
 #[test]
 fn every_unsupported_advertised_semantic_refuses_before_native_effects() {
     let addr = address();
-    let provider = MqttEventProducer::new(
+    let provider = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
@@ -372,7 +380,7 @@ fn every_unsupported_advertised_semantic_refuses_before_native_effects() {
         let i = instance(authority(1), &j.to_string());
         assert!(prepare(&i, &[&provider]).is_err(), "accepted {case}: {j}");
     }
-    let service = MqttEventService::new(&provider).unwrap();
+    let service = MqttNotificationService::new(&provider).unwrap();
     assert!(!service.connected());
     assert_eq!(service.locally_published(), 0);
 }
@@ -380,7 +388,7 @@ fn every_unsupported_advertised_semantic_refuses_before_native_effects() {
 #[test]
 fn final_description_cannot_silently_change_mapping_or_schema() {
     let addr = address();
-    let provider = MqttEventProducer::new(
+    let provider = MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(addr, 8192).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
@@ -403,7 +411,7 @@ fn final_description_cannot_silently_change_mapping_or_schema() {
                 &mut budget(),
                 &[&provider],
                 &prepared,
-                |s, op| matches!(s,ValidatedProducerScope::Event(n) if i.supports_event(n,op))
+                |s, op| matches!(s,ValidatedProducerScope::Event(n) if i.supports_notification(&AffordanceTarget::Event(Arc::from(n)),op))
             )
             .is_err()
         );

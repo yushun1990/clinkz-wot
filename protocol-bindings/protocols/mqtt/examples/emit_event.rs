@@ -1,6 +1,6 @@
 //! Qualify a complete TD, then emit to an independently subscribed local peer.
 use clinkz_wot_binding_mqtt::*;
-use clinkz_wot_core::{event::EventData, producer::ProducerInstanceAuthority, *};
+use clinkz_wot_core::{producer::ProducerInstanceAuthority, publication::PublicationData, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::producer_composition::*;
 use clinkz_wot_servient::{host_accounts::HostResourceAccounts, producer_composition::*};
@@ -38,12 +38,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }]}}
         }).to_string();
         let instance=RawProducerInstance::new(authority,vec![])
-            .with_events(vec![ProducerEventSource::new("alarm")]).with_description(Arc::from(description));
-        let provider=Rc::new(MqttEventProducer::new(MqttProducerConfig::for_loopback(address,8192)?,BindingId::new(1),BindingGeneration::INITIAL));
-        let service=MqttEventService::new(&provider)?;
+            .with_notification_sources(vec![ProducerNotificationSource::event("alarm")]).with_description(Arc::from(description));
+        let provider=Rc::new(MqttNotificationProducer::new(MqttProducerConfig::for_loopback(address,8192)?,BindingId::new(1),BindingGeneration::INITIAL));
+        let service=MqttNotificationService::new(&provider)?;
         let prepared=prepare_thing(instance.description().expect("staged TD"),key,GatewayDefaultV1::LIMITS,
-            &mut budget(),&[provider.as_ref()],|s,op| matches!(s,ValidatedProducerScope::Event(n) if instance.supports_event(n,op)))?;
-        let definitions=prepared.operations().iter().map(|o| o.definition::<MqttEventDefinition>().expect("selected MQTT").clone()).collect();
+            &mut budget(),&[provider.as_ref()],|s,op| matches!(s,ValidatedProducerScope::Event(n) if instance.supports_notification(&AffordanceTarget::Event(Arc::from(n)),op)))?;
+        let definitions=prepared.operations().iter().map(|o| o.definition::<MqttNotificationDefinition>().expect("selected MQTT").clone()).collect();
         let mut owner=RawProducerServient::try_empty(RawProducerRegistryLimits {instances:1,behaviors_per_instance:1,target_name_bytes:64})?;
         let native=service.participation(&owner,key,definitions)?;
         let accounts=Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut cx=Context::from_waker(Waker::noop());
         let end=Instant::now()+Duration::from_secs(3);
         loop {
-            let native=exposure.participant_mut::<MqttEventRuntime>(0).expect("owned MQTT");
+            let native=exposure.participant_mut::<MqttNotificationRuntime>(0).expect("owned MQTT");
             let _=native.step(&mut owner,&mut cx,&mut budget())?;
             if let Some(error)=native.first_failure() { return Err(error.clone().into()); }
             match exposure.publish(&mut owner,&mut budget()) {
@@ -64,8 +64,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         let now=MonotonicInstant::new(ClockId::new(1),0);
-        let native=exposure.participant_mut::<MqttEventRuntime>(0).expect("owned MQTT");
-        let mut emission=owner.emit_event(native,key,"alarm",EventData(Payload::new(value.into_bytes(),"application/json")),
+        let native=exposure.participant_mut::<MqttNotificationRuntime>(0).expect("owned MQTT");
+        let mut emission=owner.publish_notification(native,key,AffordanceTarget::Event(Arc::from("alarm")),PublicationData::EventData(Payload::new(value.into_bytes(),"application/json")),
             Deadline::NONE,now,&mut budget()).map_err(|r| r.error().error().clone())?;
         while emission.step(&mut cx,&mut budget(),now).is_pending() {
             if Instant::now()>=end { emission.cancel(); }
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let settlement=emission.acknowledge().ok().expect("terminal Event acknowledgement");
         println!("Local Event publication: {:?}; subscriber delivery is observed separately",settlement.native.effect);
         exposure.begin_close();
-        let native=exposure.participant_mut::<MqttEventRuntime>(0).expect("owned MQTT");
+        let native=exposure.participant_mut::<MqttNotificationRuntime>(0).expect("owned MQTT");
         let _=native.step(&mut owner,&mut cx,&mut budget())?;
         exposure.retire(&mut owner,&mut budget())?;
         if let Some(error)=settlement.cause { return Err(error.into()); }

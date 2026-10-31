@@ -209,7 +209,9 @@ pub async fn publish(owner: &mut RawProducerServient, exposure: &mut ComposedPro
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
 }
-pub async fn finish<P: NativeEventPublication>(emission: &mut ProducerEventEmission<P>) {
+pub async fn finish<P: NativeNotificationPublication>(
+    emission: &mut ProducerNotificationPublication<P>,
+) {
     let end = Instant::now() + Duration::from_secs(3);
     while emission.step(&mut cx(), &mut budget(), now()).is_pending() {
         assert!(Instant::now() < end, "emission timed out");

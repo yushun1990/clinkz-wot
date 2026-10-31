@@ -9,8 +9,8 @@ use services::*;
 use std::time::{Duration, Instant};
 use support::*;
 
-fn registration(address: SocketAddr, chunk: usize) -> MqttEventProducer {
-    MqttEventProducer::new(
+fn registration(address: SocketAddr, chunk: usize) -> MqttNotificationProducer {
+    MqttNotificationProducer::new(
         MqttProducerConfig::for_loopback(address, chunk).unwrap(),
         BindingId::new(7),
         BindingGeneration::INITIAL,
@@ -18,7 +18,7 @@ fn registration(address: SocketAddr, chunk: usize) -> MqttEventProducer {
 }
 
 struct RevokingBinding<'a> {
-    native: &'a mut MqttEventRuntime,
+    native: &'a mut MqttNotificationRuntime,
     publication: Rc<ProducerPublication>,
     during_retire: bool,
     fail_cleanup_once: bool,
@@ -29,18 +29,18 @@ struct RevokingPublication {
     during_retire: bool,
     fail_cleanup_once: bool,
 }
-impl ProducerEventBinding for RevokingBinding<'_> {
+impl ProducerNotificationBinding for RevokingBinding<'_> {
     type Publication = RevokingPublication;
-    fn event_route(&self, event: &str) -> Option<&EventRoute> {
-        self.native.event_route(event)
+    fn notification_route(&self, target: &AffordanceTarget) -> Option<&NotificationRoute> {
+        self.native.notification_route(target)
     }
-    fn start_event(
+    fn start_publication(
         &mut self,
-        route: &EventRoute,
-        data: EventData,
-    ) -> Result<RevokingPublication, BindingInputRejection<EventData>> {
+        route: &NotificationRoute,
+        data: PublicationData,
+    ) -> Result<RevokingPublication, BindingInputRejection<PublicationData>> {
         self.native
-            .start_event(route, data)
+            .start_publication(route, data)
             .map(|native| RevokingPublication {
                 native,
                 publication: Rc::clone(&self.publication),
@@ -49,13 +49,13 @@ impl ProducerEventBinding for RevokingBinding<'_> {
             })
     }
 }
-impl NativeEventPublication for RevokingPublication {
+impl NativeNotificationPublication for RevokingPublication {
     fn poll_publish(
         &mut self,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
         cancel: bool,
-    ) -> std::task::Poll<NativeEventOutcome> {
+    ) -> std::task::Poll<NativePublicationOutcome> {
         let result = self.native.poll_publish(cx, budget, cancel);
         if result.is_ready() && !self.during_retire && !self.fail_cleanup_once {
             self.publication.revoke();
@@ -88,7 +88,7 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
         for (during_retire, fail_cleanup_once) in [(false, false), (true, false), (false, true)] {
-            let service = MqttEventService::new(&provider).unwrap();
+            let service = MqttNotificationService::new(&provider).unwrap();
             let mut owner = owner();
             let instance = instance(
                 authority(1),
@@ -99,7 +99,11 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
             let definitions = prepared
                 .operations()
                 .iter()
-                .map(|o| o.definition::<MqttEventDefinition>().unwrap().clone())
+                .map(|o| {
+                    o.definition::<MqttNotificationDefinition>()
+                        .unwrap()
+                        .clone()
+                })
                 .collect();
             let mut native = service.participation(&owner, key, definitions).unwrap();
             let mut publication = owner
@@ -131,10 +135,10 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
                 fail_cleanup_once,
             };
             let mut e = owner
-                .emit_event(
+                .publish_notification(
                     &mut binding,
                     key,
-                    "alarm",
+                    AffordanceTarget::Event(Arc::from("alarm")),
                     data(b"12"),
                     Deadline::NONE,
                     now(),
@@ -148,8 +152,7 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
                 assert!(e.cleanup_error().is_some());
                 e = e
                     .acknowledge()
-                    .err()
-                    .expect("failed cleanup retains the entire emission");
+                    .expect_err("failed cleanup retains the entire emission");
             }
             finish(&mut e).await;
             let s = e.acknowledge().ok().unwrap();
@@ -159,7 +162,7 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
             } else {
                 assert!(matches!(s.cause, Some(CoreError::StaleHandle(_))));
             }
-            assert_eq!(s.native.effect, EventPublishEffect::LocallyPublished);
+            assert_eq!(s.native.effect, PublicationEffect::LocallyPublished);
             peer.event("callback/alarm", b"12");
             assert!(owner.description(key).is_none());
             drop(binding);
@@ -177,7 +180,7 @@ fn captured_actual_security_and_validation_are_used_for_every_emission() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let (input, probe) = intercept(
@@ -205,10 +208,10 @@ fn captured_actual_security_and_validation_are_used_for_every_emission() {
         probe.denied.set(true);
         let p = exposure.participant_mut::<ServicesParticipant>(0).unwrap();
         let denied = owner
-            .emit_event(
+            .publish_notification(
                 &mut p.native,
                 key,
-                "alarm",
+                AffordanceTarget::Event(Arc::from("alarm")),
                 data(b"1"),
                 Deadline::NONE,
                 now(),
@@ -223,10 +226,10 @@ fn captured_actual_security_and_validation_are_used_for_every_emission() {
         probe.denied.set(false);
         assert!(
             owner
-                .emit_event(
+                .publish_notification(
                     &mut p.native,
                     key,
-                    "alarm",
+                    AffordanceTarget::Event(Arc::from("alarm")),
                     data(b"\"bad\""),
                     Deadline::NONE,
                     now(),
@@ -235,10 +238,10 @@ fn captured_actual_security_and_validation_are_used_for_every_emission() {
                 .is_err()
         );
         let mut e = owner
-            .emit_event(
+            .publish_notification(
                 &mut p.native,
                 key,
-                "alarm",
+                AffordanceTarget::Event(Arc::from("alarm")),
                 data(b"2"),
                 Deadline::NONE,
                 now(),
@@ -271,7 +274,7 @@ fn service_substitution_after_staging_refuses_final_publication() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let (input, probe) = intercept(
@@ -319,7 +322,7 @@ fn qualified_td_event_reaches_real_peers_through_one_native_publication() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let text = td(broker.address, "things/a/alarm").to_string();
@@ -335,10 +338,10 @@ fn qualified_td_event_reaches_real_peers_through_one_native_publication() {
         other.subscribe("other/#");
         assert!(
             owner
-                .emit_event(
+                .publish_notification(
                     native(&mut exposure),
                     key,
-                    "alarm",
+                    AffordanceTarget::Event(Arc::from("alarm")),
                     data(b"1"),
                     Deadline::NONE,
                     now(),
@@ -355,7 +358,7 @@ fn qualified_td_event_reaches_real_peers_through_one_native_publication() {
         finish(&mut emission).await;
         assert_eq!(
             emission.settlement().unwrap().native.effect,
-            EventPublishEffect::LocallyPublished
+            PublicationEffect::LocallyPublished
         );
         assert!(emission.settlement().unwrap().cause.is_none());
         exact.event("things/a/alarm", b"12");
@@ -386,7 +389,7 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut json = td(broker.address, "multi/alarm");
@@ -394,9 +397,9 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
         json["events"]["notice"]["data"]["type"] = serde_json::json!("string");
         json["events"]["notice"]["forms"][0]["mqv:filter"] = serde_json::json!("multi/notice");
         let instance = RawProducerInstance::new(authority(1), vec![])
-            .with_events(vec![
-                ProducerEventSource::new("alarm"),
-                ProducerEventSource::new("notice"),
+            .with_notification_sources(vec![
+                ProducerNotificationSource::event("alarm"),
+                ProducerNotificationSource::event("notice"),
             ])
             .with_description(Arc::from(json.to_string()));
         drop(json);
@@ -405,7 +408,11 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
         let definitions = prepared
             .operations()
             .iter()
-            .map(|o| o.definition::<MqttEventDefinition>().unwrap().clone())
+            .map(|o| {
+                o.definition::<MqttNotificationDefinition>()
+                    .unwrap()
+                    .clone()
+            })
             .collect();
         let participant = service
             .participation(&owner, instance.key(), definitions)
@@ -427,16 +434,19 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
         peer.subscribe("multi/+");
         let mut alarm = emit(&mut owner, &mut exposure, b"7");
         finish(&mut alarm).await;
-        assert_eq!(alarm.settlement().unwrap().event.as_ref(), "alarm");
+        assert_eq!(
+            alarm.settlement().unwrap().target,
+            AffordanceTarget::Event(Arc::from("alarm"))
+        );
         drop(alarm);
         peer.event("multi/alarm", b"7");
         let key = exposure.key();
         assert!(
             owner
-                .emit_event(
+                .publish_notification(
                     native(&mut exposure),
                     key,
-                    "notice",
+                    AffordanceTarget::Event(Arc::from("notice")),
                     data(b"7"),
                     Deadline::NONE,
                     now(),
@@ -446,10 +456,10 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
         );
         assert!(
             owner
-                .emit_event(
+                .publish_notification(
                     native(&mut exposure),
                     key,
-                    "unknown",
+                    AffordanceTarget::Event(Arc::from("unknown")),
                     data(b"7"),
                     Deadline::NONE,
                     now(),
@@ -458,10 +468,10 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
                 .is_err()
         );
         let mut notice = owner
-            .emit_event(
+            .publish_notification(
                 native(&mut exposure),
                 key,
-                "notice",
+                AffordanceTarget::Event(Arc::from("notice")),
                 data(b"\"ok\""),
                 Deadline::NONE,
                 now(),
@@ -470,7 +480,10 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
             .ok()
             .unwrap();
         finish(&mut notice).await;
-        assert_eq!(notice.settlement().unwrap().event.as_ref(), "notice");
+        assert_eq!(
+            notice.settlement().unwrap().target,
+            AffordanceTarget::Event(Arc::from("notice"))
+        );
         drop(notice);
         peer.event("multi/notice", b"\"ok\"");
         assert_eq!(service.locally_published(), 2);
@@ -485,7 +498,7 @@ fn no_subscribers_is_a_successful_local_publication_without_replay() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut exposure = stage(
@@ -505,7 +518,7 @@ fn no_subscribers_is_a_successful_local_publication_without_replay() {
         finish(&mut e).await;
         assert_eq!(
             e.acknowledge().ok().unwrap().native.effect,
-            EventPublishEffect::LocallyPublished
+            PublicationEffect::LocallyPublished
         );
         let mut late = Peer::new(&broker);
         late.subscribe("empty/alarm");
@@ -525,7 +538,7 @@ fn validation_and_bounded_unread_settlements_return_original_refused_data() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut exposure = stage(
@@ -547,19 +560,21 @@ fn validation_and_bounded_unread_settlements_return_original_refused_data() {
             data(b"true"),
             data(b"{broken}"),
             data(b"1.00000001"),
-            EventData(Payload::new(
-                vec![b'1'; MAX_EVENT_BYTES + 1],
+            PublicationData::EventData(Payload::new(
+                vec![b'1'; MAX_NOTIFICATION_BYTES + 1],
                 "application/json",
             )),
-            EventData(Payload::new(b"1".to_vec(), "text/plain")),
-            EventData(Payload::new(b"1".to_vec(), "application/json").with_content_coding("gzip")),
+            PublicationData::EventData(Payload::new(b"1".to_vec(), "text/plain")),
+            PublicationData::EventData(
+                Payload::new(b"1".to_vec(), "application/json").with_content_coding("gzip"),
+            ),
         ] {
-            let original = Arc::clone(&d.0.body);
+            let original = Arc::clone(&d.payload().body);
             let r = owner
-                .emit_event(
+                .publish_notification(
                     native(&mut exposure),
                     key,
-                    "alarm",
+                    AffordanceTarget::Event(Arc::from("alarm")),
                     d,
                     Deadline::NONE,
                     now(),
@@ -567,7 +582,7 @@ fn validation_and_bounded_unread_settlements_return_original_refused_data() {
                 )
                 .err()
                 .unwrap();
-            assert!(Arc::ptr_eq(&original, &r.into_input().0.body));
+            assert!(Arc::ptr_eq(&original, &r.into_input().payload().body));
         }
         assert_eq!(service.locally_published(), 0);
         let mut peer = Peer::new(&broker);
@@ -576,12 +591,12 @@ fn validation_and_bounded_unread_settlements_return_original_refused_data() {
         finish(&mut e).await;
         peer.event("bounded/alarm", b"1.20e1");
         let d = data(b"2");
-        let original = Arc::clone(&d.0.body);
+        let original = Arc::clone(&d.payload().body);
         let r = owner
-            .emit_event(
+            .publish_notification(
                 native(&mut exposure),
                 key,
-                "alarm",
+                AffordanceTarget::Event(Arc::from("alarm")),
                 d,
                 Deadline::NONE,
                 now(),
@@ -590,7 +605,7 @@ fn validation_and_bounded_unread_settlements_return_original_refused_data() {
             .err()
             .unwrap();
         assert!(matches!(r.error().error(), CoreError::Backpressure(_)));
-        assert!(Arc::ptr_eq(&original, &r.into_input().0.body));
+        assert!(Arc::ptr_eq(&original, &r.into_input().payload().body));
         assert_eq!(service.locally_published(), 1);
         peer.absent();
         e.acknowledge().ok().unwrap();
@@ -609,7 +624,7 @@ fn cancel_deadline_and_replacement_do_not_publish_or_retarget_pending_data() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let text = td(broker.address, "current/alarm").to_string();
@@ -631,13 +646,13 @@ fn cancel_deadline_and_replacement_do_not_publish_or_retarget_pending_data() {
         finish(&mut e).await;
         let s = e.acknowledge().ok().unwrap();
         assert!(matches!(s.cause, Some(CoreError::Cancelled(_))));
-        assert_eq!(s.native.effect, EventPublishEffect::NotPublished);
+        assert_eq!(s.native.effect, PublicationEffect::NotPublished);
         let key = old.key();
         let mut timed = owner
-            .emit_event(
+            .publish_notification(
                 native(&mut old),
                 key,
-                "alarm",
+                AffordanceTarget::Event(Arc::from("alarm")),
                 data(b"2"),
                 Deadline::at(now().checked_add_ticks(1).unwrap()),
                 now(),
@@ -669,13 +684,13 @@ fn cancel_deadline_and_replacement_do_not_publish_or_retarget_pending_data() {
         let s = pending.acknowledge().ok().unwrap();
         assert_eq!(s.instance, key);
         assert!(matches!(s.cause, Some(CoreError::StaleHandle(_))));
-        assert_eq!(s.native.effect, EventPublishEffect::NotPublished);
+        assert_eq!(s.native.effect, PublicationEffect::NotPublished);
         assert!(
             owner
-                .emit_event(
+                .publish_notification(
                     native(&mut old),
                     key,
-                    "alarm",
+                    AffordanceTarget::Event(Arc::from("alarm")),
                     data(b"4"),
                     Deadline::NONE,
                     now(),
@@ -704,7 +719,7 @@ fn shared_connection_outlives_one_thing_and_releases_after_final_use() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut a = stage(
@@ -781,7 +796,7 @@ fn partial_write_cancellation_is_uncertain_and_fences_shared_native_service() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 1);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut a = stage(
@@ -816,7 +831,7 @@ fn partial_write_cancellation_is_uncertain_and_fences_shared_native_service() {
         finish(&mut e).await;
         let s = e.acknowledge().ok().unwrap();
         assert!(matches!(s.cause, Some(CoreError::Cancelled(_))));
-        assert_eq!(s.native.effect, EventPublishEffect::Uncertain);
+        assert_eq!(s.native.effect, PublicationEffect::Uncertain);
         assert!(!service.connected());
         assert!(service.first_failure().is_some());
         assert_eq!(service.locally_published(), 0);
@@ -843,7 +858,7 @@ fn late_native_success_retains_original_effect_and_funding_after_root_loss() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut exposure = stage(
@@ -878,7 +893,7 @@ fn late_native_success_retains_original_effect_and_funding_after_root_loss() {
         finish(&mut e).await;
         let s = e.acknowledge().ok().unwrap();
         assert!(matches!(s.cause, Some(CoreError::StaleHandle(_))));
-        assert_eq!(s.native.effect, EventPublishEffect::LocallyPublished);
+        assert_eq!(s.native.effect, PublicationEffect::LocallyPublished);
         assert!(!service.connected());
         assert_empty(&accounts);
     });
@@ -889,7 +904,7 @@ fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
     runtime().block_on(async {
         let mut broker = Broker::start();
         let provider = registration(broker.address, 8192);
-        let service = MqttEventService::new(&provider).unwrap();
+        let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut exposure = stage(
@@ -919,7 +934,7 @@ fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
         finish(&mut pending).await;
         let s = pending.acknowledge().ok().unwrap();
         assert!(matches!(s.cause, Some(CoreError::StaleHandle(_))));
-        assert_eq!(s.native.effect, EventPublishEffect::NotPublished);
+        assert_eq!(s.native.effect, PublicationEffect::NotPublished);
         assert_eq!(service.locally_published(), 0);
         assert!(!service.connected());
         close(&mut owner, &mut exposure);

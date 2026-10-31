@@ -70,8 +70,8 @@ The open finite Property Read foothold and
 implemented at the scopes below. Further ordering follows
 [PLAN.md](../../PLAN.md#near-term-capability-growth-and-priority) across both roles
 and all Affordance families. The earlier source diagnosis and initial slice
-boundary below remain scoped implementation history. TD-driven notification
-preparation remains open; HTTP SSE is an optional mapping under WP-600.
+boundary below remain scoped implementation history. TD-driven Property/Event notification preparation is implemented at the bounded
+MQTT scope; HTTP SSE remains an optional mapping under WP-600.
 
 ### Source constraints and disposition
 
@@ -262,3 +262,12 @@ data. Managed WP-400 admission reserves the largest sequential callback peak
 alongside common TD scratch before executing any such callback. Unknown bounds
 refuse that managed handoff; the pure caller-provisioned construction boundary
 does not implicitly fund requalification allocations.
+
+The typed notification registry also selects an observable Property's Form and
+captures its own value schema, actual Binding/configuration and data/access
+services. Its PropertyValue schema variant cannot become an Event data/control
+role. [MQTT Property qualification](../../protocol-bindings/protocols/mqtt/tests/property_qualification.rs)
+exercises refusal/selection, while the
+[downstream fixture](../../tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
+implements this public facet in an external Cargo crate. No package acceptance
+or whole-Thing Consumer support follows from these bounded capabilities.

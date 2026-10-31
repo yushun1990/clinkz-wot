@@ -1,68 +1,87 @@
-//! Logical Producer Event authority and settlement. Native matching, fan-out
+//! Logical Producer notification authority and settlement. Native matching, fan-out
 //! and physical resources belong exclusively to the selected Binding.
 use super::*;
-use clinkz_wot_core::{event::*, notification::notification_payload_backing};
+use clinkz_wot_core::{notification::notification_payload_backing, publication::*};
 
-/// A registered application Event source, not a request handler.
-pub struct ProducerEventSource {
-    name: Arc<str>,
+/// An application-owned Property value source or Event source, not a Read handler.
+pub enum ProducerNotificationSource {
+    Property(Arc<str>),
+    Event(Arc<str>),
 }
-impl ProducerEventSource {
-    pub fn new(name: impl Into<Arc<str>>) -> Self {
-        Self { name: name.into() }
+impl ProducerNotificationSource {
+    pub fn property(name: impl Into<Arc<str>>) -> Self {
+        Self::Property(name.into())
+    }
+    pub fn event(name: impl Into<Arc<str>>) -> Self {
+        Self::Event(name.into())
     }
     pub fn name(&self) -> &str {
-        &self.name
+        match self {
+            Self::Property(n) | Self::Event(n) => n,
+        }
+    }
+    pub fn target(&self) -> AffordanceTarget {
+        match self {
+            Self::Property(n) => AffordanceTarget::Property(n.clone()),
+            Self::Event(n) => AffordanceTarget::Event(n.clone()),
+        }
+    }
+    pub fn kind(&self) -> clinkz_wot_core::notification::NotificationKind {
+        use clinkz_wot_core::notification::NotificationKind;
+        match self {
+            Self::Property(_) => NotificationKind::PropertyObservation,
+            Self::Event(_) => NotificationKind::Event,
+        }
     }
     pub(crate) fn backing_bytes(&self) -> usize {
-        self.name.len() + 2 * size_of::<usize>()
+        self.name().len() + 2 * size_of::<usize>()
     }
 }
 
-pub struct CapturedEventRoute {
-    pub event: Arc<str>,
-    pub route: EventRoute,
-    pub services: Rc<dyn ProducerEventServices>,
+pub struct CapturedNotificationRoute {
+    pub target: AffordanceTarget,
+    pub route: NotificationRoute,
+    pub services: Rc<dyn ProducerNotificationServices>,
     /// Complete retained application data carrier allowance, prepaid by the
     /// native participant's managed admission contract (one slot here).
     pub data_bytes: usize,
 }
-impl CapturedEventRoute {
+impl CapturedNotificationRoute {
     pub fn backing_bytes(routes: &[Self], capacity: usize) -> Option<usize> {
         routes
             .iter()
             .try_fold(capacity.checked_mul(size_of::<Self>())?, |n, r| {
-                n.checked_add(r.event.len() + 2 * size_of::<usize>())
+                n.checked_add(target_name_bytes(&r.target)?.checked_add(2 * size_of::<usize>())?)
             })
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct ProducerEventSettlement {
+pub struct ProducerNotificationSettlement {
     pub instance: ProducerInstanceKey,
-    pub event: Arc<str>,
-    pub route: EventRoute,
+    pub target: AffordanceTarget,
+    pub route: NotificationRoute,
     pub cause: Option<CoreError>,
     pub cleanup_error: Option<CoreError>,
-    pub native: NativeEventOutcome,
+    pub native: NativePublicationOutcome,
 }
 
 /// One application emission. Its original logical instance, native work,
 /// unread settlement and funding survive replacement or loss of the exposure.
-pub struct ProducerEventEmission<P: NativeEventPublication> {
+pub struct ProducerNotificationPublication<P: NativeNotificationPublication> {
     native: Option<P>,
     current: Rc<Cell<bool>>,
     issuer: Weak<()>,
-    route: EventRoute,
-    event: Arc<str>,
+    route: NotificationRoute,
+    target: AffordanceTarget,
     deadline: Deadline,
     first_cause: Option<CoreError>,
     cleanup_error: Option<CoreError>,
-    native_outcome: Option<NativeEventOutcome>,
-    settlement: Option<ProducerEventSettlement>,
+    native_outcome: Option<NativePublicationOutcome>,
+    settlement: Option<ProducerNotificationSettlement>,
     instance: Rc<RawProducerInstance>,
 }
-impl<P: NativeEventPublication> ProducerEventEmission<P> {
+impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
     pub fn cancel(&mut self) {
         if self.settlement.is_none() && self.first_cause.is_none() {
             self.first_cause = Some(CoreError::Cancelled(self.progress_context()));
@@ -116,9 +135,9 @@ impl<P: NativeEventPublication> ProducerEventEmission<P> {
         if retirement.is_pending() {
             return Poll::Pending;
         }
-        self.settlement = Some(ProducerEventSettlement {
+        self.settlement = Some(ProducerNotificationSettlement {
             instance: self.instance.key(),
-            event: Arc::clone(&self.event),
+            target: self.target.clone(),
             route: self.route.clone(),
             cause: self.first_cause.clone(),
             cleanup_error: self.cleanup_error.clone(),
@@ -145,7 +164,7 @@ impl<P: NativeEventPublication> ProducerEventEmission<P> {
             .with_thing(self.instance.key().slot())
             .with_binding(binding, generation)
     }
-    pub fn settlement(&self) -> Option<&ProducerEventSettlement> {
+    pub fn settlement(&self) -> Option<&ProducerNotificationSettlement> {
         self.settlement.as_ref()
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
@@ -155,38 +174,41 @@ impl<P: NativeEventPublication> ProducerEventEmission<P> {
         self.cleanup_error.as_ref()
     }
     /// Terminal acknowledgement releases the original native slot and funding.
-    pub fn acknowledge(mut self) -> Result<ProducerEventSettlement, Self> {
+    pub fn acknowledge(mut self) -> Result<ProducerNotificationSettlement, Self> {
         match self.settlement.take() {
             Some(s) => Ok(s),
             None => Err(self),
         }
     }
 }
-impl<P: NativeEventPublication> Drop for ProducerEventEmission<P> {
+impl<P: NativeNotificationPublication> Drop for ProducerNotificationPublication<P> {
     fn drop(&mut self) {
         // Dispose native work before releasing logical work/funding retention.
         self.native = None;
         self.instance
-            .event_work
-            .set(self.instance.event_work.get() - 1);
+            .notification_work
+            .set(self.instance.notification_work.get() - 1);
     }
 }
 
 impl RawProducerServient {
-    /// Admit data against a qualified published Event source and the actual
+    /// Admit data against a qualified published Property/Event source and the actual
     /// captured native mapping/services. No subscriber count or delivery ACK
     /// is implied. Refusal has no native publication effect and returns data.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_event<B: ProducerEventBinding>(
+    pub fn publish_notification<B: ProducerNotificationBinding>(
         &mut self,
         binding: &mut B,
         key: ProducerInstanceKey,
-        event: &str,
-        data: EventData,
+        target: AffordanceTarget,
+        data: PublicationData,
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
-    ) -> Result<ProducerEventEmission<B::Publication>, BindingInputRejection<EventData>> {
+    ) -> Result<
+        ProducerNotificationPublication<B::Publication>,
+        BindingInputRejection<PublicationData>,
+    > {
         let admit = (|| -> CoreResult<_> {
             budget
                 .consume(
@@ -196,7 +218,10 @@ impl RawProducerServient {
                             * (self.limits.target_name_bytes + 1)) as u64,
                 )
                 .map_err(|_| CoreError::Backpressure(context()))?;
-            if event.len() > self.limits.target_name_bytes {
+            if target_name_bytes(&target)
+                .ok_or_else(|| CoreError::UnsupportedOperation(context()))?
+                > self.limits.target_name_bytes
+            {
                 return Err(CoreError::Backpressure(context()));
             }
             match deadline.checked_is_elapsed_at(now) {
@@ -209,20 +234,25 @@ impl RawProducerServient {
                 .iter()
                 .find(|e| e.current.get() && e.instance.key() == key)
                 .ok_or_else(|| CoreError::StaleHandle(context()))?;
+            if clinkz_wot_core::notification::NotificationKind::for_target(&target)
+                != Some(data.kind())
+            {
+                return Err(CoreError::Validation(context()));
+            }
             let route = binding
-                .event_route(event)
+                .notification_route(&target)
                 .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
             let captured = entry
-                .event_routes
+                .notification_routes
                 .as_ref()
                 .and_then(|rs| {
                     rs.iter()
-                        .find(|r| r.event.as_ref() == event && r.route.same_mapping(route))
+                        .find(|r| r.target == target && r.route.same_mapping(route))
                 })
                 .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
-            let bytes = notification_payload_backing(Some(&data.0))
+            let bytes = notification_payload_backing(Some(data.payload()))
                 .ok_or_else(|| CoreError::Backpressure(context()))?;
-            if bytes > captured.data_bytes || entry.instance.event_work.get() == usize::MAX {
+            if bytes > captured.data_bytes || entry.instance.notification_work.get() == usize::MAX {
                 return Err(CoreError::Backpressure(context()));
             }
             captured.services.authorize(&data, budget)?;
@@ -235,10 +265,10 @@ impl RawProducerServient {
                 Rc::clone(&entry.instance),
                 Rc::clone(&entry.current),
                 captured.route.clone(),
-                Arc::clone(&captured.event),
+                captured.target.clone(),
             ))
         })();
-        let (instance, current, route, event) = match admit {
+        let (instance, current, route, target) = match admit {
             Ok(value) => value,
             Err(error) => {
                 return Err(BindingInputRejection::new(
@@ -247,14 +277,16 @@ impl RawProducerServient {
                 ));
             }
         };
-        let native = binding.start_event(&route, data)?;
-        instance.event_work.set(instance.event_work.get() + 1);
-        Ok(ProducerEventEmission {
+        let native = binding.start_publication(&route, data)?;
+        instance
+            .notification_work
+            .set(instance.notification_work.get() + 1);
+        Ok(ProducerNotificationPublication {
             native: Some(native),
             current,
             issuer: Rc::downgrade(&self.issuer),
             route,
-            event,
+            target,
             deadline,
             first_cause: None,
             cleanup_error: None,
@@ -262,5 +294,12 @@ impl RawProducerServient {
             settlement: None,
             instance,
         })
+    }
+}
+
+fn target_name_bytes(target: &AffordanceTarget) -> Option<usize> {
+    match target {
+        AffordanceTarget::Property(n) | AffordanceTarget::Event(n) => Some(n.len()),
+        _ => None,
     }
 }

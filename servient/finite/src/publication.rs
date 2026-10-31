@@ -68,7 +68,7 @@ pub struct ProducerPublication {
     registry_participants: Vec<Weak<()>>,
     gates: Vec<Weak<Cell<bool>>>,
     action_routes: Option<Vec<CapturedActionRoute>>,
-    event_routes: Option<Vec<CapturedEventRoute>>,
+    notification_routes: Option<Vec<CapturedNotificationRoute>>,
     // Both original instances retain capacity until publication metadata ends.
     retired: Option<InstanceEntry>,
     instance: Option<Rc<RawProducerInstance>>,
@@ -101,9 +101,12 @@ impl ProducerPublication {
     pub fn key(&self) -> ProducerInstanceKey {
         self.key
     }
-    /// Capture the original Event publication mapping, validation and security
+    /// Capture the original notification publication mapping, validation and security
     /// services. Requalification cannot replace any one of these independently.
-    pub fn bind_event_routes(&mut self, routes: Vec<CapturedEventRoute>) -> CoreResult<()> {
+    pub fn bind_notification_routes(
+        &mut self,
+        routes: Vec<CapturedNotificationRoute>,
+    ) -> CoreResult<()> {
         if self.committed || self.cancelled.get() || routes.len() > MAX_PRODUCER_PARTICIPANTS {
             return Err(CoreError::Validation(context()));
         }
@@ -112,22 +115,23 @@ impl ProducerPublication {
             .as_ref()
             .ok_or_else(|| CoreError::Validation(context()))?;
         if routes.iter().enumerate().any(|(i, r)| {
-            !instance.supports_event(&r.event, Operation::SubscribeEvent)
-                || r.data_bytes == 0
+            clinkz_wot_core::notification::NotificationKind::for_target(&r.target).is_none_or(
+                |kind| !instance.supports_notification(&r.target, kind.start_operation()),
+            ) || r.data_bytes == 0
                 || routes[..i]
                     .iter()
-                    .any(|p| p.event == r.event && p.route.same_mapping(&r.route))
+                    .any(|p| p.target == r.target && p.route.same_mapping(&r.route))
         }) || instance
-            .events
+            .notification_sources
             .iter()
-            .any(|e| !routes.iter().any(|r| r.event.as_ref() == e.name()))
+            .any(|e| !routes.iter().any(|r| r.target == e.target()))
         {
             return Err(CoreError::Validation(context()));
         }
-        if let Some(old) = &self.event_routes {
+        if let Some(old) = &self.notification_routes {
             if old.len() != routes.len()
                 || old.iter().zip(&routes).any(|(a, b)| {
-                    a.event != b.event
+                    a.target != b.target
                         || !a.route.same_mapping(&b.route)
                         || !Rc::ptr_eq(&a.services, &b.services)
                         || a.data_bytes != b.data_bytes
@@ -136,7 +140,7 @@ impl ProducerPublication {
                 return Err(CoreError::Validation(context()));
             }
         } else {
-            self.event_routes = Some(routes);
+            self.notification_routes = Some(routes);
         }
         Ok(())
     }
@@ -378,9 +382,9 @@ pub trait ClosedProducerParticipation {
     ) -> Option<ActionRoute> {
         None
     }
-    /// Actual selected publication services and mapping for a covered Event
-    /// subscribe Form. No native subscription or Engine subscriber is created.
-    fn event_publication(
+    /// Actual selected publication services and mapping for a covered Property observe
+    /// or Event subscribe Form. No native subscription or Engine subscriber is created.
+    fn notification_publication(
         &self,
         _key: ProducerInstanceKey,
         _binding: (BindingId, BindingGeneration),
@@ -388,8 +392,8 @@ pub trait ClosedProducerParticipation {
         _form: u32,
         _definition: &dyn core::any::Any,
     ) -> Option<(
-        clinkz_wot_core::event::EventRoute,
-        Rc<dyn clinkz_wot_core::event::ProducerEventServices>,
+        clinkz_wot_core::publication::NotificationRoute,
+        Rc<dyn clinkz_wot_core::publication::ProducerNotificationServices>,
         usize,
     )> {
         None
@@ -578,7 +582,7 @@ impl RawProducerServient {
             registry_participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             action_routes: None,
-            event_routes: None,
+            notification_routes: None,
         })
     }
 
@@ -631,8 +635,8 @@ impl RawProducerServient {
         if publication
             .instance
             .as_ref()
-            .is_some_and(|i| !i.events.is_empty())
-            && publication.event_routes.is_none()
+            .is_some_and(|i| !i.notification_sources.is_empty())
+            && publication.notification_routes.is_none()
         {
             return Err(CoreError::Validation(context()));
         }
@@ -655,7 +659,7 @@ impl RawProducerServient {
             current: Rc::clone(&publication.current),
             participations: core::mem::take(&mut publication.registry_participants),
             action_routes: publication.action_routes.take(),
-            event_routes: publication.event_routes.take(),
+            notification_routes: publication.notification_routes.take(),
         };
         // COMMIT: exclusive &mut access orders description, behavior, current
         // logical permission and native participation opening. Capacity was preallocated.
@@ -710,7 +714,7 @@ impl RawProducerServient {
             || publication
                 .instance
                 .as_ref()
-                .is_some_and(|i| i.event_work.get() != 0)
+                .is_some_and(|i| i.notification_work.get() != 0)
             || self
                 .actions
                 .as_ref()
@@ -753,7 +757,7 @@ impl RawProducerServient {
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let entry = &self.instances[index];
         if entry.current.get()
-            || entry.instance.event_work.get() != 0
+            || entry.instance.notification_work.get() != 0
             || entry.participations.is_empty()
             || entry.participations.iter().any(|p| p.strong_count() != 0)
             || self

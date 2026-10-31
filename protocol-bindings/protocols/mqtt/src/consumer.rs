@@ -19,7 +19,7 @@ use tokio::{net::TcpStream, time::Sleep};
 
 const LEASES: usize = 32;
 const QUEUE: usize = 4;
-const PACKET: usize = MAX_EVENT_BYTES + MAX_TOPIC_BYTES + 7;
+const PACKET: usize = MAX_NOTIFICATION_BYTES + MAX_TOPIC_BYTES + 7;
 static CLIENT: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,20 +43,21 @@ struct ConsumerRegistration {
 /// Actual startup registration and a retained reference to application-owned
 /// infrastructure. Clones grant neither logical permission nor shutdown power.
 #[derive(Clone)]
-pub struct MqttEventConsumer {
+pub struct MqttNotificationConsumer {
     registration: Rc<ConsumerRegistration>,
     session: Rc<RefCell<ConsumerSession>>,
 }
 /// Application-owned physical service. Last real participation disposes the
 /// socket even while this owner/registrations/definitions remain retained.
 pub struct MqttConsumerService {
-    binding: MqttEventConsumer,
+    binding: MqttNotificationConsumer,
 }
 #[derive(Clone)]
 pub struct MqttConsumerProgram {
     registration: Rc<ConsumerRegistration>,
     pub(crate) topic: Arc<str>,
     cancellation: bool,
+    kind: NotificationKind,
 }
 impl MqttConsumerService {
     pub fn new(
@@ -81,7 +82,7 @@ impl MqttConsumerService {
             id,
             generation,
             BindingConfigurationDigest::new(digest),
-            BindingArtifactCompatibility::new(*b"mqtt-event-rx-01"),
+            BindingArtifactCompatibility::new(*b"mqtt-notify-rx02"),
             0,
         );
         let registration = Rc::new(ConsumerRegistration { config, identity });
@@ -125,13 +126,13 @@ impl MqttConsumerService {
             wakes: Arc::new(NativeWakes(Mutex::new(std::array::from_fn(|_| None)))),
         }));
         Ok(Self {
-            binding: MqttEventConsumer {
+            binding: MqttNotificationConsumer {
                 registration,
                 session,
             },
         })
     }
-    pub fn binding(&self) -> MqttEventConsumer {
+    pub fn binding(&self) -> MqttNotificationConsumer {
         self.binding.clone()
     }
     pub fn connected(&self) -> bool {
@@ -498,7 +499,7 @@ impl ConsumerSession {
         if n == 0
             || n > MAX_TOPIC_BYTES
             || n + 2 > body.len()
-            || body.len() - n - 2 > MAX_EVENT_BYTES
+            || body.len() - n - 2 > MAX_NOTIFICATION_BYTES
         {
             self.fail(io_error());
             return;
@@ -514,7 +515,7 @@ impl ConsumerSession {
             {
                 continue;
             }
-            // Initial broker-retained data is never fabricated as a new Event.
+            // Broker-retained data is outside this future-only notification mapping.
             if header & 1 != 0 || i.queue.len() == QUEUE {
                 i.loss = i.loss.saturating_add(1);
             } else {
@@ -574,7 +575,7 @@ pub struct MqttSubscription {
     interest: Rc<RefCell<Interest>>,
     disposed: bool,
 }
-impl ConsumerNotificationBinding for MqttEventConsumer {
+impl ConsumerNotificationBinding for MqttNotificationConsumer {
     type Program = MqttConsumerProgram;
     type Configuration = MqttConsumerConfig;
     type Participation = MqttSubscription;
@@ -592,7 +593,7 @@ impl ConsumerNotificationBinding for MqttEventConsumer {
         p: &MqttConsumerProgram,
         kind: NotificationKind,
     ) -> CoreResult<NotificationSupport> {
-        if kind != NotificationKind::Event || !Rc::ptr_eq(&p.registration, &self.registration) {
+        if kind != p.kind || !Rc::ptr_eq(&p.registration, &self.registration) {
             return Err(unsupported());
         }
         Ok(NotificationSupport {
@@ -606,7 +607,7 @@ impl ConsumerNotificationBinding for MqttEventConsumer {
         recipient: &NotificationIdentity,
     ) -> Result<MqttSubscription, BindingInputRejection<MqttConsumerProgram>> {
         let build = (|| {
-            self.support(&program, NotificationKind::Event)?;
+            self.support(&program, program.kind)?;
             let mut s = self.session.borrow_mut();
             if s.phase == ConnectionPhase::Failed {
                 return Err(io_error());
@@ -779,25 +780,27 @@ impl ConsumerDataService for MqttJsonData {
         ConsumerDataPolicy {
             retained_bytes: 0,
             temporary_bytes: 4096,
-            body_bytes: MAX_EVENT_BYTES as u64,
+            body_bytes: MAX_NOTIFICATION_BYTES as u64,
             validation_work: 65536,
         }
     }
 }
 
 #[cfg(feature = "prepare")]
-pub(crate) fn consumer_identity(b: &MqttEventConsumer) -> BindingRegistrationIdentity {
+pub(crate) fn consumer_identity(b: &MqttNotificationConsumer) -> BindingRegistrationIdentity {
     b.registration.identity
 }
 #[cfg(feature = "prepare")]
 pub(crate) fn consumer_program(
-    b: &MqttEventConsumer,
+    b: &MqttNotificationConsumer,
     topic: Arc<str>,
     cancellation: bool,
+    kind: NotificationKind,
 ) -> MqttConsumerProgram {
     MqttConsumerProgram {
         registration: b.registration.clone(),
         topic,
         cancellation,
+        kind,
     }
 }

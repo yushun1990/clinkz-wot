@@ -19,8 +19,8 @@ use clinkz_wot_planning::producer_composition::{
     PreparedThing, ProducerCapability, check_final_thing,
 };
 use clinkz_wot_servient_finite::{
-    CapturedActionRoute, CapturedEventRoute, ClosedProducerParticipation, ProducerPublication,
-    RawProducerServient,
+    CapturedActionRoute, CapturedNotificationRoute, ClosedProducerParticipation,
+    ProducerPublication, RawProducerServient,
 };
 use clinkz_wot_servient_finite::{MAX_PRODUCER_PARTICIPANTS, RawProducerInstance};
 use clinkz_wot_td::ValidatedProducerScope;
@@ -61,7 +61,7 @@ pub fn publish_prepared_thing(
         )?;
         publication.bind_action_routes(routes)?;
     }
-    publication.bind_event_routes(capture_event_routes(
+    publication.bind_notification_routes(capture_notification_routes(
         publication.key(),
         prepared,
         participants.iter().map(|p| &**p),
@@ -69,20 +69,20 @@ pub fn publish_prepared_thing(
     owner.publish_composed(publication, participants)
 }
 
-fn capture_event_routes<'a>(
+fn capture_notification_routes<'a>(
     key: ProducerInstanceKey,
     prepared: &PreparedThing,
     participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
-) -> CoreResult<Vec<CapturedEventRoute>> {
+) -> CoreResult<Vec<CapturedNotificationRoute>> {
     let mut routes = Vec::new();
     let count = prepared
         .operations()
         .iter()
         .filter(|o| {
             matches!(
-                o.site,
-                clinkz_wot_planning::producer_composition::FormSite::Event(_)
-            ) && o.operation == Operation::SubscribeEvent
+                o.operation,
+                Operation::ObserveProperty | Operation::SubscribeEvent
+            )
         })
         .count();
     // This manually driven Host publication has a fixed comparison envelope.
@@ -92,13 +92,16 @@ fn capture_event_routes<'a>(
     }
     routes.try_reserve_exact(count).map_err(|_| busy())?;
     for operation in prepared.operations() {
-        let clinkz_wot_planning::producer_composition::FormSite::Event(name) = &operation.site
-        else {
-            continue;
+        use clinkz_wot_planning::producer_composition::FormSite;
+        let target = match (&operation.site, operation.operation) {
+            (FormSite::Property(n), Operation::ObserveProperty) => {
+                clinkz_wot_core::AffordanceTarget::Property(Arc::from(n.as_str()))
+            }
+            (FormSite::Event(n), Operation::SubscribeEvent) => {
+                clinkz_wot_core::AffordanceTarget::Event(Arc::from(n.as_str()))
+            }
+            _ => continue,
         };
-        if operation.operation != Operation::SubscribeEvent {
-            continue;
-        }
         let participant = participants
             .clone()
             .find(|p| {
@@ -113,7 +116,7 @@ fn capture_event_routes<'a>(
             })
             .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
         let (route, services, data_bytes) = participant
-            .event_publication(
+            .notification_publication(
                 key,
                 operation.binding,
                 operation.site.site(),
@@ -126,12 +129,12 @@ fn capture_event_routes<'a>(
         }
         if routes
             .iter()
-            .any(|r: &CapturedEventRoute| r.event.as_ref() == name && r.route.same_mapping(&route))
+            .any(|r: &CapturedNotificationRoute| r.target == target && r.route.same_mapping(&route))
         {
             return Err(CoreError::UnsupportedOperation(context()));
         }
-        routes.push(CapturedEventRoute {
-            event: Arc::from(name.as_str()),
+        routes.push(CapturedNotificationRoute {
+            target,
             route,
             services,
             data_bytes,
@@ -387,7 +390,7 @@ struct ComposedAdmission {
     qualification: QualificationFunding,
     provider_bytes: usize,
     routes: Vec<CapturedActionRoute>,
-    event_routes: Vec<CapturedEventRoute>,
+    notification_routes: Vec<CapturedNotificationRoute>,
 }
 
 impl ComposedProducerExposure {
@@ -435,7 +438,7 @@ impl ComposedProducerExposure {
                 &input.prepared,
                 input.participants.iter().map(|p| p.as_participation()),
             )?;
-            let event_routes = capture_event_routes(
+            let notification_routes = capture_notification_routes(
                 input.instance.key(),
                 &input.prepared,
                 input.participants.iter().map(|p| p.as_participation()),
@@ -452,9 +455,9 @@ impl ComposedProducerExposure {
                     )?)
                 })
                 .and_then(|n| {
-                    n.checked_add(CapturedEventRoute::backing_bytes(
-                        &event_routes,
-                        event_routes.capacity(),
+                    n.checked_add(CapturedNotificationRoute::backing_bytes(
+                        &notification_routes,
+                        notification_routes.capacity(),
                     )?)
                 })
                 .and_then(|n| {
@@ -545,7 +548,7 @@ impl ComposedProducerExposure {
                 qualification,
                 provider_bytes,
                 routes,
-                event_routes,
+                notification_routes,
             })
         })();
         let ComposedAdmission {
@@ -553,7 +556,7 @@ impl ComposedProducerExposure {
             qualification,
             provider_bytes: qualification_provider_bytes,
             routes,
-            event_routes,
+            notification_routes,
         } = match admission {
             Ok(funding) => funding,
             Err(error) => return Err(reject(input, error)),
@@ -593,8 +596,8 @@ impl ComposedProducerExposure {
             .bind_action_routes(routes)
             .expect("selected services and exact Action behaviors checked before handoff");
         publication
-            .bind_event_routes(event_routes)
-            .expect("selected services and exact Event sources checked before handoff");
+            .bind_notification_routes(notification_routes)
+            .expect("selected services and exact notification sources checked before handoff");
         for participant in &mut participants {
             participant.retain_owner(funding.clone());
         }
@@ -707,13 +710,13 @@ impl ComposedProducerExposure {
         )
         .and_then(|routes| self.publication.bind_action_routes(routes))
         .and_then(|()| {
-            capture_event_routes(
+            capture_notification_routes(
                 self.publication.key(),
                 &self.prepared,
                 participants.iter().map(|p| &**p),
             )
         })
-        .and_then(|routes| self.publication.bind_event_routes(routes))
+        .and_then(|routes| self.publication.bind_notification_routes(routes))
         {
             self.publication_failure = Some(error.clone());
             self.publication.revoke();

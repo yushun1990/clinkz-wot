@@ -551,6 +551,7 @@ struct Hub {
     hook: RefCell<Option<Box<dyn FnOnce()>>>,
     closes: Cell<usize>,
 }
+#[derive(Clone)]
 struct Observe(Rc<Hub>);
 struct Participation {
     hub: Rc<Hub>,
@@ -966,5 +967,162 @@ fn closing_finite_facet_keeps_same_consumers_notification_live_and_callback_revo
             .first_cause,
         Some(CoreError::StaleHandle(_))
     ));
+    clean(&bank);
+}
+
+struct ObserveAccess;
+impl ConsumerAccessService for ObserveAccess {
+    fn authorize(
+        &self,
+        id: BindingRegistrationIdentity,
+        endpoint: &str,
+        op: Operation,
+    ) -> CoreResult<()> {
+        assert_eq!(id.binding_id(), BindingId::new(70));
+        assert!(endpoint.starts_with("testobserve://127.0.0.1:"));
+        assert!(matches!(
+            op,
+            Operation::ObserveProperty | Operation::UnobserveProperty
+        ));
+        Ok(())
+    }
+    fn authorize_instance(
+        &self,
+        consumer: &ConsumerInstanceRef,
+        id: BindingRegistrationIdentity,
+        endpoint: &str,
+        op: Operation,
+    ) -> CoreResult<()> {
+        assert!(consumer.is_current());
+        self.authorize(id, endpoint, op)
+    }
+    fn work(&self) -> u64 {
+        1
+    }
+    fn retained_bytes(&self) -> u64 {
+        0
+    }
+}
+// A downstream Cargo-linked Binding implements the same typed Property facet.
+impl ConsumerNotificationPreparation for Observe {
+    fn registration_identity(&self) -> BindingRegistrationIdentity {
+        BindingRegistrationIdentity::new(
+            BindingId::new(70),
+            BindingGeneration::INITIAL,
+            BindingConfigurationDigest::new([70; 32]),
+            BindingArtifactCompatibility::new(*b"downstream-obs01"),
+            0,
+        )
+    }
+    fn preparation_bounds(&self) -> NotificationPreparationBounds {
+        NotificationPreparationBounds {
+            work: 256,
+            temporary_bytes: 256,
+            retained_bytes: 256,
+        }
+    }
+    fn compile_notification(&self, input: ConsumerNotificationInput<'_>) -> CoreResult<Option<()>> {
+        assert_eq!(input.target, &AffordanceTarget::Property(Arc::from("a")));
+        assert_eq!(input.schemas.kind(), NotificationKind::PropertyObservation);
+        assert_eq!(input.endpoint, format!("testobserve://{}", self.0.peer));
+        assert!(input.document.property().observable);
+        Ok(Some(()))
+    }
+}
+#[test]
+fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry_drop() {
+    use clinkz_wot_servient_finite::consumer_notification::ConsumerNotificationRuntime;
+    let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    let hub = hub(peer.local_addr().unwrap());
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let definition = {
+        let mut td = serde_json::to_value(source(
+            json!([{"href":format!("testobserve://{}",hub.peer),"op":"observeproperty"}]),
+        ))
+        .unwrap();
+        td["properties"]["a"]["observable"] = json!(true);
+        let thing = serde_json::from_value(td).unwrap();
+        let registry =
+            ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+                binding: Observe(hub.clone()),
+                services: ConsumerServices {
+                    data: services(Arc::new(Probe::default())).data,
+                    access: Arc::new(ObserveAccess),
+                },
+            }])
+            .unwrap();
+        registry
+            .prepare_notification(
+                &thing,
+                &AffordanceTarget::Property(Arc::from("a")),
+                ConsumerSelector::default(),
+                &GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut work(),
+            )
+            .unwrap()
+    };
+    let owner = instance();
+    let mut root = ConsumerNotificationRuntime::try_new(
+        owner.reference(),
+        definition,
+        RawNotificationLimits {
+            subscriptions: 2,
+            queue_items: 2,
+            queue_payload_bytes: 1024,
+            payload_backing_bytes: 512,
+            control_backing_bytes: 0,
+            target_name_bytes: 256,
+            engine_bytes: 32768,
+        },
+    )
+    .unwrap_or_else(|_| panic!());
+    let mut cursor = root
+        .subscribe(
+            SubscriptionInput(None),
+            ResponseRequirement::None,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .unwrap_or_else(|_| panic!());
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(
+        root.progress(cursor.identity(), &mut cx, &mut work())
+            .unwrap(),
+        NotificationState::Active
+    );
+    let mut wire = [0; 128];
+    let (n, from) = peer.recv_from(&mut wire).unwrap();
+    assert_eq!(&wire[..n], b"OBSERVE 0");
+    assert!(root.front(&mut cursor, &mut work()).unwrap().is_none());
+    peer.send_to(b"0:17", from).unwrap();
+    let start = Instant::now();
+    loop {
+        root.progress(cursor.identity(), &mut cx, &mut work())
+            .unwrap();
+        if let Some(view) = root.front(&mut cursor, &mut work()).unwrap() {
+            assert_eq!(&*view.data.unwrap().body, b"17");
+            break;
+        }
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+    root.advance(&mut cursor, &mut work()).unwrap();
+    root.stop(&cursor, None, &mut work())
+        .unwrap_or_else(|_| panic!());
+    while root
+        .progress(cursor.identity(), &mut cx, &mut work())
+        .unwrap()
+        != NotificationState::Closed
+    {
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+    assert_eq!(
+        root.take_settlement(cursor.identity())
+            .unwrap()
+            .delivered_items,
+        1
+    );
+    drop(root);
     clean(&bank);
 }

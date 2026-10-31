@@ -39,7 +39,7 @@ still have supported-subset limits.
 | --- | --- | --- | --- | --- |
 | Property read | Finite Consumer/Producer paths | Owned preparation and captured services | Qualified final TD and local publication | HTTP in both roles; independent test datagram Consumer |
 | Property write | Producer finite read/write dispatch | Open | Open | Raw test TCP Producer only |
-| Property observe / unobserve | Consumer notification conversation and stop | Open | Open | Raw test datagram observation only; no TD qualification |
+| Property observe / unobserve | Consumer notification conversation/stop and typed Producer value publication | Selected observable Property Form and captured value/access services | Qualified observable sources, value mappings and publication services | Engine Producer-to-Engine Consumers through Mosquitto; mapped unobserve, independent authority and final release; downstream TD-prepared test datagram Consumer |
 | Action invoke | Consumer finite call; Producer continuing invocation store | Explicit `synchronous: true` subset only | Continuing HTTP mapping with captured validation and controls | Test datagram synchronous Consumer; HTTP and test datagram Producer |
 | Action query / cancel | Producer retained invocation controls | Open | Qualified described HTTP control routes | HTTP and test datagram Producer; no composed Consumer control path |
 | Event subscribe / unsubscribe and Producer emission | Consumer Event conversation; distinct Producer emission and settlement | Selected MQTT Event Form, captured services, validated delivery and logical stop/unsubscribe | Qualified MQTT Event sources and emission; broker-native subscribe/unsubscribe without control data or dataResponse | Engine Producer-to-Engine Consumers through Mosquitto, shared native subscriptions, independent logical authority and final release; independent wire peers also exercised |
@@ -59,8 +59,15 @@ join the existing Producer to TD-selected Consumer subscriptions, per-item
 validation, stop/unsubscribe and cleanup, with native matching/distribution and
 shared connection ownership inside MQTT. Retained deliveries are discarded with
 visible loss; no replay or reciprocal response capability is claimed.
+[Property observation](protocol-bindings/protocols/mqtt/tests/property_observation.rs)
+reuses the notification owner with Property value schemas, future-only native
+values and mapped unobserve. Establishment performs no Read, invents no initial
+value and grants no Event response right. Its declared loss policy reports drops
+or terminates, without coalescing. [Property qualification](protocol-bindings/protocols/mqtt/tests/property_qualification.rs)
+checks actual sources, full advertisement, supported schema/mapping and selected
+Consumer services before effects.
 [Downstream Consumer composition](tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
-distinguishes prepared finite I/O from raw observation; the
+exercises prepared finite I/O and TD-selected Property observation with an external test Binding; the
 [notification fixtures](servient/finite/tests/notification.rs) exercise Event
 lifecycle semantics in memory. Test Bindings are not production protocols.
 

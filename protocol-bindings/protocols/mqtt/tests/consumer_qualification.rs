@@ -58,24 +58,26 @@ fn service(address: SocketAddr, id: u32) -> MqttConsumerService {
 }
 fn prepare(
     value: serde_json::Value,
-    inputs: Vec<ConsumerNotificationRegistration<MqttEventConsumer>>,
+    inputs: Vec<ConsumerNotificationRegistration<MqttNotificationConsumer>>,
     selector: ConsumerSelector,
     bank: &Arc<HostResourceAccounts>,
-) -> CoreResult<ConsumerNotificationDefinition<MqttEventConsumer>> {
+) -> CoreResult<ConsumerNotificationDefinition<MqttNotificationConsumer>> {
     let registry = ConsumerNotificationRegistry::try_new(inputs)?;
     let thing = serde_json::from_value(value).unwrap();
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
-    registry.prepare_event(
+    registry.prepare_notification(
         &thing,
-        "alarm",
+        &AffordanceTarget::Event(Arc::from("alarm")),
         selector,
         &limits,
         bank.clone(),
         &mut budget(),
     )
 }
-fn registration(s: &MqttConsumerService) -> ConsumerNotificationRegistration<MqttEventConsumer> {
+fn registration(
+    s: &MqttConsumerService,
+) -> ConsumerNotificationRegistration<MqttNotificationConsumer> {
     ConsumerNotificationRegistration {
         binding: s.binding(),
         services: services(),
@@ -156,10 +158,10 @@ fn common_schema_security_response_and_protocol_assertions_refuse_without_native
         &bank,
     )
     .unwrap();
-    assert!(good.input().schemas.data.is_some());
-    assert!(good.input().schemas.subscription.is_none());
-    assert!(good.input().schemas.cancellation.is_none());
-    assert!(good.input().schemas.data_response.is_none());
+    assert!(good.input().schemas.data().is_some());
+    assert!(good.input().schemas.subscription().is_none());
+    assert!(good.input().schemas.cancellation().is_none());
+    assert!(good.input().schemas.data_response().is_none());
     drop(good);
     assert_empty(&bank);
 }
