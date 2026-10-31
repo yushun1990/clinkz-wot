@@ -201,3 +201,28 @@ Property/Event kind, so source-free pairing cannot relabel an Event subscription
 as Property observation. The Property DataSchema is distinct from all Event
 roles; no native subscription ACK is a Property value. Separate control/response capabilities
 must be supported explicitly; protocol ACKs cannot stand in for application data.
+
+Continuing Consumer Actions use `ConsumerActionMapping` and
+`ConsumerActionExchange`, separate from finite results and notification
+participation. Every selected operation owns its actual immutable native mapping,
+registration/configuration and full declared exchange/continuation/result/scratch
+bounds. Controls explicitly check compatibility with the original invoke mapping;
+different Binding implementations may share an admitted continuation contract.
+`destination` calculates the actual target before captured fresh authorization;
+`start` must use that same target and capture all borrowed input. Refusal permits
+no semantic effect. Tokens and native response envelopes stay opaque to the Engine.
+
+The exchange owner remains retained after response/error until successful local
+retirement, including late observations. Pending or failed retirement cannot
+release its slot/backing/funding. `abort_local` consumes the complete owner under
+a mandatory finite nonblocking local-disposal contract, including destructors;
+it makes no remote-cancellation claim. This Host subset admits no detached jobs
+or asynchronous cleanup transfer. A Binding that cannot meet local disposal needs
+a separately implemented acknowledged successor rather than a fabricated success.
+The HTTP mapping has one active finite exchange per actual registration, released
+after physical retirement; invocation capacity is independently Engine-owned.
+
+A normal poll error and an original late observation from retirement are separate
+outcomes. The Consumer retains the poll error immediately, then retains and
+validates any late completion returned by `poll_close`; an existing error cannot
+be used to discard that observation or promote it to successful handoff.

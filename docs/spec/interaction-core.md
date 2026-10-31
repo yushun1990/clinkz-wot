@@ -120,6 +120,41 @@ separately described query/cancel routes. Its 202 means locally admitted work,
 not remote terminal success or rollback. Other qualified Bindings must provide
 their actual validation services during publication, not at individual ingress.
 
+The Host `consumer_action::ConsumerActionRuntime` implements the continuing
+Consumer association separately from finite results. Its unique local handle
+pins the original Consumer incarnation and selected mappings; the Binding's
+opaque token is retained independently of each finite native exchange and never
+becomes logical authority. Invoke acceptance exposes Pending, not a completed
+result. Explicit query/cancel can use different actual mappings and captured
+access services. The original invoke data service validates completion, including
+late output after cancellation; native output, validation error, first local cause,
+cleanup error and effect uncertainty remain independently observable.
+
+Native completion does not seal unread application success. `Completed` remains
+revocable until `take_settlement(now, budget)` performs paid, fresh checks of
+time, original instance/root authority and captured services/access. Progress and
+local cancellation continue to fence unread completions. Short handoff credit
+retains the complete original result and slot; an earlier progress check cannot
+serve as cached authorization. Fencing preserves native output as evidence in a
+failed settlement. Successful handoff is the local application acceptance edge;
+subsequent revocation does not retract a value already handed to the caller.
+
+A native poll error is retained immediately as `native_error()` and the first
+local cause when none exists. Retirement still owns its original response
+opportunity. Any late output returned by `poll_close` is retained in
+`native_result()` and checked by the captured invoke validator; it cannot erase
+the earlier error, skip validation or establish application success.
+
+Cancellation request acknowledgement and already-terminal acknowledgement grant
+no terminal application result. A subsequent query must obtain and validate it.
+Native cancel failure or loss leaves remote cancellation uncertain. Local cancel,
+abandonment, root close, deadline, policy/service loss or instance replacement
+fences acceptance and retires local work; none sends an undescribed cancel or
+asserts remote rollback. No progress/control path reinvokes an Action. Unread
+terminal settlement retains the original slot; acknowledgement returns a complete
+settlement owner, and stale handles cannot address a reused slot. The settlement
+retains original services, native evidence and funding until final disposal.
+
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property
 observation carries Property values. Event subscription/data/dataResponse/

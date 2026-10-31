@@ -253,3 +253,25 @@ scope and policies, including retained-data loss and the absence of replay.
 Broader schema/security, TLS, QoS 1/2, reconnect, Event responses with real native
 cardinality, separate control Forms, collections and constrained execution remain
 outside this slice. No package, architecture gate or milestone closes here.
+
+## TD-driven continuing Consumer Actions
+
+`HttpActionConsumer` is the Consumer counterpart of the existing qualified
+`HttpActionRuntime` POST/GET/DELETE mapping. The shared pure native lowering
+checks each operation's described method, response, URI-variable, schema and
+security subset. Planning captures the independently selected operations and
+actual services; the execution-only facet consumes no TD/compiler. The native
+token survives exchange/socket disposal and is expanded only in selected control
+Forms, under fresh actual-destination authorization. A wire Location cannot select
+or redirect a control.
+
+The [Action Consumer target](../../protocol-bindings/protocols/http/tests/action_consumer.rs)
+joins actual Engine roles and covers pending/completed and cancellation paths,
+unsupported/missing mappings, input/output validation, uncertain cancel reply,
+resource pressure, policy/service loss, deadlines, abandonment, both role
+replacements, malformed/fragmented native replies and complete final socket/account
+release. Existing Producer and synchronous Consumer tests retain their scopes.
+The [HTTP README](../../protocol-bindings/protocols/http/README.md#td-driven-continuing-consumer-actions)
+owns concrete limits, explicit preparation allowance and supported wire outcomes.
+No general HTTP Action interoperability, TLS, broader schema/security,
+constrained/automatic progress or remote effect certainty is claimed.

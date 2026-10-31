@@ -221,9 +221,31 @@ the MQTT subset explicitly rejects unsupported application control/response data
 Real broker tests join the qualified Engine Producer to these independent
 Consumers and exercise stop/unsubscribe, loss, replacement and cleanup. Native
 matching/distribution/sharing and physical release remain Binding-owned.
-Continuing Consumer Action associations, constrained
-execution and automatic progress remain unimplemented. No universal runtime,
+Constrained execution and automatic progress remain unimplemented. No universal runtime,
 session or all-family acceptance gate is introduced.
+
+The separate `consumer_action::ConsumerActionRuntime` now retains TD-selected
+continuing invocation identity, mappings and services after each native exchange
+ends. Explicit query/cancel uses the original association and current authority;
+cancel acknowledgement is not terminal completion. First local cause, remote
+cancellation status, effect uncertainty, native result, validation and cleanup
+errors remain distinct. Maximum native/input/result/continuation/scratch and
+cleanup backing is funded before invocation. Pending/error retirement and unread
+settlement keep original owners; stale handles cannot control reused slots.
+The HTTP integration covers real acceptance, pending/completion, cancel, service/
+policy loss, deadlines, both role replacements, resource pressure and final
+release. The downstream datagram fixture covers different actual Binding types,
+zero-credit progress and blocked/error cleanup with a retained late invalid result.
+The original synchronous Consumer path remains separately exercised.
+
+Unread native completion remains revocable until a paid settlement handoff with
+fresh time, original authority and captured service/access checks. The HTTP
+Consumer regressions cover direct handoff and additional progress after
+revocation, denial, service/root loss, cancellation or expiry, plus insufficient
+handoff work and callback-time service loss. An actual HTTP query exchange also
+returns its original late output through retirement after a poll error; the
+original error, late output and captured validation failure remain independently
+retained and funded. These repairs do not change package acceptance status.
 
 ## Open finite Consumer ownership
 

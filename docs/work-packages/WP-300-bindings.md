@@ -61,6 +61,17 @@ already has no `Copy` bound. Common selection/preparation hands off to these
 distinct controls, never to a universal call/session. Discovery remains an
 explicit workflow under WP-500, even when it uses a selected Consumer operation.
 
+Continuing Consumer Actions use the distinct `ConsumerActionMapping` and
+`ConsumerActionExchange` native facet. A selected invoke mapping produces its
+opaque continuation; independently selected controls must explicitly support it.
+Native destination expansion precedes captured access checks. Exchanges retain
+pending/failed retirement and late replies with complete owners, and owe finite
+local abort. No transport correlation becomes logical authority. Real HTTP joins
+the existing qualified Producer; the independently Cargo-linked Action fixture
+uses different invoke/control implementations and real datagrams to test this
+boundary, including blocked/error cleanup and late invalid completion. Its
+evidence supplements the existing synchronous finite and notification regressions.
+
 HTTP SSE does not determine general fields, thread/atomic requirements, retry,
 reply cardinality or one-connection-per-subscription policy. Native streams,
 correlation, framing, reconnect and shared-service leases stay Binding-owned.

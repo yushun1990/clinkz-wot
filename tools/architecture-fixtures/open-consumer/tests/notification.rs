@@ -110,8 +110,8 @@ impl ConsumerNotificationPreparation for EventBinding {
             0,
         )
     }
-    fn preparation_bounds(&self) -> NotificationPreparationBounds {
-        NotificationPreparationBounds {
+    fn preparation_bounds(&self) -> ConsumerPreparationBounds {
+        ConsumerPreparationBounds {
             work: 32,
             temporary_bytes: 128,
             retained_bytes: 128,

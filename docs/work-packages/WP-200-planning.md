@@ -206,7 +206,7 @@ visible; whole-TD Producer qualification never drops an unsupported Write.
 The independent downstream Binding executes these finite interactions over real datagrams
 after TD/compiler destruction, including warm calls, rejected/unpaid inputs,
 empty Action roles, policy/replacement/cancellation and retained late results.
-Continuing/unspecified Action synchronicity, control operations, collections,
+The finite facet keeps continuing/unspecified Action synchronicity, control operations, collections,
 additional/different response formats and unsupported schema/security assertions
 remain explicit unsupported alternatives. This is not a universal finite model
 for every WoT operation or complete Action support. Notification preparation uses
@@ -218,6 +218,16 @@ its Property-shaped keys, requests and validator contract are replaced rather
 than repeated for each family. A general schema IR, security verifier framework,
 first-use cache or protocol-specific stream adds no necessary functionality to
 this composition proof and is not introduced.
+
+The [continuing Action preparation](../spec/planning.md#continuing-consumer-action-preparation)
+adds an independent operation-scoped association through `ConsumerActionRegistry`.
+It selects actual invoke/query/cancel mappings and services after common TD
+admission, checks native continuation compatibility and owns the complete result
+after source/compiler disposal. Missing described control support refuses the
+association; absence never synthesizes a mapping. It retains type-only/NoSec
+limits. The HTTP Engine-to-Engine and downstream datagram Action fixtures cover
+this capability alongside unchanged synchronous finite execution. This adds no
+whole-family, package or milestone acceptance claim.
 
 ## Implemented finite join
 

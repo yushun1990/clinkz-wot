@@ -11,8 +11,8 @@ behavior owner. Currentness cannot be copied into per-Binding registries. A
 retention reference for original accepted work grants neither fresh acceptance
 nor native shutdown authority.
 
-The Host Consumer's finite and composed/raw notification owners capture the same independent
-`ConsumerInstance` reference. Revocation or authority Drop fences both, including
+The Host Consumer's finite, continuing Action and composed/raw notification owners capture the same independent
+`ConsumerInstance` reference. Revocation or authority Drop fences each, including
 unread finite results and callback-time late notifications. Each owner rechecks
 currentness after permission, codec and native callbacks before successful local
 handoff. Closing/dropping one facet or stopping one call/subscription revokes only
@@ -28,6 +28,28 @@ policy/validation failure. Already accepted Producer writes retain their origina
 behavior/result across replacement, while pending acceptance cannot target the
 successor. Unread results keep native occupancy and original funding; final
 physical release and settlement acknowledgement precede admission reuse.
+
+Continuing Action admission reserves the maximum selected native exchange,
+opaque continuation, input, response and validation scratch plus cleanup before
+native acceptance. One invocation has at most one exchange; accepted continuation
+identity survives exchange retirement. Pending/error cleanup keeps the complete
+original owner and reservation, including through root loss and unread terminal
+settlement. Finite local abort disposes the native owner before funding refunds.
+An abandoned handle is retained for round-robin manual cleanup by its root; if
+all local owners disappear, the captured native finite-abort contract applies.
+Neither path claims that independent remote Action work stopped. Callback-time
+authority/service checks fence late success; original native result, validation
+failure and first local cause remain distinct. Handles cannot substitute mappings,
+move to a successor incarnation or address a reused slot.
+
+Native result readiness is separate from successful local handoff. Unread Action
+completions remain subject to cancellation, original authority/root revocation,
+deadline and captured service/policy loss. Settlement handoff takes current time
+and work credit, pays fresh destination/access checks and rechecks captured
+services after callbacks. Insufficient credit grants no success and keeps the
+original slot and funding. Native poll errors and late retirement output retain
+independent evidence; even after an error, captured validation applies to that
+late output before final settlement, without clearing the first cause.
 The composed notification owner captures the actual data/access services and separately
 prepared Property value or Event schema roles, prepays validation before native handoff and checks data
 before queue acceptance. Invalid/late data and first causes remain with the

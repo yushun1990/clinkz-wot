@@ -9,17 +9,11 @@ use clinkz_wot_td::semantic::ResolvedSemanticDocument;
 /// Bounds cover the whole callback and rollback, including variable backing.
 pub trait ConsumerNotificationPreparation: ConsumerNotificationBinding + Clone + 'static {
     fn registration_identity(&self) -> BindingRegistrationIdentity;
-    fn preparation_bounds(&self) -> NotificationPreparationBounds;
+    fn preparation_bounds(&self) -> ConsumerPreparationBounds;
     fn compile_notification(
         &self,
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<Self::Program>>;
-}
-#[derive(Clone, Copy)]
-pub struct NotificationPreparationBounds {
-    pub work: u64,
-    pub temporary_bytes: u64,
-    pub retained_bytes: u64,
 }
 pub struct ConsumerNotificationInput<'a> {
     pub document: &'a ResolvedSemanticDocument<'a>,
