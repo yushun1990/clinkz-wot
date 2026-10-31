@@ -136,49 +136,66 @@ impl ConsumerActionRegistry {
                     }
                     let index = form.index;
                     let ops = form.effective_operations.to_vec();
-                    for (i, operation, selector) in [
+                    let coordinates = [
                         (0, Operation::InvokeAction, selectors.invoke),
                         (1, Operation::QueryAction, selectors.query),
                         (2, Operation::CancelAction, selectors.cancel),
-                    ] {
-                        if !ops.contains(&operation) {
-                            continue;
-                        }
-                        described[i] = true;
-                        if selected[i].is_some() || selector.form.is_some_and(|f| f != index) {
-                            continue;
-                        }
-                        let result = cursor.with_form_semantics(
-                            ValidatedProducerScope::Action(name),
-                            index,
-                            budget,
-                            |doc, endpoint, budget| {
-                                self.select(
+                    ];
+                    for (i, operation, _) in coordinates {
+                        described[i] |= ops.contains(&operation);
+                    }
+                    if coordinates.iter().all(|(i, operation, selector)| {
+                        !ops.contains(operation)
+                            || selected[*i].is_some()
+                            || selector.form.is_some_and(|f| f != index)
+                    }) {
+                        cursor.acknowledge();
+                        continue;
+                    }
+                    // Resolve common meaning once even when a native Form
+                    // supports several Action operations through distinct mappings.
+                    let result = cursor.with_form_semantics(
+                        ValidatedProducerScope::Action(name),
+                        index,
+                        budget,
+                        |doc, endpoint, budget| -> CoreResult<()> {
+                            for (i, operation, selector) in coordinates {
+                                if !ops.contains(&operation)
+                                    || selected[i].is_some()
+                                    || selector.form.is_some_and(|f| f != index)
+                                {
+                                    continue;
+                                }
+                                match self.select(
                                     doc, name, index, operation, endpoint, selector, limits, &bank,
                                     budget,
-                                )
-                            },
-                        );
-                        match result {
-                            Ok(Some(Ok(Some((s, op, mut leases))))) => {
-                                if schemas.is_some_and(|old| old != s) {
-                                    return Err(invalid());
+                                ) {
+                                    Ok(Some((s, op, mut leases))) => {
+                                        if schemas.is_some_and(|old| old != s) {
+                                            return Err(invalid());
+                                        }
+                                        schemas = Some(s);
+                                        funding.append(&mut leases);
+                                        selected[i] = Some(op);
+                                    }
+                                    Ok(None) | Err(CoreError::UnsupportedOperation(_)) => {}
+                                    Err(e) => return Err(e),
                                 }
-                                schemas = Some(s);
-                                funding.append(&mut leases);
-                                selected[i] = Some(op);
                             }
-                            Ok(Some(Ok(None) | Err(CoreError::UnsupportedOperation(_)))) => {}
-                            Ok(Some(Err(e))) => return Err(e),
-                            Ok(None) => return Err(busy()),
-                            Err(ValidatedSemanticError::Admission(e)) => {
-                                return Err(crate::producer_property_read::td_error(e));
-                            }
-                            Err(ValidatedSemanticError::Resolution(
-                                clinkz_wot_td::semantic::SemanticError::Allocation,
-                            )) => return Err(busy()),
-                            Err(ValidatedSemanticError::Resolution(_)) => {}
+                            Ok(())
+                        },
+                    );
+                    match result {
+                        Ok(Some(Ok(()) | Err(CoreError::UnsupportedOperation(_)))) => {}
+                        Ok(Some(Err(e))) => return Err(e),
+                        Ok(None) => return Err(busy()),
+                        Err(ValidatedSemanticError::Admission(e)) => {
+                            return Err(crate::producer_property_read::td_error(e));
                         }
+                        Err(ValidatedSemanticError::Resolution(
+                            clinkz_wot_td::semantic::SemanticError::Allocation,
+                        )) => return Err(busy()),
+                        Err(ValidatedSemanticError::Resolution(_)) => {}
                     }
                     cursor.acknowledge();
                 }

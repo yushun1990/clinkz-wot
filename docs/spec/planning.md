@@ -195,6 +195,7 @@ interceptor or a claim of recoverable process-wide OOM.
 
 `ConsumerActionRegistry::prepare_action` admits one Action through the common
 Basic/semantic Form walk and captures source-free invoke/query/cancel mappings.
+One paid semantic loan serves all effective operations of a Form.
 It accepts absent or false synchronicity; explicit synchronous Actions retain the
 finite facet. Each described control operation must have a supported selected
 Form; absent controls stay unavailable. Form order is the default preference,

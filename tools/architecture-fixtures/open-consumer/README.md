@@ -62,6 +62,7 @@ the test protocol remains unqualified for production use.
 `tests/action.rs` implements the new continuing Action preparation and native
 facets entirely outside the workspace. Different invoke/control Binding types
 execute real datagrams with an opaque token after the source TD/compilers disappear.
+One TD Form describes all three operations, with independently selected mappings.
 The tests cover pending/query/cancel/completion, zero-credit progress and blocked/
 failed cleanup around a late invalid output. They retain first local cause,
 validation/native evidence and original funding through settlement and final local

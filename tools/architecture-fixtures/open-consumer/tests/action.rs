@@ -307,9 +307,7 @@ fn client(
     .unwrap();
     let td = serde_json::from_value(serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"native Action", "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
         "actions":{"run":{"input":{"type":"integer"}, "output":{"type":"integer"}, "forms":[
-            {"href":format!("linkedudp://{peer}/invoke"), "op":"invokeaction"},
-            {"href":format!("linkedudp://{peer}/query"), "op":"queryaction"},
-            {"href":format!("linkedudp://{peer}/cancel"), "op":"cancelaction"}]}}})).unwrap();
+            {"href":format!("linkedudp://{peer}/action"), "op":["invokeaction","queryaction","cancelaction"]}]}}})).unwrap();
     let d = registry
         .prepare_action(
             &td,
