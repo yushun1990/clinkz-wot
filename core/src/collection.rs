@@ -22,6 +22,7 @@ impl PropertyCollectionSchema {
     pub const MAX_TOTAL_NAME_BYTES: usize = 4096;
     pub fn try_new(members: Vec<PropertyMemberSchema>) -> CoreResult<Self> {
         if members.len() > Self::MAX_MEMBERS
+            || members.capacity() > Self::MAX_MEMBERS
             || members.iter().map(|m| m.name.len()).sum::<usize>() > Self::MAX_TOTAL_NAME_BYTES
             || members.iter().enumerate().any(|(i, m)| {
                 m.name.len() > Self::MAX_NAME_BYTES

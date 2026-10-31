@@ -44,6 +44,12 @@ fn empty_maximal_and_unicode_member_sets_validate_exactly() {
 }
 #[test]
 fn descriptor_bounds_and_decoded_duplicate_names_cannot_weaken_the_map() {
+    let mut oversized_backing = Vec::with_capacity(64);
+    oversized_backing.push(PropertyMemberSchema {
+        name: "level".into(),
+        schema: TypeSchema::Any,
+    });
+    assert!(PropertyCollectionSchema::try_new(oversized_backing).is_err());
     let s = schema(&["level"]);
     assert!(check(&s, br#"{"\u006cevel":7}"#));
     assert!(!check(&s, br#"{"level":7,"\u006cevel":8}"#));
