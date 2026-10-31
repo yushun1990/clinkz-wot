@@ -34,6 +34,11 @@ local cancellation, replacement, failed or ambiguous exchange cannot prove that
 the remote write did not occur and never authorizes automatic replay.
 
 HTTP uses operation defaults GET/PUT and a strictly empty 204 Write success.
+The strict empty remainder is checked through peer EOF on the existing closing
+connection. Hyper's header-terminator completion alone cannot establish it:
+the bounded raw head stays private until EOF, then enters Hyper under the same
+callback byte allowance. Waiting retains the original cancellable call/socket;
+native read partitioning cannot change the completion or resource contract.
 An HTTP 202, read-shaped 200, malformed framing, unexpected body or unsupported
 response mapping grants no application success. This is a concrete supported
 mapping, not a Core status convention or general interoperability claim.

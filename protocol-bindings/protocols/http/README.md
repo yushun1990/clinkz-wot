@@ -122,9 +122,9 @@ described below; Consumer and Producer support policies remain role-specific.
 
 ## Identity, buffering and ownership
 
-The private encoding is `clinkz-http-ip-v7\0` followed by the exact ASCII policy
-in `src/lib.rs::PRIVATE_POLICY`. V7 includes operation-scoped Read/Write programs,
-bounded JSON input and the strict empty-204 Write completion mapping.
+The private encoding is `clinkz-http-ip-v8\0` followed by the exact ASCII policy
+in `src/lib.rs::PRIVATE_POLICY`. V8 retains operation-scoped Read/Write programs
+and bounded JSON input, and gates empty-204 Write completion on peer EOF.
 The separate native configuration digest includes its
 artifact compatibility, target capacity and result limits. Client, compiler,
 complete registration, selected artifact and diagnostics agree. Historical private
@@ -486,7 +486,17 @@ validator then checks its prepared Property schema before effects.
 Write handlers report empty `InteractionStatus::Ok` completion. HTTP maps this to
 an empty 204; handler/validation errors retain the existing 500/null mapping.
 The Consumer accepts only an empty primary 204 without Content-Length or
-Transfer-Encoding. Read-shaped 200, asynchronous 202, truncated/malformed
+Transfer-Encoding, with no bytes after the header through peer EOF on the
+existing `Connection: close` exchange. Hyper regards a 204 as complete at its
+header terminator; this stricter Binding guard keeps the existing bounded raw
+head private until EOF, then supplies it to Hyper under the same 4096-byte
+callback allowance. Neither coalesced bytes beyond the head buffer nor bytes
+arriving on a later read can bypass the check. A peer that leaves the response
+direction open keeps the original call/socket/funding pending; cancellation,
+deadline, revocation and owner loss can still retire it without waiting for EOF.
+This is the chosen native completion boundary alongside HTTP's
+[connection-close behavior](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.6).
+Read-shaped 200, asynchronous 202, truncated/malformed
 responses and unexpected data do not establish Write success. This strict
 response subset is a concrete Binding contract, not a universal WoT requirement
 or an HTTP status switch in Core. It neither performs hidden Read nor confirms
@@ -505,7 +515,10 @@ preserve accepted work until bounded retirement and final acknowledgement.
 Read, independent definitions, readOnly/writeOnly and explicit operation
 applicability, full-description refusal, untrusted input, ambiguous native replies,
 handler error after effects, cancellation/timeout, replacement, lost services,
-unread capacity and final socket/account release. The independently Cargo-linked
+unread capacity and final socket/account release. The empty-Write regressions
+additionally exercise 4096/8192-byte header boundaries,
+coalesced/fragmented trailing data, valid peer half-close and funded cancellation
+while waiting for EOF. The independently Cargo-linked
 Consumer fixture executes Write over real datagrams using its own `WRITTEN`
 completion marker and opaque Core status 0, including retained late success.
 It is test-only and adds no production protocol.

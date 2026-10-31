@@ -822,6 +822,238 @@ fn consumer_requires_the_prepared_native_write_completion_and_never_replays_unce
 }
 
 #[test]
+fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
+    io().block_on(async {
+        for head_bytes in [4096, 8192, 1024, 4095, 4097, 8191] {
+            for fragmented in [false, true] {
+                for extra_byte in [true, false] {
+                    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+                    let addr = listener.local_addr().unwrap();
+                    let (head_sent, head_ready) = std::sync::mpsc::channel();
+                    let (finish, finish_peer) = std::sync::mpsc::channel();
+                    let peer = std::thread::spawn(move || {
+                        let (mut stream, _) = listener.accept().unwrap();
+                        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                        let mut request = Vec::new();
+                        let mut buf = [0; 4096];
+                        while !request.ends_with(b"\r\n\r\n7") {
+                            let n = stream.read(&mut buf).unwrap();
+                            assert!(n > 0);
+                            request.extend_from_slice(&buf[..n]);
+                        }
+                        assert!(request.starts_with(b"PUT /level HTTP/1.1\r\n"));
+                        let mut reply = b"HTTP/1.1 204 No Content\r\nX-Pad: ".to_vec();
+                        reply.resize(head_bytes - 4, b'x');
+                        reply.extend_from_slice(b"\r\n\r\n");
+                        assert_eq!(reply.len(), head_bytes);
+                        if fragmented {
+                            stream.write_all(&reply).unwrap();
+                            head_sent.send(()).unwrap();
+                            finish_peer.recv_timeout(Duration::from_secs(5)).unwrap();
+                            if extra_byte { let _ = stream.write_all(b"7"); }
+                        } else {
+                            if extra_byte { reply.push(b'7'); }
+                            stream.write_all(&reply).unwrap();
+                        }
+                        stream.shutdown(std::net::Shutdown::Write).unwrap();
+                        match stream.read(&mut buf) {
+                            Ok(0) => {},
+                            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => {},
+                            result => panic!("original Consumer socket was not retired: {result:?}"),
+                        }
+                        listener
+                    });
+                    let accounts = bank();
+                    let owner = consumer_instance();
+                    let client = client(description(addr), Arc::new(AtomicBool::new(false)), accounts.clone(), &owner);
+                    let mut call = start_write(&client, b"7");
+                    let start = Instant::now();
+                    let mut result = None;
+                    let mut early_result = false;
+                    if fragmented {
+                        while head_ready.try_recv().is_err() {
+                            if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) { result = Some(s); break; }
+                            assert!(start.elapsed() < Duration::from_secs(5));
+                            tokio::time::sleep(Duration::from_millis(1)).await;
+                        }
+                        for _ in 0..20 {
+                            if result.is_some() { break; }
+                            if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) { result = Some(s); break; }
+                            tokio::time::sleep(Duration::from_millis(1)).await;
+                        }
+                        early_result = result.is_some();
+                        finish.send(()).unwrap();
+                    }
+                    let result = loop {
+                        if let Some(s) = result.take() { break s; }
+                        if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) { break s; }
+                        assert!(start.elapsed() < Duration::from_secs(5));
+                        tokio::time::sleep(Duration::from_millis(1)).await;
+                    };
+                    let success = result.result().is_ok();
+                    assert_eq!(result.effect(), ConsumerEffect::Unknown);
+                    drop(result); drop(call); drop(client); clean(&accounts);
+                    let listener = peer.join().unwrap();
+                    listener.set_nonblocking(true).unwrap();
+                    assert!(matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock), "no implicit Write replay");
+                    assert!(!early_result, "settled before peer EOF: head={head_bytes}, extra={extra_byte}");
+                    assert_eq!(success, !extra_byte, "head={head_bytes}, fragmented={fragmented}, extra={extra_byte}");
+                }
+            }
+        }
+    });
+}
+
+#[test]
+fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_deadlines() {
+    io().block_on(async {
+        for fault in ["cancel", "timeout", "revoke", "root", "abandon"] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            let (head_sent, head_ready) = std::sync::mpsc::channel();
+            let (closed, peer_closed) = std::sync::mpsc::channel();
+            let peer = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut buf = [0; 4096];
+                while !request.ends_with(b"\r\n\r\n7") {
+                    let n = stream.read(&mut buf).unwrap();
+                    assert!(n > 0);
+                    request.extend_from_slice(&buf[..n]);
+                }
+                stream
+                    .write_all(b"HTTP/1.1 204 No Content\r\n\r\n")
+                    .unwrap();
+                head_sent.send(()).unwrap();
+                // Keep the response direction open: local cancellation must
+                // dispose this exact socket without awaiting peer EOF.
+                assert_eq!(stream.read(&mut buf).unwrap(), 0);
+                closed.send(()).unwrap();
+                listener
+            });
+            let accounts = bank();
+            let owner = consumer_instance();
+            let mut client = Some(client(
+                description(addr),
+                Arc::new(AtomicBool::new(false)),
+                accounts.clone(),
+                &owner,
+            ));
+            let mut call = Some(
+                client
+                    .as_ref()
+                    .unwrap()
+                    .write_property(
+                        "level",
+                        payload(b"7"),
+                        Deadline::at(now(10)),
+                        now(0),
+                        &mut work(),
+                    )
+                    .unwrap_or_else(|e| panic!("{:?}", e.error())),
+            );
+            let start = Instant::now();
+            while head_ready.try_recv().is_err() {
+                assert!(
+                    call.as_mut()
+                        .unwrap()
+                        .poll(&mut cx(), now(0), &mut work())
+                        .is_pending()
+                );
+                assert!(start.elapsed() < Duration::from_secs(5));
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            for _ in 0..20 {
+                assert!(
+                    call.as_mut()
+                        .unwrap()
+                        .poll(&mut cx(), now(0), &mut work())
+                        .is_pending()
+                );
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
+            assert!(accounts.account(ResourceKind::CleanupBytesMax).used() > 0);
+            match fault {
+                "cancel" => call.as_ref().unwrap().cancel(),
+                "revoke" => owner.revoke(),
+                "root" => drop(client.take()),
+                "abandon" => drop(call.take()),
+                _ => {}
+            }
+            let instant = now(if fault == "timeout" { 10 } else { 0 });
+            if let Some(call) = call.as_mut() {
+                assert!(
+                    call.poll(&mut cx(), instant, &mut WorkBudget::new())
+                        .is_pending()
+                );
+            } else {
+                client
+                    .as_ref()
+                    .unwrap()
+                    .step(&mut cx(), instant, &mut WorkBudget::new());
+            }
+            assert_eq!(
+                retained,
+                ResourceKind::ALL.map(|k| accounts.account(k).used())
+            );
+            assert!(
+                peer_closed.try_recv().is_err(),
+                "unfunded progress cannot dispose the original socket"
+            );
+            if let Some(call) = call.as_mut() {
+                let result = loop {
+                    if let Poll::Ready(s) = call.poll(&mut cx(), instant, &mut work()) {
+                        break s;
+                    }
+                    assert!(start.elapsed() < Duration::from_secs(5));
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                };
+                assert!(result.result().is_err());
+                assert_eq!(result.effect(), ConsumerEffect::Unknown);
+                assert_eq!(result.consumer(), &owner.reference());
+                assert!(matches!(
+                    result.native_outcome(),
+                    BindingCallSettlement::Cancelled {
+                        retry_class: RetryClass::Never,
+                        ..
+                    }
+                ));
+                assert!(
+                    matches!(result.first_cause(), Some(CoreError::TimedOut(_)))
+                        == (fault == "timeout")
+                );
+                assert!(
+                    accounts.account(ResourceKind::CleanupBytesMax).used() > 0,
+                    "unread settlement retains its original funding"
+                );
+                drop(result);
+            } else {
+                while !client.as_ref().unwrap().is_idle() {
+                    client
+                        .as_ref()
+                        .unwrap()
+                        .step(&mut cx(), instant, &mut work());
+                    assert!(start.elapsed() < Duration::from_secs(5));
+                }
+            }
+            drop(call);
+            drop(client);
+            clean(&accounts);
+            let listener = peer.join().unwrap();
+            listener.set_nonblocking(true).unwrap();
+            assert!(
+                matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock),
+                "no implicit Write replay"
+            );
+        }
+    });
+}
+
+#[test]
 fn consumer_cancellation_replacement_timeout_and_policy_loss_preserve_original_remote_effect() {
     io().block_on(async {
         for fault in ["cancel", "replace", "timeout", "policy"] {

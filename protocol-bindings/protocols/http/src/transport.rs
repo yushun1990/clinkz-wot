@@ -37,6 +37,8 @@ struct Ingress {
     wire: usize,
     allowance: Arc<AtomicUsize>,
     write: bool,
+    write_eof: bool,
+    head_sent: usize,
 }
 fn forbidden_trailer(name: &str) -> bool {
     [
@@ -63,7 +65,11 @@ impl Ingress {
             return Err(invalid());
         }
         if self.head_done {
-            return Ok(());
+            return if self.write && !bytes.is_empty() {
+                Err(invalid())
+            } else {
+                Ok(())
+            };
         }
         let n = bytes.len().min(self.head.len() - self.head_len);
         self.head[self.head_len..self.head_len + n].copy_from_slice(&bytes[..n]);
@@ -142,7 +148,7 @@ impl Ingress {
                             || transfer != 0
                             || lengths != 0
                             || declares_trailers
-                            || self.head_len != end))
+                            || self.wire != end))
                     || transfer > 1
                     || lengths > 1
                     || (transfer != 0 && lengths != 0)
@@ -155,6 +161,29 @@ impl Ingress {
         }
         Ok(())
     }
+
+    /// Hyper completes a 204 at the header terminator. This mapping additionally
+    /// requires an empty remainder through peer EOF on its Connection: close
+    /// exchange. Keep the bounded existing head private until that check passes,
+    /// then lend it to Hyper under the same per-callback byte allowance.
+    fn poll_write_head(
+        &mut self,
+        cx: &mut Context<'_>,
+        output: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let n = (self.head_len - self.head_sent)
+            .min(output.remaining())
+            .min(4096)
+            .min(self.allowance.load(Ordering::Relaxed));
+        if n == 0 && self.head_sent != self.head_len {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        output.put_slice(&self.head[self.head_sent..self.head_sent + n]);
+        self.head_sent += n;
+        self.allowance.fetch_sub(n, Ordering::Relaxed);
+        Poll::Ready(Ok(()))
+    }
 }
 impl AsyncRead for Ingress {
     fn poll_read(
@@ -162,15 +191,18 @@ impl AsyncRead for Ingress {
         cx: &mut Context<'_>,
         output: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
+        if output.remaining() == 0 {
+            return Poll::Ready(Ok(()));
+        }
+        if self.write_eof {
+            return self.poll_write_head(cx, output);
+        }
         let available = self
             .allowance
             .load(Ordering::Relaxed)
             .min(4096)
             .min(output.remaining())
             .min(32768 - self.wire);
-        if output.remaining() == 0 {
-            return Poll::Ready(Ok(()));
-        }
         if self.wire == 32768 {
             return Poll::Ready(Err(invalid()));
         }
@@ -187,6 +219,17 @@ impl AsyncRead for Ingress {
                 let bytes = read.filled();
                 self.allowance.fetch_sub(bytes.len(), Ordering::Relaxed);
                 self.inspect(bytes)?;
+                if self.write {
+                    if bytes.is_empty() {
+                        if !self.head_done {
+                            return Poll::Ready(Err(invalid()));
+                        }
+                        self.write_eof = true;
+                        return self.poll_write_head(cx, output);
+                    }
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
                 output.put_slice(bytes);
                 Poll::Ready(Ok(()))
             }
@@ -234,6 +277,8 @@ pub(super) async fn exchange(
         wire: 0,
         allowance,
         write,
+        write_eof: false,
+        head_sent: 0,
     });
     let (mut sender, connection) = hyper::client::conn::http1::Builder::new()
         .max_headers(32)
@@ -381,6 +426,8 @@ mod tests {
                     wire: 0,
                     allowance: allowance.clone(),
                     write: false,
+                    write_eof: false,
+                    head_sent: 0,
                 };
                 let mut storage = [0; 16384];
                 let mut cx = Context::from_waker(Waker::noop());
