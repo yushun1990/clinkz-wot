@@ -307,11 +307,15 @@ impl ConsumerDefinition {
                 .all(|s| input.services.data.supports_schema(s))
             || !matches!(
                 (&input.affordance, input.operation),
-                (AffordanceTarget::Property(_), Operation::ReadProperty)
-                    | (AffordanceTarget::Action(_), Operation::InvokeAction)
+                (
+                    AffordanceTarget::Property(_),
+                    Operation::ReadProperty | Operation::WriteProperty
+                ) | (AffordanceTarget::Action(_), Operation::InvokeAction)
             )
             || (input.operation == Operation::ReadProperty
                 && (input.schemas.input.is_some() || input.schemas.output.is_none()))
+            || (input.operation == Operation::WriteProperty
+                && (input.schemas.input.is_none() || input.schemas.output.is_some()))
             || policy.validation_work == 0
             || input.services.access.work() == 0
         {

@@ -21,7 +21,10 @@ impl HostSemanticCompiler for HttpCompiler {
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         use clinkz_wot_td::data_type::Operation;
         if !matches!(input.owner, clinkz_wot_td::semantic::FormOwner::Property(_))
-            || input.operation != Operation::ReadProperty
+            || !matches!(
+                input.operation,
+                Operation::ReadProperty | Operation::WriteProperty
+            )
             || input.content_type != Some("application/json")
             || input.subprotocol.is_some()
         {
@@ -32,6 +35,14 @@ impl HostSemanticCompiler for HttpCompiler {
             .document
             .form_facts(input.property, input.form_index)
             .ok_or_else(unsupported)?;
+        let write = input.operation == Operation::WriteProperty;
+        let flags = input.document.property().schema.facts();
+        if !facts.effective_operations.contains(&input.operation)
+            || (write && flags.read_only)
+            || (!write && flags.write_only)
+        {
+            return Err(unsupported());
+        }
         let [security_name] = facts.effective_security else {
             return Err(unsupported());
         };
@@ -61,6 +72,8 @@ impl HostSemanticCompiler for HttpCompiler {
             })
             .ok_or_else(unsupported)?;
         let mut output = HttpArtifact {
+            operation: input.operation,
+            method: if write { "PUT" } else { "GET" },
             target_len: input.target.len() as u8,
             ..HttpArtifact::default()
         };
@@ -81,6 +94,9 @@ impl HostSemanticCompiler for HttpCompiler {
                 SemanticValue::Text("DELETE") => "DELETE",
                 _ => return Err(unsupported()),
             };
+            if write && output.method != "PUT" {
+                return Err(unsupported());
+            }
         }
         if let Some(headers) = unique(form, "http://www.w3.org/2011/http#headers")? {
             if headers.value() != SemanticValue::Array {
@@ -130,7 +146,7 @@ impl HostSemanticCompiler for HttpCompiler {
             index: input.form_index,
         }) {
             if let Some(status) = unique(response, "http://www.w3.org/2011/http#statusCodeValue")?
-                && !matches!(status.value(), SemanticValue::Number(n) if n.as_u64() == Some(200))
+                && !matches!(status.value(), SemanticValue::Number(n) if n.as_u64() == Some(if write { 204 } else { 200 }))
             {
                 return Err(unsupported());
             }

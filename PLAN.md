@@ -38,12 +38,19 @@ still have supported-subset limits.
 | Capability | Raw execution kernels | TD-driven Consumer composition | TD-driven Producer composition | Actual Binding I/O evidence |
 | --- | --- | --- | --- | --- |
 | Property read | Finite Consumer/Producer paths | Owned preparation and captured services | Qualified final TD and local publication | HTTP in both roles; independent test datagram Consumer |
-| Property write | Producer finite read/write dispatch | Open | Open | Raw test TCP Producer only |
+| Property write | Finite Consumer/Producer paths | Operation-scoped value schema, captured Binding/data/access services | Complete qualified final TD, captured input/output validation and local publication | Engine Consumer-to-Producer HTTP PUT/204; Read/Write on one Property/listener; downstream test datagram Consumer |
 | Property observe / unobserve | Consumer notification conversation/stop and typed Producer value publication | Selected observable Property Form and captured value/access services | Qualified observable sources, value mappings and publication services | Engine Producer-to-Engine Consumers through Mosquitto; mapped unobserve, independent authority and final release; downstream TD-prepared test datagram Consumer |
 | Action invoke | Consumer finite call; Producer continuing invocation store | Explicit `synchronous: true` subset only | Continuing HTTP mapping with captured validation and controls | Test datagram synchronous Consumer; HTTP and test datagram Producer |
 | Action query / cancel | Producer retained invocation controls | Open | Qualified described HTTP control routes | HTTP and test datagram Producer; no composed Consumer control path |
 | Event subscribe / unsubscribe and Producer emission | Consumer Event conversation; distinct Producer emission and settlement | Selected MQTT Event Form, captured services, validated delivery and logical stop/unsubscribe | Qualified MQTT Event sources and emission; broker-native subscribe/unsubscribe without control data or dataResponse | Engine Producer-to-Engine Consumers through Mosquitto, shared native subscriptions, independent logical authority and final release; independent wire peers also exercised |
 | Described collection operations | No collection execution path | Open | Open | No joined native collection evidence |
+
+The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
+proves the bounded JSON/type-only, endpoint NoSec HTTP subset, including
+pre-effect validation/authorization, ambiguous response refusal, cancellation,
+replacement, retained late outcomes and final release. Unsupported required
+schema/security assertions refuse preparation; no automatic uncertain-write
+replay or readback confirmation is claimed.
 
 Here **Open** means no joined implementation for that role/operation, even when
 a raw primitive exists. Finite read/write evidence is in

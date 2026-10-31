@@ -2,7 +2,7 @@
 use super::*;
 
 pub(super) const COMPATIBILITY: BindingArtifactCompatibility =
-    BindingArtifactCompatibility::new(*b"clinkz-http-v001");
+    BindingArtifactCompatibility::new(*b"clinkz-http-v002");
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Span {
@@ -12,6 +12,7 @@ pub(super) struct Span {
 /// Source-free native request instructions. All retained backing is inline.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct HttpArtifact {
+    pub(super) operation: Operation,
     pub(super) target: [u8; 64],
     pub(super) target_len: u8,
     pub(super) method: &'static str,
@@ -25,6 +26,7 @@ pub(super) struct HttpArtifact {
 impl Default for HttpArtifact {
     fn default() -> Self {
         Self {
+            operation: Operation::ReadProperty,
             target: [0; 64],
             target_len: 0,
             method: "GET",
@@ -76,6 +78,11 @@ impl HttpArtifact {
                     || self
                         .headers()
                         .any(|(n, _)| n.eq_ignore_ascii_case("accept"))))
+            || (name.eq_ignore_ascii_case("content-type")
+                && (value != "application/json"
+                    || self
+                        .headers()
+                        .any(|(n, _)| n.eq_ignore_ascii_case("content-type"))))
         {
             return Err(super::compiler::unsupported());
         }

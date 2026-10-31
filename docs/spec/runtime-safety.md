@@ -20,6 +20,14 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
+Property Write uses the same finite cancellation, replacement and settlement
+owners. Input validation and fresh application authorization precede handler
+effects; a lost required service fences dispatch. A completed native reply cannot
+override a retained local cancellation, timeout, revoked original instance or
+policy/validation failure. Already accepted Producer writes retain their original
+behavior/result across replacement, while pending acceptance cannot target the
+successor. Unread results keep native occupancy and original funding; final
+physical release and settlement acknowledgement precede admission reuse.
 The composed notification owner captures the actual data/access services and separately
 prepared Property value or Event schema roles, prepays validation before native handoff and checks data
 before queue acceptance. Invalid/late data and first causes remain with the

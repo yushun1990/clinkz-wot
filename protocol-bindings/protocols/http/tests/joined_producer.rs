@@ -597,11 +597,11 @@ impl FiniteIngressBinding for ControlledBinding {
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.actual.prepared_for_instance(key)
     }
-    fn output_validator(&self) -> Option<&dyn ProducerOutputValidator> {
+    fn validator(&self) -> Option<&dyn FiniteValidator> {
         if self.controls.lose_service.get() {
             None
         } else {
-            self.actual.output_validator()
+            self.actual.validator()
         }
     }
     fn request_deadline(&self) -> Deadline {

@@ -239,7 +239,7 @@ fn one_mutable_behavior_serves_two_native_types_and_survives_one_retirement() {
         7,
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -250,7 +250,7 @@ fn one_mutable_behavior_serves_two_native_types_and_survives_one_retirement() {
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -326,7 +326,7 @@ fn revocation_and_same_generation_replacement_fence_both_deferred_native_candida
         7,
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -337,7 +337,7 @@ fn revocation_and_same_generation_replacement_fence_both_deferred_native_candida
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -453,7 +453,7 @@ fn two_accepted_results_pin_original_behavior_until_both_acknowledge_while_sibli
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -465,7 +465,7 @@ fn two_accepted_results_pin_original_behavior_until_both_acknowledge_while_sibli
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -581,7 +581,7 @@ fn wrong_issuer_cannot_dispatch_and_owner_drop_fences_unaccepted_but_retains_acc
         (),
         &original,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -592,7 +592,7 @@ fn wrong_issuer_cannot_dispatch_and_owner_drop_fences_unaccepted_but_retains_acc
         (),
         &original,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -698,7 +698,7 @@ fn failed_replacement_returns_exact_owner_and_does_not_change_current_authority(
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));

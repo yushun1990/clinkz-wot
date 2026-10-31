@@ -28,15 +28,20 @@ impl HttpProducerConfig {
 /// Possession grants no installation, publication, dispatch or accept authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpProducerProgram {
+    pub(super) operation: Operation,
+    pub(super) form: u32,
     pub(super) address: SocketAddr,
     pub(super) target: [u8; 64],
     pub(super) target_len: u8,
     pub(super) authority_end: u8,
     pub(super) origin: [u8; 64],
     pub(super) origin_len: u8,
-    pub(super) response_schema: clinkz_wot_core::value_type::TypeSchema,
+    pub(super) value_schema: clinkz_wot_core::value_type::TypeSchema,
 }
 impl HttpProducerProgram {
+    pub fn operation(&self) -> Operation {
+        self.operation
+    }
     pub fn listen_address(&self) -> SocketAddr {
         self.address
     }
@@ -65,7 +70,7 @@ use std::{
 
 // Separate role identity: never borrow Consumer policy/seals or StrictV1's
 // transitive disposal claim. Native parser/reply backing remains Binding-owned.
-const INSTALL_POLICY: &[u8] = b"request-reply-v3;type-only-schema;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-IgnoredAny+UTF8;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
+const INSTALL_POLICY: &[u8] = b"request-reply-v4;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;type-only-schema;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-IgnoredAny+UTF8;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
 
 /// Runtime-only executor. It retains neither a compiler nor source TD.
 pub struct HttpProducerExecutor {
@@ -100,7 +105,7 @@ pub fn producer_execution(
             id,
             generation,
             BindingConfigurationDigest::new(digest),
-            BindingArtifactCompatibility::new(*b"http-prod-rpl-v3"),
+            BindingArtifactCompatibility::new(*b"http-prod-rpl-v4"),
             ordinal,
         ),
     }
@@ -133,7 +138,8 @@ impl ProducerExecutor for HttpProducerExecutor {
     }
     fn check_program(&self, program: &Self::Program) -> CoreResult<()> {
         // Inspect native operands, not a caller-supplied compatibility tag.
-        if program.address != self.config.address
+        if program.operation != Operation::ReadProperty
+            || program.address != self.config.address
             || program.target_len as usize > program.target.len()
             || program.origin_len as usize > program.origin.len()
             || program.authority_end > program.target_len
@@ -173,7 +179,7 @@ impl ProducerExecutor for HttpProducerExecutor {
 }
 impl ProducerOutputValidator for HttpProducerProgram {
     fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
-        super::producer_validation::validate(self.response_schema, output)
+        super::producer_validation::validate(self.value_schema, output)
     }
 }
 /// Binding-owned native setup, request correlation, reply and retirement.

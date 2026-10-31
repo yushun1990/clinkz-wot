@@ -45,6 +45,19 @@ impl HttpProducerConfig {
         input: ResolvedProducerInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<HttpProducerProgram>> {
+        if input.operation() != Operation::ReadProperty || input.document().property().observable {
+            return Err(producer_unsupported());
+        }
+        self.compile_property(input, budget)
+    }
+
+    /// Compile one effective Read/Write operation. Each operation retains its
+    /// own definition even when TD defaults select both on the same Form.
+    pub(crate) fn compile_property(
+        &self,
+        input: ResolvedProducerInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<HttpProducerProgram>> {
         if budget.consume(WorkClass::BindingPolls, 4096).is_err() {
             return Ok(None);
         }
@@ -52,8 +65,10 @@ impl HttpProducerConfig {
         let facts = document
             .form_facts(input.property(), input.form_index())
             .ok_or_else(producer_unsupported)?;
-        if input.operation() != Operation::ReadProperty
-            || facts.effective_operations != [Operation::ReadProperty]
+        if !matches!(
+            input.operation(),
+            Operation::ReadProperty | Operation::WriteProperty
+        ) || !facts.effective_operations.contains(&input.operation())
             || facts.content_type != "application/json"
             || facts.subprotocol.is_some()
             || facts.content_coding.is_some()
@@ -64,7 +79,12 @@ impl HttpProducerConfig {
                 .is_some_and(|m| m != "application/json")
             || document.uri_variables(UriVariableScope::Thing).is_some()
             || document.uri_variables(UriVariableScope::Property).is_some()
-            || document.property().observable
+        {
+            return Err(producer_unsupported());
+        }
+        let flags = document.property().schema.facts();
+        if (input.operation() == Operation::ReadProperty && flags.write_only)
+            || (input.operation() == Operation::WriteProperty && flags.read_only)
         {
             return Err(producer_unsupported());
         }
@@ -87,7 +107,7 @@ impl HttpProducerConfig {
         }
         // Shared DataSchema meaning is prepared once. HTTP supplies JSON
         // decoding; accepting extension-free schemas is not validation support.
-        let response_schema =
+        let value_schema =
             clinkz_wot_planning::type_schema::prepare_type_schema(document.property().schema)?;
         let form = document
             .scope(SemanticScope::Form {
@@ -98,7 +118,15 @@ impl HttpProducerConfig {
         let mut method = false;
         for node in form.children() {
             if node.name().is("http://www.w3.org/2011/http#methodName") {
-                if method || node.value() != SemanticValue::Text("GET") {
+                let expected = if input.operation() == Operation::ReadProperty {
+                    "GET"
+                } else {
+                    "PUT"
+                };
+                if method
+                    || facts.declared_operations.is_some_and(|ops| ops.len() > 1)
+                    || node.value() != SemanticValue::Text(expected)
+                {
                     return Err(producer_unsupported());
                 }
                 method = true;
@@ -116,7 +144,7 @@ impl HttpProducerConfig {
                     || !node
                         .name()
                         .is("http://www.w3.org/2011/http#statusCodeValue")
-                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(200))
+                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if input.operation() == Operation::ReadProperty { 200 } else { 204 }))
                 {
                     return Err(producer_unsupported());
                 }
@@ -133,13 +161,15 @@ impl HttpProducerConfig {
             return Err(producer_unsupported());
         }
         let mut program = HttpProducerProgram {
+            operation: input.operation(),
+            form: input.form_index(),
             address: self.address,
             target: [0; 64],
             target_len: input.target().len() as u8,
             authority_end: authority_end as u8,
             origin: [0; 64],
             origin_len: origin.len() as u8,
-            response_schema,
+            value_schema,
         };
         program.target[..input.target().len()].copy_from_slice(input.target().as_bytes());
         program.origin[..origin.len()].copy_from_slice(origin.as_bytes());

@@ -158,8 +158,12 @@ fn validate_finite_binding_output(
     });
 
     if valid_binding_response
-        && matches!(operation, Operation::ReadProperty | Operation::InvokeAction)
+        && matches!(
+            operation,
+            Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+        )
         && (operation != Operation::ReadProperty || output.data().is_some())
+        && (operation != Operation::WriteProperty || output.data().is_none())
         && output.status() == InteractionStatus::Ok
         && metadata.payload_role() == ResponsePayloadRole::Application
         && metadata.action_invocation().is_none()
@@ -241,6 +245,49 @@ mod tests {
             context.binding(),
             Some((EXPECTED_BINDING_ID, EXPECTED_BINDING_GENERATION))
         );
+    }
+
+    #[test]
+    fn write_completion_is_empty_primary_application_output_with_original_identity() {
+        let validate_write = |output| {
+            super::validate_finite_binding_output(
+                EXPECTED_BINDING_ID,
+                EXPECTED_BINDING_GENERATION,
+                expected_plan_id(),
+                Operation::WriteProperty,
+                output,
+            )
+        };
+        // The code is opaque to Core; only a concrete Binding can establish
+        // that this native primary response means terminal application success.
+        for code in [0, 204, 65000] {
+            let output = InteractionOutput::empty()
+                .try_with_metadata(*valid_output(code).metadata())
+                .unwrap();
+            assert!(validate_write(output).is_ok());
+            assert!(
+                validate_write(valid_output(code)).is_err(),
+                "Read-shaped Write result"
+            );
+        }
+        let empty = InteractionOutput::empty()
+            .try_with_metadata(*valid_output(0).metadata())
+            .unwrap();
+        assert!(validate_write(empty.with_status(InteractionStatus::Accepted)).is_err());
+        assert!(validate_write(InteractionOutput::empty()).is_err());
+        let wrong = InteractionOutput::empty()
+            .try_with_metadata(
+                InteractionOutputMetadata::default().with_untrusted_binding_response(
+                    BindingResponseMetadata::primary(
+                        BindingId::new(999),
+                        EXPECTED_BINDING_GENERATION,
+                        expected_plan_id(),
+                        0,
+                    ),
+                ),
+            )
+            .unwrap();
+        assert!(validate_write(wrong).is_err());
     }
 
     #[test]

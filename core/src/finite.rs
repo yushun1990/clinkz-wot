@@ -163,14 +163,14 @@ pub trait FiniteIngressBinding {
     ) -> bool {
         false
     }
-    /// Actual source-independent service for this captured native mapping.
+    /// Actual source-independent service for this captured native mapping set.
     /// None is an absent facet, not a successful validation. A runtime requiring
     /// validation must fence progress if this service disappears. Providers with
-    /// multiple mappings need a separately qualified per-mapping facet; this
-    /// initial service covers every output accepted by this native participant.
+    /// multiple mappings must check both data roles for each original candidate;
+    /// a service for a different operation cannot satisfy the selected mapping.
     /// The service and its operands belong to the captured Configuration;
     /// substituting them must invalidate that pairing, not preserve its tag.
-    fn output_validator(&self) -> Option<&dyn crate::producer::ProducerOutputValidator> {
+    fn validator(&self) -> Option<&dyn FiniteValidator> {
         None
     }
     /// Passive deadline of the original retained native exchange, including
@@ -206,6 +206,25 @@ pub trait FiniteIngressBinding {
         reply: Option<&RawFiniteReply<Self::Reply>>,
         cause: Option<&crate::CoreError>,
     ) -> Poll<CoreResult<FiniteDelivery>>;
+}
+
+/// Captured source-independent validation for this participant's mappings.
+/// Input checks precede application authorization and behavior effects. Output
+/// checks do not establish whether an errored/late write committed. The exact
+/// original candidate selects both roles; no TD or operation switch is needed
+/// in the Engine. Callbacks are pure and bounded by the runtime input/output
+/// envelope and must not acquire native effects or application authority.
+pub trait FiniteValidator {
+    fn validate_input(
+        &self,
+        candidate: &FiniteCandidate,
+        input: &InteractionInput,
+    ) -> CoreResult<()>;
+    fn validate_output(
+        &self,
+        candidate: &FiniteCandidate,
+        output: &InteractionOutput,
+    ) -> CoreResult<()>;
 }
 
 /// Application behavior for a *raw* finite operation. Authorization runs at

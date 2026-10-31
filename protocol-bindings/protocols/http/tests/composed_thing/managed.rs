@@ -101,7 +101,7 @@ fn http_input(
                 key,
                 name,
                 operation.binding.0,
-                FiniteOutputValidation::Required,
+                FiniteValidation::Required,
             )) as Box<dyn OwnedProducerParticipation>
         })
         .collect();
@@ -573,8 +573,8 @@ impl FiniteIngressBinding for ControlledClose {
         self.inner
             .covers_definition(key, site, form, op, definition)
     }
-    fn output_validator(&self) -> Option<&dyn ProducerOutputValidator> {
-        self.inner.output_validator()
+    fn validator(&self) -> Option<&dyn FiniteValidator> {
+        self.inner.validator()
     }
     fn request_deadline(&self) -> Deadline {
         self.inner.request_deadline()
@@ -668,7 +668,7 @@ fn partial_native_setup_and_failed_cleanup_keep_original_capacity_and_sockets() 
                 output_media_capacity: 64,
                 output_retained_bytes: 8192,
             },
-            FiniteOutputValidation::Required,
+            FiniteValidation::Required,
             Deadline::NONE,
         )
         .ok()
@@ -767,7 +767,7 @@ fn moved_native_owner_keeps_funding_and_a_substitute_cannot_publish_or_retire() 
         input.instance.key(),
         "left",
         BindingId::new(101),
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     let mut exposure = ComposedProducerExposure::try_new(
         &owner,
@@ -822,9 +822,9 @@ fn raw_or_foreign_native_pairs_are_returned_before_managed_setup() {
             "left",
             BindingId::new(101),
             if raw {
-                FiniteOutputValidation::Raw
+                FiniteValidation::Raw
             } else {
-                FiniteOutputValidation::Required
+                FiniteValidation::Required
             },
         ));
         let rejection = ComposedProducerExposure::try_new(
@@ -1229,7 +1229,7 @@ fn review_large_input(
                 input.instance.key(),
                 name,
                 operation.binding.0,
-                FiniteOutputValidation::Required,
+                FiniteValidation::Required,
             ))) as Box<dyn OwnedProducerParticipation>
         })
         .collect();

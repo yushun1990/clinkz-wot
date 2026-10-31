@@ -105,7 +105,7 @@ lease for each independently installed native contribution. It checks the exact
 owned definition/operation against one unambiguous participant, plus readiness,
 and requires every participant to cover at least one operation of that same
 qualified exposure. Finite readiness also checks the exact logical instance,
-requires output validation to be enabled and verifies its captured service;
+requires input/output validation to be enabled and verifies its captured service;
 an explicitly raw runtime cannot qualify a published exposure. An unrelated
 closed runtime cannot be opened as an extra participant. The
 handoff installs separately owned closed ingress gates before commit and flips
@@ -120,7 +120,11 @@ new semantic ingress, including after an earlier exchange. Owned replies and
 native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
-The HTTP finite participant is still a one-endpoint/one-route adapter; a linked
+The HTTP finite participant can share one listener across up to 32 independently
+prepared Property Read/Write mappings; native method/path collisions refuse before
+setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`
+that checks the original candidate's separate input/output roles. There is no
+HTTP method, status or retry case in this SPI. A linked
 test-only UDP Action participant exercises shared infrastructure and continuing
 work over actual I/O. The HTTP Action participant adds a production loopback
  mapping with independent invoke/status/cancel Forms, publication-captured JSON/type

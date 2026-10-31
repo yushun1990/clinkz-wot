@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0097-td-driven-property-write.md][0097 TD-driven Property Write]]
+
 - [[file:0096-td-driven-property-observation.md][0096 TD-driven Property observation]]
 
 - [[file:0095-td-driven-producer-events.md][0095 TD-driven Producer Events over Native Distribution]]

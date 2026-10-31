@@ -15,7 +15,7 @@ use std::{
 };
 
 const FORMAT: BindingArtifactCompatibility =
-    BindingArtifactCompatibility::new(*b"external-udp-v01");
+    BindingArtifactCompatibility::new(*b"external-udp-v02");
 #[derive(Default)]
 pub struct Probe {
     pub review_bank:
@@ -46,7 +46,7 @@ pub struct Probe {
 pub fn configuration() -> ConsumerBindingConfiguration {
     ConsumerBindingConfiguration::for_semantic_host(
         256,
-        BindingConfigurationDigest::new([177; 32]),
+        BindingConfigurationDigest::new([178; 32]),
         FORMAT,
         1024,
         16,
@@ -76,7 +76,10 @@ struct Client {
 }
 impl binding::ClientBinding for Client {
     fn supports_operation(&self, operation: Operation) -> bool {
-        matches!(operation, Operation::ReadProperty | Operation::InvokeAction)
+        matches!(
+            operation,
+            Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+        )
     }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         FORMAT
@@ -173,7 +176,11 @@ impl Call {
         match socket.recv_from(&mut bytes) {
             Ok((n, source)) if source == self.address && n <= 1024 => {
                 let (binding, generation, plan) = self.selected;
-                let output = (if n == 0 {
+                let write = self.request.as_ref().unwrap().operation() == Operation::WriteProperty;
+                if write && &bytes[..n] != b"WRITTEN" {
+                    return Poll::Ready(Err(invalid()));
+                }
+                let output = (if n == 0 || write {
                     InteractionOutput::empty()
                 } else {
                     InteractionOutput::with_data(Payload::new(&bytes[..n], "application/json"))
@@ -364,7 +371,10 @@ impl ConsumerAccessService for Access {
     ) -> CoreResult<()> {
         if self.0.denied.load(Ordering::Relaxed)
             || id.configuration() != configuration().configuration()
-            || !matches!(op, Operation::ReadProperty | Operation::InvokeAction)
+            || !matches!(
+                op,
+                Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+            )
             || !target.starts_with("linkedudp://127.0.0.1:")
         {
             return Err(invalid());
@@ -433,7 +443,7 @@ pub mod prepare {
             let target = input.resolved_target();
             if !matches!(
                 input.operation(),
-                Operation::ReadProperty | Operation::InvokeAction
+                Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
             ) || !target.starts_with("linkedudp://")
             {
                 return Err(CoreError::UnsupportedOperation(context()));
@@ -462,10 +472,10 @@ pub mod prepare {
             self.probe.starts.fetch_add(1, Ordering::Relaxed);
             let mut bytes = Vec::new();
             bytes.try_reserve_exact(256).map_err(|_| busy())?;
-            bytes.extend_from_slice(if input.operation() == Operation::ReadProperty {
-                b"READ "
-            } else {
-                b"INVOKE "
+            bytes.extend_from_slice(match input.operation() {
+                Operation::ReadProperty => b"READ ",
+                Operation::WriteProperty => b"WRITE ",
+                _ => b"INVOKE ",
             });
             Ok(Cursor {
                 operation: input.operation(),

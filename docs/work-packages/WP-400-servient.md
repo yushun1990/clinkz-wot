@@ -50,12 +50,14 @@ constrained execution are separate work.
 
 ## Prepared validation and time on shared finite ingress
 
-`FiniteOutputValidation::Required` refuses an absent actual provider service at
+`FiniteValidation::Required` refuses an absent actual provider input/output service at
 admission and fences start/acceptance/delivery on service loss. Raw mode remains
 explicit. Complete shape/backing checks precede the codec callback; dispatch
 prepays the count/name lookup plus the declared maximum body and both media
 traversals. Invalid output becomes the retained exchange error before the native
-reply. A service is part of its actual captured configuration, not a support tag.
+reply. Input is checked before fresh authorization and handler effects using
+that same original candidate. A service is part of its actual captured
+configuration, not a support tag. The output-only finite API is replaced directly.
 
 Progress takes one caller-qualified monotonic instant. The runtime retains the
 original native request deadline across incomplete input, dispatch and pending
@@ -181,7 +183,7 @@ Finite and raw notification owners now share a separate move-only Core
 definitions and native resources contain no
 such permission. Equal numeric slots do not identify the same incarnation.
 
-Finite execution supports Property Read and explicitly synchronous Actions with
+Finite execution supports Property Read/Write and explicitly synchronous Actions with
 separate input/output checks and operation-aware instance authorization. Callback
 work, input/result backing, unread/late settlement and cleanup remain funded by
 the original bank. Closing a finite facet or stopping a subscription is local;
@@ -190,6 +192,15 @@ progress, independently of local cancellation and result delivery. There is no
 implicit replay. Revoking/dropping the Consumer authority fences every facet,
 even after callbacks or with no native progress credit. Replacement cannot
 retarget old work.
+
+The [HTTP Write integration](../../protocol-bindings/protocols/http/tests/property_write.rs)
+joins the existing open finite Consumer and composed Producer paths over real
+GET/PUT I/O. It exercises independent Read/Write definitions on one Property,
+pre-effect refusal, empty terminal completion, ambiguous replies, handler failure
+after effects, mutable policy/service loss, cancellation/deadline/replacement,
+late original results, unread admission pressure and complete final release.
+The downstream Consumer fixture also executes Write using its own non-HTTP
+completion convention, including a late native success after local cancellation.
 
 The notification executor and its existing Event/overflow/response/cleanup tests
 move into the execution-only crate, without an old-path re-export. Its independent

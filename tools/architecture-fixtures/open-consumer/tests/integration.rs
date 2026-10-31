@@ -23,7 +23,7 @@ fn now() -> MonotonicInstant {
     MonotonicInstant::new(ClockId::new(99), 1)
 }
 fn source(forms: Value) -> clinkz_wot_td::thing::Thing {
-    serde_json::from_value(json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"anonymous downstream Thing", "security":["none"], "securityDefinitions":{"none":{"scheme":"nosec"}}, "properties":{"a":{"type":"integer","forms":forms}}})).unwrap()
+    serde_json::from_value(json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"anonymous downstream Thing", "security":["none"], "securityDefinitions":{"none":{"scheme":"nosec"}}, "properties":{"a":{"type":"integer","readOnly":true,"forms":forms}}})).unwrap()
 }
 fn registry(inputs: Vec<ConsumerRegistrationInput>) -> ConsumerRegistry {
     ConsumerRegistry::try_new(inputs).unwrap_or_else(|e| panic!("{:?}", e.error()))
@@ -309,7 +309,7 @@ fn exact_pair_refusal_recovers_compiler_and_executor_before_io() {
     let p = Arc::new(Probe::default());
     let other = ConsumerBindingConfiguration::for_semantic_host(
         256,
-        BindingConfigurationDigest::new([178; 32]),
+        BindingConfigurationDigest::new([179; 32]),
         configuration().native_compatibility().unwrap(),
         1024,
         16,
@@ -1227,7 +1227,7 @@ fn target_envelope_is_partial_support_and_selected_short_form_still_executes() {
     let prepared = prepare(&registry, &thing, bank.clone());
     assert!(prepared.support().iter().any(|s| s.form == 0
         && s.operation == Operation::WriteProperty
-        && s.unsupported == Some(ConsumerUnsupported::Operation)));
+        && s.unsupported == Some(ConsumerUnsupported::Target)));
     let rt = runtime(prepared, bank.clone());
     drop(thing);
     drop(registry);

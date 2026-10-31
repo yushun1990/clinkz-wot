@@ -84,7 +84,7 @@ fn http_read(
     instance: ProducerInstanceKey,
     name: &str,
     id: BindingId,
-    validation: FiniteOutputValidation,
+    validation: FiniteValidation,
 ) -> RawFiniteRuntime<HttpFiniteBinding> {
     let config = HttpFiniteConfig::try_new(
         HttpProducerConfig::for_loopback(address).unwrap(),
@@ -991,7 +991,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
         ka,
         "left",
         left_id,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     let mut right = http_read(
         &s,
@@ -1000,7 +1000,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
         ka,
         "right",
         right_id,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
 
     // B has a live handler and a separate closed listener. It is not part of
@@ -1042,7 +1042,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
         kb,
         "left",
         foreign_id,
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
     );
     for runtime in [&mut left, &mut right, &mut unrelated] {
         assert_eq!(
@@ -1122,10 +1122,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
 
 #[test]
 fn qualified_publication_requires_validation_and_rejects_invalid_output() {
-    for validation in [
-        FiniteOutputValidation::Required,
-        FiniteOutputValidation::Raw,
-    ] {
+    for validation in [FiniteValidation::Required, FiniteValidation::Raw] {
         let addr = tcp_addr();
         let description: Arc<str> = Arc::from(
             serde_json::json!({
@@ -1185,13 +1182,7 @@ fn qualified_publication_requires_validation_and_rejects_invalid_output() {
         );
         // Both modes have the actual validator; its mere presence cannot
         // qualify a runtime whose dispatch policy skips that service.
-        assert!(
-            runtime
-                .closed_binding()
-                .unwrap()
-                .output_validator()
-                .is_some()
-        );
+        assert!(runtime.closed_binding().unwrap().validator().is_some());
         let published = publish_prepared_thing(
             &mut s,
             &mut publication,
@@ -1201,7 +1192,7 @@ fn qualified_publication_requires_validation_and_rejects_invalid_output() {
             &GatewayDefaultV1::LIMITS,
             &mut budget(),
         );
-        if validation == FiniteOutputValidation::Raw {
+        if validation == FiniteValidation::Raw {
             assert!(
                 matches!(published, Err(CoreError::Validation(_))),
                 "{published:?}"
@@ -1299,7 +1290,7 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
             output_media_capacity: 64,
             output_retained_bytes: 8192,
         },
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
         Deadline::NONE,
     )
     .ok()
@@ -1868,7 +1859,7 @@ fn partial_native_failure_and_cancelled_prepublication_retire_without_dispatch()
             output_media_capacity: 64,
             output_retained_bytes: 8192,
         },
-        FiniteOutputValidation::Required,
+        FiniteValidation::Required,
         Deadline::NONE,
     )
     .ok()

@@ -156,11 +156,21 @@ An explicit binding/Form selector only narrows candidates after common services
 have accepted the meaning. Selection keys include affordance kind/name and
 operation, so same-named
 Properties and Actions do not collide. The current finite facets are Property
-Read and `InvokeAction` with explicit `synchronous: true`; absent/false
+Read/Write and `InvokeAction` with explicit `synchronous: true`; absent/false
 synchronous claims and query/cancel/collection operations remain unsupported.
 Action input/output use distinct prepared type-only schemas; absent roles
 permit no application data. Only one captured media service is currently
 supported for both directions; differing response media is refused.
+
+Read and Write select independently on the same Property, including one Form
+with default or explicit multiple operations. A Write captures the complete
+supported Property value schema as input and no response value role. Property
+readOnly/writeOnly declarations constrain eligibility even when a Form explicitly
+contradicts them. Unsupported value assertions, effective security or concrete
+Binding response mappings remain reported Consumer alternatives; a selector
+cannot weaken them. Complete Producer qualification still requires every retained
+effective operation, actual behavior and mapping. It cannot keep a Read while
+silently dropping an unsupported advertised Write.
 
 Eager `prepare` lends each `ConsumerCompilation` to a caller driver. Native
 `step` is resumable under small caller credits while that single common semantic

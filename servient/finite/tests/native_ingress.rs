@@ -313,7 +313,7 @@ fn one_native_listener_matches_two_instances_and_revocation_is_local() {
         7,
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -421,7 +421,7 @@ fn same_slot_new_authority_cannot_receive_old_native_candidate() {
         7,
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -540,7 +540,7 @@ fn pending_reply_survives_revocation_and_closing_until_native_retirement() {
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -621,7 +621,7 @@ fn close_retains_full_unaccepted_input_until_native_retirement() {
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -683,7 +683,7 @@ fn denied_input_and_reply_stay_owned_across_pending_send_and_failed_close() {
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -758,7 +758,7 @@ fn failure_keeps_original_reply_and_first_cause_during_failed_close() {
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -851,7 +851,7 @@ fn actual_binding_configuration_and_finite_operation_are_checked_before_effects(
         8,
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .err()
@@ -900,7 +900,7 @@ fn close_before_dispatch_returns_original_native_refusal_without_running_handler
         7,
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -957,7 +957,7 @@ fn close_after_write_reports_unknown_effect_and_undelivered_success() {
         7,
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -1052,7 +1052,7 @@ fn fixed_exchange(
         (),
         &servient,
         limits,
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -1241,7 +1241,7 @@ fn worst_case_registry_lookup_is_prepaid_and_zero_credit_is_inert() {
         (),
         &servient,
         max,
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -1322,7 +1322,7 @@ fn equal_prefix_target_misses_pay_for_every_bounded_name_byte() {
         (),
         &servient,
         max,
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -1397,7 +1397,7 @@ fn target_name_limit_checks_both_registration_and_native_candidate() {
         (),
         &servient,
         max,
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -1462,7 +1462,7 @@ fn thing_level_candidate_is_unsupported_not_a_name_capacity_failure() {
         (),
         &servient,
         limits(),
-        FiniteOutputValidation::Raw,
+        FiniteValidation::Raw,
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));

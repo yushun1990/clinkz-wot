@@ -83,7 +83,7 @@ fn action_input_box_refusal_recovers_original_payload_and_empty_read_needs_no_al
         BindingId::new(1),
         BindingGeneration::INITIAL,
         configuration().configuration(),
-        BindingArtifactCompatibility::new(*b"external-udp-v01"),
+        BindingArtifactCompatibility::new(*b"external-udp-v02"),
         BindingArtifactRole::ConsumerCall,
     );
     let artifact = BindingArtifactRef::new(id, SlotIndex::new(0));
