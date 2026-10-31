@@ -285,3 +285,15 @@ exercises refusal/selection, while the
 [downstream fixture](../../tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
 implements this public facet in an external Cargo crate. No package acceptance
 or whole-Thing Consumer support follows from these bounded capabilities.
+
+## Thing-root ReadAllProperties
+
+The root semantic loan now supplies Property schemas with their local contexts.
+The open Consumer selects an actual root Form and captures an owned combined
+readable-member schema with actual services. Whole-Thing Producer preparation and
+final comparison include the root operation, every retained Property Form and
+original member meaning. See the [Planning contract](../spec/planning.md#thing-root-property-collection-preparation).
+
+ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and long-lived
+collection operations remain unimplemented. This scoped capability changes no
+work-package dependencies, gate, milestone or production qualification status.

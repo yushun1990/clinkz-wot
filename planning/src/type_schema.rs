@@ -8,6 +8,37 @@ use clinkz_wot_td::semantic::{
     SchemaConstraints, SchemaView, SemanticName, SemanticNode, SemanticValue,
 };
 
+/// TD 1.1 §6.3.9.6: return every readable Property, using its own complete
+/// supported schema. No individual Form, behavior or native read is consulted.
+pub fn prepare_read_all_schema(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<clinkz_wot_core::collection::PropertyCollectionSchema> {
+    use clinkz_wot_core::collection::{PropertyCollectionSchema as S, PropertyMemberSchema};
+    let mut members = alloc::vec::Vec::new();
+    let mut bytes = 0;
+    for p in doc.collection_properties().ok_or_else(refused)? {
+        if p.schema.facts().write_only {
+            continue;
+        }
+        bytes += p.name.len();
+        if members.len() == S::MAX_MEMBERS
+            || p.name.len() > S::MAX_NAME_BYTES
+            || bytes > S::MAX_TOTAL_NAME_BYTES
+        {
+            return Err(refused());
+        }
+        let schema = prepare_type_schema(p.schema)?;
+        members
+            .try_reserve_exact(1)
+            .map_err(|_| clinkz_wot_core::consumer::busy())?;
+        members.push(PropertyMemberSchema {
+            name: p.name.into(),
+            schema,
+        });
+    }
+    S::try_new(members)
+}
+
 /// Capture all executable assertions or refuse. Metadata, default, unit and
 /// read/write annotations impose no value constraint. No schema tree, literal,
 /// source loan or format implementation survives this fixed-size result.

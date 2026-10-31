@@ -196,7 +196,9 @@ impl<'a> SemanticNode<'a> {
 }
 
 /// Temporary semantic closure of one Form, its property, Thing and effective
-/// security definitions. Other Forms/properties are not present. Every scalar
+/// security definitions. Thing-root Forms also lend described Property schemas
+/// for collection meaning; individual Property Forms are never substituted.
+/// Other Forms are not present. Every scalar
 /// borrows the admitted immutable TD;
 /// artifacts must copy the native instructions they need before this is freed.
 pub struct ResolvedSemanticDocument<'a> {
@@ -402,7 +404,30 @@ impl<'a> Resolver<'a> {
         };
         let mut context = root_context;
         match owner {
-            FormOwner::Thing => {}
+            FormOwner::Thing => {
+                // Collection schemas use each Property's own local context.
+                // These loans carry no individual Forms or native mappings.
+                if let Some(properties) = &thing.properties {
+                    for (name, property) in properties {
+                        resolver.pay(name.len() as u64 + 1)?;
+                        let schema = property._schema.context();
+                        let mut schema_context = root_context;
+                        schema_context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+                        schema_context = resolver.local(schema_context, &schema._extra_fields)?;
+                        resolver.scope(
+                            SemanticScope::Property(name),
+                            &schema._extra_fields,
+                            schema._metadata.tags.as_deref(),
+                            schema_context,
+                        )?;
+                        let root = resolver.document.scopes.last().unwrap().root;
+                        resolver.document.nodes[root].schema = Some(&property._schema);
+                        resolver.schema_facts(&property._schema, 0, schema_context)?;
+                        resolver.schema_children(&property._schema, schema_context, 0)?;
+                        resolver.finish(root);
+                    }
+                }
+            }
             FormOwner::Property(name) => {
                 let property = &thing.properties.as_ref().unwrap()[name];
                 resolver.pay(name.len() as u64 + 1)?;

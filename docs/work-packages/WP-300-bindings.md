@@ -110,3 +110,17 @@ observe/unobserve as SUBSCRIBE/UNSUBSCRIBE under its non-retained QoS 0 subset.
 Property and Event tests reaffirm native sharing, partial-control ownership,
 publication uncertainty and final physical release. The
 [MQTT README](../../protocol-bindings/protocols/mqtt/README.md) owns that subset.
+
+## Native collection read facet
+
+The finite HTTP capability now supports one native Thing-root ReadAllProperties
+mapping beside independent Property mappings, with explicit logical targets and
+native method/path collision refusal. Collection codec support is explicit;
+`FiniteValidator` captures additional traversal work before dispatch. The
+[Binding SPI](../spec/binding-spi.md#native-thing-root-readallproperties) and
+[HTTP subset](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties)
+own those contracts.
+
+ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and long-lived
+collection operations remain unimplemented. This scoped capability changes no
+work-package dependencies, gate, milestone or production qualification status.

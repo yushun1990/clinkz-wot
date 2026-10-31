@@ -265,7 +265,7 @@ fn exposure(
         .iter()
         .map(|o| {
             (
-                Arc::from("level"),
+                AffordanceTarget::Property(Arc::from("level")),
                 o.definition::<HttpProducerProgram>().unwrap().clone(),
             )
         })
@@ -1180,8 +1180,8 @@ fn missing_write_behavior_native_coverage_and_collisions_refuse_complete_publica
         .unwrap()
         .clone();
     let mappings = vec![
-        (Arc::from("level"), read.clone()),
-        (Arc::from("level"), read.clone()),
+        (AffordanceTarget::Property(Arc::from("level")), read.clone()),
+        (AffordanceTarget::Property(Arc::from("level")), read.clone()),
     ];
     let returned = HttpFiniteConfig::try_from_mappings(
         HttpProducerConfig::for_loopback(addr).unwrap(),
@@ -1197,7 +1197,7 @@ fn missing_write_behavior_native_coverage_and_collisions_refuse_complete_publica
         HttpProducerConfig::for_loopback(addr).unwrap(),
         read,
         key,
-        Arc::from("level"),
+        clinkz_wot_core::AffordanceTarget::Property(Arc::from("level")),
         1000,
     )
     .unwrap();

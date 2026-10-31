@@ -157,8 +157,9 @@ have accepted the meaning. Selection keys include affordance kind/name and
 operation, so same-named
 Properties and Actions do not collide. The current finite facets are Property
 Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
-unspecified synchronicity use the separate Action facet below; collection
-operations remain unsupported.
+unspecified synchronicity use the separate Action facet below. Thing-root
+ReadAllProperties uses the finite facet; other collection operations remain
+unsupported.
 Action input/output use distinct prepared type-only schemas; absent roles
 permit no application data. Only one captured media service is currently
 supported for both directions; differing response media is refused.
@@ -251,3 +252,30 @@ Property selection authorizes `ObserveProperty`; captured runtime policy uses
 that operation for establishment/delivery and `UnobserveProperty` for mapped
 stop. Preparation neither executes a Read nor captures an initial value. Native
 Form semantics and stop support remain the concrete Binding's responsibility.
+
+## Thing-root Property collection preparation
+
+ReadAllProperties selects actual root Form/operation/Binding coordinates using
+the same per-Form semantic loan and actual startup registrations. A Property
+Form is never a fallback collection Form. Consumer selection may retain a root
+operation when individual Property Forms are unsupported; complete Producer
+qualification still requires every retained Form/effective operation and its
+actual behavior/native participant. Unsupported collection alternatives remain
+reported by the Consumer, rather than authorizing an invented protocol mapping.
+
+`prepare_read_all_schema` derives owned names and supported member assertions
+from TD's resolved Property schema loans, independently of individual native
+read mappings. `ConsumerFiniteSchemas::ReadAllProperties` captures that combined
+meaning and requires actual collection validation support from the selected
+service. Preparation funds retained member/name backing and bounded destruction
+as well as artifacts/services; temporary construction remains inside the existing
+common admission allowance. Native preparation performs no reads or aggregation.
+Final Producer qualification compares the original complete member meaning,
+root coordinate and selected actual registration after closed native setup.
+Changing an included schema, readability or member set invalidates prior support.
+
+The supported schema and HTTP subset are scoped by the
+[collection contract](interaction-core.md) and
+[HTTP mapping](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).
+This adds no universal compiler, eager collection plan set, first-use coordinator,
+new gate or implementation claim for other collection operations.

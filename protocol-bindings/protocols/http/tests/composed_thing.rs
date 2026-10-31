@@ -90,7 +90,7 @@ fn http_read(
         HttpProducerConfig::for_loopback(address).unwrap(),
         program,
         instance,
-        Arc::from(name),
+        clinkz_wot_core::AffordanceTarget::Property(Arc::from(name)),
         100,
     )
     .unwrap();
@@ -1270,7 +1270,7 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
         HttpProducerConfig::for_loopback(tcp).unwrap(),
         program.clone(),
         k,
-        Arc::from("level"),
+        clinkz_wot_core::AffordanceTarget::Property(Arc::from("level")),
         100,
     )
     .unwrap();
@@ -1844,7 +1844,7 @@ fn partial_native_failure_and_cancelled_prepublication_retire_without_dispatch()
         HttpProducerConfig::for_loopback(tcp).unwrap(),
         program,
         k2,
-        Arc::from("level"),
+        clinkz_wot_core::AffordanceTarget::Property(Arc::from("level")),
         100,
     )
     .unwrap();

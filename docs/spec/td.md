@@ -51,6 +51,10 @@ contract remains a separate capability, not a prerequisite of every typed use.
 The bounded semantic loan now resolves a selected Form at Thing, Property,
 Action or Event scope, retaining original coordinates, effective operations,
 security, typed affordance schemas and local-context extension associations.
+A Thing-root Form's loan also includes the described Property schemas with each
+Property's own local context, without lending or selecting individual Forms.
+`collection_properties` is available only for a root loan; its scopes, schema
+branches and name/context resolution use the existing bounded arena and work.
 Selected Combo references are reachable through the same shared security loan.
 Unknown security definitions survive TD decoding and round trips, including
 when unused; selecting one still requires an actual supporting security service.

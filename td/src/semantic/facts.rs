@@ -334,6 +334,24 @@ impl<'a> ResolvedSemanticDocument<'a> {
             schema: SchemaView(self.scope(SemanticScope::Property(name)).unwrap()),
         }
     }
+    /// Property schema loans in a Thing-root Form's bounded semantic closure.
+    /// Individual Forms are not lent and need not support the root operation.
+    pub fn collection_properties(&self) -> Option<impl Iterator<Item = PropertyFacts<'_>>> {
+        if self.selected.as_ref()?.owner != FormOwner::Thing {
+            return None;
+        }
+        Some(self.scopes.iter().filter_map(|scope| {
+            let SemanticScope::Property(name) = scope.key else {
+                return None;
+            };
+            let property = &self.selected.as_ref()?.thing.properties.as_ref()?[name];
+            Some(PropertyFacts {
+                name,
+                observable: property.observable,
+                schema: SchemaView(self.scope(SemanticScope::Property(name))?),
+            })
+        }))
+    }
     pub fn action(&self) -> Option<ActionFacts<'_>> {
         let selected = self.selected.as_ref()?;
         let FormOwner::Action(name) = selected.owner else {

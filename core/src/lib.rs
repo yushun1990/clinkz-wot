@@ -21,6 +21,8 @@ pub mod action;
 pub mod artifact;
 #[cfg(target_has_atomic = "ptr")]
 pub mod binding;
+#[cfg(target_has_atomic = "ptr")]
+pub mod collection;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod consumer;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
