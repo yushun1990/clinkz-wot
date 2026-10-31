@@ -221,3 +221,8 @@ or asynchronous cleanup transfer. A Binding that cannot meet local disposal need
 a separately implemented acknowledged successor rather than a fabricated success.
 The HTTP mapping has one active finite exchange per actual registration, released
 after physical retirement; invocation capacity is independently Engine-owned.
+
+A normal poll error and an original late observation from retirement are separate
+outcomes. The Consumer retains the poll error immediately, then retains and
+validates any late completion returned by `poll_close`; an existing error cannot
+be used to discard that observation or promote it to successful handoff.

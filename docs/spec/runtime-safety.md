@@ -41,6 +41,15 @@ Neither path claims that independent remote Action work stopped. Callback-time
 authority/service checks fence late success; original native result, validation
 failure and first local cause remain distinct. Handles cannot substitute mappings,
 move to a successor incarnation or address a reused slot.
+
+Native result readiness is separate from successful local handoff. Unread Action
+completions remain subject to cancellation, original authority/root revocation,
+deadline and captured service/policy loss. Settlement handoff takes current time
+and work credit, pays fresh destination/access checks and rechecks captured
+services after callbacks. Insufficient credit grants no success and keeps the
+original slot and funding. Native poll errors and late retirement output retain
+independent evidence; even after an error, captured validation applies to that
+late output before final settlement, without clearing the first cause.
 The composed notification owner captures the actual data/access services and separately
 prepared Property value or Event schema roles, prepays validation before native handoff and checks data
 before queue acceptance. Invalid/late data and first causes remain with the

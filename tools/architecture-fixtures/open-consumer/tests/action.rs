@@ -392,7 +392,7 @@ fn distinct_downstream_invoke_and_control_bindings_execute_native_action_lifecyc
     drive(&h, ConsumerActionState::Pending);
     h.query(now(), &mut work()).unwrap();
     drive(&h, ConsumerActionState::Completed);
-    let s = h.take_settlement().unwrap();
+    let s = h.take_settlement(now(), &mut work()).unwrap();
     assert!(s.accepted());
     assert_eq!(
         s.remote_cancellation(),
@@ -447,7 +447,7 @@ fn delayed_cleanup_keeps_late_output_validation_first_cause_and_original_funding
     owner.revoke();
     p.fail_close.store(true, Ordering::Relaxed);
     h.progress(&mut cx(), now(), &mut work()).unwrap();
-    assert!(h.take_settlement().is_err());
+    assert!(h.take_settlement(now(), &mut work()).is_err());
     assert_eq!(p.live.load(Ordering::Relaxed), 1);
     assert!(b.account(ResourceKind::CleanupBytesMax).used() > 0);
     // Losing the root does not dispose work retained by its original handle.
@@ -456,7 +456,7 @@ fn delayed_cleanup_keeps_late_output_validation_first_cause_and_original_funding
     drop(replacement);
     p.close_blocked.store(false, Ordering::Relaxed);
     drive(&h, ConsumerActionState::Closed);
-    let s = h.take_settlement().unwrap();
+    let s = h.take_settlement(now(), &mut work()).unwrap();
     assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
     assert!(s.cleanup_error().is_some());
     assert!(s.validation_error().is_some());
@@ -501,7 +501,7 @@ fn last_local_owner_uses_funded_nonblocking_abort_without_remote_cancel() {
     p.close_blocked.store(true, Ordering::Relaxed);
     drop(runtime);
     h.progress(&mut cx(), now(), &mut work()).unwrap();
-    assert!(h.take_settlement().is_err());
+    assert!(h.take_settlement(now(), &mut work()).is_err());
     assert_eq!(p.live.load(Ordering::Relaxed), 1);
     drop(h);
     drop(owner);

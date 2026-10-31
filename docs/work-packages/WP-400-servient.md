@@ -238,6 +238,15 @@ release. The downstream datagram fixture covers different actual Binding types,
 zero-credit progress and blocked/error cleanup with a retained late invalid result.
 The original synchronous Consumer path remains separately exercised.
 
+Unread native completion remains revocable until a paid settlement handoff with
+fresh time, original authority and captured service/access checks. The HTTP
+Consumer regressions cover direct handoff and additional progress after
+revocation, denial, service/root loss, cancellation or expiry, plus insufficient
+handoff work and callback-time service loss. An actual HTTP query exchange also
+returns its original late output through retirement after a poll error; the
+original error, late output and captured validation failure remain independently
+retained and funded. These repairs do not change package acceptance status.
+
 ## Open finite Consumer ownership
 
 The source-free `servient-finite::consumer` owner consumes Core definitions and

@@ -130,6 +130,21 @@ access services. The original invoke data service validates completion, includin
 late output after cancellation; native output, validation error, first local cause,
 cleanup error and effect uncertainty remain independently observable.
 
+Native completion does not seal unread application success. `Completed` remains
+revocable until `take_settlement(now, budget)` performs paid, fresh checks of
+time, original instance/root authority and captured services/access. Progress and
+local cancellation continue to fence unread completions. Short handoff credit
+retains the complete original result and slot; an earlier progress check cannot
+serve as cached authorization. Fencing preserves native output as evidence in a
+failed settlement. Successful handoff is the local application acceptance edge;
+subsequent revocation does not retract a value already handed to the caller.
+
+A native poll error is retained immediately as `native_error()` and the first
+local cause when none exists. Retirement still owns its original response
+opportunity. Any late output returned by `poll_close` is retained in
+`native_result()` and checked by the captured invoke validator; it cannot erase
+the earlier error, skip validation or establish application success.
+
 Cancellation request acknowledgement and already-terminal acknowledgement grant
 no terminal application result. A subsequent query must obtain and validate it.
 Native cancel failure or loss leaves remote cancellation uncertain. Local cancel,

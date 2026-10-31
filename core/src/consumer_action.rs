@@ -33,6 +33,8 @@ pub enum ConsumerActionReply {
 /// Owns a finite native exchange, not the continuing invocation. Ready/error
 /// never disposes this owner. Close may return an original late observation;
 /// pending/error retains every owner and requires further cleanup progress.
+/// A poll error does not waive late response validation or retention: the
+/// invocation keeps that error independently of an observation from close.
 pub trait ConsumerActionExchange {
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>>;
     fn poll_close(&mut self, cx: &mut Context<'_>)

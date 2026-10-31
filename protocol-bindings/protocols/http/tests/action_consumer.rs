@@ -11,13 +11,14 @@ use clinkz_wot_servient_finite::{consumer_action::*, *};
 use clinkz_wot_td::thing::Thing;
 use serde_json::{Value, json};
 use std::{
+    any::Any,
     net::TcpListener,
     rc::Rc,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
-    task::{Context, Waker},
+    task::{Context, Poll, Waker},
     time::Duration,
 };
 #[path = "support/action.rs"]
@@ -57,6 +58,8 @@ struct Policy {
     denied: AtomicBool,
     reject_output: AtomicBool,
     unavailable: AtomicBool,
+    lose_data_on_query_access: AtomicBool,
+    validations: AtomicUsize,
     log: Mutex<Vec<(BindingId, Operation, String)>>,
 }
 struct Data(Arc<Policy>, Arc<dyn ConsumerDataService>);
@@ -71,6 +74,7 @@ impl ConsumerDataService for Data {
         !self.0.unavailable.load(Ordering::Relaxed)
     }
     fn validate(&self, schema: TypeSchema, p: &Payload) -> CoreResult<()> {
+        self.0.validations.fetch_add(1, Ordering::Relaxed);
         if self.0.reject_output.load(Ordering::Relaxed) && p.body.as_ref() == b"24" {
             return Err(invalid());
         }
@@ -90,6 +94,14 @@ impl ConsumerAccessService for Access {
         op: Operation,
     ) -> CoreResult<()> {
         self.1.authorize_instance(consumer, b, target, op)?;
+        if op == Operation::QueryAction
+            && self
+                .0
+                .lose_data_on_query_access
+                .swap(false, Ordering::Relaxed)
+        {
+            self.0.unavailable.store(true, Ordering::Relaxed);
+        }
         self.0
             .log
             .lock()
@@ -316,7 +328,7 @@ fn accepted_pending_query_completed_uses_selected_forms_and_independent_identity
         let identity = h.identity().unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         assert_eq!(producer.counts.invoked.get(), 1);
-        assert!(h.take_settlement().is_err());
+        assert!(h.take_settlement(now(), &mut budget()).is_err());
         h.query(now(), &mut budget()).unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         assert_eq!(h.identity().unwrap(), identity);
@@ -329,7 +341,7 @@ fn accepted_pending_query_completed_uses_selected_forms_and_independent_identity
                 .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
                 .is_err()
         );
-        let settlement = h.take_settlement().unwrap();
+        let settlement = h.take_settlement(now(), &mut budget()).unwrap();
         assert_eq!(settlement.identity(), &identity);
         assert_eq!(
             settlement.result().unwrap().data().unwrap().body.as_ref(),
@@ -415,10 +427,10 @@ fn described_cancel_acknowledges_request_and_query_can_still_complete() {
             h.remote_cancellation().unwrap(),
             ConsumerActionCancellation::AlreadyTerminal
         );
-        assert!(h.take_settlement().is_err());
+        assert!(h.take_settlement(now(), &mut budget()).is_err());
         h.query(now(), &mut budget()).unwrap();
         producer.drive(&h, ConsumerActionState::Completed).await;
-        let s = h.take_settlement().unwrap();
+        let s = h.take_settlement(now(), &mut budget()).unwrap();
         assert!(s.result().is_ok());
         assert_eq!(
             s.remote_cancellation(),
@@ -479,7 +491,7 @@ fn input_and_completion_validation_and_remote_failure_keep_original_evidence() {
                     },
                 )
                 .await;
-            let s = h.take_settlement().unwrap();
+            let s = h.take_settlement(now(), &mut budget()).unwrap();
             assert!(s.result().is_err());
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
             assert_eq!(s.native_result().unwrap().is_err(), remote_invalid);
@@ -591,7 +603,7 @@ fn local_cancellation_and_cancel_response_loss_do_not_claim_remote_rollback() {
             // The Producer accepted cancellation but has not delivered its reply.
             h.cancel_local();
             producer.drive(&h, ConsumerActionState::Closed).await;
-            let s = h.take_settlement().unwrap();
+            let s = h.take_settlement(now(), &mut budget()).unwrap();
             assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
             assert_eq!(
                 s.remote_cancellation(),
@@ -671,7 +683,7 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
             if reason != 3 {
                 producer.drive(&h, ConsumerActionState::Closed).await;
             }
-            let s = h.take_settlement().unwrap();
+            let s = h.take_settlement(now(), &mut budget()).unwrap();
             assert!(s.result().is_err());
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
             assert_eq!(producer.counts.invoked.get(), 1);
@@ -736,7 +748,7 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
         let mut old_exposure = producer.replace();
         old.query(now(), &mut budget()).unwrap();
         producer.drive(&old, ConsumerActionState::Closed).await;
-        let s = old.take_settlement().unwrap();
+        let s = old.take_settlement(now(), &mut budget()).unwrap();
         assert!(s.result().is_err());
         assert_eq!(s.effect(), ConsumerEffect::Unknown);
         assert_eq!(producer.counts.invoked.get(), 0);
@@ -753,7 +765,12 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
         new.query(now(), &mut budget()).unwrap();
         producer.drive(&new, ConsumerActionState::Completed).await;
         new.request_cancel(now(), &mut budget()).unwrap_err();
-        assert!(new.take_settlement().unwrap().result().is_ok());
+        assert!(
+            new.take_settlement(now(), &mut budget())
+                .unwrap()
+                .result()
+                .is_ok()
+        );
         old_counts.complete.set(true);
         let native = old_exposure
             .participant_mut::<HttpActionRuntime>(0)
@@ -815,7 +832,7 @@ fn absent_controls_are_unsupported_and_never_synthesized() {
         h.cancel_local();
         producer.drive(&h, ConsumerActionState::Closed).await;
         assert_eq!(producer.counts.cancelled.get(), 0);
-        drop(h.take_settlement().unwrap());
+        drop(h.take_settlement(now(), &mut budget()).unwrap());
         drop(h);
         drop(runtime);
         drop(owner);
@@ -875,7 +892,7 @@ fn malformed_native_acceptance_and_framing_never_grant_completion_or_replay() {
                 }
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
-            let s = h.take_settlement().unwrap();
+            let s = h.take_settlement(now(), &mut budget()).unwrap();
             assert!(s.result().is_err());
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
             assert!(h.query(now(), &mut budget()).is_err());
@@ -971,11 +988,358 @@ fn wire_location_cannot_replace_the_selected_query_form() {
                 h.query(now(), &mut budget()).unwrap();
             }
         }
-        assert!(h.take_settlement().unwrap().result().is_ok());
+        assert!(
+            h.take_settlement(now(), &mut budget())
+                .unwrap()
+                .result()
+                .is_ok()
+        );
         drop(h);
         drop(runtime);
         drop(owner);
         clean(&b);
     });
     peer.join().unwrap();
+}
+
+#[test]
+fn unread_completion_remains_revocable_until_settlement_handoff() {
+    io().block_on(async {
+        for progress_before_handoff in [false, true] {
+            for cause in 0..9 {
+                let mut producer = Producer::new();
+                let b = bank();
+                let owner = instance();
+                let p = Arc::new(Policy::default());
+                let mut runtime = Some(client(
+                    &td(producer.address, None),
+                    b.clone(),
+                    p.clone(),
+                    &owner,
+                    true,
+                    1,
+                ));
+                let h = runtime
+                    .as_ref()
+                    .unwrap()
+                    .invoke_action(
+                        "run",
+                        payload(b"12"),
+                        Deadline::at(MonotonicInstant::new(ClockId::new(1), 1)),
+                        now(),
+                        &mut budget(),
+                    )
+                    .ok()
+                    .unwrap();
+                producer.drive(&h, ConsumerActionState::Pending).await;
+                producer.counts.complete.set(true);
+                h.query(now(), &mut budget()).unwrap();
+                producer.drive(&h, ConsumerActionState::Completed).await;
+                match cause {
+                    0 => owner.revoke(),
+                    1 => p.denied.store(true, Ordering::Relaxed),
+                    2 => p.unavailable.store(true, Ordering::Relaxed),
+                    3 => runtime.as_ref().unwrap().begin_close(),
+                    4 => h.cancel_local(),
+                    6 => drop(runtime.take()),
+                    8 => p.lose_data_on_query_access.store(true, Ordering::Relaxed),
+                    _ => {}
+                }
+                let time = match cause {
+                    5 => MonotonicInstant::new(ClockId::new(1), 1),
+                    7 => MonotonicInstant::new(ClockId::new(2), 0),
+                    _ => now(),
+                };
+                if progress_before_handoff {
+                    h.progress(&mut cx(), time, &mut budget()).unwrap();
+                }
+                let s = h.take_settlement(time, &mut budget()).unwrap();
+                assert!(
+                    s.result().is_err(),
+                    "unread completion escaped cause {cause}"
+                );
+                match (cause, s.first_cause()) {
+                    (0 | 3 | 6, Some(CoreError::StaleHandle(_)))
+                    | (1, Some(CoreError::Security { .. }))
+                    | (2 | 7 | 8, Some(CoreError::Validation(_)))
+                    | (4, Some(CoreError::Cancelled(_)))
+                    | (5, Some(CoreError::TimedOut(_))) => {}
+                    _ => panic!("wrong first cause {cause}: {:?}", s.first_cause()),
+                }
+                assert_eq!(s.state(), ConsumerActionState::Closed);
+                assert_eq!(
+                    s.native_result()
+                        .unwrap()
+                        .as_ref()
+                        .unwrap()
+                        .data()
+                        .unwrap()
+                        .body
+                        .as_ref(),
+                    b"24"
+                );
+                assert_eq!(s.effect(), ConsumerEffect::Unknown);
+                assert_eq!(producer.counts.invoked.get(), 1);
+                drop(s);
+                drop(h);
+                drop(runtime);
+                drop(owner);
+                clean(&b);
+                producer.finish();
+            }
+        }
+    });
+}
+
+#[test]
+fn unread_success_requires_paid_fresh_handoff_and_keeps_its_slot_on_short_credit() {
+    io().block_on(async {
+        for deny_handoff in [false, true] {
+            let mut producer = Producer::new();
+            let b = bank();
+            let owner = instance();
+            let p = Arc::new(Policy::default());
+            let d = definition(&td(producer.address, None), b.clone(), p.clone(), true).unwrap();
+            let selected = d.input().query.as_ref().unwrap();
+            let access_work = selected.services.access.work();
+            let destination_work = selected.mapping.bounds().poll_work;
+            let runtime = ConsumerActionRuntime::try_new(owner.reference(), vec![d], 1)
+                .ok()
+                .unwrap();
+            let h = runtime
+                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .ok()
+                .unwrap();
+            producer.drive(&h, ConsumerActionState::Pending).await;
+            producer.counts.complete.set(true);
+            h.query(now(), &mut budget()).unwrap();
+            producer.drive(&h, ConsumerActionState::Completed).await;
+            let before = b.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+            let access_calls = p.log.lock().unwrap().len();
+            assert_eq!(p.validations.load(Ordering::Relaxed), 2);
+            p.denied.store(deny_handoff, Ordering::Relaxed);
+            assert!(matches!(
+                h.take_settlement(now(), &mut WorkBudget::new()),
+                Err(CoreError::Backpressure(_))
+            ));
+            for (class, required) in [
+                (WorkClass::ProviderProbes, access_work),
+                (WorkClass::BindingPolls, destination_work),
+                (WorkClass::CleanupItems, 1),
+            ] {
+                let mut short = budget();
+                short.set_remaining(class, required - 1);
+                assert!(matches!(
+                    h.take_settlement(now(), &mut short),
+                    Err(CoreError::Backpressure(_))
+                ));
+                assert_eq!(h.state().unwrap(), ConsumerActionState::Completed);
+                assert_eq!(p.log.lock().unwrap().len(), access_calls);
+                assert_eq!(
+                    b.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+                    before
+                );
+                assert!(
+                    runtime
+                        .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                        .is_err()
+                );
+            }
+            // A completed value needs a fresh access check, not another codec
+            // callback or native exchange. Recent progress cannot cache permission.
+            let mut handoff = WorkBudget::new()
+                .with_remaining(WorkClass::ProviderProbes, access_work)
+                .with_remaining(WorkClass::BindingPolls, destination_work)
+                .with_remaining(WorkClass::CleanupItems, 1);
+            let s = h.take_settlement(now(), &mut handoff).unwrap();
+            assert_eq!(p.log.lock().unwrap().len(), access_calls + 1);
+            assert_eq!(p.validations.load(Ordering::Relaxed), 2);
+            assert_eq!(s.result().is_err(), deny_handoff);
+            if deny_handoff {
+                assert!(matches!(s.first_cause(), Some(CoreError::Security { .. })));
+            }
+            assert!(s.native_result().unwrap().is_ok());
+            assert!(h.take_settlement(now(), &mut budget()).is_err());
+            owner.revoke();
+            drop(h);
+            drop(runtime);
+            drop(owner);
+            assert_eq!(
+                s.result().is_err(),
+                deny_handoff,
+                "the successful handoff is the acceptance boundary"
+            );
+            assert!(b.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+            drop(s);
+            clean(&b);
+            producer.finish();
+        }
+    });
+}
+
+#[derive(Default)]
+struct RetirementProbe {
+    blocked: AtomicBool,
+    late_replies: AtomicUsize,
+}
+struct RetirementMapping {
+    original: Box<dyn ConsumerActionMapping>,
+    probe: Arc<RetirementProbe>,
+}
+impl ConsumerActionMapping for RetirementMapping {
+    fn identity(&self) -> BindingRegistrationIdentity {
+        self.original.identity()
+    }
+    fn operation(&self) -> Operation {
+        self.original.operation()
+    }
+    fn bounds(&self) -> ConsumerActionBounds {
+        let mut b = self.original.bounds();
+        b.exchange_bytes += std::mem::size_of::<RetirementExchange>() as u64;
+        b.poll_work += 16;
+        b
+    }
+    fn native_definition(&self) -> &dyn Any {
+        self.original.native_definition()
+    }
+    fn supports_continuation(&self, invoke: &dyn ConsumerActionMapping) -> CoreResult<()> {
+        self.original.supports_continuation(invoke)
+    }
+    fn destination(&self, continuation: Option<&dyn Any>) -> CoreResult<Box<str>> {
+        self.original.destination(continuation)
+    }
+    fn start(
+        &self,
+        input: Option<&Payload>,
+        continuation: Option<&dyn Any>,
+    ) -> CoreResult<Box<dyn ConsumerActionExchange>> {
+        Ok(Box::new(RetirementExchange {
+            original: self.original.start(input, continuation)?,
+            reply: None,
+            polled: false,
+            probe: self.probe.clone(),
+        }))
+    }
+}
+struct RetirementExchange {
+    original: Box<dyn ConsumerActionExchange>,
+    reply: Option<ConsumerActionReply>,
+    polled: bool,
+    probe: Arc<RetirementProbe>,
+}
+impl ConsumerActionExchange for RetirementExchange {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>> {
+        assert!(
+            !self.polled,
+            "normal poll must not replay a failed exchange"
+        );
+        self.polled = true;
+        if let Poll::Ready(result) = self.original.poll(cx) {
+            self.reply = Some(result.unwrap());
+        }
+        Poll::Ready(Err(query_poll_error()))
+    }
+    fn poll_close(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<CoreResult<Option<ConsumerActionReply>>> {
+        if self.probe.blocked.load(Ordering::Relaxed) {
+            return Poll::Pending;
+        }
+        if self.reply.is_none() {
+            match self.original.poll(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(result) => self.reply = Some(result?),
+            }
+        }
+        match self.original.poll_close(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(result) => {
+                assert!(result?.is_none());
+                self.probe.late_replies.fetch_add(1, Ordering::Relaxed);
+                Poll::Ready(Ok(self.reply.take()))
+            }
+        }
+    }
+    fn abort_local(self: Box<Self>) {
+        self.original.abort_local();
+    }
+}
+fn query_poll_error() -> CoreError {
+    CoreError::Binding(
+        ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+            .with_redacted_cause(660, "query poll failed before retirement response"),
+    )
+}
+#[test]
+fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirement() {
+    io().block_on(async {
+        for invalid_output in [false, true] {
+            let mut producer = Producer::new();
+            let b = bank();
+            let owner = instance();
+            let p = Arc::new(Policy::default());
+            let probe = Arc::new(RetirementProbe::default());
+            let mut input = definition(&td(producer.address, None), b.clone(), p.clone(), false)
+                .unwrap()
+                .into_input();
+            let mut query = input.query.take().unwrap();
+            // Retain the actual selected HTTP mapping; only its exchange result
+            // timing changes, as permitted by the native retirement contract.
+            query.mapping = Box::new(RetirementMapping {
+                original: query.mapping,
+                probe: probe.clone(),
+            });
+            input.query = Some(query);
+            let d = ConsumerActionDefinition::try_new(input).ok().unwrap();
+            let runtime = ConsumerActionRuntime::try_new(owner.reference(), vec![d], 1)
+                .ok()
+                .unwrap();
+            let h = runtime
+                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .ok()
+                .unwrap();
+            producer.drive(&h, ConsumerActionState::Pending).await;
+            producer.counts.complete.set(true);
+            p.reject_output.store(invalid_output, Ordering::Relaxed);
+            probe.blocked.store(true, Ordering::Relaxed);
+            h.query(now(), &mut budget()).unwrap();
+            h.progress(&mut cx(), now(), &mut budget()).unwrap();
+            assert!(h.take_settlement(now(), &mut budget()).is_err());
+            assert!(b.account(ResourceKind::CleanupBytesMax).used() > 0);
+            assert_eq!(h.first_cause().unwrap(), Some(query_poll_error()));
+            h.cancel_local();
+            h.progress(&mut cx(), now(), &mut WorkBudget::new())
+                .unwrap();
+            assert_eq!(probe.late_replies.load(Ordering::Relaxed), 0);
+            probe.blocked.store(false, Ordering::Relaxed);
+            producer.drive(&h, ConsumerActionState::Closed).await;
+            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            assert_eq!(s.first_cause(), Some(&query_poll_error()));
+            assert_eq!(s.native_error(), Some(&query_poll_error()));
+            assert_eq!(p.validations.load(Ordering::Relaxed), 2);
+            assert_eq!(
+                s.native_result()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body
+                    .as_ref(),
+                b"24"
+            );
+            assert!(s.native_result().unwrap().is_ok(), "late output was lost");
+            assert_eq!(s.validation_error().is_some(), invalid_output);
+            assert!(s.result().is_err());
+            assert_eq!(probe.late_replies.load(Ordering::Relaxed), 1);
+            assert_eq!(producer.counts.invoked.get(), 1);
+            drop(s);
+            drop(h);
+            drop(runtime);
+            drop(owner);
+            clean(&b);
+            producer.finish();
+        }
+    });
 }

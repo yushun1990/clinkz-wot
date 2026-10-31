@@ -90,7 +90,7 @@ fn main() {
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        let settlement = handle.take_settlement().unwrap();
+        let settlement = handle.take_settlement(now(), &mut work()).unwrap();
         eprintln!(
             "accepted={}, cancellation={:?}, effect={:?}",
             settlement.accepted(),

@@ -666,6 +666,18 @@ returns original input. Pending/error cleanup and unread settlement keep origina
 funding; Drop disposes native owners finitely before refunding it. The API admits
 no detached job, native pooling, reconnect or cleanup transfer.
 
+`Completed` means a validated native result is ready; unread success remains
+revocable. `take_settlement(now, budget)` is the application handoff and performs
+fresh paid time/authority/service/access checks even after recent progress.
+Zero or short handoff credit keeps the original result and invocation slot.
+Cancellation, root/instance loss, expiry or policy loss before handoff yields a
+fenced settlement with the original native output still available as evidence.
+Once successful handoff has occurred, later revocation does not retract that value.
+If a native poll fails but retirement returns a late completion, `native_error()`
+keeps the poll error while `native_result()` keeps the actual late output.
+The captured validator still checks it; neither a valid late result nor a later
+cancellation can erase the original failure or silently retry the Action.
+
 Run `serve_action`, save its printed qualified TD to `TD.json`, then run:
 
 ```sh
