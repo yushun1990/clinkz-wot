@@ -9,8 +9,8 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
     fn registration_identity(&self) -> clinkz_wot_core::BindingRegistrationIdentity {
         consumer_identity(self)
     }
-    fn preparation_bounds(&self) -> NotificationPreparationBounds {
-        NotificationPreparationBounds {
+    fn preparation_bounds(&self) -> ConsumerPreparationBounds {
+        ConsumerPreparationBounds {
             work: 4096,
             temporary_bytes: 8192,
             retained_bytes: 1024,

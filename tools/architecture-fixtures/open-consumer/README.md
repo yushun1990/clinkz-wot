@@ -57,3 +57,12 @@ preparation facet. Its TD-selected observable Property receives a real datagram
 after the source TD and registry are dropped, through captured value validation
 and Property operation authorization. This is external Binding SPI evidence;
 the test protocol remains unqualified for production use.
+
+
+`tests/action.rs` implements the new continuing Action preparation and native
+facets entirely outside the workspace. Different invoke/control Binding types
+execute real datagrams with an opaque token after the source TD/compilers disappear.
+The tests cover pending/query/cancel/completion, zero-credit progress and blocked/
+failed cleanup around a late invalid output. They retain first local cause,
+validation/native evidence and original funding through settlement and final local
+socket disposal. The test protocol makes no production interoperability claim.

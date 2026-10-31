@@ -23,6 +23,8 @@ pub mod artifact;
 pub mod binding;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod consumer;
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod consumer_action;
 #[cfg(target_has_atomic = "ptr")]
 pub mod deadline;
 #[cfg(target_has_atomic = "ptr")]

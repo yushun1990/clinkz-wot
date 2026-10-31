@@ -38,7 +38,9 @@ pub use producer::{
 mod producer_compiler;
 #[cfg(feature = "prepare")]
 pub use producer_compiler::try_producer_registration;
+mod action_consumer;
 mod transport;
+pub use action_consumer::HttpActionConsumer;
 #[cfg(feature = "prepare")]
 use compiler::HttpCompiler;
 use program::{COMPATIBILITY, HttpArtifact};
@@ -48,7 +50,7 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v8\0",
+    "clinkz-http-ip-v9\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
@@ -61,7 +63,12 @@ const PRIVATE_POLICY: &[u8] = concat!(
     "noTEadvertisement;single-chunked;noTEandCL;singleCL;",
     "call-owned-driver;noSpawn;local-drop-before-settlement;noNetworkWait;",
     "SDK-disposal-may-allocate;noPool;noRetry;noTLS;noDNS;",
-    "connect-io=DeploymentFailure"
+    "connect-io=DeploymentFailure;",
+    "action-consumer-POST202-accepted-id;GET200-running-completed-failed;DELETE200-cancelling-terminal;",
+    "action-id=hex16-u32;control-selected-template-id;Location-never-followed;",
+    "action-head16/8192;singleCL;json-envelope8192;output4096;wire16384-through-EOF;",
+    "action-noTE-noCE-noUpgrade-noTrailers-no1xx;duplicate-envelope-fields-refuse;",
+    "action-borrowed-RawValue;io4096-per-poll;one-exchange-per-registration;noReplay"
 ).as_bytes();
 const PRIVATE: [u8; 32] = sha2_const_stable::Sha256::new()
     .update(PRIVATE_POLICY)
@@ -575,12 +582,20 @@ impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
         if binding.configuration() != self.0.configuration.configuration()
             || !matches!(
                 operation,
-                Operation::ReadProperty | Operation::WriteProperty
+                Operation::ReadProperty
+                    | Operation::WriteProperty
+                    | Operation::InvokeAction
+                    | Operation::QueryAction
+                    | Operation::CancelAction
             )
         {
             return Err(error(641, "HTTP Consumer policy/configuration mismatch"));
         }
-        Target::parse(target).map(|_| ())
+        if matches!(operation, Operation::QueryAction | Operation::CancelAction) {
+            action_consumer::check_control_destination(target)
+        } else {
+            Target::parse(target).map(|_| ())
+        }
     }
     fn retained_bytes(&self) -> u64 {
         std::mem::size_of::<Self>() as u64 + 32

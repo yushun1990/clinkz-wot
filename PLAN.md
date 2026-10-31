@@ -40,10 +40,21 @@ still have supported-subset limits.
 | Property read | Finite Consumer/Producer paths | Owned preparation and captured services | Qualified final TD and local publication | HTTP in both roles; independent test datagram Consumer |
 | Property write | Finite Consumer/Producer paths | Operation-scoped value schema, captured Binding/data/access services | Complete qualified final TD, captured input/output validation and local publication | Engine Consumer-to-Producer HTTP PUT/204; Read/Write on one Property/listener; downstream test datagram Consumer |
 | Property observe / unobserve | Consumer notification conversation/stop and typed Producer value publication | Selected observable Property Form and captured value/access services | Qualified observable sources, value mappings and publication services | Engine Producer-to-Engine Consumers through Mosquitto; mapped unobserve, independent authority and final release; downstream TD-prepared test datagram Consumer |
-| Action invoke | Consumer finite call; Producer continuing invocation store | Explicit `synchronous: true` subset only | Continuing HTTP mapping with captured validation and controls | Test datagram synchronous Consumer; HTTP and test datagram Producer |
-| Action query / cancel | Producer retained invocation controls | Open | Qualified described HTTP control routes | HTTP and test datagram Producer; no composed Consumer control path |
+| Action invoke | Separate finite Consumer and continuing invocation owners; Producer continuing store | Explicit synchronous subset plus retained continuing invocation with captured mappings/services | Continuing HTTP mapping with captured validation and controls | Engine Consumer-to-Producer HTTP acceptance, pending and validated completion; independent downstream datagram Consumer |
+| Action query / cancel | Retained Consumer/Producer invocation controls | Independently selected described Forms, opaque native continuation and original instance authority | Qualified described HTTP control routes | Engine Consumer-to-Producer HTTP query/cancel, uncertainty, replacement and final release; distinct downstream invoke/control Bindings over real datagrams |
 | Event subscribe / unsubscribe and Producer emission | Consumer Event conversation; distinct Producer emission and settlement | Selected MQTT Event Form, captured services, validated delivery and logical stop/unsubscribe | Qualified MQTT Event sources and emission; broker-native subscribe/unsubscribe without control data or dataResponse | Engine Producer-to-Engine Consumers through Mosquitto, shared native subscriptions, independent logical authority and final release; independent wire peers also exercised |
 | Described collection operations | No collection execution path | Open | Open | No joined native collection evidence |
+
+The [continuing Action integration](protocol-bindings/protocols/http/tests/action_consumer.rs)
+proves the bounded HTTP JSON/type-only, endpoint NoSec Consumer-to-Producer
+mapping. Acceptance, pending execution, validated completion, local cancellation
+and remote cancellation uncertainty remain separate. Described controls use
+independently selected actual registrations; native continuation and original
+services survive the initiating exchange. The
+[downstream Action fixture](tools/architecture-fixtures/open-consumer/tests/action.rs)
+adds real datagrams, different invoke/control Binding implementations and funded
+late validation/retirement evidence. These are Host/manual execution claims;
+general security/schema, constrained execution and production qualification remain open.
 
 The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
 proves the bounded JSON/type-only, endpoint NoSec HTTP subset, including

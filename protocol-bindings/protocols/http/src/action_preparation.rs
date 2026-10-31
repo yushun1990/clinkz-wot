@@ -31,10 +31,10 @@ impl HttpActionProducer {
         let FormSite::Action(name) = input.site else {
             return Ok(None);
         };
-        let (method, control) = match input.operation {
-            Operation::InvokeAction => ("POST", false),
-            Operation::QueryAction => ("GET", true),
-            Operation::CancelAction => ("DELETE", true),
+        let control = match input.operation {
+            Operation::InvokeAction => false,
+            Operation::QueryAction => true,
+            Operation::CancelAction => true,
             _ => return Ok(None),
         };
         // Eligibility is native and must precede HTTP-specific schema/security
@@ -57,142 +57,15 @@ impl HttpActionProducer {
         budget
             .consume(WorkClass::BindingPolls, 4096)
             .map_err(|_| producer_unsupported())?;
-        let doc = input.document;
-        let form = doc
-            .form(FormOwner::Action(name), input.form)
-            .ok_or_else(producer_unsupported)?;
-        if form.effective_operations != [input.operation]
-            || form.content_type != "application/json"
-            || form.subprotocol.is_some()
-            || form.content_coding.is_some()
-            || form.scopes.is_some()
-            || form.additional_responses
-            || form
-                .response_content_type
-                .is_some_and(|m| m != "application/json")
-            || doc.action_synchronous(name) == Some(Some(true))
-            || doc.uri_variables(UriVariableScope::Thing).is_some()
-            || doc.scope(SemanticScope::Thing).is_none_or(|n| {
-                n.children()
-                    .any(|n| !crate::producer_compiler::class_assertion(n))
-            })
-        {
-            return Err(producer_unsupported());
-        }
-        let action_scope = doc
-            .scope(SemanticScope::Action(name))
-            .ok_or_else(producer_unsupported)?;
-        for role in ["input", "output"] {
-            let iri = if role == "input" {
-                "https://www.w3.org/2019/wot/td#input"
-            } else {
-                "https://www.w3.org/2019/wot/td#output"
-            };
-            if action_scope.children().filter(|n| n.name().is(iri)).count()
-                != usize::from(
-                    doc.affordance_schema(FormOwner::Action(name), role)
-                        .is_some(),
-                )
-            {
-                return Err(producer_unsupported());
-            }
-        }
-        if action_scope.children().any(|n| {
-            !crate::producer_compiler::class_assertion(n)
-                && !n.name().is("https://www.w3.org/2019/wot/td#input")
-                && !n.name().is("https://www.w3.org/2019/wot/td#output")
-        }) {
-            return Err(producer_unsupported());
-        }
-        match doc.uri_variables(UriVariableScope::Action) {
-            None if !control => {}
-            Some(vars) => {
-                let mut vars = vars;
-                let Some(("id", schema)) = vars.next() else {
-                    return Err(producer_unsupported());
-                };
-                if vars.next().is_some()
-                    || prepare_type_schema(schema)?
-                        != clinkz_wot_core::value_type::TypeSchema::Type(
-                            clinkz_wot_core::value_type::ValueType::String,
-                        )
-                {
-                    return Err(producer_unsupported());
-                }
-            }
-            _ => return Err(producer_unsupported()),
-        }
-        let [security_name] = form.effective_security else {
-            return Err(producer_unsupported());
-        };
-        let security = doc
-            .security(security_name)
-            .map_err(|_| producer_unsupported())?;
-        if security.scheme != "nosec"
-            || security.proxy.is_some()
-            || security
-                .semantics
-                .children()
-                .any(|n| !crate::producer_compiler::class_assertion(n))
-        {
-            return Err(producer_unsupported());
-        }
-        let input_schema = doc
-            .affordance_schema(FormOwner::Action(name), "input")
-            .map(prepare_type_schema)
-            .transpose()?;
-        let output_schema = doc
-            .affordance_schema(FormOwner::Action(name), "output")
-            .map(prepare_type_schema)
-            .transpose()?;
-        let form_scope = doc
-            .scope(SemanticScope::AffordanceForm {
-                owner: FormOwner::Action(name),
-                index: input.form,
-            })
-            .ok_or_else(producer_unsupported)?;
-        let mut seen_method = false;
-        for node in form_scope.children() {
-            if seen_method
-                || !node.name().is("http://www.w3.org/2011/http#methodName")
-                || node.value() != SemanticValue::Text(method)
-            {
-                return Err(producer_unsupported());
-            }
-            seen_method = true;
-        }
-        if let Some(response) = doc.scope(SemanticScope::AffordanceResponse {
-            owner: FormOwner::Action(name),
-            index: input.form,
-        }) {
-            let mut seen = false;
-            for node in response.children() {
-                if seen
-                    || !node
-                        .name()
-                        .is("http://www.w3.org/2011/http#statusCodeValue")
-                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if control {200} else {202}))
-                {
-                    return Err(producer_unsupported());
-                }
-                seen = true;
-            }
-        }
-        let path = target.uri.path_and_query().map_or("/", |p| p.as_str());
-        if path.len() > 64 || (control && path.contains('?')) {
-            return Err(producer_unsupported());
-        }
-        Ok(Some(HttpActionDefinition {
-            instance_binding: self.identity,
-            action: Arc::from(name.as_str()),
-            operation: input.operation,
-            form: input.form,
-            address: target.address,
-            path: Arc::from(path),
-            input_schema,
-            output_schema,
-            control,
-        }))
+        lower_action(
+            input.document,
+            name,
+            input.form,
+            input.operation,
+            input.target,
+            self.identity,
+        )
+        .map(Some)
     }
 }
 impl ProducerCapability for HttpActionProducer {
@@ -237,4 +110,165 @@ impl ProducerCapability for HttpActionProducer {
         };
         Ok(self.lower(input, budget)?.as_ref() == Some(expected))
     }
+}
+
+/// Shared native contract for the existing POST/GET/DELETE Action mapping.
+/// Producer listener eligibility and Consumer policy remain role-specific.
+pub(crate) fn lower_action(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    name: &str,
+    form_index: u32,
+    operation: Operation,
+    endpoint: &str,
+    identity: (BindingId, BindingGeneration),
+) -> CoreResult<HttpActionDefinition> {
+    let (method, control) = match operation {
+        Operation::InvokeAction => ("POST", false),
+        Operation::QueryAction => ("GET", true),
+        Operation::CancelAction => ("DELETE", true),
+        _ => return Err(producer_unsupported()),
+    };
+    let base = if control {
+        endpoint
+            .strip_suffix("{?id}")
+            .ok_or_else(producer_unsupported)?
+    } else {
+        endpoint
+    };
+    let target = Target::parse(base)?;
+    let form = doc
+        .form(FormOwner::Action(name), form_index)
+        .ok_or_else(producer_unsupported)?;
+    if form.effective_operations != [operation]
+        || form.content_type != "application/json"
+        || form.subprotocol.is_some()
+        || form.content_coding.is_some()
+        || form.scopes.is_some()
+        || form.additional_responses
+        || form
+            .response_content_type
+            .is_some_and(|m| m != "application/json")
+        || doc.action_synchronous(name) == Some(Some(true))
+        || doc.uri_variables(UriVariableScope::Thing).is_some()
+        || doc.scope(SemanticScope::Thing).is_none_or(|n| {
+            n.children()
+                .any(|n| !crate::producer_compiler::class_assertion(n))
+        })
+    {
+        return Err(producer_unsupported());
+    }
+    let action_scope = doc
+        .scope(SemanticScope::Action(name))
+        .ok_or_else(producer_unsupported)?;
+    for role in ["input", "output"] {
+        let iri = if role == "input" {
+            "https://www.w3.org/2019/wot/td#input"
+        } else {
+            "https://www.w3.org/2019/wot/td#output"
+        };
+        if action_scope.children().filter(|n| n.name().is(iri)).count()
+            != usize::from(
+                doc.affordance_schema(FormOwner::Action(name), role)
+                    .is_some(),
+            )
+        {
+            return Err(producer_unsupported());
+        }
+    }
+    if action_scope.children().any(|n| {
+        !crate::producer_compiler::class_assertion(n)
+            && !n.name().is("https://www.w3.org/2019/wot/td#input")
+            && !n.name().is("https://www.w3.org/2019/wot/td#output")
+    }) {
+        return Err(producer_unsupported());
+    }
+    match doc.uri_variables(UriVariableScope::Action) {
+        None if !control => {}
+        Some(vars) => {
+            let mut vars = vars;
+            let Some(("id", schema)) = vars.next() else {
+                return Err(producer_unsupported());
+            };
+            if vars.next().is_some()
+                || prepare_type_schema(schema)?
+                    != clinkz_wot_core::value_type::TypeSchema::Type(
+                        clinkz_wot_core::value_type::ValueType::String,
+                    )
+            {
+                return Err(producer_unsupported());
+            }
+        }
+        _ => return Err(producer_unsupported()),
+    }
+    let [security_name] = form.effective_security else {
+        return Err(producer_unsupported());
+    };
+    let security = doc
+        .security(security_name)
+        .map_err(|_| producer_unsupported())?;
+    if security.scheme != "nosec"
+        || security.proxy.is_some()
+        || security
+            .semantics
+            .children()
+            .any(|n| !crate::producer_compiler::class_assertion(n))
+    {
+        return Err(producer_unsupported());
+    }
+    let input_schema = doc
+        .affordance_schema(FormOwner::Action(name), "input")
+        .map(prepare_type_schema)
+        .transpose()?;
+    let output_schema = doc
+        .affordance_schema(FormOwner::Action(name), "output")
+        .map(prepare_type_schema)
+        .transpose()?;
+    let form_scope = doc
+        .scope(SemanticScope::AffordanceForm {
+            owner: FormOwner::Action(name),
+            index: form_index,
+        })
+        .ok_or_else(producer_unsupported)?;
+    let mut seen_method = false;
+    for node in form_scope.children() {
+        if seen_method
+            || !node.name().is("http://www.w3.org/2011/http#methodName")
+            || node.value() != SemanticValue::Text(method)
+        {
+            return Err(producer_unsupported());
+        }
+        seen_method = true;
+    }
+    if let Some(response) = doc.scope(SemanticScope::AffordanceResponse {
+        owner: FormOwner::Action(name),
+        index: form_index,
+    }) {
+        let mut seen = false;
+        for node in response.children() {
+            if seen
+                || !node
+                    .name()
+                    .is("http://www.w3.org/2011/http#statusCodeValue")
+                || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if control {200} else {202}))
+            {
+                return Err(producer_unsupported());
+            }
+            seen = true;
+        }
+    }
+    let path = target.uri.path_and_query().map_or("/", |p| p.as_str());
+    if path.len() > 64 || (control && path.contains('?')) {
+        return Err(producer_unsupported());
+    }
+    Ok(HttpActionDefinition {
+        instance_binding: identity,
+        action: Arc::from(name),
+        operation,
+        form: form_index,
+        address: target.address,
+        path: Arc::from(path),
+        input_schema,
+        output_schema,
+        control,
+    })
 }

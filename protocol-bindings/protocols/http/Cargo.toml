@@ -23,7 +23,7 @@ socket2 = { version = "=0.6.4", default-features = false }
 sha2-const-stable = "=0.1.0"
 
 serde = { workspace = true }
-serde_json = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std", "raw_value"] }
 
 [dev-dependencies]
 clinkz-wot-planning = { path = "../../../planning" }
@@ -45,4 +45,8 @@ required-features = ["prepare"]
 
 [[example]]
 name = "serve_action"
+required-features = ["prepare"]
+
+[[example]]
+name = "invoke_action"
 required-features = ["prepare"]

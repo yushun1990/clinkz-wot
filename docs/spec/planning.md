@@ -156,8 +156,9 @@ An explicit binding/Form selector only narrows candidates after common services
 have accepted the meaning. Selection keys include affordance kind/name and
 operation, so same-named
 Properties and Actions do not collide. The current finite facets are Property
-Read/Write and `InvokeAction` with explicit `synchronous: true`; absent/false
-synchronous claims and query/cancel/collection operations remain unsupported.
+Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
+unspecified synchronicity use the separate Action facet below; collection
+operations remain unsupported.
 Action input/output use distinct prepared type-only schemas; absent roles
 permit no application data. Only one captured media service is currently
 supported for both directions; differing response media is refused.
@@ -189,6 +190,30 @@ Servient owner consumes it. Host startup registration/reference construction use
 the existing trusted Host allocation policy; fallible native compiler-slot and
 owned-cursor allocations are exercised independently. This is not an allocator
 interceptor or a claim of recoverable process-wide OOM.
+
+## Continuing Consumer Action preparation
+
+`ConsumerActionRegistry::prepare_action` admits one Action through the common
+Basic/semantic Form walk and captures source-free invoke/query/cancel mappings.
+It accepts absent or false synchronicity; explicit synchronous Actions retain the
+finite facet. Each described control operation must have a supported selected
+Form; absent controls stay unavailable. Form order is the default preference,
+selectors only narrow applicability and ambiguity within a Form refuses.
+Each operation can select a different actual registration, configuration and
+access service. The control mapping explicitly proves compatibility with the
+original invoke mapping before the association can execute. Registration equality
+is neither required nor sufficient. No generic continuation URL is constructed.
+
+The actual `ConsumerActionPreparation` compiles pure bounded native mappings,
+while Planning checks the common type-only and endpoint NoSec subset.
+Native vocabulary, URI variables and response conventions stay in the Binding.
+The association owns every selected mapping, both Action data roles, actual
+services and original funding after all TD/compiler owners disappear.
+`ConsumerPreparationBounds` replaces the notification-specific bounds name for
+these two pure typed preparation facets. Declared work must fit the caller's
+configured compilation allowance; short/unfunded preparation invokes no native
+effects and releases partial owners. The supported HTTP callback requires an
+explicit 4096-unit preparation allowance, as does the existing MQTT facet.
 
 ## Open Consumer notification preparation
 

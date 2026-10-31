@@ -120,6 +120,26 @@ separately described query/cancel routes. Its 202 means locally admitted work,
 not remote terminal success or rollback. Other qualified Bindings must provide
 their actual validation services during publication, not at individual ingress.
 
+The Host `consumer_action::ConsumerActionRuntime` implements the continuing
+Consumer association separately from finite results. Its unique local handle
+pins the original Consumer incarnation and selected mappings; the Binding's
+opaque token is retained independently of each finite native exchange and never
+becomes logical authority. Invoke acceptance exposes Pending, not a completed
+result. Explicit query/cancel can use different actual mappings and captured
+access services. The original invoke data service validates completion, including
+late output after cancellation; native output, validation error, first local cause,
+cleanup error and effect uncertainty remain independently observable.
+
+Cancellation request acknowledgement and already-terminal acknowledgement grant
+no terminal application result. A subsequent query must obtain and validate it.
+Native cancel failure or loss leaves remote cancellation uncertain. Local cancel,
+abandonment, root close, deadline, policy/service loss or instance replacement
+fences acceptance and retires local work; none sends an undescribed cancel or
+asserts remote rollback. No progress/control path reinvokes an Action. Unread
+terminal settlement retains the original slot; acknowledgement returns a complete
+settlement owner, and stale handles cannot address a reused slot. The settlement
+retains original services, native evidence and funding until final disposal.
+
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property
 observation carries Property values. Event subscription/data/dataResponse/

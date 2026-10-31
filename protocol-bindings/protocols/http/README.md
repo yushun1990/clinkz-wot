@@ -614,3 +614,72 @@ codec/type validation runs on normal and late output. Unsupported schema/securit
 meaning is reported unsupported instead of trusting result-shape sealing alone.
 The lower-level `try_inline_consumer_registration` exists for the retained
 restricted aggregate regression/measurement path. HTTP SSE is not implemented.
+
+
+## TD-driven continuing Consumer Actions
+
+`ConsumerActionRegistry::prepare_action` selects invoke and every described
+query/cancel operation independently. Register `HttpActionConsumer` with
+`HttpConsumerConfig::consumer_services()` (or actual application services) and an
+explicit 4096-unit `PlanCompileWorkUnitsPerStepMax` allowance. This is the same
+bounded pure native callback policy as the existing typed MQTT facet. The shared
+HTTP lowering preserves the qualified Producer mapping above: JSON/type-only,
+endpoint NoSec, cleartext IP literals, POST invoke and independent GET/DELETE
+control Forms ending in `{?id}`, with a string `uriVariables.id`. Absent or false
+`synchronous` uses this continuing facet; the existing explicitly synchronous
+finite Consumer remains separate. A missing described control provider refuses
+preparation; absent operations remain unavailable. Different actual registrations
+may select controls on this native listener; another listener/continuation format
+is unsupported by this concrete mapping.
+
+The source-free `consumer_action::ConsumerActionRuntime` owns each invocation
+independently of finite native exchanges. `invoke_action` returns a local handle;
+`progress` exposes Invoking, Pending, Querying, Cancelling, local Closing and terminal states.
+`query` and `request_cancel` are explicit described operations. POST 202 with the
+bounded native id means accepted work, never a terminal result. GET `running`
+remains pending; `completed` supplies output for the original captured validator;
+`failed` is a remote execution failure. DELETE `cancelling` acknowledges only a
+request; `terminal` acknowledges no result. A later query must obtain completion.
+The default access service checks the actual expanded control target before I/O.
+No Location header is followed, no URL is invented by the Engine and no failure
+or cancellation replays the Action.
+
+The native Consumer exchanges use one fresh closing TCP connection, with 16
+headers, an inclusive 8192-byte head, one Content-Length, an 8192-byte response
+envelope and 4096-byte application data. At most 16384 response bytes are retained;
+one native poll shares 4096 read/write bytes. Complete framing is checked through
+peer EOF, including fragmented trailing bytes. Chunked/close-delimited bodies,
+content codings, trailers, upgrades, informational responses, malformed/duplicate
+response fields and unexpected status/role combinations refuse this mapping.
+Borrowed JSON RawValue preserves output bytes without constructing a JSON tree;
+the actual captured data service validates them. The HTTP policy fingerprint is
+v9. There is one active exchange per actual registration; the Engine independently
+bounds continuing invocations and unread terminal slots.
+
+`cancel_local`, handle abandonment, deadline, policy/service loss, root close and
+instance replacement retire local work with its first cause. They do not send a
+hidden DELETE or prove remote rollback. A lost DELETE reply retains Uncertain
+remote cancellation; Requested still permits eventual application completion.
+Settlement retains accepted status, original native result, validation and cleanup
+errors, remote cancellation and effect uncertainty separately. Pre-effect refusal
+returns original input. Pending/error cleanup and unread settlement keep original
+funding; Drop disposes native owners finitely before refunding it. The API admits
+no detached job, native pooling, reconnect or cleanup transfer.
+
+Run `serve_action`, save its printed qualified TD to `TD.json`, then run:
+
+```sh
+cargo run --locked --offline -p clinkz-wot-binding-http --example invoke_action -- TD.json run 12
+cargo run --locked --offline -p clinkz-wot-binding-http --example invoke_action -- TD.json run 12 --cancel
+cargo test --locked --offline -p clinkz-wot-binding-http --test action_consumer --test action_producer
+cargo test --locked --offline --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml --test action
+```
+
+The HTTP integration joins real Engine roles and covers pending/completed and
+cancellation paths, unsupported mappings, validation, capacity, replacements,
+malformed native replies, abandonment and final socket/account release. The
+independent downstream fixture executes real datagrams using different invoke and
+control Binding implementations, including late invalid completion during blocked
+and failed cleanup. These tests do not establish general Action interoperability,
+HTTPS, broader DataSchema/security, constrained execution, automatic progress or
+remote effect certainty.

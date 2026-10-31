@@ -1092,8 +1092,8 @@ impl ConsumerNotificationPreparation for Observe {
             0,
         )
     }
-    fn preparation_bounds(&self) -> NotificationPreparationBounds {
-        NotificationPreparationBounds {
+    fn preparation_bounds(&self) -> ConsumerPreparationBounds {
+        ConsumerPreparationBounds {
             work: 256,
             temporary_bytes: 256,
             retained_bytes: 256,
