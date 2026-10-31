@@ -196,8 +196,8 @@ impl<'a> SemanticNode<'a> {
 }
 
 /// Temporary semantic closure of one Form, its property, Thing and effective
-/// security definitions. Thing-root Forms also lend described Property schemas
-/// for collection meaning; individual Property Forms are never substituted.
+/// security definitions. Thing-root ReadAllProperties Forms also lend described
+/// Property schemas; individual Property Forms are never substituted.
 /// Other Forms are not present. Every scalar
 /// borrows the admitted immutable TD;
 /// artifacts must copy the native instructions they need before this is freed.
@@ -407,7 +407,15 @@ impl<'a> Resolver<'a> {
             FormOwner::Thing => {
                 // Collection schemas use each Property's own local context.
                 // These loans carry no individual Forms or native mappings.
-                if let Some(properties) = &thing.properties {
+                let read_all = thing
+                    .forms
+                    .as_ref()
+                    .and_then(|forms| forms.get(selected_form as usize))
+                    .and_then(|form| form.op.as_ref())
+                    .is_some_and(|ops| {
+                        ops.contains(&crate::data_type::Operation::ReadAllProperties)
+                    });
+                if let Some(properties) = thing.properties.as_ref().filter(|_| read_all) {
                     for (name, property) in properties {
                         resolver.pay(name.len() as u64 + 1)?;
                         let schema = property._schema.context();

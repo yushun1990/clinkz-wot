@@ -22,11 +22,12 @@ unconstrained object assertion would discard individual schemas and readability.
 ## Selected direction
 
 Reuse the existing finite owners for this one finite operation. Carry Thing scope
-explicitly through Consumer selection and HTTP native mappings. Root semantic
-loans include Property schemas with their own contexts, without individual Forms.
+explicitly through Consumer selection and HTTP native mappings. ReadAllProperties
+root semantic loans include Property schemas with their own contexts, without individual Forms.
 Prepare owned readable-member names/type assertions, excluding writeOnly members;
 require actual collection codec support and retain its services/configuration.
-A separate root application behavior returns the combined result. HTTP owns the
+Unrelated root operations acquire no Property schema obligations. A separate
+root application behavior returns the combined result. HTTP owns the
 single GET/200 JSON object mapping and native method/path collision checks.
 
 The exact supported response requires every readable member once and validates
