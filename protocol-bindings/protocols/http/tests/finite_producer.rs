@@ -319,13 +319,14 @@ impl FiniteValidator for ControlledHttp {
     fn validate_output(
         &self,
         candidate: &FiniteCandidate,
+        input: &InteractionInput,
         output: &InteractionOutput,
     ) -> CoreResult<()> {
         self.validations.set(self.validations.get() + 1);
         self.native
             .validator()
             .unwrap()
-            .validate_output(candidate, output)
+            .validate_output(candidate, input, output)
     }
 }
 impl FiniteIngressBinding for ControlledHttp {

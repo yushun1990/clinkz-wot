@@ -276,7 +276,7 @@ owns concrete limits, explicit preparation allowance and supported wire outcomes
 No general HTTP Action interoperability, TLS, broader schema/security,
 constrained/automatic progress or remote effect certainty is claimed.
 
-## TD-driven HTTP ReadAllProperties
+## TD-driven HTTP Property collection reads
 
 The joined Consumer and Producer support the bounded root GET/200 JSON mapping
 defined by the [HTTP README](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).
@@ -285,6 +285,15 @@ join multiple Properties in one native request and exercise adversarial native
 responses independently of the Producer. Existing Property/Action/Event paths
 retain their own evidence and narrower qualification claims.
 
-ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and long-lived
+ReadMultipleProperties uses one explicitly described HTTP POST, TD's default JSON
+name-array request and an exact selected-map primary 200 response. The
+[HTTP selected-read contract](../../protocol-bindings/protocols/http/README.md#thing-root-readmultipleproperties)
+owns the supported wire mapping and bounds. The
+[selected-read tests](../../protocol-bindings/protocols/http/tests/read_multiple_properties.rs)
+join Engine Consumer/Producer and independent malformed/partial peers. The claim
+is Host/manual, JSON/type-only and endpoint-NoSec; URI templates, GET query
+selection, general security/schema support and production qualification remain open.
+
+WriteAllProperties, WriteMultipleProperties and long-lived
 collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

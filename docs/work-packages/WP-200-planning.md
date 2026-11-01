@@ -286,7 +286,7 @@ exercises refusal/selection, while the
 implements this public facet in an external Cargo crate. No package acceptance
 or whole-Thing Consumer support follows from these bounded capabilities.
 
-## Thing-root ReadAllProperties
+## Thing-root Property collection reads
 
 The root semantic loan now supplies Property schemas with their local contexts.
 The open Consumer selects an actual root Form and captures an owned combined
@@ -294,6 +294,13 @@ readable-member schema with actual services. Whole-Thing Producer preparation an
 final comparison include the root operation, every retained Property Form and
 original member meaning. See the [Planning contract](../spec/planning.md#thing-root-property-collection-preparation).
 
-ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and long-lived
+ReadMultipleProperties shares the bounded readable-schema loan and independently
+paid temporary/retained schemas. Preparation captures an actual root Form and
+request/result services; invocation supplies a separate bounded selection and
+performs encoding. Complete final qualification compares the original eligible
+member meaning. The [selected-read tests](../../protocol-bindings/protocols/http/tests/read_multiple_properties.rs)
+exercise static refusal, actual services, source destruction and cleanup credit.
+
+WriteAllProperties, WriteMultipleProperties and long-lived
 collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

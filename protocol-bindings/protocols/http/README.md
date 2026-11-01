@@ -653,7 +653,7 @@ content codings, trailers, upgrades, informational responses, malformed/duplicat
 response fields and unexpected status/role combinations refuse this mapping.
 Borrowed JSON RawValue preserves output bytes without constructing a JSON tree;
 the actual captured data service validates them. The HTTP policy fingerprint is
-v10 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
+v11 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
 bounds continuing invocations and unread terminal slots.
 
 `cancel_local`, handle abandonment, deadline, policy/service loss, root close and
@@ -737,7 +737,7 @@ Consumer data policy funds up to `4096 * 40 + 16 * 2` validation work units;
 Producer validation captures and prepays an additional `4096 * 40` units beyond
 the finite owner's base body/media traversal. Member/name backing, bounded
 destruction, captured services and callback scratch retain their original accounts.
-Consumer native policy fingerprint is v10.
+Consumer native policy fingerprint is v11.
 
 The Engine enters the root application behavior once. It does not call or
 implicitly aggregate individual Property handlers. Application/Binding code owns
@@ -749,7 +749,7 @@ replacement, lost services and close keep original root attribution, first cause
 late native/application evidence and physical release owners. No retry or
 individual-read fallback is implied by failure.
 
-ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties, collection
+WriteAllProperties, WriteMultipleProperties, collection
 observation, query-all Actions and subscribe/unsubscribe-all Events are
 unimplemented. They require their own selected-member/data roles, native support
 and appropriate lifecycle; this finite read does not qualify them. HTTP JSON,
@@ -768,7 +768,77 @@ Run the real examples in separate terminals:
 ```sh
 cargo run -p clinkz-wot-binding-http --example serve_properties -- 8082 30 > /tmp/collection-td.json
 cargo run -p clinkz-wot-binding-http --example read_all_properties -- /tmp/collection-td.json
+cargo run -p clinkz-wot-binding-http --example read_multiple_properties -- /tmp/collection-td.json level
+cargo run -p clinkz-wot-binding-http --example read_multiple_properties -- /tmp/collection-td.json on
 ```
 
 The Consumer prints the validated combined value. The Producer publishes the
 complete final TD before writing it and retires its listener/accounts on exit.
+
+## Thing-root ReadMultipleProperties
+
+`ConsumerRuntime::read_multiple_properties(&["level"], deadline, now, budget)`
+selects members for one actual Thing-root `readmultipleproperties` interaction.
+Preparation retains all eligible readable names/schemas, actual services and the
+selected root Form. It performs no request encoding. Each call checks exact names
+against that retained set and owns an inline bitmap into its original schema.
+Caller storage and the source TD can be destroyed before execution. The bitmap
+remains with the original call through cancellation, unread/late results and
+settlement. The schema is not modified by any call.
+Preparation also qualifies the captured generic Array input validator that
+invocation calls on the encoded name array; selection-specific codec support
+alone does not qualify this dependency. Required support and policy are checked
+again after authorization, including final admission and immediate/unread result
+handoff. A change fences success while retaining the original result and funding.
+
+The supported Form explicitly specifies `"htv:methodName":"POST"`, with
+`application/json` request and primary 200 JSON response. As defined by
+[TD 1.1 §5.3.1.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing),
+the default request is a JSON array of exact Property names, such as `["level"]`.
+The response is a JSON object containing exactly those members, such as
+`{"level":7}`. A subsequent call can send `["on"]` against the same prepared TD
+and must receive only `{"on":true}`. `[]` requires `{}`. Name order has no semantic
+meaning; the encoder uses retained schema order. Names are never normalized or
+silently deduplicated. Undescribed/writeOnly names refuse before native effects.
+
+TD HTTP defaults ReadMultipleProperties to GET when no method is specified. This
+slice declines that mapping: a GET request body has no generally defined
+semantics. It also declines URI templates/uriVariables, including TD's illustrated
+GET query mapping. No fixed query parameter or implicit member-list-to-variable
+conversion is introduced. Supporting another request mapping requires actual
+semantic/Binding support. Single-operation explicit POST is qualified as part of
+the actual Form; a multi-operation Form with one explicit method is refused.
+
+The native Producer matches POST/path/authority, accepts one bounded fixed-length
+JSON body, validates its member set before authorization/dispatch, and calls one
+registered root behavior. The actual `FiniteValidator` receives the original
+input again for output validation. Every requested member is required exactly
+once with its own retained schema; an extra readable member is as invalid as an
+unknown/writeOnly member. Escaped duplicates, missing/invalid values and malformed
+responses refuse whole-result success. HTTP 206/207, truncated bodies, application
+aggregation failures and per-member failure envelopes are errors, with original
+group attribution and uncertain post-handler effect. No read fan-out, retry,
+atomic snapshot or simultaneous sampling is implied.
+
+The ReadAllProperties descriptor/profile ceilings also apply. Both native input
+and output are at most 4096 bytes; escaping expansion can make an otherwise valid
+selection unencodable and is refused within the bounded writer. Consumer data
+policy separately prepays each encode/input-validation/output-validation callback
+at `4096 * 40 + 16 * 2` work units. Complete encoded-input lifetime, callback
+scratch and cleanup are reserved before encoding; the captured data policy
+explicitly declares complete returned selection-payload backing independently of
+encoder scratch and result body limits; refusal drops it before funding
+releases. The additional Producer work bound is `4096 * 120` when the participant
+contains a selected-read mapping, covering both original-selection decodes and
+result member traversal. ReadAll-only participants retain `4096 * 40`. The exact
+captured bound is still rechecked immediately before output validation.
+
+[Selected-read execution tests](tests/read_multiple_properties.rs) prove different
+subsets from one TD, a separate all-read on the same listener, static/unsupported
+selection, independent malformed/partial peers, exact Producer validation,
+authorization, lost services during encoding/result validation, prepublication,
+cancellation, replacement before/after dispatch, unpaid work, failed sibling
+admission, retained results and final account/socket release. Shared fixtures also
+rerun the existing schema cleanup regressions for selected reads. This remains
+the Host/manual, JSON/type-only, endpoint-NoSec slice; general URI mapping,
+security, HTTPS, constrained profiles and production qualification remain open.

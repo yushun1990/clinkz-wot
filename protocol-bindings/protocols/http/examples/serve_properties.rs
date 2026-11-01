@@ -25,8 +25,24 @@ impl RawFiniteHandler for Values {
     fn handle(
         &self,
         ctx: HandlerContext<'_>,
-        _: &InteractionInput,
+        input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
+        if ctx.operation() == Operation::ReadMultipleProperties {
+            let requested: Vec<String> =
+                serde_json::from_slice(&input.data.as_ref().unwrap().body).unwrap();
+            let values = serde_json::json!({"level":7,"on":true});
+            let selected: serde_json::Map<String, serde_json::Value> = requested
+                .into_iter()
+                .map(|name| {
+                    let value = values[&name].clone();
+                    (name, value)
+                })
+                .collect();
+            return Ok(InteractionOutput::with_data(Payload::new(
+                serde_json::to_vec(&selected).unwrap(),
+                "application/json",
+            )));
+        }
         let body: &[u8] = match ctx.target() {
             AffordanceTarget::Thing => br#"{"level":7,"on":true}"#,
             AffordanceTarget::Property(name) if name.as_ref() == "level" => b"7",
@@ -59,7 +75,8 @@ fn main() {
     let description: Arc<str> = Arc::from(serde_json::json!({
         "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"native collection read",
         "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
-        "forms":[{"op":"readallproperties", "href":format!("http://{addr}/properties")}],
+        "forms":[{"op":"readallproperties", "href":format!("http://{addr}/properties")},
+            {"op":"readmultipleproperties", "href":format!("http://{addr}/properties"), "htv:methodName":"POST"}],
         "properties":{
             "level":{"type":"integer","readOnly":true,"forms":[{"href":format!("http://{addr}/level")}]},
             "on":{"type":"boolean","readOnly":true,"forms":[{"href":format!("http://{addr}/on")}]}
@@ -68,7 +85,7 @@ fn main() {
     let accounts = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
         instances: 1,
-        behaviors_per_instance: 3,
+        behaviors_per_instance: 4,
         target_name_bytes: 256,
     })
     .unwrap();
@@ -83,6 +100,11 @@ fn main() {
             RawFiniteBehavior::new(
                 AffordanceTarget::Thing,
                 Operation::ReadAllProperties,
+                Values,
+            ),
+            RawFiniteBehavior::new(
+                AffordanceTarget::Thing,
+                Operation::ReadMultipleProperties,
                 Values,
             ),
             RawFiniteBehavior::new(

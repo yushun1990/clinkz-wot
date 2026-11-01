@@ -781,6 +781,7 @@ impl ConsumerDataService for MqttJsonData {
             retained_bytes: 0,
             temporary_bytes: 4096,
             body_bytes: MAX_NOTIFICATION_BYTES as u64,
+            encoded_selection_bytes: 0,
             validation_work: 65536,
         }
     }

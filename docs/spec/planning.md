@@ -158,8 +158,8 @@ operation, so same-named
 Properties and Actions do not collide. The current finite facets are Property
 Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
 unspecified synchronicity use the separate Action facet below. Thing-root
-ReadAllProperties uses the finite facet; other collection operations remain
-unsupported.
+ReadAllProperties and ReadMultipleProperties use the finite facet; other
+collection operations remain unsupported.
 Action input/output use distinct prepared type-only schemas; absent roles
 permit no application data. Only one captured media service is currently
 supported for both directions; differing response media is refused.
@@ -255,19 +255,27 @@ Form semantics and stop support remain the concrete Binding's responsibility.
 
 ## Thing-root Property collection preparation
 
-ReadAllProperties selects actual root Form/operation/Binding coordinates using
-the same per-Form semantic loan and actual startup registrations. A Property
+ReadAllProperties/ReadMultipleProperties select actual root Form/operation/Binding
+coordinates using the same per-Form semantic loan and actual startup registrations. A Property
 Form is never a fallback collection Form. Consumer selection may retain a root
 operation when individual Property Forms are unsupported; complete Producer
 qualification still requires every retained Form/effective operation and its
 actual behavior/native participant. Unsupported collection alternatives remain
 reported by the Consumer, rather than authorizing an invented protocol mapping.
 
-`prepare_read_all_schema` derives owned names and supported member assertions
+`prepare_readable_property_schema` derives owned names and supported member assertions
 from TD's resolved Property schema loans, independently of individual native
-read mappings. `ConsumerFiniteSchemas::ReadAllProperties` captures that combined
-meaning and requires actual collection validation support from the selected
-service. Preparation funds retained member/name backing and bounded destruction
+read mappings. Distinct `ConsumerFiniteSchemas` variants capture all-read versus
+selected-read meaning. The latter requires actual request encoding, the generic
+Array input validator invoked on the encoded request, and exact selected-result
+validation support; selection-specific encoding/result facets alone cannot
+qualify it. All-read support acquires no generic Array input requirement.
+Preparation captures the complete eligible schema and performs no invocation
+encoding. Each invocation validates its own bounded set against that immutable
+schema, funds the complete encoded input before acquisition, and retains an inline
+selection independently of native ownership of the request. URI-variable
+expansion and native encoding are not universal Engine query conventions; the
+current native slice declines URI templates/variables. Preparation funds retained member/name backing and bounded destruction
 as well as artifacts/services; temporary construction remains inside the existing
 common admission allowance. Native preparation performs no reads or aggregation.
 The borrowed member census prepays `CleanupItems` for the temporary schema before

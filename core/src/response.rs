@@ -164,10 +164,13 @@ fn validate_finite_binding_output(
                 | Operation::WriteProperty
                 | Operation::InvokeAction
                 | Operation::ReadAllProperties
+                | Operation::ReadMultipleProperties
         )
         && (!matches!(
             operation,
-            Operation::ReadProperty | Operation::ReadAllProperties
+            Operation::ReadProperty
+                | Operation::ReadAllProperties
+                | Operation::ReadMultipleProperties
         ) || output.data().is_some())
         && (operation != Operation::WriteProperty || output.data().is_none())
         && output.status() == InteractionStatus::Ok

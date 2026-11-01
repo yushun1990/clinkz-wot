@@ -85,8 +85,11 @@ impl HttpProducerConfig {
         let facts = document
             .form(input.owner, input.form_index)
             .ok_or_else(producer_unsupported)?;
-        let collection =
-            input.owner == FormOwner::Thing && input.operation == Operation::ReadAllProperties;
+        let collection = input.owner == FormOwner::Thing
+            && matches!(
+                input.operation,
+                Operation::ReadAllProperties | Operation::ReadMultipleProperties
+            );
         if !(collection
             || matches!(
                 (input.owner, input.operation),
@@ -137,7 +140,7 @@ impl HttpProducerConfig {
         // decoding; accepting extension-free schemas is not validation support.
         let property_map = if collection {
             Some(Arc::new(
-                clinkz_wot_planning::type_schema::prepare_read_all_schema(document)?,
+                clinkz_wot_planning::type_schema::prepare_readable_property_schema(document)?,
             ))
         } else {
             None
@@ -162,10 +165,13 @@ impl HttpProducerConfig {
                 }
             })
             .ok_or_else(producer_unsupported)?;
+        let multiple = input.operation == Operation::ReadMultipleProperties;
         let mut method = false;
         for node in form.children() {
             if node.name().is("http://www.w3.org/2011/http#methodName") {
-                let expected = if input.operation != Operation::WriteProperty {
+                let expected = if multiple {
+                    "POST"
+                } else if input.operation != Operation::WriteProperty {
                     "GET"
                 } else {
                     "PUT"
@@ -180,6 +186,9 @@ impl HttpProducerConfig {
             } else {
                 return Err(producer_unsupported());
             }
+        }
+        if multiple && !method {
+            return Err(producer_unsupported());
         }
         if let Some(response) = document.scope(if collection {
             SemanticScope::AffordanceResponse {

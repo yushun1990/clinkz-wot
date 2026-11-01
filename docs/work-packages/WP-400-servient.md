@@ -431,6 +431,14 @@ The real [Engine-to-Engine tests](../../protocol-bindings/protocols/http/tests/r
 exercise single native request, complete publication, member refusal, replacement,
 cancellation, service loss, saturation and final account/socket release.
 
-ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and long-lived
+ReadMultipleProperties retains a separate per-call selection with the original
+finite definition and authority. Encoding starts only after its complete payload,
+scratch and cleanup funding; native refusal drops encoded input before release.
+The [selected-read tests](../../protocol-bindings/protocols/http/tests/read_multiple_properties.rs)
+exercise different subsets from one TD, unsupported/malformed/partial results,
+authorization, prepublication, service loss, cancellation/replacement, failed
+sibling admission, unpaid work and final account/socket release.
+
+WriteAllProperties, WriteMultipleProperties and long-lived
 collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

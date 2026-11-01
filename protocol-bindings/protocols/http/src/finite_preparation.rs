@@ -45,7 +45,9 @@ impl HttpFiniteProducer {
             (FormSite::Property(p), Operation::ReadProperty | Operation::WriteProperty) => {
                 p.as_str()
             }
-            (FormSite::Thing, Operation::ReadAllProperties) => "",
+            (FormSite::Thing, Operation::ReadAllProperties | Operation::ReadMultipleProperties) => {
+                ""
+            }
             _ => return Ok(None),
         };
         if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
