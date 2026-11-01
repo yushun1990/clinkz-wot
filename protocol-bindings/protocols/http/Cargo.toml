@@ -50,3 +50,11 @@ required-features = ["prepare"]
 [[example]]
 name = "invoke_action"
 required-features = ["prepare"]
+
+[[example]]
+name = "read_all_properties"
+required-features = ["prepare"]
+
+[[example]]
+name = "serve_properties"
+required-features = ["prepare"]

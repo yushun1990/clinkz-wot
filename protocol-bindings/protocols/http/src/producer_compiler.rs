@@ -34,7 +34,7 @@ pub fn try_producer_registration(
     )
 }
 use clinkz_wot_td::semantic::{
-    SemanticName, SemanticNode, SemanticScope, SemanticValue, UriVariableScope,
+    FormOwner, SemanticName, SemanticNode, SemanticScope, SemanticValue, UriVariableScope,
 };
 
 impl HttpProducerConfig {
@@ -58,17 +58,44 @@ impl HttpProducerConfig {
         input: ResolvedProducerInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<HttpProducerProgram>> {
+        self.compile_mapping(
+            clinkz_wot_planning::ResolvedBindingInput {
+                operation: input.operation(),
+                owner: FormOwner::Property(input.property()),
+                property: input.property(),
+                form_index: input.form_index(),
+                target: input.target(),
+                content_type: None,
+                subprotocol: None,
+                document: input.document(),
+            },
+            budget,
+        )
+    }
+
+    pub(crate) fn compile_mapping(
+        &self,
+        input: clinkz_wot_planning::ResolvedBindingInput<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<HttpProducerProgram>> {
         if budget.consume(WorkClass::BindingPolls, 4096).is_err() {
             return Ok(None);
         }
-        let document = input.document();
+        let document = input.document;
         let facts = document
-            .form_facts(input.property(), input.form_index())
+            .form(input.owner, input.form_index)
             .ok_or_else(producer_unsupported)?;
-        if !matches!(
-            input.operation(),
-            Operation::ReadProperty | Operation::WriteProperty
-        ) || !facts.effective_operations.contains(&input.operation())
+        let collection =
+            input.owner == FormOwner::Thing && input.operation == Operation::ReadAllProperties;
+        if !(collection
+            || matches!(
+                (input.owner, input.operation),
+                (
+                    FormOwner::Property(_),
+                    Operation::ReadProperty | Operation::WriteProperty
+                )
+            ))
+            || !facts.effective_operations.contains(&input.operation)
             || facts.content_type != "application/json"
             || facts.subprotocol.is_some()
             || facts.content_coding.is_some()
@@ -82,10 +109,11 @@ impl HttpProducerConfig {
         {
             return Err(producer_unsupported());
         }
-        let flags = document.property().schema.facts();
-        if (input.operation() == Operation::ReadProperty && flags.write_only)
-            || (input.operation() == Operation::WriteProperty && flags.read_only)
-        {
+        if !collection && {
+            let flags = document.property().schema.facts();
+            (input.operation == Operation::ReadProperty && flags.write_only)
+                || (input.operation == Operation::WriteProperty && flags.read_only)
+        } {
             return Err(producer_unsupported());
         }
         let [name] = facts.effective_security else {
@@ -107,18 +135,37 @@ impl HttpProducerConfig {
         }
         // Shared DataSchema meaning is prepared once. HTTP supplies JSON
         // decoding; accepting extension-free schemas is not validation support.
-        let value_schema =
-            clinkz_wot_planning::type_schema::prepare_type_schema(document.property().schema)?;
+        let property_map = if collection {
+            Some(Arc::new(
+                clinkz_wot_planning::type_schema::prepare_read_all_schema(document)?,
+            ))
+        } else {
+            None
+        };
+        let value_schema = if collection {
+            clinkz_wot_core::value_type::TypeSchema::Type(
+                clinkz_wot_core::value_type::ValueType::Object,
+            )
+        } else {
+            clinkz_wot_planning::type_schema::prepare_type_schema(document.property().schema)?
+        };
         let form = document
-            .scope(SemanticScope::Form {
-                property: input.property(),
-                index: input.form_index(),
+            .scope(if collection {
+                SemanticScope::AffordanceForm {
+                    owner: FormOwner::Thing,
+                    index: input.form_index,
+                }
+            } else {
+                SemanticScope::Form {
+                    property: input.property,
+                    index: input.form_index,
+                }
             })
             .ok_or_else(producer_unsupported)?;
         let mut method = false;
         for node in form.children() {
             if node.name().is("http://www.w3.org/2011/http#methodName") {
-                let expected = if input.operation() == Operation::ReadProperty {
+                let expected = if input.operation != Operation::WriteProperty {
                     "GET"
                 } else {
                     "PUT"
@@ -134,9 +181,16 @@ impl HttpProducerConfig {
                 return Err(producer_unsupported());
             }
         }
-        if let Some(response) = document.scope(SemanticScope::Response {
-            property: input.property(),
-            index: input.form_index(),
+        if let Some(response) = document.scope(if collection {
+            SemanticScope::AffordanceResponse {
+                owner: FormOwner::Thing,
+                index: input.form_index,
+            }
+        } else {
+            SemanticScope::Response {
+                property: input.property,
+                index: input.form_index,
+            }
         }) {
             let mut status = false;
             for node in response.children() {
@@ -144,14 +198,14 @@ impl HttpProducerConfig {
                     || !node
                         .name()
                         .is("http://www.w3.org/2011/http#statusCodeValue")
-                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if input.operation() == Operation::ReadProperty { 200 } else { 204 }))
+                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if input.operation != Operation::WriteProperty { 200 } else { 204 }))
                 {
                     return Err(producer_unsupported());
                 }
                 status = true;
             }
         }
-        let target = Target::parse(input.target()).map_err(|_| producer_unsupported())?;
+        let target = Target::parse(input.target).map_err(|_| producer_unsupported())?;
         if target.address != self.address {
             return Err(producer_unsupported());
         }
@@ -161,17 +215,18 @@ impl HttpProducerConfig {
             return Err(producer_unsupported());
         }
         let mut program = HttpProducerProgram {
-            operation: input.operation(),
-            form: input.form_index(),
+            operation: input.operation,
+            form: input.form_index,
             address: self.address,
             target: [0; 64],
-            target_len: input.target().len() as u8,
+            target_len: input.target.len() as u8,
             authority_end: authority_end as u8,
             origin: [0; 64],
             origin_len: origin.len() as u8,
             value_schema,
+            property_map,
         };
-        program.target[..input.target().len()].copy_from_slice(input.target().as_bytes());
+        program.target[..input.target.len()].copy_from_slice(input.target.as_bytes());
         program.origin[..origin.len()].copy_from_slice(origin.as_bytes());
         Ok(Some(program))
     }

@@ -645,7 +645,7 @@ fn partial_native_setup_and_failed_cleanup_keep_original_capacity_and_sockets() 
         HttpProducerConfig::for_loopback(addresses[0]).unwrap(),
         program,
         input.instance.key(),
-        Arc::from("left"),
+        clinkz_wot_core::AffordanceTarget::Property(Arc::from("left")),
         100,
     )
     .unwrap();

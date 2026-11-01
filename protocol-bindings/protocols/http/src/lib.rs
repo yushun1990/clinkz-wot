@@ -50,10 +50,11 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v9\0",
+    "clinkz-http-ip-v10\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
+    "Thing-root-readall-GET200;exact-readable-Property-map;type-only-members;no-missing-extra-duplicate-writeOnly;members32-names256-total4096;validation-work=body40+media2;",
     "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
     "fresh;concurrency1-until-release;header32/8192inclusive;body4096;",
     "trailer32/8192exclusive-duplicates-count;hyper-cumulative-extensions<16384;",
@@ -202,7 +203,7 @@ impl binding::ClientBinding for Client {
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
         matches!(
             operation,
-            Operation::ReadProperty | Operation::WriteProperty
+            Operation::ReadProperty | Operation::WriteProperty | Operation::ReadAllProperties
         )
     }
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
@@ -241,7 +242,7 @@ impl binding::ClientBinding for Client {
         };
         if target.1.operation != request.operation()
             || match (request.operation(), request.input()) {
-                (Operation::ReadProperty, None) => false,
+                (Operation::ReadProperty | Operation::ReadAllProperties, None) => false,
                 (Operation::WriteProperty, Some(payload)) => producer_validation::validate_payload(
                     clinkz_wot_core::value_type::TypeSchema::Any,
                     payload,
@@ -556,8 +557,21 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
             // no allocator-intercepted or process-wide RAM claim.
             temporary_bytes: 65_536,
             body_bytes: BODY,
-            validation_work: BODY * 5 + MEDIA * 2,
+            validation_work: BODY * 40 + MEDIA * 2,
         }
+    }
+    fn supports_property_map(
+        &self,
+        _: &clinkz_wot_core::collection::PropertyCollectionSchema,
+    ) -> bool {
+        true
+    }
+    fn validate_property_map(
+        &self,
+        schema: &clinkz_wot_core::collection::PropertyCollectionSchema,
+        payload: &Payload,
+    ) -> CoreResult<()> {
+        producer_validation::validate_property_map(schema, payload)
     }
 }
 struct HttpConsumerAccess(HttpConsumerConfig);
@@ -583,6 +597,7 @@ impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
             || !matches!(
                 operation,
                 Operation::ReadProperty
+                    | Operation::ReadAllProperties
                     | Operation::WriteProperty
                     | Operation::InvokeAction
                     | Operation::QueryAction

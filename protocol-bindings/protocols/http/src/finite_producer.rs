@@ -17,57 +17,70 @@ use std::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpFiniteConfig {
     listen: HttpProducerConfig,
-    mappings: Arc<[(Arc<str>, HttpProducerProgram)]>,
+    mappings: Arc<[(AffordanceTarget, HttpProducerProgram)]>,
     instance: ProducerInstanceKey,
     request_timeout_ticks: u64,
 }
 
 impl HttpFiniteConfig {
+    fn valid_target(target: &AffordanceTarget, program: &HttpProducerProgram) -> bool {
+        match (target, program.operation()) {
+            (AffordanceTarget::Thing, Operation::ReadAllProperties) => {
+                program.property_map.is_some()
+            }
+            (
+                AffordanceTarget::Property(name),
+                Operation::ReadProperty | Operation::WriteProperty,
+            ) => name.len() <= 256 && program.property_map.is_none(),
+            _ => false,
+        }
+    }
     pub fn try_new(
         listen: HttpProducerConfig,
         program: HttpProducerProgram,
         instance: ProducerInstanceKey,
-        property: Arc<str>,
+        target: AffordanceTarget,
         request_timeout_ticks: u64,
-    ) -> Result<Self, BindingInputRejection<(HttpProducerProgram, Arc<str>)>> {
+    ) -> Result<Self, BindingInputRejection<(HttpProducerProgram, AffordanceTarget)>> {
         // Program fields are private and produced by the HTTP compiler. Check
         // actual listen operands as well as the bounded native target backing.
         if program.listen_address() != listen.listen_address()
-            || property.len() > 256
+            || !Self::valid_target(&target, &program)
             || request_timeout_ticks == 0
         {
             return Err(BindingInputRejection::new(
-                (program, property),
+                (program, target),
                 BindingOperationalError::new(crate::producer::producer_unsupported()),
             ));
         }
         Ok(Self {
             listen,
-            mappings: Arc::from([(property, program)]),
+            mappings: Arc::from([(target, program)]),
             instance,
             request_timeout_ticks,
         })
     }
 
-    /// One native listener with independently prepared Property mappings.
+    /// One native listener with independently prepared root/Property mappings.
     /// Native method/path collisions refuse before socket acquisition. The
     /// complete mapping set shares immutable backing across configuration loans.
     #[allow(clippy::type_complexity)] // Refusal returns the complete original mapping owners.
     pub fn try_from_mappings(
         listen: HttpProducerConfig,
-        mappings: Vec<(Arc<str>, HttpProducerProgram)>,
+        mappings: Vec<(AffordanceTarget, HttpProducerProgram)>,
         instance: ProducerInstanceKey,
         request_timeout_ticks: u64,
-    ) -> Result<Self, BindingInputRejection<Vec<(Arc<str>, HttpProducerProgram)>>> {
+    ) -> Result<Self, BindingInputRejection<Vec<(AffordanceTarget, HttpProducerProgram)>>> {
         if mappings.is_empty()
             || mappings.len() > 32
             || request_timeout_ticks == 0
-            || mappings.iter().enumerate().any(|(i, (name, program))| {
-                name.len() > 256
+            || mappings.iter().enumerate().any(|(i, (target, program))| {
+                !Self::valid_target(target, program)
                     || program.listen_address() != listen.listen_address()
                     || mappings[..i].iter().any(|(_, old)| {
                         old.path_and_query() == program.path_and_query()
-                            && old.operation() == program.operation()
+                            && (old.operation() == Operation::WriteProperty)
+                                == (program.operation() == Operation::WriteProperty)
                     })
             })
         {
@@ -100,7 +113,7 @@ pub struct HttpFiniteReply {
 /// FiniteIngressBinding. Its only interaction with behavior is an owned candidate
 /// and a borrowed result; native polling cannot dispatch application code.
 ///
-/// At most 32 native Property mappings share one listener and one exchange.
+/// At most 32 native root/Property mappings share one listener and one exchange.
 /// HTTP/1.1 GET/PUT, exact path/Host, 16 headers/8192 bytes, JSON input/output
 /// <=4096 bytes and 4096 I/O bytes per native poll. Hyper/socket allocations are native
 /// Host backing, not a transitive allocation-free or aggregate-RAM guarantee.
@@ -187,13 +200,17 @@ impl FiniteIngressBinding for HttpFiniteBinding {
             self.configuration
                 .mappings
                 .iter()
-                .map(|(name, _)| {
-                    name.len().next_multiple_of(core::mem::size_of::<usize>())
+                .map(|(target, program)| {
+                    target
+                        .name()
+                        .map_or(0, str::len)
+                        .next_multiple_of(core::mem::size_of::<usize>())
                         + 2 * core::mem::size_of::<usize>()
+                        + program.schema_backing_bytes()
                 })
                 .sum::<usize>()
                 + self.configuration.mappings.len()
-                    * core::mem::size_of::<(Arc<str>, HttpProducerProgram)>()
+                    * core::mem::size_of::<(AffordanceTarget, HttpProducerProgram)>()
                 + 4 * core::mem::size_of::<usize>()
                 + 64,
         )
@@ -209,12 +226,23 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         operation: Operation,
         definition: &dyn Any,
     ) -> bool {
-        key == self.configuration.instance && self.configuration.mappings.iter().any(|(name, program)| {
-            matches!(site, clinkz_wot_core::thing::AffordanceSite::Property(n) if n == name.as_ref())
-                && operation == program.operation && form == program.form
-                && definition.downcast_ref::<HttpProducerProgram>() == Some(program)
-        })
+        key == self.configuration.instance
+            && self.configuration.mappings.iter().any(|(target, program)| {
+                (match (target, site) {
+                    (AffordanceTarget::Thing, clinkz_wot_core::thing::AffordanceSite::Thing) => {
+                        true
+                    }
+                    (
+                        AffordanceTarget::Property(a),
+                        clinkz_wot_core::thing::AffordanceSite::Property(b),
+                    ) => a.as_ref() == b,
+                    _ => false,
+                }) && operation == program.operation
+                    && form == program.form
+                    && definition.downcast_ref::<HttpProducerProgram>() == Some(program)
+            })
     }
+
     fn validator(&self) -> Option<&dyn FiniteValidator> {
         Some(&self.configuration)
     }
@@ -313,11 +341,11 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                 let Some((index, input)) = connection.take_request() else {
                     return Poll::Pending;
                 };
-                let (property, program) = &self.configuration.mappings[index];
+                let (target, program) = &self.configuration.mappings[index];
                 Poll::Ready(Ok(FiniteIngress {
                     candidates: vec![FiniteCandidate {
                         instance: self.configuration.instance,
-                        target: AffordanceTarget::Property(property.clone()),
+                        target: target.clone(),
                         operation: program.operation,
                     }],
                     input,
@@ -386,15 +414,19 @@ impl HttpFiniteConfig {
         }
         self.mappings
             .iter()
-            .find(|(name, p)| {
-                matches!(&candidate.target, AffordanceTarget::Property(n) if n == name)
-                    && candidate.operation == p.operation
-            })
+            .find(|(target, p)| &candidate.target == target && candidate.operation == p.operation)
             .map(|(_, program)| program)
             .ok_or_else(crate::producer::producer_unsupported)
     }
 }
 impl FiniteValidator for HttpFiniteConfig {
+    fn additional_validation_work(&self) -> u64 {
+        if self.mappings.iter().any(|(_, p)| p.property_map.is_some()) {
+            4096 * 40
+        } else {
+            0
+        }
+    }
     fn validate_input(
         &self,
         candidate: &FiniteCandidate,
@@ -402,7 +434,7 @@ impl FiniteValidator for HttpFiniteConfig {
     ) -> CoreResult<()> {
         let program = self.program_for(candidate)?;
         match (program.operation, input.data.as_ref()) {
-            (Operation::ReadProperty, None) => Ok(()),
+            (Operation::ReadProperty | Operation::ReadAllProperties, None) => Ok(()),
             (Operation::WriteProperty, Some(payload)) => {
                 crate::producer_validation::validate_payload(program.value_schema, payload)
             }
@@ -419,7 +451,7 @@ impl FiniteValidator for HttpFiniteConfig {
     ) -> CoreResult<()> {
         let program = self.program_for(candidate)?;
         match program.operation {
-            Operation::ReadProperty => program.validate(output),
+            Operation::ReadProperty | Operation::ReadAllProperties => program.validate(output),
             Operation::WriteProperty if raw_finite_property_shape(program.operation, output) => {
                 Ok(())
             }

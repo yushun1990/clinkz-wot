@@ -1,4 +1,4 @@
-# Host HTTP Properties and Actions
+# Host HTTP Properties, Actions and Collection Reads
 
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
 open `ConsumerRegistry`/`ConsumerRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
@@ -653,7 +653,7 @@ content codings, trailers, upgrades, informational responses, malformed/duplicat
 response fields and unexpected status/role combinations refuse this mapping.
 Borrowed JSON RawValue preserves output bytes without constructing a JSON tree;
 the actual captured data service validates them. The HTTP policy fingerprint is
-v9. There is one active exchange per actual registration; the Engine independently
+v10 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
 bounds continuing invocations and unread terminal slots.
 
 `cancel_local`, handle abandonment, deadline, policy/service loss, root close and
@@ -695,3 +695,80 @@ control Binding implementations, including late invalid completion during blocke
 and failed cleanup. These tests do not establish general Action interoperability,
 HTTPS, broader DataSchema/security, constrained execution, automatic progress or
 remote effect certainty.
+
+## Thing-root ReadAllProperties
+
+The open Consumer and completely qualified composed Producer support TD 1.1
+`readallproperties` on an **actual Thing-root Form**. The Consumer API is
+`ConsumerRuntime::read_all_properties(deadline, now, budget)`. The root definition
+retains the selected Form, actual registration/configuration, data/access services
+and an owned schema for every described readable Property. A root mapping can be
+selected independently of individual Property Form support. Producer publication
+still requires every final retained Form/effective operation, a distinct registered
+`AffordanceTarget::Thing` behavior and complete native participant coverage.
+
+The mapping uses one bodyless HTTP GET and a primary 200 `application/json`
+response, with the existing bounded read framing policy. GET can be defaulted or
+explicit; other explicit methods, response statuses/media, subprotocols, coding,
+required URI variables, additional response mappings and non-endpoint-NoSec
+security refuse preparation. Cleartext IP Consumer targets and the existing
+nonzero loopback Producer endpoints retain their respective limits. Concrete
+Bindings that lack native collection support remain unsupported.
+
+The response is one object containing every readable (non-writeOnly) Property
+exactly once, keyed by its TD name. ReadOnly Properties are included. Every value
+is checked against that Property's complete supported type-only schema, including
+exact mathematical integer validation. Missing, duplicate (including escaped-name
+duplicates), unknown and writeOnly members, invalid values and malformed payloads
+refuse successful settlement. Empty readable sets require `{}`. Unsupported
+assertions on any included member refuse preparation, rather than accepting only
+an object type. The captured service must explicitly support collection validation;
+its scalar validation support alone is insufficient. The shared JSON codec
+validates original member bytes with borrowed RawValue and no JSON value tree.
+
+The semantic descriptor bounds are 32 readable members, 256 UTF-8 bytes per name
+and 4096 total name bytes. These are ceilings, not a promise that every such TD
+fits: the existing resolved-loan limits (128 nodes, 32 scopes and bounded context
+work) and admission/profile limits also apply, including schemas of described
+writeOnly Properties in the root loan. The HTTP response remains at most 4096
+bytes. At most 32 explicit native root/Property mappings share a listener; native
+method/path collisions refuse, even for different logical GET operations.
+Consumer data policy funds up to `4096 * 40 + 16 * 2` validation work units;
+Producer validation captures and prepays an additional `4096 * 40` units beyond
+the finite owner's base body/media traversal. Member/name backing, bounded
+destruction, captured services and callback scratch retain their original accounts.
+Consumer native policy fingerprint is v10.
+
+The Engine enters the root application behavior once. It does not call or
+implicitly aggregate individual Property handlers. Application/Binding code owns
+native aggregation and any stronger consistency guarantee. This mapping promises
+no simultaneous sampling or atomic snapshot. A root application aggregation
+failure returns an error for the group; no HTTP 206/207 or per-member partial
+failure envelope is supported as successful collection completion. Cancellation,
+replacement, lost services and close keep original root attribution, first cause,
+late native/application evidence and physical release owners. No retry or
+individual-read fallback is implied by failure.
+
+ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties, collection
+observation, query-all Actions and subscribe/unsubscribe-all Events are
+unimplemented. They require their own selected-member/data roles, native support
+and appropriate lifecycle; this finite read does not qualify them. HTTP JSON,
+type-only schema, NoSec and manual Host evidence establishes no general schema,
+security, HTTPS, constrained-profile or production collection qualification.
+
+[Real execution tests](tests/read_all_properties.rs) join an Engine Consumer to
+an Engine Producer for multiple Properties in one request, preserve individual
+operations on the same listener, exercise independent adversarial peers, complete
+qualification, service loss, cancellation, replacement, saturation, unpaid
+validation and final socket/account release. Existing Property/Action/Event
+regressions retain their own claims.
+
+Run the real examples in separate terminals:
+
+```sh
+cargo run -p clinkz-wot-binding-http --example serve_properties -- 8082 30 > /tmp/collection-td.json
+cargo run -p clinkz-wot-binding-http --example read_all_properties -- /tmp/collection-td.json
+```
+
+The Consumer prints the validated combined value. The Producer publishes the
+complete final TD before writing it and retires its listener/accounts on exit.

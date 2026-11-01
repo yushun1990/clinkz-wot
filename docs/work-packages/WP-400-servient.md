@@ -420,3 +420,17 @@ Large HTTP definition wrappers also exercise 24 MiB of original buffers through
 admission and real publication without regenerating them; declared callback
 temporaries are checked at actual bank limits before allocation, and direct
 typed-owner retirement releases scratch while retaining lifetime/cleanup backing.
+
+## Executable root collection read
+
+The existing finite Consumer and composed Producer owners now execute
+ReadAllProperties with independent root identity, a registered root behavior,
+captured combined validation, original authority and funded retirement. No
+individual Property dispatch or universal collection lifecycle is introduced.
+The real [Engine-to-Engine tests](../../protocol-bindings/protocols/http/tests/read_all_properties.rs)
+exercise single native request, complete publication, member refusal, replacement,
+cancellation, service loss, saturation and final account/socket release.
+
+ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and long-lived
+collection operations remain unimplemented. This scoped capability changes no
+work-package dependencies, gate, milestone or production qualification status.

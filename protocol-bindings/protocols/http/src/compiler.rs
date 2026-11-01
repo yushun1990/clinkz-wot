@@ -1,7 +1,7 @@
 //! Optional HTTP preparation; all executable types are defined by the runtime.
 use super::*;
 use clinkz_wot_planning::*;
-use clinkz_wot_td::semantic::{SemanticNode, SemanticScope, SemanticValue};
+use clinkz_wot_td::semantic::{FormOwner, SemanticNode, SemanticScope, SemanticValue};
 const HTTP: &str = "http://www.w3.org/2011/http#";
 #[derive(Debug)]
 pub(super) struct HttpCompiler(pub HttpConsumerConfig);
@@ -20,11 +20,16 @@ impl HostSemanticCompiler for HttpCompiler {
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         use clinkz_wot_td::data_type::Operation;
-        if !matches!(input.owner, clinkz_wot_td::semantic::FormOwner::Property(_))
-            || !matches!(
-                input.operation,
-                Operation::ReadProperty | Operation::WriteProperty
-            )
+        let collection =
+            input.owner == FormOwner::Thing && input.operation == Operation::ReadAllProperties;
+        if !(collection
+            || matches!(
+                (input.owner, input.operation),
+                (
+                    FormOwner::Property(_),
+                    Operation::ReadProperty | Operation::WriteProperty
+                )
+            ))
             || input.content_type != Some("application/json")
             || input.subprotocol.is_some()
         {
@@ -33,13 +38,14 @@ impl HostSemanticCompiler for HttpCompiler {
         Target::parse(input.target).map_err(|_| unsupported())?;
         let facts = input
             .document
-            .form_facts(input.property, input.form_index)
+            .form(input.owner, input.form_index)
             .ok_or_else(unsupported)?;
         let write = input.operation == Operation::WriteProperty;
-        let flags = input.document.property().schema.facts();
         if !facts.effective_operations.contains(&input.operation)
-            || (write && flags.read_only)
-            || (!write && flags.write_only)
+            || (!collection && {
+                let flags = input.document.property().schema.facts();
+                (write && flags.read_only) || (!write && flags.write_only)
+            })
         {
             return Err(unsupported());
         }
@@ -66,9 +72,16 @@ impl HostSemanticCompiler for HttpCompiler {
         }
         let form = input
             .document
-            .scope(SemanticScope::Form {
-                property: input.property,
-                index: input.form_index,
+            .scope(if collection {
+                SemanticScope::AffordanceForm {
+                    owner: FormOwner::Thing,
+                    index: input.form_index,
+                }
+            } else {
+                SemanticScope::Form {
+                    property: input.property,
+                    index: input.form_index,
+                }
             })
             .ok_or_else(unsupported)?;
         let mut output = HttpArtifact {
@@ -95,6 +108,9 @@ impl HostSemanticCompiler for HttpCompiler {
                 _ => return Err(unsupported()),
             };
             if write && output.method != "PUT" {
+                return Err(unsupported());
+            }
+            if collection && output.method != "GET" {
                 return Err(unsupported());
             }
         }
@@ -141,9 +157,16 @@ impl HostSemanticCompiler for HttpCompiler {
                 return Err(unsupported());
             }
         }
-        if let Some(response) = input.document.scope(SemanticScope::Response {
-            property: input.property,
-            index: input.form_index,
+        if let Some(response) = input.document.scope(if collection {
+            SemanticScope::AffordanceResponse {
+                owner: FormOwner::Thing,
+                index: input.form_index,
+            }
+        } else {
+            SemanticScope::Response {
+                property: input.property,
+                index: input.form_index,
+            }
         }) {
             if let Some(status) = unique(response, "http://www.w3.org/2011/http#statusCodeValue")?
                 && !matches!(status.value(), SemanticValue::Number(n) if n.as_u64() == Some(if write { 204 } else { 200 }))

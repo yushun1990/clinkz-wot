@@ -5,6 +5,67 @@ use clinkz_wot_core::{
     value_type::{TypeSchema, ValueType},
 };
 
+/// The HTTP JSON collection mapping: one object with every described readable
+/// Property exactly once. Validate original member bytes, including exact
+/// decimal integrality, without a JSON tree or normalized value copy.
+pub fn validate_property_map(
+    schema: &clinkz_wot_core::collection::PropertyCollectionSchema,
+    payload: &clinkz_wot_core::Payload,
+) -> CoreResult<()> {
+    use serde::de::{DeserializeSeed, MapAccess, Visitor};
+    validate_payload(TypeSchema::Type(ValueType::Object), payload)?;
+    struct Key<'a>(&'a clinkz_wot_core::collection::PropertyCollectionSchema);
+    impl<'de> DeserializeSeed<'de> for Key<'_> {
+        type Value = usize;
+        fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<usize, D::Error> {
+            struct Name<'a>(&'a clinkz_wot_core::collection::PropertyCollectionSchema);
+            impl Visitor<'_> for Name<'_> {
+                type Value = usize;
+                fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.write_str("a described readable Property")
+                }
+                fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<usize, E> {
+                    self.0
+                        .members()
+                        .iter()
+                        .position(|m| m.name.as_ref() == s)
+                        .ok_or_else(|| E::custom("unexpected collection member"))
+                }
+            }
+            d.deserialize_str(Name(self.0))
+        }
+    }
+    struct Members<'a>(&'a clinkz_wot_core::collection::PropertyCollectionSchema);
+    impl<'de> Visitor<'de> for Members<'_> {
+        type Value = ();
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("a complete Property collection")
+        }
+        fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<(), M::Error> {
+            use serde::de::Error;
+            let mut seen = 0u32;
+            while let Some(i) = map.next_key_seed(Key(self.0))? {
+                let bit = 1u32 << i;
+                if seen & bit != 0 {
+                    return Err(M::Error::custom("duplicate collection member"));
+                }
+                let value: &serde_json::value::RawValue = map.next_value()?;
+                validate_json(self.0.members()[i].schema, value.get().as_bytes())
+                    .map_err(|_| M::Error::custom("invalid collection member"))?;
+                seen |= bit;
+            }
+            let expected = ((1u64 << self.0.members().len()) - 1) as u32;
+            if seen != expected {
+                return Err(M::Error::custom("incomplete collection response"));
+            }
+            Ok(())
+        }
+    }
+    let mut decoder = serde_json::Deserializer::from_slice(&payload.body);
+    serde::Deserializer::deserialize_map(&mut decoder, Members(schema)).map_err(|_| invalid())?;
+    decoder.end().map_err(|_| invalid())
+}
+
 pub fn validate(schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {
     let payload = output.data().ok_or_else(invalid)?;
     validate_payload(schema, payload)

@@ -20,6 +20,17 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
+Thing-root ReadAllProperties retains its own root coordinate, actual registration,
+combined schema and services under the existing finite ownership and settlement
+rules. Its bounded schema/name backing and destruction stay funded through final
+release; normal and late data use the captured member validator. Producer
+publication requires a root behavior and actual native collection mapping as well
+as full support of every final retained Form. Cancellation, replacement and local
+close cannot transfer that interaction to individual Property behaviors or a
+successor Thing. Missing/invalid members confer no partial success; native and
+application aggregation provide no implicit atomic snapshot. Collection validation
+work is prepaid in full, with service-bound changes fencing further dispatch.
+
 Property Write uses the same finite cancellation, replacement and settlement
 owners. Input validation and fresh application authorization precede handler
 effects; a lost required service fences dispatch. A completed native reply cannot

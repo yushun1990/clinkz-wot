@@ -594,3 +594,50 @@ fn semantic_arena_backing_and_node_scope_depth_work_boundaries() {
     assert!(matches!(result, Err(SemanticError::Limit)));
     assert!(used <= RESOLUTION_WORK);
 }
+
+#[test]
+fn root_property_schema_closure_is_selected_operation_scoped() {
+    let mut value = serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"scoped collection loan",
+        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "forms":[
+            {"href":"http://127.0.0.1/properties", "op":"readallproperties"},
+            {"href":"http://127.0.0.1/actions", "op":"queryallactions"},
+            {"href":"http://127.0.0.1/events", "op":"subscribeallevents"}
+        ],
+        "properties":{}
+    });
+    // More Property scopes than fit in a single Property-collection closure.
+    // Unrelated root operations must retain their own bounded meaning anyway.
+    for i in 0..40 {
+        value["properties"][format!("p{i}")] = serde_json::json!({"type":"integer","readOnly":true,
+            "forms":[{"href":format!("http://127.0.0.1/p{i}")}]});
+    }
+    let thing: crate::thing::Thing = serde_json::from_value(value.clone()).unwrap();
+    assert!(
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0)
+            .0
+            .is_err()
+    );
+    for index in [1, 2] {
+        let doc = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, index)
+            .0
+            .unwrap();
+        assert!(doc.collection_properties().is_none());
+        assert!(doc.scope(SemanticScope::Property("p0")).is_none());
+    }
+    value["properties"] = serde_json::json!({"p":{"type":"integer","readOnly":true,
+        "forms":[{"href":"http://127.0.0.1/p"}]}});
+    let thing: crate::thing::Thing = serde_json::from_value(value).unwrap();
+    let root = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0)
+        .0
+        .unwrap();
+    let properties: Vec<_> = root.collection_properties().unwrap().collect();
+    assert_eq!(properties.len(), 1);
+    assert_eq!(properties[0].name, "p");
+    let individual =
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Property("p"), 0)
+            .0
+            .unwrap();
+    assert!(individual.collection_properties().is_none());
+}

@@ -212,6 +212,7 @@ impl ConsumerRegistry {
                                         FormSite::Property(_),
                                         Operation::ReadProperty | Operation::WriteProperty
                                     ) | (FormSite::Action(_), Operation::InvokeAction)
+                                        | (FormSite::Thing, Operation::ReadAllProperties)
                                 );
                                 let mut reason = if !finite {
                                     ConsumerUnsupported::Operation
@@ -232,9 +233,20 @@ impl ConsumerRegistry {
                                     if !pay(budget, W::PlanningItems, 256) {
                                         return Err(busy());
                                     }
-                                    let schemas =
-                                        common_services(document, &site, index, operation);
-                                    if let Ok(schemas) = schemas {
+                                    let schemas = match common_services(
+                                        document,
+                                        &site,
+                                        index,
+                                        operation,
+                                        limits,
+                                        retained_cleanup_work,
+                                        budget,
+                                    ) {
+                                        Ok(schemas) => Some(schemas),
+                                        Err(CoreError::UnsupportedOperation(_)) => None,
+                                        Err(error) => return Err(error),
+                                    };
+                                    if let Some(schemas) = schemas {
                                         reason = ConsumerUnsupported::NoCompleteProvider;
                                         for registration in &self.registrations {
                                             let id = registration.execution.identity();
@@ -251,11 +263,7 @@ impl ConsumerRegistry {
                                             if !registration.execution.supports_operation(operation)
                                                 || data.content_type() != facts.content_type
                                                 || !data.available()
-                                                || !schemas
-                                                    .input
-                                                    .into_iter()
-                                                    .chain(schemas.output)
-                                                    .all(|s| data.supports_schema(s))
+                                                || !schemas.supports(data.as_ref())
                                             {
                                                 continue;
                                             }
@@ -341,10 +349,15 @@ impl ConsumerRegistry {
                                                 limits,
                                                 K::CleanupWorkItemsPerStepMax,
                                                 retained_cleanup_work
-                                                    .checked_add(m.contract.abort_work)
+                                                    .checked_add(schemas.drop_work()) // live temporary
+                                                    .and_then(|n| {
+                                                        n.checked_add(m.contract.abort_work)
+                                                    })
                                                     .and_then(|n| {
                                                         n.checked_add(
-                                                            m.contract.artifact_drop_work + 4,
+                                                            m.contract.artifact_drop_work
+                                                                + schemas.drop_work()
+                                                                + 4,
                                                         )
                                                     })
                                                     .ok_or_else(invalid)?,
@@ -367,6 +380,11 @@ impl ConsumerRegistry {
                                                     .checked_add(artifact_budget.1)
                                                     .ok_or_else(invalid)?,
                                             )?;
+                                            // Prepay the retained clone before native construction.
+                                            // Refusal/rollback never borrows the temporary's credit.
+                                            if !pay(budget, W::CleanupItems, schemas.drop_work()) {
+                                                return Err(busy());
+                                            }
                                             let mut job = ConsumerCompilation::new(
                                                 &registration.compiler,
                                                 input,
@@ -407,6 +425,9 @@ impl ConsumerRegistry {
                                                     n.checked_add(site_name(&site).len() as u64)
                                                 })
                                                 .and_then(|n| n.checked_add(256))
+                                                .and_then(|n| {
+                                                    n.checked_add(schemas.retained_bytes() as u64)
+                                                })
                                                 .ok_or_else(invalid)?;
                                             let mut service_funding = reserve(
                                                 &bank,
@@ -418,10 +439,16 @@ impl ConsumerRegistry {
                                             chosen_budget = (
                                                 artifact_budget.0,
                                                 artifact_budget.1,
-                                                m.contract.artifact_drop_work + 2,
+                                                m.contract.artifact_drop_work
+                                                    + schemas.drop_work()
+                                                    + 2,
                                             );
                                             retained_cleanup_work = retained_cleanup_work
-                                                .checked_add(m.contract.artifact_drop_work + 2)
+                                                .checked_add(
+                                                    m.contract.artifact_drop_work
+                                                        + schemas.drop_work()
+                                                        + 2,
+                                                )
                                                 .ok_or_else(invalid)?;
                                             chosen = Some(
                                                 ConsumerDefinition::try_new(
@@ -434,7 +461,7 @@ impl ConsumerRegistry {
                                                         execution: registration.execution.clone(),
                                                         configuration: m.configuration,
                                                         services: registration.services.clone(),
-                                                        schemas,
+                                                        schemas: schemas.clone(),
                                                         funding: compiled.funding,
                                                         bank: bank.clone(),
                                                     },
@@ -785,7 +812,10 @@ fn common_services(
     site: &FormSite,
     index: u32,
     operation: Operation,
-) -> CoreResult<ConsumerSchemas> {
+    limits: &ResourceLimits,
+    retained_cleanup_work: u64,
+    budget: &mut WorkBudget,
+) -> CoreResult<ConsumerFiniteSchemas> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
     let [security] = facts.effective_security else {
         return Err(unsupported());
@@ -816,22 +846,22 @@ fn common_services(
         (FormSite::Property(_), Operation::ReadProperty)
             if !doc.property().schema.facts().write_only =>
         {
-            Ok(ConsumerSchemas {
+            Ok(ConsumerFiniteSchemas::Value(ConsumerSchemas {
                 input: None,
                 output: Some(crate::type_schema::prepare_type_schema(
                     doc.property().schema,
                 )?),
-            })
+            }))
         }
         (FormSite::Property(_), Operation::WriteProperty)
             if !doc.property().schema.facts().read_only =>
         {
-            Ok(ConsumerSchemas {
+            Ok(ConsumerFiniteSchemas::Value(ConsumerSchemas {
                 input: Some(crate::type_schema::prepare_type_schema(
                     doc.property().schema,
                 )?),
                 output: None,
-            })
+            }))
         }
         (FormSite::Action(_), Operation::InvokeAction) => {
             // Absence makes no synchronous claim. Continuing invocations need
@@ -839,7 +869,7 @@ fn common_services(
             if doc.action().is_none_or(|a| a.synchronous != Some(true)) {
                 return Err(unsupported());
             }
-            Ok(ConsumerSchemas {
+            Ok(ConsumerFiniteSchemas::Value(ConsumerSchemas {
                 input: doc
                     .affordance_schema(site.owner(), "input")
                     .map(crate::type_schema::prepare_type_schema)
@@ -848,7 +878,23 @@ fn common_services(
                     .affordance_schema(site.owner(), "output")
                     .map(crate::type_schema::prepare_type_schema)
                     .transpose()?,
-            })
+            }))
+        }
+        (FormSite::Thing, Operation::ReadAllProperties) => {
+            let cleanup = crate::type_schema::read_all_member_count(doc)? as u64 + 1;
+            check_limit(
+                limits,
+                K::CleanupWorkItemsPerStepMax,
+                retained_cleanup_work
+                    .checked_add(cleanup)
+                    .ok_or_else(invalid)?,
+            )?;
+            if !pay(budget, W::CleanupItems, cleanup) {
+                return Err(busy());
+            }
+            Ok(ConsumerFiniteSchemas::ReadAllProperties(
+                crate::type_schema::prepare_read_all_schema(doc)?,
+            ))
         }
         _ => Err(unsupported()),
     }
@@ -906,6 +952,7 @@ fn site_name(site: &FormSite) -> &str {
 }
 fn site_target(site: &FormSite) -> Option<AffordanceTarget> {
     match site {
+        FormSite::Thing => Some(AffordanceTarget::Thing),
         FormSite::Property(n) => Some(AffordanceTarget::Property(Arc::from(n.as_str()))),
         FormSite::Action(n) => Some(AffordanceTarget::Action(Arc::from(n.as_str()))),
         _ => None,

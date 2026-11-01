@@ -238,7 +238,7 @@ pub(crate) fn create(
             HttpProducerConfig::for_loopback(addr).unwrap(),
             program,
             key,
-            Arc::from("level"),
+            clinkz_wot_core::AffordanceTarget::Property(Arc::from("level")),
             100,
         )
         .unwrap();

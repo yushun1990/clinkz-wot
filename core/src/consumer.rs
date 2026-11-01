@@ -1,5 +1,6 @@
 //! Source-independent finite Consumer definitions and captured services.
 //! A definition has no compiler, source TD, semantic arena or parser callback.
+use crate::collection::PropertyCollectionSchema;
 use crate::host_accounts::{HostCapacityReservation, HostResourceAccounts};
 use crate::value_type::TypeSchema;
 use crate::*;
@@ -19,6 +20,18 @@ pub trait ConsumerDataService: Send + Sync {
     /// Complete support of the already prepared type-only assertion.
     fn supports_schema(&self, _schema: TypeSchema) -> bool {
         true
+    }
+    /// Complete native representation of a named Property map. Scalar/type
+    /// support alone does not establish collection support.
+    fn supports_property_map(&self, _schema: &PropertyCollectionSchema) -> bool {
+        false
+    }
+    fn validate_property_map(
+        &self,
+        _schema: &PropertyCollectionSchema,
+        _payload: &Payload,
+    ) -> CoreResult<()> {
+        Err(CoreError::UnsupportedOperation(context()))
     }
     fn available(&self) -> bool {
         true
@@ -125,6 +138,61 @@ impl core::fmt::Debug for ConsumerInstanceRef {
 pub struct ConsumerSchemas {
     pub input: Option<TypeSchema>,
     pub output: Option<TypeSchema>,
+}
+
+/// Data roles for the implemented finite operations. Collection meaning is
+/// retained explicitly rather than disguised as an unconstrained object.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConsumerFiniteSchemas {
+    Value(ConsumerSchemas),
+    ReadAllProperties(PropertyCollectionSchema),
+}
+impl ConsumerFiniteSchemas {
+    pub fn input(&self) -> Option<TypeSchema> {
+        match self {
+            Self::Value(s) => s.input,
+            Self::ReadAllProperties(_) => None,
+        }
+    }
+    pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
+        match self {
+            Self::Value(s) => s
+                .input
+                .into_iter()
+                .chain(s.output)
+                .all(|s| data.supports_schema(s)),
+            Self::ReadAllProperties(s) => data.supports_property_map(s),
+        }
+    }
+    pub fn validate_output(
+        &self,
+        data: &dyn ConsumerDataService,
+        payload: Option<&Payload>,
+    ) -> CoreResult<()> {
+        match (self, payload) {
+            (Self::Value(ConsumerSchemas { output: None, .. }), None) => Ok(()),
+            (
+                Self::Value(ConsumerSchemas {
+                    output: Some(s), ..
+                }),
+                Some(p),
+            ) => data.validate(*s, p),
+            (Self::ReadAllProperties(s), Some(p)) => data.validate_property_map(s, p),
+            _ => Err(invalid()),
+        }
+    }
+    pub fn retained_bytes(&self) -> usize {
+        match self {
+            Self::Value(_) => 0,
+            Self::ReadAllProperties(s) => s.retained_bytes(),
+        }
+    }
+    pub fn drop_work(&self) -> u64 {
+        match self {
+            Self::Value(_) => 0,
+            Self::ReadAllProperties(s) => s.members().len() as u64 + 1,
+        }
+    }
 }
 
 /// A Property's value schema is not Event data. Event control/response roles
@@ -264,7 +332,7 @@ pub struct ConsumerDefinition {
     execution: Arc<HostConsumerBindingRegistration>,
     configuration: ConsumerBindingConfiguration,
     services: ConsumerServices,
-    schemas: ConsumerSchemas,
+    schemas: ConsumerFiniteSchemas,
     data_policy: ConsumerDataPolicy,
     access_work: u64,
     // Last to drop: artifact destructors, executor/services and backing are
@@ -281,7 +349,7 @@ pub struct ConsumerDefinitionInput {
     pub execution: Arc<HostConsumerBindingRegistration>,
     pub configuration: ConsumerBindingConfiguration,
     pub services: ConsumerServices,
-    pub schemas: ConsumerSchemas,
+    pub schemas: ConsumerFiniteSchemas,
     pub funding: Vec<HostCapacityReservation>,
     pub bank: Arc<HostResourceAccounts>,
 }
@@ -299,23 +367,35 @@ impl ConsumerDefinition {
             || id.role() != BindingArtifactRole::ConsumerCall
             || input.execution.consumer_configuration() != Some(input.configuration)
             || !input.services.data.available()
-            || !input
-                .schemas
-                .input
-                .into_iter()
-                .chain(input.schemas.output)
-                .all(|s| input.services.data.supports_schema(s))
+            || !input.schemas.supports(input.services.data.as_ref())
             || !matches!(
                 (&input.affordance, input.operation),
                 (
                     AffordanceTarget::Property(_),
                     Operation::ReadProperty | Operation::WriteProperty
                 ) | (AffordanceTarget::Action(_), Operation::InvokeAction)
+                    | (AffordanceTarget::Thing, Operation::ReadAllProperties)
             )
-            || (input.operation == Operation::ReadProperty
-                && (input.schemas.input.is_some() || input.schemas.output.is_none()))
-            || (input.operation == Operation::WriteProperty
-                && (input.schemas.input.is_none() || input.schemas.output.is_some()))
+            || !matches!(
+                (&input.schemas, input.operation),
+                (
+                    ConsumerFiniteSchemas::Value(ConsumerSchemas {
+                        input: None,
+                        output: Some(_)
+                    }),
+                    Operation::ReadProperty
+                ) | (
+                    ConsumerFiniteSchemas::Value(ConsumerSchemas {
+                        input: Some(_),
+                        output: None
+                    }),
+                    Operation::WriteProperty
+                ) | (ConsumerFiniteSchemas::Value(_), Operation::InvokeAction)
+                    | (
+                        ConsumerFiniteSchemas::ReadAllProperties(_),
+                        Operation::ReadAllProperties
+                    )
+            )
             || policy.validation_work == 0
             || input.services.access.work() == 0
         {
@@ -341,8 +421,10 @@ impl ConsumerDefinition {
             bank: input.bank,
         })
     }
-    pub fn name(&self) -> &str {
-        self.affordance.name().unwrap()
+    /// Root operations have no affordance name; the Thing coordinate remains
+    /// distinct from a Property whose name happens to be empty.
+    pub fn name(&self) -> Option<&str> {
+        self.affordance.name()
     }
     pub fn affordance(&self) -> &AffordanceTarget {
         &self.affordance

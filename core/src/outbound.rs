@@ -92,9 +92,15 @@ impl OutboundRequest {
             || identity.plan_id().generation() != identity.plan_set_generation().get()
             || !matches!(
                 operation,
-                Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+                Operation::ReadProperty
+                    | Operation::WriteProperty
+                    | Operation::InvokeAction
+                    | Operation::ReadAllProperties
             )
-            || (operation == Operation::ReadProperty && input.is_some())
+            || (matches!(
+                operation,
+                Operation::ReadProperty | Operation::ReadAllProperties
+            ) && input.is_some())
             || (operation == Operation::WriteProperty && input.is_none())
         {
             return Err(BindingInputRejection::new(
