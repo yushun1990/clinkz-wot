@@ -47,7 +47,7 @@ impl Service<Request<Incoming>> for BridgeService {
     type Future = Pin<Box<dyn Future<Output = Result<Reply, Infallible>> + Send>>;
     fn call(&self, request: Request<Incoming>) -> Self::Future {
         let bridge = self.0.clone();
-        let write = request.method() == hyper::Method::PUT;
+        let has_input = matches!(*request.method(), hyper::Method::PUT | hyper::Method::POST);
         Box::pin(async move {
             let mut body = request.into_body();
             let mut bytes = Vec::new();
@@ -66,7 +66,7 @@ impl Service<Request<Incoming>> for BridgeService {
             }
             {
                 let mut state = bridge.lock().unwrap();
-                state.input = Some(if write {
+                state.input = Some(if has_input {
                     InteractionInput::with_data(Payload::new(bytes, "application/json"))
                 } else {
                     InteractionInput::empty()
@@ -120,17 +120,14 @@ impl Ingress {
             .programs
             .iter()
             .position(|p| {
-                request.path == Some(p.path_and_query())
-                    && request.method
-                        == Some(if p.operation == Operation::WriteProperty {
-                            "PUT"
-                        } else {
-                            "GET"
-                        })
+                request.path == Some(p.path_and_query()) && request.method == Some(p.method())
             })
             .ok_or_else(invalid)?;
         let program = &self.programs[mapping];
-        let write = program.operation == Operation::WriteProperty;
+        let has_input = matches!(
+            program.operation,
+            Operation::WriteProperty | Operation::ReadMultipleProperties
+        );
         let mut host = 0;
         let mut length = 0;
         let mut media = 0;
@@ -150,13 +147,13 @@ impl Ingress {
                     .ok()
                     .and_then(|v| v.parse().ok())
                     .ok_or_else(invalid)?;
-                if self.body_length > if write { 4096 } else { 0 } {
+                if self.body_length > if has_input { 4096 } else { 0 } {
                     return Err(invalid());
                 }
             }
             if h.name.eq_ignore_ascii_case("content-type") {
                 media += 1;
-                if write && h.value != b"application/json" {
+                if has_input && h.value != b"application/json" {
                     return Err(invalid());
                 }
             }
@@ -183,7 +180,7 @@ impl Ingress {
         if host != 1
             || length > 1
             || media > 1
-            || (write && (length != 1 || self.body_length == 0 || media != 1))
+            || (has_input && (length != 1 || self.body_length == 0 || media != 1))
         {
             return Err(invalid());
         }

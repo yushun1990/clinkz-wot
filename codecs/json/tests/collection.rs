@@ -1,4 +1,7 @@
-use clinkz_wot_codec_json::validate_property_map;
+use clinkz_wot_codec_json::{
+    decode_property_selection, encode_property_selection, validate_property_map,
+    validate_selected_property_map,
+};
 use clinkz_wot_core::{Payload, collection::*, value_type::*};
 fn schema(names: &[&str]) -> PropertyCollectionSchema {
     PropertyCollectionSchema::try_new(
@@ -82,4 +85,77 @@ fn descriptor_bounds_and_decoded_duplicate_names_cannot_weaken_the_map() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn selection_round_trips_exact_names_and_refuses_duplicate_or_unreadable_input() {
+    let s = schema(&["", "温度", "\"", "😀", "level"]);
+    let selected = s.select(&["😀", "", "level"]).unwrap();
+    let encoded = encode_property_selection(&s, selected).unwrap();
+    assert_eq!(decode_property_selection(&s, &encoded).unwrap(), selected);
+    let good = Payload::new(
+        br#"{"":7,"\uD83D\uDE00":70e-1,"level":7.0}"#.as_slice(),
+        "application/json",
+    );
+    assert!(validate_selected_property_map(&s, selected, &good).is_ok());
+    assert!(validate_property_map(&s, &good).is_err());
+    for bytes in [
+        br#"["level","\u006cevel"]"#.as_slice(),
+        br#"["secret"]"#,
+        b"[1]",
+        b"null",
+        b"{}",
+        br#"["\uD800"]"#,
+        b"[] []",
+    ] {
+        assert!(decode_property_selection(&s, &Payload::new(bytes, "application/json")).is_err());
+    }
+    for bytes in [
+        br#"{"level":7}"#.as_slice(),
+        br#"{"":7,"\uD83D\uDE00":7,"level":7,"\u6e29\u5ea6":7}"#,
+        br#"{"":7,"\uD83D\uDE00":7,"level":7,"\u006cevel":7}"#,
+        br#"{"":7,"\uD83D\uDE00":7,"level":7e-100}"#,
+    ] {
+        assert!(
+            validate_selected_property_map(&s, selected, &Payload::new(bytes, "application/json"))
+                .is_err()
+        );
+    }
+    assert!(s.select(&["level", "level"]).is_err());
+    assert!(s.select(&["level"; 33]).is_err());
+    let empty = s.select(&[]).unwrap();
+    assert_eq!(
+        encode_property_selection(&s, empty).unwrap().body.as_ref(),
+        b"[]"
+    );
+    assert!(
+        validate_selected_property_map(
+            &s,
+            empty,
+            &Payload::new(b"{}".as_slice(), "application/json")
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn maximal_selection_and_encoded_escaping_have_bounded_backing() {
+    let names: Vec<_> = (0..32).map(|i| format!("p{i}")).collect();
+    let s = schema(&names.iter().map(String::as_str).collect::<Vec<_>>());
+    let selected = s
+        .select(&names.iter().map(String::as_str).collect::<Vec<_>>())
+        .unwrap();
+    assert_eq!(selected.bits(), u32::MAX);
+    assert_eq!(
+        decode_property_selection(&s, &encode_property_selection(&s, selected).unwrap()).unwrap(),
+        selected
+    );
+    assert!(encode_property_selection(&schema(&["p0"]), selected).is_err());
+    // Names fit the static descriptor while their escaped request exceeds the
+    // native body envelope. Encoding must fail within its funded buffer.
+    let names: Vec<_> = (0..17)
+        .map(|i| format!("{i:02}{}", "\n".repeat(238)))
+        .collect();
+    let s = schema(&names.iter().map(String::as_str).collect::<Vec<_>>());
+    assert!(encode_property_selection(&s, s.all()).is_err());
 }

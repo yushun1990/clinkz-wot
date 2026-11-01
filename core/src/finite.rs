@@ -103,9 +103,9 @@ impl core::fmt::Debug for RawFiniteSettlement {
 /// missing Read value. This initial Write facet supports empty success only.
 pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutput) -> bool {
     match operation {
-        Operation::ReadProperty | Operation::ReadAllProperties => {
-            crate::response::property_read_handler_shape(output)
-        }
+        Operation::ReadProperty
+        | Operation::ReadAllProperties
+        | Operation::ReadMultipleProperties => crate::response::property_read_handler_shape(output),
         Operation::WriteProperty => {
             let metadata = output.metadata();
             output.data().is_none()
@@ -215,7 +215,9 @@ pub trait FiniteIngressBinding {
 /// checks do not establish whether an errored/late write committed. The exact
 /// original candidate selects both roles; no TD or operation switch is needed
 /// in the Engine. Callbacks are pure and bounded by the runtime input/output
-/// envelope and must not acquire native effects or application authority.
+/// envelope and must not acquire native effects or application authority. Output
+/// validation also receives the original retained input: selected collection
+/// results cannot be certified from a candidate or current request state alone.
 pub trait FiniteValidator {
     /// Complete additional callback work beyond the runtime's declared maximum
     /// input/output body and media traversals. Passive bounded metadata, captured
@@ -232,6 +234,7 @@ pub trait FiniteValidator {
     fn validate_output(
         &self,
         candidate: &FiniteCandidate,
+        input: &InteractionInput,
         output: &InteractionOutput,
     ) -> CoreResult<()>;
 }

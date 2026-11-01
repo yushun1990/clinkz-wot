@@ -14,6 +14,11 @@ use core::{
 
 const MAX_CALLS: usize = 32;
 
+enum CallInput<'a> {
+    Value(Option<Payload>),
+    Members(&'a [&'a str]),
+}
+
 struct Definition {
     input: ConsumerDefinitionInput,
     data_policy: ConsumerDataPolicy,
@@ -87,6 +92,7 @@ impl Definition {
     fn validate(
         &self,
         output: &InteractionOutput,
+        selection: Option<collection::PropertySelection>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<()>> {
         if !self.input.services.data.available()
@@ -96,7 +102,8 @@ impl Definition {
         }
         let has_output = match &self.input.schemas {
             ConsumerFiniteSchemas::Value(s) => s.output.is_some(),
-            ConsumerFiniteSchemas::ReadAllProperties(_) => true,
+            ConsumerFiniteSchemas::ReadAllProperties(_)
+            | ConsumerFiniteSchemas::ReadMultipleProperties(_) => true,
         };
         if output.data().is_some() != has_output {
             return Poll::Ready(Err(invalid()));
@@ -115,11 +122,11 @@ impl Definition {
         if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
             return Poll::Pending;
         }
-        Poll::Ready(
-            self.input
-                .schemas
-                .validate_output(self.input.services.data.as_ref(), output.data()),
-        )
+        Poll::Ready(self.input.schemas.validate_output(
+            self.input.services.data.as_ref(),
+            selection,
+            output.data(),
+        ))
     }
     fn validate_payload(
         &self,
@@ -197,6 +204,7 @@ struct Call {
     cancel_started: bool,
     terminal: bool,
     output_validated: bool,
+    selection: Option<collection::PropertySelection>,
     abandoned: bool,
     deadline: Deadline,
     last_time: MonotonicInstant,
@@ -278,7 +286,7 @@ impl ConsumerRuntime {
         self.start(
             AffordanceSite::Property(name),
             Operation::ReadProperty,
-            None,
+            CallInput::Value(None),
             deadline,
             now,
             budget,
@@ -295,7 +303,27 @@ impl ConsumerRuntime {
         self.start(
             AffordanceSite::Thing,
             Operation::ReadAllProperties,
-            None,
+            CallInput::Value(None),
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| e.error().error().clone())
+    }
+    /// One actual root interaction for this call's exact readable-member set.
+    /// Names are borrowed only during admission; the retained schema and an
+    /// inline selection survive independently of the caller and source TD.
+    pub fn read_multiple_properties(
+        &self,
+        members: &[&str],
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        self.start(
+            AffordanceSite::Thing,
+            Operation::ReadMultipleProperties,
+            CallInput::Members(members),
             deadline,
             now,
             budget,
@@ -315,7 +343,7 @@ impl ConsumerRuntime {
         self.start(
             AffordanceSite::Action(name),
             Operation::InvokeAction,
-            input,
+            CallInput::Value(input),
             deadline,
             now,
             budget,
@@ -335,7 +363,7 @@ impl ConsumerRuntime {
         self.start(
             AffordanceSite::Property(name),
             Operation::WriteProperty,
-            Some(input),
+            CallInput::Value(Some(input)),
             deadline,
             now,
             budget,
@@ -349,11 +377,15 @@ impl ConsumerRuntime {
         &self,
         target: AffordanceSite<'_>,
         operation: Operation,
-        input: Option<Payload>,
+        input: CallInput<'_>,
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
+        let (input, members) = match input {
+            CallInput::Value(input) => (input, None),
+            CallInput::Members(members) => (None, Some(members)),
+        };
         let mut state = self.state.borrow_mut();
         let checked = (|| -> CoreResult<_> {
             if !state.active || !state.consumer.is_current() {
@@ -396,14 +428,36 @@ impl ConsumerRuntime {
                 return Err(busy());
             }
             definition.check_current(&state.consumer)?;
+            let selection = match (&definition.input.schemas, members) {
+                (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(names)) => {
+                    if names.len() > collection::PropertyCollectionSchema::MAX_MEMBERS {
+                        return Err(invalid());
+                    }
+                    let work = names.len() as u64
+                        * (collection::PropertyCollectionSchema::MAX_MEMBERS as u64 + 1)
+                        * (collection::PropertyCollectionSchema::MAX_NAME_BYTES as u64 + 1)
+                        + 1;
+                    if !pay(budget, W::PlanningItems, work) {
+                        return Err(busy());
+                    }
+                    Some(schema.select(names)?)
+                }
+                (ConsumerFiniteSchemas::ReadMultipleProperties(_), None) | (_, Some(_)) => {
+                    return Err(invalid());
+                }
+                _ => None,
+            };
             // Native lifetime, complete result opportunity and callback scratch are
             // acquired before invocation; unread/late results retain this charge.
             let resource = definition.resources();
             let policy = definition.data_policy();
             let (body, media) = definition.configuration().result_limits();
-            let input_bytes =
+            let input_bytes = if selection.is_some() {
+                policy.encoded_selection_bytes
+            } else {
                 clinkz_wot_core::notification::notification_payload_backing(input.as_ref())
-                    .ok_or_else(invalid)? as u64;
+                    .ok_or_else(invalid)? as u64
+            };
             let lifetime = resource
                 .admitted()
                 .retained_bytes()
@@ -454,16 +508,43 @@ impl ConsumerRuntime {
             }
             budget.consume(W::BindingPolls, 1).unwrap();
             budget.consume(W::CleanupItems, 1).unwrap();
-            match definition.validate_payload(
-                definition.input.schemas.input(),
-                input.as_ref(),
-                budget,
-            ) {
+            // Acquire encoded input only after its complete lifetime/scratch and
+            // destruction allowances. On refusal it drops before this funding.
+            let encoded =
+                if let (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(selected)) =
+                    (&definition.input.schemas, selection)
+                {
+                    if !pay(budget, W::CodecInputBytes, policy.validation_work) {
+                        return Err(busy());
+                    }
+                    let payload = definition
+                        .input
+                        .services
+                        .data
+                        .encode_property_selection(schema, selected)?;
+                    if notification::notification_payload_backing(Some(&payload))
+                        .ok_or_else(invalid)? as u64
+                        > input_bytes
+                    {
+                        return Err(invalid());
+                    }
+                    Some(payload)
+                } else {
+                    None
+                };
+            if selection.is_some() {
+                if !pay(budget, W::ProviderProbes, definition.access_work()) {
+                    return Err(busy());
+                }
+                definition.check_current(&state.consumer)?;
+            }
+            let payload = encoded.as_ref().or(input.as_ref());
+            match definition.validate_payload(definition.input.schemas.input(), payload, budget) {
                 Poll::Ready(result) => result?,
                 Poll::Pending => return Err(busy()),
             }
             // Codec callbacks may change current policy as well as authority.
-            if input.is_some() {
+            if payload.is_some() {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
                     return Err(busy());
                 }
@@ -472,13 +553,21 @@ impl ConsumerRuntime {
             if !state.consumer.is_current() {
                 return Err(stale());
             }
-            Ok((slot, sequence, definition, funding))
+            Ok((slot, sequence, definition, funding, selection, encoded))
         })();
-        let (slot, sequence, definition, funding) = match checked {
+        let (slot, sequence, definition, funding, selection, encoded) = match checked {
             Ok(checked) => checked,
             Err(e) => return Err(reject(input, e)),
         };
-        let raw = definition.start(input, deadline.instant().map(|_| deadline))?;
+        let raw = match definition.start(encoded.or(input), deadline.instant().map(|_| deadline)) {
+            Ok(raw) => raw,
+            Err(rejection) if selection.is_some() => {
+                let (payload, error) = rejection.into_parts();
+                drop(payload); // encoded input dies before its original reservation
+                return Err(BindingInputRejection::new(None, error));
+            }
+            Err(rejection) => return Err(rejection),
+        };
         state.slots[slot] = Some(Call {
             consumer: state.consumer.clone(),
             effect: ConsumerEffect::NotAttempted,
@@ -494,6 +583,7 @@ impl ConsumerRuntime {
             cancel_started: false,
             terminal: false,
             output_validated: false,
+            selection,
             abandoned: false,
             deadline,
             last_time: now,
@@ -794,7 +884,7 @@ impl Call {
             if let BindingCallSettlement::Returned(Ok(output)) = outcome {
                 // Authorization/service loss fences application success while
                 // preserving the original result in the settlement owner.
-                match self.definition.validate(output, budget) {
+                match self.definition.validate(output, self.selection, budget) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Ok(())) => self.output_validated = true,
                     Poll::Ready(Err(error)) => {

@@ -5,64 +5,156 @@ use clinkz_wot_core::{
     value_type::{TypeSchema, ValueType},
 };
 
-/// The HTTP JSON collection mapping: one object with every described readable
-/// Property exactly once. Validate original member bytes, including exact
-/// decimal integrality, without a JSON tree or normalized value copy.
-pub fn validate_property_map(
-    schema: &clinkz_wot_core::collection::PropertyCollectionSchema,
-    payload: &clinkz_wot_core::Payload,
-) -> CoreResult<()> {
-    use serde::de::{DeserializeSeed, MapAccess, Visitor};
-    validate_payload(TypeSchema::Type(ValueType::Object), payload)?;
-    struct Key<'a>(&'a clinkz_wot_core::collection::PropertyCollectionSchema);
-    impl<'de> DeserializeSeed<'de> for Key<'_> {
-        type Value = usize;
-        fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<usize, D::Error> {
-            struct Name<'a>(&'a clinkz_wot_core::collection::PropertyCollectionSchema);
-            impl Visitor<'_> for Name<'_> {
-                type Value = usize;
-                fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    f.write_str("a described readable Property")
+use clinkz_wot_core::{
+    Payload,
+    collection::{PropertyCollectionSchema, PropertySelection},
+};
+use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
+
+struct MemberIndex<'a>(&'a PropertyCollectionSchema);
+impl<'de> DeserializeSeed<'de> for MemberIndex<'_> {
+    type Value = usize;
+    fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<usize, D::Error> {
+        d.deserialize_str(self)
+    }
+}
+
+impl Visitor<'_> for MemberIndex<'_> {
+    type Value = usize;
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("a described readable Property name")
+    }
+    fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<usize, E> {
+        self.0
+            .members()
+            .iter()
+            .position(|m| m.name.as_ref() == name)
+            .ok_or_else(|| E::custom("unexpected collection member"))
+    }
+}
+
+/// Default TD 1.1 request representation: an array of exact Property names.
+/// Decode against the immutable readable set, including escaped duplicates.
+/// No request tree, owned name list or source TD is constructed.
+pub fn decode_property_selection(
+    schema: &PropertyCollectionSchema,
+    payload: &Payload,
+) -> CoreResult<PropertySelection> {
+    validate_payload(TypeSchema::Type(ValueType::Array), payload)?;
+    struct Names<'a>(&'a PropertyCollectionSchema);
+    impl<'de> Visitor<'de> for Names<'_> {
+        type Value = PropertySelection;
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("a Property name array")
+        }
+        fn visit_seq<S: SeqAccess<'de>>(self, mut seq: S) -> Result<Self::Value, S::Error> {
+            use serde::de::Error;
+            let mut bits = 0;
+            let mut count = 0;
+            while let Some(index) = seq.next_element_seed(MemberIndex(self.0))? {
+                count += 1;
+                let bit = 1u32 << index;
+                if count > PropertyCollectionSchema::MAX_MEMBERS || bits & bit != 0 {
+                    return Err(S::Error::custom("invalid or duplicate selection"));
                 }
-                fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<usize, E> {
-                    self.0
-                        .members()
-                        .iter()
-                        .position(|m| m.name.as_ref() == s)
-                        .ok_or_else(|| E::custom("unexpected collection member"))
-                }
+                bits |= bit;
             }
-            d.deserialize_str(Name(self.0))
+            self.0
+                .selection_from_bits(bits)
+                .map_err(|_| S::Error::custom("invalid selection"))
         }
     }
-    struct Members<'a>(&'a clinkz_wot_core::collection::PropertyCollectionSchema);
+    let mut decoder = serde_json::Deserializer::from_slice(&payload.body);
+    let selected =
+        serde::Deserializer::deserialize_seq(&mut decoder, Names(schema)).map_err(|_| invalid())?;
+    decoder.end().map_err(|_| invalid())?;
+    Ok(selected)
+}
+
+/// Serialize the TD default name array under the existing 4096-byte envelope.
+/// The writer refuses before growing past it, including escaping expansion.
+pub fn encode_property_selection(
+    schema: &PropertyCollectionSchema,
+    selected: PropertySelection,
+) -> CoreResult<Payload> {
+    use serde::ser::{SerializeSeq, Serializer};
+    schema.selection_from_bits(selected.bits())?;
+    struct Bounded(Vec<u8>);
+    impl std::io::Write for Bounded {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if bytes.len() > 4096 - self.0.len() {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            }
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut buffer = Bounded(Vec::new());
+    buffer.0.try_reserve_exact(4096).map_err(|_| invalid())?;
+    let mut encoder = serde_json::Serializer::new(&mut buffer);
+    let mut seq = (&mut encoder)
+        .serialize_seq(Some(selected.bits().count_ones() as usize))
+        .map_err(|_| invalid())?;
+    for (index, member) in schema.members().iter().enumerate() {
+        if selected.contains(index) {
+            seq.serialize_element(member.name.as_ref())
+                .map_err(|_| invalid())?;
+        }
+    }
+    seq.end().map_err(|_| invalid())?;
+    Ok(Payload::new(buffer.0, "application/json"))
+}
+
+/// One object containing every readable Property exactly once.
+pub fn validate_property_map(
+    schema: &PropertyCollectionSchema,
+    payload: &Payload,
+) -> CoreResult<()> {
+    validate_selected_property_map(schema, schema.all(), payload)
+}
+
+/// Validate precisely the original requested subset and each original value.
+/// Unrequested, missing, duplicate and invalid members refuse the whole result.
+pub fn validate_selected_property_map(
+    schema: &PropertyCollectionSchema,
+    selected: PropertySelection,
+    payload: &Payload,
+) -> CoreResult<()> {
+    schema.selection_from_bits(selected.bits())?;
+    validate_payload(TypeSchema::Type(ValueType::Object), payload)?;
+    struct Members<'a>(&'a PropertyCollectionSchema, PropertySelection);
     impl<'de> Visitor<'de> for Members<'_> {
         type Value = ();
         fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("a complete Property collection")
+            f.write_str("a complete selected Property collection")
         }
         fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<(), M::Error> {
             use serde::de::Error;
             let mut seen = 0u32;
-            while let Some(i) = map.next_key_seed(Key(self.0))? {
+            while let Some(i) = map.next_key_seed(MemberIndex(self.0))? {
                 let bit = 1u32 << i;
-                if seen & bit != 0 {
-                    return Err(M::Error::custom("duplicate collection member"));
+                if seen & bit != 0 || !self.1.contains(i) {
+                    return Err(M::Error::custom(
+                        "duplicate or unrequested collection member",
+                    ));
                 }
                 let value: &serde_json::value::RawValue = map.next_value()?;
                 validate_json(self.0.members()[i].schema, value.get().as_bytes())
                     .map_err(|_| M::Error::custom("invalid collection member"))?;
                 seen |= bit;
             }
-            let expected = ((1u64 << self.0.members().len()) - 1) as u32;
-            if seen != expected {
+            if seen != self.1.bits() {
                 return Err(M::Error::custom("incomplete collection response"));
             }
             Ok(())
         }
     }
     let mut decoder = serde_json::Deserializer::from_slice(&payload.body);
-    serde::Deserializer::deserialize_map(&mut decoder, Members(schema)).map_err(|_| invalid())?;
+    serde::Deserializer::deserialize_map(&mut decoder, Members(schema, selected))
+        .map_err(|_| invalid())?;
     decoder.end().map_err(|_| invalid())
 }
 

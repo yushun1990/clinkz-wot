@@ -25,9 +25,10 @@ pub struct HttpFiniteConfig {
 impl HttpFiniteConfig {
     fn valid_target(target: &AffordanceTarget, program: &HttpProducerProgram) -> bool {
         match (target, program.operation()) {
-            (AffordanceTarget::Thing, Operation::ReadAllProperties) => {
-                program.property_map.is_some()
-            }
+            (
+                AffordanceTarget::Thing,
+                Operation::ReadAllProperties | Operation::ReadMultipleProperties,
+            ) => program.property_map.is_some(),
             (
                 AffordanceTarget::Property(name),
                 Operation::ReadProperty | Operation::WriteProperty,
@@ -79,8 +80,7 @@ impl HttpFiniteConfig {
                     || program.listen_address() != listen.listen_address()
                     || mappings[..i].iter().any(|(_, old)| {
                         old.path_and_query() == program.path_and_query()
-                            && (old.operation() == Operation::WriteProperty)
-                                == (program.operation() == Operation::WriteProperty)
+                            && old.method() == program.method()
                     })
             })
         {
@@ -421,7 +421,13 @@ impl HttpFiniteConfig {
 }
 impl FiniteValidator for HttpFiniteConfig {
     fn additional_validation_work(&self) -> u64 {
-        if self.mappings.iter().any(|(_, p)| p.property_map.is_some()) {
+        if self
+            .mappings
+            .iter()
+            .any(|(_, p)| p.operation == Operation::ReadMultipleProperties)
+        {
+            4096 * 120
+        } else if self.mappings.iter().any(|(_, p)| p.property_map.is_some()) {
             4096 * 40
         } else {
             0
@@ -435,6 +441,16 @@ impl FiniteValidator for HttpFiniteConfig {
         let program = self.program_for(candidate)?;
         match (program.operation, input.data.as_ref()) {
             (Operation::ReadProperty | Operation::ReadAllProperties, None) => Ok(()),
+            (Operation::ReadMultipleProperties, Some(payload)) => {
+                crate::producer_validation::decode_property_selection(
+                    program
+                        .property_map
+                        .as_ref()
+                        .ok_or_else(crate::producer::producer_unsupported)?,
+                    payload,
+                )
+                .map(|_| ())
+            }
             (Operation::WriteProperty, Some(payload)) => {
                 crate::producer_validation::validate_payload(program.value_schema, payload)
             }
@@ -447,10 +463,31 @@ impl FiniteValidator for HttpFiniteConfig {
     fn validate_output(
         &self,
         candidate: &FiniteCandidate,
+        input: &InteractionInput,
         output: &InteractionOutput,
     ) -> CoreResult<()> {
         let program = self.program_for(candidate)?;
         match program.operation {
+            Operation::ReadMultipleProperties => {
+                let schema = program
+                    .property_map
+                    .as_ref()
+                    .ok_or_else(crate::producer::producer_unsupported)?;
+                let selected = crate::producer_validation::decode_property_selection(
+                    schema,
+                    input
+                        .data
+                        .as_ref()
+                        .ok_or_else(crate::producer::producer_unsupported)?,
+                )?;
+                crate::producer_validation::validate_selected_property_map(
+                    schema,
+                    selected,
+                    output
+                        .data()
+                        .ok_or_else(crate::producer::producer_unsupported)?,
+                )
+            }
             Operation::ReadProperty | Operation::ReadAllProperties => program.validate(output),
             Operation::WriteProperty if raw_finite_property_shape(program.operation, output) => {
                 Ok(())

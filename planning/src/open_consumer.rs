@@ -212,7 +212,11 @@ impl ConsumerRegistry {
                                         FormSite::Property(_),
                                         Operation::ReadProperty | Operation::WriteProperty
                                     ) | (FormSite::Action(_), Operation::InvokeAction)
-                                        | (FormSite::Thing, Operation::ReadAllProperties)
+                                        | (
+                                            FormSite::Thing,
+                                            Operation::ReadAllProperties
+                                                | Operation::ReadMultipleProperties
+                                        )
                                 );
                                 let mut reason = if !finite {
                                     ConsumerUnsupported::Operation
@@ -880,8 +884,8 @@ fn common_services(
                     .transpose()?,
             }))
         }
-        (FormSite::Thing, Operation::ReadAllProperties) => {
-            let cleanup = crate::type_schema::read_all_member_count(doc)? as u64 + 1;
+        (FormSite::Thing, Operation::ReadAllProperties | Operation::ReadMultipleProperties) => {
+            let cleanup = crate::type_schema::readable_member_count(doc)? as u64 + 1;
             check_limit(
                 limits,
                 K::CleanupWorkItemsPerStepMax,
@@ -892,9 +896,12 @@ fn common_services(
             if !pay(budget, W::CleanupItems, cleanup) {
                 return Err(busy());
             }
-            Ok(ConsumerFiniteSchemas::ReadAllProperties(
-                crate::type_schema::prepare_read_all_schema(doc)?,
-            ))
+            let schema = crate::type_schema::prepare_readable_property_schema(doc)?;
+            Ok(if operation == Operation::ReadAllProperties {
+                ConsumerFiniteSchemas::ReadAllProperties(schema)
+            } else {
+                ConsumerFiniteSchemas::ReadMultipleProperties(schema)
+            })
         }
         _ => Err(unsupported()),
     }

@@ -20,8 +20,11 @@ impl HostSemanticCompiler for HttpCompiler {
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         use clinkz_wot_td::data_type::Operation;
-        let collection =
-            input.owner == FormOwner::Thing && input.operation == Operation::ReadAllProperties;
+        let collection = input.owner == FormOwner::Thing
+            && matches!(
+                input.operation,
+                Operation::ReadAllProperties | Operation::ReadMultipleProperties
+            );
         if !(collection
             || matches!(
                 (input.owner, input.operation),
@@ -41,6 +44,15 @@ impl HostSemanticCompiler for HttpCompiler {
             .form(input.owner, input.form_index)
             .ok_or_else(unsupported)?;
         let write = input.operation == Operation::WriteProperty;
+        let multiple = input.operation == Operation::ReadMultipleProperties;
+        if multiple
+            && input.document.scope(SemanticScope::Thing).is_none_or(|n| {
+                n.children()
+                    .any(|n| !crate::producer_compiler::class_assertion(n))
+            })
+        {
+            return Err(unsupported());
+        }
         if !facts.effective_operations.contains(&input.operation)
             || (!collection && {
                 let flags = input.document.property().schema.facts();
@@ -110,9 +122,12 @@ impl HostSemanticCompiler for HttpCompiler {
             if write && output.method != "PUT" {
                 return Err(unsupported());
             }
-            if collection && output.method != "GET" {
+            if collection && output.method != if multiple { "POST" } else { "GET" } {
                 return Err(unsupported());
             }
+        }
+        if multiple && output.method != "POST" {
+            return Err(unsupported());
         }
         if let Some(headers) = unique(form, "http://www.w3.org/2011/http#headers")? {
             if headers.value() != SemanticValue::Array {
@@ -150,6 +165,9 @@ impl HostSemanticCompiler for HttpCompiler {
         }
         // Other standardized HTTP instructions are outside this declared slice.
         for node in form.children() {
+            if multiple && !http_name(node) && !crate::producer_compiler::class_assertion(node) {
+                return Err(unsupported());
+            }
             if http_name(node)
                 && !node.name().is("http://www.w3.org/2011/http#methodName")
                 && !node.name().is("http://www.w3.org/2011/http#headers")

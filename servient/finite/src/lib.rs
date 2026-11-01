@@ -357,8 +357,10 @@ impl RawProducerServient {
                     Operation::ReadProperty | Operation::WriteProperty
                 ) && matches!(&behavior.target, AffordanceTarget::Property(name)
                         if name.len() <= limits.target_name_bytes)
-                    || behavior.operation == Operation::ReadAllProperties
-                        && behavior.target == AffordanceTarget::Thing)
+                    || matches!(
+                        behavior.operation,
+                        Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                    ) && behavior.target == AffordanceTarget::Thing)
                     && !instance.behaviors[..j].iter().any(|prior| {
                         prior.operation == behavior.operation && prior.target == behavior.target
                     })
@@ -579,7 +581,7 @@ impl RawProducerServient {
                     validation_failure = Some(error.clone());
                     return Err(error);
                 }
-                validator.validate_output(&ingress.candidates[0], &output)?;
+                validator.validate_output(&ingress.candidates[0], &ingress.input, &output)?;
             }
             Ok(output)
         });

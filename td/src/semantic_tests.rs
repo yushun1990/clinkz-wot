@@ -603,7 +603,8 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
         "forms":[
             {"href":"http://127.0.0.1/properties", "op":"readallproperties"},
             {"href":"http://127.0.0.1/actions", "op":"queryallactions"},
-            {"href":"http://127.0.0.1/events", "op":"subscribeallevents"}
+            {"href":"http://127.0.0.1/events", "op":"subscribeallevents"},
+            {"href":"http://127.0.0.1/selected", "op":"readmultipleproperties"}
         ],
         "properties":{}
     });
@@ -614,11 +615,13 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
             "forms":[{"href":format!("http://127.0.0.1/p{i}")}]});
     }
     let thing: crate::thing::Thing = serde_json::from_value(value.clone()).unwrap();
-    assert!(
-        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0)
-            .0
-            .is_err()
-    );
+    for index in [0, 3] {
+        assert!(
+            ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, index)
+                .0
+                .is_err()
+        );
+    }
     for index in [1, 2] {
         let doc = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, index)
             .0
@@ -629,12 +632,14 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
     value["properties"] = serde_json::json!({"p":{"type":"integer","readOnly":true,
         "forms":[{"href":"http://127.0.0.1/p"}]}});
     let thing: crate::thing::Thing = serde_json::from_value(value).unwrap();
-    let root = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0)
-        .0
-        .unwrap();
-    let properties: Vec<_> = root.collection_properties().unwrap().collect();
-    assert_eq!(properties.len(), 1);
-    assert_eq!(properties[0].name, "p");
+    for index in [0, 3] {
+        let root = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, index)
+            .0
+            .unwrap();
+        let properties: Vec<_> = root.collection_properties().unwrap().collect();
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].name, "p");
+    }
     let individual =
         ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Property("p"), 0)
             .0

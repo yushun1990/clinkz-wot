@@ -328,6 +328,7 @@ impl ConsumerDataService for Data {
             retained_bytes: 64,
             temporary_bytes: 0,
             body_bytes: 1024,
+            encoded_selection_bytes: 0,
             validation_work: 4096,
         }
     }

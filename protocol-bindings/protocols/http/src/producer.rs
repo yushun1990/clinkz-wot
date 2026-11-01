@@ -48,6 +48,13 @@ impl HttpProducerProgram {
                 + 2 * core::mem::size_of::<usize>()
         })
     }
+    pub(crate) fn method(&self) -> &'static str {
+        match self.operation {
+            Operation::WriteProperty => "PUT",
+            Operation::ReadMultipleProperties => "POST",
+            _ => "GET",
+        }
+    }
     pub fn operation(&self) -> Operation {
         self.operation
     }
@@ -188,6 +195,11 @@ impl ProducerExecutor for HttpProducerExecutor {
 }
 impl ProducerOutputValidator for HttpProducerProgram {
     fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
+        if self.operation == Operation::ReadMultipleProperties {
+            // Selected output requires the original invocation input. This
+            // legacy output-only facet cannot certify it as an all-result.
+            return Err(producer_unsupported());
+        }
         if let Some(schema) = &self.property_map {
             return super::producer_validation::validate_property_map(
                 schema,

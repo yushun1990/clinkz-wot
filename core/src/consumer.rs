@@ -1,6 +1,6 @@
 //! Source-independent finite Consumer definitions and captured services.
 //! A definition has no compiler, source TD, semantic arena or parser callback.
-use crate::collection::PropertyCollectionSchema;
+use crate::collection::{PropertyCollectionSchema, PropertySelection};
 use crate::host_accounts::{HostCapacityReservation, HostResourceAccounts};
 use crate::value_type::TypeSchema;
 use crate::*;
@@ -33,6 +33,30 @@ pub trait ConsumerDataService: Send + Sync {
     ) -> CoreResult<()> {
         Err(CoreError::UnsupportedOperation(context()))
     }
+    /// Both the default TD name-array request and exact selected response must
+    /// be executable. ReadAllProperties support does not imply this facet.
+    fn supports_property_selection(&self, _schema: &PropertyCollectionSchema) -> bool {
+        false
+    }
+    /// Encode precisely this set with the selected Form's media type. Pure,
+    /// bounded by policy.body_bytes/temporary_bytes/validation_work. The caller
+    /// reserves policy.encoded_selection_bytes of complete returned payload
+    /// backing (body, Arc and media/coding capacities) before entry.
+    fn encode_property_selection(
+        &self,
+        _schema: &PropertyCollectionSchema,
+        _selection: PropertySelection,
+    ) -> CoreResult<Payload> {
+        Err(CoreError::UnsupportedOperation(context()))
+    }
+    fn validate_selected_property_map(
+        &self,
+        _schema: &PropertyCollectionSchema,
+        _selection: PropertySelection,
+        _payload: &Payload,
+    ) -> CoreResult<()> {
+        Err(CoreError::UnsupportedOperation(context()))
+    }
     fn available(&self) -> bool {
         true
     }
@@ -42,6 +66,9 @@ pub struct ConsumerDataPolicy {
     pub retained_bytes: u64,
     pub temporary_bytes: u64,
     pub body_bytes: u64,
+    /// Complete returned selection-payload backing, reserved before encoding.
+    /// Zero declines selection encoding. Separate from transient encoder scratch.
+    pub encoded_selection_bytes: u64,
     /// Complete maximum callback/traversal work, prepaid before validation.
     pub validation_work: u64,
 }
@@ -146,12 +173,16 @@ pub struct ConsumerSchemas {
 pub enum ConsumerFiniteSchemas {
     Value(ConsumerSchemas),
     ReadAllProperties(PropertyCollectionSchema),
+    ReadMultipleProperties(PropertyCollectionSchema),
 }
 impl ConsumerFiniteSchemas {
     pub fn input(&self) -> Option<TypeSchema> {
         match self {
             Self::Value(s) => s.input,
             Self::ReadAllProperties(_) => None,
+            Self::ReadMultipleProperties(_) => {
+                Some(TypeSchema::Type(crate::value_type::ValueType::Array))
+            }
         }
     }
     pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
@@ -162,11 +193,15 @@ impl ConsumerFiniteSchemas {
                 .chain(s.output)
                 .all(|s| data.supports_schema(s)),
             Self::ReadAllProperties(s) => data.supports_property_map(s),
+            Self::ReadMultipleProperties(s) => {
+                data.policy().encoded_selection_bytes > 0 && data.supports_property_selection(s)
+            }
         }
     }
     pub fn validate_output(
         &self,
         data: &dyn ConsumerDataService,
+        selection: Option<PropertySelection>,
         payload: Option<&Payload>,
     ) -> CoreResult<()> {
         match (self, payload) {
@@ -178,19 +213,24 @@ impl ConsumerFiniteSchemas {
                 Some(p),
             ) => data.validate(*s, p),
             (Self::ReadAllProperties(s), Some(p)) => data.validate_property_map(s, p),
+            (Self::ReadMultipleProperties(s), Some(p)) => {
+                data.validate_selected_property_map(s, selection.ok_or_else(invalid)?, p)
+            }
             _ => Err(invalid()),
         }
     }
     pub fn retained_bytes(&self) -> usize {
         match self {
             Self::Value(_) => 0,
-            Self::ReadAllProperties(s) => s.retained_bytes(),
+            Self::ReadAllProperties(s) | Self::ReadMultipleProperties(s) => s.retained_bytes(),
         }
     }
     pub fn drop_work(&self) -> u64 {
         match self {
             Self::Value(_) => 0,
-            Self::ReadAllProperties(s) => s.members().len() as u64 + 1,
+            Self::ReadAllProperties(s) | Self::ReadMultipleProperties(s) => {
+                s.members().len() as u64 + 1
+            }
         }
     }
 }
@@ -374,7 +414,10 @@ impl ConsumerDefinition {
                     AffordanceTarget::Property(_),
                     Operation::ReadProperty | Operation::WriteProperty
                 ) | (AffordanceTarget::Action(_), Operation::InvokeAction)
-                    | (AffordanceTarget::Thing, Operation::ReadAllProperties)
+                    | (
+                        AffordanceTarget::Thing,
+                        Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                    )
             )
             || !matches!(
                 (&input.schemas, input.operation),
@@ -394,6 +437,10 @@ impl ConsumerDefinition {
                     | (
                         ConsumerFiniteSchemas::ReadAllProperties(_),
                         Operation::ReadAllProperties
+                    )
+                    | (
+                        ConsumerFiniteSchemas::ReadMultipleProperties(_),
+                        Operation::ReadMultipleProperties
                     )
             )
             || policy.validation_work == 0

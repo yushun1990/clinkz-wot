@@ -121,8 +121,8 @@ native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
 The HTTP finite participant can share one listener across up to 32 independently
-prepared Property Read/Write and Thing-root ReadAllProperties mappings; native method/path collisions refuse before
-setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`
+prepared Property Read/Write and Thing-root collection read mappings; native
+method/path collisions refuse before setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`
 that checks the original candidate's separate input/output roles. There is no
 HTTP method, status or retry case in this SPI. A linked
 test-only UDP Action participant exercises shared infrastructure and continuing
@@ -227,9 +227,9 @@ outcomes. The Consumer retains the poll error immediately, then retains and
 validates any late completion returned by `poll_close`; an existing error cannot
 be used to discard that observation or promote it to successful handoff.
 
-## Native Thing-root ReadAllProperties
+## Native Thing-root Property collection reads
 
-The implemented finite subset includes a root collection read; operation flags
+The implemented finite subset includes all/selected root collection reads; operation flags
 alone do not establish support. The actual compiler qualifies its own root Form,
 codec/collection service, native mapping and configuration. The HTTP participant
 retains an explicit `AffordanceTarget` for every native mapping, preserving Thing
@@ -253,7 +253,15 @@ Loss of lookup availability with a stable captured bound still permits validatio
 of the original late result through the retained service; native delivery remains
 fenced by the current-pair check.
 
-HTTP owns its single GET/200 JSON group mapping and complete-result refusal
+`FiniteValidator::validate_output` receives the original `InteractionInput`
+alongside the original candidate. Selected-member output validation must use that
+input, including during late-result handling, rather than current/global request
+state. The captured allowance covers repeated decoding of original selection as
+well as output traversal. No decoder or original-input-dependent validation runs
+with a newly increased allowance after the handler.
+
+HTTP owns its GET/200 JSON all-read and explicit POST/200 JSON selected-read
+mappings and complete-result refusal
 policy, documented in [its README](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).
 Other Bindings decline collection operations unless their actual native
 capabilities support them. The Engine does not call individual reads, interpret

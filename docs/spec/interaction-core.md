@@ -43,10 +43,11 @@ represented as schema conformance. Native status mapping remains Binding-owned.
 Consumer data services validate a payload independently of direction. Prepared
 `ConsumerSchemas` keep single-value input and output distinct; absence of a data
 role differs from a present unconstrained value. `ConsumerFiniteSchemas` retains
-either those roles or the derived `ReadAllProperties` member schema explicitly.
+either those roles or the derived Property collection member schema explicitly.
 The current finite path supports Property Read/Write, explicitly synchronous
-Action invocation (including empty data roles), and Thing-root ReadAllProperties. Shape/identity seals require terminal primary application
-results and refuse continuing status/invocation references; captured codec/schema
+Action invocation (including empty data roles), and Thing-root
+ReadAllProperties/ReadMultipleProperties. Shape/identity seals require terminal
+primary application results and refuse continuing status/invocation references; captured codec/schema
 checks separately precede input effects and validated result handoff.
 
 A prepared Write requires the Property value as input and supports empty terminal
@@ -252,15 +253,29 @@ atomicity. They MUST NOT silently become N individual calls/subscriptions.
 Explicit application fan-out is a separate bounded capability with its own
 promised guarantees. Native group distribution and matching stay Binding-owned.
 
-The implemented collection subset is TD-driven **ReadAllProperties** in both
+The implemented collection subset is TD-driven **ReadAllProperties** and
+**ReadMultipleProperties** in both
 roles. Its coordinate is `AffordanceTarget::Thing`, with its own actual root
 Form and operation; individual Property Forms supply no collection mapping or
 behavior. In accordance with [TD 1.1 §6.3.9.6](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing),
-the output includes all described readable Properties and excludes writeOnly
-Properties. `collection::PropertyCollectionSchema` owns those names and their
+the ReadAllProperties output includes all described readable Properties and
+excludes writeOnly Properties. `collection::PropertyCollectionSchema` owns those names and their
 complete supported type-only assertions after source destruction. ReadOnly
 Properties remain readable. Unsupported assertions on any included member refuse
 preparation; an excluded writeOnly member supplies no output schema.
+
+ReadMultipleProperties prepares the same eligible readable-member names and
+schemas, independently of its per-invocation input. The Consumer accepts a bounded
+set of exact names, rejects duplicates/unknown/writeOnly names before native
+effects, and retains the selection with the original definition through settlement.
+An empty selection requires an empty map. According to
+[TD 1.1 §5.3.1.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing),
+the default request is a name array serialized using the selected Form's media
+type. The actual captured data service must explicitly support both encoding that
+request and validating exactly the requested output members. A missing member,
+an unrequested member (including another readable Property), a duplicate or an
+invalid value refuses the whole result. The static schema is never narrowed by
+one call, and a later call cannot replace the original requested set.
 
 The actual captured data service must explicitly support the complete named map;
 scalar or object type support alone is insufficient. The concrete codec checks
@@ -274,9 +289,9 @@ synthesizes individual reads. Neither dispatch nor a complete valid response
 establishes an atomic snapshot, simultaneous sampling or remote effect certainty.
 Any stronger guarantee needs actual application/Binding support and evidence.
 
-This finite read adds no universal collection lifecycle. All-versus-selected
-scope and read-versus-write data roles must remain distinct: future multiple
-reads need an explicit selected member set; all writes concern every writable
+These finite reads add no universal collection lifecycle. All-versus-selected
+scope and read-versus-write data roles remain distinct: all reads still require
+every readable member; all writes concern every writable
 (non-readOnly) member; selected writes retain their chosen writable set and
 partial-effect evidence. Future observation/subscription or continuing collection
 operations need the appropriate retained owners and mapped controls, rather than

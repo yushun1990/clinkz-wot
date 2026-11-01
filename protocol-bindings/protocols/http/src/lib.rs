@@ -50,10 +50,11 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v10\0",
+    "clinkz-http-ip-v11\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
+    "Thing-root-readmultiple-explicit-POST200;TD-default-name-array4096;original-selection-bitmap;empty-selection;exact-selected-map;no-query-convention;",
     "Thing-root-readall-GET200;exact-readable-Property-map;type-only-members;no-missing-extra-duplicate-writeOnly;members32-names256-total4096;validation-work=body40+media2;",
     "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
     "fresh;concurrency1-until-release;header32/8192inclusive;body4096;",
@@ -203,7 +204,10 @@ impl binding::ClientBinding for Client {
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
         matches!(
             operation,
-            Operation::ReadProperty | Operation::WriteProperty | Operation::ReadAllProperties
+            Operation::ReadProperty
+                | Operation::WriteProperty
+                | Operation::ReadAllProperties
+                | Operation::ReadMultipleProperties
         )
     }
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
@@ -248,6 +252,15 @@ impl binding::ClientBinding for Client {
                     payload,
                 )
                 .is_err(),
+                (Operation::ReadMultipleProperties, Some(payload)) => {
+                    producer_validation::validate_payload(
+                        clinkz_wot_core::value_type::TypeSchema::Type(
+                            clinkz_wot_core::value_type::ValueType::Array,
+                        ),
+                        payload,
+                    )
+                    .is_err()
+                }
                 _ => true,
             }
         {
@@ -557,6 +570,7 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
             // no allocator-intercepted or process-wide RAM claim.
             temporary_bytes: 65_536,
             body_bytes: BODY,
+            encoded_selection_bytes: BODY + core::mem::size_of::<Payload>() as u64 + 64,
             validation_work: BODY * 40 + MEDIA * 2,
         }
     }
@@ -572,6 +586,24 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
         payload: &Payload,
     ) -> CoreResult<()> {
         producer_validation::validate_property_map(schema, payload)
+    }
+    fn supports_property_selection(&self, _: &collection::PropertyCollectionSchema) -> bool {
+        true
+    }
+    fn encode_property_selection(
+        &self,
+        schema: &collection::PropertyCollectionSchema,
+        selected: collection::PropertySelection,
+    ) -> CoreResult<Payload> {
+        producer_validation::encode_property_selection(schema, selected)
+    }
+    fn validate_selected_property_map(
+        &self,
+        schema: &collection::PropertyCollectionSchema,
+        selected: collection::PropertySelection,
+        payload: &Payload,
+    ) -> CoreResult<()> {
+        producer_validation::validate_selected_property_map(schema, selected, payload)
     }
 }
 struct HttpConsumerAccess(HttpConsumerConfig);
@@ -598,6 +630,7 @@ impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
                 operation,
                 Operation::ReadProperty
                     | Operation::ReadAllProperties
+                    | Operation::ReadMultipleProperties
                     | Operation::WriteProperty
                     | Operation::InvokeAction
                     | Operation::QueryAction

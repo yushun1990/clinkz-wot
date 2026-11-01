@@ -117,10 +117,18 @@ The finite HTTP capability now supports one native Thing-root ReadAllProperties
 mapping beside independent Property mappings, with explicit logical targets and
 native method/path collision refusal. Collection codec support is explicit;
 `FiniteValidator` captures additional traversal work before dispatch. The
-[Binding SPI](../spec/binding-spi.md#native-thing-root-readallproperties) and
+[Binding SPI](../spec/binding-spi.md#native-thing-root-property-collection-reads) and
 [HTTP subset](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties)
 own those contracts.
 
-ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and long-lived
+ReadMultipleProperties adds explicit request-encoding and selected-result data
+support. Finite output validation receives the original retained input; its
+captured work allowance includes both selection decodes and member validation.
+Native method/path collisions remain Binding-owned, with POST distinct from GET.
+The [selected-read tests](../../protocol-bindings/protocols/http/tests/read_multiple_properties.rs)
+exercise real native input, validation-service loss, changed work bounds and
+retirement. Exact wire support belongs to the HTTP mapping contract.
+
+WriteAllProperties, WriteMultipleProperties and long-lived
 collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

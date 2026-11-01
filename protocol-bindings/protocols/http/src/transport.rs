@@ -302,7 +302,7 @@ pub(super) async fn exchange(
     for (name, value) in instructions.headers() {
         request = request.header(name, value);
     }
-    if write
+    if input.is_some()
         && !instructions
             .headers()
             .any(|(n, _)| n.eq_ignore_ascii_case("content-type"))

@@ -20,8 +20,8 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
-Thing-root ReadAllProperties retains its own root coordinate, actual registration,
-combined schema and services under the existing finite ownership and settlement
+Thing-root ReadAllProperties/ReadMultipleProperties retain their own root
+coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
 rules. Its bounded schema/name backing and destruction stay funded through final
 release; normal and late data use the captured member validator. Producer
 publication requires a root behavior and actual native collection mapping as well
@@ -30,6 +30,16 @@ close cannot transfer that interaction to individual Property behaviors or a
 successor Thing. Missing/invalid members confer no partial success; native and
 application aggregation provide no implicit atomic snapshot. Collection validation
 work is prepaid in full, with service-bound changes fencing further dispatch.
+Selected reads retain the original per-call bitmap into the immutable schema;
+neither replacement nor another call can change it. The captured data policy
+(`encoded_selection_bytes`) separately declares complete encoded-selection
+payload backing, including media/Arc allocations; zero declines that facet. The request
+array is encoded only after lifetime, scratch and cleanup reservations and work prepayment. Refused
+encoded input is destroyed before its original funding releases, including native
+admission refusal. Service loss during encoding fences the next callback and
+native start; loss during validation fences successful application handoff. The
+Producer validates output against its original retained input, including late
+results across authority/service loss, using the same captured validator rules.
 
 Property Write uses the same finite cancellation, replacement and settlement
 owners. Input validation and fresh application authorization precede handler
