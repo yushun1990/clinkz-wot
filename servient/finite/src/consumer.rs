@@ -57,10 +57,7 @@ impl Definition {
     fn access_work(&self) -> u64 {
         self.access_work
     }
-    fn check_current(&self, consumer: &ConsumerInstanceRef) -> CoreResult<()> {
-        if !consumer.is_current() {
-            return Err(stale());
-        }
+    fn check_dependencies(&self) -> CoreResult<()> {
         if self.input.execution.consumer_configuration() != Some(self.input.configuration)
             || self.input.execution.identity().configuration()
                 != self.input.configuration.configuration()
@@ -78,6 +75,13 @@ impl Definition {
         {
             return Err(invalid());
         }
+        Ok(())
+    }
+    fn check_current(&self, consumer: &ConsumerInstanceRef) -> CoreResult<()> {
+        if !consumer.is_current() {
+            return Err(stale());
+        }
+        self.check_dependencies()?;
         self.input.services.access.authorize_instance(
             consumer,
             self.binding(),
@@ -87,7 +91,10 @@ impl Definition {
         if !consumer.is_current() {
             return Err(stale());
         }
-        Ok(())
+        // Permission can invalidate any captured dependency through interior
+        // state. Every caller, including final admission and validated/unread
+        // result handoff, needs the observations made after that callback.
+        self.check_dependencies()
     }
     fn validate(
         &self,

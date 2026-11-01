@@ -38,7 +38,13 @@ array is encoded only after lifetime, scratch and cleanup reservations and work 
 encoded input is destroyed before its original funding releases, including native
 admission refusal. Service loss during encoding fences the next callback and
 native start. Authorization-time data-service changes are rechecked before
-encoding and before generic input validation; loss during validation fences successful application handoff. The
+encoding, generic input validation, final native admission and result handoff.
+The shared finite check inspects captured configuration, service availability,
+data/access work policy and required facets both before and after authorization;
+pre-callback observations cannot authorize the next boundary. The same check
+applies after result validation and when handing off an already validated unread
+result. Fencing retains the original result, authority, first cause and funding.
+Loss during validation fences successful application handoff. The
 Producer validates output against its original retained input, including late
 results across authority/service loss, using the same captured validator rules.
 

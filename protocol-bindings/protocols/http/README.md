@@ -785,6 +785,11 @@ against that retained set and owns an inline bitmap into its original schema.
 Caller storage and the source TD can be destroyed before execution. The bitmap
 remains with the original call through cancellation, unread/late results and
 settlement. The schema is not modified by any call.
+Preparation also qualifies the captured generic Array input validator that
+invocation calls on the encoded name array; selection-specific codec support
+alone does not qualify this dependency. Required support and policy are checked
+again after authorization, including final admission and immediate/unread result
+handoff. A change fences success while retaining the original result and funding.
 
 The supported Form explicitly specifies `"htv:methodName":"POST"`, with
 `application/json` request and primary 200 JSON response. As defined by

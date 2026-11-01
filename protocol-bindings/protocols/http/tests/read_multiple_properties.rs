@@ -732,7 +732,7 @@ fn escaping_expansion_refuses_with_funded_cleanup_before_native_start() {
 }
 
 #[test]
-fn authorization_service_loss_cannot_enter_encoding_or_input_validation() {
+fn authorization_service_loss_fences_each_admission_boundary() {
     struct AccessChangesData(Arc<AtomicBool>, std::sync::atomic::AtomicUsize, usize);
     impl ConsumerAccessService for AccessChangesData {
         fn authorize(
@@ -751,7 +751,8 @@ fn authorization_service_loss_cannot_enter_encoding_or_input_validation() {
             _: Operation,
         ) -> CoreResult<()> {
             // First permission precedes encoding; the second follows encoding
-            // and precedes generic input validation. Fence either callback edge.
+            // and precedes generic input validation; the third precedes native
+            // admission. Each callback must leave the dependencies current.
             if self.1.fetch_add(1, Ordering::Relaxed) + 1 == self.2 {
                 self.0.store(false, Ordering::Relaxed);
             }
@@ -767,7 +768,7 @@ fn authorization_service_loss_cannot_enter_encoding_or_input_validation() {
     // A non-effecting permission callback is allowed to change policy through
     // interior state. No codec callback may rely on its earlier availability.
     io().block_on(async {
-        for permission in [1, 2] {
+        for permission in [1, 2, 3] {
             let addr = address();
             let td = selected_description(addr);
             let mut server = Fixture::new(td.clone());
@@ -807,7 +808,7 @@ fn authorization_service_loss_cannot_enter_encoding_or_input_validation() {
             );
             assert_eq!(
                 encodes.load(Ordering::Relaxed),
-                usize::from(permission == 2)
+                usize::from(permission >= 2)
             );
             assert_eq!(
                 baseline,
@@ -816,6 +817,294 @@ fn authorization_service_loss_cannot_enter_encoding_or_input_validation() {
             server.step();
             assert_eq!(server.controls.requests.get(), 0);
             assert_eq!(server.app.roots.get(), 0);
+            drop(client);
+            clean(&accounts);
+            server.close();
+        }
+    });
+}
+
+// These wrappers change only captured service metadata. All encoding, decoding
+// and native I/O still use the actual HTTP participant and JSON service.
+struct ReviewData {
+    actual: Arc<dyn ConsumerDataService>,
+    fault: &'static str,
+    changed: Arc<AtomicBool>,
+    validated: Arc<std::sync::atomic::AtomicUsize>,
+}
+impl ConsumerDataService for ReviewData {
+    fn content_type(&self) -> &str {
+        self.actual.content_type()
+    }
+    fn policy(&self) -> ConsumerDataPolicy {
+        let mut policy = self.actual.policy();
+        policy.retained_bytes += 256;
+        if self.fault == "policy" && self.changed.load(Ordering::Relaxed) {
+            policy.validation_work += 1;
+        }
+        policy
+    }
+    fn available(&self) -> bool {
+        self.actual.available()
+            && !(self.fault == "availability" && self.changed.load(Ordering::Relaxed))
+    }
+    fn supports_schema(&self, schema: value_type::TypeSchema) -> bool {
+        self.actual.supports_schema(schema)
+            && !(self.fault == "array"
+                && self.changed.load(Ordering::Relaxed)
+                && schema == value_type::TypeSchema::Type(value_type::ValueType::Array))
+    }
+    fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+        assert!(
+            self.available(),
+            "unavailable service entered input validation"
+        );
+        if !self.supports_schema(schema) {
+            return Err(CoreError::UnsupportedOperation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            )));
+        }
+        self.actual.validate(schema, payload)
+    }
+    fn supports_property_map(&self, schema: &collection::PropertyCollectionSchema) -> bool {
+        self.actual.supports_property_map(schema)
+    }
+    fn validate_property_map(
+        &self,
+        schema: &collection::PropertyCollectionSchema,
+        payload: &Payload,
+    ) -> CoreResult<()> {
+        self.actual.validate_property_map(schema, payload)
+    }
+    fn supports_property_selection(&self, schema: &collection::PropertyCollectionSchema) -> bool {
+        self.actual.supports_property_selection(schema)
+    }
+    fn encode_property_selection(
+        &self,
+        schema: &collection::PropertyCollectionSchema,
+        selected: collection::PropertySelection,
+    ) -> CoreResult<Payload> {
+        self.actual.encode_property_selection(schema, selected)
+    }
+    fn validate_selected_property_map(
+        &self,
+        schema: &collection::PropertyCollectionSchema,
+        selected: collection::PropertySelection,
+        payload: &Payload,
+    ) -> CoreResult<()> {
+        self.actual
+            .validate_selected_property_map(schema, selected, payload)?;
+        self.validated.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+}
+struct ReviewAccess {
+    fault: &'static str,
+    armed: Arc<AtomicBool>,
+    changed: Arc<AtomicBool>,
+    validated: Arc<std::sync::atomic::AtomicUsize>,
+}
+impl ConsumerAccessService for ReviewAccess {
+    fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
+        Ok(())
+    }
+    fn authorize_instance(
+        &self,
+        _: &ConsumerInstanceRef,
+        _: BindingRegistrationIdentity,
+        _: &str,
+        _: Operation,
+    ) -> CoreResult<()> {
+        if self.armed.load(Ordering::Relaxed) && self.validated.load(Ordering::Relaxed) != 0 {
+            self.changed.store(true, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+    fn retained_bytes(&self) -> u64 {
+        128
+    }
+    fn work(&self) -> u64 {
+        if self.fault == "access" && self.changed.load(Ordering::Relaxed) {
+            2
+        } else {
+            1
+        }
+    }
+}
+
+#[test]
+fn review_authorization_changes_fence_immediate_and_unread_validated_result_handoff() {
+    io().block_on(async {
+        for unread in [false, true] {
+            for fault in ["availability", "policy", "access", "array", "none"] {
+                let addr = address();
+                let td = selected_description(addr);
+                let mut server = Fixture::new(td.clone());
+                let accounts = bank();
+                let owner = consumer_instance();
+                let changed = Arc::new(AtomicBool::new(false));
+                let armed = Arc::new(AtomicBool::new(!unread));
+                let validated = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                let mut reg = registration();
+                reg.services.data = Arc::new(ReviewData {
+                    actual: reg.services.data.clone(),
+                    fault,
+                    changed: changed.clone(),
+                    validated: validated.clone(),
+                });
+                reg.services.access = Arc::new(ReviewAccess {
+                    fault,
+                    armed: armed.clone(),
+                    changed: changed.clone(),
+                    validated: validated.clone(),
+                });
+                let prepared = prepare_consumer(
+                    &td,
+                    accounts.clone(),
+                    vec![reg],
+                    ConsumerSelector::default(),
+                )
+                .unwrap();
+                let (d, f) = prepared.into_execution();
+                let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
+                    .unwrap_or_else(|_| panic!());
+                let mut call = start_selected(&client, &["on"]);
+                let start = Instant::now();
+                let (local, remote) = if unread {
+                    // Complete output validation but withhold credit for the
+                    // final permission callback, retaining an unread result.
+                    while validated.load(Ordering::Relaxed) == 0 {
+                        server.step();
+                        client.step(
+                            &mut cx(),
+                            now(0),
+                            &mut work().with_remaining(WorkClass::ProviderProbes, 1),
+                        );
+                        assert!(start.elapsed() < Duration::from_secs(5));
+                        tokio::time::sleep(Duration::from_millis(1)).await;
+                    }
+                    assert!(!changed.load(Ordering::Relaxed));
+                    let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
+                    armed.store(true, Ordering::Relaxed);
+                    assert!(
+                        call.poll(&mut cx(), now(0), &mut WorkBudget::new())
+                            .is_pending()
+                    );
+                    assert!(
+                        !changed.load(Ordering::Relaxed),
+                        "no unpaid permission callback"
+                    );
+                    assert_eq!(
+                        retained,
+                        ResourceKind::ALL.map(|k| accounts.account(k).used())
+                    );
+                    let Poll::Ready(local) = call.poll(
+                        &mut cx(),
+                        now(0),
+                        &mut WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 1),
+                    ) else {
+                        panic!("validated result requires only the paid current check");
+                    };
+                    assert_eq!(
+                        retained,
+                        ResourceKind::ALL.map(|k| accounts.account(k).used())
+                    );
+                    (local, server.server().take_settlement().unwrap())
+                } else {
+                    server.exchange(&mut call).await
+                };
+                assert!(changed.load(Ordering::Relaxed));
+                assert_eq!(validated.load(Ordering::Relaxed), 1);
+                assert_eq!(
+                    local.result().is_ok(),
+                    fault == "none",
+                    "unread={unread}, fault={fault}"
+                );
+                if fault != "none" {
+                    assert!(matches!(
+                        local.first_cause(),
+                        Some(CoreError::Validation(_))
+                    ));
+                }
+                let BindingCallSettlement::Returned(Ok(original)) = local.native_outcome() else {
+                    panic!("retain the original validated native output");
+                };
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&original.data().unwrap().body).unwrap(),
+                    json!({"on":true})
+                );
+                assert_eq!(local.consumer(), &owner.reference());
+                assert_eq!(local.affordance(), &AffordanceTarget::Thing);
+                assert_eq!(local.operation(), Operation::ReadMultipleProperties);
+                assert_eq!(local.effect(), ConsumerEffect::Unknown);
+                assert!(local.rejected_output().is_none());
+                assert!(remote.result.is_ok());
+                assert_eq!(server.controls.requests.get(), 1);
+                assert_eq!(server.app.reads.get(), 0);
+                drop(local);
+                drop(call);
+                drop(client);
+                clean(&accounts);
+                server.close();
+            }
+        }
+    });
+}
+
+#[test]
+fn review_preparation_qualifies_generic_array_input_independently_of_selection_facets() {
+    io().block_on(async {
+        for array_supported in [false, true] {
+            let addr = address();
+            let mut td = selected_description(addr);
+            td["forms"]
+                .as_array_mut()
+                .unwrap()
+                .push(description(addr)["forms"][0].clone());
+            let mut server = Fixture::new(td.clone());
+            let accounts = bank();
+            let owner = consumer_instance();
+            let mut reg = registration();
+            reg.services.data = Arc::new(ReviewData {
+                actual: reg.services.data.clone(),
+                fault: "array",
+                changed: Arc::new(AtomicBool::new(!array_supported)),
+                validated: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            });
+            let prepared = prepare_consumer(
+                &td,
+                accounts.clone(),
+                vec![reg],
+                ConsumerSelector::default(),
+            )
+            .unwrap();
+            let selected = |op| {
+                prepared
+                    .support()
+                    .iter()
+                    .any(|s| s.selected && s.operation == op)
+            };
+            assert_eq!(selected(Operation::ReadMultipleProperties), array_supported);
+            assert!(
+                selected(Operation::ReadAllProperties),
+                "all-read has no Array input dependency"
+            );
+            let (d, f) = prepared.into_execution();
+            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
+                .unwrap_or_else(|_| panic!());
+            let result =
+                client.read_multiple_properties(&["on"], Deadline::NONE, now(0), &mut work());
+            if array_supported {
+                let mut call = result.unwrap();
+                let (local, remote) = server.exchange(&mut call).await;
+                assert_eq!(body(&local), json!({"on":true}));
+                assert!(remote.result.is_ok());
+            } else {
+                assert!(matches!(result, Err(CoreError::UnsupportedOperation(_))));
+                server.step();
+                assert_eq!(server.controls.requests.get(), 0);
+            }
             drop(client);
             clean(&accounts);
             server.close();

@@ -266,8 +266,10 @@ reported by the Consumer, rather than authorizing an invented protocol mapping.
 `prepare_readable_property_schema` derives owned names and supported member assertions
 from TD's resolved Property schema loans, independently of individual native
 read mappings. Distinct `ConsumerFiniteSchemas` variants capture all-read versus
-selected-read meaning. The latter requires actual request encoding and selected
-result validation support; all-read or scalar support alone cannot qualify it.
+selected-read meaning. The latter requires actual request encoding, the generic
+Array input validator invoked on the encoded request, and exact selected-result
+validation support; selection-specific encoding/result facets alone cannot
+qualify it. All-read support acquires no generic Array input requirement.
 Preparation captures the complete eligible schema and performs no invocation
 encoding. Each invocation validates its own bounded set against that immutable
 schema, funds the complete encoded input before acquisition, and retains an inline

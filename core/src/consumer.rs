@@ -35,6 +35,7 @@ pub trait ConsumerDataService: Send + Sync {
     }
     /// Both the default TD name-array request and exact selected response must
     /// be executable. ReadAllProperties support does not imply this facet.
+    /// The generic input-schema validator is qualified separately.
     fn supports_property_selection(&self, _schema: &PropertyCollectionSchema) -> bool {
         false
     }
@@ -194,7 +195,11 @@ impl ConsumerFiniteSchemas {
                 .all(|s| data.supports_schema(s)),
             Self::ReadAllProperties(s) => data.supports_property_map(s),
             Self::ReadMultipleProperties(s) => {
-                data.policy().encoded_selection_bytes > 0 && data.supports_property_selection(s)
+                data.policy().encoded_selection_bytes > 0
+                    && self
+                        .input()
+                        .is_some_and(|schema| data.supports_schema(schema))
+                    && data.supports_property_selection(s)
             }
         }
     }
