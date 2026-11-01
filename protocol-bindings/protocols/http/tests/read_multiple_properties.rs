@@ -511,6 +511,10 @@ impl ConsumerDataService for SelectedService {
         p
     }
     fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+        assert!(
+            self.available(),
+            "unavailable service entered input validation"
+        );
         self.actual.validate(s, p)
     }
     fn available(&self) -> bool {
@@ -724,5 +728,97 @@ fn escaping_expansion_refuses_with_funded_cleanup_before_native_start() {
         listener.set_nonblocking(true).unwrap();
         assert!(matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
         drop(client); clean(&accounts);
+    });
+}
+
+#[test]
+fn authorization_service_loss_cannot_enter_encoding_or_input_validation() {
+    struct AccessChangesData(Arc<AtomicBool>, std::sync::atomic::AtomicUsize, usize);
+    impl ConsumerAccessService for AccessChangesData {
+        fn authorize(
+            &self,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            Ok(())
+        }
+        fn authorize_instance(
+            &self,
+            _: &ConsumerInstanceRef,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            // First permission precedes encoding; the second follows encoding
+            // and precedes generic input validation. Fence either callback edge.
+            if self.1.fetch_add(1, Ordering::Relaxed) + 1 == self.2 {
+                self.0.store(false, Ordering::Relaxed);
+            }
+            Ok(())
+        }
+        fn retained_bytes(&self) -> u64 {
+            64
+        }
+        fn work(&self) -> u64 {
+            1
+        }
+    }
+    // A non-effecting permission callback is allowed to change policy through
+    // interior state. No codec callback may rely on its earlier availability.
+    io().block_on(async {
+        for permission in [1, 2] {
+            let addr = address();
+            let td = selected_description(addr);
+            let mut server = Fixture::new(td.clone());
+            let accounts = bank();
+            let owner = consumer_instance();
+            let available = Arc::new(AtomicBool::new(true));
+            let encodes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let mut reg = registration();
+            reg.services.data = Arc::new(SelectedService {
+                actual: reg.services.data.clone(),
+                available: available.clone(),
+                encodes: encodes.clone(),
+                selected_support: true,
+                lose_on_encode: false,
+                lose_on_result: false,
+            });
+            reg.services.access = Arc::new(AccessChangesData(
+                available.clone(),
+                std::sync::atomic::AtomicUsize::new(0),
+                permission,
+            ));
+            let prepared = prepare_consumer(
+                &td,
+                accounts.clone(),
+                vec![reg],
+                ConsumerSelector::default(),
+            )
+            .unwrap();
+            let (d, f) = prepared.into_execution();
+            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
+                .unwrap_or_else(|_| panic!());
+            let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
+            assert!(
+                client
+                    .read_multiple_properties(&["on"], Deadline::NONE, now(0), &mut work())
+                    .is_err()
+            );
+            assert_eq!(
+                encodes.load(Ordering::Relaxed),
+                usize::from(permission == 2)
+            );
+            assert_eq!(
+                baseline,
+                ResourceKind::ALL.map(|k| accounts.account(k).used())
+            );
+            server.step();
+            assert_eq!(server.controls.requests.get(), 0);
+            assert_eq!(server.app.roots.get(), 0);
+            drop(client);
+            clean(&accounts);
+            server.close();
+        }
     });
 }

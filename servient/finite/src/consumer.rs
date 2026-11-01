@@ -139,6 +139,11 @@ impl Definition {
             (Some(schema), Some(payload))
                 if payload.body.len() as u64 <= self.data_policy.body_bytes =>
             {
+                if !self.input.services.data.available()
+                    || self.input.services.data.policy() != self.data_policy
+                {
+                    return Poll::Ready(Err(invalid()));
+                }
                 if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
                     return Poll::Pending;
                 }
@@ -514,6 +519,13 @@ impl ConsumerRuntime {
                 if let (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(selected)) =
                     (&definition.input.schemas, selection)
                 {
+                    // Authorization may change service availability or its
+                    // work/backing declarations. Check at this callback edge.
+                    if !definition.input.services.data.available()
+                        || definition.input.services.data.policy() != policy
+                    {
+                        return Err(invalid());
+                    }
                     if !pay(budget, W::CodecInputBytes, policy.validation_work) {
                         return Err(busy());
                     }

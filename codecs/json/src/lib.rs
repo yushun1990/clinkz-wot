@@ -93,7 +93,9 @@ pub fn encode_property_selection(
         }
     }
     let mut buffer = Bounded(Vec::new());
-    buffer.0.try_reserve_exact(4096).map_err(|_| invalid())?;
+    buffer.0.try_reserve_exact(4096).map_err(|_| {
+        CoreError::Backpressure(ErrorContext::new(ErrorPhase::Codec, RetryClass::Never))
+    })?;
     let mut encoder = serde_json::Serializer::new(&mut buffer);
     let mut seq = (&mut encoder)
         .serialize_seq(Some(selected.bits().count_ones() as usize))
