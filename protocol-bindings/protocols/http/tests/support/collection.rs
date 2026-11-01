@@ -106,7 +106,10 @@ impl RawFiniteHandler for Behavior {
         match ctx.operation() {
             Operation::ReadAllProperties | Operation::ReadMultipleProperties => {
                 assert_eq!(ctx.target(), &AffordanceTarget::Thing);
-                assert_eq!(input.data.is_none(), ctx.operation() == Operation::ReadAllProperties);
+                assert_eq!(
+                    input.data.is_none(),
+                    ctx.operation() == Operation::ReadAllProperties
+                );
                 self.0.roots.set(self.0.roots.get() + 1);
                 if self.0.fails.get() {
                     return Err(CoreError::Binding(ErrorContext::new(
@@ -115,14 +118,21 @@ impl RawFiniteHandler for Behavior {
                     )));
                 }
                 if ctx.operation() == Operation::ReadMultipleProperties {
-                    let names: Vec<String> = serde_json::from_slice(&input.data.as_ref().unwrap().body).unwrap();
+                    let names: Vec<String> =
+                        serde_json::from_slice(&input.data.as_ref().unwrap().body).unwrap();
                     self.0.selections.borrow_mut().push(names.clone());
                     if !self.0.fixed_selection_response.get() {
                         let values: Value = serde_json::from_slice(&self.0.value.borrow()).unwrap();
-                        let selected: serde_json::Map<String, Value> = names.into_iter().map(|n| {
-                            let value = values[&n].clone(); (n, value)
-                        }).collect();
-                        return Ok(InteractionOutput::with_data(payload(&serde_json::to_vec(&selected).unwrap())));
+                        let selected: serde_json::Map<String, Value> = names
+                            .into_iter()
+                            .map(|n| {
+                                let value = values[&n].clone();
+                                (n, value)
+                            })
+                            .collect();
+                        return Ok(InteractionOutput::with_data(payload(
+                            &serde_json::to_vec(&selected).unwrap(),
+                        )));
                     }
                 }
                 Ok(InteractionOutput::with_data(payload(
@@ -281,9 +291,21 @@ fn exposure(
             Behavior(app.clone()),
         ),
     ];
-    for (name, operation) in [("readallproperties", Operation::ReadAllProperties), ("readmultipleproperties", Operation::ReadMultipleProperties)] {
-        if td["forms"].as_array().unwrap().iter().any(|f| f["op"] == name) {
-            behaviors.push(RawFiniteBehavior::new(AffordanceTarget::Thing, operation, Behavior(app.clone())));
+    for (name, operation) in [
+        ("readallproperties", Operation::ReadAllProperties),
+        ("readmultipleproperties", Operation::ReadMultipleProperties),
+    ] {
+        if td["forms"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["op"] == name)
+        {
+            behaviors.push(RawFiniteBehavior::new(
+                AffordanceTarget::Thing,
+                operation,
+                Behavior(app.clone()),
+            ));
         }
     }
     let instance =
@@ -530,7 +552,12 @@ fn client(
     let (definitions, funding) = prepared.into_execution();
     let root = definitions
         .iter()
-        .find(|d| matches!(d.operation(), Operation::ReadAllProperties | Operation::ReadMultipleProperties))
+        .find(|d| {
+            matches!(
+                d.operation(),
+                Operation::ReadAllProperties | Operation::ReadMultipleProperties
+            )
+        })
         .unwrap();
     assert_eq!(root.affordance(), &AffordanceTarget::Thing);
     assert_eq!(root.name(), None);
@@ -577,7 +604,6 @@ fn registration() -> ConsumerRegistrationInput {
     .unwrap()
 }
 
-
 fn collection_description(addr: SocketAddr, operation: Operation) -> Value {
     let mut td = description(addr);
     if operation == Operation::ReadMultipleProperties {
@@ -586,7 +612,11 @@ fn collection_description(addr: SocketAddr, operation: Operation) -> Value {
     }
     td
 }
-fn start_collection_at(client: &ConsumerRuntime, operation: Operation, deadline: Deadline) -> CoreResult<ConsumerCall> {
+fn start_collection_at(
+    client: &ConsumerRuntime,
+    operation: Operation,
+    deadline: Deadline,
+) -> CoreResult<ConsumerCall> {
     if operation == Operation::ReadMultipleProperties {
         client.read_multiple_properties(&["on"], deadline, now(0), &mut work())
     } else {
@@ -605,10 +635,8 @@ fn verify_collection_lifecycle(operation: Operation) {
             let owner = consumer_instance();
             let denied = Arc::new(AtomicBool::new(false));
             let client = client(td, denied.clone(), accounts.clone(), &owner);
-            let mut call = Some(
-                start_collection_at(&client, operation, Deadline::at(now(10)))
-                    .unwrap(),
-            );
+            let mut call =
+                Some(start_collection_at(&client, operation, Deadline::at(now(10))).unwrap());
             let start = Instant::now();
             while server.app.roots.get() == 0 {
                 server.step();
@@ -692,7 +720,6 @@ fn verify_collection_lifecycle(operation: Operation) {
     });
 }
 
-
 fn verify_collection_replacement(operation: Operation) {
     io().block_on(async {
         for accepted in [false, true] {
@@ -774,7 +801,6 @@ fn verify_collection_replacement(operation: Operation) {
         }
     });
 }
-
 
 fn verify_collection_publication(operation: Operation) {
     io().block_on(async {
@@ -863,7 +889,6 @@ fn verify_collection_publication(operation: Operation) {
     });
 }
 
-
 fn verify_collection_authorization(operation: Operation) {
     io().block_on(async {
         let addr = address();
@@ -897,7 +922,6 @@ fn verify_collection_authorization(operation: Operation) {
         server.close();
     });
 }
-
 
 fn verify_collection_cleanup(operation: Operation) {
     use std::sync::atomic::AtomicUsize;
@@ -947,10 +971,19 @@ fn verify_collection_cleanup(operation: Operation) {
             self.queries.fetch_add(1, Ordering::Relaxed);
             self.supported && self.actual.supports_property_selection(s)
         }
-        fn encode_property_selection(&self, s: &collection::PropertyCollectionSchema, selected: collection::PropertySelection) -> CoreResult<Payload> {
+        fn encode_property_selection(
+            &self,
+            s: &collection::PropertyCollectionSchema,
+            selected: collection::PropertySelection,
+        ) -> CoreResult<Payload> {
             self.actual.encode_property_selection(s, selected)
         }
-        fn validate_selected_property_map(&self, s: &collection::PropertyCollectionSchema, selected: collection::PropertySelection, p: &Payload) -> CoreResult<()> {
+        fn validate_selected_property_map(
+            &self,
+            s: &collection::PropertyCollectionSchema,
+            selected: collection::PropertySelection,
+            p: &Payload,
+        ) -> CoreResult<()> {
             self.actual.validate_selected_property_map(s, selected, p)
         }
     }
@@ -1102,7 +1135,6 @@ fn verify_collection_cleanup(operation: Operation) {
     assert_eq!((partial.queries, partial.jobs), (0, 0));
     assert_eq!(partial.used - walk.used, 3);
 }
-
 
 fn verify_collection_validator_bound(operation: Operation) {
     struct ChangingNative {
@@ -1342,4 +1374,3 @@ fn verify_collection_validator_bound(operation: Operation) {
         );
     }
 }
-
