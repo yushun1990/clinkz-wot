@@ -244,6 +244,14 @@ pair. Dispatch prepays the complete allowance before either validation or handle
 entry. HTTP declares its bounded named-member traversal; Consumer data policy
 likewise covers the complete collection callback. Short credit retains the
 original exchange and invokes no partially funded traversal.
+The handler can change interior service policy despite a retained validator loan.
+Immediately before output validation, the finite owner rechecks that exact
+validator's captured allowance. A change fences the exchange before
+the callback, retaining its original reply, accepted behavior and uncertain effect
+through native retirement. Restoring metadata cannot reopen the fenced exchange.
+Loss of lookup availability with a stable captured bound still permits validation
+of the original late result through the retained service; native delivery remains
+fenced by the current-pair check.
 
 HTTP owns its single GET/200 JSON group mapping and complete-result refusal
 policy, documented in [its README](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).

@@ -219,7 +219,8 @@ pub trait FiniteIngressBinding {
 pub trait FiniteValidator {
     /// Complete additional callback work beyond the runtime's declared maximum
     /// input/output body and media traversals. Passive bounded metadata, captured
-    /// at admission and rechecked before effects. Zero retains that base policy.
+    /// at admission and rechecked before effects and again after the handler,
+    /// immediately before output validation. Zero retains that base policy.
     fn additional_validation_work(&self) -> u64 {
         0
     }

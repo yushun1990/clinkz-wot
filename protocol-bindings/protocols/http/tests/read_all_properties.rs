@@ -624,6 +624,432 @@ fn engine_read_all_uses_one_root_request_and_keeps_individual_operations_distinc
 }
 
 #[test]
+fn review_collection_cleanup_work_is_actually_prepaid() {
+    use std::sync::atomic::AtomicUsize;
+    #[derive(Clone, Copy)]
+    enum Mode {
+        Unselected,
+        UnsupportedData,
+        Selected,
+        Cancel,
+    }
+    struct DataProbe {
+        actual: Arc<dyn ConsumerDataService>,
+        queries: Arc<AtomicUsize>,
+        supported: bool,
+    }
+    impl ConsumerDataService for DataProbe {
+        fn content_type(&self) -> &str {
+            self.actual.content_type()
+        }
+        fn validate(
+            &self,
+            s: clinkz_wot_core::value_type::TypeSchema,
+            p: &Payload,
+        ) -> CoreResult<()> {
+            self.actual.validate(s, p)
+        }
+        fn policy(&self) -> ConsumerDataPolicy {
+            let mut p = self.actual.policy();
+            p.retained_bytes += 128;
+            p
+        }
+        fn supports_property_map(
+            &self,
+            s: &clinkz_wot_core::collection::PropertyCollectionSchema,
+        ) -> bool {
+            self.queries.fetch_add(1, Ordering::Relaxed);
+            self.supported && self.actual.supports_property_map(s)
+        }
+        fn validate_property_map(
+            &self,
+            s: &clinkz_wot_core::collection::PropertyCollectionSchema,
+            p: &Payload,
+        ) -> CoreResult<()> {
+            self.actual.validate_property_map(s, p)
+        }
+    }
+    struct Probe {
+        used: u64,
+        queries: usize,
+        jobs: usize,
+        error: Option<CoreError>,
+        selected: usize,
+    }
+    fn td_with_members(count: usize) -> Value {
+        let addr = address();
+        let mut td = description(addr);
+        td["forms"] = json!([
+            {"op":"readallproperties","href":format!("http://{addr}/skip")},
+            {"op":"readallproperties","href":format!("http://{addr}/properties")}
+        ]);
+        td["properties"] = json!({});
+        for i in 0..count {
+            td["properties"][format!("p{i}")] = json!({"type":"integer", "readOnly":true,
+                "forms":[{"href":format!("http://{addr}/p{i}")}]});
+        }
+        td
+    }
+    fn attempt(td: &Value, mode: Mode, cleanup: u64) -> Probe {
+        let thing: Thing = serde_json::from_value(td.clone()).unwrap();
+        let mut reg = registration();
+        let queries = Arc::new(AtomicUsize::new(0));
+        reg.services.data = Arc::new(DataProbe {
+            actual: reg.services.data,
+            queries: queries.clone(),
+            supported: !matches!(mode, Mode::UnsupportedData),
+        });
+        let registry = ConsumerRegistry::try_new(vec![reg]).unwrap_or_else(|_| panic!());
+        let accounts = bank();
+        let mut budget = work().with_remaining(WorkClass::CleanupItems, cleanup);
+        let mut jobs = 0;
+        let prepared = registry.prepare(
+            &thing,
+            GatewayDefaultV1::LIMITS,
+            accounts.clone(),
+            ConsumerSelector {
+                form: Some(if matches!(mode, Mode::Unselected) {
+                    99
+                } else {
+                    1
+                }),
+                binding: None,
+            },
+            &mut budget,
+            |job| {
+                jobs += 1;
+                if matches!(mode, Mode::Cancel) {
+                    job.step(&mut WorkBudget::new(), true);
+                } else {
+                    while !job.is_finished() {
+                        job.step(&mut work(), false);
+                    }
+                }
+            },
+        );
+        let (error, selected) = match &prepared {
+            Ok(p) => (None, p.support().iter().filter(|s| s.selected).count()),
+            Err(e) => (Some(e.clone()), 0),
+        };
+        drop(prepared);
+        clean(&accounts);
+        Probe {
+            used: cleanup - budget.remaining(WorkClass::CleanupItems),
+            queries: queries.load(Ordering::Relaxed),
+            jobs,
+            error,
+            selected,
+        }
+    }
+    let mut previous = None;
+    for count in [1, 10] {
+        let td = td_with_members(count);
+        let walk = attempt(&td, Mode::Unselected, 1_000_000);
+        let temporary = attempt(&td, Mode::UnsupportedData, 1_000_000);
+        let compiled = attempt(&td, Mode::Selected, 1_000_000);
+        let schema_drop = count as u64 + 1;
+        assert!(matches!(
+            walk.error,
+            Some(CoreError::UnsupportedOperation(_))
+        ));
+        assert!(matches!(
+            temporary.error,
+            Some(CoreError::UnsupportedOperation(_))
+        ));
+        assert_eq!((temporary.queries, temporary.jobs), (1, 0));
+        assert_eq!(
+            temporary.used - walk.used,
+            schema_drop,
+            "temporary owner needs its own credit"
+        );
+        assert!(compiled.error.is_none());
+        assert_eq!(compiled.selected, 1);
+        let native_cleanup = compiled.used - temporary.used - schema_drop;
+        let total = compiled.used - walk.used;
+        if let Some(one) = previous {
+            assert_eq!(total - one, 18, "both schema owners grow by nine members");
+        }
+        previous = Some(total);
+        println!(
+            "{count} members: schema cleanup={schema_drop} per owner, native cleanup={native_cleanup}, beyond walk={total}"
+        );
+
+        // Cancelling the native job fixes the credit spent up to its start,
+        // independently of later TD/Form walking. Use that observed boundary to
+        // test one-unit shortages before temporary construction and cloning.
+        let cancelled = attempt(&td, Mode::Cancel, 1_000_000);
+        assert!(matches!(cancelled.error, Some(CoreError::Cancelled(_))));
+        assert_eq!(cancelled.jobs, 1);
+        for (credit, expected_queries) in [
+            (cancelled.used - native_cleanup - schema_drop - 1, 0),
+            (cancelled.used - native_cleanup - 1, 1),
+        ] {
+            let refused = attempt(&td, Mode::Selected, credit);
+            assert!(matches!(refused.error, Some(CoreError::Backpressure(_))));
+            assert_eq!(refused.queries, expected_queries);
+            assert_eq!(
+                refused.jobs, 0,
+                "short schema credit cannot start a native job"
+            );
+            assert!(
+                refused.used < credit,
+                "failed atomic payment keeps the short credit"
+            );
+        }
+        let exact = attempt(&td, Mode::Selected, compiled.used);
+        assert!(exact.error.is_none());
+        assert_eq!(exact.selected, 1);
+        assert_eq!(exact.used, compiled.used);
+        let rollback = attempt(&td, Mode::Selected, compiled.used - 1);
+        assert!(rollback.error.is_some());
+        assert_eq!(rollback.jobs, 1, "late refusal releases the retained clone");
+    }
+    // A supported first member is acquired before a later unsupported schema;
+    // partial construction has the same prepaid temporary disposal bound.
+    let mut td = td_with_members(2);
+    td["properties"]["p1"]["minimum"] = json!(0);
+    let walk = attempt(&td, Mode::Unselected, 1_000_000);
+    let partial = attempt(&td, Mode::Selected, 1_000_000);
+    assert!(matches!(
+        partial.error,
+        Some(CoreError::UnsupportedOperation(_))
+    ));
+    assert_eq!((partial.queries, partial.jobs), (0, 0));
+    assert_eq!(partial.used - walk.used, 3);
+}
+
+#[test]
+fn review_changed_validation_bound_cannot_run_unfunded_output_callback() {
+    struct ChangingNative {
+        actual: HttpFiniteBinding,
+        allowance: Rc<Cell<u64>>,
+        validated: Rc<Cell<bool>>,
+        hold_close: Rc<Cell<bool>>,
+        sends: Rc<Cell<usize>>,
+    }
+    impl FiniteValidator for ChangingNative {
+        fn additional_validation_work(&self) -> u64 {
+            self.allowance.get()
+        }
+        fn validate_input(&self, c: &FiniteCandidate, i: &InteractionInput) -> CoreResult<()> {
+            self.actual.validator().unwrap().validate_input(c, i)
+        }
+        fn validate_output(&self, c: &FiniteCandidate, o: &InteractionOutput) -> CoreResult<()> {
+            self.validated.set(true);
+            self.actual.validator().unwrap().validate_output(c, o)
+        }
+    }
+    impl FiniteIngressBinding for ChangingNative {
+        type Configuration = HttpFiniteConfig;
+        type Reply = HttpFiniteReply;
+        fn identity(&self) -> (BindingId, BindingGeneration) {
+            self.actual.identity()
+        }
+        fn configuration(&self) -> &HttpFiniteConfig {
+            self.actual.configuration()
+        }
+        fn validator(&self) -> Option<&dyn FiniteValidator> {
+            Some(self)
+        }
+        fn poll_start(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
+            self.actual.poll_start(cx)
+        }
+        fn poll_receive(
+            &mut self,
+            cx: &mut Context<'_>,
+            t: MonotonicInstant,
+        ) -> Poll<CoreResult<FiniteIngress<Self::Reply>>> {
+            self.actual.poll_receive(cx, t)
+        }
+        fn poll_send(
+            &mut self,
+            cx: &mut Context<'_>,
+            r: &RawFiniteReply<Self::Reply>,
+        ) -> Poll<CoreResult<()>> {
+            self.sends.set(self.sends.get() + 1);
+            self.actual.poll_send(cx, r)
+        }
+        fn poll_close(
+            &mut self,
+            cx: &mut Context<'_>,
+            i: Option<&FiniteIngress<Self::Reply>>,
+            r: Option<&RawFiniteReply<Self::Reply>>,
+            e: Option<&CoreError>,
+        ) -> Poll<CoreResult<FiniteDelivery>> {
+            let reply = r.expect("original accepted exchange stays owned");
+            assert!(i.is_none());
+            assert_eq!(reply.effect, FiniteEffect::Unknown);
+            assert_eq!(reply.operation, Some(Operation::ReadAllProperties));
+            assert_eq!(reply.ingress.candidates[0].target, AffordanceTarget::Thing);
+            assert!(matches!(reply.result, Err(CoreError::Validation(_))));
+            assert!(matches!(e, Some(CoreError::Validation(_))));
+            if self.hold_close.get() {
+                Poll::Pending
+            } else {
+                self.actual.poll_close(cx, i, r, e)
+            }
+        }
+    }
+    struct ChangingHandler(Rc<Cell<u64>>, u64);
+    impl RawFiniteHandler for ChangingHandler {
+        fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+            Ok(())
+        }
+        fn handle(
+            &self,
+            _: HandlerContext<'_>,
+            _: &InteractionInput,
+        ) -> CoreResult<InteractionOutput> {
+            self.0.set(self.1);
+            Ok(InteractionOutput::with_data(payload(
+                br#"{"level":7,"on":true}"#,
+            )))
+        }
+    }
+    for increase in [false, true] {
+        let addr = address();
+        let auth = authority(Generation::INITIAL);
+        let key = auth.key();
+        let listen = HttpProducerConfig::for_loopback(addr).unwrap();
+        let provider = HttpFiniteProducer::try_new(
+            listen,
+            BindingId::new(97),
+            BindingGeneration::INITIAL,
+            1000,
+        )
+        .unwrap();
+        let prepared = prepare_thing(
+            &description(addr).to_string(),
+            key,
+            GatewayDefaultV1::LIMITS,
+            &mut work(),
+            &[&provider],
+            |_, _| true,
+        )
+        .unwrap();
+        let program = prepared
+            .operations()
+            .iter()
+            .find(|o| o.site == FormSite::Thing)
+            .unwrap()
+            .definition::<HttpProducerProgram>()
+            .unwrap()
+            .clone();
+        let config = HttpFiniteConfig::try_new(listen, program, key, AffordanceTarget::Thing, 1000)
+            .unwrap_or_else(|_| panic!());
+        let initial = config.additional_validation_work();
+        let next = if increase { initial + 1 } else { initial - 1 };
+        let allowance = Rc::new(Cell::new(initial));
+        let hold_close = Rc::new(Cell::new(true));
+        let sends = Rc::new(Cell::new(0));
+        let validated = Rc::new(Cell::new(false));
+        let mut owner = RawProducerServient::try_new(
+            vec![RawProducerInstance::new(
+                auth,
+                vec![RawFiniteBehavior::new(
+                    AffordanceTarget::Thing,
+                    Operation::ReadAllProperties,
+                    ChangingHandler(allowance.clone(), next),
+                )],
+            )],
+            RawProducerRegistryLimits {
+                instances: 1,
+                behaviors_per_instance: 1,
+                target_name_bytes: 256,
+            },
+        )
+        .unwrap_or_else(|_| panic!());
+        let mut native = RawFiniteRuntime::try_new(
+            ChangingNative {
+                actual: HttpFiniteBinding::new(
+                    config.clone(),
+                    BindingId::new(97),
+                    BindingGeneration::INITIAL,
+                ),
+                allowance: allowance.clone(),
+                validated: validated.clone(),
+                hold_close: hold_close.clone(),
+                sends: sends.clone(),
+            },
+            config,
+            &owner,
+            RawFiniteLimits {
+                candidates: 1,
+                input_body_bytes: 4096,
+                output_body_bytes: 4096,
+                output_media_capacity: 64,
+                output_retained_bytes: 8192,
+            },
+            FiniteValidation::Required,
+            Deadline::NONE,
+        )
+        .unwrap_or_else(|_| panic!());
+        assert_eq!(
+            native.step(&mut cx(), &mut work(), now(0)),
+            Poll::Ready(RawFiniteState::InstalledClosed)
+        );
+        native.activate_raw().unwrap();
+        let mut peer = TcpStream::connect(addr).unwrap();
+        write!(peer, "GET /properties HTTP/1.1\r\nHost: {addr}\r\n\r\n").unwrap();
+        let start = Instant::now();
+        while native.state() != RawFiniteState::Dispatching {
+            let _ = owner
+                .step(&mut native, &mut cx(), &mut work(), now(0))
+                .unwrap();
+            assert!(start.elapsed() < Duration::from_secs(3));
+        }
+        let prepaid = 1 + (256 + 1) + 1 + 4096 + 64 * 2 + 4096 + initial;
+        let mut budget = work().with_remaining(WorkClass::HandlerSteps, prepaid);
+        let _ = owner
+            .step(&mut native, &mut cx(), &mut budget, now(0))
+            .unwrap();
+        assert_eq!(budget.remaining(WorkClass::HandlerSteps), 0);
+        assert_eq!(allowance.get(), next);
+        let output_ran = validated.get();
+        println!(
+            "Output validation ran={output_ran}; captured bound={initial}; current bound={}",
+            allowance.get()
+        );
+        assert_eq!(native.state(), RawFiniteState::Closing);
+        assert!(
+            matches!(native.first_cause(), Some(CoreError::Validation(c)) if c.phase() == ErrorPhase::Validate)
+        );
+        assert_eq!(
+            native.step(&mut cx(), &mut WorkBudget::new(), now(0)),
+            Poll::Pending
+        );
+        assert_eq!(native.step(&mut cx(), &mut work(), now(0)), Poll::Pending);
+        assert!(
+            TcpListener::bind(addr).is_err(),
+            "pending retirement retains the socket"
+        );
+        allowance.set(initial); // Restoring metadata cannot reopen a fenced exchange.
+        drop(owner);
+        assert_eq!(native.step(&mut cx(), &mut work(), now(0)), Poll::Pending);
+        assert_eq!(sends.get(), 0);
+        hold_close.set(false);
+        assert_eq!(
+            native.step(&mut cx(), &mut work(), now(0)),
+            Poll::Ready(RawFiniteState::Closed)
+        );
+        let result = native.take_settlement().unwrap();
+        assert_eq!(result.recipient, Some(key));
+        assert_eq!(result.target, Some(AffordanceTarget::Thing));
+        assert_eq!(result.operation, Some(Operation::ReadAllProperties));
+        assert_eq!(result.effect, FiniteEffect::Unknown);
+        assert_eq!(result.delivery, FiniteDelivery::NotDelivered);
+        assert!(matches!(result.result, Err(CoreError::Validation(_))));
+        drop(native);
+        drop(peer);
+        drop(TcpListener::bind(addr).unwrap());
+        assert!(
+            !output_ran,
+            "output validation ran after its bound changed, with no credit for the increased allowance"
+        );
+    }
+}
+
+#[test]
 fn producer_rejects_missing_wrong_duplicate_unknown_and_write_only_members_without_fanout() {
     io().block_on(async {
         let addr = address();

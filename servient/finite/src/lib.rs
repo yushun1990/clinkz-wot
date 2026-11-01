@@ -511,6 +511,7 @@ impl RawProducerServient {
         let recipient = single.map(|candidate| candidate.instance);
         let operation = single.map(|candidate| candidate.operation);
         let mut effect = FiniteEffect::NotInvoked;
+        let mut validation_failure = None;
         let result = self.resolve(&ingress, runtime.limits).and_then(|(i, b)| {
             let instance = &self.instances[i].instance;
             let behavior = &instance.behaviors[b];
@@ -565,6 +566,19 @@ impl RawProducerServient {
                 ));
             }
             if let Some(validator) = validator {
+                // The handler may change interior service policy despite this
+                // retained loan. Check this exact validator's prepaid bound.
+                // The loan still owes late-result validation if lookup
+                // availability is lost; the delivery step fences that loss.
+                if validator.additional_validation_work() != runtime.validation_work {
+                    let error = CoreError::Validation(
+                        ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                            .with_thing(instance.key().slot())
+                            .with_operation(behavior.operation),
+                    );
+                    validation_failure = Some(error.clone());
+                    return Err(error);
+                }
                 validator.validate_output(&ingress.candidates[0], &output)?;
             }
             Ok(output)
@@ -576,7 +590,13 @@ impl RawProducerServient {
             recipient,
             operation,
         });
-        runtime.state = RawFiniteState::Delivering;
+        if let Some(error) = validation_failure {
+            // The original input, reply and accepted behavior remain owned
+            // through native retirement; changed policy grants no delivery.
+            runtime.fail(error);
+        } else {
+            runtime.state = RawFiniteState::Delivering;
+        }
         Ok(Poll::Ready(runtime.state))
     }
 }

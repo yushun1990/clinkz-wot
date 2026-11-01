@@ -233,9 +233,20 @@ impl ConsumerRegistry {
                                     if !pay(budget, W::PlanningItems, 256) {
                                         return Err(busy());
                                     }
-                                    let schemas =
-                                        common_services(document, &site, index, operation);
-                                    if let Ok(schemas) = schemas {
+                                    let schemas = match common_services(
+                                        document,
+                                        &site,
+                                        index,
+                                        operation,
+                                        limits,
+                                        retained_cleanup_work,
+                                        budget,
+                                    ) {
+                                        Ok(schemas) => Some(schemas),
+                                        Err(CoreError::UnsupportedOperation(_)) => None,
+                                        Err(error) => return Err(error),
+                                    };
+                                    if let Some(schemas) = schemas {
                                         reason = ConsumerUnsupported::NoCompleteProvider;
                                         for registration in &self.registrations {
                                             let id = registration.execution.identity();
@@ -338,7 +349,10 @@ impl ConsumerRegistry {
                                                 limits,
                                                 K::CleanupWorkItemsPerStepMax,
                                                 retained_cleanup_work
-                                                    .checked_add(m.contract.abort_work)
+                                                    .checked_add(schemas.drop_work()) // live temporary
+                                                    .and_then(|n| {
+                                                        n.checked_add(m.contract.abort_work)
+                                                    })
                                                     .and_then(|n| {
                                                         n.checked_add(
                                                             m.contract.artifact_drop_work
@@ -366,6 +380,11 @@ impl ConsumerRegistry {
                                                     .checked_add(artifact_budget.1)
                                                     .ok_or_else(invalid)?,
                                             )?;
+                                            // Prepay the retained clone before native construction.
+                                            // Refusal/rollback never borrows the temporary's credit.
+                                            if !pay(budget, W::CleanupItems, schemas.drop_work()) {
+                                                return Err(busy());
+                                            }
                                             let mut job = ConsumerCompilation::new(
                                                 &registration.compiler,
                                                 input,
@@ -793,6 +812,9 @@ fn common_services(
     site: &FormSite,
     index: u32,
     operation: Operation,
+    limits: &ResourceLimits,
+    retained_cleanup_work: u64,
+    budget: &mut WorkBudget,
 ) -> CoreResult<ConsumerFiniteSchemas> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
     let [security] = facts.effective_security else {
@@ -859,6 +881,17 @@ fn common_services(
             }))
         }
         (FormSite::Thing, Operation::ReadAllProperties) => {
+            let cleanup = crate::type_schema::read_all_member_count(doc)? as u64 + 1;
+            check_limit(
+                limits,
+                K::CleanupWorkItemsPerStepMax,
+                retained_cleanup_work
+                    .checked_add(cleanup)
+                    .ok_or_else(invalid)?,
+            )?;
+            if !pay(budget, W::CleanupItems, cleanup) {
+                return Err(busy());
+            }
             Ok(ConsumerFiniteSchemas::ReadAllProperties(
                 crate::type_schema::prepare_read_all_schema(doc)?,
             ))

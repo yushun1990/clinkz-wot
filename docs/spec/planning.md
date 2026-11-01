@@ -270,6 +270,12 @@ meaning and requires actual collection validation support from the selected
 service. Preparation funds retained member/name backing and bounded destruction
 as well as artifacts/services; temporary construction remains inside the existing
 common admission allowance. Native preparation performs no reads or aggregation.
+The borrowed member census prepays `CleanupItems` for the temporary schema before
+its vector/member acquisition, and for each retained clone before native
+construction. Each owner has its own member-count-plus-vector disposal allowance;
+unsupported schemas, cancellation and late refusal use the original paid credit.
+Both live schema owners also count toward the aggregate cleanup ceiling. A short
+payment reports capacity refusal rather than an unsupported alternative.
 Final Producer qualification compares the original complete member meaning,
 root coordinate and selected actual registration after closed native setup.
 Changing an included schema, readability or member set invalidates prior support.
