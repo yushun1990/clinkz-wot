@@ -109,6 +109,7 @@ impl Definition {
         }
         let has_output = match &self.input.schemas {
             ConsumerFiniteSchemas::Value(s) => s.output.is_some(),
+            ConsumerFiniteSchemas::WriteAllProperties(_) => false,
             ConsumerFiniteSchemas::ReadAllProperties(_)
             | ConsumerFiniteSchemas::ReadMultipleProperties(_) => true,
         };
@@ -137,13 +138,12 @@ impl Definition {
     }
     fn validate_payload(
         &self,
-        schema: Option<clinkz_wot_core::value_type::TypeSchema>,
         payload: Option<&Payload>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<()>> {
-        Poll::Ready(match (schema, payload) {
+        Poll::Ready(match (self.input.schemas.input(), payload) {
             (None, None) => Ok(()),
-            (Some(schema), Some(payload))
+            (Some(_), Some(payload))
                 if payload.body.len() as u64 <= self.data_policy.body_bytes =>
             {
                 if !self.input.services.data.available()
@@ -154,7 +154,9 @@ impl Definition {
                 if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
                     return Poll::Pending;
                 }
-                self.input.services.data.validate(schema, payload)
+                self.input
+                    .schemas
+                    .validate_input(self.input.services.data.as_ref(), Some(payload))
             }
             _ => Err(invalid()),
         })
@@ -385,6 +387,29 @@ impl ConsumerRuntime {
             BindingInputRejection::new(input.expect("write input retained"), error)
         })
     }
+    /// One native Thing-root write. Complete writable-map validation and group
+    /// authorization precede native effects; refusal returns the original input.
+    /// Error/cancellation can follow partial remote effects and never replays.
+    pub fn write_all_properties(
+        &self,
+        input: Payload,
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
+        self.start(
+            AffordanceSite::Thing,
+            Operation::WriteAllProperties,
+            CallInput::Value(Some(input)),
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| {
+            let (input, error) = e.into_parts();
+            BindingInputRejection::new(input.expect("collection write input retained"), error)
+        })
+    }
     fn start(
         &self,
         target: AffordanceSite<'_>,
@@ -558,7 +583,7 @@ impl ConsumerRuntime {
                 definition.check_current(&state.consumer)?;
             }
             let payload = encoded.as_ref().or(input.as_ref());
-            match definition.validate_payload(definition.input.schemas.input(), payload, budget) {
+            match definition.validate_payload(payload, budget) {
                 Poll::Ready(result) => result?,
                 Poll::Pending => return Err(busy()),
             }
@@ -905,7 +930,12 @@ impl Call {
                 // preserving the original result in the settlement owner.
                 match self.definition.validate(output, self.selection, budget) {
                     Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Ok(())) => self.output_validated = true,
+                    Poll::Ready(Ok(())) => {
+                        self.output_validated = true;
+                        if self.definition.input.operation == Operation::WriteAllProperties {
+                            self.effect = ConsumerEffect::Completed;
+                        }
+                    }
                     Poll::Ready(Err(error)) => {
                         self.first_cause.get_or_insert(error.clone());
                         if let BindingCallSettlement::Returned(Ok(original)) =

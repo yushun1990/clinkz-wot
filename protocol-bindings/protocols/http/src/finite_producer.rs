@@ -27,7 +27,9 @@ impl HttpFiniteConfig {
         match (target, program.operation()) {
             (
                 AffordanceTarget::Thing,
-                Operation::ReadAllProperties | Operation::ReadMultipleProperties,
+                Operation::ReadAllProperties
+                | Operation::ReadMultipleProperties
+                | Operation::WriteAllProperties,
             ) => program.property_map.is_some(),
             (
                 AffordanceTarget::Property(name),
@@ -451,6 +453,15 @@ impl FiniteValidator for HttpFiniteConfig {
                 )
                 .map(|_| ())
             }
+            (Operation::WriteAllProperties, Some(payload)) => {
+                crate::producer_validation::validate_property_map(
+                    program
+                        .property_map
+                        .as_ref()
+                        .ok_or_else(crate::producer::producer_unsupported)?,
+                    payload,
+                )
+            }
             (Operation::WriteProperty, Some(payload)) => {
                 crate::producer_validation::validate_payload(program.value_schema, payload)
             }
@@ -489,7 +500,9 @@ impl FiniteValidator for HttpFiniteConfig {
                 )
             }
             Operation::ReadProperty | Operation::ReadAllProperties => program.validate(output),
-            Operation::WriteProperty if raw_finite_property_shape(program.operation, output) => {
+            Operation::WriteProperty | Operation::WriteAllProperties
+                if raw_finite_property_shape(program.operation, output) =>
+            {
                 Ok(())
             }
             _ => Err(CoreError::Validation(ErrorContext::new(

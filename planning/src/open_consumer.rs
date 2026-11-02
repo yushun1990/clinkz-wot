@@ -216,6 +216,7 @@ impl ConsumerRegistry {
                                             FormSite::Thing,
                                             Operation::ReadAllProperties
                                                 | Operation::ReadMultipleProperties
+                                                | Operation::WriteAllProperties
                                         )
                                 );
                                 let mut reason = if !finite {
@@ -884,8 +885,19 @@ fn common_services(
                     .transpose()?,
             }))
         }
-        (FormSite::Thing, Operation::ReadAllProperties | Operation::ReadMultipleProperties) => {
-            let cleanup = crate::type_schema::readable_member_count(doc)? as u64 + 1;
+        (
+            FormSite::Thing,
+            Operation::ReadAllProperties
+            | Operation::ReadMultipleProperties
+            | Operation::WriteAllProperties,
+        ) => {
+            let writing = operation == Operation::WriteAllProperties;
+            let cleanup = if writing {
+                crate::type_schema::writable_member_count(doc)?
+            } else {
+                crate::type_schema::readable_member_count(doc)?
+            } as u64
+                + 1;
             check_limit(
                 limits,
                 K::CleanupWorkItemsPerStepMax,
@@ -896,8 +908,14 @@ fn common_services(
             if !pay(budget, W::CleanupItems, cleanup) {
                 return Err(busy());
             }
-            let schema = crate::type_schema::prepare_readable_property_schema(doc)?;
-            Ok(if operation == Operation::ReadAllProperties {
+            let schema = if writing {
+                crate::type_schema::prepare_writable_property_schema(doc)?
+            } else {
+                crate::type_schema::prepare_readable_property_schema(doc)?
+            };
+            Ok(if writing {
+                ConsumerFiniteSchemas::WriteAllProperties(schema)
+            } else if operation == Operation::ReadAllProperties {
                 ConsumerFiniteSchemas::ReadAllProperties(schema)
             } else {
                 ConsumerFiniteSchemas::ReadMultipleProperties(schema)

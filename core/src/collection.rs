@@ -1,4 +1,4 @@
-//! Source-independent meaning of the supported Property collection response.
+//! Source-independent meaning of supported Property collection data.
 //! Native representation and aggregation remain codec/Binding/application work.
 use crate::{CoreResult, value_type::TypeSchema};
 use alloc::{boxed::Box, vec::Vec};
@@ -9,9 +9,10 @@ pub struct PropertyMemberSchema {
     pub schema: TypeSchema,
 }
 
-/// Eligible readable-member schemas. All-read requires every member exactly
-/// once; selected-read carries a separate per-call set. Undescribed and writeOnly
-/// members are excluded, not unvalidated optional values. This is the bounded type-only
+/// Eligible member schemas, derived independently for each data role. Read
+/// schemas exclude writeOnly; write schemas exclude readOnly. All operations
+/// require every eligible member exactly once; selected operations carry a
+/// separate per-call set. Excluded members are never optional unvalidated values. This is the bounded type-only
 /// subset, not a general DataSchema tree or a snapshot/atomicity promise.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertyCollectionSchema {

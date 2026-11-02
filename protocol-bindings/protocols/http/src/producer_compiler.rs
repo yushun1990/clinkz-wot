@@ -88,7 +88,9 @@ impl HttpProducerConfig {
         let collection = input.owner == FormOwner::Thing
             && matches!(
                 input.operation,
-                Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                Operation::ReadAllProperties
+                    | Operation::ReadMultipleProperties
+                    | Operation::WriteAllProperties
             );
         if !(collection
             || matches!(
@@ -140,7 +142,11 @@ impl HttpProducerConfig {
         // decoding; accepting extension-free schemas is not validation support.
         let property_map = if collection {
             Some(Arc::new(
-                clinkz_wot_planning::type_schema::prepare_readable_property_schema(document)?,
+                if input.operation == Operation::WriteAllProperties {
+                    clinkz_wot_planning::type_schema::prepare_writable_property_schema(document)?
+                } else {
+                    clinkz_wot_planning::type_schema::prepare_readable_property_schema(document)?
+                },
             ))
         } else {
             None
@@ -171,7 +177,10 @@ impl HttpProducerConfig {
             if node.name().is("http://www.w3.org/2011/http#methodName") {
                 let expected = if multiple {
                     "POST"
-                } else if input.operation != Operation::WriteProperty {
+                } else if !matches!(
+                    input.operation,
+                    Operation::WriteProperty | Operation::WriteAllProperties
+                ) {
                     "GET"
                 } else {
                     "PUT"
@@ -207,7 +216,7 @@ impl HttpProducerConfig {
                     || !node
                         .name()
                         .is("http://www.w3.org/2011/http#statusCodeValue")
-                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if input.operation != Operation::WriteProperty { 200 } else { 204 }))
+                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if !matches!(input.operation, Operation::WriteProperty | Operation::WriteAllProperties) { 200 } else { 204 }))
                 {
                     return Err(producer_unsupported());
                 }

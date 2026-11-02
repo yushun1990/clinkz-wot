@@ -50,7 +50,7 @@ impl HttpProducerProgram {
     }
     pub(crate) fn method(&self) -> &'static str {
         match self.operation {
-            Operation::WriteProperty => "PUT",
+            Operation::WriteProperty | Operation::WriteAllProperties => "PUT",
             Operation::ReadMultipleProperties => "POST",
             _ => "GET",
         }
@@ -195,9 +195,13 @@ impl ProducerExecutor for HttpProducerExecutor {
 }
 impl ProducerOutputValidator for HttpProducerProgram {
     fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
-        if self.operation == Operation::ReadMultipleProperties {
-            // Selected output requires the original invocation input. This
-            // legacy output-only facet cannot certify it as an all-result.
+        if matches!(
+            self.operation,
+            Operation::ReadMultipleProperties | Operation::WriteAllProperties
+        ) {
+            // Selected reads need their original input; collection writes need
+            // complete input validation and empty-result checks. Neither can be
+            // certified by this legacy output-only Property Read facet.
             return Err(producer_unsupported());
         }
         if let Some(schema) = &self.property_map {

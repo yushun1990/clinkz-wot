@@ -53,6 +53,10 @@ pub enum FiniteEffect {
     /// The handler was entered. Even an error or invalid/oversized result may
     /// follow a committed write; implicit replay is not safe.
     Unknown,
+    /// The root collection behavior reported complete success and its result
+    /// passed validation. Does not imply atomic commit, rollback, per-member
+    /// receipts or native reply delivery. Errors after entry remain Unknown.
+    Completed,
 }
 
 /// Whether the original result reached the Binding's declared delivery edge.
@@ -98,15 +102,17 @@ impl core::fmt::Debug for RawFiniteSettlement {
     }
 }
 
-/// Basic Property/collection-read result shape. Raw mode permits unvalidated data bytes, not
-/// Action status/invocation metadata, untrusted Binding response claims, or a
-/// missing Read value. This initial Write facet supports empty success only.
+/// Basic finite Property/collection result shape. Raw mode permits unvalidated
+/// data bytes, not Action metadata, untrusted Binding response claims or a
+/// missing Read value. Supported writes require empty success. A root collection
+/// write handler must report success only after the whole requested group has
+/// completed; failure after entry cannot establish absence of partial effects.
 pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutput) -> bool {
     match operation {
         Operation::ReadProperty
         | Operation::ReadAllProperties
         | Operation::ReadMultipleProperties => crate::response::property_read_handler_shape(output),
-        Operation::WriteProperty => {
+        Operation::WriteProperty | Operation::WriteAllProperties => {
             let metadata = output.metadata();
             output.data().is_none()
                 && output.status() == InteractionStatus::Ok

@@ -126,7 +126,9 @@ impl Ingress {
         let program = &self.programs[mapping];
         let has_input = matches!(
             program.operation,
-            Operation::WriteProperty | Operation::ReadMultipleProperties
+            Operation::WriteProperty
+                | Operation::WriteAllProperties
+                | Operation::ReadMultipleProperties
         );
         let mut host = 0;
         let mut length = 0;
@@ -339,10 +341,11 @@ impl NativeConnection {
                 && std::str::from_utf8(&p.body)
                     .is_ok_and(|json| serde_json::from_str::<serde::de::IgnoredAny>(json).is_ok())
         });
-        let write_success = self.bridge.lock().unwrap().operation == Some(Operation::WriteProperty)
-            && result.is_ok_and(|o| {
-                clinkz_wot_core::finite::raw_finite_property_shape(Operation::WriteProperty, o)
-            });
+        let operation = self.bridge.lock().unwrap().operation;
+        let write_success = operation.is_some_and(|op| {
+            matches!(op, Operation::WriteProperty | Operation::WriteAllProperties)
+                && result.is_ok_and(|o| clinkz_wot_core::finite::raw_finite_property_shape(op, o))
+        });
         if result.is_ok() && body.is_none() && !write_success {
             // Raw results still need an executable native encoding. Refuse
             // before queuing/writing anything; a replacement 500 would not be

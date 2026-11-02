@@ -23,7 +23,9 @@ impl HostSemanticCompiler for HttpCompiler {
         let collection = input.owner == FormOwner::Thing
             && matches!(
                 input.operation,
-                Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                Operation::ReadAllProperties
+                    | Operation::ReadMultipleProperties
+                    | Operation::WriteAllProperties
             );
         if !(collection
             || matches!(
@@ -43,9 +45,12 @@ impl HostSemanticCompiler for HttpCompiler {
             .document
             .form(input.owner, input.form_index)
             .ok_or_else(unsupported)?;
-        let write = input.operation == Operation::WriteProperty;
+        let write = matches!(
+            input.operation,
+            Operation::WriteProperty | Operation::WriteAllProperties
+        );
         let multiple = input.operation == Operation::ReadMultipleProperties;
-        if multiple
+        if (multiple || input.operation == Operation::WriteAllProperties)
             && input.document.scope(SemanticScope::Thing).is_none_or(|n| {
                 n.children()
                     .any(|n| !crate::producer_compiler::class_assertion(n))
@@ -122,7 +127,16 @@ impl HostSemanticCompiler for HttpCompiler {
             if write && output.method != "PUT" {
                 return Err(unsupported());
             }
-            if collection && output.method != if multiple { "POST" } else { "GET" } {
+            if collection
+                && output.method
+                    != if write {
+                        "PUT"
+                    } else if multiple {
+                        "POST"
+                    } else {
+                        "GET"
+                    }
+            {
                 return Err(unsupported());
             }
         }
@@ -165,7 +179,10 @@ impl HostSemanticCompiler for HttpCompiler {
         }
         // Other standardized HTTP instructions are outside this declared slice.
         for node in form.children() {
-            if multiple && !http_name(node) && !crate::producer_compiler::class_assertion(node) {
+            if (multiple || input.operation == Operation::WriteAllProperties)
+                && !http_name(node)
+                && !crate::producer_compiler::class_assertion(node)
+            {
                 return Err(unsupported());
             }
             if http_name(node)
@@ -229,6 +246,6 @@ fn text(node: SemanticNode<'_>) -> CoreResult<&str> {
 pub(super) fn unsupported() -> CoreError {
     CoreError::UnsupportedOperation(
         ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-            .with_redacted_cause(610, "unsupported HTTP read mapping"),
+            .with_redacted_cause(610, "unsupported HTTP finite mapping"),
     )
 }

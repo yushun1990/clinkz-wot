@@ -258,7 +258,10 @@ pub(super) async fn exchange(
     input: Option<Payload>,
     allowance: Arc<AtomicUsize>,
 ) -> CoreResult<(u16, Vec<u8>)> {
-    let write = instructions.operation == Operation::WriteProperty;
+    let write = matches!(
+        instructions.operation,
+        Operation::WriteProperty | Operation::WriteAllProperties
+    );
     let socket = TcpStream::connect(target.address).await.map_err(|_| {
         // Socket/process/network availability is not a captured ingress or
         // concurrency limit. Keep returned I/O failure structured even when

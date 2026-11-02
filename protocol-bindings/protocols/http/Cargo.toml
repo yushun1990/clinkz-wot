@@ -62,3 +62,7 @@ required-features = ["prepare"]
 [[example]]
 name = "read_multiple_properties"
 required-features = ["prepare"]
+
+[[example]]
+name = "write_all_properties"
+required-features = ["prepare"]

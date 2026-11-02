@@ -8,35 +8,72 @@ use clinkz_wot_td::semantic::{
     SchemaConstraints, SchemaView, SemanticName, SemanticNode, SemanticValue,
 };
 
-// Borrowed census only: callers can fund a schema's vector and every member
-// destructor before acquiring any of them, including partial-construction paths.
-pub(crate) fn readable_member_count(
+// Borrowed census lets callers prepay construction and destruction of each
+// role-specific schema, including partial-construction paths.
+#[derive(Clone, Copy)]
+enum Members {
+    Readable,
+    Writable,
+}
+impl Members {
+    fn includes(self, schema: SchemaView<'_>) -> bool {
+        let facts = schema.facts();
+        match self {
+            Self::Readable => !facts.write_only,
+            Self::Writable => !facts.read_only,
+        }
+    }
+}
+fn member_count(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    role: Members,
 ) -> CoreResult<usize> {
     let count = doc
         .collection_properties()
         .ok_or_else(refused)?
-        .filter(|p| !p.schema.facts().write_only)
+        .filter(|p| role.includes(p.schema))
         .count();
     if count > clinkz_wot_core::collection::PropertyCollectionSchema::MAX_MEMBERS {
         return Err(refused());
     }
     Ok(count)
 }
-
-/// TD 1.1 §6.3.9.6: retain every eligible readable Property and its complete
-/// supported schema; all/selected invocation scope remains separate. No individual Form, behavior or native read is consulted.
+pub(crate) fn readable_member_count(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<usize> {
+    member_count(doc, Members::Readable)
+}
+pub(crate) fn writable_member_count(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<usize> {
+    member_count(doc, Members::Writable)
+}
+/// TD 1.1: every non-writeOnly Property and its complete supported schema.
+/// No individual Form, behavior or native read is consulted.
 pub fn prepare_readable_property_schema(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<clinkz_wot_core::collection::PropertyCollectionSchema> {
+    prepare_members(doc, Members::Readable)
+}
+/// TD 1.1: every non-readOnly Property, including writeOnly members. The
+/// invocation's all/selected scope is separate from this immutable eligibility.
+pub fn prepare_writable_property_schema(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<clinkz_wot_core::collection::PropertyCollectionSchema> {
+    prepare_members(doc, Members::Writable)
+}
+fn prepare_members(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    role: Members,
 ) -> CoreResult<clinkz_wot_core::collection::PropertyCollectionSchema> {
     use clinkz_wot_core::collection::{PropertyCollectionSchema as S, PropertyMemberSchema};
     let mut members = alloc::vec::Vec::new();
     members
-        .try_reserve_exact(readable_member_count(doc)?)
+        .try_reserve_exact(member_count(doc, role)?)
         .map_err(|_| clinkz_wot_core::consumer::busy())?;
     let mut bytes = 0;
     for p in doc.collection_properties().ok_or_else(refused)? {
-        if p.schema.facts().write_only {
+        if !role.includes(p.schema) {
             continue;
         }
         bytes += p.name.len();

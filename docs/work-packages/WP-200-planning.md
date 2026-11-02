@@ -301,6 +301,10 @@ performs encoding. Complete final qualification compares the original eligible
 member meaning. The [selected-read tests](../../protocol-bindings/protocols/http/tests/read_multiple_properties.rs)
 exercise static refusal, actual services, source destruction and cleanup credit.
 
-WriteAllProperties, WriteMultipleProperties and long-lived
-collection operations remain unimplemented. This scoped capability changes no
+WriteAllProperties adds an independently derived writable **input** schema and
+actual map validation support to the same finite preparation, without selection
+encoding or an output map. Member eligibility, work and separate schema cleanup
+are covered by the [collection-write tests](../../protocol-bindings/protocols/http/tests/write_all_properties.rs).
+
+WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

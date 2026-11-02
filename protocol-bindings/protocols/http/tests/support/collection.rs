@@ -33,10 +33,18 @@ fn cx() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
 fn address() -> SocketAddr {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
+    // TD preparation needs the endpoint before native installation. Avoid
+    // assigning the same kernel-selected port to parallel staged fixtures.
+    static USED: std::sync::Mutex<Vec<SocketAddr>> = std::sync::Mutex::new(Vec::new());
+    let mut used = USED.lock().unwrap();
+    loop {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        if !used.contains(&addr) {
+            used.push(addr);
+            return addr;
+        }
+    }
 }
 fn bank() -> Arc<HostResourceAccounts> {
     Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS))
@@ -83,6 +91,9 @@ struct Application {
     drops: Cell<usize>,
     fixed_selection_response: Cell<bool>,
     selections: RefCell<Vec<Vec<String>>>,
+    authorizations: Cell<usize>,
+    write_fault: Cell<u8>,
+    applied: RefCell<Value>,
 }
 struct Behavior(Rc<Application>);
 impl Drop for Behavior {
@@ -92,6 +103,7 @@ impl Drop for Behavior {
 }
 impl RawFiniteHandler for Behavior {
     fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+        self.0.authorizations.set(self.0.authorizations.get() + 1);
         if self.0.denies.get() {
             Err(denied())
         } else {
@@ -138,6 +150,28 @@ impl RawFiniteHandler for Behavior {
                 Ok(InteractionOutput::with_data(payload(
                     &self.0.value.borrow(),
                 )))
+            }
+            Operation::WriteAllProperties => {
+                assert_eq!(ctx.target(), &AffordanceTarget::Thing);
+                self.0.roots.set(self.0.roots.get() + 1);
+                let values: Value =
+                    serde_json::from_slice(&input.data.as_ref().unwrap().body).unwrap();
+                // Real application effects are deliberately sequential. A root
+                // operation does not acquire atomicity from one network request.
+                if self.0.write_fault.get() == 5 {
+                    return Err(denied());
+                }
+                self.0.applied.borrow_mut()["on"] = values["on"].clone();
+                if self.0.write_fault.get() == 1 {
+                    return Err(denied());
+                }
+                *self.0.applied.borrow_mut() = values;
+                match self.0.write_fault.get() {
+                    2 => Err(denied()),
+                    3 => Ok(InteractionOutput::with_data(payload(b"{}"))),
+                    4 => Ok(InteractionOutput::empty().with_status(InteractionStatus::Accepted)),
+                    _ => Ok(InteractionOutput::empty()),
+                }
             }
             Operation::ReadProperty => {
                 self.0.reads.set(self.0.reads.get() + 1);
@@ -291,9 +325,17 @@ fn exposure(
             Behavior(app.clone()),
         ),
     ];
+    if td["properties"]["on"]["readOnly"] == false {
+        behaviors.push(RawFiniteBehavior::new(
+            AffordanceTarget::Property(Arc::from("on")),
+            Operation::WriteProperty,
+            Behavior(app.clone()),
+        ));
+    }
     for (name, operation) in [
         ("readallproperties", Operation::ReadAllProperties),
         ("readmultipleproperties", Operation::ReadMultipleProperties),
+        ("writeallproperties", Operation::WriteAllProperties),
     ] {
         if td["forms"]
             .as_array()
@@ -432,6 +474,12 @@ impl Fixture {
         );
         let server = exposure.participant_mut::<Server>(0).unwrap();
         let _ = server.step(&mut cx(), &mut work(), now(0));
+        assert_eq!(
+            server.state(),
+            RawFiniteState::InstalledClosed,
+            "native setup failed: {:?}",
+            server.first_cause()
+        );
         let addr = server
             .closed_binding()
             .unwrap()
@@ -555,7 +603,9 @@ fn client(
         .find(|d| {
             matches!(
                 d.operation(),
-                Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                Operation::ReadAllProperties
+                    | Operation::ReadMultipleProperties
+                    | Operation::WriteAllProperties
             )
         })
         .unwrap();
@@ -610,6 +660,10 @@ fn collection_description(addr: SocketAddr, operation: Operation) -> Value {
         td["forms"][0]["op"] = json!("readmultipleproperties");
         td["forms"][0]["htv:methodName"] = json!("POST");
     }
+    if operation == Operation::WriteAllProperties {
+        td["forms"][0]["op"] = json!("writeallproperties");
+        td["properties"]["on"]["readOnly"] = json!(false);
+    }
     td
 }
 fn start_collection_at(
@@ -619,6 +673,15 @@ fn start_collection_at(
 ) -> CoreResult<ConsumerCall> {
     if operation == Operation::ReadMultipleProperties {
         client.read_multiple_properties(&["on"], deadline, now(0), &mut work())
+    } else if operation == Operation::WriteAllProperties {
+        client
+            .write_all_properties(
+                payload(br#"{"on":false,"secret":"updated"}"#),
+                deadline,
+                now(0),
+                &mut work(),
+            )
+            .map_err(|e| e.error().error().clone())
     } else {
         client.read_all_properties(deadline, now(0), &mut work())
     }
@@ -709,6 +772,13 @@ fn verify_collection_lifecycle(operation: Operation) {
             assert!(remote.result.is_ok());
             assert_eq!(remote.target, Some(AffordanceTarget::Thing));
             assert_eq!(remote.delivery, FiniteDelivery::NotDelivered);
+            if operation == Operation::WriteAllProperties {
+                assert_eq!(remote.effect, FiniteEffect::Completed);
+                assert_eq!(
+                    *server.app.applied.borrow(),
+                    json!({"on":false,"secret":"updated"})
+                );
+            }
             assert_eq!(server.controls.requests.get(), 1);
             assert_eq!(server.app.roots.get(), 1);
             assert_eq!(server.app.reads.get(), 0);
@@ -774,6 +844,26 @@ fn verify_collection_replacement(operation: Operation) {
             let (local, remote) = server.exchange(&mut call).await;
             assert_eq!(local.result().is_ok(), accepted);
             assert_eq!(remote.recipient, Some(old));
+            if operation == Operation::WriteAllProperties {
+                assert_eq!(
+                    remote.effect,
+                    if accepted {
+                        FiniteEffect::Completed
+                    } else {
+                        FiniteEffect::NotInvoked
+                    }
+                );
+                assert_eq!(
+                    local.effect(),
+                    if accepted {
+                        ConsumerEffect::Completed
+                    } else {
+                        ConsumerEffect::Unknown
+                    }
+                );
+                assert_eq!(server.app.applied.borrow().is_null(), !accepted);
+                assert!(next_app.applied.borrow().is_null());
+            }
             assert_eq!(
                 remote.target,
                 if accepted {
@@ -797,7 +887,14 @@ fn verify_collection_replacement(operation: Operation) {
             drop(client);
             clean(&accounts);
             server.close();
-            assert_eq!(next_app.drops.get(), 4);
+            assert_eq!(
+                next_app.drops.get(),
+                if operation == Operation::WriteAllProperties {
+                    5
+                } else {
+                    4
+                }
+            );
         }
     });
 }
@@ -810,6 +907,10 @@ fn verify_collection_publication(operation: Operation) {
         let mut peer = TcpStream::connect(addr).unwrap();
         if operation == Operation::ReadMultipleProperties {
             write!(peer, "POST /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: 6\r\n\r\n[\"on\"]").unwrap();
+        } else if operation == Operation::WriteAllProperties {
+            let body = br#"{"on":false,"secret":"updated"}"#;
+            write!(peer, "PUT /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).unwrap();
+            peer.write_all(body).unwrap();
         } else {
             write!(peer, "GET /properties HTTP/1.1\r\nHost: {addr}\r\n\r\n").unwrap();
         }
@@ -838,7 +939,7 @@ fn verify_collection_publication(operation: Operation) {
             }
             assert!(start.elapsed() < Duration::from_secs(5));
         }
-        assert!(bytes.starts_with(b"HTTP/1.1 200"));
+        assert!(bytes.starts_with(if operation == Operation::WriteAllProperties { b"HTTP/1.1 204" } else { b"HTTP/1.1 200" }));
         assert_eq!(server.app.roots.get(), 1);
         drop(server.server().take_settlement().unwrap());
         let accounts = bank();
@@ -898,11 +999,7 @@ fn verify_collection_authorization(operation: Operation) {
         let denied = Arc::new(AtomicBool::new(false));
         let client = client(td.clone(), denied.clone(), accounts.clone(), &owner);
         denied.store(true, Ordering::Relaxed);
-        assert!(
-            client
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
-                .is_err()
-        );
+        assert!(start_collection_at(&client, operation, Deadline::NONE).is_err());
         let mut server = Fixture::new(td);
         assert_eq!(server.controls.requests.get(), 0);
         denied.store(false, Ordering::Relaxed);
@@ -998,12 +1095,12 @@ fn verify_collection_cleanup(operation: Operation) {
         let addr = address();
         let mut td = description(addr);
         td["forms"] = json!([
-            {"op":operation.as_str(),"href":format!("http://{addr}/skip"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else {"GET"}},
-            {"op":operation.as_str(),"href":format!("http://{addr}/properties"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else {"GET"}}
+            {"op":operation.as_str(),"href":format!("http://{addr}/skip"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else if operation == Operation::WriteAllProperties {"PUT"} else {"GET"}},
+            {"op":operation.as_str(),"href":format!("http://{addr}/properties"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else if operation == Operation::WriteAllProperties {"PUT"} else {"GET"}}
         ]);
         td["properties"] = json!({});
         for i in 0..count {
-            td["properties"][format!("p{i}")] = json!({"type":"integer", "readOnly":true,
+            td["properties"][format!("p{i}")] = json!({"type":"integer", "readOnly":operation != Operation::WriteAllProperties,
                 "forms":[{"href":format!("http://{addr}/p{i}")}]});
         }
         td
@@ -1212,7 +1309,7 @@ fn verify_collection_validator_bound(operation: Operation) {
             }
         }
     }
-    struct ChangingHandler(Rc<Cell<u64>>, u64);
+    struct ChangingHandler(Rc<Cell<u64>>, u64, Operation);
     impl RawFiniteHandler for ChangingHandler {
         fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
             Ok(())
@@ -1223,6 +1320,9 @@ fn verify_collection_validator_bound(operation: Operation) {
             _: &InteractionInput,
         ) -> CoreResult<InteractionOutput> {
             self.0.set(self.1);
+            if self.2 == Operation::WriteAllProperties {
+                return Ok(InteractionOutput::empty());
+            }
             Ok(InteractionOutput::with_data(payload(
                 br#"{"level":7,"on":true}"#,
             )))
@@ -1271,7 +1371,7 @@ fn verify_collection_validator_bound(operation: Operation) {
                 vec![RawFiniteBehavior::new(
                     AffordanceTarget::Thing,
                     operation,
-                    ChangingHandler(allowance.clone(), next),
+                    ChangingHandler(allowance.clone(), next, operation),
                 )],
             )],
             RawProducerRegistryLimits {
@@ -1314,6 +1414,10 @@ fn verify_collection_validator_bound(operation: Operation) {
         let mut peer = TcpStream::connect(addr).unwrap();
         if operation == Operation::ReadMultipleProperties {
             write!(peer, "POST /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: 14\r\n\r\n[\"level\",\"on\"]").unwrap();
+        } else if operation == Operation::WriteAllProperties {
+            let body = br#"{"on":false,"secret":"updated"}"#;
+            write!(peer, "PUT /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).unwrap();
+            peer.write_all(body).unwrap();
         } else {
             write!(peer, "GET /properties HTTP/1.1\r\nHost: {addr}\r\n\r\n").unwrap();
         }

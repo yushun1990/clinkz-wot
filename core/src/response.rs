@@ -165,6 +165,7 @@ fn validate_finite_binding_output(
                 | Operation::InvokeAction
                 | Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
+                | Operation::WriteAllProperties
         )
         && (!matches!(
             operation,
@@ -172,7 +173,10 @@ fn validate_finite_binding_output(
                 | Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
         ) || output.data().is_some())
-        && (operation != Operation::WriteProperty || output.data().is_none())
+        && (!matches!(
+            operation,
+            Operation::WriteProperty | Operation::WriteAllProperties
+        ) || output.data().is_none())
         && output.status() == InteractionStatus::Ok
         && metadata.payload_role() == ResponsePayloadRole::Application
         && metadata.action_invocation().is_none()

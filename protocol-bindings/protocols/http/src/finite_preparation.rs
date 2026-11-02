@@ -45,9 +45,12 @@ impl HttpFiniteProducer {
             (FormSite::Property(p), Operation::ReadProperty | Operation::WriteProperty) => {
                 p.as_str()
             }
-            (FormSite::Thing, Operation::ReadAllProperties | Operation::ReadMultipleProperties) => {
-                ""
-            }
+            (
+                FormSite::Thing,
+                Operation::ReadAllProperties
+                | Operation::ReadMultipleProperties
+                | Operation::WriteAllProperties,
+            ) => "",
             _ => return Ok(None),
         };
         if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
@@ -137,7 +140,7 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
 }
 
 // This concrete participant supports HTTP Property Read/Write and the native
-// Thing-root ReadAllProperties mapping. The composition selector asks it about
+// Thing-root finite collection mappings. The composition selector asks it about
 // each actual Form/operation; it interprets no Action/Event lifecycle.
 impl ProducerCapability for HttpFiniteProducer {
     fn identity(&self) -> (BindingId, BindingGeneration) {
