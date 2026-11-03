@@ -116,6 +116,38 @@ through the applicable architecture process. Questioning an accepted design is
 permitted and expected when new evidence justifies it; silently diverging from
 it is not.
 
+### Binding-Driven Architecture Feedback
+
+Evaluate the Engine and SPI against the enduring protocol-independent W3C WoT
+goal, not merely whether the current implementation can pass review. Each
+substantive Binding integration is an opportunity to test the semantic model,
+public API, ownership boundaries, and the assumptions behind them. A limitation
+matters regardless of which PR introduced it. Existing code, prior ADRs,
+passing tests, and independent acceptance are evidence of scoped correctness,
+not proof that the underlying architecture is the right one.
+
+Distinguish inherent protocol or remote-effect uncertainty, a deliberately
+unsupported combination, and a structural Engine/SPI limitation. In particular,
+do not force a Binding to discard legitimate native evidence or distinctions
+(such as supported per-member collection outcomes or actual atomicity guarantees)
+to fit a lowest-common-denominator result type. Equally, do not invent
+transactional, delivery, or rollback guarantees that a Binding cannot establish.
+The Engine owns shared WoT semantics, logical authority, and truthful outcome
+representation; Bindings retain native mapping, execution, and physical
+resource ownership. Protocol-specific mechanics must not leak into Core merely
+to express a missing capability.
+
+When a concrete, relevant Binding or WoT counterexample exposes a structural
+gap, evaluate correction or replacement of the Engine/SPI abstraction against
+local adaptation, and migrate any changed architecture through its existing
+authority process. Do not postpone a known design defect because its current
+Binding can work around it; do not build speculative universal abstractions for
+unproven cases. Choose capability work partly for the architectural assumptions
+it can challenge. Reviews assess architectural fitness separately from
+implementation correctness and must not treat a successful PR as settling a
+broader design question. This feedback loop adds no new gate, approval stage,
+or parallel governance artifact.
+
 ## Capability Allocation: Max, XHigh, and High
 
 Model/profile selection is a compute-allocation choice inside a task session,
