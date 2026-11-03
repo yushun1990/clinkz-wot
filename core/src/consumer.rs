@@ -9,7 +9,7 @@ use clinkz_wot_foundation::{ResourceKind, WorkBudget, WorkClass};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Actual codec and type-validation implementation. Preparation checks the
-/// entire schema subset; this service validates bytes on every normal/late result.
+/// entire schema subset; this service validates input and normal/late result bytes.
 /// Callbacks are trusted, pure and bounded by their captured declared policy.
 /// Metadata/support/availability queries are bounded allocation-free passive
 /// inspection; they acquire no credentials, source documents or native I/O.
@@ -175,15 +175,34 @@ pub enum ConsumerFiniteSchemas {
     Value(ConsumerSchemas),
     ReadAllProperties(PropertyCollectionSchema),
     ReadMultipleProperties(PropertyCollectionSchema),
+    /// Complete writable-member input; empty success has no output schema.
+    WriteAllProperties(PropertyCollectionSchema),
 }
 impl ConsumerFiniteSchemas {
     pub fn input(&self) -> Option<TypeSchema> {
         match self {
             Self::Value(s) => s.input,
             Self::ReadAllProperties(_) => None,
+            Self::WriteAllProperties(_) => {
+                Some(TypeSchema::Type(crate::value_type::ValueType::Object))
+            }
             Self::ReadMultipleProperties(_) => {
                 Some(TypeSchema::Type(crate::value_type::ValueType::Array))
             }
+        }
+    }
+    /// Called under the captured data policy's complete validation allowance.
+    /// A writable map is validated in full before native admission.
+    pub fn validate_input(
+        &self,
+        data: &dyn ConsumerDataService,
+        payload: Option<&Payload>,
+    ) -> CoreResult<()> {
+        match (self, payload) {
+            (Self::WriteAllProperties(schema), Some(p)) => data.validate_property_map(schema, p),
+            (_, Some(p)) => data.validate(self.input().ok_or_else(invalid)?, p),
+            (_, None) if self.input().is_none() => Ok(()),
+            _ => Err(invalid()),
         }
     }
     pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
@@ -193,7 +212,9 @@ impl ConsumerFiniteSchemas {
                 .into_iter()
                 .chain(s.output)
                 .all(|s| data.supports_schema(s)),
-            Self::ReadAllProperties(s) => data.supports_property_map(s),
+            Self::ReadAllProperties(s) | Self::WriteAllProperties(s) => {
+                data.supports_property_map(s)
+            }
             Self::ReadMultipleProperties(s) => {
                 data.policy().encoded_selection_bytes > 0
                     && self
@@ -210,7 +231,10 @@ impl ConsumerFiniteSchemas {
         payload: Option<&Payload>,
     ) -> CoreResult<()> {
         match (self, payload) {
-            (Self::Value(ConsumerSchemas { output: None, .. }), None) => Ok(()),
+            (
+                Self::Value(ConsumerSchemas { output: None, .. }) | Self::WriteAllProperties(_),
+                None,
+            ) => Ok(()),
             (
                 Self::Value(ConsumerSchemas {
                     output: Some(s), ..
@@ -227,15 +251,17 @@ impl ConsumerFiniteSchemas {
     pub fn retained_bytes(&self) -> usize {
         match self {
             Self::Value(_) => 0,
-            Self::ReadAllProperties(s) | Self::ReadMultipleProperties(s) => s.retained_bytes(),
+            Self::ReadAllProperties(s)
+            | Self::ReadMultipleProperties(s)
+            | Self::WriteAllProperties(s) => s.retained_bytes(),
         }
     }
     pub fn drop_work(&self) -> u64 {
         match self {
             Self::Value(_) => 0,
-            Self::ReadAllProperties(s) | Self::ReadMultipleProperties(s) => {
-                s.members().len() as u64 + 1
-            }
+            Self::ReadAllProperties(s)
+            | Self::ReadMultipleProperties(s)
+            | Self::WriteAllProperties(s) => s.members().len() as u64 + 1,
         }
     }
 }
@@ -362,7 +388,12 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConsumerEffect {
     NotAttempted,
+    /// Remote effects may include a partially applied collection. No replay.
     Unknown,
+    /// A collection's native successful completion was validated. This is
+    /// evidence of the whole group completion, not atomicity or rollback.
+    /// Local cancellation/policy failure can still refuse application handoff.
+    Completed,
 }
 
 /// One immutable selected executor, native definition, actual services and
@@ -421,7 +452,9 @@ impl ConsumerDefinition {
                 ) | (AffordanceTarget::Action(_), Operation::InvokeAction)
                     | (
                         AffordanceTarget::Thing,
-                        Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                        Operation::ReadAllProperties
+                            | Operation::ReadMultipleProperties
+                            | Operation::WriteAllProperties
                     )
             )
             || !matches!(
@@ -446,6 +479,10 @@ impl ConsumerDefinition {
                     | (
                         ConsumerFiniteSchemas::ReadMultipleProperties(_),
                         Operation::ReadMultipleProperties
+                    )
+                    | (
+                        ConsumerFiniteSchemas::WriteAllProperties(_),
+                        Operation::WriteAllProperties
                     )
             )
             || policy.validation_work == 0

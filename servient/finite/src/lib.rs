@@ -359,7 +359,9 @@ impl RawProducerServient {
                         if name.len() <= limits.target_name_bytes)
                     || matches!(
                         behavior.operation,
-                        Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                        Operation::ReadAllProperties
+                            | Operation::ReadMultipleProperties
+                            | Operation::WriteAllProperties
                     ) && behavior.target == AffordanceTarget::Thing)
                     && !instance.behaviors[..j].iter().any(|prior| {
                         prior.operation == behavior.operation && prior.target == behavior.target
@@ -582,6 +584,9 @@ impl RawProducerServient {
                     return Err(error);
                 }
                 validator.validate_output(&ingress.candidates[0], &ingress.input, &output)?;
+            }
+            if behavior.operation == Operation::WriteAllProperties {
+                effect = FiniteEffect::Completed;
             }
             Ok(output)
         });

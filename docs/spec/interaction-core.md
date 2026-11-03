@@ -46,7 +46,7 @@ role differs from a present unconstrained value. `ConsumerFiniteSchemas` retains
 either those roles or the derived Property collection member schema explicitly.
 The current finite path supports Property Read/Write, explicitly synchronous
 Action invocation (including empty data roles), and Thing-root
-ReadAllProperties/ReadMultipleProperties. Shape/identity seals require terminal
+ReadAllProperties/ReadMultipleProperties/WriteAllProperties. Shape/identity seals require terminal
 primary application results and refuse continuing status/invocation references; captured codec/schema
 checks separately precede input effects and validated result handoff.
 
@@ -254,7 +254,7 @@ Explicit application fan-out is a separate bounded capability with its own
 promised guarantees. Native group distribution and matching stay Binding-owned.
 
 The implemented collection subset is TD-driven **ReadAllProperties** and
-**ReadMultipleProperties** in both
+**ReadMultipleProperties**, plus **WriteAllProperties**, in both
 roles. Its coordinate is `AffordanceTarget::Thing`, with its own actual root
 Form and operation; individual Property Forms supply no collection mapping or
 behavior. In accordance with [TD 1.1 §6.3.9.6](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing),
@@ -289,11 +289,44 @@ synthesizes individual reads. Neither dispatch nor a complete valid response
 establishes an atomic snapshot, simultaneous sampling or remote effect certainty.
 Any stronger guarantee needs actual application/Binding support and evidence.
 
-These finite reads add no universal collection lifecycle. All-versus-selected
-scope and read-versus-write data roles remain distinct: all reads still require
-every readable member; all writes concern every writable
-(non-readOnly) member; selected writes retain their chosen writable set and
-partial-effect evidence. Future observation/subscription or continuing collection
+WriteAllProperties has a distinct writable-member **input** schema, independent
+of either readable output map. Every writable (non-readOnly) Property, including
+writeOnly members, MUST appear exactly once with its own schema-valid value.
+ReadOnly, unknown, duplicate and missing members refuse the whole input. An empty
+writable set permits only an empty map. The supported implementation is type-only;
+unsupported assertions on any included member refuse preparation rather than
+silently weaken validation. Individual Property Forms grant no collection support.
+Complete input validation and group authorization MUST precede application
+effects. Engine dispatch enters one distinct root behavior once, and native
+execution performs one actual collection interaction; no N-WriteProperty lowering
+is allowed. An empty successful root result reports completed application of the
+whole group. The handler MUST NOT use success to mean merely accepted, partially
+applied or individually successful members. Neither this report nor validation
+proves atomic commit, ordering, rollback or independent physical-state confirmation.
+
+Collection outcome evidence has independent axes:
+
+| Evidence | Meaning |
+| --- | --- |
+| Producer `FiniteEffect::NotInvoked` | Validation/authorization/admission refused before behavior entry; no application effect attempted. |
+| Producer `FiniteEffect::Unknown` | Behavior entered without a valid complete result; some, all or no members may have changed. An error does not undo effects. |
+| Producer `FiniteEffect::Completed` | Root behavior reported whole-group completion and passed result validation. Native delivery is separate. |
+| Consumer `ConsumerEffect::NotAttempted` / local admission refusal | No native progress was attempted. |
+| Consumer `ConsumerEffect::Unknown` | Native progress lacks validated completion evidence; remote refusal, partial application or full completion remain possible. |
+| Consumer `ConsumerEffect::Completed` | Selected native mapping returned a validated whole-group completion. Local handoff still requires original authority and fresh policy. |
+
+For this increment the new Completed variants are emitted only for
+WriteAllProperties. Existing finite Read/Property Write/Action effect reporting
+is unchanged. A completed unread native result keeps its completion evidence if
+local cancellation, replacement, timeout or policy loss subsequently refuses
+handoff. Original native outcome, first cause, result and delivery remain separate.
+No owner automatically replays an effect-uncertain collection write or claims
+per-member success from it. A Producer pre-effect refusal does not become known
+to a Consumer through a generic native error response without a supported mapping.
+
+These finite operations add no universal collection lifecycle. All-versus-selected
+scope and read-versus-write data roles remain distinct. Future selected writes
+retain their chosen writable set and partial-effect evidence. Future observation/subscription or continuing collection
 operations need the appropriate retained owners and mapped controls, rather than
 being forced through this finite result. Those operations remain unimplemented.
 
@@ -317,7 +350,7 @@ An admitted native success is not by itself a successful application outcome:
 `result()`, which also requires terminal shape, captured validation, live original
 authority and fresh policy. A successful Write result reports completion under
 the selected mapping; it is not a Read or independent confirmation of physical
-state. Producer `FiniteEffect::NotInvoked/Unknown`, application result and native
+state. Producer `FiniteEffect::NotInvoked/Unknown/Completed`, application result and native
 `FiniteDelivery` are separate axes. A handler error or invalid result after entry
 cannot downgrade Unknown to NotInvoked. No finite owner replays a write.
 

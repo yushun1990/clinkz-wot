@@ -129,6 +129,10 @@ The [selected-read tests](../../protocol-bindings/protocols/http/tests/read_mult
 exercise real native input, validation-service loss, changed work bounds and
 retirement. Exact wire support belongs to the HTTP mapping contract.
 
-WriteAllProperties, WriteMultipleProperties and long-lived
-collection operations remain unimplemented. This scoped capability changes no
+WriteAllProperties adds one native group write using the same finite facet,
+with a complete writable input validator and empty completion. HTTP owns PUT,
+204/EOF completion and failure mapping. The [collection-write tests](../../protocol-bindings/protocols/http/tests/write_all_properties.rs)
+exercise uncertain completion, original validator bounds and physical retirement.
+
+WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

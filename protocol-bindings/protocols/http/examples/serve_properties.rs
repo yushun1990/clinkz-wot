@@ -1,7 +1,7 @@
 //! cargo run -p clinkz-wot-binding-http --example serve_properties -- 8082 30 > TD.json
 //! cargo run -p clinkz-wot-binding-http --example read_all_properties -- TD.json
 //! One completely qualified Thing, one native listener, and an application-owned
-//! combined value. No simultaneous sampling/atomic snapshot guarantee is implied.
+//! combined value. No transactional or atomic snapshot guarantee is implied.
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::{finite::*, host_accounts::HostResourceAccounts, producer::*, *};
 use clinkz_wot_foundation::*;
@@ -10,6 +10,7 @@ use clinkz_wot_servient::producer_composition::*;
 use clinkz_wot_servient_finite::*;
 use clinkz_wot_td::ValidatedProducerScope;
 use std::{
+    cell::RefCell,
     net::SocketAddr,
     rc::Rc,
     sync::Arc,
@@ -17,7 +18,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-struct Values;
+struct Values(Rc<RefCell<serde_json::Value>>);
 impl RawFiniteHandler for Values {
     fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
         Ok(())
@@ -27,30 +28,48 @@ impl RawFiniteHandler for Values {
         ctx: HandlerContext<'_>,
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
-        if ctx.operation() == Operation::ReadMultipleProperties {
-            let requested: Vec<String> =
-                serde_json::from_slice(&input.data.as_ref().unwrap().body).unwrap();
-            let values = serde_json::json!({"level":7,"on":true});
-            let selected: serde_json::Map<String, serde_json::Value> = requested
-                .into_iter()
-                .map(|name| {
-                    let value = values[&name].clone();
-                    (name, value)
-                })
-                .collect();
-            return Ok(InteractionOutput::with_data(Payload::new(
-                serde_json::to_vec(&selected).unwrap(),
-                "application/json",
-            )));
+        match ctx.operation() {
+            Operation::WriteAllProperties | Operation::WriteProperty => {
+                let value =
+                    serde_json::from_slice(&input.data.as_ref().unwrap().body).map_err(|_| {
+                        CoreError::Validation(ErrorContext::new(
+                            ErrorPhase::Handler,
+                            RetryClass::Never,
+                        ))
+                    })?;
+                if ctx.operation() == Operation::WriteAllProperties {
+                    *self.0.borrow_mut() = value;
+                } else {
+                    self.0.borrow_mut()[ctx.target().name().unwrap()] = value;
+                }
+                return Ok(InteractionOutput::empty());
+            }
+            Operation::ReadMultipleProperties => {
+                let requested: Vec<String> =
+                    serde_json::from_slice(&input.data.as_ref().unwrap().body).unwrap();
+                let values = self.0.borrow();
+                let selected: serde_json::Map<String, serde_json::Value> = requested
+                    .into_iter()
+                    .map(|name| {
+                        let value = values[&name].clone();
+                        (name, value)
+                    })
+                    .collect();
+                return Ok(InteractionOutput::with_data(Payload::new(
+                    serde_json::to_vec(&selected).unwrap(),
+                    "application/json",
+                )));
+            }
+            _ => {}
         }
-        let body: &[u8] = match ctx.target() {
-            AffordanceTarget::Thing => br#"{"level":7,"on":true}"#,
-            AffordanceTarget::Property(name) if name.as_ref() == "level" => b"7",
-            AffordanceTarget::Property(name) if name.as_ref() == "on" => b"true",
+        let values = self.0.borrow();
+        let value = match ctx.target() {
+            AffordanceTarget::Thing => &*values,
+            AffordanceTarget::Property(name) => &values[name.as_ref()],
             _ => unreachable!(),
         };
         Ok(InteractionOutput::with_data(Payload::new(
-            body,
+            serde_json::to_vec(value).unwrap(),
             "application/json",
         )))
     }
@@ -73,19 +92,20 @@ fn main() {
         .unwrap();
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let description: Arc<str> = Arc::from(serde_json::json!({
-        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"native collection read",
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"native finite collections",
         "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
         "forms":[{"op":"readallproperties", "href":format!("http://{addr}/properties")},
-            {"op":"readmultipleproperties", "href":format!("http://{addr}/properties"), "htv:methodName":"POST"}],
+            {"op":"readmultipleproperties", "href":format!("http://{addr}/properties"), "htv:methodName":"POST"},
+            {"op":"writeallproperties", "href":format!("http://{addr}/properties")}],
         "properties":{
-            "level":{"type":"integer","readOnly":true,"forms":[{"href":format!("http://{addr}/level")}]},
-            "on":{"type":"boolean","readOnly":true,"forms":[{"href":format!("http://{addr}/on")}]}
+            "level":{"type":"integer","forms":[{"href":format!("http://{addr}/level")}]},
+            "on":{"type":"boolean","forms":[{"href":format!("http://{addr}/on")}]}
         }
     }).to_string());
     let accounts = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
         instances: 1,
-        behaviors_per_instance: 4,
+        behaviors_per_instance: 7,
         target_name_bytes: 256,
     })
     .unwrap();
@@ -94,32 +114,31 @@ fn main() {
         Generation::INITIAL,
     ))
     .unwrap();
-    let instance = RawProducerInstance::new(
-        authority,
-        vec![
-            RawFiniteBehavior::new(
-                AffordanceTarget::Thing,
-                Operation::ReadAllProperties,
-                Values,
-            ),
-            RawFiniteBehavior::new(
-                AffordanceTarget::Thing,
-                Operation::ReadMultipleProperties,
-                Values,
-            ),
-            RawFiniteBehavior::new(
-                AffordanceTarget::Property(Arc::from("level")),
-                Operation::ReadProperty,
-                Values,
-            ),
-            RawFiniteBehavior::new(
-                AffordanceTarget::Property(Arc::from("on")),
-                Operation::ReadProperty,
-                Values,
-            ),
-        ],
-    )
-    .with_description(description.clone());
+    let values = Rc::new(RefCell::new(serde_json::json!({"level":7,"on":true})));
+    let mut behaviors = Vec::new();
+    for operation in [
+        Operation::ReadAllProperties,
+        Operation::ReadMultipleProperties,
+        Operation::WriteAllProperties,
+    ] {
+        behaviors.push(RawFiniteBehavior::new(
+            AffordanceTarget::Thing,
+            operation,
+            Values(values.clone()),
+        ));
+    }
+    for name in ["level", "on"] {
+        for operation in [Operation::ReadProperty, Operation::WriteProperty] {
+            behaviors.push(RawFiniteBehavior::new(
+                AffordanceTarget::Property(Arc::from(name)),
+                operation,
+                Values(values.clone()),
+            ));
+        }
+    }
+    let instance =
+        RawProducerInstance::new(authority, behaviors).with_description(description.clone());
+    drop(values);
     let key = instance.key();
     let listen = HttpProducerConfig::for_loopback(addr).unwrap();
     let provider: Rc<dyn ProducerCapability> = Rc::new(
@@ -187,7 +206,7 @@ fn main() {
             providers: vec![provider],
             participants: vec![Box::new(native)],
             expected: None,
-            handler_backing_bytes: 0,
+            handler_backing_bytes: 8192,
         },
         Arc::new(GatewayDefaultV1::LIMITS.clone()),
         accounts.clone(),

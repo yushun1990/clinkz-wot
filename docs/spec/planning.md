@@ -158,7 +158,7 @@ operation, so same-named
 Properties and Actions do not collide. The current finite facets are Property
 Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
 unspecified synchronicity use the separate Action facet below. Thing-root
-ReadAllProperties and ReadMultipleProperties use the finite facet; other
+ReadAllProperties, ReadMultipleProperties and WriteAllProperties use the finite facet; other
 collection operations remain unsupported.
 Action input/output use distinct prepared type-only schemas; absent roles
 permit no application data. Only one captured media service is currently
@@ -255,7 +255,7 @@ Form semantics and stop support remain the concrete Binding's responsibility.
 
 ## Thing-root Property collection preparation
 
-ReadAllProperties/ReadMultipleProperties select actual root Form/operation/Binding
+ReadAllProperties/ReadMultipleProperties/WriteAllProperties select actual root Form/operation/Binding
 coordinates using the same per-Form semantic loan and actual startup registrations. A Property
 Form is never a fallback collection Form. Consumer selection may retain a root
 operation when individual Property Forms are unsupported; complete Producer
@@ -286,7 +286,20 @@ Both live schema owners also count toward the aggregate cleanup ceiling. A short
 payment reports capacity refusal rather than an unsupported alternative.
 Final Producer qualification compares the original complete member meaning,
 root coordinate and selected actual registration after closed native setup.
-Changing an included schema, readability or member set invalidates prior support.
+Changing an included schema, role eligibility or member set invalidates prior support.
+
+`prepare_writable_property_schema` independently derives every non-readOnly
+Property, including writeOnly members. `ConsumerFiniteSchemas::WriteAllProperties`
+retains this complete **input** map; it has no output schema. Its captured actual
+data service must support named-map validation; generic Object validation alone
+cannot qualify it. The runtime invokes that complete map validator under the
+captured work policy, then rechecks group authorization and all dependencies
+before native admission. It does not invoke an additional generic Object
+validator, selection encoder or individual Property operation. The same member
+census, separate temporary/retained funding and cleanup prepayment apply to the
+writable role. Native preparation performs no writes. Future selected writes
+can retain the writable eligibility separately from their invocation subset;
+WriteMultipleProperties is not implemented here.
 
 The supported schema and HTTP subset are scoped by the
 [collection contract](interaction-core.md) and

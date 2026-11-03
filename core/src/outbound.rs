@@ -97,6 +97,7 @@ impl OutboundRequest {
                     | Operation::InvokeAction
                     | Operation::ReadAllProperties
                     | Operation::ReadMultipleProperties
+                    | Operation::WriteAllProperties
             )
             || (matches!(
                 operation,
@@ -104,7 +105,9 @@ impl OutboundRequest {
             ) && input.is_some())
             || (matches!(
                 operation,
-                Operation::WriteProperty | Operation::ReadMultipleProperties
+                Operation::WriteProperty
+                    | Operation::WriteAllProperties
+                    | Operation::ReadMultipleProperties
             ) && input.is_none())
         {
             return Err(BindingInputRejection::new(

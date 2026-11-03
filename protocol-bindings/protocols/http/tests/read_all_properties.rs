@@ -349,7 +349,9 @@ fn full_producer_qualification_requires_root_behavior_every_form_and_original_me
         let mut bad = td.clone();
         match fault {
             "schema" => bad["properties"]["on"]["const"] = json!(true),
-            "root-op" => bad["forms"][0]["op"] = json!(["readallproperties", "writeallproperties"]),
+            "root-op" => {
+                bad["forms"][0]["op"] = json!(["readallproperties", "writemultipleproperties"])
+            }
             "root-protocol" => bad["forms"]
                 .as_array_mut()
                 .unwrap()

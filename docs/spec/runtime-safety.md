@@ -20,7 +20,7 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
-Thing-root ReadAllProperties/ReadMultipleProperties retain their own root
+Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
 rules. Its bounded schema/name backing and destruction stay funded through final
 release; normal and late data use the captured member validator. Producer
@@ -47,6 +47,17 @@ result. Fencing retains the original result, authority, first cause and funding.
 Loss during validation fences successful application handoff. The
 Producer validates output against its original retained input, including late
 results across authority/service loss, using the same captured validator rules.
+
+WriteAllProperties validates the complete captured writable input map and
+fresh group permission before native admission and before Producer application
+effects. No member is applied by Engine validation or individual behavior fan-out.
+A behavior error, invalid success shape or changed validator bound after entry
+keeps possible partial effects. Completed group evidence is independent of
+native delivery and local handoff, as defined by [Core outcomes](interaction-core.md).
+Consumer uncertainty never triggers replay. Cancellation, replacement, service
+loss and late results keep the original root input, behavior, authority, captured
+services, first cause and all cleanup owners. A validated unread completion
+retains its evidence while fresh policy can still refuse local success.
 
 Property Write uses the same finite cancellation, replacement and settlement
 owners. Input validation and fresh application authorization precede handler

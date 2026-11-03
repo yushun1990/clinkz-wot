@@ -334,7 +334,7 @@ impl<'a> ResolvedSemanticDocument<'a> {
             schema: SchemaView(self.scope(SemanticScope::Property(name)).unwrap()),
         }
     }
-    /// Property schema loans in a Property collection read root Form's semantic closure.
+    /// Property schema loans in a Property collection root Form's semantic closure.
     /// Individual Forms are not lent and need not support the root operation.
     pub fn collection_properties(&self) -> Option<impl Iterator<Item = PropertyFacts<'_>>> {
         if self.selected.as_ref()?.owner != FormOwner::Thing {
@@ -348,6 +348,7 @@ impl<'a> ResolvedSemanticDocument<'a> {
                 op,
                 crate::data_type::Operation::ReadAllProperties
                     | crate::data_type::Operation::ReadMultipleProperties
+                    | crate::data_type::Operation::WriteAllProperties
             )
         }) {
             return None;

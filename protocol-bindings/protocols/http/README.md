@@ -1,4 +1,4 @@
-# Host HTTP Properties, Actions and Collection Reads
+# Host HTTP Properties, Actions and Finite Collections
 
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
 open `ConsumerRegistry`/`ConsumerRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
@@ -653,7 +653,7 @@ content codings, trailers, upgrades, informational responses, malformed/duplicat
 response fields and unexpected status/role combinations refuse this mapping.
 Borrowed JSON RawValue preserves output bytes without constructing a JSON tree;
 the actual captured data service validates them. The HTTP policy fingerprint is
-v11 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
+v12 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
 bounds continuing invocations and unread terminal slots.
 
 `cancel_local`, handle abandonment, deadline, policy/service loss, root close and
@@ -737,7 +737,7 @@ Consumer data policy funds up to `4096 * 40 + 16 * 2` validation work units;
 Producer validation captures and prepays an additional `4096 * 40` units beyond
 the finite owner's base body/media traversal. Member/name backing, bounded
 destruction, captured services and callback scratch retain their original accounts.
-Consumer native policy fingerprint is v11.
+Consumer native policy fingerprint is v12.
 
 The Engine enters the root application behavior once. It does not call or
 implicitly aggregate individual Property handlers. Application/Binding code owns
@@ -749,7 +749,7 @@ replacement, lost services and close keep original root attribution, first cause
 late native/application evidence and physical release owners. No retry or
 individual-read fallback is implied by failure.
 
-WriteAllProperties, WriteMultipleProperties, collection
+WriteMultipleProperties, collection
 observation, query-all Actions and subscribe/unsubscribe-all Events are
 unimplemented. They require their own selected-member/data roles, native support
 and appropriate lifecycle; this finite read does not qualify them. HTTP JSON,
@@ -842,3 +842,68 @@ admission, retained results and final account/socket release. Shared fixtures al
 rerun the existing schema cleanup regressions for selected reads. This remains
 the Host/manual, JSON/type-only, endpoint-NoSec slice; general URI mapping,
 security, HTTPS, constrained profiles and production qualification remain open.
+
+## Thing-root WriteAllProperties
+
+`ConsumerRuntime::write_all_properties(payload, deadline, now, budget)` selects
+one actual Thing-root `writeallproperties` Form and returns the original payload
+on local refusal. Preparation retains every writable (non-readOnly) member's
+name and supported type-only schema, including writeOnly members. The actual
+captured map service validates the complete input; missing, unknown, readOnly,
+duplicate (including escaped duplicate), malformed and invalid members refuse
+before native effects. Readable output schemas and individual Property Forms
+never substitute for that input. Unsupported included assertions decline
+preparation. An empty writable set accepts only `{}`.
+
+This Host/manual, endpoint-NoSec, application/json subset uses exactly one HTTP
+PUT, default or explicit, with one complete JSON object body. Native authority,
+method/path matching, framing, encoding and status interpretation stay in HTTP.
+The same listener may carry separate root reads and individual Property mappings;
+a method/path collision refuses qualification. URI variables/templates, additional
+responses, content coding and unsupported schema/security assertions are declined.
+Complete Producer qualification includes every final retained Form, original
+writable schema, actual native coverage and registered distinct root behavior.
+
+The Producer validates the whole map and authorizes the group before entering
+that behavior once. The behavior must return empty `InteractionStatus::Ok` only
+when the **whole group has completed**; HTTP maps it to 204. Accepted, payload
+results, partial-member envelopes and handler errors are not whole-group success.
+The Consumer's 204 response must have no body, Content-Length or Transfer-Encoding
+and must satisfy the existing Write header checks **through peer EOF**, including
+trailing bytes in later reads. A valid head without EOF is still pending. 200,
+202, 206/207, truncated/extra data, loss or malformed framing leave remote effects
+uncertain; the Consumer cannot infer pre-effect refusal from a generic 500.
+
+`FiniteEffect::NotInvoked` proves no application entry. After entry, failure can
+follow actual partial or complete application; `Unknown` promises neither rollback
+nor per-member results. `FiniteEffect::Completed` records valid whole-group handler
+completion independently of `FiniteDelivery`. `ConsumerEffect::Completed` requires
+validated native completion; otherwise progressed calls remain `Unknown`.
+Original native evidence survives cancellation, replacement, policy loss and
+unread settlement even when local success is refused. No implicit replay,
+N-WriteProperty fallback, transactional atomicity or physical-state confirmation
+is supplied. These are the [Core effect contracts](../../../docs/spec/interaction-core.md).
+
+The existing member descriptor limits apply: 32 members, 256 UTF-8 bytes per
+name, 4096 total name bytes; the semantic loan/profile may refuse earlier. Input
+is at most 4096 bytes. Consumer policy v12 prepays `4096 * 40 + 16 * 2` validation
+work and captured scratch; Producer named-map validation adds `4096 * 40` beyond
+base input/output traversal (or the selected-read allowance when sharing that
+participant). Original input/schema, captured services, native exchange and
+retained cleanup remain funded until their actual disposal/acknowledgement.
+
+The `write_all_properties` integration target exercises both Engine roles and
+independent peers, real partial application, readonly/missing/invalid members,
+service/work refusal, complete publication, cancellation/replacement, unread
+completion and final resource release. WriteMultipleProperties remains open;
+its future caller-selected set can use the same immutable writable eligibility
+without changing all-write completeness. This slice adds no universal collection
+runtime or production, HTTPS, broader schema/security or constrained qualification.
+
+```sh
+cargo test --locked --offline -p clinkz-wot-binding-http --test write_all_properties
+# With serve_properties running and its TD in /tmp/collection-td.json:
+printf '%s' '{"level":8,"on":false}' > /tmp/collection-values.json
+cargo run -p clinkz-wot-binding-http --example write_all_properties -- /tmp/collection-td.json /tmp/collection-values.json
+cargo run -p clinkz-wot-binding-http --example read_all_properties -- /tmp/collection-td.json
+```

@@ -22,7 +22,7 @@ impl<'de> DeserializeSeed<'de> for MemberIndex<'_> {
 impl Visitor<'_> for MemberIndex<'_> {
     type Value = usize;
     fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("a described readable Property name")
+        f.write_str("a described eligible Property name")
     }
     fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<usize, E> {
         self.0
@@ -110,7 +110,7 @@ pub fn encode_property_selection(
     Ok(Payload::new(buffer.0, "application/json"))
 }
 
-/// One object containing every readable Property exactly once.
+/// One object containing every member of this role-specific schema exactly once.
 pub fn validate_property_map(
     schema: &PropertyCollectionSchema,
     payload: &Payload,
@@ -149,7 +149,7 @@ pub fn validate_selected_property_map(
                 seen |= bit;
             }
             if seen != self.1.bits() {
-                return Err(M::Error::custom("incomplete collection response"));
+                return Err(M::Error::custom("incomplete collection map"));
             }
             Ok(())
         }

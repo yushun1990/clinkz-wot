@@ -294,6 +294,12 @@ join Engine Consumer/Producer and independent malformed/partial peers. The claim
 is Host/manual, JSON/type-only and endpoint-NoSec; URI templates, GET query
 selection, general security/schema support and production qualification remain open.
 
-WriteAllProperties, WriteMultipleProperties and long-lived
-collection operations remain unimplemented. This scoped capability changes no
+WriteAllProperties joins Consumer and completely qualified Producer with one
+root HTTP PUT and strictly empty 204 response checked through EOF, as specified
+by the [HTTP all-write contract](../../protocol-bindings/protocols/http/README.md#thing-root-writeallproperties).
+The [real HTTP tests](../../protocol-bindings/protocols/http/tests/write_all_properties.rs)
+cover complete input, partial application failures and ambiguous independent
+peers without retry, atomicity or rollback claims.
+
+WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

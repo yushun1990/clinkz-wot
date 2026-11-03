@@ -439,6 +439,12 @@ exercise different subsets from one TD, unsupported/malformed/partial results,
 authorization, prepublication, service loss, cancellation/replacement, failed
 sibling admission, unpaid work and final account/socket release.
 
-WriteAllProperties, WriteMultipleProperties and long-lived
-collection operations remain unimplemented. This scoped capability changes no
+WriteAllProperties uses one distinct root behavior after complete input
+validation and group authorization. Reported completion, possible partial effects,
+native delivery and local handoff remain separate; uncertain writes never replay.
+The [collection-write tests](../../protocol-bindings/protocols/http/tests/write_all_properties.rs)
+exercise real partial application, authority replacement, unread completion,
+cancellation, retained cleanup and final release under the existing finite owners.
+
+WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

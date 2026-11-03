@@ -121,7 +121,7 @@ native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
 The HTTP finite participant can share one listener across up to 32 independently
-prepared Property Read/Write and Thing-root collection read mappings; native
+prepared Property Read/Write and Thing-root finite collection mappings; native
 method/path collisions refuse before setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`
 that checks the original candidate's separate input/output roles. There is no
 HTTP method, status or retry case in this SPI. A linked
@@ -229,7 +229,7 @@ be used to discard that observation or promote it to successful handoff.
 
 ## Native Thing-root Property collection reads
 
-The implemented finite subset includes all/selected root collection reads; operation flags
+The implemented finite subset includes all/selected root collection reads and all-writes; operation flags
 alone do not establish support. The actual compiler qualifies its own root Form,
 codec/collection service, native mapping and configuration. The HTTP participant
 retains an explicit `AffordanceTarget` for every native mapping, preserving Thing
@@ -260,9 +260,18 @@ state. The captured allowance covers repeated decoding of original selection as
 well as output traversal. No decoder or original-input-dependent validation runs
 with a newly increased allowance after the handler.
 
-HTTP owns its GET/200 JSON all-read and explicit POST/200 JSON selected-read
-mappings and complete-result refusal
+WriteAllProperties qualifies a separate writable input map and empty completion
+role. The captured validator checks the **entire** input before application
+authorization/entry; its bounded traversal shares the existing collection work
+allowance. A valid handler success certifies reported whole-group completion,
+not transactional atomicity or rollback. Handler failure after entry retains
+possible partial effects. Native reply delivery remains a separate fact.
+
+HTTP owns its GET/200 JSON all-read, explicit POST/200 JSON selected-read and
+PUT/204 empty all-write mappings, with strict complete-result refusal
 policy, documented in [its README](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).
 Other Bindings decline collection operations unless their actual native
-capabilities support them. The Engine does not call individual reads, interpret
-HTTP aggregation, or grant snapshot/atomicity guarantees.
+capabilities support them. The Engine does not call individual Property operations,
+interpret HTTP aggregation, or grant snapshot/atomicity guarantees. Native error
+responses cannot certify pre-effect refusal without an actual supported mapping;
+uncertain group writes MUST NOT be automatically replayed.
