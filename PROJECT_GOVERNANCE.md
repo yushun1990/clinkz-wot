@@ -132,10 +132,11 @@ do not force a Binding to discard legitimate native evidence or distinctions
 (such as supported per-member collection outcomes or actual atomicity guarantees)
 to fit a lowest-common-denominator result type. Equally, do not invent
 transactional, delivery, or rollback guarantees that a Binding cannot establish.
-The Engine owns shared WoT semantics, logical authority, and truthful outcome
-representation; Bindings retain native mapping, execution, and physical
-resource ownership. Protocol-specific mechanics must not leak into Core merely
-to express a missing capability.
+Evaluate who should represent such evidence against the active architecture
+authority (`ARCHITECTURE_GOVERNANCE.md` and the normative owners registered in
+`docs/spec/authority.toml`), rather than treating this governance rule as a
+second Engine/Binding contract. Correct representation gaps at the appropriate
+boundary without moving protocol-native mechanics into Core as a workaround.
 
 When a concrete, relevant Binding or WoT counterexample exposes a structural
 gap, evaluate correction or replacement of the Engine/SPI abstraction against
