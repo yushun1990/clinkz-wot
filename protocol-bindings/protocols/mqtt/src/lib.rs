@@ -73,7 +73,32 @@ pub struct MqttNotificationDefinition {
     topic: Arc<str>,
     form: u32,
     operation: Operation,
-    schema: TypeSchema,
+    schema: MqttDataSchema,
+}
+
+/// The concrete MQTT mapping carries either one affordance value or a complete
+/// TD-named root map. No topic parsing or member routing enters the Engine.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(feature = "prepare"), allow(dead_code))]
+enum MqttDataSchema {
+    Value(TypeSchema),
+    Properties(Arc<clinkz_wot_core::collection::PropertyCollectionSchema>),
+}
+impl MqttDataSchema {
+    fn retained_bytes(&self) -> usize {
+        match self {
+            Self::Value(_) => 0,
+            Self::Properties(s) => {
+                s.retained_bytes() + std::mem::size_of_val(&**s) + 2 * std::mem::size_of::<usize>()
+            }
+        }
+    }
+    fn validate(&self, payload: &clinkz_wot_core::Payload) -> clinkz_wot_core::CoreResult<()> {
+        match self {
+            Self::Value(s) => clinkz_wot_codec_json::validate_payload(*s, payload),
+            Self::Properties(s) => clinkz_wot_codec_json::validate_property_map(s, payload),
+        }
+    }
 }
 impl PartialEq for MqttNotificationDefinition {
     fn eq(&self, b: &Self) -> bool {
@@ -105,14 +130,16 @@ fn io_error() -> CoreError {
 fn target_site(target: &AffordanceTarget) -> clinkz_wot_core::thing::AffordanceSite<'_> {
     use clinkz_wot_core::thing::AffordanceSite;
     match target {
+        AffordanceTarget::Thing => AffordanceSite::Thing,
         AffordanceTarget::Property(n) => AffordanceSite::Property(n),
         AffordanceTarget::Event(n) => AffordanceSite::Event(n),
         _ => unreachable!("only qualified notification targets"),
     }
 }
-fn target_name(target: &AffordanceTarget) -> &str {
+fn target_name_bytes(target: &AffordanceTarget) -> usize {
     match target {
-        AffordanceTarget::Property(n) | AffordanceTarget::Event(n) => n,
+        AffordanceTarget::Thing => 0,
+        AffordanceTarget::Property(n) | AffordanceTarget::Event(n) => n.len(),
         _ => unreachable!(),
     }
 }

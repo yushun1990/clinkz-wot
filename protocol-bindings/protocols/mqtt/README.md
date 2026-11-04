@@ -18,7 +18,7 @@ SUBSCRIBE and `unobserveproperty` uses UNSUBSCRIBE. It supplies future values
 without an implicit Read or fabricated initial value. Wire behavior is
 [MQTT 3.1.1](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html).
 
-Supported TD subset:
+Single-affordance TD subset (root observation adds the separate mapping below):
 
 - Local `mqtt://IP:port` loopback broker, optional trailing slash; no DNS, TLS,
   credentials, URI variables, query, path topic or fragment.
@@ -245,6 +245,81 @@ policy/validation, cancellation, deadline, replacement, unread funding, partial
 publication and a Thing with same-named Property/Event sources. The same
 `broker-tests` command and manual CI step run both roles/families.
 
+## Thing-root Property observation
+
+The bounded mapping also joins **ObserveAllProperties / UnobserveAllProperties**
+in both roles. One root Form declares both operations, with one exact
+`mqv:filter`, JSON content and non-retained QoS 0. For example, add this root
+Form to a completely supported TD describing `temperature` (integer) and
+`enabled` (boolean):
+
+```json
+"forms": [{
+  "href": "mqtt://127.0.0.1:1883",
+  "op": ["observeallproperties", "unobserveallproperties"],
+  "mqv:filter": "things/room/properties",
+  "mqv:qos": "0",
+  "mqv:retain": false
+}]
+```
+
+Each application publication is a complete named map, for example
+`{"temperature":7,"enabled":true}`. Names are exact TD Property names, not topic
+segments or device identifiers. Every non-writeOnly member appears exactly once;
+each value validates against that member's original supported DataSchema. Unknown,
+missing, duplicate/escaped duplicate and invalid members refuse the entire map.
+This full-map subset uses TD 1.1's combined Property meta-interaction schema.
+It does not identify which member changed or imply an atomic snapshot.
+
+The evolving MQTT Binding guidance does **not** define an observe-all default.
+This is an explicit ClinkZ MQTT mapping policy: the combined root Form maps to
+one SUBSCRIBE and a mapped UNSUBSCRIBE on the same filter. Omit `controlPacket`
+on that combined Form; a single explicit packet cannot describe both operations.
+Separate control Forms and partial/delta maps are outside this mapping. No new
+WoT vocabulary, topic-extraction syntax or implicit per-Property subscriptions
+are introduced. Individual Form/observable support never substitutes for root
+authority. The root Consumer includes readable Properties independently of their
+individual `observable` hints; complete Producer qualification still checks
+every individual advertised operation and requires its actual source/behavior.
+
+Preparation explicitly selects `NotificationKind::ObserveAllProperties` and
+`AffordanceTarget::Thing` through `prepare_notification`. The owned schema variant
+is `ConsumerNotificationSchemas::ObserveAllProperties`, with actual map-validation
+support, rather than scalar Object support. Runtime establishment/delivery use
+root observe permission; mapped stop uses root unobserve permission. This is a
+group grant covering every included member. Every logical observation has its
+own identity, cursor, bounded queue/loss policy, authority and settlement, even
+when several Consumers share one compatible native subscription. Only the last
+native interest sends UNSUBSCRIBE. A sibling's local removal reports no remote
+unsubscribe ACK. Pending controls and late data retain their original owners.
+
+Producer registration adds `ProducerNotificationSource::AllProperties` separately
+from leaf sources. `publish_notification` takes the Thing target and
+`PublicationData::PropertyValues`. The application supplies the complete map
+when any included Property changes; publishing a leaf value does not synthesize
+a group sample or perform hidden Reads. Root publication captures its own
+route, kind, validator and policy. Wrong-family carriers and invalid maps return
+their original backing before native effects. Native publication/retirement and
+unread settlement retain the same original ownership as single notifications.
+
+The common schema envelope bounds member count at 32, each name at 256 bytes,
+and total name backing at 4096 bytes; the existing TD semantic arena and complete
+Producer source/definition limits may refuse earlier. Samples remain bounded at
+4096 encoded bytes. Variable schema construction/disposal, definition retention
+and captured validation have explicit work/Host backing; native service queues,
+frames and routing retain the separate fixed Binding policy described above.
+There is no per-member cursor, replay cache, automatic worker or general pool.
+These bounds establish no large-fleet throughput or constrained-profile claim.
+
+The [qualification tests](tests/collection_qualification.rs) and
+[real broker integration](tests/observe_all_properties.rs) exercise these roles,
+complete TD support, independent schemas/permissions, one shared native root
+subscription, whole-sample loss, stop, replacement, late work, uncertain partial
+publication/unsubscribe and final release. Existing single-Property/Event tests
+remain required regression evidence. Workspace topic
+[0082](../../../workspace/0082-logical-physical-subscription-decoupling.md)
+remains open beyond this bounded topology.
+
 General DataSchema/security, QoS 1/2, TLS, broader loss/reconnect policies,
 dataResponse with actual response cardinality, separate control mappings,
-collections and constrained profiles remain separate work.
+other collections and constrained profiles remain separate work.

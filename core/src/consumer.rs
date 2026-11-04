@@ -320,9 +320,11 @@ impl ConsumerFiniteSchemas {
 
 /// A Property's value schema is not Event data. Event control/response roles
 /// stay distinct; native SUBACK/UNSUBACK packets never become application data.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsumerNotificationSchemas {
     PropertyValue(TypeSchema),
+    /// Complete named readable values; shared backing survives the source TD.
+    ObserveAllProperties(Arc<PropertyCollectionSchema>),
     Event {
         subscription: Option<TypeSchema>,
         data: Option<TypeSchema>,
@@ -331,34 +333,53 @@ pub enum ConsumerNotificationSchemas {
     },
 }
 impl ConsumerNotificationSchemas {
-    pub fn kind(self) -> crate::notification::NotificationKind {
+    pub fn kind(&self) -> crate::notification::NotificationKind {
         match self {
             Self::PropertyValue(_) => crate::notification::NotificationKind::PropertyObservation,
+            Self::ObserveAllProperties(_) => {
+                crate::notification::NotificationKind::ObserveAllProperties
+            }
             Self::Event { .. } => crate::notification::NotificationKind::Event,
         }
     }
-    pub fn subscription(self) -> Option<TypeSchema> {
+    pub fn subscription(&self) -> Option<TypeSchema> {
         match self {
-            Self::Event { subscription, .. } => subscription,
+            Self::Event { subscription, .. } => *subscription,
             _ => None,
         }
     }
-    pub fn data(self) -> Option<TypeSchema> {
+    pub fn data(&self) -> Option<TypeSchema> {
         match self {
-            Self::PropertyValue(s) => Some(s),
-            Self::Event { data, .. } => data,
+            Self::PropertyValue(s) => Some(*s),
+            Self::Event { data, .. } => *data,
+            Self::ObserveAllProperties(_) => None,
         }
     }
-    pub fn data_response(self) -> Option<TypeSchema> {
+    pub fn data_response(&self) -> Option<TypeSchema> {
         match self {
-            Self::Event { data_response, .. } => data_response,
+            Self::Event { data_response, .. } => *data_response,
             _ => None,
         }
     }
-    pub fn cancellation(self) -> Option<TypeSchema> {
+    pub fn cancellation(&self) -> Option<TypeSchema> {
         match self {
-            Self::Event { cancellation, .. } => cancellation,
+            Self::Event { cancellation, .. } => *cancellation,
             _ => None,
+        }
+    }
+    /// Scalar support cannot qualify a named collection decoder.
+    pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
+        match self {
+            Self::ObserveAllProperties(s) => data.supports_property_map(s),
+            _ => [
+                self.subscription(),
+                self.data(),
+                self.data_response(),
+                self.cancellation(),
+            ]
+            .into_iter()
+            .flatten()
+            .all(|s| data.supports_schema(s)),
         }
     }
 }
@@ -396,20 +417,11 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
                     input.identity.binding_generation(),
                 )
                 || input.binding.configuration() != &input.configuration
-                || crate::notification::NotificationKind::for_target(&input.target)
-                    != Some(input.schemas.kind())
+                || !input.schemas.kind().accepts_target(&input.target)
                 || !input.services.data.available()
                 || input.services.data.policy().validation_work == 0
                 || input.services.access.work() == 0
-                || ![
-                    input.schemas.subscription(),
-                    input.schemas.data(),
-                    input.schemas.data_response(),
-                    input.schemas.cancellation(),
-                ]
-                .into_iter()
-                .flatten()
-                .all(|s| input.services.data.supports_schema(s))
+                || !input.schemas.supports(input.services.data.as_ref())
             {
                 return Err(invalid());
             }

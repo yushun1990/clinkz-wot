@@ -191,15 +191,15 @@ the subscription. Pending/error retains its
 reply owner, payload and capacity; only successful native retirement permits
 cursor advance. Required and already submitted responses cannot be declined.
 No initial Property value, replay, wire backpressure, TD qualification or schema
-validation is inferred. Collection operations and constrained execution remain
-unimplemented by this Host slice.
+validation is inferred. The same owner also admits Thing-root Property collection
+observations; constrained execution remains unimplemented by this Host slice.
 Fixed loss status and one prepaid overflow/late handoff preserve cleanup when
 the item/byte queue is full. Explicit owner cleanup works after every cursor is
 lost; terminal acknowledgement releases the logical reservation. Native physical
 retirement and remote cancellation/response outcomes remain separate.
 
 The composed `ConsumerNotificationRuntime` consumes the selected source-free
-Property or Event definition and captures actual services around that same raw
+Property, Property collection or Event definition and captures actual services around that same raw
 lifecycle.
 It exposes the same paid `decline_response` operation for admitted optional
 opportunities, retaining native retirement before advance without sending or
@@ -217,19 +217,19 @@ declared MQTT subset. Property establishment has empty control input, fabricates
 no initial value and performs no implicit Read. Mapped stop authorizes
 `UnobserveProperty`; shared native cleanup does not revoke a sibling. Current
 queues report dropped values or terminate, without coalescing. Raw calls gain no
-TD qualification; collections and native Event response rights remain outside
-this subset.
+TD qualification. Collection observations use the distinct retained schema and
+root operations below; native Event response rights remain outside this subset.
 
 Producer notification publication has its own Host facet in `core::publication`
 and `servient-finite::notification_publication`; it remains separate from finite
 requests and Consumer conversations. An application registers a
-`ProducerNotificationSource::Property` or `Event` on the same logical Producer
+`ProducerNotificationSource::Property`, `AllProperties` or `Event` on the same logical Producer
 instance as other behavior. Complete publication captures each selected observe
 or subscribe mapping and its actual data/security services. A Property source is
 not a Read handler, and an Event of the same name cannot satisfy it.
 `publish_notification` checks current authority, exact captured target/mapping,
 backing, fresh policy and validation before native acceptance. `PublicationData`
-distinguishes PropertyValue from EventData; mismatched family/data refuse before
+distinguishes PropertyValue, PropertyValues and EventData; mismatched family/data refuse before
 native acceptance and return the original carrier. Source registration alone
 cannot bypass complete TD qualification or captured services. No Engine record
 is created for a remote broker subscriber and no Engine subscriber loop
@@ -253,11 +253,11 @@ atomicity. They MUST NOT silently become N individual calls/subscriptions.
 Explicit application fan-out is a separate bounded capability with its own
 promised guarantees. Native group distribution and matching stay Binding-owned.
 
-The implemented collection subset is TD-driven **ReadAllProperties** and
+The implemented finite collection subset is TD-driven **ReadAllProperties** and
 **ReadMultipleProperties**, plus **WriteAllProperties** and **WriteMultipleProperties**, in both
 roles. Its coordinate is `AffordanceTarget::Thing`, with its own actual root
 Form and operation; individual Property Forms supply no collection mapping or
-behavior. In accordance with [TD 1.1 §6.3.9.6](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing),
+behavior. In accordance with [TD 1.1 §5.3.1.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing),
 the ReadAllProperties output includes all described readable Properties and
 excludes writeOnly Properties. `collection::PropertyCollectionSchema` owns those names and their
 complete supported type-only assertions after source destruction. ReadOnly
@@ -372,9 +372,51 @@ per-member success from it. A Producer pre-effect refusal does not become known
 to a Consumer through a generic native error response without a supported mapping.
 
 These finite operations add no universal collection lifecycle. All-versus-selected
-scope and read-versus-write data roles remain distinct. Future observation/subscription or continuing collection
-operations need the appropriate retained owners and mapped controls, rather than
-being forced through this finite result. Those operations remain unimplemented.
+scope and read-versus-write data roles remain distinct.
+
+**ObserveAllProperties / UnobserveAllProperties** reuse the notification
+conversation under one `AffordanceTarget::Thing` and the distinct
+`NotificationKind::ObserveAllProperties`. One logical identity, move-only cursor,
+queue, loss policy, stop and settlement cover the collection. Individual Property
+observations neither establish nor cancel it. Native subscription/session count
+and sharing remain Binding-owned. Mapped cancellation authorizes the original
+`UnobserveAllProperties`; local stop fences delivery immediately even if mapped
+cancellation is denied, malformed, unsupported or uncertain.
+
+Notification kind is explicit in preparation, raw requests and captured Producer
+routes; a target's scope does not determine its operation family. Kind/scope,
+prepared program and publication-data pairing are checked before effects. A
+Thing target is not a standing alias for every root notification operation.
+
+The implemented data subset is a complete named readable Property map per sample.
+`ConsumerNotificationSchemas::ObserveAllProperties` retains the original member
+schemas in shared owned backing; scalar `data()` is absent for this distinct
+role. A captured data service must explicitly support/validate Property maps.
+Each included value has its exact TD Property name and supported DataSchema;
+writeOnly members are excluded, while readOnly members remain eligible. A root
+Form supplies its own authority independently of the individual `observable`
+hint or observe Forms. Unknown, missing, duplicate (including escaped aliases)
+or invalid members refuse the entire sample before logical queue admission.
+Application delivery retains the complete map, with no inferred changed-member
+identity or atomic snapshot. Group authorization grants the whole collection;
+partial member permission cannot be used as authority for this operation.
+
+Producer registration requires a distinct `AllProperties` source and captured
+root route/services. It publishes `PublicationData::PropertyValues`; leaf sources
+and single-value/Event carriers cannot stand in for it. The application supplies
+a complete map when any included Property changes; publishing a leaf value does
+not fabricate a collection sample or trigger hidden Reads. Both roles retain
+empty establishment/cancellation data, no response right, and future-only
+delivery for the [declared MQTT mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation).
+Validation work and variable schema backing are funded before handoff; overflow
+reports whole-sample loss or terminates, without coalescing or losing cleanup.
+Replacement and late publication retain original authority, mapping and funding
+through retirement and acknowledgement. No initial value, replay, atomicity,
+wildcard attribution or fleet scalability is established.
+
+Other continuing collection operations need their appropriate retained owners
+and mapped controls; QueryAllActions and SubscribeAllEvents/UnsubscribeAllEvents
+remain unimplemented.
 
 ## Error and retry contract
 

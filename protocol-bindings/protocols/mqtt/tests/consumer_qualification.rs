@@ -69,6 +69,7 @@ fn prepare(
     registry.prepare_notification(
         &thing,
         &AffordanceTarget::Event(Arc::from("alarm")),
+        NotificationKind::Event,
         selector,
         &limits,
         bank.clone(),

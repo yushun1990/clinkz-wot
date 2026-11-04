@@ -138,7 +138,8 @@ UDP remains test-only; HTTP's one-listener-per-Action implementation does not
 constrain other native resource layouts or cross-Binding Action routes.
 
 Producer notification participants additionally supply their exact emission mapping
-and actual validation/security services for each selected Property observe or Event subscribe Form before
+and actual validation/security services for each selected Property observe,
+Thing-root observe-all or Event subscribe Form before
 publication. These services and the complete data allowance are recaptured and
 compared before commit; missing or substituted services refuse. Native notification
 publication has separate start, progress and retirement controls, not a finite
@@ -191,16 +192,35 @@ application input; they do not represent continuing Action or notification
 conversations. Existing inline aggregate and raw finite APIs retain their
 restricted purposes. Notification preparation uses a separate typed facet:
 `ConsumerNotificationPreparation` compiles owned programs on the actual
-`ConsumerNotificationBinding` registration. Its operation-scoped Property/Event registry
+`ConsumerNotificationBinding` registration. Its operation-scoped Property/collection/Event registry
 captures actual services and configuration without adding finite methods or
 passing TD/compiler owners into execution. MQTT supplies that real native facet;
 its shared topic interests, queues, control correlation, wakers and final socket
 release remain Binding-owned. Each Engine recipient retains independent logical
 acceptance, value/data validation, loss and stop. A native program retains its
-Property/Event kind, so source-free pairing cannot relabel an Event subscription
+Property/collection/Event kind, so source-free pairing cannot relabel an Event subscription
 as Property observation. The Property DataSchema is distinct from all Event
 roles; no native subscription ACK is a Property value. Separate control/response capabilities
 must be supported explicitly; protocol ACKs cannot stand in for application data.
+
+Thing-root ObserveAllProperties retains one logical participation and its
+collection schema, not a list of Property drivers. The implemented complete-map
+data facet attributes each value through its exact TD member name and validates
+the original schema at the Engine's captured data service. The real MQTT
+participant uses one exact root topic and non-retained QoS 0 maps. Its combined
+root Form explicitly declares observe-all/unobserve-all, mapped to SUBSCRIBE/
+UNSUBSCRIBE by this Binding; the evolving MQTT guidance supplies no observe-all
+default. Native matching, shared-topic compatibility, lease routing, protocol
+ACKs and final physical retirement remain inside MQTT. No Core wildcard parser,
+subscription pool or per-member fallback is introduced. The
+[mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation)
+refuses partial maps and separate control Forms; these are supported-subset
+restrictions, not a universal collection protocol contract.
+
+Notification kind is an explicit semantic operand, checked against target scope,
+actual native program and captured publication route. Producer route lookup uses
+both target and kind. Neither a Thing-root target
+nor a protocol topic alone identifies the interaction family.
 
 Continuing Consumer Actions use `ConsumerActionMapping` and
 `ConsumerActionExchange`, separate from finite results and notification

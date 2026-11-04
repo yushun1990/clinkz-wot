@@ -313,5 +313,15 @@ substitutes for that facet. Final qualification compares original member meaning
 The [selected-write tests](../../protocol-bindings/protocols/http/tests/write_multiple_properties.rs)
 exercise these boundaries and the existing prepaid schema cleanup.
 
-Long-lived collection operations remain unimplemented. This scoped capability changes no
-work-package dependencies, gate, milestone or production qualification status.
+## Thing-root notification preparation
+
+ObserveAllProperties selects an explicit collection kind and root Form, retaining
+the shared TD-readable member schemas and actual map/access services. The
+[Planning contract](../spec/planning.md#open-consumer-notification-preparation)
+owns its preparation/funding semantics. [Qualification tests](../../protocol-bindings/protocols/mqtt/tests/collection_qualification.rs)
+exercise unsupported members, scalar-only services, ambiguity, source destruction
+and complete final Producer requalification.
+
+Other continuing collection operations remain unimplemented. This scoped capability
+changes no work-package dependencies, gate, milestone or production qualification
+status.

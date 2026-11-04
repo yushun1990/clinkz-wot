@@ -455,5 +455,16 @@ reports, delivery and physical retirement remain separate. The
 and independent datagram fixture cover real effects, original authority and
 final account/socket release under the existing finite owners.
 
-Long-lived collection operations remain unimplemented. This scoped capability changes no
-work-package dependencies, gate, milestone or production qualification status.
+## Root Property notification ownership
+
+ObserveAllProperties reuses the notification owner with one root identity and
+complete-map validation. Producer publication requires a distinct root source,
+kind and captured route/services. [Interaction Core](../spec/interaction-core.md)
+and [Runtime Safety](../spec/runtime-safety.md) own the semantics. The
+[real broker tests](../../protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs)
+exercise invalid members, fresh permission, short validation work, overflow,
+replacement, late work, independent stop and original-bank/final socket release.
+
+Other continuing collection operations remain unimplemented. This scoped capability
+changes no work-package dependencies, gate, milestone or production qualification
+status.

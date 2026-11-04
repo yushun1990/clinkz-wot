@@ -55,7 +55,7 @@ where
         Ok(Self { registrations })
     }
 
-    /// Select one Property observe or Event subscribe Form, in TD order by
+    /// Select one Property observe, root observe-all or Event subscribe Form, in TD order by
     /// default. Ambiguity within a Form refuses. Unsupported alternatives remain eligible for later Forms.
     /// All control schemas are inspected separately before native compilation.
     #[allow(clippy::too_many_arguments)]
@@ -63,25 +63,22 @@ where
         &self,
         thing: &Thing,
         target: &AffordanceTarget,
+        kind: NotificationKind,
         selector: ConsumerSelector,
         limits: &ResourceLimits,
         bank: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerNotificationDefinition<B>> {
-        let (name, scope, kind) = match target {
-            AffordanceTarget::Property(n) => (
-                n.as_ref(),
-                ValidatedProducerScope::Property(n.as_ref()),
-                NotificationKind::PropertyObservation,
-            ),
-            AffordanceTarget::Event(n) => (
-                n.as_ref(),
-                ValidatedProducerScope::Event(n.as_ref()),
-                NotificationKind::Event,
-            ),
+        if !kind.accepts_target(target) {
+            return Err(unsupported());
+        }
+        let scope = match target {
+            AffordanceTarget::Thing => ValidatedProducerScope::Thing,
+            AffordanceTarget::Property(n) => ValidatedProducerScope::Property(n.as_ref()),
+            AffordanceTarget::Event(n) => ValidatedProducerScope::Event(n.as_ref()),
             _ => return Err(unsupported()),
         };
-        if name.len() > 256 {
+        if target.name().is_some_and(|n| n.len() > 256) {
             return Err(unsupported());
         }
         let common = limits
@@ -152,7 +149,8 @@ where
                         budget,
                         |document, endpoint, budget| {
                             self.select_form(
-                                document, target, index, endpoint, selector, limits, &bank, budget,
+                                document, target, kind, index, endpoint, selector, limits, &bank,
+                                budget,
                             )
                         },
                     );
@@ -179,6 +177,7 @@ where
         &self,
         document: &ResolvedSemanticDocument<'_>,
         target: &AffordanceTarget,
+        kind: NotificationKind,
         index: u32,
         endpoint: &str,
         selector: ConsumerSelector,
@@ -190,20 +189,44 @@ where
             return Ok(None);
         }
         use clinkz_wot_td::semantic::FormOwner;
-        let (owner, name, variables) = match target {
-            AffordanceTarget::Property(n) => (
-                FormOwner::Property(n),
-                n.as_ref(),
-                UriVariableScope::Property,
-            ),
-            AffordanceTarget::Event(n) => {
-                (FormOwner::Event(n), n.as_ref(), UriVariableScope::Event)
-            }
+        let (owner, variables) = match target {
+            AffordanceTarget::Thing => (FormOwner::Thing, UriVariableScope::Thing),
+            AffordanceTarget::Property(n) => (FormOwner::Property(n), UriVariableScope::Property),
+            AffordanceTarget::Event(n) => (FormOwner::Event(n), UriVariableScope::Event),
             _ => return Err(unsupported()),
         };
-        let kind = NotificationKind::for_target(target).unwrap();
         let facts = document.form(owner, index).ok_or_else(unsupported)?;
+        // Fund the complete variable schema before construction. Its temporary
+        // reservation bridges to each selected definition's retained funding;
+        // shared Arc clones acquire no additional member/name allocation.
+        let _schema_scratch = if kind == NotificationKind::ObserveAllProperties {
+            use clinkz_wot_core::collection::PropertyCollectionSchema as S;
+            if !pay(budget, W::PlanningItems, (S::MAX_MEMBERS + 1) as u64) {
+                return Err(busy());
+            }
+            let count = crate::type_schema::readable_member_count(document)?;
+            if !pay(budget, W::PlanningItems, 2 * (count as u64 + 1)) {
+                return Err(busy());
+            }
+            let bytes = (S::backing_bound()
+                + ::core::mem::size_of::<S>()
+                + 2 * ::core::mem::size_of::<usize>()) as u64;
+            reserve(
+                bank,
+                &[
+                    (K::EngineLiveBytesGlobalMax, bytes),
+                    (K::AdmissionTemporaryBytesGlobalMax, bytes),
+                ],
+            )?
+        } else {
+            Vec::new()
+        };
         let schemas = match kind {
+            NotificationKind::ObserveAllProperties => {
+                ConsumerNotificationSchemas::ObserveAllProperties(Arc::new(
+                    crate::type_schema::prepare_readable_property_schema(document)?,
+                ))
+            }
             NotificationKind::PropertyObservation => {
                 let property = document.property();
                 if !property.observable {
@@ -249,15 +272,7 @@ where
             let data = &r.services.data;
             if !data.available()
                 || data.content_type() != facts.content_type
-                || ![
-                    schemas.subscription(),
-                    schemas.data(),
-                    schemas.data_response(),
-                    schemas.cancellation(),
-                ]
-                .into_iter()
-                .flatten()
-                .all(|s| data.supports_schema(s))
+                || !schemas.supports(data.as_ref())
             {
                 continue;
             }
@@ -295,7 +310,20 @@ where
             )?;
             let retained = bounds
                 .retained_bytes
-                .checked_add(1024 + endpoint.len() as u64 + name.len() as u64)
+                .checked_add(
+                    1024 + endpoint.len() as u64 + target.name().map_or(0, str::len) as u64,
+                )
+                .and_then(|n| {
+                    n.checked_add(match &schemas {
+                        ConsumerNotificationSchemas::ObserveAllProperties(s) => {
+                            (s.retained_bytes()
+                                + ::core::mem::size_of_val(&**s)
+                                + 2 * ::core::mem::size_of::<usize>())
+                                as u64
+                        }
+                        _ => 0,
+                    })
+                })
                 .and_then(|n| n.checked_add(data.policy().retained_bytes))
                 .and_then(|n| n.checked_add(r.services.access.retained_bytes()))
                 .ok_or_else(invalid)?;
@@ -311,7 +339,7 @@ where
                 target,
                 form: index,
                 endpoint,
-                schemas,
+                schemas: schemas.clone(),
             }) {
                 Ok(Some(p)) => p,
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
@@ -330,7 +358,7 @@ where
                     target: target.clone(),
                     endpoint: endpoint.into(),
                     form: index,
-                    schemas,
+                    schemas: schemas.clone(),
                     services: r.services.clone(),
                     funding,
                     bank: bank.clone(),

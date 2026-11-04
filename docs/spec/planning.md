@@ -221,8 +221,9 @@ explicit 4096-unit preparation allowance, as does the existing MQTT facet.
 
 The typed `open_consumer::ConsumerNotificationRegistry` is the notification
 facet beside finite preparation. Its operation-scoped `prepare_notification` reuses
-common TD admission and the resolved Form loan, selecting one named observable
-Property's observe Form or Event's subscribe Form in TD order or by explicit
+common TD admission and the resolved Form loan with an explicit notification
+kind and target, selecting one named observable
+Property's observe Form, Thing-root observe-all Form or Event's subscribe Form in TD order or by explicit
 selector. Unsupported alternatives
 are skipped; missing support and multiple complete actual providers refuse.
 It does not claim whole-Thing Consumer support or Producer qualification.
@@ -240,7 +241,10 @@ configuration, family-qualified target, endpoint/Form, concrete data and
 access services and original Host funding.
 `ConsumerNotificationSchemas::PropertyValue` captures the Property's
 own DataSchema and requires `observable: true`; it cannot acquire Event control
-or reciprocal-response schemas. The `Event` variant retains separate
+or reciprocal-response schemas. The `ObserveAllProperties` variant owns the
+named readable collection schema; it is not a scalar Object assertion. It shares
+member backing between the definition and captured validator without copying
+names per cursor. The `Event` variant retains separate
 subscription/data/dataResponse/cancellation schemas. Neither its program nor runtime
 retains a source TD/semantic loan/compiler. Each present role requires complete
 supported schema/media meaning. Required native responses still need actual
@@ -252,6 +256,17 @@ Property selection authorizes `ObserveProperty`; captured runtime policy uses
 that operation for establishment/delivery and `UnobserveProperty` for mapped
 stop. Preparation neither executes a Read nor captures an initial value. Native
 Form semantics and stop support remain the concrete Binding's responsibility.
+
+Root notification preparation selects the actual Thing Form and authorizes
+`ObserveAllProperties`; runtime establishment/delivery and mapped stop use the
+corresponding root operations. It derives every non-writeOnly member schema
+from the shared TD loan, independently of leaf Forms and observability hints.
+Its bounded member census, construction/disposal work and temporary schema
+backing are paid before construction; selected definition funding retains the
+schema until final disposal. Collection data services must explicitly support
+the full named map; scalar Object support cannot qualify them. The current
+MQTT mapping requires both operations on the same root Form. Other root control
+topologies require an actually implemented Binding/preparation facet.
 
 ## Thing-root Property collection preparation
 

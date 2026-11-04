@@ -39,18 +39,21 @@ impl NotificationRoute {
 #[derive(Debug)]
 pub enum PublicationData {
     PropertyValue(Payload),
+    /// One named Property collection sample under Thing-root authority.
+    PropertyValues(Payload),
     EventData(Payload),
 }
 impl PublicationData {
     pub fn kind(&self) -> crate::notification::NotificationKind {
         match self {
             Self::PropertyValue(_) => crate::notification::NotificationKind::PropertyObservation,
+            Self::PropertyValues(_) => crate::notification::NotificationKind::ObserveAllProperties,
             Self::EventData(_) => crate::notification::NotificationKind::Event,
         }
     }
     pub fn payload(&self) -> &Payload {
         match self {
-            Self::PropertyValue(p) | Self::EventData(p) => p,
+            Self::PropertyValue(p) | Self::PropertyValues(p) | Self::EventData(p) => p,
         }
     }
 }
@@ -98,7 +101,11 @@ pub trait NativeNotificationPublication {
 
 pub trait ProducerNotificationBinding {
     type Publication: NativeNotificationPublication;
-    fn notification_route(&self, target: &crate::AffordanceTarget) -> Option<&NotificationRoute>;
+    fn notification_route(
+        &self,
+        target: &crate::AffordanceTarget,
+        kind: crate::notification::NotificationKind,
+    ) -> Option<&NotificationRoute>;
     /// Before acceptance, refusal returns the original complete data carrier.
     /// After acceptance the publication owns the native slot through disposal.
     fn start_publication(

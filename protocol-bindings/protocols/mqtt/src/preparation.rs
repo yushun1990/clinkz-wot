@@ -24,6 +24,7 @@ impl MqttNotificationProducer {
             return Ok(None);
         };
         let target = match input.site {
+            FormSite::Thing => AffordanceTarget::Thing,
             FormSite::Property(n) => AffordanceTarget::Property(Arc::from(n.as_str())),
             FormSite::Event(n) => AffordanceTarget::Event(Arc::from(n.as_str())),
             _ => return Ok(None),
@@ -43,16 +44,22 @@ pub(crate) fn lower_notification(
     configured_address: SocketAddr,
     input: ProducerOperationInput<'_>,
     budget: &mut WorkBudget,
-) -> CoreResult<Option<(Arc<str>, TypeSchema)>> {
+) -> CoreResult<Option<(Arc<str>, MqttDataSchema)>> {
     let (name, owner, kind, variables) = match input.site {
+        FormSite::Thing => (
+            "",
+            FormOwner::Thing,
+            NotificationKind::ObserveAllProperties,
+            UriVariableScope::Thing,
+        ),
         FormSite::Property(n) => (
-            n,
+            n.as_str(),
             FormOwner::Property(n),
             NotificationKind::PropertyObservation,
             UriVariableScope::Property,
         ),
         FormSite::Event(n) => (
-            n,
+            n.as_str(),
             FormOwner::Event(n),
             NotificationKind::Event,
             UriVariableScope::Event,
@@ -99,6 +106,21 @@ pub(crate) fn lower_notification(
         return Err(unsupported());
     }
     let schema = match kind {
+        NotificationKind::ObserveAllProperties => {
+            // This mapping supports a combined root Form, not a fabricated
+            // cancellation assembled from unrelated Forms or leaf mappings.
+            if form.effective_operations.len() != 2
+                || !form.effective_operations.contains(&kind.start_operation())
+                || !form.effective_operations.contains(&kind.stop_operation())
+            {
+                return Err(unsupported());
+            }
+            let schema = clinkz_wot_planning::type_schema::prepare_readable_property_schema(doc)?;
+            if schema.members().is_empty() {
+                return Err(unsupported());
+            }
+            MqttDataSchema::Properties(Arc::new(schema))
+        }
         NotificationKind::PropertyObservation => {
             let property = doc.property();
             if !property.observable {
@@ -106,7 +128,7 @@ pub(crate) fn lower_notification(
             }
             // The Property DataSchema includes extension assertions. Unknown
             // semantics refuse in the shared type-only validator.
-            prepare_type_schema(property.schema)?
+            MqttDataSchema::Value(prepare_type_schema(property.schema)?)
         }
         NotificationKind::Event => {
             let event_scope = doc
@@ -124,10 +146,10 @@ pub(crate) fn lower_notification(
             {
                 return Err(unsupported());
             }
-            prepare_type_schema(
+            MqttDataSchema::Value(prepare_type_schema(
                 doc.affordance_schema(owner, "data")
                     .ok_or_else(unsupported)?,
-            )?
+            )?)
         }
     };
     let [security_name] = form.effective_security else {
@@ -223,8 +245,9 @@ impl ProducerCapability for MqttNotificationProducer {
         let d = d.downcast_ref::<MqttNotificationDefinition>()?;
         Some(
             std::mem::size_of::<MqttNotificationDefinition>()
-                + target_name(&d.target).len()
+                + target_name_bytes(&d.target)
                 + d.topic.len()
+                + d.schema.retained_bytes()
                 + 4 * std::mem::size_of::<usize>(),
         )
     }

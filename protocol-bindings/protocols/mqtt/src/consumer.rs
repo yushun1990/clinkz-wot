@@ -776,13 +776,29 @@ impl ConsumerDataService for MqttJsonData {
     fn validate(&self, schema: TypeSchema, payload: &Payload) -> CoreResult<()> {
         clinkz_wot_codec_json::validate_payload(schema, payload)
     }
+    fn supports_property_map(
+        &self,
+        schema: &clinkz_wot_core::collection::PropertyCollectionSchema,
+    ) -> bool {
+        schema
+            .members()
+            .iter()
+            .all(|m| self.supports_schema(m.schema))
+    }
+    fn validate_property_map(
+        &self,
+        schema: &clinkz_wot_core::collection::PropertyCollectionSchema,
+        payload: &Payload,
+    ) -> CoreResult<()> {
+        clinkz_wot_codec_json::validate_property_map(schema, payload)
+    }
     fn policy(&self) -> ConsumerDataPolicy {
         ConsumerDataPolicy {
             retained_bytes: 0,
             temporary_bytes: 4096,
             body_bytes: MAX_NOTIFICATION_BYTES as u64,
             encoded_selection_bytes: 0,
-            validation_work: 65536,
+            validation_work: MAX_NOTIFICATION_BYTES as u64 * 40 + 128,
         }
     }
 }

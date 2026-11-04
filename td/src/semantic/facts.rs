@@ -350,6 +350,8 @@ impl<'a> ResolvedSemanticDocument<'a> {
                     | crate::data_type::Operation::ReadMultipleProperties
                     | crate::data_type::Operation::WriteAllProperties
                     | crate::data_type::Operation::WriteMultipleProperties
+                    | crate::data_type::Operation::ObserveAllProperties
+                    | crate::data_type::Operation::UnobserveAllProperties
             )
         }) {
             return None;

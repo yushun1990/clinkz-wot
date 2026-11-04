@@ -1,5 +1,7 @@
 use super::*;
-use clinkz_wot_core::{CoreResult, notification::ConsumerNotificationBinding};
+use clinkz_wot_core::{
+    CoreResult, consumer::ConsumerNotificationSchemas, notification::ConsumerNotificationBinding,
+};
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use clinkz_wot_planning::{
     open_consumer::*,
@@ -26,16 +28,21 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
             || input.schemas.cancellation().is_some()
             || input.schemas.data_response().is_some()
             || input.schemas.data().is_none()
+                && !matches!(
+                    input.schemas,
+                    ConsumerNotificationSchemas::ObserveAllProperties(_)
+                )
         {
             return Err(unsupported());
         }
         let site = match input.target {
+            AffordanceTarget::Thing => FormSite::Thing,
             AffordanceTarget::Property(n) => FormSite::Property(n.to_string()),
             AffordanceTarget::Event(n) => FormSite::Event(n.to_string()),
             _ => return Err(unsupported()),
         };
-        let kind = NotificationKind::for_target(input.target).unwrap();
-        if input.schemas.kind() != kind {
+        let kind = input.schemas.kind();
+        if !kind.accepts_target(input.target) {
             return Err(unsupported());
         }
         let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 4096);
@@ -53,13 +60,22 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
         else {
             return Ok(None);
         };
-        if Some(schema) != input.schemas.data() {
+        let matches = match (&schema, &input.schemas) {
+            (
+                MqttDataSchema::Properties(a),
+                ConsumerNotificationSchemas::ObserveAllProperties(b),
+            ) => a == b,
+            (MqttDataSchema::Value(a), _) => Some(*a) == input.schemas.data(),
+            _ => false,
+        };
+        if !matches {
             return Err(unsupported());
         }
         let cancellation = input
             .document
             .form(
                 match input.target {
+                    AffordanceTarget::Thing => clinkz_wot_td::semantic::FormOwner::Thing,
                     AffordanceTarget::Property(n) => {
                         clinkz_wot_td::semantic::FormOwner::Property(n)
                     }

@@ -249,12 +249,12 @@ to = "Released"
 
 [[machine]]
 id = "notification-conversation"
-requirements = ["EXEC-NOTIFY-001", "SAFE-OVERFLOW-001"]
+requirements = ["EXEC-NOTIFY-001", "EXEC-COLLECTION-001", "SAFE-OVERFLOW-001"]
 states = ["Reserved", "Establishing", "Active", "Stopping", "CleanupPending", "Closed"]
 initial = "Reserved"
 terminal = ["Closed"]
 required_events = ["Reserved:cancel-or-fail-before-native-start"]
-invariant = "Each Engine logical subscription has independent cursor/permission/stop. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
+invariant = "Each Engine logical subscription captures its notification kind and scope and has independent cursor/permission/stop. A Property collection has one root identity and complete named schema; it does not create member cursors. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
 
 [[machine.transition]]
 from = "Reserved"

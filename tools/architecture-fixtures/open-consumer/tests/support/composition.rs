@@ -792,6 +792,7 @@ fn subscribe(root: &mut RawNotificationServient<Observe, Access>) -> Notificatio
     root.subscribe(
         RawNotificationRequest {
             target: AffordanceTarget::Property(Arc::from("a")),
+            kind: NotificationKind::PropertyObservation,
             subscription: SubscriptionInput(None),
             responses: ResponseRequirement::None,
             overflow: NotificationOverflow::Terminate,
@@ -1134,6 +1135,7 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
             .prepare_notification(
                 &thing,
                 &AffordanceTarget::Property(Arc::from("a")),
+                NotificationKind::PropertyObservation,
                 ConsumerSelector::default(),
                 &GatewayDefaultV1::LIMITS,
                 bank.clone(),

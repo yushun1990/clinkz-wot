@@ -6,6 +6,8 @@ use clinkz_wot_core::{notification::notification_payload_backing, publication::*
 /// An application-owned Property value source or Event source, not a Read handler.
 pub enum ProducerNotificationSource {
     Property(Arc<str>),
+    /// A distinct root source; does not register individual Property behavior.
+    AllProperties,
     Event(Arc<str>),
 }
 impl ProducerNotificationSource {
@@ -15,13 +17,15 @@ impl ProducerNotificationSource {
     pub fn event(name: impl Into<Arc<str>>) -> Self {
         Self::Event(name.into())
     }
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> Option<&str> {
         match self {
-            Self::Property(n) | Self::Event(n) => n,
+            Self::Property(n) | Self::Event(n) => Some(n),
+            Self::AllProperties => None,
         }
     }
     pub fn target(&self) -> AffordanceTarget {
         match self {
+            Self::AllProperties => AffordanceTarget::Thing,
             Self::Property(n) => AffordanceTarget::Property(n.clone()),
             Self::Event(n) => AffordanceTarget::Event(n.clone()),
         }
@@ -29,17 +33,19 @@ impl ProducerNotificationSource {
     pub fn kind(&self) -> clinkz_wot_core::notification::NotificationKind {
         use clinkz_wot_core::notification::NotificationKind;
         match self {
+            Self::AllProperties => NotificationKind::ObserveAllProperties,
             Self::Property(_) => NotificationKind::PropertyObservation,
             Self::Event(_) => NotificationKind::Event,
         }
     }
     pub(crate) fn backing_bytes(&self) -> usize {
-        self.name().len() + 2 * size_of::<usize>()
+        self.name().map_or(0, str::len) + 2 * size_of::<usize>()
     }
 }
 
 pub struct CapturedNotificationRoute {
     pub target: AffordanceTarget,
+    pub kind: clinkz_wot_core::notification::NotificationKind,
     pub route: NotificationRoute,
     pub services: Rc<dyn ProducerNotificationServices>,
     /// Complete retained application data carrier allowance, prepaid by the
@@ -234,13 +240,11 @@ impl RawProducerServient {
                 .iter()
                 .find(|e| e.current.get() && e.instance.key() == key)
                 .ok_or_else(|| CoreError::StaleHandle(context()))?;
-            if clinkz_wot_core::notification::NotificationKind::for_target(&target)
-                != Some(data.kind())
-            {
+            if !data.kind().accepts_target(&target) {
                 return Err(CoreError::Validation(context()));
             }
             let route = binding
-                .notification_route(&target)
+                .notification_route(&target, data.kind())
                 .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
             let captured = entry
                 .notification_routes
@@ -250,6 +254,9 @@ impl RawProducerServient {
                         .find(|r| r.target == target && r.route.same_mapping(route))
                 })
                 .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+            if captured.kind != data.kind() {
+                return Err(CoreError::Validation(context()));
+            }
             let bytes = notification_payload_backing(Some(data.payload()))
                 .ok_or_else(|| CoreError::Backpressure(context()))?;
             if bytes > captured.data_bytes || entry.instance.notification_work.get() == usize::MAX {
@@ -299,6 +306,7 @@ impl RawProducerServient {
 
 fn target_name_bytes(target: &AffordanceTarget) -> Option<usize> {
     match target {
+        AffordanceTarget::Thing => Some(0),
         AffordanceTarget::Property(n) | AffordanceTarget::Event(n) => Some(n.len()),
         _ => None,
     }
