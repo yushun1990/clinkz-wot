@@ -124,7 +124,9 @@ pub fn intercept_with_instance(
         .find(|o| {
             matches!(
                 o.operation,
-                Operation::SubscribeEvent | Operation::ObserveProperty
+                Operation::SubscribeEvent
+                    | Operation::ObserveProperty
+                    | Operation::ObserveAllProperties
             )
         })
         .unwrap();

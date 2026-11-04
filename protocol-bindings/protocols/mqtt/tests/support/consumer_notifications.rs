@@ -88,6 +88,7 @@ fn prepare_consumer(
     let definition = registry.prepare_notification(
         &thing,
         &target(),
+        KIND,
         ConsumerSelector::default(),
         &limits,
         bank.clone(),
@@ -230,6 +231,7 @@ async fn producer(
 async fn send(o: &mut RawProducerServient, e: &mut ComposedProducerExposure, bytes: &[u8]) {
     let key = e.key();
     let data = match KIND {
+        NotificationKind::ObserveAllProperties => unreachable!("single-affordance fixture"),
         NotificationKind::PropertyObservation => PublicationData::PropertyValue(Payload::new(bytes.to_vec(), "application/json")),
         NotificationKind::Event => data(bytes),
     };
@@ -548,6 +550,7 @@ fn malformed_json_wrong_schema_and_unpaid_validation_never_escape_to_application
         let s = service(&b, 8192);
         let mut description = notification_td(b.address, "invalid/alarm");
         match KIND {
+        NotificationKind::ObserveAllProperties => unreachable!("single-affordance fixture"),
             NotificationKind::PropertyObservation => description["properties"][NAME]["type"] = serde_json::json!("boolean"),
             NotificationKind::Event => description["events"][NAME]["data"]["type"] = serde_json::json!("boolean"),
         }
@@ -1061,6 +1064,7 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
                 .prepare_notification(
                     &thing,
                     &target(),
+                    KIND,
                     ConsumerSelector::default(),
                     &limits,
                     bank.clone(),
@@ -1092,12 +1096,14 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
 
 fn target() -> AffordanceTarget {
     match KIND {
+        NotificationKind::ObserveAllProperties => unreachable!("single-affordance fixture"),
         NotificationKind::PropertyObservation => AffordanceTarget::Property(Arc::from(NAME)),
         NotificationKind::Event => AffordanceTarget::Event(Arc::from(NAME)),
     }
 }
 fn notification_td(address: SocketAddr, topic: &str) -> serde_json::Value {
     match KIND {
+        NotificationKind::ObserveAllProperties => unreachable!("single-affordance fixture"),
         NotificationKind::PropertyObservation => property_td(address, topic),
         NotificationKind::Event => td(address, topic),
     }
@@ -1105,6 +1111,7 @@ fn notification_td(address: SocketAddr, topic: &str) -> serde_json::Value {
 fn notification_instance(authority: ProducerInstanceAuthority, text: &str) -> RawProducerInstance {
     RawProducerInstance::new(authority, vec![]).with_description(Arc::from(text))
         .with_notification_sources(vec![match KIND {
+        NotificationKind::ObserveAllProperties => unreachable!("single-affordance fixture"),
             NotificationKind::PropertyObservation => ProducerNotificationSource::property(NAME),
             NotificationKind::Event => ProducerNotificationSource::event(NAME),
         }])

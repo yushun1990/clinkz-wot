@@ -236,6 +236,7 @@ fn runtime(
             .prepare_notification(
                 &source,
                 &AffordanceTarget::Event(Arc::from("alarm")),
+                NotificationKind::Event,
                 ConsumerSelector::default(),
                 GatewayDefaultV1::LIMITS,
                 bank.clone(),

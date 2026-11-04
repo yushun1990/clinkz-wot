@@ -96,12 +96,28 @@ impl NotificationValidation for CapturedServices {
         self.validate(self.schemas.data_response(), input.0.as_ref())
     }
     fn prepay_data(&self, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.schemas.data().is_some() {
+        if self.schemas.data().is_some()
+            || matches!(
+                self.schemas,
+                ConsumerNotificationSchemas::ObserveAllProperties(_)
+            )
+        {
             self.prepay(budget)?;
         }
         Ok(())
     }
     fn data(&self, data: Option<&Payload>) -> CoreResult<()> {
+        if let ConsumerNotificationSchemas::ObserveAllProperties(schema) = &self.schemas {
+            let payload = data.ok_or_else(invalid)?;
+            if !self.services.data.available()
+                || self.services.data.policy() != self.policy
+                || !self.services.data.supports_property_map(schema)
+                || payload.body.len() as u64 > self.policy.body_bytes
+            {
+                return Err(invalid());
+            }
+            return self.services.data.validate_property_map(schema, payload);
+        }
         self.validate(self.schemas.data(), data)
     }
 }
@@ -132,19 +148,11 @@ where
             if !consumer.is_current()
                 || input.binding.identity() != (id.binding_id(), id.binding_generation())
                 || input.binding.configuration() != &input.configuration
-                || NotificationKind::for_target(&input.target) != Some(input.schemas.kind())
+                || !input.schemas.kind().accepts_target(&input.target)
                 || !data.available()
                 || policy.validation_work == 0
                 || input.services.access.work() == 0
-                || ![
-                    input.schemas.subscription(),
-                    input.schemas.data(),
-                    input.schemas.data_response(),
-                    input.schemas.cancellation(),
-                ]
-                .into_iter()
-                .flatten()
-                .all(|s| data.supports_schema(s))
+                || !input.schemas.supports(data.as_ref())
             {
                 return Err(invalid());
             }
@@ -170,7 +178,7 @@ where
                 binding: id,
                 consumer: consumer.clone(),
                 services: input.services.clone(),
-                schemas: input.schemas,
+                schemas: input.schemas.clone(),
                 policy,
                 access_work: input.services.access.work(),
             });
@@ -208,6 +216,7 @@ where
             .subscribe(
                 RawNotificationRequest {
                     target: self.definition.input().target.clone(),
+                    kind: self.definition.input().schemas.kind(),
                     subscription: input,
                     responses,
                     overflow,

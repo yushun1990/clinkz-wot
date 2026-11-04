@@ -60,25 +60,44 @@ impl NotificationIssuer {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotificationKind {
     PropertyObservation,
+    /// One Thing-root conversation carrying named Property collection data.
+    ObserveAllProperties,
     Event,
 }
 impl NotificationKind {
-    pub fn for_target(target: &AffordanceTarget) -> Option<Self> {
-        match target {
-            AffordanceTarget::Property(_) => Some(Self::PropertyObservation),
-            AffordanceTarget::Event(_) => Some(Self::Event),
+    /// Scope alone does not select a notification family: Thing-root Forms
+    /// can describe Property or Event collections. Capture the operation kind.
+    pub fn for_operation(operation: Operation) -> Option<Self> {
+        match operation {
+            Operation::ObserveProperty | Operation::UnobserveProperty => {
+                Some(Self::PropertyObservation)
+            }
+            Operation::ObserveAllProperties | Operation::UnobserveAllProperties => {
+                Some(Self::ObserveAllProperties)
+            }
+            Operation::SubscribeEvent | Operation::UnsubscribeEvent => Some(Self::Event),
             _ => None,
         }
+    }
+    pub fn accepts_target(self, target: &AffordanceTarget) -> bool {
+        matches!(
+            (self, target),
+            (Self::PropertyObservation, AffordanceTarget::Property(_))
+                | (Self::ObserveAllProperties, AffordanceTarget::Thing)
+                | (Self::Event, AffordanceTarget::Event(_))
+        )
     }
     pub const fn start_operation(self) -> Operation {
         match self {
             Self::PropertyObservation => Operation::ObserveProperty,
+            Self::ObserveAllProperties => Operation::ObserveAllProperties,
             Self::Event => Operation::SubscribeEvent,
         }
     }
     pub const fn stop_operation(self) -> Operation {
         match self {
             Self::PropertyObservation => Operation::UnobserveProperty,
+            Self::ObserveAllProperties => Operation::UnobserveAllProperties,
             Self::Event => Operation::UnsubscribeEvent,
         }
     }
@@ -102,6 +121,7 @@ pub enum NotificationOverflow {
 
 pub struct RawNotificationRequest {
     pub target: AffordanceTarget,
+    pub kind: NotificationKind,
     pub subscription: SubscriptionInput,
     /// Chosen from the actual required semantics, not inferred from the mere
     /// presence of an Event dataResponse schema. Property observations use None.

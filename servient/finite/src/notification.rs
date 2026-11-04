@@ -416,17 +416,20 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             if !self.paired() {
                 return Err(stale());
             }
-            let kind = NotificationKind::for_target(&request.target).ok_or_else(unsupported)?;
+            let kind = request.kind;
+            if !kind.accepts_target(&request.target) {
+                return Err(unsupported());
+            }
             if request
                 .target
                 .name()
-                .is_none_or(|s| s.len() > self.limits.target_name_bytes)
+                .is_some_and(|s| s.len() > self.limits.target_name_bytes)
                 || notification_payload_backing(request.subscription.0.as_ref())
                     .is_none_or(|n| n > self.limits.control_backing_bytes)
             {
                 return Err(capacity());
             }
-            if kind == NotificationKind::PropertyObservation
+            if kind != NotificationKind::Event
                 && (request.responses != ResponseRequirement::None
                     || request.subscription.0.is_some())
             {
@@ -435,7 +438,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             if self.limits.queue_items == 0 {
                 return Err(capacity());
             }
-            if kind == NotificationKind::PropertyObservation
+            if kind != NotificationKind::Event
                 && (self.limits.queue_payload_bytes == 0 || self.limits.payload_backing_bytes == 0)
             {
                 return Err(capacity());
@@ -473,7 +476,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             let reservation = self
                 .reservation(
                     self.limits.queue_items,
-                    request.target.name().unwrap().len(),
+                    request.target.name().map_or(0, str::len),
                 )
                 .ok_or_else(capacity)?;
             if self
@@ -497,7 +500,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             return Err(reject((request, program), capacity()));
         }
         let Some(reservation) = self
-            .reservation(queue.capacity(), request.target.name().unwrap().len())
+            .reservation(queue.capacity(), request.target.name().map_or(0, str::len))
             .filter(|n| {
                 self.reserved_bytes
                     .checked_add(*n)
@@ -648,8 +651,10 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             if !e.support.cancellation {
                 return Err(unsupported());
             }
-            if matches!(e.request.target, AffordanceTarget::Property(_))
-                && cancellation.as_ref().unwrap().0.is_some()
+            if matches!(
+                e.request.target,
+                AffordanceTarget::Thing | AffordanceTarget::Property(_)
+            ) && cancellation.as_ref().unwrap().0.is_some()
             {
                 return Err(invalid());
             }
@@ -1083,7 +1088,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                     return Ok(e.state);
                 }
                 let item = e.staged.as_ref().unwrap();
-                let kind = NotificationKind::for_target(&e.request.target).unwrap();
+                let kind = e.request.kind;
                 let validation = self
                     .validation
                     .as_ref()
@@ -1101,7 +1106,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 } else if let Err(error) = validation {
                     e.fence(error);
                 } else if bytes.is_none_or(|n| n > self.limits.payload_backing_bytes)
-                    || (kind == NotificationKind::PropertyObservation
+                    || (kind != NotificationKind::Event
                         && (item.native.data.is_none() || has_response))
                     || (has_response && !e.support.event_responses)
                     || (e.request.responses == ResponseRequirement::Required && !has_response)

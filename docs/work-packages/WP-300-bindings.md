@@ -143,5 +143,15 @@ exercises richer reports over real I/O in both finite roles, including late
 results and rejection of unrequested-member evidence. Its Producer is raw and
 its protocol is a test participant, not production or TD-qualified support.
 
-Long-lived collection operations remain unimplemented. This scoped capability changes no
-work-package dependencies, gate, milestone or production qualification status.
+## Native collection observation facet
+
+The existing notification participation/publication facets now carry explicit
+kind and Thing-root Property maps. [Binding SPI](../spec/binding-spi.md) owns their
+pairing and native/logical separation; the [MQTT mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation)
+uses one exact topic without N leaf operations. [Real broker tests](../../protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs)
+exercise shared native interests, independent logical stop, partial controls,
+publication uncertainty and physical retirement.
+
+Other continuing collection operations remain unimplemented. This scoped capability
+changes no work-package dependencies, gate, milestone or production qualification
+status.

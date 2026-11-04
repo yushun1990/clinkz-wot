@@ -571,6 +571,7 @@ fn payload(s: &str) -> Payload {
 fn property(overflow: NotificationOverflow) -> RawNotificationRequest {
     RawNotificationRequest {
         target: AffordanceTarget::Property(Arc::from("temperature")),
+        kind: NotificationKind::PropertyObservation,
         subscription: SubscriptionInput(None),
         responses: ResponseRequirement::None,
         overflow,
@@ -579,6 +580,7 @@ fn property(overflow: NotificationOverflow) -> RawNotificationRequest {
 fn event(required: bool) -> RawNotificationRequest {
     RawNotificationRequest {
         target: AffordanceTarget::Event(Arc::from("alarm")),
+        kind: NotificationKind::Event,
         subscription: SubscriptionInput(Some(payload("filter"))),
         responses: if required {
             ResponseRequirement::Required
@@ -652,6 +654,37 @@ fn property_observation_has_one_cursor_and_no_fabricated_initial_value() {
     let report = settle(&mut root, &id);
     assert_eq!(report.delivered_items, 1);
     assert_eq!(report.remote_cancellation, RemoteCancellation::Unknown);
+}
+
+#[test]
+fn notification_kind_scope_mismatch_refuses_before_native_preparation() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(&bus, limits());
+    for (target, kind) in [
+        (AffordanceTarget::Thing, NotificationKind::Event),
+        (
+            AffordanceTarget::Property(Arc::from("p")),
+            NotificationKind::ObserveAllProperties,
+        ),
+        (
+            AffordanceTarget::Event(Arc::from("e")),
+            NotificationKind::PropertyObservation,
+        ),
+    ] {
+        let mut request = property(NotificationOverflow::Terminate);
+        request.target = target;
+        request.kind = kind;
+        let rejected = root
+            .subscribe(request, Program::property(), &mut budget())
+            .err()
+            .unwrap();
+        assert!(matches!(
+            rejected.error().error(),
+            CoreError::UnsupportedOperation(_)
+        ));
+    }
+    assert_eq!(bus.borrow().prepare_calls, 0);
+    assert_eq!(bus.borrow().start_polls, 0);
 }
 
 #[test]

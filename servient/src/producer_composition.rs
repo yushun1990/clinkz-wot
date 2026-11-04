@@ -81,7 +81,9 @@ fn capture_notification_routes<'a>(
         .filter(|o| {
             matches!(
                 o.operation,
-                Operation::ObserveProperty | Operation::SubscribeEvent
+                Operation::ObserveProperty
+                    | Operation::ObserveAllProperties
+                    | Operation::SubscribeEvent
             )
         })
         .count();
@@ -94,6 +96,9 @@ fn capture_notification_routes<'a>(
     for operation in prepared.operations() {
         use clinkz_wot_planning::producer_composition::FormSite;
         let target = match (&operation.site, operation.operation) {
+            (FormSite::Thing, Operation::ObserveAllProperties) => {
+                clinkz_wot_core::AffordanceTarget::Thing
+            }
             (FormSite::Property(n), Operation::ObserveProperty) => {
                 clinkz_wot_core::AffordanceTarget::Property(Arc::from(n.as_str()))
             }
@@ -135,6 +140,10 @@ fn capture_notification_routes<'a>(
         }
         routes.push(CapturedNotificationRoute {
             target,
+            kind: clinkz_wot_core::notification::NotificationKind::for_operation(
+                operation.operation,
+            )
+            .unwrap(),
             route,
             services,
             data_bytes,

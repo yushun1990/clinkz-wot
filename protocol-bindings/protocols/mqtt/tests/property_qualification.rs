@@ -60,6 +60,7 @@ fn prepare_consumer(
     registry.prepare_notification(
         &thing,
         &target(),
+        NotificationKind::PropertyObservation,
         selector,
         &limits,
         bank.clone(),
@@ -306,6 +307,7 @@ fn missing_property_services_and_cancelled_staging_release_original_capacity_wit
     let (input, probe) =
         intercept_with_instance(&owner, property_instance(authority(1), &text), &p, &s, true);
     let invalid = CapturedNotificationRoute {
+        kind: NotificationKind::PropertyObservation,
         target: AffordanceTarget::Action(Arc::from("not-a-notification")),
         route: NotificationRoute::new(p.identity()),
         services: probe,

@@ -379,6 +379,7 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
                 .prepare_notification(
                     &thing,
                     &event_target,
+                    NotificationKind::Event,
                     ConsumerSelector::default(),
                     &limits,
                     bank.clone(),

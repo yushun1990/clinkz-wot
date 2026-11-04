@@ -111,14 +111,11 @@ impl RawProducerInstance {
         self
     }
     pub fn supports_notification(&self, target: &AffordanceTarget, operation: Operation) -> bool {
-        let Some(kind) = clinkz_wot_core::notification::NotificationKind::for_target(target) else {
-            return false;
-        };
-        (operation == kind.start_operation() || operation == kind.stop_operation())
-            && self
-                .notification_sources
-                .iter()
-                .any(|s| s.target() == *target)
+        self.notification_sources.iter().any(|s| {
+            s.target() == *target
+                && (operation == s.kind().start_operation()
+                    || operation == s.kind().stop_operation())
+        })
     }
 
     pub fn key(&self) -> ProducerInstanceKey {
@@ -154,6 +151,9 @@ impl RawProducerInstance {
         }) && self.notification_sources.iter().all(|e| {
             advertised(
                 match e {
+                    ProducerNotificationSource::AllProperties => {
+                        clinkz_wot_core::thing::AffordanceSite::Thing
+                    }
                     ProducerNotificationSource::Property(n) => {
                         clinkz_wot_core::thing::AffordanceSite::Property(n)
                     }
@@ -175,6 +175,8 @@ impl RawProducerInstance {
                 _,
                 Operation::ObserveProperty
                 | Operation::UnobserveProperty
+                | Operation::ObserveAllProperties
+                | Operation::UnobserveAllProperties
                 | Operation::SubscribeEvent
                 | Operation::UnsubscribeEvent,
             ) => self.supports_notification(target, operation),
@@ -340,10 +342,10 @@ impl RawProducerServient {
                 .iter()
                 .enumerate()
                 .all(|(i, e)| {
-                    e.name().len() <= limits.target_name_bytes
+                    e.name().is_none_or(|n| n.len() <= limits.target_name_bytes)
                         && !instance.notification_sources[..i]
                             .iter()
-                            .any(|prior| prior.target() == e.target())
+                            .any(|prior| prior.target() == e.target() && prior.kind() == e.kind())
                 })
             && instance.actions.iter().enumerate().all(|(j, action)| {
                 action.name().len() <= limits.target_name_bytes

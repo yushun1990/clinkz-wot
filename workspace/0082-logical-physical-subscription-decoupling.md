@@ -28,45 +28,37 @@ without solving the other.
 
 ## Existing authority and evidence boundary
 
-- [Binding SPI](../docs/spec/binding-spi.md) gives the concrete binding
-  protocol-local client/session state, native multiplexing, routing and
-  flow control. Servient retains semantic admission, subscription lifecycle,
-  scheduling, resource governance and cleanup authority. Native sharing
-  must not become independent binding-owned application dispatch.
-- [Subscription flow](../docs/architecture/10-primary-data-flows.md)
-  describes distinct `SubscriptionId`s, a linear application receive cursor,
-  independently admitted logical subscriptions, driver/slot capacity and
-  generation-safe stop/drain. It also states that standard Thing-root
-  collection operations use one native/coalesced driver rather than silently
-  expanding to N per-affordance subscriptions.
-- [Planning](../docs/spec/planning.md) records
-  `NativeMultiplexed`/`BindingCoalesced` collection topology and
-  `ExactAffordanceTarget` attribution for eligible *Thing-root collection*
-  operations. This does **not** prove arbitrary subscription sharing
-  *across Things/ConsumerHandles*, nor an application-visible physical
-  device identifier for many sources mapped to one logical target.
-- [Historical source attribution topic 0003](0003-subscription-source-attribution.org)
-  is MIGRATED: protocol topics/key expressions remain in binding artifacts
-  and must not silently replace protocol-neutral application source identity.
-  Different observable WoT semantics require distinct logical targets or a
-  reviewed extension.
-- [Subscription receiver topic 0011](0011-subscription-receiver-ownership.md)
-  is MIGRATED: a single non-cloneable application receive capability has
-  one cursor; independent logical consumers use distinct admitted identities.
-  A shared transport must not accidentally create clone/broadcast semantics.
-- [Architecture roadmap](../PLAN.md) requires explicit long-lived
-  subscription/emission domain-entry review and one minimal `ObserveProperty`
-  cross-package proof *before* broad subscription/emission expansion. The
-  current Consumer Property Read one-shot tranche and [PR #168](https://github.com/yushun1990/clinkz-wot/pull/168)
-  do not prove a retained or cross-Thing subscription topology.
+The active v6 contracts are [Interaction Core](../docs/spec/interaction-core.md),
+[Planning](../docs/spec/planning.md), [Binding SPI](../docs/spec/binding-spi.md)
+and [Runtime Safety](../docs/spec/runtime-safety.md). Native matching,
+distribution, compatible subscription/session sharing and physical retirement
+belong to Bindings; each Engine conversation retains independent logical
+permission, cursor, loss, stop and original-instance cleanup. A described root
+operation must not silently become N individual subscriptions. Historical v5
+`NativeMultiplexed`/`BindingCoalesced` topology inventories and one-shot tranche
+entry restrictions are not the current SPI.
 
-The historical/deferred long-lived SPI describes one driver with a receive
-cursor, protocol resource and binding-local cleanup state. Whether such a
-driver may own a *lease* or an independently accounted virtual cursor into
-shared native state, without weakening its unique lifecycle, is unproved.
-No current text should be interpreted as empirical evidence for automatic
-cross-Thing sharing, nor as requiring one physical Broker subscribe call
-per logical subscription.
+[Topic 0003](0003-subscription-source-attribution.org) and
+[topic 0011](0011-subscription-receiver-ownership.md) remain MIGRATED: raw topics
+are not application device identity, and one move-only cursor does not acquire
+implicit broadcast semantics. A native lease may share physical state only while
+preserving each admitted logical obligation.
+
+[Single-Property/Event broker evidence](../protocol-bindings/protocols/mqtt/tests/property_observation.rs)
+and [Thing-root observation evidence](../protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs)
+now exercise independent Consumers sharing a compatible exact-topic native
+subscription. The root mapping uses complete named Property maps, not wildcard
+source extraction. [Investigation 0103](0103-thing-root-observe-all-properties.md)
+migrates that bounded increment's decisions into the domain contracts.
+
+This evidence addresses independent stop, original attribution/schema, loss,
+replacement, owned controls and final release for that topology. It does not
+resolve fleet partitioning, tenant/credential compatibility, wildcard overlap,
+shared-group semantics, per-device source identity, throughput or Host/static
+parity. The complete map's member/sample cost and each logical cursor's queue
+cost remain bounded independently of native registration count. Reducing native
+subscriptions does not erase those costs. No fleet-wide subscription-pool API or
+scalability result follows; this broader topic remains OPEN.
 
 ## Identity and cost dimensions that must not be conflated
 
@@ -181,25 +173,23 @@ facade, or active normative requirement.
   legitimate application design, but not a substitute for independent engine
   logical subscription semantics when those are requested.
 
-No candidate is selected by this OPEN topic.
+No fleet-wide candidate is selected by this OPEN topic; the bounded exact-topic
+mapping above is not a general topology decision.
 
 ## Revisit trigger, scope and governance
 
-Revisit **during the long-lived ObserveProperty/subscription domain-entry
-architecture review and before freezing cross-Thing subscription-sharing
-APIs, binding driver ownership or fleet scalability claims**. The review
+Revisit **as substantive Binding/collection integrations expose further
+sharing counterexamples, and before freezing fleet subscription-sharing APIs,
+native ownership or scalability claims**. The review
 must examine current normative sources, actual binding implementations,
 protocol behavior and negative evidence, then decide whether to migrate
 requirements, change ownership, constrain supported topology or leave
 application-defined fan-out as the sufficient v1 solution.
 
 This is a non-authoritative, non-blocking counterexample. It does not reopen
-MIGRATED topics 0003/0011; activate inactive subscription requirements;
-change `PLAN-SET-001`, `SubscriptionId`, `AffordanceTarget`, driver contracts,
-resource defaults, public API, package admission, performance budgets or CI
-gates; or block the independently reviewed one-shot Consumer Property Read
-tranche/PR #168. A demonstrated *positive contradiction* with an irreversible
-API/ownership decision must be raised through
+MIGRATED topics 0003/0011 or silently alter active identities, ownership contracts,
+resource defaults, admission, performance budgets or CI gates. A demonstrated
+contradiction with an API/ownership decision must be raised through
 [architecture governance](../ARCHITECTURE_GOVERNANCE.md), not silently patched.
 
 Related: [0081 Plan reuse](0081-reusable-plan-and-thing-identity.md)

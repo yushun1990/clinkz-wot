@@ -282,31 +282,34 @@ impl MqttNotificationService {
         }
         let mut mappings: Vec<NotificationMapping> = Vec::new();
         for d in &definitions {
-            if d.operation
-                != NotificationKind::for_target(&d.target)
-                    .unwrap()
-                    .start_operation()
-            {
+            let kind = NotificationKind::for_operation(d.operation).ok_or_else(unsupported)?;
+            if d.operation != kind.start_operation() {
                 continue;
             }
             if mappings.len() == 16
                 || mappings
                     .iter()
-                    .any(|e| e.target == d.target || e.topic == d.topic)
+                    .any(|e| e.target == d.target && e.kind == kind || e.topic == d.topic)
             {
                 return Err(unsupported());
             }
             mappings.push(NotificationMapping {
                 target: d.target.clone(),
+                kind,
                 topic: Arc::clone(&d.topic),
                 route: NotificationRoute::new(session.registration.binding),
-                services: Rc::new(JsonNoSec { schema: d.schema }),
+                services: Rc::new(JsonNoSec {
+                    schema: d.schema.clone(),
+                }),
             });
         }
         if mappings.is_empty()
             || definitions.iter().any(|d| {
                 !mappings.iter().any(|e| {
-                    e.target == d.target && e.topic == d.topic && e.services.schema == d.schema
+                    e.target == d.target
+                        && Some(e.kind) == NotificationKind::for_operation(d.operation)
+                        && e.topic == d.topic
+                        && e.services.schema == d.schema
                 })
             })
             || definitions.iter().enumerate().any(|(i, d)| {
@@ -359,7 +362,7 @@ impl MqttNotificationService {
 }
 
 struct JsonNoSec {
-    schema: TypeSchema,
+    schema: MqttDataSchema,
 }
 impl ProducerNotificationServices for JsonNoSec {
     fn authorize(&self, _data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
@@ -369,13 +372,17 @@ impl ProducerNotificationServices for JsonNoSec {
     }
     fn validate(&self, data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
         budget
-            .consume(WorkClass::CodecInputBytes, data.payload().body.len() as u64)
+            .consume(
+                WorkClass::CodecInputBytes,
+                MAX_NOTIFICATION_BYTES as u64 * 40 + 128,
+            )
             .map_err(|_| busy())?;
-        clinkz_wot_codec_json::validate_payload(self.schema, data.payload())
+        self.schema.validate(data.payload())
     }
 }
 struct NotificationMapping {
     target: AffordanceTarget,
+    kind: NotificationKind,
     topic: Arc<str>,
     route: NotificationRoute,
     services: Rc<JsonNoSec>,
@@ -512,14 +519,18 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             + l.definitions.capacity() * size_of::<MqttNotificationDefinition>();
         for d in &l.definitions {
             bytes = bytes.checked_add(
-                target_name(&d.target).len() + d.topic.len() + 4 * size_of::<usize>(),
+                target_name_bytes(&d.target)
+                    + d.topic.len()
+                    + d.schema.retained_bytes()
+                    + 4 * size_of::<usize>(),
             )?;
         }
         for e in &l.mappings {
             bytes = bytes.checked_add(
-                target_name(&e.target).len()
+                target_name_bytes(&e.target)
                     + e.topic.len()
                     + size_of::<JsonNoSec>()
+                    + e.services.schema.retained_bytes()
                     + 10 * size_of::<usize>(),
             )?;
         }
@@ -566,18 +577,17 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         usize,
     )> {
         let target = match site {
+            AffordanceSite::Thing => AffordanceTarget::Thing,
             AffordanceSite::Property(n) => AffordanceTarget::Property(Arc::from(n)),
             AffordanceSite::Event(n) => AffordanceTarget::Event(Arc::from(n)),
             _ => return None,
         };
-        if !self.covers_definition(
-            key,
-            binding,
-            site,
-            form,
-            NotificationKind::for_target(&target)?.start_operation(),
-            definition,
-        ) {
+        let kind = NotificationKind::for_operation(
+            definition
+                .downcast_ref::<MqttNotificationDefinition>()?
+                .operation,
+        )?;
+        if !self.covers_definition(key, binding, site, form, kind.start_operation(), definition) {
             return None;
         }
         let e = self
@@ -585,7 +595,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             .as_ref()?
             .mappings
             .iter()
-            .find(|e| e.target == target)?;
+            .find(|e| e.target == target && e.kind == kind)?;
         Some((e.route.clone(), e.services.clone(), DATA_BACKING))
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
@@ -602,12 +612,16 @@ impl Drop for MqttNotificationRuntime {
 }
 impl ProducerNotificationBinding for MqttNotificationRuntime {
     type Publication = MqttPublication;
-    fn notification_route(&self, target: &AffordanceTarget) -> Option<&NotificationRoute> {
+    fn notification_route(
+        &self,
+        target: &AffordanceTarget,
+        kind: NotificationKind,
+    ) -> Option<&NotificationRoute> {
         self.lease
             .as_ref()?
             .mappings
             .iter()
-            .find(|e| e.target == *target)
+            .find(|e| e.target == *target && e.kind == kind)
             .map(|e| &e.route)
     }
     fn start_publication(
@@ -625,7 +639,7 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         let Some(e) = l.mappings.iter().find(|e| e.route.same_mapping(route)) else {
             return Err(reject(data, unsupported()));
         };
-        if Some(data.kind()) != NotificationKind::for_target(&e.target) {
+        if data.kind() != e.kind {
             return Err(reject(data, unsupported()));
         }
         let mut s = l.session.borrow_mut();

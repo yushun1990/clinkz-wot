@@ -115,23 +115,24 @@ impl ProducerPublication {
             .as_ref()
             .ok_or_else(|| CoreError::Validation(context()))?;
         if routes.iter().enumerate().any(|(i, r)| {
-            clinkz_wot_core::notification::NotificationKind::for_target(&r.target).is_none_or(
-                |kind| !instance.supports_notification(&r.target, kind.start_operation()),
-            ) || r.data_bytes == 0
+            !r.kind.accepts_target(&r.target)
+                || !instance.supports_notification(&r.target, r.kind.start_operation())
+                || r.data_bytes == 0
                 || routes[..i]
                     .iter()
                     .any(|p| p.target == r.target && p.route.same_mapping(&r.route))
-        }) || instance
-            .notification_sources
-            .iter()
-            .any(|e| !routes.iter().any(|r| r.target == e.target()))
-        {
+        }) || instance.notification_sources.iter().any(|e| {
+            !routes
+                .iter()
+                .any(|r| r.target == e.target() && r.kind == e.kind())
+        }) {
             return Err(CoreError::Validation(context()));
         }
         if let Some(old) = &self.notification_routes {
             if old.len() != routes.len()
                 || old.iter().zip(&routes).any(|(a, b)| {
                     a.target != b.target
+                        || a.kind != b.kind
                         || !a.route.same_mapping(&b.route)
                         || !Rc::ptr_eq(&a.services, &b.services)
                         || a.data_bytes != b.data_bytes

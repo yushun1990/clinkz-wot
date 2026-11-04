@@ -101,13 +101,22 @@ original slot and funding. Native poll errors and late retirement output retain
 independent evidence; even after an error, captured validation applies to that
 late output before final settlement, without clearing the first cause.
 The composed notification owner captures the actual data/access services and separately
-prepared Property value or Event schema roles, prepays validation before native handoff and checks data
+prepared Property value, root Property map or Event schema roles, prepays validation before native handoff and checks data
 before queue acceptance. Invalid/late data and first causes remain with the
 original subscription through cleanup. Its original Host bank conservatively
 funds the root queue and validation envelope until root disposal; raw owner-scoped
 limits alone are not an aggregate-accounting claim. Native topic sharing,
 distribution, bounded queues and connection/control-frame disposal remain in
 the Binding, independently of each logical recipient's authority and stop.
+
+A collection observation retains one root authority and original named schema
+through late candidates, stop and settlement. Complete-map validation accepts
+all members together or fences the entire owned sample; no partially validated
+member may escape. Cursor replacement never inherits buffered maps. Shared
+native topic loss/overflow is visible per logical recipient, with whole-sample
+DropNewest or termination and no implicit coalescing. Mapped root unobserve and
+physical housekeeping remain separate: stopping a shared interest may require
+no native unsubscribe, and local disposal alone cannot claim a remote ACK.
 
 `SAFE-PUBLISH-001`: Producer setup MUST validate the draft/known dependencies,
 capture actual providers/behavior and reserve setup/ingress/finalization/cleanup

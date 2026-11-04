@@ -31,8 +31,12 @@ struct RevokingPublication {
 }
 impl ProducerNotificationBinding for RevokingBinding<'_> {
     type Publication = RevokingPublication;
-    fn notification_route(&self, target: &AffordanceTarget) -> Option<&NotificationRoute> {
-        self.native.notification_route(target)
+    fn notification_route(
+        &self,
+        target: &AffordanceTarget,
+        kind: clinkz_wot_core::notification::NotificationKind,
+    ) -> Option<&NotificationRoute> {
+        self.native.notification_route(target, kind)
     }
     fn start_publication(
         &mut self,

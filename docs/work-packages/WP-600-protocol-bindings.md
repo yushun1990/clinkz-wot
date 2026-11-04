@@ -251,7 +251,7 @@ unsupported semantics, ambiguity/selectors and actual registration/service pairi
 The [MQTT README](../../protocol-bindings/protocols/mqtt/README.md) owns concrete
 scope and policies, including retained-data loss and the absence of replay.
 Broader schema/security, TLS, QoS 1/2, reconnect, Event responses with real native
-cardinality, separate control Forms, collections and constrained execution remain
+cardinality, separate control Forms, other notification collections and constrained execution remain
 outside this slice. No package, architecture gate or milestone closes here.
 
 ## TD-driven continuing Consumer Actions
@@ -312,5 +312,18 @@ provides no per-member or atomicity report; a separate test-native datagram
 fixture challenges the shared SPI with richer evidence without extending HTTP's
 production qualification.
 
-Long-lived collection operations remain unimplemented. This scoped capability changes no
-work-package dependencies, gate, milestone or production qualification status.
+## TD-driven MQTT Property collection observation
+
+Both TD-driven roles now execute ObserveAllProperties/UnobserveAllProperties
+through the [declared MQTT mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation).
+[Qualification](../../protocol-bindings/protocols/mqtt/tests/collection_qualification.rs)
+and [real Mosquitto evidence](../../protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs)
+cover a combined root Form and complete future-only named maps, with no hidden
+per-Property lowering. The MQTT guidance does not define an observe-all default;
+this concrete mapping supplies the native policy. Deltas, wildcard extraction,
+atomic snapshots, fleet scaling and general production/profile qualification
+remain outside this evidence.
+
+Other continuing collection operations remain unimplemented. This scoped capability
+changes no work-package dependencies, gate, milestone or production qualification
+status.

@@ -88,6 +88,7 @@ pub fn prepare(
         &mut budget(),
         providers,
         |s, op| match s {
+            ValidatedProducerScope::Thing => instance.supports(&AffordanceTarget::Thing, op),
             ValidatedProducerScope::Property(n) => instance.supports_property(n, op),
             ValidatedProducerScope::Event(n) => {
                 instance.supports_notification(&AffordanceTarget::Event(Arc::from(n)), op)
@@ -184,4 +185,31 @@ pub fn property_instance(authority: ProducerInstanceAuthority, text: &str) -> Ra
     RawProducerInstance::new(authority, vec![])
         .with_description(Arc::from(text))
         .with_notification_sources(vec![ProducerNotificationSource::property("temperature")])
+}
+
+pub fn collection_td(address: SocketAddr, topic: &str) -> serde_json::Value {
+    let mut value = property_td(address, &format!("{topic}/temperature"));
+    value["title"] = serde_json::json!("Collection observation");
+    let mut enabled = value["properties"]["temperature"].clone();
+    enabled["type"] = serde_json::json!("boolean");
+    enabled["forms"][0]["mqv:filter"] = serde_json::json!(format!("{topic}/enabled"));
+    value["properties"]["enabled"] = enabled;
+    value["forms"] = serde_json::json!([{
+        "href":format!("mqtt://{address}"),
+        "op":["observeallproperties","unobserveallproperties"],
+        "mqv:filter":topic, "mqv:qos":"0", "mqv:retain":false
+    }]);
+    value
+}
+pub fn collection_instance(
+    authority: ProducerInstanceAuthority,
+    text: &str,
+) -> RawProducerInstance {
+    RawProducerInstance::new(authority, vec![])
+        .with_description(Arc::from(text))
+        .with_notification_sources(vec![
+            ProducerNotificationSource::AllProperties,
+            ProducerNotificationSource::property("temperature"),
+            ProducerNotificationSource::property("enabled"),
+        ])
 }

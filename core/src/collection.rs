@@ -10,9 +10,10 @@ pub struct PropertyMemberSchema {
 }
 
 /// Eligible member schemas, derived independently for each data role. Read
-/// schemas exclude writeOnly; write schemas exclude readOnly. All operations
-/// require every eligible member exactly once; selected operations carry a
-/// separate per-call set. Excluded members are never optional unvalidated values. This is the bounded type-only
+/// schemas exclude writeOnly; write schemas exclude readOnly. Finite all-member
+/// operations and complete observation samples require every eligible member
+/// exactly once; selected operations carry a separate per-call set. Excluded
+/// members are never optional unvalidated values. This is the bounded type-only
 /// subset, not a general DataSchema tree or a snapshot/atomicity promise.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertyCollectionSchema {

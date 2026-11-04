@@ -605,7 +605,9 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
             {"href":"http://127.0.0.1/actions", "op":"queryallactions"},
             {"href":"http://127.0.0.1/events", "op":"subscribeallevents"},
             {"href":"http://127.0.0.1/selected", "op":"readmultipleproperties"},
-            {"href":"http://127.0.0.1/properties", "op":"writeallproperties"}
+            {"href":"http://127.0.0.1/properties", "op":"writeallproperties"},
+            {"href":"mqtt://127.0.0.1:1883", "op":"observeallproperties"},
+            {"href":"mqtt://127.0.0.1:1883", "op":"unobserveallproperties"}
         ],
         "properties":{}
     });
@@ -616,7 +618,7 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
             "forms":[{"href":format!("http://127.0.0.1/p{i}")}]});
     }
     let thing: crate::thing::Thing = serde_json::from_value(value.clone()).unwrap();
-    for index in [0, 3, 4] {
+    for index in [0, 3, 4, 5, 6] {
         assert!(
             ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, index)
                 .0
@@ -633,7 +635,7 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
     value["properties"] = serde_json::json!({"p":{"type":"integer","readOnly":true,
         "forms":[{"href":"http://127.0.0.1/p"}]}});
     let thing: crate::thing::Thing = serde_json::from_value(value).unwrap();
-    for index in [0, 3, 4] {
+    for index in [0, 3, 4, 5, 6] {
         let root = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, index)
             .0
             .unwrap();
