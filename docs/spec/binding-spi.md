@@ -229,7 +229,7 @@ be used to discard that observation or promote it to successful handoff.
 
 ## Native Thing-root Property collection reads
 
-The implemented finite subset includes all/selected root collection reads and all-writes; operation flags
+The implemented finite subset includes all/selected root collection reads and writes; operation flags
 alone do not establish support. The actual compiler qualifies its own root Form,
 codec/collection service, native mapping and configuration. The HTTP participant
 retains an explicit `AffordanceTarget` for every native mapping, preserving Thing
@@ -267,11 +267,27 @@ allowance. A valid handler success certifies reported whole-group completion,
 not transactional atomicity or rollback. Handler failure after entry retains
 possible partial effects. Native reply delivery remains a separate fact.
 
+WriteMultipleProperties uses complete writable eligibility with a separately
+validated per-call map/set. Its native input is one group interaction, not a list
+of implicit single writes. Captured output validation receives the original input
+to associate any `PropertyWriteReport` with precisely that call's selected set.
+The [Core report contract](interaction-core.md) retains
+member effects, opaque member statuses and supported atomicity independently of
+aggregate completion, local cause and delivery. The carrier is inline: existing
+`size_of`-based call/output reservations cover it, with no report allocation or
+variable cleanup obligation. Normal, unread and late reports use the same
+identity/seal/selection checks. An incomplete report is evidence rather than
+whole-group success. No HTTP-specific empty-result rule limits another Binding.
+
 HTTP owns its GET/200 JSON all-read, explicit POST/200 JSON selected-read and
-PUT/204 empty all-write mappings, with strict complete-result refusal
+PUT/204 empty all/selected-write mappings, with strict complete-result refusal
 policy, documented in [its README](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).
 Other Bindings decline collection operations unless their actual native
 capabilities support them. The Engine does not call individual Property operations,
 interpret HTTP aggregation, or grant snapshot/atomicity guarantees. Native error
 responses cannot certify pre-effect refusal without an actual supported mapping;
 uncertain group writes MUST NOT be automatically replayed.
+HTTP cannot encode member reports and refuses them, including complete reports,
+instead of erasing them or claiming 204 completion. The independent datagram
+fixture tests a different native report mapping through public Cargo APIs; it
+does not establish production protocol or WebDAV support.

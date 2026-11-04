@@ -29,7 +29,8 @@ impl HttpFiniteConfig {
                 AffordanceTarget::Thing,
                 Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
-                | Operation::WriteAllProperties,
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties,
             ) => program.property_map.is_some(),
             (
                 AffordanceTarget::Property(name),
@@ -453,6 +454,16 @@ impl FiniteValidator for HttpFiniteConfig {
                 )
                 .map(|_| ())
             }
+            (Operation::WriteMultipleProperties, Some(payload)) => {
+                crate::producer_validation::validate_property_write_map(
+                    program
+                        .property_map
+                        .as_ref()
+                        .ok_or_else(crate::producer::producer_unsupported)?,
+                    payload,
+                )
+                .map(|_| ())
+            }
             (Operation::WriteAllProperties, Some(payload)) => {
                 crate::producer_validation::validate_property_map(
                     program
@@ -500,8 +511,11 @@ impl FiniteValidator for HttpFiniteConfig {
                 )
             }
             Operation::ReadProperty | Operation::ReadAllProperties => program.validate(output),
-            Operation::WriteProperty | Operation::WriteAllProperties
-                if raw_finite_property_shape(program.operation, output) =>
+            Operation::WriteProperty
+            | Operation::WriteAllProperties
+            | Operation::WriteMultipleProperties
+                if raw_finite_property_shape(program.operation, output)
+                    && output.metadata().property_write_report().is_none() =>
             {
                 Ok(())
             }

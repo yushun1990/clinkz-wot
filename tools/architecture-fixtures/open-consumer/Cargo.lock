@@ -436,6 +436,7 @@ name = "independent-open-consumer"
 version = "0.1.0"
 dependencies = [
  "clinkz-wot-binding-http",
+ "clinkz-wot-codec-json",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
  "clinkz-wot-planning",

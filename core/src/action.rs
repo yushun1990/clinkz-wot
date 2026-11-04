@@ -98,4 +98,5 @@ pub fn raw_action_output_shape(output: &InteractionOutput) -> bool {
         && output.metadata().payload_role() == ResponsePayloadRole::Application
         && output.metadata().action_invocation().is_none()
         && output.metadata().binding_response().is_none()
+        && output.metadata().property_write_report().is_none()
 }

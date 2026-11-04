@@ -49,7 +49,8 @@ impl HttpFiniteProducer {
                 FormSite::Thing,
                 Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
-                | Operation::WriteAllProperties,
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties,
             ) => "",
             _ => return Ok(None),
         };

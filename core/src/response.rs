@@ -166,6 +166,7 @@ fn validate_finite_binding_output(
                 | Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
                 | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
         )
         && (!matches!(
             operation,
@@ -175,11 +176,18 @@ fn validate_finite_binding_output(
         ) || output.data().is_some())
         && (!matches!(
             operation,
-            Operation::WriteProperty | Operation::WriteAllProperties
+            Operation::WriteProperty
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
         ) || output.data().is_none())
         && output.status() == InteractionStatus::Ok
         && metadata.payload_role() == ResponsePayloadRole::Application
         && metadata.action_invocation().is_none()
+        && (metadata.property_write_report().is_none()
+            || matches!(
+                operation,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            ))
     {
         return Ok(output);
     }
@@ -501,4 +509,5 @@ pub(crate) fn property_read_handler_shape(output: &InteractionOutput) -> bool {
         && metadata.payload_role() == ResponsePayloadRole::Application
         && metadata.binding_response().is_none()
         && metadata.action_invocation().is_none()
+        && metadata.property_write_report().is_none()
 }

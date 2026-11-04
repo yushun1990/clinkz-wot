@@ -46,7 +46,7 @@ role differs from a present unconstrained value. `ConsumerFiniteSchemas` retains
 either those roles or the derived Property collection member schema explicitly.
 The current finite path supports Property Read/Write, explicitly synchronous
 Action invocation (including empty data roles), and Thing-root
-ReadAllProperties/ReadMultipleProperties/WriteAllProperties. Shape/identity seals require terminal
+ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties. Shape/identity seals require terminal
 primary application results and refuse continuing status/invocation references; captured codec/schema
 checks separately precede input effects and validated result handoff.
 
@@ -254,7 +254,7 @@ Explicit application fan-out is a separate bounded capability with its own
 promised guarantees. Native group distribution and matching stay Binding-owned.
 
 The implemented collection subset is TD-driven **ReadAllProperties** and
-**ReadMultipleProperties**, plus **WriteAllProperties**, in both
+**ReadMultipleProperties**, plus **WriteAllProperties** and **WriteMultipleProperties**, in both
 roles. Its coordinate is `AffordanceTarget::Thing`, with its own actual root
 Form and operation; individual Property Forms supply no collection mapping or
 behavior. In accordance with [TD 1.1 §6.3.9.6](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing),
@@ -301,8 +301,54 @@ effects. Engine dispatch enters one distinct root behavior once, and native
 execution performs one actual collection interaction; no N-WriteProperty lowering
 is allowed. An empty successful root result reports completed application of the
 whole group. The handler MUST NOT use success to mean merely accepted, partially
-applied or individually successful members. Neither this report nor validation
+applied or individually successful members. Neither this completion nor validation
 proves atomic commit, ordering, rollback or independent physical-state confirmation.
+
+WriteMultipleProperties retains the same complete writable eligibility, but its
+per-call input is a map of **selected** member values. The actual captured data
+service validates every supplied name/value and derives the exact selection;
+omitted writable members are not input obligations. Unknown/readOnly members,
+duplicates (including decoded aliases), malformed data or any invalid value
+refuse the entire input before effects. The bounded subset permits `{}` and
+still performs one native interaction. The invocation retains its selection
+independently of native input ownership and later calls. Unsupported assertions
+on any eligible member refuse preparation, even if a caller might omit it.
+
+`ConsumerAccessService::authorize_property_write` receives the original immutable
+schema and validated selection before native admission and at each subsequent
+permission edge, including unread handoff. Its default delegates to group
+permission covering all members; a member-restricting policy checks the entire
+set within its captured `work()` allowance. Producer authorization receives the
+complete validated input before any member effect; discovering a denied member
+cannot justify applying an earlier allowed member first.
+
+Empty terminal success remains a whole-group completion option, not the only
+protocol-independent write result. `InteractionOutputMetadata` may instead carry
+`collection::PropertyWriteReport` for either root write. Its original-schema
+indices identify the exact requested set, each member's Completed, NotApplied or
+Unknown effect, optional opaque 16-bit native status, and Unspecified/Atomic/
+NonAtomic evidence. Unclassified members remain Unknown; native status never
+establishes effect by itself. Disjoint masks and exact original-set association
+are required. An Atomic report with a known member effect must classify the
+whole set consistently; mixed partial effects contradict atomicity. Neither
+one exchange nor all-complete outcomes supply an atomicity claim. No arbitrary
+native diagnostic tree, transaction coordinator or general protocol receipt
+schema is introduced. Bindings needing richer diagnostics need an explicit
+supported contract rather than silently truncating them into this carrier.
+
+Member reports are terminal native evidence even when incomplete. Consumer
+`native_outcome()` retains the report; `result()` refuses whole-group success for
+an incomplete report using an Application error with CallerDecision retry advice.
+A first local cause still takes precedence. Invalid original-set association
+retains the untrusted report in `rejected_output()`. Scalar writes, Reads and
+Actions cannot acquire this collection-only result. Producer mappings validate
+reports against their original input and must encode the supported evidence or
+refuse it, never replace an incomplete report with an empty success.
+`ConsumerSettlement::property_write_members()` exposes the retained original
+schema and invocation set, so report indices remain interpretable after TD,
+registry and runtime destruction, including for rejected or late reports. A
+Producer interprets the report against its captured original application/native
+mapping; an index report never describes a successor schema or an arbitrary TD.
 
 Collection outcome evidence has independent axes:
 
@@ -311,12 +357,13 @@ Collection outcome evidence has independent axes:
 | Producer `FiniteEffect::NotInvoked` | Validation/authorization/admission refused before behavior entry; no application effect attempted. |
 | Producer `FiniteEffect::Unknown` | Behavior entered without a valid complete result; some, all or no members may have changed. An error does not undo effects. |
 | Producer `FiniteEffect::Completed` | Root behavior reported whole-group completion and passed result validation. Native delivery is separate. |
+| Producer `FiniteEffect::Reported` | A validated incomplete member report remains in the original result. No whole-group completion is claimed. |
 | Consumer `ConsumerEffect::NotAttempted` / local admission refusal | No native progress was attempted. |
 | Consumer `ConsumerEffect::Unknown` | Native progress lacks validated completion evidence; remote refusal, partial application or full completion remain possible. |
 | Consumer `ConsumerEffect::Completed` | Selected native mapping returned a validated whole-group completion. Local handoff still requires original authority and fresh policy. |
+| Consumer `ConsumerEffect::Reported` | The original native output contains validated incomplete member evidence; consult that report for exact effects and atomicity. |
 
-For this increment the new Completed variants are emitted only for
-WriteAllProperties. Existing finite Read/Property Write/Action effect reporting
+Completed/Reported are emitted only for the two root writes. Existing finite Read/Property Write/Action effect reporting
 is unchanged. A completed unread native result keeps its completion evidence if
 local cancellation, replacement, timeout or policy loss subsequently refuses
 handoff. Original native outcome, first cause, result and delivery remain separate.
@@ -325,8 +372,7 @@ per-member success from it. A Producer pre-effect refusal does not become known
 to a Consumer through a generic native error response without a supported mapping.
 
 These finite operations add no universal collection lifecycle. All-versus-selected
-scope and read-versus-write data roles remain distinct. Future selected writes
-retain their chosen writable set and partial-effect evidence. Future observation/subscription or continuing collection
+scope and read-versus-write data roles remain distinct. Future observation/subscription or continuing collection
 operations need the appropriate retained owners and mapped controls, rather than
 being forced through this finite result. Those operations remain unimplemented.
 

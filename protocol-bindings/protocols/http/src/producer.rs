@@ -50,7 +50,9 @@ impl HttpProducerProgram {
     }
     pub(crate) fn method(&self) -> &'static str {
         match self.operation {
-            Operation::WriteProperty | Operation::WriteAllProperties => "PUT",
+            Operation::WriteProperty
+            | Operation::WriteAllProperties
+            | Operation::WriteMultipleProperties => "PUT",
             Operation::ReadMultipleProperties => "POST",
             _ => "GET",
         }
@@ -197,7 +199,9 @@ impl ProducerOutputValidator for HttpProducerProgram {
     fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
         if matches!(
             self.operation,
-            Operation::ReadMultipleProperties | Operation::WriteAllProperties
+            Operation::ReadMultipleProperties
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
         ) {
             // Selected reads need their original input; collection writes need
             // complete input validation and empty-result checks. Neither can be

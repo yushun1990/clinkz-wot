@@ -57,6 +57,8 @@ pub enum FiniteEffect {
     /// passed validation. Does not imply atomic commit, rollback, per-member
     /// receipts or native reply delivery. Errors after entry remain Unknown.
     Completed,
+    /// A validated, incomplete per-member report is retained in the result.
+    Reported,
 }
 
 /// Whether the original result reached the Binding's declared delivery edge.
@@ -112,13 +114,20 @@ pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutpu
         Operation::ReadProperty
         | Operation::ReadAllProperties
         | Operation::ReadMultipleProperties => crate::response::property_read_handler_shape(output),
-        Operation::WriteProperty | Operation::WriteAllProperties => {
+        Operation::WriteProperty
+        | Operation::WriteAllProperties
+        | Operation::WriteMultipleProperties => {
             let metadata = output.metadata();
             output.data().is_none()
                 && output.status() == InteractionStatus::Ok
                 && metadata.payload_role() == ResponsePayloadRole::Application
                 && metadata.action_invocation().is_none()
                 && metadata.binding_response().is_none()
+                && (metadata.property_write_report().is_none()
+                    || matches!(
+                        operation,
+                        Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                    ))
         }
         _ => false,
     }

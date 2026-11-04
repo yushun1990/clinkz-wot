@@ -32,3 +32,18 @@ WP-200/WP-400. The type-only schema and NoSec service envelope remain supported
 subsets; general DataSchema constraints, security composition/credentials,
 continuing Consumer Actions and TD-driven Event/observation preparation remain
 open. Existing raw Event control/response/retirement evidence is retained.
+
+
+## Finite collection write evidence
+
+The joined all/selected root writes share bounded writable-member schemas while
+retaining their distinct completeness rules. `PropertyWriteReport` replaces an
+empty-success-only interpretation of the shared collection result: original-set
+member effects, optional opaque native statuses and explicit atomicity evidence
+survive independently of local cause and delivery. It is inline in existing
+size-accounted outputs; it adds no universal transaction or collection runtime.
+The [Core collection contract](../spec/interaction-core.md) owns exact semantics.
+[Core report tests](../../core/tests/collection_write_report.rs), the HTTP joined
+slice and an independent Cargo-linked datagram fixture exercise its scoped
+validation, original selection and late-release obligations. No package, gate,
+milestone or production qualification is inferred from this increment.

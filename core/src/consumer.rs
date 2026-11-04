@@ -33,6 +33,18 @@ pub trait ConsumerDataService: Send + Sync {
     ) -> CoreResult<()> {
         Err(CoreError::UnsupportedOperation(context()))
     }
+    /// Validate every supplied writable value and return exactly its member set.
+    /// Generic Object or all-map support does not imply selected-write support.
+    fn supports_property_write_selection(&self, _schema: &PropertyCollectionSchema) -> bool {
+        false
+    }
+    fn validate_property_write_map(
+        &self,
+        _schema: &PropertyCollectionSchema,
+        _payload: &Payload,
+    ) -> CoreResult<PropertySelection> {
+        Err(CoreError::UnsupportedOperation(context()))
+    }
     /// Both the default TD name-array request and exact selected response must
     /// be executable. ReadAllProperties support does not imply this facet.
     /// The generic input-schema validator is qualified separately.
@@ -92,6 +104,21 @@ pub trait ConsumerAccessService: Send + Sync {
         target: &str,
         operation: Operation,
     ) -> CoreResult<()>;
+    /// Fresh permission for the complete original writable set, before native
+    /// effects and on result handoff. Default group permission covers every
+    /// member; policies with member restrictions override this callback.
+    /// `work()` bounds the complete callback, including member inspection.
+    fn authorize_property_write(
+        &self,
+        consumer: &ConsumerInstanceRef,
+        binding: BindingRegistrationIdentity,
+        target: &str,
+        operation: Operation,
+        members: (&PropertyCollectionSchema, PropertySelection),
+    ) -> CoreResult<()> {
+        let _ = members;
+        self.authorize_instance(consumer, binding, target, operation)
+    }
     fn retained_bytes(&self) -> u64;
     fn work(&self) -> u64;
 }
@@ -175,15 +202,17 @@ pub enum ConsumerFiniteSchemas {
     Value(ConsumerSchemas),
     ReadAllProperties(PropertyCollectionSchema),
     ReadMultipleProperties(PropertyCollectionSchema),
-    /// Complete writable-member input; empty success has no output schema.
+    /// Complete writable-member input; the value-free result may carry a report.
     WriteAllProperties(PropertyCollectionSchema),
+    /// Writable eligibility is immutable; the input map determines each call's set.
+    WriteMultipleProperties(PropertyCollectionSchema),
 }
 impl ConsumerFiniteSchemas {
     pub fn input(&self) -> Option<TypeSchema> {
         match self {
             Self::Value(s) => s.input,
             Self::ReadAllProperties(_) => None,
-            Self::WriteAllProperties(_) => {
+            Self::WriteAllProperties(_) | Self::WriteMultipleProperties(_) => {
                 Some(TypeSchema::Type(crate::value_type::ValueType::Object))
             }
             Self::ReadMultipleProperties(_) => {
@@ -198,10 +227,28 @@ impl ConsumerFiniteSchemas {
         data: &dyn ConsumerDataService,
         payload: Option<&Payload>,
     ) -> CoreResult<()> {
+        self.validate_input_selection(data, payload).map(|_| ())
+    }
+    /// The selected-write set must outlive transfer of its native input.
+    pub fn validate_input_selection(
+        &self,
+        data: &dyn ConsumerDataService,
+        payload: Option<&Payload>,
+    ) -> CoreResult<Option<PropertySelection>> {
         match (self, payload) {
-            (Self::WriteAllProperties(schema), Some(p)) => data.validate_property_map(schema, p),
-            (_, Some(p)) => data.validate(self.input().ok_or_else(invalid)?, p),
-            (_, None) if self.input().is_none() => Ok(()),
+            (Self::WriteMultipleProperties(schema), Some(p)) => {
+                let selected = data.validate_property_write_map(schema, p)?;
+                schema.selection_from_bits(selected.bits())?;
+                Ok(Some(selected))
+            }
+            (Self::WriteAllProperties(schema), Some(p)) => {
+                data.validate_property_map(schema, p)?;
+                Ok(Some(schema.all()))
+            }
+            (_, Some(p)) => data
+                .validate(self.input().ok_or_else(invalid)?, p)
+                .map(|_| None),
+            (_, None) if self.input().is_none() => Ok(None),
             _ => Err(invalid()),
         }
     }
@@ -215,6 +262,7 @@ impl ConsumerFiniteSchemas {
             Self::ReadAllProperties(s) | Self::WriteAllProperties(s) => {
                 data.supports_property_map(s)
             }
+            Self::WriteMultipleProperties(s) => data.supports_property_write_selection(s),
             Self::ReadMultipleProperties(s) => {
                 data.policy().encoded_selection_bytes > 0
                     && self
@@ -232,7 +280,9 @@ impl ConsumerFiniteSchemas {
     ) -> CoreResult<()> {
         match (self, payload) {
             (
-                Self::Value(ConsumerSchemas { output: None, .. }) | Self::WriteAllProperties(_),
+                Self::Value(ConsumerSchemas { output: None, .. })
+                | Self::WriteAllProperties(_)
+                | Self::WriteMultipleProperties(_),
                 None,
             ) => Ok(()),
             (
@@ -253,7 +303,8 @@ impl ConsumerFiniteSchemas {
             Self::Value(_) => 0,
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
-            | Self::WriteAllProperties(s) => s.retained_bytes(),
+            | Self::WriteAllProperties(s)
+            | Self::WriteMultipleProperties(s) => s.retained_bytes(),
         }
     }
     pub fn drop_work(&self) -> u64 {
@@ -261,7 +312,8 @@ impl ConsumerFiniteSchemas {
             Self::Value(_) => 0,
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
-            | Self::WriteAllProperties(s) => s.members().len() as u64 + 1,
+            | Self::WriteAllProperties(s)
+            | Self::WriteMultipleProperties(s) => s.members().len() as u64 + 1,
         }
     }
 }
@@ -394,6 +446,9 @@ pub enum ConsumerEffect {
     /// evidence of the whole group completion, not atomicity or rollback.
     /// Local cancellation/policy failure can still refuse application handoff.
     Completed,
+    /// A validated member report is retained; the whole group is incomplete.
+    /// Consult the original native output for exact member/atomicity evidence.
+    Reported,
 }
 
 /// One immutable selected executor, native definition, actual services and
@@ -455,6 +510,7 @@ impl ConsumerDefinition {
                         Operation::ReadAllProperties
                             | Operation::ReadMultipleProperties
                             | Operation::WriteAllProperties
+                            | Operation::WriteMultipleProperties
                     )
             )
             || !matches!(
@@ -483,6 +539,10 @@ impl ConsumerDefinition {
                     | (
                         ConsumerFiniteSchemas::WriteAllProperties(_),
                         Operation::WriteAllProperties
+                    )
+                    | (
+                        ConsumerFiniteSchemas::WriteMultipleProperties(_),
+                        Operation::WriteMultipleProperties
                     )
             )
             || policy.validation_work == 0

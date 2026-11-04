@@ -653,7 +653,7 @@ content codings, trailers, upgrades, informational responses, malformed/duplicat
 response fields and unexpected status/role combinations refuse this mapping.
 Borrowed JSON RawValue preserves output bytes without constructing a JSON tree;
 the actual captured data service validates them. The HTTP policy fingerprint is
-v12 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
+v13 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
 bounds continuing invocations and unread terminal slots.
 
 `cancel_local`, handle abandonment, deadline, policy/service loss, root close and
@@ -737,7 +737,7 @@ Consumer data policy funds up to `4096 * 40 + 16 * 2` validation work units;
 Producer validation captures and prepays an additional `4096 * 40` units beyond
 the finite owner's base body/media traversal. Member/name backing, bounded
 destruction, captured services and callback scratch retain their original accounts.
-Consumer native policy fingerprint is v12.
+Consumer native policy fingerprint is v13.
 
 The Engine enters the root application behavior once. It does not call or
 implicitly aggregate individual Property handlers. Application/Binding code owns
@@ -886,7 +886,7 @@ is supplied. These are the [Core effect contracts](../../../docs/spec/interactio
 
 The existing member descriptor limits apply: 32 members, 256 UTF-8 bytes per
 name, 4096 total name bytes; the semantic loan/profile may refuse earlier. Input
-is at most 4096 bytes. Consumer policy v12 prepays `4096 * 40 + 16 * 2` validation
+is at most 4096 bytes. Consumer policy v13 prepays `4096 * 40 + 16 * 2` validation
 work and captured scratch; Producer named-map validation adds `4096 * 40` beyond
 base input/output traversal (or the selected-read allowance when sharing that
 participant). Original input/schema, captured services, native exchange and
@@ -895,10 +895,9 @@ retained cleanup remain funded until their actual disposal/acknowledgement.
 The `write_all_properties` integration target exercises both Engine roles and
 independent peers, real partial application, readonly/missing/invalid members,
 service/work refusal, complete publication, cancellation/replacement, unread
-completion and final resource release. WriteMultipleProperties remains open;
-its future caller-selected set can use the same immutable writable eligibility
-without changing all-write completeness. This slice adds no universal collection
-runtime or production, HTTPS, broader schema/security or constrained qualification.
+completion and final resource release. The selected-write mapping below reuses
+the writable eligibility without weakening all-write completeness. Neither slice
+claims production, HTTPS, broader schema/security or constrained qualification.
 
 ```sh
 cargo test --locked --offline -p clinkz-wot-binding-http --test write_all_properties
@@ -906,4 +905,57 @@ cargo test --locked --offline -p clinkz-wot-binding-http --test write_all_proper
 printf '%s' '{"level":8,"on":false}' > /tmp/collection-values.json
 cargo run -p clinkz-wot-binding-http --example write_all_properties -- /tmp/collection-td.json /tmp/collection-values.json
 cargo run -p clinkz-wot-binding-http --example read_all_properties -- /tmp/collection-td.json
+```
+
+
+## Thing-root WriteMultipleProperties
+
+`ConsumerRuntime::write_multiple_properties(payload, deadline, now, budget)`
+selects an actual root `writemultipleproperties` Form. The payload is one JSON
+object of selected writable names and their new values, each validated against
+its own original Property schema. Omitted writable members are untouched by this
+intent; readOnly names, unknown names, decoded duplicates, malformed data and
+invalid values refuse the entire input before effects. writeOnly members remain
+eligible. The captured service derives the exact selection from the validated
+map and retains it independently of the native request. No second list or
+selection-array encoding is required. This subset permits an empty map and still
+makes one request. Unsupported assertions on any eligible member refuse
+preparation, including members a later caller might omit.
+
+The mapping is one HTTP PUT, default or explicit, and strictly empty 204 through
+EOF, with the all-write framing, size, work, endpoint-NoSec and schema limits
+above. TD 1.1 [Table 32](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#protocol-bindings)
+provides the HTTP method default. The JSON object/204 convention follows
+[WoT Profiles, 4 November 2025 Working Draft, section 6.2.1.4](https://www.w3.org/TR/2025/WD-wot-profile-20251104/#writemultipleproperties).
+That draft supplies mapping guidance, not a Recommendation or a claim of profile
+conformance. 200/202/206/207 are unsupported responses for this mapping, not
+proof of absence of remote effects. There is no automatic retry, readback,
+N-WriteProperty lowering, atomicity, ordering or rollback guarantee.
+
+Complete Producer qualification retains the whole final TD, the original
+writable eligibility and one distinct root behavior. That behavior receives the
+complete validated input and must authorize the entire selected group before any
+member effect. Consumer member policies can inspect the captured schema and
+validated set through `authorize_property_write`, with fresh permission at native
+admission, subsequent progress and unread handoff.
+
+The protocol-independent finite result can retain bounded per-member reports and
+explicit atomicity evidence under the [Core contract](../../../docs/spec/interaction-core.md).
+This HTTP mapping provides neither. It refuses an application member report,
+even a complete one, rather than silently discarding it or substituting 204.
+A normal 204 establishes reported whole-group completion only. Errors after
+handler entry can follow partial application; generic HTTP failure cannot convey
+which members changed. An independently Cargo-linked test datagram mapping
+exercises richer reports through both finite roles, with TD-driven Consumer
+preparation and raw Producer registration; it is not production protocol or
+TD-qualified Producer interoperability evidence.
+
+[Selected-write tests](tests/write_multiple_properties.rs) cover changing subsets
+from one TD, independent schemas, omitted members, member permission, original
+payload refusal, unsupported advertisement, real partial application, ambiguous
+peers, prepublication/service loss, cancellation/replacement, late/unread
+completion, short work, schema cleanup and final account/socket release.
+
+```sh
+cargo test --locked --offline -p clinkz-wot-binding-http --test write_multiple_properties
 ```

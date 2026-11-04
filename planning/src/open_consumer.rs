@@ -217,6 +217,7 @@ impl ConsumerRegistry {
                                             Operation::ReadAllProperties
                                                 | Operation::ReadMultipleProperties
                                                 | Operation::WriteAllProperties
+                                                | Operation::WriteMultipleProperties
                                         )
                                 );
                                 let mut reason = if !finite {
@@ -889,9 +890,13 @@ fn common_services(
             FormSite::Thing,
             Operation::ReadAllProperties
             | Operation::ReadMultipleProperties
-            | Operation::WriteAllProperties,
+            | Operation::WriteAllProperties
+            | Operation::WriteMultipleProperties,
         ) => {
-            let writing = operation == Operation::WriteAllProperties;
+            let writing = matches!(
+                operation,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            );
             let cleanup = if writing {
                 crate::type_schema::writable_member_count(doc)?
             } else {
@@ -913,7 +918,9 @@ fn common_services(
             } else {
                 crate::type_schema::prepare_readable_property_schema(doc)?
             };
-            Ok(if writing {
+            Ok(if operation == Operation::WriteMultipleProperties {
+                ConsumerFiniteSchemas::WriteMultipleProperties(schema)
+            } else if writing {
                 ConsumerFiniteSchemas::WriteAllProperties(schema)
             } else if operation == Operation::ReadAllProperties {
                 ConsumerFiniteSchemas::ReadAllProperties(schema)

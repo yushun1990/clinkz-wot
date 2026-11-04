@@ -77,17 +77,36 @@ impl Definition {
         }
         Ok(())
     }
-    fn check_current(&self, consumer: &ConsumerInstanceRef) -> CoreResult<()> {
+    fn check_current(
+        &self,
+        consumer: &ConsumerInstanceRef,
+        selection: Option<collection::PropertySelection>,
+    ) -> CoreResult<()> {
         if !consumer.is_current() {
             return Err(stale());
         }
         self.check_dependencies()?;
-        self.input.services.access.authorize_instance(
-            consumer,
-            self.binding(),
-            &self.input.target,
-            self.input.operation,
-        )?;
+        if let (
+            ConsumerFiniteSchemas::WriteAllProperties(schema)
+            | ConsumerFiniteSchemas::WriteMultipleProperties(schema),
+            Some(selected),
+        ) = (&self.input.schemas, selection)
+        {
+            self.input.services.access.authorize_property_write(
+                consumer,
+                self.binding(),
+                &self.input.target,
+                self.input.operation,
+                (schema, selected),
+            )?;
+        } else {
+            self.input.services.access.authorize_instance(
+                consumer,
+                self.binding(),
+                &self.input.target,
+                self.input.operation,
+            )?;
+        }
         if !consumer.is_current() {
             return Err(stale());
         }
@@ -109,12 +128,23 @@ impl Definition {
         }
         let has_output = match &self.input.schemas {
             ConsumerFiniteSchemas::Value(s) => s.output.is_some(),
-            ConsumerFiniteSchemas::WriteAllProperties(_) => false,
+            ConsumerFiniteSchemas::WriteAllProperties(_)
+            | ConsumerFiniteSchemas::WriteMultipleProperties(_) => false,
             ConsumerFiniteSchemas::ReadAllProperties(_)
             | ConsumerFiniteSchemas::ReadMultipleProperties(_) => true,
         };
         if output.data().is_some() != has_output {
             return Poll::Ready(Err(invalid()));
+        }
+        if let Some(report) = output.metadata().property_write_report() {
+            let selected = match (&self.input.schemas, selection) {
+                (ConsumerFiniteSchemas::WriteAllProperties(schema), _) => schema.all(),
+                (ConsumerFiniteSchemas::WriteMultipleProperties(_), Some(s)) => s,
+                _ => return Poll::Ready(Err(invalid())),
+            };
+            if let Err(error) = report.validate_selection(selected) {
+                return Poll::Ready(Err(error));
+            }
         }
         // An absent data role has no decoding work. Preserve empty finite
         // Action/Write completion under zero codec credit.
@@ -140,9 +170,9 @@ impl Definition {
         &self,
         payload: Option<&Payload>,
         budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<()>> {
+    ) -> Poll<CoreResult<Option<collection::PropertySelection>>> {
         Poll::Ready(match (self.input.schemas.input(), payload) {
-            (None, None) => Ok(()),
+            (None, None) => Ok(None),
             (Some(_), Some(payload))
                 if payload.body.len() as u64 <= self.data_policy.body_bytes =>
             {
@@ -156,7 +186,7 @@ impl Definition {
                 }
                 self.input
                     .schemas
-                    .validate_input(self.input.services.data.as_ref(), Some(payload))
+                    .validate_input_selection(self.input.services.data.as_ref(), Some(payload))
             }
             _ => Err(invalid()),
         })
@@ -410,6 +440,28 @@ impl ConsumerRuntime {
             BindingInputRejection::new(input.expect("collection write input retained"), error)
         })
     }
+    /// One selected native root interaction. The validated input map supplies
+    /// its exact writable set; omitted members are untouched by this intent.
+    pub fn write_multiple_properties(
+        &self,
+        input: Payload,
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
+        self.start(
+            AffordanceSite::Thing,
+            Operation::WriteMultipleProperties,
+            CallInput::Value(Some(input)),
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| {
+            let (input, error) = e.into_parts();
+            BindingInputRejection::new(input.expect("selected write input retained"), error)
+        })
+    }
     fn start(
         &self,
         target: AffordanceSite<'_>,
@@ -464,7 +516,7 @@ impl ConsumerRuntime {
             if !pay(budget, W::ProviderProbes, definition.access_work()) {
                 return Err(busy());
             }
-            definition.check_current(&state.consumer)?;
+            definition.check_current(&state.consumer, None)?;
             let selection = match (&definition.input.schemas, members) {
                 (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(names)) => {
                     if names.len() > collection::PropertyCollectionSchema::MAX_MEMBERS {
@@ -580,24 +632,31 @@ impl ConsumerRuntime {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
                     return Err(busy());
                 }
-                definition.check_current(&state.consumer)?;
+                definition.check_current(&state.consumer, None)?;
             }
             let payload = encoded.as_ref().or(input.as_ref());
-            match definition.validate_payload(payload, budget) {
+            let input_selection = match definition.validate_payload(payload, budget) {
                 Poll::Ready(result) => result?,
                 Poll::Pending => return Err(busy()),
-            }
+            };
             // Codec callbacks may change current policy as well as authority.
             if payload.is_some() {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
                     return Err(busy());
                 }
-                definition.check_current(&state.consumer)?;
+                definition.check_current(&state.consumer, input_selection.or(selection))?;
             }
             if !state.consumer.is_current() {
                 return Err(stale());
             }
-            Ok((slot, sequence, definition, funding, selection, encoded))
+            Ok((
+                slot,
+                sequence,
+                definition,
+                funding,
+                input_selection.or(selection),
+                encoded,
+            ))
         })();
         let (slot, sequence, definition, funding, selection, encoded) = match checked {
             Ok(checked) => checked,
@@ -605,7 +664,7 @@ impl ConsumerRuntime {
         };
         let raw = match definition.start(encoded.or(input), deadline.instant().map(|_| deadline)) {
             Ok(raw) => raw,
-            Err(rejection) if selection.is_some() => {
+            Err(rejection) if operation == Operation::ReadMultipleProperties => {
                 let (payload, error) = rejection.into_parts();
                 drop(payload); // encoded input dies before its original reservation
                 return Err(BindingInputRejection::new(None, error));
@@ -732,6 +791,24 @@ pub struct ConsumerSettlement {
     call: Call,
 }
 impl ConsumerSettlement {
+    /// Original writable meaning and invocation set, retained even after source
+    /// destruction, replacement or native-report rejection. Report indices must
+    /// be resolved through this schema, never through a successor definition.
+    pub fn property_write_members(
+        &self,
+    ) -> Option<(
+        &collection::PropertyCollectionSchema,
+        collection::PropertySelection,
+    )> {
+        match (&self.call.definition.input.schemas, self.call.selection) {
+            (
+                ConsumerFiniteSchemas::WriteAllProperties(schema)
+                | ConsumerFiniteSchemas::WriteMultipleProperties(schema),
+                Some(selected),
+            ) => Some((schema, selected)),
+            _ => None,
+        }
+    }
     pub fn effect(&self) -> ConsumerEffect {
         self.call.effect
     }
@@ -766,7 +843,12 @@ impl ConsumerSettlement {
             return Err(error.clone());
         }
         match self.native_outcome() {
-            BindingCallSettlement::Returned(Ok(output)) => Ok(output),
+            BindingCallSettlement::Returned(Ok(output)) => {
+                if let Some(report) = output.metadata().property_write_report() {
+                    report.completion()?;
+                }
+                Ok(output)
+            }
             BindingCallSettlement::Returned(Err(error)) => Err(error.clone()),
             _ => Err(CoreError::Cancelled(context())),
         }
@@ -814,7 +896,10 @@ impl Call {
         if !pay(budget, W::ProviderProbes, self.definition.access_work()) {
             return Poll::Pending;
         }
-        if let Err(e) = self.definition.check_current(&self.consumer) {
+        if let Err(e) = self
+            .definition
+            .check_current(&self.consumer, self.selection)
+        {
             self.cancel(e);
         }
         // A completed validation survives a yield for the final policy check.
@@ -932,8 +1017,19 @@ impl Call {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Ok(())) => {
                         self.output_validated = true;
-                        if self.definition.input.operation == Operation::WriteAllProperties {
-                            self.effect = ConsumerEffect::Completed;
+                        if matches!(
+                            self.definition.input.operation,
+                            Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                        ) {
+                            self.effect = if output
+                                .metadata()
+                                .property_write_report()
+                                .is_some_and(|r| !r.is_complete())
+                            {
+                                ConsumerEffect::Reported
+                            } else {
+                                ConsumerEffect::Completed
+                            };
                         }
                     }
                     Poll::Ready(Err(error)) => {
@@ -957,7 +1053,10 @@ impl Call {
                 if !pay(budget, W::ProviderProbes, self.definition.access_work()) {
                     return Poll::Pending;
                 }
-                if let Err(error) = self.definition.check_current(&self.consumer) {
+                if let Err(error) = self
+                    .definition
+                    .check_current(&self.consumer, self.selection)
+                {
                     self.first_cause.get_or_insert(error);
                 }
             }

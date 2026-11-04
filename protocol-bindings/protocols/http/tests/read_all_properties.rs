@@ -350,7 +350,7 @@ fn full_producer_qualification_requires_root_behavior_every_form_and_original_me
         match fault {
             "schema" => bad["properties"]["on"]["const"] = json!(true),
             "root-op" => {
-                bad["forms"][0]["op"] = json!(["readallproperties", "writemultipleproperties"])
+                bad["forms"][0]["op"] = json!(["readallproperties", "observeallproperties"])
             }
             "root-protocol" => bad["forms"]
                 .as_array_mut()

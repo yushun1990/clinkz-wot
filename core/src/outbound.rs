@@ -98,6 +98,7 @@ impl OutboundRequest {
                     | Operation::ReadAllProperties
                     | Operation::ReadMultipleProperties
                     | Operation::WriteAllProperties
+                    | Operation::WriteMultipleProperties
             )
             || (matches!(
                 operation,
@@ -107,6 +108,7 @@ impl OutboundRequest {
                 operation,
                 Operation::WriteProperty
                     | Operation::WriteAllProperties
+                    | Operation::WriteMultipleProperties
                     | Operation::ReadMultipleProperties
             ) && input.is_none())
         {

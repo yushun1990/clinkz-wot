@@ -362,6 +362,7 @@ impl RawProducerServient {
                         Operation::ReadAllProperties
                             | Operation::ReadMultipleProperties
                             | Operation::WriteAllProperties
+                            | Operation::WriteMultipleProperties
                     ) && behavior.target == AffordanceTarget::Thing)
                     && !instance.behaviors[..j].iter().any(|prior| {
                         prior.operation == behavior.operation && prior.target == behavior.target
@@ -585,8 +586,19 @@ impl RawProducerServient {
                 }
                 validator.validate_output(&ingress.candidates[0], &ingress.input, &output)?;
             }
-            if behavior.operation == Operation::WriteAllProperties {
-                effect = FiniteEffect::Completed;
+            if matches!(
+                behavior.operation,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            ) {
+                effect = if output
+                    .metadata()
+                    .property_write_report()
+                    .is_some_and(|r| !r.is_complete())
+                {
+                    FiniteEffect::Reported
+                } else {
+                    FiniteEffect::Completed
+                };
             }
             Ok(output)
         });

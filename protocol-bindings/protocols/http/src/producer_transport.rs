@@ -128,6 +128,7 @@ impl Ingress {
             program.operation,
             Operation::WriteProperty
                 | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
                 | Operation::ReadMultipleProperties
         );
         let mut host = 0;
@@ -343,10 +344,16 @@ impl NativeConnection {
         });
         let operation = self.bridge.lock().unwrap().operation;
         let write_success = operation.is_some_and(|op| {
-            matches!(op, Operation::WriteProperty | Operation::WriteAllProperties)
-                && result.is_ok_and(|o| clinkz_wot_core::finite::raw_finite_property_shape(op, o))
+            matches!(
+                op,
+                Operation::WriteProperty
+                    | Operation::WriteAllProperties
+                    | Operation::WriteMultipleProperties
+            ) && result.is_ok_and(|o| clinkz_wot_core::finite::raw_finite_property_shape(op, o))
         });
-        if result.is_ok() && body.is_none() && !write_success {
+        if result.is_ok_and(|o| o.metadata().property_write_report().is_some())
+            || (result.is_ok() && body.is_none() && !write_success)
+        {
             // Raw results still need an executable native encoding. Refuse
             // before queuing/writing anything; a replacement 500 would not be
             // delivery of this retained successful value. Its original owner

@@ -15,7 +15,7 @@ use std::{
 };
 
 const FORMAT: BindingArtifactCompatibility =
-    BindingArtifactCompatibility::new(*b"external-udp-v02");
+    BindingArtifactCompatibility::new(*b"external-udp-v03");
 #[derive(Default)]
 pub struct Probe {
     pub review_bank:
@@ -46,7 +46,7 @@ pub struct Probe {
 pub fn configuration() -> ConsumerBindingConfiguration {
     ConsumerBindingConfiguration::for_semantic_host(
         256,
-        BindingConfigurationDigest::new([178; 32]),
+        BindingConfigurationDigest::new([179; 32]),
         FORMAT,
         1024,
         16,
@@ -58,6 +58,7 @@ pub struct Program {
     address: SocketAddr,
     request: Vec<u8>,
     probe: Arc<Probe>,
+    write_schema: Option<Arc<collection::PropertyCollectionSchema>>,
 }
 impl Drop for Program {
     fn drop(&mut self) {
@@ -78,7 +79,10 @@ impl binding::ClientBinding for Client {
     fn supports_operation(&self, operation: Operation) -> bool {
         matches!(
             operation,
-            Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+            Operation::ReadProperty
+                | Operation::WriteProperty
+                | Operation::InvokeAction
+                | Operation::WriteMultipleProperties
         )
     }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
@@ -129,6 +133,7 @@ impl binding::ClientBinding for Client {
             socket: None,
             sent: false,
             probe: self.probe.clone(),
+            write_schema: program.write_schema.clone(),
         };
         HostBindingCallBox::try_new(call).map_err(|mut call| reject(call.request.take().unwrap()))
     }
@@ -141,6 +146,7 @@ pub struct Call {
     socket: Option<UdpSocket>,
     sent: bool,
     probe: Arc<Probe>,
+    write_schema: Option<Arc<collection::PropertyCollectionSchema>>,
 }
 impl Drop for Call {
     fn drop(&mut self) {
@@ -177,6 +183,22 @@ impl Call {
             Ok((n, source)) if source == self.address && n <= 1024 => {
                 let (binding, generation, plan) = self.selected;
                 let write = self.request.as_ref().unwrap().operation() == Operation::WriteProperty;
+                if let Some(schema) = &self.write_schema {
+                    let result = decode_write_report(schema, &bytes[..n]).and_then(|report| {
+                        InteractionOutput::empty()
+                            .try_with_metadata(
+                                InteractionOutputMetadata::default()
+                                    .with_property_write_report(report)
+                                    .with_untrusted_binding_response(
+                                        BindingResponseMetadata::primary(
+                                            binding, generation, plan, 0,
+                                        ),
+                                    ),
+                            )
+                            .ok_or_else(invalid)
+                    });
+                    return Poll::Ready(result);
+                }
                 if write && &bytes[..n] != b"WRITTEN" {
                     return Poll::Ready(Err(invalid()));
                 }
@@ -320,16 +342,27 @@ pub fn execution(id: u16, probe: Arc<Probe>) -> HostConsumerBindingRegistration 
 }
 struct Data(Arc<Probe>);
 impl ConsumerDataService for Data {
+    fn supports_property_write_selection(&self, _: &collection::PropertyCollectionSchema) -> bool {
+        true
+    }
+    fn validate_property_write_map(
+        &self,
+        schema: &collection::PropertyCollectionSchema,
+        payload: &Payload,
+    ) -> CoreResult<collection::PropertySelection> {
+        self.0.validates.fetch_add(1, Ordering::Relaxed);
+        clinkz_wot_codec_json::validate_property_write_map(schema, payload)
+    }
     fn content_type(&self) -> &str {
         "application/json"
     }
     fn policy(&self) -> ConsumerDataPolicy {
         ConsumerDataPolicy {
             retained_bytes: 64,
-            temporary_bytes: 0,
+            temporary_bytes: 65_536,
             body_bytes: 1024,
             encoded_selection_bytes: 0,
-            validation_work: 4096,
+            validation_work: 4096 * 40,
         }
     }
     fn supports_schema(&self, schema: value_type::TypeSchema) -> bool {
@@ -374,7 +407,10 @@ impl ConsumerAccessService for Access {
             || id.configuration() != configuration().configuration()
             || !matches!(
                 op,
-                Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+                Operation::ReadProperty
+                    | Operation::WriteProperty
+                    | Operation::InvokeAction
+                    | Operation::WriteMultipleProperties
             )
             || !target.starts_with("linkedudp://127.0.0.1:")
         {
@@ -399,6 +435,49 @@ fn reject(request: OutboundRequest) -> BindingInputRejection<OutboundRequest> {
     BindingInputRejection::new(request, BindingOperationalError::new(invalid()))
 }
 
+/// Test-native protocol: REPORT set completed not-applied [U|A|N] followed
+/// by one opaque status (or x) per eligible member. This is not a WoT wire
+/// standard. Its deliberately richer reply falsifies empty-write-only SPIs.
+fn decode_write_report(
+    schema: &collection::PropertyCollectionSchema,
+    bytes: &[u8],
+) -> CoreResult<collection::PropertyWriteReport> {
+    use collection::*;
+    let mut fields = std::str::from_utf8(bytes)
+        .map_err(|_| invalid())?
+        .split_ascii_whitespace();
+    if fields.next() != Some("REPORT") {
+        return Err(invalid());
+    }
+    let mut number = || {
+        fields
+            .next()
+            .ok_or_else(invalid)?
+            .parse::<u32>()
+            .map_err(|_| invalid())
+    };
+    let selected = schema.selection_from_bits(number()?)?;
+    let completed = number()?;
+    let not_applied = number()?;
+    let atomicity = match fields.next() {
+        Some("U") => WriteAtomicity::Unspecified,
+        Some("A") => WriteAtomicity::Atomic,
+        Some("N") => WriteAtomicity::NonAtomic,
+        _ => return Err(invalid()),
+    };
+    let mut report = PropertyWriteReport::try_new(selected, completed, not_applied, atomicity)?;
+    for i in 0..schema.members().len() {
+        let status = fields.next().ok_or_else(invalid)?;
+        if status != "x" {
+            report = report.with_native_status(i, status.parse().map_err(|_| invalid())?)?;
+        }
+    }
+    if fields.next().is_some() {
+        return Err(invalid());
+    }
+    Ok(report)
+}
+
 #[cfg(feature = "prepare")]
 pub mod prepare {
     use super::*;
@@ -413,6 +492,7 @@ pub mod prepare {
         bytes: Vec<u8>,
         copied: usize,
         address: SocketAddr,
+        write_schema: Option<Arc<collection::PropertyCollectionSchema>>,
     }
     impl Drop for Compiler {
         fn drop(&mut self) {
@@ -444,12 +524,28 @@ pub mod prepare {
             let target = input.resolved_target();
             if !matches!(
                 input.operation(),
-                Operation::ReadProperty | Operation::WriteProperty | Operation::InvokeAction
+                Operation::ReadProperty
+                    | Operation::WriteProperty
+                    | Operation::InvokeAction
+                    | Operation::WriteMultipleProperties
             ) || !target.starts_with("linkedudp://")
             {
                 return Err(CoreError::UnsupportedOperation(context()));
             }
             address(target)?;
+            if input.operation() == Operation::WriteMultipleProperties {
+                let resolved = input.resolved().ok_or_else(invalid)?;
+                if resolved.owner != clinkz_wot_td::semantic::FormOwner::Thing
+                    || resolved
+                        .document
+                        .collection_properties()
+                        .ok_or_else(invalid)?
+                        .count()
+                        > 3
+                {
+                    return Err(invalid());
+                }
+            }
             if target.ends_with("/failure") {
                 return Err(invalid());
             }
@@ -476,6 +572,7 @@ pub mod prepare {
             bytes.extend_from_slice(match input.operation() {
                 Operation::ReadProperty => b"READ ",
                 Operation::WriteProperty => b"WRITE ",
+                Operation::WriteMultipleProperties => b"GROUP ",
                 _ => b"INVOKE ",
             });
             Ok(Cursor {
@@ -483,6 +580,15 @@ pub mod prepare {
                 bytes,
                 copied: 0,
                 address: address(input.resolved_target())?,
+                write_schema: if input.operation() == Operation::WriteMultipleProperties {
+                    Some(Arc::new(
+                        clinkz_wot_planning::type_schema::prepare_writable_property_schema(
+                            input.resolved().ok_or_else(invalid)?.document,
+                        )?,
+                    ))
+                } else {
+                    None
+                },
             })
         }
         fn step(
@@ -523,7 +629,13 @@ pub mod prepare {
                 if self.probe.invalid_artifact.load(Ordering::Relaxed) {
                     513
                 } else {
-                    (std::mem::size_of::<Program>() + cursor.bytes.capacity()) as u64
+                    (std::mem::size_of::<Program>()
+                        + cursor.bytes.capacity()
+                        + cursor.write_schema.as_ref().map_or(0, |s| {
+                            s.retained_bytes()
+                                + std::mem::size_of_val(s.as_ref())
+                                + 2 * std::mem::size_of::<usize>()
+                        })) as u64
                 },
             );
             BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
@@ -534,6 +646,7 @@ pub mod prepare {
                     address: cursor.address,
                     request: cursor.bytes,
                     probe: self.probe.clone(),
+                    write_schema: cursor.write_schema,
                 },
             )))
         }
@@ -627,6 +740,7 @@ impl PollClientBinding for StaticClient {
                 socket: None,
                 sent: false,
                 probe: self.probe.clone(),
+                write_schema: program.write_schema.clone(),
             },
         );
         Ok(StartStatus::Pending)

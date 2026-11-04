@@ -1,6 +1,6 @@
 use clinkz_wot_codec_json::{
     decode_property_selection, encode_property_selection, validate_property_map,
-    validate_selected_property_map,
+    validate_property_write_map, validate_selected_property_map,
 };
 use clinkz_wot_core::{Payload, collection::*, value_type::*};
 fn schema(names: &[&str]) -> PropertyCollectionSchema {
@@ -17,6 +17,58 @@ fn schema(names: &[&str]) -> PropertyCollectionSchema {
 }
 fn check(s: &PropertyCollectionSchema, bytes: &[u8]) -> bool {
     validate_property_map(s, &Payload::new(bytes, "application/json")).is_ok()
+}
+
+#[test]
+fn selected_write_derives_only_validated_members_with_independent_schemas() {
+    let s = PropertyCollectionSchema::try_new(vec![
+        PropertyMemberSchema {
+            name: "on".into(),
+            schema: TypeSchema::Type(ValueType::Boolean),
+        },
+        PropertyMemberSchema {
+            name: "secret".into(),
+            schema: TypeSchema::Type(ValueType::String),
+        },
+        PropertyMemberSchema {
+            name: "level".into(),
+            schema: TypeSchema::Type(ValueType::Integer),
+        },
+    ])
+    .unwrap();
+    for (bytes, names) in [
+        (b"{}".as_slice(), vec![]),
+        (br#"{"on":true}"#, vec!["on"]),
+        (br#"{"secret":"x","level":70e-1}"#, vec!["secret", "level"]),
+        (
+            br#"{"\u006fn":false,"secret":"x","level":7.0}"#,
+            vec!["on", "secret", "level"],
+        ),
+    ] {
+        let selected =
+            validate_property_write_map(&s, &Payload::new(bytes, "application/json")).unwrap();
+        assert_eq!(selected, s.select(&names).unwrap());
+    }
+    for bytes in [
+        br#"{"on":1}"#.as_slice(),
+        br#"{"secret":true}"#,
+        br#"{"level":7.1}"#,
+        br#"{"on":true,"on":false}"#,
+        br#"{"on":true,"\u006fn":false}"#,
+        br#"{"on":true,"secret":"\uD800"}"#,
+        br#"{"extra":null}"#,
+        b"[]",
+        b"{} {}",
+    ] {
+        assert!(validate_property_write_map(&s, &Payload::new(bytes, "application/json")).is_err());
+    }
+    let names: Vec<_> = (0..32).map(|i| format!("p{i}")).collect();
+    let s = schema(&names.iter().map(String::as_str).collect::<Vec<_>>());
+    let p = Payload::new(br#"{"p31":1,"p0":2}"#.as_slice(), "application/json");
+    assert_eq!(
+        validate_property_write_map(&s, &p).unwrap().bits(),
+        0x80000001
+    );
 }
 #[test]
 fn empty_maximal_and_unicode_member_sets_validate_exactly() {

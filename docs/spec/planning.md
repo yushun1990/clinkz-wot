@@ -158,7 +158,7 @@ operation, so same-named
 Properties and Actions do not collide. The current finite facets are Property
 Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
 unspecified synchronicity use the separate Action facet below. Thing-root
-ReadAllProperties, ReadMultipleProperties and WriteAllProperties use the finite facet; other
+ReadAllProperties, ReadMultipleProperties, WriteAllProperties and WriteMultipleProperties use the finite facet; other
 collection operations remain unsupported.
 Action input/output use distinct prepared type-only schemas; absent roles
 permit no application data. Only one captured media service is currently
@@ -255,7 +255,7 @@ Form semantics and stop support remain the concrete Binding's responsibility.
 
 ## Thing-root Property collection preparation
 
-ReadAllProperties/ReadMultipleProperties/WriteAllProperties select actual root Form/operation/Binding
+ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties select actual root Form/operation/Binding
 coordinates using the same per-Form semantic loan and actual startup registrations. A Property
 Form is never a fallback collection Form. Consumer selection may retain a root
 operation when individual Property Forms are unsupported; complete Producer
@@ -297,9 +297,17 @@ captured work policy, then rechecks group authorization and all dependencies
 before native admission. It does not invoke an additional generic Object
 validator, selection encoder or individual Property operation. The same member
 census, separate temporary/retained funding and cleanup prepayment apply to the
-writable role. Native preparation performs no writes. Future selected writes
-can retain the writable eligibility separately from their invocation subset;
-WriteMultipleProperties is not implemented here.
+writable role. Native preparation performs no writes.
+
+`ConsumerFiniteSchemas::WriteMultipleProperties` retains that same complete
+writable eligibility independently of a per-call subset. It requires the actual
+`supports_property_write_selection`/`validate_property_write_map` facet; generic
+Object validation, all-map validation and selected-read support cannot qualify it.
+The captured pure validator derives the selection only after validating every
+supplied value. Admission retains that inline set before transferring the input,
+then invokes fresh set-aware permission and rechecks dependencies. It performs
+no selection-array encoding. Final Producer comparison includes the original
+eligible writable schema, even when one invocation selects fewer members.
 
 The supported schema and HTTP subset are scoped by the
 [collection contract](interaction-core.md) and

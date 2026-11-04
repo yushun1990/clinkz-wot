@@ -1,4 +1,6 @@
 #![cfg(feature = "prepare")]
+#[path = "support/collection_write.rs"]
+mod collection_write;
 #[path = "support/composition.rs"]
 mod composition;
 use clinkz_wot_core::{consumer::ConsumerInstance, host_accounts::HostResourceAccounts, *};
@@ -309,7 +311,7 @@ fn exact_pair_refusal_recovers_compiler_and_executor_before_io() {
     let p = Arc::new(Probe::default());
     let other = ConsumerBindingConfiguration::for_semantic_host(
         256,
-        BindingConfigurationDigest::new([179; 32]),
+        BindingConfigurationDigest::new([180; 32]),
         configuration().native_compatibility().unwrap(),
         1024,
         16,

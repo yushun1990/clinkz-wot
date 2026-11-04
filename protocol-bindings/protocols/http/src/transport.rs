@@ -260,7 +260,9 @@ pub(super) async fn exchange(
 ) -> CoreResult<(u16, Vec<u8>)> {
     let write = matches!(
         instructions.operation,
-        Operation::WriteProperty | Operation::WriteAllProperties
+        Operation::WriteProperty
+            | Operation::WriteAllProperties
+            | Operation::WriteMultipleProperties
     );
     let socket = TcpStream::connect(target.address).await.map_err(|_| {
         // Socket/process/network availability is not a captured ingress or

@@ -20,7 +20,7 @@ pub struct PropertyCollectionSchema {
 }
 /// A bounded set of indices into one retained PropertyCollectionSchema. This
 /// value has meaning only with that original schema; it owns no names or TD.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct PropertySelection(u32);
 impl PropertySelection {
     pub fn contains(self, index: usize) -> bool {
@@ -104,6 +104,124 @@ impl PropertyCollectionSchema {
 fn invalid_selection() -> crate::CoreError {
     crate::CoreError::Validation(crate::ErrorContext::new(
         crate::ErrorPhase::Admission,
+        crate::RetryClass::Never,
+    ))
+}
+
+/// Evidence supplied by the selected native mapping/application, never inferred
+/// from one request, a successful member, or local cancellation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum WriteAtomicity {
+    Unspecified,
+    Atomic,
+    NonAtomic,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MemberWriteEffect {
+    Completed,
+    NotApplied,
+    Unknown,
+}
+
+/// Bounded terminal member evidence for one original writable schema/selection.
+/// Unclassified selected members remain Unknown. Native status is opaque
+/// provenance and cannot establish an effect. This carrier adds no allocation,
+/// arbitrary diagnostic tree, transaction coordinator or replay authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct PropertyWriteReport {
+    selected: PropertySelection,
+    completed: u32,
+    not_applied: u32,
+    atomicity: WriteAtomicity,
+    status_present: u32,
+    statuses: [u16; PropertyCollectionSchema::MAX_MEMBERS],
+}
+impl PropertyWriteReport {
+    pub fn try_new(
+        selected: PropertySelection,
+        completed: u32,
+        not_applied: u32,
+        atomicity: WriteAtomicity,
+    ) -> CoreResult<Self> {
+        let bits = selected.bits();
+        if (completed | not_applied) & !bits != 0
+            || completed & not_applied != 0
+            || (atomicity == WriteAtomicity::Atomic
+                && ((completed != 0 && completed != bits)
+                    || (not_applied != 0 && not_applied != bits)))
+        {
+            return Err(invalid_report());
+        }
+        Ok(Self {
+            selected,
+            completed,
+            not_applied,
+            atomicity,
+            status_present: 0,
+            statuses: [0; PropertyCollectionSchema::MAX_MEMBERS],
+        })
+    }
+    pub fn with_native_status(mut self, index: usize, status: u16) -> CoreResult<Self> {
+        if !self.selected.contains(index) || self.status_present & (1u32 << index) != 0 {
+            return Err(invalid_report());
+        }
+        self.status_present |= 1u32 << index;
+        self.statuses[index] = status;
+        Ok(self)
+    }
+    pub fn selection(&self) -> PropertySelection {
+        self.selected
+    }
+    pub fn effect(&self, index: usize) -> Option<MemberWriteEffect> {
+        if !self.selected.contains(index) {
+            None
+        } else if self.completed & (1u32 << index) != 0 {
+            Some(MemberWriteEffect::Completed)
+        } else if self.not_applied & (1u32 << index) != 0 {
+            Some(MemberWriteEffect::NotApplied)
+        } else {
+            Some(MemberWriteEffect::Unknown)
+        }
+    }
+    pub fn native_status(&self, index: usize) -> Option<u16> {
+        (index < PropertyCollectionSchema::MAX_MEMBERS
+            && self.status_present & (1u32 << index) != 0)
+            .then(|| self.statuses[index])
+    }
+    pub fn atomicity(&self) -> WriteAtomicity {
+        self.atomicity
+    }
+    pub fn is_complete(&self) -> bool {
+        self.completed == self.selected.bits()
+    }
+    /// Exact original invocation association; a later call's set cannot replace it.
+    pub fn validate_selection(&self, selected: PropertySelection) -> CoreResult<()> {
+        if self.selected == selected {
+            Ok(())
+        } else {
+            Err(invalid_report())
+        }
+    }
+    /// Incomplete native reports are evidence, not whole-group success.
+    pub fn completion(&self) -> CoreResult<()> {
+        if self.is_complete() {
+            Ok(())
+        } else {
+            Err(crate::CoreError::Application(
+                crate::ErrorContext::new(
+                    crate::ErrorPhase::Binding,
+                    crate::RetryClass::CallerDecision,
+                )
+                .with_redacted_cause(626, "collection write has incomplete member outcomes"),
+            ))
+        }
+    }
+}
+
+fn invalid_report() -> crate::CoreError {
+    crate::CoreError::Validation(crate::ErrorContext::new(
+        crate::ErrorPhase::Validate,
         crate::RetryClass::Never,
     ))
 }

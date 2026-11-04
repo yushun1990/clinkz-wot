@@ -306,5 +306,12 @@ actual map validation support to the same finite preparation, without selection
 encoding or an output map. Member eligibility, work and separate schema cleanup
 are covered by the [collection-write tests](../../protocol-bindings/protocols/http/tests/write_all_properties.rs).
 
-WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
+WriteMultipleProperties prepares the complete writable eligibility and explicitly
+qualifies selected-map validation. Invocation derives its own set only after all
+supplied values validate; no selected-read encoder or individual Property mapping
+substitutes for that facet. Final qualification compares original member meaning.
+The [selected-write tests](../../protocol-bindings/protocols/http/tests/write_multiple_properties.rs)
+exercise these boundaries and the existing prepaid schema cleanup.
+
+Long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

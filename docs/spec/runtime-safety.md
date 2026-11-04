@@ -20,7 +20,7 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
-Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties retain their own root
+Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
 rules. Its bounded schema/name backing and destruction stay funded through final
 release; normal and late data use the captured member validator. Producer
@@ -48,7 +48,7 @@ Loss during validation fences successful application handoff. The
 Producer validates output against its original retained input, including late
 results across authority/service loss, using the same captured validator rules.
 
-WriteAllProperties validates the complete captured writable input map and
+Both root writes validate their complete invocation input map and
 fresh group permission before native admission and before Producer application
 effects. No member is applied by Engine validation or individual behavior fan-out.
 A behavior error, invalid success shape or changed validator bound after entry
@@ -58,6 +58,17 @@ Consumer uncertainty never triggers replay. Cancellation, replacement, service
 loss and late results keep the original root input, behavior, authority, captured
 services, first cause and all cleanup owners. A validated unread completion
 retains its evidence while fresh policy can still refuse local success.
+Selected writes derive the original set from the captured validator, not a
+second caller-supplied list. Set-aware Consumer permission uses that retained
+set before effects, after native/codec callbacks and on unread handoff; changes
+cannot grant permission through another call's set. Optional member reports are
+checked against the original set even after cancellation/replacement. Validated
+incomplete reports retain their distinct Reported effect and native evidence;
+local revocation does not turn them into Unknown or whole-group completion.
+Invalid reports remain separately observable as rejected output. Inline report
+backing is included in existing size-based call/output funding; native owners,
+results and schema leases remain charged until actual disposal. No logical
+cancellation or terminal receipt proves physical release or remote rollback.
 
 Property Write uses the same finite cancellation, replacement and settlement
 owners. Input validation and fresh application authorization precede handler
