@@ -55,7 +55,7 @@ where
         Ok(Self { registrations })
     }
 
-    /// Select one Property observe, root observe-all or Event subscribe Form, in TD order by
+    /// Select one leaf or root Property/Event notification Form, in TD order by
     /// default. Ambiguity within a Form refuses. Unsupported alternatives remain eligible for later Forms.
     /// All control schemas are inspected separately before native compilation.
     #[allow(clippy::too_many_arguments)]
@@ -221,7 +221,34 @@ where
         } else {
             Vec::new()
         };
+        let _event_schema_scratch = if kind == NotificationKind::SubscribeAllEvents {
+            use clinkz_wot_core::collection::EventCollectionSchema as S;
+            if !pay(budget, W::PlanningItems, (S::MAX_MEMBERS + 1) as u64) {
+                return Err(busy());
+            }
+            let count = crate::type_schema::event_member_count(document)?;
+            if !pay(budget, W::PlanningItems, 5 * (count as u64 + 1)) {
+                return Err(busy());
+            }
+            let bytes = (S::backing_bound()
+                + ::core::mem::size_of::<S>()
+                + 2 * ::core::mem::size_of::<usize>()) as u64;
+            reserve(
+                bank,
+                &[
+                    (K::EngineLiveBytesGlobalMax, bytes),
+                    (K::AdmissionTemporaryBytesGlobalMax, bytes),
+                ],
+            )?
+        } else {
+            Vec::new()
+        };
         let schemas = match kind {
+            NotificationKind::SubscribeAllEvents => {
+                ConsumerNotificationSchemas::SubscribeAllEvents(Arc::new(
+                    crate::type_schema::prepare_event_collection_schema(document)?,
+                ))
+            }
             NotificationKind::ObserveAllProperties => {
                 ConsumerNotificationSchemas::ObserveAllProperties(Arc::new(
                     crate::type_schema::prepare_readable_property_schema(document)?,
@@ -316,6 +343,12 @@ where
                 .and_then(|n| {
                     n.checked_add(match &schemas {
                         ConsumerNotificationSchemas::ObserveAllProperties(s) => {
+                            (s.retained_bytes()
+                                + ::core::mem::size_of_val(&**s)
+                                + 2 * ::core::mem::size_of::<usize>())
+                                as u64
+                        }
+                        ConsumerNotificationSchemas::SubscribeAllEvents(s) => {
                             (s.retained_bytes()
                                 + ::core::mem::size_of_val(&**s)
                                 + 2 * ::core::mem::size_of::<usize>())

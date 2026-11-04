@@ -63,6 +63,8 @@ pub enum NotificationKind {
     /// One Thing-root conversation carrying named Property collection data.
     ObserveAllProperties,
     Event,
+    /// One Thing-root conversation carrying individually attributed Events.
+    SubscribeAllEvents,
 }
 impl NotificationKind {
     /// Scope alone does not select a notification family: Thing-root Forms
@@ -76,6 +78,9 @@ impl NotificationKind {
                 Some(Self::ObserveAllProperties)
             }
             Operation::SubscribeEvent | Operation::UnsubscribeEvent => Some(Self::Event),
+            Operation::SubscribeAllEvents | Operation::UnsubscribeAllEvents => {
+                Some(Self::SubscribeAllEvents)
+            }
             _ => None,
         }
     }
@@ -85,6 +90,7 @@ impl NotificationKind {
             (Self::PropertyObservation, AffordanceTarget::Property(_))
                 | (Self::ObserveAllProperties, AffordanceTarget::Thing)
                 | (Self::Event, AffordanceTarget::Event(_))
+                | (Self::SubscribeAllEvents, AffordanceTarget::Thing)
         )
     }
     pub const fn start_operation(self) -> Operation {
@@ -92,6 +98,7 @@ impl NotificationKind {
             Self::PropertyObservation => Operation::ObserveProperty,
             Self::ObserveAllProperties => Operation::ObserveAllProperties,
             Self::Event => Operation::SubscribeEvent,
+            Self::SubscribeAllEvents => Operation::SubscribeAllEvents,
         }
     }
     pub const fn stop_operation(self) -> Operation {
@@ -99,6 +106,22 @@ impl NotificationKind {
             Self::PropertyObservation => Operation::UnobserveProperty,
             Self::ObserveAllProperties => Operation::UnobserveAllProperties,
             Self::Event => Operation::UnsubscribeEvent,
+            Self::SubscribeAllEvents => Operation::UnsubscribeAllEvents,
+        }
+    }
+    pub const fn is_event(self) -> bool {
+        matches!(self, Self::Event | Self::SubscribeAllEvents)
+    }
+    /// Occurrence identity is independent of the root conversation target.
+    pub fn accepts_occurrence(
+        self,
+        conversation: &AffordanceTarget,
+        item: &AffordanceTarget,
+    ) -> bool {
+        if self == Self::SubscribeAllEvents {
+            matches!(item, AffordanceTarget::Event(_))
+        } else {
+            conversation == item
         }
     }
 }
@@ -186,6 +209,8 @@ impl NotificationResponse for Infallible {
 /// retains its original recipient and response owner until disposal.
 pub struct NativeNotification<R> {
     pub recipient: NotificationIdentity,
+    /// Logical source of THIS occurrence, never a native topic or route token.
+    pub target: AffordanceTarget,
     pub data: Option<Payload>,
     pub response: Option<R>,
 }
@@ -207,7 +232,8 @@ pub trait NotificationParticipation {
         cx: &mut Context<'_>,
         input: &SubscriptionInput,
     ) -> Poll<CoreResult<()>>;
-    /// Bound complete payload backing BEFORE handoff. Pending registers wake
+    /// Bound complete data AND occurrence-target backing BEFORE handoff.
+    /// `notification_item_backing` computes the recipient allowance. Pending registers wake
     /// interest and rechecks readiness; callbacks cannot deliver to applications.
     fn poll_next(
         &mut self,
@@ -291,11 +317,28 @@ pub trait NotificationValidation {
     ) -> CoreResult<()>;
     fn response(
         &self,
+        target: &AffordanceTarget,
         input: &EventDataResponse,
         budget: &mut clinkz_wot_foundation::WorkBudget,
     ) -> CoreResult<()>;
     fn prepay_data(&self, budget: &mut clinkz_wot_foundation::WorkBudget) -> CoreResult<()>;
-    fn data(&self, payload: Option<&Payload>) -> CoreResult<()>;
+    fn data(&self, target: &AffordanceTarget, payload: Option<&Payload>) -> CoreResult<()>;
+}
+
+/// Complete recipient allowance includes attribution backing as well as data.
+pub fn notification_item_backing(
+    target: &AffordanceTarget,
+    payload: Option<&Payload>,
+) -> Option<usize> {
+    let name = target.name().map_or(Some(0), |n| {
+        let layout = core::alloc::Layout::new::<[usize; 2]>()
+            .extend(core::alloc::Layout::array::<u8>(n.len()).ok()?)
+            .ok()?
+            .0
+            .pad_to_align();
+        Some(layout.size())
+    })?;
+    notification_payload_backing(payload)?.checked_add(name)
 }
 
 /// Full retained payload backing, including both String capacities and the Arc
