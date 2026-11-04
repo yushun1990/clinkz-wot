@@ -118,6 +118,16 @@ pub fn validate_property_map(
     validate_selected_property_map(schema, schema.all(), payload)
 }
 
+/// Validate a selected writable map and derive its set in the same pass. Every
+/// supplied member must be eligible and schema-valid; omitted members are not
+/// writes. Duplicate decoded names (including escapes) refuse the whole input.
+pub fn validate_property_write_map(
+    schema: &PropertyCollectionSchema,
+    payload: &Payload,
+) -> CoreResult<PropertySelection> {
+    property_map(schema, None, payload)
+}
+
 /// Validate precisely the original requested subset and each original value.
 /// Unrequested, missing, duplicate and invalid members refuse the whole result.
 pub fn validate_selected_property_map(
@@ -125,20 +135,30 @@ pub fn validate_selected_property_map(
     selected: PropertySelection,
     payload: &Payload,
 ) -> CoreResult<()> {
-    schema.selection_from_bits(selected.bits())?;
+    property_map(schema, Some(selected), payload).map(|_| ())
+}
+
+fn property_map(
+    schema: &PropertyCollectionSchema,
+    selected: Option<PropertySelection>,
+    payload: &Payload,
+) -> CoreResult<PropertySelection> {
+    if let Some(selected) = selected {
+        schema.selection_from_bits(selected.bits())?;
+    }
     validate_payload(TypeSchema::Type(ValueType::Object), payload)?;
-    struct Members<'a>(&'a PropertyCollectionSchema, PropertySelection);
+    struct Members<'a>(&'a PropertyCollectionSchema, Option<PropertySelection>);
     impl<'de> Visitor<'de> for Members<'_> {
-        type Value = ();
+        type Value = PropertySelection;
         fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str("a complete selected Property collection")
         }
-        fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<(), M::Error> {
+        fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
             use serde::de::Error;
             let mut seen = 0u32;
             while let Some(i) = map.next_key_seed(MemberIndex(self.0))? {
                 let bit = 1u32 << i;
-                if seen & bit != 0 || !self.1.contains(i) {
+                if seen & bit != 0 || self.1.is_some_and(|s| !s.contains(i)) {
                     return Err(M::Error::custom(
                         "duplicate or unrequested collection member",
                     ));
@@ -148,16 +168,19 @@ pub fn validate_selected_property_map(
                     .map_err(|_| M::Error::custom("invalid collection member"))?;
                 seen |= bit;
             }
-            if seen != self.1.bits() {
+            if self.1.is_some_and(|s| seen != s.bits()) {
                 return Err(M::Error::custom("incomplete collection map"));
             }
-            Ok(())
+            self.0
+                .selection_from_bits(seen)
+                .map_err(|_| M::Error::custom("invalid member set"))
         }
     }
     let mut decoder = serde_json::Deserializer::from_slice(&payload.body);
-    serde::Deserializer::deserialize_map(&mut decoder, Members(schema, selected))
+    let selected = serde::Deserializer::deserialize_map(&mut decoder, Members(schema, selected))
         .map_err(|_| invalid())?;
-    decoder.end().map_err(|_| invalid())
+    decoder.end().map_err(|_| invalid())?;
+    Ok(selected)
 }
 
 pub fn validate(schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {

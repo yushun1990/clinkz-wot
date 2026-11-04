@@ -446,5 +446,14 @@ The [collection-write tests](../../protocol-bindings/protocols/http/tests/write_
 exercise real partial application, authority replacement, unread completion,
 cancellation, retained cleanup and final release under the existing finite owners.
 
-WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
+WriteMultipleProperties retains a separate validated set for each original call,
+uses set-aware Consumer permission and one Producer root behavior, and performs
+no implicit member fan-out. Valid incomplete reports remain native evidence with
+Reported effect while whole-group `result()` fails. Local cause, late/unread
+reports, delivery and physical retirement remain separate. The
+[selected-write tests](../../protocol-bindings/protocols/http/tests/write_multiple_properties.rs)
+and independent datagram fixture cover real effects, original authority and
+final account/socket release under the existing finite owners.
+
+Long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

@@ -67,3 +67,14 @@ The tests cover pending/query/cancel/completion, zero-credit progress and blocke
 failed cleanup around a late invalid output. They retain first local cause,
 validation/native evidence and original funding through settlement and final local
 socket disposal. The test protocol makes no production interoperability claim.
+
+
+`tests/support/collection_write.rs` joins a TD-prepared selected-write Consumer
+and a raw finite Producer over the fixture's GROUP/REPORT datagram protocol.
+Independent member schemas, native member statuses (including zero), mixed
+completion/rejection/uncertainty, atomic refusal, original-set mismatch,
+cancellation/revocation, retained charges and final socket reuse challenge the
+shared result contract. The concrete JSON codec supplies bounded selected-map
+validation. The Producer is deliberately raw: this is public SPI and real-I/O
+evidence, not complete TD Producer qualification, WebDAV or a production mapping.
+The HTTP joined slice supplies TD qualification evidence for its own PUT/204 subset.

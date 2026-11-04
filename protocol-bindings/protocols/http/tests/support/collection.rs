@@ -94,6 +94,8 @@ struct Application {
     authorizations: Cell<usize>,
     write_fault: Cell<u8>,
     applied: RefCell<Value>,
+    denied_member: RefCell<Option<String>>,
+    write_report: Cell<Option<collection::PropertyWriteReport>>,
 }
 struct Behavior(Rc<Application>);
 impl Drop for Behavior {
@@ -102,7 +104,13 @@ impl Drop for Behavior {
     }
 }
 impl RawFiniteHandler for Behavior {
-    fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+    fn authorize(&self, input: &InteractionInput) -> CoreResult<()> {
+        if let Some(name) = self.0.denied_member.borrow().as_ref() {
+            let values: Value = serde_json::from_slice(&input.data.as_ref().unwrap().body).unwrap();
+            if values.get(name).is_some() {
+                return Err(denied());
+            }
+        }
         self.0.authorizations.set(self.0.authorizations.get() + 1);
         if self.0.denies.get() {
             Err(denied())
@@ -151,7 +159,7 @@ impl RawFiniteHandler for Behavior {
                     &self.0.value.borrow(),
                 )))
             }
-            Operation::WriteAllProperties => {
+            Operation::WriteAllProperties | Operation::WriteMultipleProperties => {
                 assert_eq!(ctx.target(), &AffordanceTarget::Thing);
                 self.0.roots.set(self.0.roots.get() + 1);
                 let values: Value =
@@ -161,16 +169,29 @@ impl RawFiniteHandler for Behavior {
                 if self.0.write_fault.get() == 5 {
                     return Err(denied());
                 }
-                self.0.applied.borrow_mut()["on"] = values["on"].clone();
+                if let Some(value) = values.get("on") {
+                    self.0.applied.borrow_mut()["on"] = value.clone();
+                }
                 if self.0.write_fault.get() == 1 {
                     return Err(denied());
                 }
-                *self.0.applied.borrow_mut() = values;
+                for (name, value) in values.as_object().unwrap() {
+                    self.0.applied.borrow_mut()[name] = value.clone();
+                }
                 match self.0.write_fault.get() {
                     2 => Err(denied()),
                     3 => Ok(InteractionOutput::with_data(payload(b"{}"))),
                     4 => Ok(InteractionOutput::empty().with_status(InteractionStatus::Accepted)),
-                    _ => Ok(InteractionOutput::empty()),
+                    _ => Ok(if let Some(report) = self.0.write_report.get() {
+                        InteractionOutput::empty()
+                            .try_with_metadata(
+                                InteractionOutputMetadata::default()
+                                    .with_property_write_report(report),
+                            )
+                            .unwrap()
+                    } else {
+                        InteractionOutput::empty()
+                    }),
                 }
             }
             Operation::ReadProperty => {
@@ -336,13 +357,17 @@ fn exposure(
         ("readallproperties", Operation::ReadAllProperties),
         ("readmultipleproperties", Operation::ReadMultipleProperties),
         ("writeallproperties", Operation::WriteAllProperties),
+        (
+            "writemultipleproperties",
+            Operation::WriteMultipleProperties,
+        ),
     ] {
-        if td["forms"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|f| f["op"] == name)
-        {
+        if td["forms"].as_array().unwrap().iter().any(|f| {
+            f["op"] == name
+                || f["op"]
+                    .as_array()
+                    .is_some_and(|ops| ops.iter().any(|op| op == name))
+        }) {
             behaviors.push(RawFiniteBehavior::new(
                 AffordanceTarget::Thing,
                 operation,
@@ -606,6 +631,7 @@ fn client(
                 Operation::ReadAllProperties
                     | Operation::ReadMultipleProperties
                     | Operation::WriteAllProperties
+                    | Operation::WriteMultipleProperties
             )
         })
         .unwrap();
@@ -660,8 +686,11 @@ fn collection_description(addr: SocketAddr, operation: Operation) -> Value {
         td["forms"][0]["op"] = json!("readmultipleproperties");
         td["forms"][0]["htv:methodName"] = json!("POST");
     }
-    if operation == Operation::WriteAllProperties {
-        td["forms"][0]["op"] = json!("writeallproperties");
+    if matches!(
+        operation,
+        Operation::WriteAllProperties | Operation::WriteMultipleProperties
+    ) {
+        td["forms"][0]["op"] = json!(operation.as_str());
         td["properties"]["on"]["readOnly"] = json!(false);
     }
     td
@@ -676,6 +705,15 @@ fn start_collection_at(
     } else if operation == Operation::WriteAllProperties {
         client
             .write_all_properties(
+                payload(br#"{"on":false,"secret":"updated"}"#),
+                deadline,
+                now(0),
+                &mut work(),
+            )
+            .map_err(|e| e.error().error().clone())
+    } else if operation == Operation::WriteMultipleProperties {
+        client
+            .write_multiple_properties(
                 payload(br#"{"on":false,"secret":"updated"}"#),
                 deadline,
                 now(0),
@@ -772,7 +810,10 @@ fn verify_collection_lifecycle(operation: Operation) {
             assert!(remote.result.is_ok());
             assert_eq!(remote.target, Some(AffordanceTarget::Thing));
             assert_eq!(remote.delivery, FiniteDelivery::NotDelivered);
-            if operation == Operation::WriteAllProperties {
+            if matches!(
+                operation,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            ) {
                 assert_eq!(remote.effect, FiniteEffect::Completed);
                 assert_eq!(
                     *server.app.applied.borrow(),
@@ -844,7 +885,10 @@ fn verify_collection_replacement(operation: Operation) {
             let (local, remote) = server.exchange(&mut call).await;
             assert_eq!(local.result().is_ok(), accepted);
             assert_eq!(remote.recipient, Some(old));
-            if operation == Operation::WriteAllProperties {
+            if matches!(
+                operation,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            ) {
                 assert_eq!(
                     remote.effect,
                     if accepted {
@@ -889,7 +933,10 @@ fn verify_collection_replacement(operation: Operation) {
             server.close();
             assert_eq!(
                 next_app.drops.get(),
-                if operation == Operation::WriteAllProperties {
+                if matches!(
+                    operation,
+                    Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                ) {
                     5
                 } else {
                     4
@@ -907,7 +954,7 @@ fn verify_collection_publication(operation: Operation) {
         let mut peer = TcpStream::connect(addr).unwrap();
         if operation == Operation::ReadMultipleProperties {
             write!(peer, "POST /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: 6\r\n\r\n[\"on\"]").unwrap();
-        } else if operation == Operation::WriteAllProperties {
+        } else if matches!(operation, Operation::WriteAllProperties | Operation::WriteMultipleProperties) {
             let body = br#"{"on":false,"secret":"updated"}"#;
             write!(peer, "PUT /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).unwrap();
             peer.write_all(body).unwrap();
@@ -939,7 +986,7 @@ fn verify_collection_publication(operation: Operation) {
             }
             assert!(start.elapsed() < Duration::from_secs(5));
         }
-        assert!(bytes.starts_with(if operation == Operation::WriteAllProperties { b"HTTP/1.1 204" } else { b"HTTP/1.1 200" }));
+        assert!(bytes.starts_with(if matches!(operation, Operation::WriteAllProperties | Operation::WriteMultipleProperties) { b"HTTP/1.1 204" } else { b"HTTP/1.1 200" }));
         assert_eq!(server.app.roots.get(), 1);
         drop(server.server().take_settlement().unwrap());
         let accounts = bank();
@@ -1068,6 +1115,20 @@ fn verify_collection_cleanup(operation: Operation) {
             self.queries.fetch_add(1, Ordering::Relaxed);
             self.supported && self.actual.supports_property_selection(s)
         }
+        fn supports_property_write_selection(
+            &self,
+            s: &collection::PropertyCollectionSchema,
+        ) -> bool {
+            self.queries.fetch_add(1, Ordering::Relaxed);
+            self.supported && self.actual.supports_property_write_selection(s)
+        }
+        fn validate_property_write_map(
+            &self,
+            s: &collection::PropertyCollectionSchema,
+            p: &Payload,
+        ) -> CoreResult<collection::PropertySelection> {
+            self.actual.validate_property_write_map(s, p)
+        }
         fn encode_property_selection(
             &self,
             s: &collection::PropertyCollectionSchema,
@@ -1095,12 +1156,12 @@ fn verify_collection_cleanup(operation: Operation) {
         let addr = address();
         let mut td = description(addr);
         td["forms"] = json!([
-            {"op":operation.as_str(),"href":format!("http://{addr}/skip"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else if operation == Operation::WriteAllProperties {"PUT"} else {"GET"}},
-            {"op":operation.as_str(),"href":format!("http://{addr}/properties"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else if operation == Operation::WriteAllProperties {"PUT"} else {"GET"}}
+            {"op":operation.as_str(),"href":format!("http://{addr}/skip"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else if matches!(operation, Operation::WriteAllProperties | Operation::WriteMultipleProperties) {"PUT"} else {"GET"}},
+            {"op":operation.as_str(),"href":format!("http://{addr}/properties"),"htv:methodName":if operation == Operation::ReadMultipleProperties {"POST"} else if matches!(operation, Operation::WriteAllProperties | Operation::WriteMultipleProperties) {"PUT"} else {"GET"}}
         ]);
         td["properties"] = json!({});
         for i in 0..count {
-            td["properties"][format!("p{i}")] = json!({"type":"integer", "readOnly":operation != Operation::WriteAllProperties,
+            td["properties"][format!("p{i}")] = json!({"type":"integer", "readOnly": !matches!(operation, Operation::WriteAllProperties | Operation::WriteMultipleProperties),
                 "forms":[{"href":format!("http://{addr}/p{i}")}]});
         }
         td
@@ -1320,7 +1381,10 @@ fn verify_collection_validator_bound(operation: Operation) {
             _: &InteractionInput,
         ) -> CoreResult<InteractionOutput> {
             self.0.set(self.1);
-            if self.2 == Operation::WriteAllProperties {
+            if matches!(
+                self.2,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            ) {
                 return Ok(InteractionOutput::empty());
             }
             Ok(InteractionOutput::with_data(payload(
@@ -1414,7 +1478,10 @@ fn verify_collection_validator_bound(operation: Operation) {
         let mut peer = TcpStream::connect(addr).unwrap();
         if operation == Operation::ReadMultipleProperties {
             write!(peer, "POST /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: 14\r\n\r\n[\"level\",\"on\"]").unwrap();
-        } else if operation == Operation::WriteAllProperties {
+        } else if matches!(
+            operation,
+            Operation::WriteAllProperties | Operation::WriteMultipleProperties
+        ) {
             let body = br#"{"on":false,"secret":"updated"}"#;
             write!(peer, "PUT /properties HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).unwrap();
             peer.write_all(body).unwrap();

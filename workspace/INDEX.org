@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0102-thing-root-write-multiple-properties.md][0102 TD-driven Thing-root WriteMultipleProperties and native member evidence]]
+
 - [[file:0101-thing-root-write-all-properties.md][0101 TD-driven Thing-root WriteAllProperties]]
 
 - [[file:0099-thing-root-read-all-properties.md][0099 Executable Thing-root ReadAllProperties]]

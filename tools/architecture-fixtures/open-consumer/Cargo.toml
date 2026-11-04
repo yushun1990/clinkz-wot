@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 clinkz-wot-core = { path = "../../../core" }
 clinkz-wot-foundation = { path = "../../../foundation" }
+clinkz-wot-codec-json = { path = "../../../codecs/json" }
 clinkz-wot-planning = { path = "../../../planning", optional = true }
 clinkz-wot-td = { path = "../../../td", optional = true }
 

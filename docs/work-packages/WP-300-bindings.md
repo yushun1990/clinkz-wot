@@ -134,5 +134,14 @@ with a complete writable input validator and empty completion. HTTP owns PUT,
 204/EOF completion and failure mapping. The [collection-write tests](../../protocol-bindings/protocols/http/tests/write_all_properties.rs)
 exercise uncertain completion, original validator bounds and physical retirement.
 
-WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
+WriteMultipleProperties uses one native group interaction and captured original
+input validation. The shared finite output can carry a bounded member report,
+opaque member statuses and explicit atomicity evidence independently of whole
+completion. HTTP PUT/204 declines reports it cannot encode; the independent
+[datagram fixture](../../tools/architecture-fixtures/open-consumer/tests/support/collection_write.rs)
+exercises richer reports over real I/O in both finite roles, including late
+results and rejection of unrequested-member evidence. Its Producer is raw and
+its protocol is a test participant, not production or TD-qualified support.
+
+Long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.

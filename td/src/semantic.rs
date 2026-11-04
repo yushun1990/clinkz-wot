@@ -419,6 +419,7 @@ impl<'a> Resolver<'a> {
                                 crate::data_type::Operation::ReadAllProperties
                                     | crate::data_type::Operation::ReadMultipleProperties
                                     | crate::data_type::Operation::WriteAllProperties
+                                    | crate::data_type::Operation::WriteMultipleProperties
                             )
                         })
                     });

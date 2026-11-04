@@ -231,14 +231,16 @@ impl InteractionOptions {
     }
 }
 
-/// Normalized completion status of a successful interaction.
+/// Normalized terminal status. A collection member report may contain individual
+/// failures even when its native exchange completed normally; its completion
+/// check, rather than this status alone, establishes whole-group success.
 ///
 /// Request failures use [`CoreError`](crate::CoreError), while concrete
 /// protocol status codes remain in binding-response metadata.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum InteractionStatus {
-    /// Normal successful completion.
+    /// Normal terminal output, including a collection member report.
     #[default]
     Ok,
     /// An addressable asynchronous action status resource was created.
@@ -350,15 +352,29 @@ impl BindingResponseMetadata {
     }
 }
 
-/// Fixed-size metadata accompanying a successful interaction output.
+/// Fixed-size metadata accompanying an interaction output.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct InteractionOutputMetadata {
     action_invocation: Option<ActionInvocationRef>,
     binding_response: Option<BindingResponseMetadata>,
     payload_role: ResponsePayloadRole,
+    property_write_report: Option<crate::collection::PropertyWriteReport>,
 }
 
 impl InteractionOutputMetadata {
+    /// Member evidence, independently validated against the original collection
+    /// invocation. Unsupported native mappings must refuse, never erase it.
+    #[must_use]
+    pub const fn with_property_write_report(
+        mut self,
+        report: crate::collection::PropertyWriteReport,
+    ) -> Self {
+        self.property_write_report = Some(report);
+        self
+    }
+    pub const fn property_write_report(&self) -> Option<&crate::collection::PropertyWriteReport> {
+        self.property_write_report.as_ref()
+    }
     /// Returns metadata carrying an action invocation reference.
     #[must_use]
     pub const fn with_action_invocation(mut self, action_invocation: ActionInvocationRef) -> Self {
@@ -418,6 +434,7 @@ impl InteractionOutput {
                 action_invocation: None,
                 binding_response: None,
                 payload_role: ResponsePayloadRole::Application,
+                property_write_report: None,
             },
         }
     }
@@ -430,7 +447,7 @@ impl InteractionOutput {
         }
     }
 
-    /// Returns the output with a different successful completion status.
+    /// Returns the output with a different status.
     #[must_use]
     pub const fn with_status(mut self, status: InteractionStatus) -> Self {
         self.status = status;
@@ -462,7 +479,7 @@ impl InteractionOutput {
         self.data.as_ref()
     }
 
-    /// Returns the normalized successful completion status.
+    /// Returns the normalized status; a member report has its own completion check.
     pub const fn status(&self) -> InteractionStatus {
         self.status
     }

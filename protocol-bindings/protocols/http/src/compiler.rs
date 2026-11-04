@@ -26,6 +26,7 @@ impl HostSemanticCompiler for HttpCompiler {
                 Operation::ReadAllProperties
                     | Operation::ReadMultipleProperties
                     | Operation::WriteAllProperties
+                    | Operation::WriteMultipleProperties
             );
         if !(collection
             || matches!(
@@ -47,10 +48,16 @@ impl HostSemanticCompiler for HttpCompiler {
             .ok_or_else(unsupported)?;
         let write = matches!(
             input.operation,
-            Operation::WriteProperty | Operation::WriteAllProperties
+            Operation::WriteProperty
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
         );
         let multiple = input.operation == Operation::ReadMultipleProperties;
-        if (multiple || input.operation == Operation::WriteAllProperties)
+        if (multiple
+            || matches!(
+                input.operation,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            ))
             && input.document.scope(SemanticScope::Thing).is_none_or(|n| {
                 n.children()
                     .any(|n| !crate::producer_compiler::class_assertion(n))
@@ -179,7 +186,11 @@ impl HostSemanticCompiler for HttpCompiler {
         }
         // Other standardized HTTP instructions are outside this declared slice.
         for node in form.children() {
-            if (multiple || input.operation == Operation::WriteAllProperties)
+            if (multiple
+                || matches!(
+                    input.operation,
+                    Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                ))
                 && !http_name(node)
                 && !crate::producer_compiler::class_assertion(node)
             {

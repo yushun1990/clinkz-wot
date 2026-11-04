@@ -1,4 +1,6 @@
 #![cfg(feature = "prepare")]
+#[path = "support/collection_write.rs"]
+mod collection_write;
 #[path = "support/composition.rs"]
 mod composition;
 use clinkz_wot_core::{consumer::ConsumerInstance, host_accounts::HostResourceAccounts, *};

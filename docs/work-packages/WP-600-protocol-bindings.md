@@ -301,5 +301,16 @@ The [real HTTP tests](../../protocol-bindings/protocols/http/tests/write_all_pro
 cover complete input, partial application failures and ambiguous independent
 peers without retry, atomicity or rollback claims.
 
-WriteMultipleProperties and long-lived collection operations remain unimplemented. This scoped capability changes no
+WriteMultipleProperties joins both TD-driven roles through one HTTP PUT/204
+interaction using caller-selected writable values. Exact mapping, source status,
+unsupported responses and limits belong to the
+[HTTP selected-write contract](../../protocol-bindings/protocols/http/README.md#thing-root-writemultipleproperties).
+The [real HTTP tests](../../protocol-bindings/protocols/http/tests/write_multiple_properties.rs)
+cover independently schema-validated subsets, member permission, actual partial
+application, malformed peers and lifecycle/resource refusal and release. HTTP
+provides no per-member or atomicity report; a separate test-native datagram
+fixture challenges the shared SPI with richer evidence without extending HTTP's
+production qualification.
+
+Long-lived collection operations remain unimplemented. This scoped capability changes no
 work-package dependencies, gate, milestone or production qualification status.
