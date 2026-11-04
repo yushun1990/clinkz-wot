@@ -134,8 +134,11 @@ pub(crate) fn lower_notification(
                     || m.data_response.is_some()
                     || m.data.is_none()
                     || doc.scope(SemanticScope::Event(&m.name)).is_none_or(|s| {
+                        // Expanded IRIs and aliases can introduce untyped
+                        // td:data extensions beside the retained typed role.
                         s.children()
                             .any(|n| !annotation(n) && !n.name().is(TD_DATA))
+                            || s.children().filter(|n| n.name().is(TD_DATA)).count() != 1
                     })
                 {
                     return Err(unsupported());

@@ -79,24 +79,30 @@ fn definition(
     access: Arc<Access>,
     data: Arc<dyn ConsumerDataService>,
 ) -> ConsumerNotificationDefinition<MqttNotificationConsumer> {
+    try_definition(s, td, bank, access, data).unwrap()
+}
+fn try_definition(
+    s: &MqttConsumerService,
+    td: serde_json::Value,
+    bank: &Arc<HostResourceAccounts>,
+    access: Arc<Access>,
+    data: Arc<dyn ConsumerDataService>,
+) -> CoreResult<ConsumerNotificationDefinition<MqttNotificationConsumer>> {
     let registry = ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
         binding: s.binding(),
         services: ConsumerServices { data, access },
-    }])
-    .unwrap();
+    }])?;
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
-    registry
-        .prepare_notification(
-            &serde_json::from_value(td).unwrap(),
-            &AffordanceTarget::Thing,
-            NotificationKind::SubscribeAllEvents,
-            ConsumerSelector::default(),
-            &limits,
-            bank.clone(),
-            &mut budget(),
-        )
-        .unwrap()
+    registry.prepare_notification(
+        &serde_json::from_value(td).unwrap(),
+        &AffordanceTarget::Thing,
+        NotificationKind::SubscribeAllEvents,
+        ConsumerSelector::default(),
+        &limits,
+        bank.clone(),
+        &mut budget(),
+    )
 }
 fn from_definition(
     d: ConsumerNotificationDefinition<MqttNotificationConsumer>,
@@ -1373,6 +1379,64 @@ fn final_publication_refuses_missing_actual_collection_services_after_closed_nat
         pe.retire(&mut po, &mut budget()).unwrap();
         assert!(!s.connected());
         drop(pe);
+        assert_empty(&bank);
+    });
+}
+
+#[test]
+fn extra_expanded_event_data_refuses_before_native_start_and_supported_td_still_executes() {
+    runtime().block_on(async {
+        let b = Broker::start();
+        let bank = bank();
+        let topic = "duplicate/events";
+        let (mut po, mut pe, _, ps) = producer(&b, topic, &bank, 8192).await;
+        let s = service(&b, 8192);
+        let baseline = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+        for key in [
+            "https://www.w3.org/2019/wot/td#data",
+            "td:data",
+            "extraData",
+        ] {
+            let mut td = event_collection_td(b.address, topic);
+            td["events"]["alarm"]["@context"] = serde_json::json!({
+                "td": "https://www.w3.org/2019/wot/td#",
+                "extraData": "https://www.w3.org/2019/wot/td#data"
+            });
+            td["events"]["alarm"][key] = serde_json::json!({"type":"string","minLength":100});
+            assert!(
+                try_definition(
+                    &s,
+                    td,
+                    &bank,
+                    Arc::new(Access::default()),
+                    Arc::new(MqttJsonData)
+                )
+                .is_err(),
+                "extra {key} meaning must refuse before a native subscription can be created"
+            );
+            assert!(!s.connected());
+            assert_eq!(
+                bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+                baseline
+            );
+        }
+        assert!(!b.logs().contains("Received SUBSCRIBE from cr"));
+        let owner = consumer_owner();
+        let mut c = consumer(&s, &b, topic, &owner, &bank, Arc::new(Access::default()), 4);
+        let mut cursor = subscribe(&mut c, NotificationOverflow::Terminate);
+        active(&mut c, &cursor).await;
+        send(&mut po, &mut pe, ONE).await;
+        value(&mut c, &mut cursor, ONE).await;
+        c.stop(&cursor, Some(CancellationInput(None)), &mut budget())
+            .unwrap_or_else(|_| panic!());
+        assert_eq!(
+            settled(&mut c, &cursor).await.remote_cancellation,
+            RemoteCancellation::Confirmed
+        );
+        assert!(!s.connected());
+        close(&mut po, &mut pe);
+        assert!(!ps.connected());
+        drop((c, pe));
         assert_empty(&bank);
     });
 }

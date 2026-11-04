@@ -74,6 +74,67 @@ fn provider(addr: SocketAddr) -> MqttNotificationProducer {
     )
 }
 #[test]
+fn duplicate_expanded_event_data_roles_refuse_collection_qualification_in_both_roles() {
+    let addr = "127.0.0.1:18883".parse().unwrap();
+    let p = provider(addr);
+    let s = service(addr, 8);
+    let bank = bank();
+    for event in ["alarm", "ready"] {
+        let mut base = event_collection_td(addr, "duplicate/events");
+        base["events"][event]["@context"] = serde_json::json!({
+            "td": "https://www.w3.org/2019/wot/td#",
+            "extraData": "https://www.w3.org/2019/wot/td#data"
+        });
+        let supported = selected(
+            base.clone(),
+            &[&s],
+            ConsumerSelector::default(),
+            &bank,
+            Arc::new(MqttJsonData),
+            &mut budget(),
+        )
+        .unwrap();
+        drop(supported);
+        assert!(
+            prepare(
+                &event_collection_instance(authority(1), &base.to_string()),
+                &[&p]
+            )
+            .is_ok()
+        );
+        for key in [
+            "https://www.w3.org/2019/wot/td#data",
+            "td:data",
+            "extraData",
+        ] {
+            let mut td = base.clone();
+            td["events"][event][key] = serde_json::json!({"type":"string","minLength":100});
+            assert!(
+                selected(
+                    td.clone(),
+                    &[&s],
+                    ConsumerSelector::default(),
+                    &bank,
+                    Arc::new(MqttJsonData),
+                    &mut budget()
+                )
+                .is_err(),
+                "Consumer ignored extra {key} meaning on {event}"
+            );
+            assert!(
+                prepare(
+                    &event_collection_instance(authority(1), &td.to_string()),
+                    &[&p]
+                )
+                .is_err(),
+                "Producer ignored extra {key} meaning on {event}"
+            );
+            assert!(!s.connected());
+            assert_empty(&bank);
+        }
+    }
+}
+#[test]
 fn both_roles_refuse_incomplete_mapping_unknown_semantics_and_every_unsupported_event_role() {
     let addr = "127.0.0.1:18883".parse().unwrap();
     let p = provider(addr);
