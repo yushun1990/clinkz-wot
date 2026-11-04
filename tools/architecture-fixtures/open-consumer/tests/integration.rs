@@ -311,7 +311,7 @@ fn exact_pair_refusal_recovers_compiler_and_executor_before_io() {
     let p = Arc::new(Probe::default());
     let other = ConsumerBindingConfiguration::for_semantic_host(
         256,
-        BindingConfigurationDigest::new([179; 32]),
+        BindingConfigurationDigest::new([180; 32]),
         configuration().native_compatibility().unwrap(),
         1024,
         16,
