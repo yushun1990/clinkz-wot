@@ -1017,7 +1017,21 @@ prepays 65536 work units; managed participation reserves a 128 KiB controlled
 I/O/formatting envelope in addition to definitions, records and services. OS
 socket state remains Binding-owned. These are conservative controlled-backing
 bounds, not process RAM or throughput measurements. Acknowledged Action
-settlements retain their original managed funding until result disposal.
+settlements retain their original managed funding until result disposal. In
+addition to the native envelope, each managed Action acquires a separate original-bank
+result/cleanup lease before behavior entry. Live invocations and acknowledged but
+retained settlements share the configured Servient result-slot bound. Acknowledging
+an HTTP record permits no uncharged result growth: a held settlement keeps its
+slot, and reservation saturation returns 503 before application invocation.
+
+Both completed-query and settlement output lend slices/fixed metadata through
+`RawActionOutputView`; no payload/body Arc can be extracted. To share original
+bytes, retain the settlement (for example in Rc) through their final use. An
+explicit byte copy is separate caller-owned backing. Result disposal, including
+the final shared settlement reference, returns its slot and byte/cleanup leases.
+Consumer QueryAllActions preparation qualifies every resolved response assertion,
+including foreign-vocabulary predicates; unsupported envelope instructions refuse
+that candidate while independent supported operations may remain available.
 
 [Real HTTP tests](tests/query_all_actions.rs) exercise both Engine roles,
 independent native peers, concurrency, validation, complete qualification,

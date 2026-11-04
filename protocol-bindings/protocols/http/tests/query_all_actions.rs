@@ -1186,3 +1186,191 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
         server.close();
     });
 }
+
+#[test]
+fn review_borrowed_settlement_body_cannot_outlive_original_funding() {
+    let mut server = Server::new();
+    let token = server.invoke("run", 1);
+    let id = token.split_once('-').unwrap().1.parse().unwrap();
+    server.app.complete.set(true);
+    server.progress();
+    let settlement = server
+        .exposure
+        .participant_mut::<HttpActionRuntime>(0)
+        .unwrap()
+        .acknowledge(&mut server.owner, id)
+        .unwrap()
+        .unwrap();
+    let original = server.app.last_body.borrow().as_ref().unwrap().clone();
+    let root = Rc::new(settlement);
+    let shared = root.clone();
+    let pointer = shared.result().unwrap().data().unwrap().body.as_ptr();
+    assert_eq!(pointer, original.as_ptr().cast::<u8>());
+    drop(root);
+    let bank = server.retire();
+    assert_eq!(shared.result().unwrap().data().unwrap().body, b"1");
+    assert!(original.strong_count() > 0);
+    assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+    // Slice copies are caller-owned allocations. Sharing the original bytes
+    // requires sharing their result owner and its original capacity.
+    let copied = shared.result().unwrap().data().unwrap().body.to_vec();
+    assert_ne!(copied.as_ptr(), pointer);
+    drop(shared);
+    assert_eq!(original.strong_count(), 0);
+    assert_eq!(copied, b"1");
+    drop(original);
+    clean(&bank);
+}
+
+#[test]
+fn review_root_consumer_refuses_unhandled_response_assertion() {
+    for predicate in [
+        "x:statusEnvelope",
+        "urn:review:statusEnvelope",
+        "http://www.w3.org/2011/http#unknown",
+    ] {
+        let addr = address();
+        let mut td = description(addr);
+        td["@context"] = json!(["https://www.w3.org/2022/wot/td/v1.1", {"x":"urn:review:"}]);
+        td["forms"][0]["response"][predicate] = json!("wrapped");
+        td["properties"] = json!({"p":{"type":"integer","readOnly":true,"forms":[{"href":format!("http://{addr}/p")}]}});
+        let bank = accounts();
+        let prepared =
+            prepare_consumer(&td, bank.clone(), Arc::new(ConsumerPolicy::default())).unwrap();
+        assert!(
+            !prepared
+                .support()
+                .iter()
+                .any(|s| s.operation == Operation::QueryAllActions && s.selected),
+            "{predicate}"
+        );
+        assert!(
+            prepared
+                .support()
+                .iter()
+                .any(|s| s.operation == Operation::ReadProperty && s.selected)
+        );
+        drop(prepared);
+        clean(&bank);
+    }
+    let mut supported = description(address());
+    supported["forms"][0]["response"]["@type"] = json!("urn:review:ExpectedResponse");
+    let bank = accounts();
+    let prepared = prepare_consumer(
+        &supported,
+        bank.clone(),
+        Arc::new(ConsumerPolicy::default()),
+    )
+    .unwrap();
+    assert!(
+        prepared
+            .support()
+            .iter()
+            .any(|s| s.operation == Operation::QueryAllActions && s.selected)
+    );
+    drop(prepared);
+    clean(&bank);
+}
+
+#[test]
+fn review_acknowledged_results_still_use_bounded_result_capacity() {
+    let mut server = Server::new();
+    server.app.complete.set(true);
+    server.app.long.set(true);
+    let bank = server.bank.clone();
+    let reserved = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    let mut settlements = Vec::new();
+    let mut last_charge = reserved;
+    for _ in 0..64 {
+        let (status, value, report) = server.send("POST", "/signal", "1");
+        if status == 503 {
+            assert_eq!(settlements.len(), 8);
+            assert!(matches!(
+                report.request_error,
+                Some(CoreError::Backpressure(_))
+            ));
+            break;
+        }
+        assert_eq!(status, 202);
+        let token = value["id"].as_str().unwrap();
+        let id = token.split_once('-').unwrap().1.parse().unwrap();
+        server.progress();
+        let settlement = server
+            .exposure
+            .participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .acknowledge(&mut server.owner, id)
+            .unwrap()
+            .unwrap();
+        settlements.push(settlement);
+        let charged = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+        assert!(
+            charged > last_charge,
+            "newly admitted output must own additional backing"
+        );
+        last_charge = charged;
+    }
+    assert_eq!(settlements.len(), 8);
+    assert_eq!(server.app.invoked.get(), 8);
+    assert_eq!(server.native().records(), 0);
+    let retained: usize = settlements
+        .iter()
+        .map(|s| s.result().unwrap().data().unwrap().body.len())
+        .sum();
+    assert!(last_charge >= reserved + retained as u64);
+    drop(settlements.pop());
+    assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() < last_charge);
+    let token = server.invoke("signal", 1);
+    server.progress();
+    let id = token.split_once('-').unwrap().1.parse().unwrap();
+    settlements.push(
+        server
+            .exposure
+            .participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .acknowledge(&mut server.owner, id)
+            .unwrap()
+            .unwrap(),
+    );
+    let (status, _, _) = server.send("POST", "/signal", "1");
+    assert_eq!(status, 503);
+    assert_eq!(server.app.invoked.get(), 9);
+    let bank = server.retire();
+    assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+    drop(settlements);
+    clean(&bank);
+}
+
+#[test]
+fn review_result_funding_refusal_is_pre_effect_and_rolls_back_every_original_account() {
+    for kind in [
+        ResourceKind::EngineLiveBytesGlobalMax,
+        ResourceKind::CleanupBytesMax,
+        ResourceKind::CleanupItemsMax,
+    ] {
+        let mut server = Server::new();
+        let bank = server.bank.clone();
+        let original: Vec<_> = ResourceKind::ALL
+            .into_iter()
+            .map(|k| bank.account(k).used())
+            .collect();
+        let account = bank.account(kind);
+        let occupied = bank
+            .reserve(kind, account.limit() - account.used())
+            .unwrap();
+        let (status, _, report) = server.send("POST", "/run", "1");
+        assert_eq!(status, 503, "{kind:?}");
+        assert!(matches!(
+            report.request_error,
+            Some(CoreError::Backpressure(_))
+        ));
+        assert_eq!(server.app.invoked.get(), 0);
+        assert_eq!(server.native().records(), 0);
+        drop(occupied);
+        for (k, before) in ResourceKind::ALL.into_iter().zip(original) {
+            assert_eq!(bank.account(k).used(), before, "{k:?}");
+        }
+        server.invoke("run", 1);
+        server.close();
+    }
+}

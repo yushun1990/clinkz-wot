@@ -483,3 +483,14 @@ They also falsified the old acknowledgement path: `RawActionSettlement` now
 retains its original instance/funding until result disposal. Existing raw and
 continuing Action evidence must be rerun for that direct ownership correction.
 No dependency, milestone, gate or production status changes.
+
+
+The result-ownership review corrections use slice-only public query/settlement
+views and a per-admission result lease. Live and acknowledged-but-retained results
+share the original store's bounded slots; managed admission additionally reserves
+each result's maximum byte/cleanup capacity from the captured original bank before
+behavior. The [HTTP regressions](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+retain the exact allocation across shared settlement/root loss, exhaust retained
+result slots, reuse only disposed capacity and verify rollback for each exhausted
+account. Raw lifecycle tests likewise require disposal before slot reuse.
+The exact ownership contract is [Runtime Safety](../spec/runtime-safety.md).

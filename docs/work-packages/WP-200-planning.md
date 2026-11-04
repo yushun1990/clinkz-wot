@@ -337,3 +337,10 @@ The [HTTP integration](../../protocol-bindings/protocols/http/tests/query_all_ac
 covers source destruction, unsupported output/mapping/service assertions, missing
 root behavior, incomplete native inventory and changed final description/services.
 No new dependency, gate or package acceptance is introduced.
+
+
+QueryAllActions Consumer qualification additionally checks every resolved response
+predicate, including extension vocabulary outside HTTP. The response-envelope
+regressions require that root to remain unselected while another supported leaf
+is admitted. The supported response semantics remain Binding-owned; this is not
+a mandatory-extension vocabulary or another selection mechanism.

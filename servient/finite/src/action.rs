@@ -16,11 +16,12 @@ use clinkz_wot_core::{
         ActionEffect, ActionMappingKey, ActionRoute, RawActionHandler, RawActionRequest,
         RawActionStart, RawActionWork, raw_action_output_shape,
     },
+    host_accounts::{HostCapacityReservation, HostResourceAccounts},
     interaction_output_backing,
     producer::ProducerInstanceKey,
     security::PrincipalId,
 };
-use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_foundation::{Generation, ResourceKind, SlotIndex, WorkBudget, WorkClass};
 use core::{cell::Cell, mem::size_of, task::Poll};
 
 const MAX_INVOCATIONS: usize = 128;
@@ -74,6 +75,8 @@ impl RawActionBehavior {
 /// cancellation or replacement. Native backing has a separate Binding owner.
 #[derive(Clone, Copy, Debug)]
 pub struct RawActionLimits {
+    /// Live invocations plus acknowledged results still held by callers.
+    /// Acknowledgement transfers this slot; disposal returns it.
     pub invocations: usize,
     pub application_work_bytes: usize,
     pub input_fields: usize,
@@ -105,9 +108,61 @@ impl core::fmt::Debug for RawActionHandle {
     }
 }
 
+/// A result view exposes no cloneable owner of the original payload allocation.
+/// Retain the settlement to share its bytes; an explicit byte copy belongs to
+/// the caller. The same view is used before and after acknowledgement.
+#[derive(Clone, Copy, Debug)]
+pub struct RawActionPayloadView<'a> {
+    pub body: &'a [u8],
+    pub content_type: &'a str,
+    pub content_coding: Option<&'a str>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RawActionOutputView<'a> {
+    data: Option<RawActionPayloadView<'a>>,
+    status: clinkz_wot_core::InteractionStatus,
+    metadata: clinkz_wot_core::InteractionOutputMetadata,
+}
+impl<'a> RawActionOutputView<'a> {
+    fn new(output: &'a InteractionOutput) -> Self {
+        Self {
+            data: output.data().map(|p| RawActionPayloadView {
+                body: &p.body,
+                content_type: &p.content_type,
+                content_coding: p.content_coding.as_deref(),
+            }),
+            status: output.status(),
+            metadata: *output.metadata(),
+        }
+    }
+    pub fn data(self) -> Option<RawActionPayloadView<'a>> {
+        self.data
+    }
+    pub fn status(self) -> clinkz_wot_core::InteractionStatus {
+        self.status
+    }
+    pub fn metadata(self) -> clinkz_wot_core::InteractionOutputMetadata {
+        self.metadata
+    }
+}
+
+/// Querying a completed invocation lends the same slices as its settlement.
+/// It cannot provide an earlier escape of the original shared allocation.
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_servient_finite::RawActionState;
+/// use std::sync::Arc;
+/// fn detach(state: RawActionState<'_>) -> Option<Arc<[u8]>> {
+///     match state {
+///         RawActionState::Complete(Ok(output)) => Some(Arc::clone(&output.data().unwrap().body)),
+///         _ => None,
+///     }
+/// }
+/// ```
 pub enum RawActionState<'a> {
     Running,
-    Complete(&'a CoreResult<InteractionOutput>),
+    Complete(Result<RawActionOutputView<'a>, &'a CoreError>),
 }
 
 /// Borrowed observation. Completion is retained until acknowledged; a cancel
@@ -136,14 +191,16 @@ pub struct RawActionSettlement {
     pub abandoned: bool,
     close_failure: Option<CoreError>,
     _validator: Option<Rc<dyn clinkz_wot_core::action::ActionValidator>>,
+    _result_lease: ActionResultLease,
     // Last: target/result and application owners must die before their original
     // managed funding. Acknowledgement transfers ownership; it is not disposal.
     _retained: Rc<super::RawProducerInstance>,
 }
 
 impl RawActionSettlement {
-    /// Borrow the result under this settlement's original funding. Extracting
-    /// the public payload field used to let it outlive that capacity owner.
+    /// Lend slices/fixed metadata under the original result slot and funding.
+    /// No InteractionOutput, Payload or body Arc is exposed, including through
+    /// a completed query before acknowledgement.
     ///
     /// ```compile_fail,E0616
     /// use clinkz_wot_servient_finite::RawActionSettlement;
@@ -152,17 +209,82 @@ impl RawActionSettlement {
     ///     settlement.result
     /// }
     /// ```
-    pub fn result(&self) -> &CoreResult<InteractionOutput> {
-        &self.result
+    ///
+    /// ```compile_fail,E0308
+    /// use clinkz_wot_servient_finite::RawActionSettlement;
+    /// use std::sync::Arc;
+    /// fn detach(s: &RawActionSettlement) -> Arc<[u8]> {
+    ///     Arc::clone(&s.result().unwrap().data().unwrap().body)
+    /// }
+    /// ```
+    ///
+    /// ```compile_fail,E0515
+    /// use clinkz_wot_servient_finite::RawActionSettlement;
+    /// fn escape(s: RawActionSettlement) -> &'static [u8] {
+    ///     s.result().unwrap().data().unwrap().body
+    /// }
+    /// ```
+    pub fn result(&self) -> Result<RawActionOutputView<'_>, &CoreError> {
+        self.result.as_ref().map(RawActionOutputView::new)
     }
-    pub fn target(&self) -> &AffordanceTarget {
-        &self.target
+    pub fn target(&self) -> clinkz_wot_core::thing::AffordanceSite<'_> {
+        let AffordanceTarget::Action(name) = &self.target else {
+            unreachable!()
+        };
+        clinkz_wot_core::thing::AffordanceSite::Action(name)
     }
     pub fn cancel_failure(&self) -> Option<&CoreError> {
         self.cancel_failure.as_ref()
     }
     pub fn close_failure(&self) -> Option<&CoreError> {
         self.close_failure.as_ref()
+    }
+}
+
+/// One existing result slot and, for managed publication, its original bank's
+/// complete promised backing/cleanup capacity. This owner is never cloned.
+struct ActionResultLease {
+    slots: Rc<Cell<usize>>,
+    _funding: [Option<HostCapacityReservation>; 3],
+}
+impl ActionResultLease {
+    fn acquire(
+        slots: &Rc<Cell<usize>>,
+        limits: RawActionLimits,
+        accounts: Option<&Arc<HostResourceAccounts>>,
+    ) -> CoreResult<Self> {
+        if slots.get() >= limits.invocations {
+            return Err(CoreError::Backpressure(context()));
+        }
+        let mut funding = core::array::from_fn(|_| None);
+        if let Some(accounts) = accounts {
+            let bytes = limits
+                .output_retained_bytes
+                .checked_add(size_of::<RawActionSettlement>())
+                .and_then(|n| u64::try_from(n).ok())
+                .ok_or_else(|| CoreError::Backpressure(context()))?;
+            for (slot, (kind, amount)) in funding.iter_mut().zip([
+                (ResourceKind::EngineLiveBytesGlobalMax, bytes),
+                (ResourceKind::CleanupBytesMax, bytes),
+                (ResourceKind::CleanupItemsMax, 1),
+            ]) {
+                *slot = Some(
+                    accounts
+                        .reserve(kind, amount)
+                        .ok_or_else(|| CoreError::Backpressure(context()))?,
+                );
+            }
+        }
+        slots.set(slots.get() + 1);
+        Ok(Self {
+            slots: slots.clone(),
+            _funding: funding,
+        })
+    }
+}
+impl Drop for ActionResultLease {
+    fn drop(&mut self) {
+        self.slots.set(self.slots.get() - 1);
     }
 }
 
@@ -191,8 +313,6 @@ struct Invocation {
     // Drop. A later funded step can request cancellation even when no mutable
     // Servient was available to the guard at revocation time.
     current: Rc<Cell<bool>>,
-    // Strong retention of the exact behavior/instance, never a successor lookup.
-    instance: Rc<super::RawProducerInstance>,
     behavior: usize,
     binding: (BindingId, BindingGeneration),
     mapping: ActionMappingKey,
@@ -208,6 +328,9 @@ struct Invocation {
     abandoned: bool,
     close_failure: Option<CoreError>,
     work_bytes: usize,
+    result_lease: ActionResultLease,
+    // Last: original behavior/services and retained funding outlive all children.
+    instance: Rc<super::RawProducerInstance>,
 }
 
 pub(super) struct ActionStore {
@@ -217,6 +340,7 @@ pub(super) struct ActionStore {
     next: u32,
     retiring: bool,
     retire_cursor: usize,
+    result_slots: Rc<Cell<usize>>,
 }
 
 impl ActionStore {
@@ -334,10 +458,9 @@ impl ActionStore {
     }
     fn view(entry: &Invocation) -> RawActionView<'_> {
         RawActionView {
-            state: entry
-                .result
-                .as_ref()
-                .map_or(RawActionState::Running, RawActionState::Complete),
+            state: entry.result.as_ref().map_or(RawActionState::Running, |r| {
+                RawActionState::Complete(r.as_ref().map(RawActionOutputView::new))
+            }),
             cancel_requested: entry.cancel_requested,
             cancel_failure: entry.cancel_failure.as_ref(),
         }
@@ -366,6 +489,7 @@ impl RawProducerServient {
             next: 0,
             retiring: false,
             retire_cursor: 0,
+            result_slots: Rc::new(Cell::new(0)),
         });
         Ok(())
     }
@@ -464,7 +588,7 @@ impl RawProducerServient {
         {
             return Err(CoreError::UnsupportedOperation(context()));
         }
-        if store.entries.len() == limits.invocations
+        if store.result_slots.get() == limits.invocations
             || behavior.work_bytes
                 > limits
                     .application_work_bytes
@@ -488,6 +612,11 @@ impl RawProducerServient {
             &target,
             Operation::InvokeAction,
             request.invoke.binding,
+        )?;
+        let result_lease = ActionResultLease::acquire(
+            &store.result_slots,
+            limits,
+            instance.instance.action_result_accounts.as_ref(),
         )?;
         let token = Rc::new(Cell::new(false));
         let id = ActionInvocationRef::new(SlotIndex::new(next), Generation::INITIAL);
@@ -518,6 +647,7 @@ impl RawProducerServient {
             abandoned: false,
             close_failure: None,
             work_bytes: behavior.work_bytes,
+            result_lease,
         });
         let started = behavior.handler.invoke(ctx, request.input);
         let entry = store.entries.last_mut().expect("reserved invocation");
@@ -1016,6 +1146,7 @@ impl ActionStore {
             abandoned: entry.abandoned,
             close_failure: entry.close_failure,
             _validator: entry.validator,
+            _result_lease: entry.result_lease,
             _retained: entry.instance,
         })
     }

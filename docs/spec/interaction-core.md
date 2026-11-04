@@ -189,8 +189,22 @@ Binding obligations; the Engine neither performs N QueryAction calls nor
 progresses application continuations. Raw use alone establishes no TD/native
 completeness. Acknowledgement transfers a complete Action settlement owner;
 original result/target/error storage and validation service remain owned until
-that owner is disposed. These data are exposed by borrow, so acknowledgement
-cannot detach their controlled backing from its funding.
+that owner is disposed. Query and settlement output use slice-only
+`RawActionOutputView`/`RawActionPayloadView`; they expose neither InteractionOutput,
+Payload nor the original body's Arc. Target access similarly lends an affordance
+site/name. Shared original data require retaining the settlement owner; an
+explicit byte copy creates separate caller-owned backing. Returning a reference
+to a cloneable Payload would not establish this ownership guarantee.
+
+Each admitted invocation owns a non-cloneable result lease that moves into its
+acknowledged settlement. `RawActionLimits::invocations` bounds live invocations
+plus acknowledged results still retained by callers. Acknowledgement removes
+logical/native records but does not free this result capacity. Managed publication
+captures the actual original account bank; admission reserves each result's
+maximum output/settlement backing and cleanup before behavior entry. Refusal
+returns provisional reservations without consuming a slot or entering behavior.
+Only actual disposal returns the result slot and byte/cleanup leases. Raw callers
+supply their own bounded backing and receive the same retained-slot guarantee.
 
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property
@@ -450,8 +464,8 @@ through retirement and acknowledgement. No initial value, replay, atomicity,
 wildcard attribution or fleet scalability is established.
 
 Other continuing collection operations need their appropriate retained owners
-and mapped controls; QueryAllActions and SubscribeAllEvents/UnsubscribeAllEvents
-remain unimplemented.
+and mapped controls. SubscribeAllEvents/UnsubscribeAllEvents remain unimplemented;
+QueryAllActions uses the distinct finite status observation described above.
 
 ## Error and retry contract
 

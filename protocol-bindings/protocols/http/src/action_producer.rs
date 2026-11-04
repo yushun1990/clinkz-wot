@@ -700,7 +700,7 @@ impl HttpActionRuntime {
                 if let Some(output) = output {
                     value.pop();
                     value.push_str(",\"output\":");
-                    value.push_str(std::str::from_utf8(&output.body).map_err(|_| invalid())?);
+                    value.push_str(std::str::from_utf8(output.body).map_err(|_| invalid())?);
                     value.push('}');
                 }
                 // Bound retained serialization before appending; a large group
@@ -894,7 +894,7 @@ impl HttpActionRuntime {
                                 if let Some(data) = output.data() {
                                     format!(
                                         "{{\"status\":\"completed\",\"output\":{}}}",
-                                        std::str::from_utf8(&data.body).unwrap_or("null")
+                                        std::str::from_utf8(data.body).unwrap_or("null")
                                     )
                                 } else {
                                     String::from("{\"status\":\"completed\"}")

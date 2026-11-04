@@ -201,13 +201,32 @@ capacity failure refuses the whole query without truncation. Publication's
 complete inventory check prevents a partial native owner advertising all Actions.
 Pending original replies retain their original identity across replacement and
 close, with native local-write evidence distinct from remote receipt.
-Acknowledging a Producer Action transfers its result and original instance
-retention into `RawActionSettlement`. Its result/target and application owner are
-disposed before their original managed funding, even after the native participant,
-exposure and Servient are gone. Result, target and error access borrows that
-owner; the old public owned fields cannot detach its controlled backing.
-Original validation-service retention also survives acknowledgement.
-Acknowledgement is not final physical release.
+Each admitted Producer Action owns a result-slot lease independently of its
+logical record. The slot covers both live invocation and transferred result;
+acknowledgement does not replenish capacity. It moves into `RawActionSettlement`
+and survives native-record removal, replacement and Servient/exposure loss.
+Retained settlements continue to count against the original store's invocation
+bound; repeated acknowledgement cannot accumulate unbounded results under one
+fixed reservation. Disposing one result permits exactly that slot to be reused.
+
+Managed publication binds its original Host account bank before Serving. Before
+behavior entry, each Action acquires separate EngineLiveBytesGlobalMax and
+CleanupBytesMax reservations for `output_retained_bytes + size_of::<RawActionSettlement>()`,
+plus one CleanupItemsMax reservation. Any failed acquisition releases the partial
+set and leaves application behavior and result-slot usage untouched. Successful
+admission transfers these exact leases through result disposal. These are
+controlled-backing/cleanup allowances, not additive physical RAM measurements;
+native I/O/formatting and application work have their existing separate owners.
+Raw execution remains caller-funded and enforces the same result-slot lifetime.
+
+Original result/target/validator storage is disposed before its result leases and
+retained instance funding. Both completed-query and settlement APIs lend only
+byte/media slices and fixed metadata; they never expose cloneable owners of the
+original payload allocation. Sharing the original requires retaining the result
+owner (for example Rc<RawActionSettlement>); explicitly copying its bytes creates
+separate caller-owned storage. A borrow of InteractionOutput/Payload would permit
+an uncharged Arc escape and is not this contract. Original validator retention
+also survives acknowledgement. Acknowledgement is not final physical release.
 
 `SAFE-OVERFLOW-001`: Every retained input/result/notification queue MUST have item
 and backing-byte limits with visible loss/backpressure/termination policy.

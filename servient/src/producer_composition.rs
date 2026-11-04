@@ -608,6 +608,9 @@ impl ComposedProducerExposure {
         publication
             .retain_owner(funding.clone())
             .expect("new unpublished instance is exclusive");
+        publication
+            .bind_action_result_accounts(accounts.clone())
+            .expect("new unpublished instance has no previous result bank");
         let refs: Vec<_> = participants.iter().map(|p| p.as_participation()).collect();
         publication
             .bind_participants(&refs)

@@ -227,7 +227,8 @@ impl HostSemanticCompiler for HttpCompiler {
                 return Err(unsupported());
             }
             if response.children().any(|n| {
-                http_name(n) && !n.name().is("http://www.w3.org/2011/http#statusCodeValue")
+                (http_name(n) || actions && !crate::producer_compiler::class_assertion(n))
+                    && !n.name().is("http://www.w3.org/2011/http#statusCodeValue")
             }) {
                 return Err(unsupported());
             }

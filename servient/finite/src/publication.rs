@@ -101,6 +101,31 @@ impl ProducerPublication {
     pub fn key(&self) -> ProducerInstanceKey {
         self.key
     }
+    /// Bind the actual managed result bank before publication. Every admitted
+    /// Action must acquire its own result/cleanup lease before behavior entry.
+    /// A retry cannot substitute another account for the original instance.
+    pub fn bind_action_result_accounts(
+        &mut self,
+        accounts: Arc<clinkz_wot_core::host_accounts::HostResourceAccounts>,
+    ) -> CoreResult<()> {
+        if self.committed || self.cancelled.get() {
+            return Err(CoreError::Validation(context()));
+        }
+        let instance = self
+            .instance
+            .as_mut()
+            .and_then(Rc::get_mut)
+            .ok_or_else(|| CoreError::Validation(context()))?;
+        if instance
+            .action_result_accounts
+            .as_ref()
+            .is_some_and(|old| !Arc::ptr_eq(old, &accounts))
+        {
+            return Err(CoreError::Validation(context()));
+        }
+        instance.action_result_accounts = Some(accounts);
+        Ok(())
+    }
     /// Capture the original notification publication mapping, validation and security
     /// services. Requalification cannot replace any one of these independently.
     pub fn bind_notification_routes(

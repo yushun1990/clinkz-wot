@@ -86,3 +86,31 @@ Producer evidence is reaffirmed only by rerunning affected fixtures; old results
 are not inherited. These corrections add no new architecture target, ADR-level
 platform choice, global gate or compatibility wrapper. Independent acceptance
 remains a separate fresh-context review of the exact proposed revision.
+
+## Review counterexamples: result ownership and response closure
+
+The review reproduced three defects in the first implementation: a borrowed
+InteractionOutput still exposes a cloneable payload Arc; retaining one fixed
+instance reservation does not fund arbitrarily many acknowledged results; and
+Consumer response qualification ignored non-HTTP extension assertions.
+
+Correct the bounded Action owner directly. Public query and settlement results
+lend byte/media slices and fixed metadata, never an InteractionOutput/Payload or
+the original allocation's Arc. Sharing requires retaining the settlement owner;
+copying bytes creates separately caller-owned backing. A per-admission result
+lease covers the live invocation and transfers unchanged into its settlement.
+Live plus acknowledged-but-retained results count against the original store's
+capacity, including after root loss. Managed publication also captures its actual
+original account bank: each result's maximum backing/cleanup reservations are
+acquired before behavior entry and stay owned until disposal. Reuse cannot
+renew either capacity for free. Query views cannot bypass this boundary before
+acknowledgement. Native inventory, correlation and retirement remain unchanged.
+
+A global Payload/Arc redesign would affect unrelated finite/notification APIs;
+it is unnecessary for this bounded Action facet because a slice view closes all
+its public result escape paths. Holding only a shared fixed reservation fails
+the review's repeated-acknowledgement counterexample. A second per-Binding result
+store would duplicate the actual Servient owner. Select the bounded result lease
+and exact views, with no compatibility facade. The root Consumer's selected
+response must additionally qualify every resolved assertion under the concrete
+Binding's supported response vocabulary/annotations.

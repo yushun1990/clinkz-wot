@@ -210,7 +210,7 @@ states = ["Admitted", "Running", "Terminal", "CleanupPending", "Released"]
 initial = "Admitted"
 terminal = ["Released"]
 required_events = []
-invariant = "Action lifetime is not initiating exchange lifetime; per-invocation querying/cancellation requires supported described operations and pinned native continuation. A root aggregate query observes original authorized invocation owners without changing their states or creating control authority; native inventory and correlation remain Binding-owned. Local abandonment does not assert remote terminal. Acknowledgement transfers result and original funding retention until settlement disposal."
+invariant = "Action lifetime is not initiating exchange lifetime; per-invocation querying/cancellation requires supported described operations and pinned native continuation. A root aggregate query observes original authorized invocation owners without changing their states or creating control authority; native inventory and correlation remain Binding-owned. Local abandonment does not assert remote terminal. Acknowledgement transfers the original result slot and per-result backing/cleanup leases until settlement disposal; retained results cannot replenish admission capacity. Query/settlement views lend slices without exposing the original payload Arc."
 
 [[machine.transition]]
 from = "Admitted"

@@ -82,6 +82,7 @@ pub struct RawProducerInstance {
     action_query: Option<Box<dyn clinkz_wot_core::action::ActionQueryPolicy>>,
     notification_sources: Vec<ProducerNotificationSource>,
     notification_work: Cell<usize>,
+    action_result_accounts: Option<Arc<clinkz_wot_core::host_accounts::HostResourceAccounts>>,
     // Last to drop: original accepted work retains the actual shared capacity
     // owner through behavior/native/result disposal and acknowledgement.
     retained_owner: Option<Rc<dyn core::any::Any>>,
@@ -97,6 +98,7 @@ impl RawProducerInstance {
             action_query: None,
             notification_sources: Vec::new(),
             notification_work: Cell::new(0),
+            action_result_accounts: None,
             retained_owner: None,
         }
     }

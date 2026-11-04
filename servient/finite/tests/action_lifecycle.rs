@@ -372,6 +372,11 @@ fn action_outlives_initiating_exchange_and_replacement_without_retargeting() {
         owner.take_raw_action_settlement(&handle),
         Err(CoreError::StaleHandle(_))
     ));
+    assert!(matches!(
+        owner.invoke_raw_action(request(successor_key, &target, &input), &mut budget),
+        Err(CoreError::Backpressure(_))
+    ));
+    drop(late); // acknowledgement transferred the result slot, not disposal
     let next = owner
         .invoke_raw_action(request(successor_key, &target, &input), &mut budget)
         .unwrap();
@@ -571,6 +576,11 @@ fn saturated_and_failed_admission_never_enter_behavior_and_close_retains_owner()
         settlement.close_failure(),
         Some(CoreError::Cleanup(_))
     ));
+    assert!(matches!(
+        owner.invoke_raw_action(request(instance_key, &target, &input), &mut budget),
+        Err(CoreError::Backpressure(_))
+    ));
+    drop(settlement);
     let next = owner
         .invoke_raw_action(request(instance_key, &target, &input), &mut budget)
         .unwrap();

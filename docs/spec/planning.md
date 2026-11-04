@@ -340,8 +340,12 @@ Planning captures each exact name and supported output role in
 schemas do not become query inputs. A concrete status validator must establish
 complete representation support; a scalar Object validator cannot qualify it.
 Duplicate expanded output assertions, unsupported required output constraints,
-security or response semantics refuse preparation. Consumer partial support may
-still execute the root without executing unrelated leaf mappings.
+security or response semantics refuse preparation. QueryAllActions qualification
+checks every resolved response predicate, including non-HTTP extension assertions;
+only supported unique response instructions and the Binding's supported class
+annotations are admitted. Another supported leaf cannot make that root selected.
+Consumer partial support may still execute a supported root without executing
+unrelated leaf mappings.
 
 Complete Producer qualification additionally requires the actual root policy,
 all described Action operations, their original validation/control services, a

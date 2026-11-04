@@ -6,7 +6,7 @@ use clinkz_wot_servient::producer_composition::*;
 use clinkz_wot_servient_finite::{consumer::*, *};
 use clinkz_wot_td::{ValidatedProducerScope, thing::Thing};
 use serde_json::{Value, json};
-use std::{cell::Cell, io::{Read, Write}, net::{SocketAddr, TcpListener, TcpStream}, rc::Rc,
+use std::{cell::{Cell, RefCell}, io::{Read, Write}, net::{SocketAddr, TcpListener, TcpStream}, rc::Rc,
     sync::{Arc, atomic::{AtomicBool, Ordering}}, task::{Context, Poll, Waker}, time::{Duration, Instant}};
 fn work() -> WorkBudget { WorkClass::ALL.into_iter().fold(WorkBudget::new(), |b,c| b.with_remaining(c,1_000_000)) }
 fn cx() -> Context<'static> { Context::from_waker(Waker::noop()) }
@@ -33,7 +33,8 @@ fn description(addr: SocketAddr) -> Value {
     td
 }
 #[derive(Default)]
-struct App { invoked: Cell<usize>, roots: Cell<usize>, members: Cell<usize>, leaf_queries: Cell<usize>,
+struct App {
+    last_body: RefCell<Option<std::sync::Weak<[u8]>>>, invoked: Cell<usize>, roots: Cell<usize>, members: Cell<usize>, leaf_queries: Cell<usize>,
     deny_root: Cell<bool>, deny_member: Cell<bool>, complete: Cell<bool>, invalid: Cell<bool>,
     cancelled: Cell<usize>, long: Cell<bool>, disposed: Cell<usize>, retained: Cell<bool> }
 struct Root(Rc<App>);
@@ -62,7 +63,9 @@ impl RawActionWork for Job {
         let value = if self.app.invalid.get() { b"false".to_vec() }
             else if self.signal && self.app.long.get() { serde_json::to_vec(&"x".repeat(3000)).unwrap() }
             else if self.signal { b"\"ready\"".to_vec() } else { self.value.to_string().into_bytes() };
-        Poll::Ready(Ok(InteractionOutput::with_data(Payload::new(value,"application/json"))))
+        let payload = Payload::new(value,"application/json");
+        *self.app.last_body.borrow_mut() = Some(Arc::downgrade(&payload.body));
+        Poll::Ready(Ok(InteractionOutput::with_data(payload)))
     }
     fn request_cancel(&mut self)->CoreResult<()> { self.app.cancelled.set(self.app.cancelled.get()+1); Ok(()) }
     fn poll_close(&mut self)->Poll<CoreResult<()>> { if self.app.retained.get() { Poll::Pending } else { Poll::Ready(Ok(())) } }
@@ -132,7 +135,8 @@ impl Server {
             assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;
         }
     }
-    fn close(mut self) {
+    fn close(self) { clean(&self.retire()); }
+    fn retire(mut self) -> Arc<HostResourceAccounts> {
         self.exposure.begin_close();assert!(self.exposure.retire(&mut self.owner,&mut work()).is_err()||self.native().records()==0);
         let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
         let ids:Vec<_>=native.action_ids().collect();
@@ -140,7 +144,7 @@ impl Server {
             for _ in 0..8 { if self.owner.step_raw_action(&h,&mut work()).unwrap().is_ready(){break;} }
             drop(native.acknowledge(&mut self.owner,id).unwrap().unwrap()); }
         native.take_delivery();self.exposure.retire(&mut self.owner,&mut work()).unwrap();
-        drop(self.exposure);drop(self.owner);clean(&self.bank);TcpListener::bind(self.addr).unwrap();
+        drop(self.exposure);drop(self.owner);TcpListener::bind(self.addr).unwrap();self.bank
     }
 }
 #[derive(Default)]

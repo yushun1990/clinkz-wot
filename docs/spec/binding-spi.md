@@ -154,6 +154,14 @@ invocation views confer neither dispatch nor infrastructure shutdown authority.
 The [HTTP mapping](../../protocol-bindings/protocols/http/README.md#thing-root-action-status-query)
 is an explicit draft-derived subset, not a universal Action/session protocol.
 
+Producer Action query/settlement output lends byte/media slices and fixed metadata,
+not a clonable InteractionOutput/Payload/body Arc. Native encoding stays under
+its existing Binding owner and envelope; retaining original semantic output
+requires retaining its result owner. Acknowledging a native record does not release
+the Servient result-slot or per-result original-bank reservations. Complete
+managed publication captures that actual bank before ingress. No per-Binding
+copy of the semantic result store or protocol-specific result policy is required.
+
 Producer notification participants additionally supply their exact emission mapping
 and actual validation/security services for each selected Property observe,
 Thing-root observe-all or Event subscribe Form before
