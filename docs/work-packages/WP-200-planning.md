@@ -322,6 +322,18 @@ owns its preparation/funding semantics. [Qualification tests](../../protocol-bin
 exercise unsupported members, scalar-only services, ambiguity, source destruction
 and complete final Producer requalification.
 
-Other continuing collection operations remain unimplemented. This scoped capability
+Event collection operations remain unimplemented. This scoped capability
 changes no work-package dependencies, gate, milestone or production qualification
 status.
+
+## Root Action status preparation
+
+The finite Consumer now admits QueryAllActions with named Action output roles and
+an explicitly supported actual status validator. Producer composition captures a
+Thing/root query route in the same qualified Action route set as leaf controls.
+[Planning](../spec/planning.md#thing-root-action-status-preparation) owns exact
+selection/final-qualification rules; [TD](../spec/td.md) owns the bounded root loan.
+The [HTTP integration](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+covers source destruction, unsupported output/mapping/service assertions, missing
+root behavior, incomplete native inventory and changed final description/services.
+No new dependency, gate or package acceptance is introduced.

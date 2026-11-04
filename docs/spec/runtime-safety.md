@@ -186,6 +186,29 @@ cases where applicable and their own storage/wake/release evidence. No portable
 compile, matching mock trace or std flag qualifies hardware, SDK, allocator or
 real-time performance. Missing implemented profiles remain gaps, not exclusions.
 
+QueryAllActions retains its finite query's original Consumer authority, root
+mapping, named output schemas, actual services and normal/late native payload
+through settlement disposal. Cancellation of this query closes its native
+exchange; it does not cancel any Action. Short validation or handoff work retains
+the original observation and slot. Recheck authority and service/policy after
+callbacks and before handoff, including an already validated unread result.
+
+Producer root status observation prepays the bounded inventory walk before root
+or member policy callbacks and rechecks original currentness after callbacks.
+It borrows original invocation owners without polling, cancellation, re-binding
+or result acknowledgement. Native formatting/backing retains its own paid bound;
+capacity failure refuses the whole query without truncation. Publication's
+complete inventory check prevents a partial native owner advertising all Actions.
+Pending original replies retain their original identity across replacement and
+close, with native local-write evidence distinct from remote receipt.
+Acknowledging a Producer Action transfers its result and original instance
+retention into `RawActionSettlement`. Its result/target and application owner are
+disposed before their original managed funding, even after the native participant,
+exposure and Servient are gone. Result, target and error access borrows that
+owner; the old public owned fields cannot detach its controlled backing.
+Original validation-service retention also survives acknowledgement.
+Acknowledgement is not final physical release.
+
 `SAFE-OVERFLOW-001`: Every retained input/result/notification queue MUST have item
 and backing-byte limits with visible loss/backpressure/termination policy.
 Overflow reporting and cleanup MUST progress without enqueueing into the full

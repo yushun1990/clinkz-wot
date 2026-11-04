@@ -959,3 +959,71 @@ completion, short work, schema cleanup and final account/socket release.
 ```sh
 cargo test --locked --offline -p clinkz-wot-binding-http --test write_multiple_properties
 ```
+
+## Thing-root Action status query
+
+A root `queryallactions` Form with explicit `htv:methodName: "GET"`, JSON,
+endpoint NoSec and a supported primary 200 response selects one native status
+query. TD 1.1 has no HTTP method default for this operation. The Consumer uses
+`ConsumerRuntime::query_all_actions`; it needs no prior invocation handles and
+retains its own original query authority/services through normal or late result
+settlement. Root status responses do not grant local Action control authority.
+
+The payload mapping follows the Action-name/ActionStatus-array representation in
+[HTTP Profile Working Draft 2025-11-04 §6.2.2.4](https://www.w3.org/TR/2025/WD-wot-profile-20251104/#queryallactions).
+This is draft guidance and a supported subset, not a TD-defined universal status
+schema or a claim of HTTP Profile conformance. Existing invocation uses 202 and
+`accepted`, with separately described `{?id}` query/cancel Forms. It does not
+implement that draft's 201 acceptance or deletion-on-cancel contract.
+
+The result is an object keyed by exact declared Action names, with arrays of
+records containing `status` and a unique absolute HTTP(S) `href` of at most 256
+bytes. Supported states are `pending`, `running`, `completed` and `failed`.
+Completed output must match that Action's retained output role; it is absent
+exactly when the role is absent. Other states carry no output. Unknown Actions,
+duplicate decoded names/fields/identities, missing identity, unknown status,
+foreign fields and invalid output refuse the response while retaining its
+original bytes. Missing names mean no visible retained records; empty arrays
+are valid. Optional timestamps/problem details and alternative envelopes are
+outside this subset and are refused, not discarded. A successful query may
+contain failed invocations and does not establish an effect or cancellation.
+
+`HttpActionRuntime` supports several Actions and one root mapping on one
+listener. Its entire described Action set and every invoke/query/cancel Form must
+qualify against the same actual correlation owner, including schema and service
+rechecks before publication. Each Action currently needs one Form for each of
+those three operations. The root requires a separately registered
+`ActionQueryPolicy`; Action handlers receive fresh `QueryAllActions` permission
+checks for their own original invocations. Root denial refuses; member denial
+filters a record; original principal mismatch excludes it. NoSec leaves these
+application checks in force. No Engine leaf-query loop is used.
+
+The native owner emits every declared name (possibly an empty array), orders each
+array by reverse local admission order and preserves the original epoch/id and
+Action control path. It does not progress invocation work while reading status.
+Current application continuations are `running`; no queued `pending` state is
+invented. Completed/failed records remain until explicit acknowledgement or the
+configured terminal reaper; running work cannot be pruned. A cancel request can
+still be running or complete later. Old tokens cannot target replacement leases
+or another Action. A root reply has its own retained recipient/target/route and
+local delivery evidence, independent of individual invocation results.
+
+This bounded Host/manual mapping permits at most 32 prepared native definitions,
+128 retained records, 32 Action schemas / 4096 total name bytes, paths of 64 bytes
+and a 4096-byte aggregate response. Existing TD semantic-arena, registry and
+managed-account limits may refuse earlier. An oversized aggregate fails as a
+whole with 503; it is never truncated or silently paginated. Native aggregation
+prepays 65536 work units; managed participation reserves a 128 KiB controlled
+I/O/formatting envelope in addition to definitions, records and services. OS
+socket state remains Binding-owned. These are conservative controlled-backing
+bounds, not process RAM or throughput measurements. Acknowledged Action
+settlements retain their original managed funding until result disposal.
+
+[Real HTTP tests](tests/query_all_actions.rs) exercise both Engine roles,
+independent native peers, concurrency, validation, complete qualification,
+fresh permission, cancellation/replacement, response loss, capacity, original
+pending replies, blocked cleanup and final account/socket release. Distributed
+multi-owner aggregation, history completeness, atomic snapshots, general
+DataSchema/security, TLS, constrained/automatic progress, replay and production
+qualification remain unsupported. Query cancellation disposes its socket and
+never sends an Action cancel or reinvokes application behavior.

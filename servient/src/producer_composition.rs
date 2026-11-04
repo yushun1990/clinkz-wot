@@ -9,7 +9,7 @@ use crate::{
 };
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
-    BindingInputRejection, BindingOperationalError, producer::ProducerInstanceKey,
+    AffordanceTarget, BindingInputRejection, BindingOperationalError, producer::ProducerInstanceKey,
 };
 use clinkz_wot_core::{CoreError, CoreResult, ErrorContext, ErrorPhase, Operation, RetryClass};
 use clinkz_wot_foundation::{ResourceKind as K, WorkClass};
@@ -52,7 +52,7 @@ pub fn publish_prepared_thing(
         matches!(
             o.site,
             clinkz_wot_planning::producer_composition::FormSite::Action(_)
-        )
+        ) || o.operation == Operation::QueryAllActions
     }) {
         let routes = capture_action_routes(
             publication.key(),
@@ -167,15 +167,22 @@ fn capture_action_routes<'a>(
                     matches!(
                         o.site,
                         clinkz_wot_planning::producer_composition::FormSite::Action(_)
-                    )
+                    ) || o.operation == Operation::QueryAllActions
                 })
                 .count(),
         )
         .map_err(|_| busy())?;
     for operation in prepared.operations() {
-        let clinkz_wot_planning::producer_composition::FormSite::Action(name) = &operation.site
-        else {
-            continue;
+        let target = match &operation.site {
+            clinkz_wot_planning::producer_composition::FormSite::Action(name) => {
+                AffordanceTarget::Action(Arc::from(name.as_str()))
+            }
+            clinkz_wot_planning::producer_composition::FormSite::Thing
+                if operation.operation == Operation::QueryAllActions =>
+            {
+                AffordanceTarget::Thing
+            }
+            _ => continue,
         };
         let participant = participants
             .clone()
@@ -203,7 +210,7 @@ fn capture_action_routes<'a>(
                     .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
                 (route, Some(validator))
             }
-            Operation::QueryAction | Operation::CancelAction => (
+            Operation::QueryAction | Operation::CancelAction | Operation::QueryAllActions => (
                 participant
                     .action_control_route(
                         key,
@@ -222,7 +229,7 @@ fn capture_action_routes<'a>(
             return Err(CoreError::Validation(context()));
         }
         routes.push(CapturedActionRoute {
-            action: Arc::from(name.as_str()),
+            target,
             operation: operation.operation,
             route,
             validator,

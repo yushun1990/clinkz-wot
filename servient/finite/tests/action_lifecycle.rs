@@ -356,7 +356,16 @@ fn action_outlives_initiating_exchange_and_replacement_without_retargeting() {
     );
     assert_eq!(late.query, Some(route(2, 22)));
     assert_eq!(late.cancel, Some(route(3, 33)));
-    assert_eq!(late.result.unwrap().data().unwrap().body.as_ref(), b"late");
+    assert_eq!(
+        late.result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
+        b"late"
+    );
     assert!(late.cancel_requested);
     assert!(late.abandoned);
     assert!(matches!(
@@ -557,9 +566,9 @@ fn saturated_and_failed_admission_never_enter_behavior_and_close_retains_owner()
     assert_eq!(trace.borrow().dropped, 1);
     let settlement = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
     assert!(settlement.abandoned);
-    assert!(matches!(settlement.result, Err(CoreError::Cancelled(_))));
+    assert!(matches!(settlement.result(), Err(CoreError::Cancelled(_))));
     assert!(matches!(
-        settlement.close_failure,
+        settlement.close_failure(),
         Some(CoreError::Cleanup(_))
     ));
     let next = owner
@@ -614,7 +623,7 @@ fn invalid_late_result_is_retained_and_cannot_be_reported_as_success() {
             .take_raw_action_settlement(&handle)
             .unwrap()
             .unwrap()
-            .result,
+            .result(),
         Err(CoreError::Validation(_))
     ));
 }
@@ -688,7 +697,17 @@ fn action_only_instance_needs_no_finite_runtime_and_unpublished_controls_are_uns
     assert_eq!(result.binding, route(8, 800).binding);
     // This instance was registered through the explicitly raw API, not
     // published: opaque non-JSON output remains legal without a TD claim.
-    assert_eq!(result.result.unwrap().data().unwrap().body.as_ref(), b"now");
+    assert_eq!(
+        result
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
+        b"now"
+    );
     assert_eq!(trace.borrow().operations, vec![Operation::InvokeAction]);
 }
 
@@ -763,7 +782,14 @@ fn stalled_invocation_and_foreign_same_number_handle_do_not_block_or_alias_sibli
         .unwrap();
     assert_eq!(b_result.instance, b_key);
     assert_eq!(
-        b_result.result.unwrap().data().unwrap().body.as_ref(),
+        b_result
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
         b"late"
     );
 
@@ -879,7 +905,14 @@ fn lost_handles_do_not_orphan_owner_level_retirement_or_terminal_results() {
     assert_eq!(completed.reference, b_ref);
     assert_eq!(completed.instance, b_key);
     assert_eq!(
-        completed.result.unwrap().data().unwrap().body.as_ref(),
+        completed
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
         b"now"
     );
     assert!(matches!(
@@ -895,8 +928,11 @@ fn lost_handles_do_not_orphan_owner_level_retirement_or_terminal_results() {
     };
     assert_eq!(cleaned.reference, a_ref);
     assert_eq!(cleaned.instance, a_key);
-    assert!(matches!(cleaned.result, Err(CoreError::Cancelled(_))));
-    assert!(matches!(cleaned.close_failure, Some(CoreError::Cleanup(_))));
+    assert!(matches!(cleaned.result(), Err(CoreError::Cancelled(_))));
+    assert!(matches!(
+        cleaned.close_failure(),
+        Some(CoreError::Cleanup(_))
+    ));
     assert!(cleaned.abandoned);
     assert!(matches!(
         owner.step_raw_action_retirement(&mut WorkBudget::new()),
@@ -969,7 +1005,7 @@ fn stalled_cleanup_does_not_block_sibling_and_root_drop_locally_aborts_the_rest(
     let Poll::Ready(Some(sibling)) = owner.step_raw_action_retirement(&mut budget).unwrap() else {
         panic!("stalled cleanup must not block a sibling");
     };
-    assert!(matches!(sibling.result, Err(CoreError::Cancelled(_))));
+    assert!(matches!(sibling.result(), Err(CoreError::Cancelled(_))));
     assert_eq!(trace.borrow().dropped, 1);
     drop(owner);
     assert_eq!(trace.borrow().local_aborts, 1);
@@ -1051,8 +1087,8 @@ fn cancel_then_close_sends_application_request_before_immediate_local_retirement
     assert_eq!(cleanup_only.remaining(WorkClass::CleanupItems), 0);
     let settled = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
     assert!(settled.cancel_requested);
-    assert!(settled.cancel_failure.is_none());
-    assert!(matches!(settled.result, Err(CoreError::Cancelled(_))));
+    assert!(settled.cancel_failure().is_none());
+    assert!(matches!(settled.result(), Err(CoreError::Cancelled(_))));
     let trace = trace.borrow();
     assert_eq!(
         (trace.cancels, trace.closes, trace.polls, trace.dropped),
@@ -1105,11 +1141,14 @@ fn revoke_then_owner_retirement_keeps_cancel_and_close_failures_until_settlement
     };
     assert!(settled.cancel_requested);
     assert!(matches!(
-        settled.cancel_failure,
+        settled.cancel_failure(),
         Some(CoreError::Cancelled(_))
     ));
-    assert!(matches!(settled.close_failure, Some(CoreError::Cleanup(_))));
-    assert!(matches!(settled.result, Err(CoreError::Cancelled(_))));
+    assert!(matches!(
+        settled.close_failure(),
+        Some(CoreError::Cleanup(_))
+    ));
+    assert!(matches!(settled.result(), Err(CoreError::Cancelled(_))));
     let trace = trace.borrow();
     assert_eq!(
         (trace.cancels, trace.closes, trace.polls, trace.dropped),

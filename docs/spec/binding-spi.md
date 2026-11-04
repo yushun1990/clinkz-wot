@@ -134,8 +134,25 @@ work over actual I/O. The HTTP Action participant adds a production loopback
   publication. Missing services or control routes refuse qualification; after
   commit the Servient checks the captured Action and operation routes, so a raw
   request cannot downgrade published execution or invent a control Form.
-UDP remains test-only; HTTP's one-listener-per-Action implementation does not
-constrain other native resource layouts or cross-Binding Action routes.
+UDP remains test-only. The HTTP Action participant may own several Actions and
+one root status mapping on the same listener. Before advertising aggregation it
+MUST prove that every declared Action's entire supported invoke/control set is
+in that actual native owner. A separately prepared listener cannot satisfy that
+inventory through a silent fetch/fan-out. Exact native record-to-Action matching
+precedes control dispatch; an invocation token cannot cross another Action's
+control path even if their original Form ordinals coincide. Native reply
+settlements retain original recipient, target, operation and route, including
+root queries with no single invocation. This concrete topology does not constrain
+other Bindings' infrastructure layouts or cross-Binding Action routes.
+
+QueryAllActions uses a finite Consumer exchange with separately captured actual
+status-validation support. The Producer participant supplies a distinct root
+control route at qualification, alongside invoke validation and leaf controls.
+Native aggregation, status-resource identity, encoding, ordering, history pruning
+and any actual consistency evidence stay inside the Binding. Shared borrowed
+invocation views confer neither dispatch nor infrastructure shutdown authority.
+The [HTTP mapping](../../protocol-bindings/protocols/http/README.md#thing-root-action-status-query)
+is an explicit draft-derived subset, not a universal Action/session protocol.
 
 Producer notification participants additionally supply their exact emission mapping
 and actual validation/security services for each selected Property observe,

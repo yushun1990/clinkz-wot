@@ -188,3 +188,54 @@ fn refused() -> CoreError {
             .with_redacted_cause(624, "unsupported type-only schema assertion"),
     )
 }
+
+/// Action definitions are not status records. Retain each output role and
+/// reject duplicate expanded role assertions before selecting a status codec.
+pub fn prepare_action_collection_schema(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<clinkz_wot_core::action::ActionCollectionSchema> {
+    use clinkz_wot_core::action::{ActionCollectionSchema as S, ActionMemberSchema};
+    use clinkz_wot_td::semantic::{FormOwner, SemanticScope};
+    let mut members = alloc::vec::Vec::new();
+    members
+        .try_reserve_exact(action_member_count(doc)?)
+        .map_err(|_| clinkz_wot_core::consumer::busy())?;
+    let mut bytes = 0;
+    for name in doc.collection_actions().ok_or_else(refused)? {
+        bytes += name.len();
+        if name.len() > 256 || bytes > S::MAX_TOTAL_NAME_BYTES {
+            return Err(refused());
+        }
+        let output = doc.affordance_schema(FormOwner::Action(name), "output");
+        let scope = doc.scope(SemanticScope::Action(name)).ok_or_else(refused)?;
+        // Input has no data role in a query. Its actual schema need not be
+        // executable by this Consumer, but cannot masquerade as another output.
+        if scope
+            .children()
+            .filter(|n| n.name().is("https://www.w3.org/2019/wot/td#output"))
+            .count()
+            != usize::from(output.is_some())
+            || scope.children().any(|n| {
+                !n.name().is("https://www.w3.org/2019/wot/td#input")
+                    && !n.name().is("https://www.w3.org/2019/wot/td#output")
+                    && !annotation(n)
+            })
+        {
+            return Err(refused());
+        }
+        members.push(ActionMemberSchema {
+            name: name.into(),
+            output: output.map(prepare_type_schema).transpose()?,
+        });
+    }
+    S::try_new(members)
+}
+pub(crate) fn action_member_count(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<usize> {
+    let count = doc.collection_actions().ok_or_else(refused)?.count();
+    if count > clinkz_wot_core::action::ActionCollectionSchema::MAX_MEMBERS {
+        return Err(refused());
+    }
+    Ok(count)
+}

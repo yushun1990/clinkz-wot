@@ -465,6 +465,21 @@ and [Runtime Safety](../spec/runtime-safety.md) own the semantics. The
 exercise invalid members, fresh permission, short validation work, overflow,
 replacement, late work, independent stop and original-bank/final socket release.
 
-Other continuing collection operations remain unimplemented. This scoped capability
+Event collection operations remain unimplemented. This scoped capability
 changes no work-package dependencies, gate, milestone or production qualification
 status.
+
+## Root Action status ownership
+
+QueryAllActions uses one finite Consumer owner and one root Producer observation
+over original retained invocation owners. [Core](../spec/interaction-core.md) owns
+the semantic distinction and root/member permission; [Runtime Safety](../spec/runtime-safety.md)
+owns paid callbacks, replacement, settlement and final release. The
+[HTTP tests](../../protocol-bindings/protocols/http/tests/query_all_actions.rs) cover
+concurrent same-definition invocations, cancellation uncertainty, invalid output,
+root/member denial, original principal and route, short credit, late replies,
+replacement, native loss, blocked retirement and original bank/socket disposal.
+They also falsified the old acknowledgement path: `RawActionSettlement` now
+retains its original instance/funding until result disposal. Existing raw and
+continuing Action evidence must be rerun for that direct ownership correction.
+No dependency, milestone, gate or production status changes.

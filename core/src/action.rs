@@ -23,6 +23,51 @@ pub struct ActionRoute {
     pub mapping: ActionMappingKey,
 }
 
+/// Application permission for one root status query. Per-invocation permission
+/// is additionally checked against each original Action handler/principal.
+/// The complete callback is cooperative and included in paid HandlerSteps.
+pub trait ActionQueryPolicy {
+    fn authorize(&self, input: &InteractionInput) -> CoreResult<()>;
+}
+
+/// Source-independent Action definitions used to validate a status collection.
+/// Output describes completed application data, never the status envelope.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActionMemberSchema {
+    pub name: alloc::boxed::Box<str>,
+    pub output: Option<crate::value_type::TypeSchema>,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActionCollectionSchema {
+    members: alloc::vec::Vec<ActionMemberSchema>,
+}
+impl ActionCollectionSchema {
+    pub const MAX_MEMBERS: usize = 32;
+    pub const MAX_TOTAL_NAME_BYTES: usize = 4096;
+    pub fn try_new(members: alloc::vec::Vec<ActionMemberSchema>) -> CoreResult<Self> {
+        if members.len() > Self::MAX_MEMBERS
+            || members.capacity() > Self::MAX_MEMBERS
+            || members.iter().map(|m| m.name.len()).sum::<usize>() > Self::MAX_TOTAL_NAME_BYTES
+            || members.iter().enumerate().any(|(i, m)| {
+                m.name.len() > 256 || members[..i].iter().any(|old| old.name == m.name)
+            })
+        {
+            return Err(crate::CoreError::Validation(crate::ErrorContext::new(
+                crate::ErrorPhase::Admission,
+                crate::RetryClass::Never,
+            )));
+        }
+        Ok(Self { members })
+    }
+    pub fn members(&self) -> &[ActionMemberSchema] {
+        &self.members
+    }
+    pub fn retained_bytes(&self) -> usize {
+        self.members.capacity() * core::mem::size_of::<ActionMemberSchema>()
+            + self.members.iter().map(|m| m.name.len()).sum::<usize>()
+    }
+}
+
 /// A candidate observation. The native owner retains the input/reply opportunity;
 /// constructing this value does not grant application dispatch. Raw callers
 /// supply mapping associations; this type does not verify TD coverage or

@@ -153,6 +153,8 @@ Topics are retained after migration as decision history.
 - [[file:0060-roadmap-execution-sequencing-review.md][0060 Roadmap Execution Sequencing Review]]
 - [[file:0061-consumer-one-shot-domain-entry.md][0061 Consumer One-Shot Domain Entry]]
 
+- [[file:0105-thing-root-query-all-actions.md][0105 Thing-root QueryAllActions]]
+
 * History
 
 - [[file:history/2026-07.org][July 2026 architecture notes]]

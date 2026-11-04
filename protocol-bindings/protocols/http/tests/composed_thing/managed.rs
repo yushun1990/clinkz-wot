@@ -456,9 +456,18 @@ fn shared_udp_replacement_keeps_original_bank_until_action_acknowledgement() {
     assert!(result.cancel_requested);
     assert_eq!(result.effect, ActionEffect::PossiblyApplied);
     assert_eq!(
-        result.result.unwrap().data().unwrap().body.as_ref(),
+        result
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
         b"\"done\""
     );
+    assert!(live(&old_bank) > 0); // acknowledgement transferred a funded owner
+    drop(result);
     assert_empty(&old_bank);
     second.begin_close();
     assert!(second.retire(&mut owner, &mut budget()).is_err()); // native close is not Action retirement

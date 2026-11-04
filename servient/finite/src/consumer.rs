@@ -131,7 +131,8 @@ impl Definition {
             ConsumerFiniteSchemas::WriteAllProperties(_)
             | ConsumerFiniteSchemas::WriteMultipleProperties(_) => false,
             ConsumerFiniteSchemas::ReadAllProperties(_)
-            | ConsumerFiniteSchemas::ReadMultipleProperties(_) => true,
+            | ConsumerFiniteSchemas::ReadMultipleProperties(_)
+            | ConsumerFiniteSchemas::QueryAllActions(_) => true,
         };
         if output.data().is_some() != has_output {
             return Poll::Ready(Err(invalid()));
@@ -330,6 +331,24 @@ impl ConsumerRuntime {
         self.start(
             AffordanceSite::Property(name),
             Operation::ReadProperty,
+            CallInput::Value(None),
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| e.error().error().clone())
+    }
+    /// One root status exchange. Returned native records confer no local
+    /// invocation authority and do not query/cancel existing Consumer handles.
+    pub fn query_all_actions(
+        &self,
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        self.start(
+            AffordanceSite::Thing,
+            Operation::QueryAllActions,
             CallInput::Value(None),
             deadline,
             now,

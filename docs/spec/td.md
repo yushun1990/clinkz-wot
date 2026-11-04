@@ -57,6 +57,11 @@ the described Property schemas with each Property's own local context, without l
 `collection_properties` is available only for that operation's root loan; its
 scopes, schema branches and name/context resolution use the existing bounded
 arena and work. Unrelated root operations acquire no Property schema closure.
+A QueryAllActions root loan similarly lends `collection_actions` and each Action's
+input/output schema under its own local context, without leaf Forms. Definitions
+are not invocation status records; output is a distinct application data role.
+Only that selected root operation acquires this bounded semantic closure;
+expanded extension names cannot introduce a second ignored output assertion.
 Selected Combo references are reachable through the same shared security loan.
 Unknown security definitions survive TD decoding and round trips, including
 when unused; selecting one still requires an actual supporting security service.

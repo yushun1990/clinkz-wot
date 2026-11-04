@@ -41,6 +41,7 @@ pub struct HttpActionDefinition {
     pub(crate) input_schema: Option<TypeSchema>,
     pub(crate) output_schema: Option<TypeSchema>,
     pub(crate) control: bool,
+    pub(crate) collection: Option<clinkz_wot_core::action::ActionCollectionSchema>,
 }
 impl HttpActionDefinition {
     fn route(&self) -> ActionRoute {
@@ -101,6 +102,7 @@ fn refused(error: &CoreError) -> (u16, &'static str) {
 struct Record {
     id: u32,
     handle: RawActionHandle,
+    definition: usize,
     finished: Option<Instant>,
 }
 static NEXT_EPOCH: AtomicU64 = AtomicU64::new(0);
@@ -113,12 +115,24 @@ struct Exchange {
     written: usize,
     invoked: Option<u32>,
     request_error: Option<CoreError>,
+    identity: Option<HttpActionExchangeIdentity>,
 }
 
 /// A completed exchange's local write is separate from application effect and
 /// does not prove that the remote peer received or processed the response.
 #[derive(Debug)]
+pub struct HttpActionExchangeIdentity {
+    pub instance: ProducerInstanceKey,
+    pub target: AffordanceTarget,
+    pub operation: Operation,
+    pub route: ActionRoute,
+}
+
+#[derive(Debug)]
 pub struct HttpActionDelivery {
+    /// Original selected operation, including a root aggregate with no single
+    /// invocation. A partial unclassified request has no semantic identity.
+    pub exchange: Option<HttpActionExchangeIdentity>,
     pub invocation: Option<u32>,
     pub locally_written: bool,
     pub write_started: bool,
@@ -127,9 +141,9 @@ pub struct HttpActionDelivery {
     pub request_error: Option<CoreError>,
 }
 
-/// One HTTP native participant for one Action and its *actually prepared*
-/// Forms. Several such participants may compose in the same Thing; a Binding
-/// can implement a shared listener as another participant implementation.
+/// One HTTP native participant for several Actions and their actually prepared
+/// Forms, optionally including a complete Thing-root status inventory. Other
+/// native participants may compose on the same logical Thing.
 pub struct HttpActionRuntime {
     key: ProducerInstanceKey,
     // Native correlation epoch: a stale Location from another lease (including
@@ -137,7 +151,7 @@ pub struct HttpActionRuntime {
     nonce: u64,
     token: ProducerOwnerToken,
     definitions: Vec<HttpActionDefinition>,
-    validator: Rc<dyn ActionValidator>,
+    validators: Vec<(Arc<str>, Rc<dyn ActionValidator>)>,
     max_records: usize,
     records: Vec<Record>,
     next_work: usize,
@@ -162,28 +176,87 @@ impl HttpActionRuntime {
         let Some(invoke) = definitions.first() else {
             return Err(producer_unsupported());
         };
-        // This concrete participant has no cross-Binding correlation service.
-        // Require the entire advertised HTTP control set here; a different
-        // Binding's query/cancel cannot be silently routed to this handle store.
-        if invoke.operation != Operation::InvokeAction
-            || invoke.control
-            || max_records == 0
+        // Native completeness: every Action named by the root must have its
+        // entire invoke/control set in this SAME actual correlation owner.
+        if max_records == 0
             || max_records > 128
-            || definitions.len() != 3
-            || ![Operation::QueryAction, Operation::CancelAction]
+            || definitions.len() > 32
+            || definitions
                 .iter()
-                .all(|op| definitions.iter().any(|d| d.operation == *op))
+                .filter(|d| d.operation == Operation::QueryAllActions)
+                .count()
+                > 1
+            || definitions.iter().any(|d| {
+                d.address != invoke.address || d.instance_binding != invoke.instance_binding
+            })
             || definitions.iter().enumerate().any(|(i, d)| {
-                d.address != invoke.address
-                    || d.action != invoke.action
-                    || d.instance_binding != invoke.instance_binding
-                    || d.input_schema != invoke.input_schema
-                    || d.output_schema != invoke.output_schema
-                    || d.control != (d.operation != Operation::InvokeAction)
-                    || definitions[..i].iter().any(|p| p.operation == d.operation)
+                definitions[..i].iter().any(|p| {
+                    p.operation == d.operation && (p.action == d.action || p.path == d.path)
+                })
             })
         {
             return Err(producer_unsupported());
+        }
+        let mut validators: Vec<(Arc<str>, Rc<dyn ActionValidator>)> = Vec::new();
+        for d in definitions
+            .iter()
+            .filter(|d| d.operation != Operation::QueryAllActions)
+        {
+            if d.collection.is_some()
+                || d.control != (d.operation != Operation::InvokeAction)
+                || ![
+                    Operation::InvokeAction,
+                    Operation::QueryAction,
+                    Operation::CancelAction,
+                ]
+                .iter()
+                .all(|op| {
+                    definitions.iter().any(|other| {
+                        other.action == d.action
+                            && other.operation == *op
+                            && other.input_schema == d.input_schema
+                            && other.output_schema == d.output_schema
+                    })
+                })
+            {
+                return Err(producer_unsupported());
+            }
+            if d.operation == Operation::InvokeAction {
+                validators.push((
+                    Arc::clone(&d.action),
+                    Rc::new(Schemas {
+                        input: d.input_schema,
+                        output: d.output_schema,
+                    }),
+                ));
+            }
+        }
+        if validators.is_empty()
+            && definitions.iter().all(|d| {
+                d.collection
+                    .as_ref()
+                    .is_none_or(|s| !s.members().is_empty())
+            })
+        {
+            return Err(producer_unsupported());
+        }
+        for root in definitions
+            .iter()
+            .filter(|d| d.operation == Operation::QueryAllActions)
+        {
+            let schema = root.collection.as_ref().ok_or_else(producer_unsupported)?;
+            if root.control
+                || schema.members().len() != validators.len()
+                || schema.members().iter().any(|m| {
+                    !definitions.iter().any(|d| {
+                        d.operation == Operation::InvokeAction
+                            && d.action.as_ref() == m.name.as_ref()
+                            && d.output_schema == m.output
+                    })
+                })
+            {
+                return Err(producer_unsupported());
+            }
         }
         let mut records = Vec::new();
         records
@@ -201,10 +274,7 @@ impl HttpActionRuntime {
             key,
             nonce: salt ^ ordinal,
             token: owner.participation_token(),
-            validator: Rc::new(Schemas {
-                input: invoke.input_schema,
-                output: invoke.output_schema,
-            }),
+            validators,
             definitions,
             max_records,
             records,
@@ -282,6 +352,7 @@ impl HttpActionRuntime {
                     RetryClass::Never,
                 ))),
                 request_error: exchange.request_error,
+                exchange: exchange.identity,
             });
         }
     }
@@ -394,6 +465,7 @@ impl HttpActionRuntime {
                         written: 0,
                         invoked: None,
                         request_error: None,
+                        identity: None,
                     });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(Poll::Pending),
@@ -415,6 +487,7 @@ impl HttpActionRuntime {
                     RetryClass::Never,
                 ))),
                 request_error: exchange.request_error,
+                exchange: exchange.identity,
             });
             return Ok(Poll::Ready(()));
         }
@@ -494,7 +567,7 @@ impl HttpActionRuntime {
                     request.method
                         == Some(match d.operation {
                             Operation::InvokeAction => "POST",
-                            Operation::QueryAction => "GET",
+                            Operation::QueryAction | Operation::QueryAllActions => "GET",
                             _ => "DELETE",
                         })
                         && request.path.is_some_and(|path| {
@@ -510,13 +583,10 @@ impl HttpActionRuntime {
                 self.exchange = None;
                 return Ok(Poll::Ready(()));
             };
-            let body_len = if definition.control {
-                0
-            } else {
-                length.unwrap_or(0)
-            };
-            if (definition.control && (length.unwrap_or(0) != 0 || media != 0))
-                || (!definition.control && media != usize::from(body_len != 0))
+            let no_input = definition.operation != Operation::InvokeAction;
+            let body_len = if no_input { 0 } else { length.unwrap_or(0) };
+            if (no_input && (length.unwrap_or(0) != 0 || media != 0))
+                || (!no_input && media != usize::from(body_len != 0))
                 || exchange.received.len() > end + body_len
             {
                 self.exchange = None;
@@ -553,6 +623,7 @@ impl HttpActionRuntime {
                         write_started: true,
                         cause: None,
                         request_error: exchange.request_error.take(),
+                        exchange: exchange.identity.take(),
                     });
                     self.exchange = None;
                     Ok(Poll::Ready(()))
@@ -568,12 +639,118 @@ impl HttpActionRuntime {
                     write_started: exchange.written != 0,
                     cause: Some(io_error()),
                     request_error: exchange.request_error.take(),
+                    exchange: exchange.identity.take(),
                 });
                 self.exchange = None;
                 Ok(Poll::Ready(()))
             }
         }
     }
+    fn aggregate(
+        &self,
+        owner: &RawProducerServient,
+        definition: &HttpActionDefinition,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<String> {
+        // One paid, bounded native aggregation. Core visits original owners;
+        // it never follows the hrefs or invokes the leaf-query operation.
+        budget
+            .consume(WorkClass::BindingPolls, 65_536)
+            .map_err(|_| {
+                CoreError::Backpressure(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))
+            })?;
+        let schema = definition
+            .collection
+            .as_ref()
+            .ok_or_else(producer_unsupported)?;
+        let mut records = Vec::<(String, String)>::with_capacity(self.max_records);
+        owner.query_raw_actions(
+            self.key,
+            definition.route(),
+            self.records.iter().rev().map(|r| &r.handle),
+            &InteractionInput::empty(),
+            budget,
+            |name, handle, view| {
+                let record = self
+                    .records
+                    .iter()
+                    .find(|r| r.handle.reference() == handle.reference())
+                    .ok_or_else(invalid)?;
+                let invoke = &self.definitions[record.definition];
+                let query = self
+                    .definitions
+                    .iter()
+                    .find(|d| d.action == invoke.action && d.operation == Operation::QueryAction)
+                    .ok_or_else(invalid)?;
+                let href = format!(
+                    "http://{}{}?id={}",
+                    query.address,
+                    query.path,
+                    self.wire_id(record.id)
+                );
+                let (state, output) = match view.state {
+                    RawActionState::Running => ("running", None),
+                    RawActionState::Complete(Ok(output)) => ("completed", output.data()),
+                    RawActionState::Complete(Err(_)) => ("failed", None),
+                };
+                let mut value = format!(
+                    "{{\"status\":\"{state}\",\"href\":{}}}",
+                    serde_json::to_string(&href).map_err(|_| invalid())?
+                );
+                if let Some(output) = output {
+                    value.pop();
+                    value.push_str(",\"output\":");
+                    value.push_str(std::str::from_utf8(&output.body).map_err(|_| invalid())?);
+                    value.push('}');
+                }
+                // Bound retained serialization before appending; a large group
+                // fails as a whole, with no truncation or incomplete success.
+                if records
+                    .iter()
+                    .map(|(name, value)| name.len() + value.len() + 4)
+                    .sum::<usize>()
+                    + name.len()
+                    + value.len()
+                    + 4
+                    > 4096
+                {
+                    return Err(CoreError::Backpressure(ErrorContext::new(
+                        ErrorPhase::Binding,
+                        RetryClass::Never,
+                    )));
+                }
+                records.push((name.into(), value));
+                Ok(())
+            },
+        )?;
+        let mut result = String::from("{");
+        for (i, member) in schema.members().iter().enumerate() {
+            if i != 0 {
+                result.push(',');
+            }
+            result.push_str(&serde_json::to_string(member.name.as_ref()).map_err(|_| invalid())?);
+            result.push_str(":[");
+            let mut first = true;
+            for (_, value) in records
+                .iter()
+                .filter(|(name, _)| name == member.name.as_ref())
+            {
+                if !first {
+                    result.push(',');
+                }
+                first = false;
+                result.push_str(value);
+            }
+            result.push(']');
+        }
+        result.push('}');
+        crate::action_status::validate(
+            schema,
+            &Payload::new(result.as_bytes().to_vec(), "application/json"),
+        )?;
+        Ok(result)
+    }
+
     fn answer(
         &mut self,
         owner: &mut RawProducerServient,
@@ -582,6 +759,16 @@ impl HttpActionRuntime {
         path: &str,
         body: Vec<u8>,
     ) -> CoreResult<()> {
+        self.exchange.as_mut().unwrap().identity = Some(HttpActionExchangeIdentity {
+            instance: self.key,
+            operation: definition.operation,
+            route: definition.route(),
+            target: if definition.operation == Operation::QueryAllActions {
+                AffordanceTarget::Thing
+            } else {
+                AffordanceTarget::Action(Arc::clone(&definition.action))
+            },
+        });
         let status: u16;
         let result: String;
         let mut location = None;
@@ -591,7 +778,21 @@ impl HttpActionRuntime {
             InteractionInput::with_data(Payload::new(body, "application/json"))
         };
         let mut id = None;
-        if definition.operation == Operation::InvokeAction {
+        if definition.operation == Operation::QueryAllActions {
+            let aggregate = self.aggregate(owner, definition, budget);
+            match aggregate {
+                Ok(value) => {
+                    status = 200;
+                    result = value;
+                }
+                Err(error) => {
+                    let (code, response) = refused(&error);
+                    status = code;
+                    result = response.into();
+                    self.exchange.as_mut().unwrap().request_error = Some(error);
+                }
+            }
+        } else if definition.operation == Operation::InvokeAction {
             if self.records.len() < self.max_records {
                 let request = RawActionRequest {
                     instance: self.key,
@@ -600,12 +801,16 @@ impl HttpActionRuntime {
                     query: self
                         .definitions
                         .iter()
-                        .find(|d| d.operation == Operation::QueryAction)
+                        .find(|d| {
+                            d.action == definition.action && d.operation == Operation::QueryAction
+                        })
                         .map(HttpActionDefinition::route),
                     cancel: self
                         .definitions
                         .iter()
-                        .find(|d| d.operation == Operation::CancelAction)
+                        .find(|d| {
+                            d.action == definition.action && d.operation == Operation::CancelAction
+                        })
                         .map(HttpActionDefinition::route),
                     input: &input,
                 };
@@ -615,17 +820,20 @@ impl HttpActionRuntime {
                         self.records.push(Record {
                             id: number,
                             handle,
+                            definition: self
+                                .definitions
+                                .iter()
+                                .position(|d| d == definition)
+                                .unwrap(),
                             finished: None,
                         });
                         id = Some(number);
                         status = 202;
                         let token = self.wire_id(number);
                         result = format!("{{\"id\":\"{token}\",\"status\":\"accepted\"}}");
-                        if let Some(query) = self
-                            .definitions
-                            .iter()
-                            .find(|d| d.operation == Operation::QueryAction)
-                        {
+                        if let Some(query) = self.definitions.iter().find(|d| {
+                            d.action == definition.action && d.operation == Operation::QueryAction
+                        }) {
                             location =
                                 Some(format!("http://{}{}?id={token}", query.address, query.path));
                         }
@@ -662,7 +870,13 @@ impl HttpActionRuntime {
             })
         {
             if epoch == self.nonce
-                && let Some(handle) = self.handle(number)
+                && let Some(handle) = self
+                    .records
+                    .iter()
+                    .find(|r| {
+                        r.id == number && self.definitions[r.definition].action == definition.action
+                    })
+                    .map(|r| r.handle.clone())
             {
                 let input = InteractionInput::empty();
                 let control = if definition.operation == Operation::QueryAction {
@@ -763,16 +977,21 @@ impl ClosedProducerParticipation for HttpActionRuntime {
             |sum, d| {
                 sum.checked_add(d.action.len())?
                     .checked_add(d.path.len())?
+                    .checked_add(d.collection.as_ref().map_or(0, |s| s.retained_bytes()))?
                     .checked_add(4 * size_of::<usize>())
             },
         )?;
         size_of::<Self>()
             .checked_add(definitions)?
             .checked_add(self.max_records.checked_mul(size_of::<Record>())?)?
-            .checked_add(size_of::<Schemas>() + size_of::<Cell<bool>>() + size_of::<[usize; 8]>())?
+            .checked_add(
+                self.validators.capacity() * size_of::<(Arc<str>, Rc<dyn ActionValidator>)>(),
+            )?
+            .checked_add(self.validators.len() * (size_of::<Schemas>() + 2 * size_of::<usize>()))?
+            .checked_add(size_of::<Cell<bool>>() + size_of::<[usize; 8]>())?
             // Retained ingress, decoded payload, reply and bounded formatting
             // overlap. Native OS/socket state is separately Binding-owned.
-            .checked_add(40 * 1024)
+            .checked_add(128 * 1024)
     }
     fn begin_retire(&mut self) {
         self.begin_close();
@@ -795,9 +1014,14 @@ impl ClosedProducerParticipation for HttpActionRuntime {
         definition: &dyn Any,
     ) -> bool {
         key == self.key
-            && matches!(site, AffordanceSite::Action(name) if name == self.definitions[0].action.as_ref())
             && self.definitions.iter().any(|d| {
-                d.instance_binding == binding
+                (match site {
+                    AffordanceSite::Action(name) => {
+                        name == d.action.as_ref() && d.operation != Operation::QueryAllActions
+                    }
+                    AffordanceSite::Thing => d.operation == Operation::QueryAllActions,
+                    _ => false,
+                }) && d.instance_binding == binding
                     && d.form == form
                     && d.operation == op
                     && definition.downcast_ref::<HttpActionDefinition>() == Some(d)
@@ -825,7 +1049,7 @@ impl ClosedProducerParticipation for HttpActionRuntime {
                     .downcast_ref::<HttpActionDefinition>()
                     .unwrap()
                     .route(),
-                Rc::clone(&self.validator),
+                Rc::clone(&self.validators.iter().find(|(name,_)| matches!(site, AffordanceSite::Action(n) if n == name.as_ref())).unwrap().1),
             )
         })
     }
@@ -838,15 +1062,18 @@ impl ClosedProducerParticipation for HttpActionRuntime {
         operation: Operation,
         definition: &dyn Any,
     ) -> Option<ActionRoute> {
-        matches!(operation, Operation::QueryAction | Operation::CancelAction)
-            .then_some(())
-            .filter(|_| self.covers(key, binding, site, form, operation, definition))
-            .map(|_| {
-                definition
-                    .downcast_ref::<HttpActionDefinition>()
-                    .unwrap()
-                    .route()
-            })
+        matches!(
+            operation,
+            Operation::QueryAction | Operation::CancelAction | Operation::QueryAllActions
+        )
+        .then_some(())
+        .filter(|_| self.covers(key, binding, site, form, operation, definition))
+        .map(|_| {
+            definition
+                .downcast_ref::<HttpActionDefinition>()
+                .unwrap()
+                .route()
+        })
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
         &self.gate

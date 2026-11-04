@@ -218,6 +218,7 @@ impl ConsumerRegistry {
                                                 | Operation::ReadMultipleProperties
                                                 | Operation::WriteAllProperties
                                                 | Operation::WriteMultipleProperties
+                                                | Operation::QueryAllActions
                                         )
                                 );
                                 let mut reason = if !finite {
@@ -885,6 +886,22 @@ fn common_services(
                     .map(crate::type_schema::prepare_type_schema)
                     .transpose()?,
             }))
+        }
+        (FormSite::Thing, Operation::QueryAllActions) => {
+            let cleanup = crate::type_schema::action_member_count(doc)? as u64 + 1;
+            check_limit(
+                limits,
+                K::CleanupWorkItemsPerStepMax,
+                retained_cleanup_work
+                    .checked_add(cleanup)
+                    .ok_or_else(invalid)?,
+            )?;
+            if !pay(budget, W::CleanupItems, cleanup) {
+                return Err(busy());
+            }
+            Ok(ConsumerFiniteSchemas::QueryAllActions(
+                crate::type_schema::prepare_action_collection_schema(doc)?,
+            ))
         }
         (
             FormSite::Thing,

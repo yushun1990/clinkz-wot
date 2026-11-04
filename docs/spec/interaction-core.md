@@ -43,10 +43,10 @@ represented as schema conformance. Native status mapping remains Binding-owned.
 Consumer data services validate a payload independently of direction. Prepared
 `ConsumerSchemas` keep single-value input and output distinct; absence of a data
 role differs from a present unconstrained value. `ConsumerFiniteSchemas` retains
-either those roles or the derived Property collection member schema explicitly.
+those roles, derived Property collection member schemas or named Action output roles explicitly.
 The current finite path supports Property Read/Write, explicitly synchronous
 Action invocation (including empty data roles), and Thing-root
-ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties. Shape/identity seals require terminal
+ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties and QueryAllActions. Shape/identity seals require terminal
 primary application results and refuse continuing status/invocation references; captured codec/schema
 checks separately precede input effects and validated result handoff.
 
@@ -156,6 +156,41 @@ asserts remote rollback. No progress/control path reinvokes an Action. Unread
 terminal settlement retains the original slot; acknowledgement returns a complete
 settlement owner, and stale handles cannot address a reused slot. The settlement
 retains original services, native evidence and funding until final disposal.
+
+A Thing-root **QueryAllActions** is a finite status observation, independent of
+any Consumer invocation handle. Action definitions, invocation instances and
+invocation output MUST remain distinct. One definition can have zero or multiple
+concurrent instances and retained terminal records. The query MUST preserve each
+record's Action attribution, native invocation identity, state and any supported
+completed output/error evidence; one value per definition cannot represent it.
+Status-resource links are native evidence, not Engine invocation authority or
+permission to follow them. Query success does not imply invocation success,
+remote cancellation, a complete historical ledger or a distributed snapshot.
+TD 1.1 defines the root interaction, not a universal envelope/retention policy.
+Concrete status vocabulary, representation, ordering and retention require an
+explicit supported mapping. Unsupported native evidence MUST NOT be silently
+collapsed into an unconstrained Object or a single Action result.
+
+The Host Consumer retains `ActionCollectionSchema` separately from scalar data
+roles. Its actual `ConsumerDataService` MUST explicitly support and validate the
+selected status representation, including each named Action's own output schema;
+scalar Object support is insufficient. The original complete native payload and
+response metadata survive validation failure, cancellation and late settlement.
+No aggregate observation creates or replaces local continuing invocation handles.
+
+The Host Producer's `query_raw_actions` is one bounded borrowed observation of
+a qualified Binding's original inventory. A distinct root `ActionQueryPolicy`
+and captured Thing/QueryAllActions route are required; per-record original
+instance/principal and fresh Action-handler permission additionally apply.
+Member Security denial filters that record; root denial or another error refuses
+the query. Authorization cannot confer control of a successor or change the
+original handle association. Native inventory completeness and correlation remain
+Binding obligations; the Engine neither performs N QueryAction calls nor
+progresses application continuations. Raw use alone establishes no TD/native
+completeness. Acknowledgement transfers a complete Action settlement owner;
+original result/target/error storage and validation service remain owned until
+that owner is disposed. These data are exposed by borrow, so acknowledgement
+cannot detach their controlled backing from its funding.
 
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property

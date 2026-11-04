@@ -48,6 +48,7 @@ still have supported-subset limits.
 | Thing-root WriteAllProperties | Finite root write with independent writable input schema and optional bounded member report | Complete map validation and group authorization before native effects | Complete final-TD qualification, captured validator and one root behavior | [Engine Consumer-to-Producer HTTP PUT/204](protocol-bindings/protocols/http/tests/write_all_properties.rs); real partial effects, uncertain completion, no replay, cancellation/replacement and final release |
 | Thing-root WriteMultipleProperties | Finite root write with retained per-call writable set and optional bounded member report | Actual root Form/Binding, captured map validation and set-aware permission | Complete final-TD qualification and one distinct root behavior | [Engine Consumer-to-Producer HTTP PUT/204](protocol-bindings/protocols/http/tests/write_multiple_properties.rs); changing subsets, partial effects and lifecycle/resource evidence; independent test datagrams exercise richer member/atomicity reports with TD-driven Consumer and raw Producer |
 | Thing-root ObserveAllProperties / UnobserveAllProperties | One root notification authority, independent cursor/stop and complete named Property maps | Explicit collection kind, selected root Form, original readable schemas and captured map/access services | Complete final-TD qualification and a distinct root publication source | [Engine Producer-to-Consumers through Mosquitto](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs); one native subscription, member validation, shared stop, loss/replacement, late work and physical release |
+| Thing-root QueryAllActions | One root status observation over original Producer invocation owners; finite Consumer settlement | Selected root Form, named Action output schemas and actual status/access services | Complete final-TD qualification, root policy/route and complete native inventory | [Engine Consumer-to-Producer HTTP GET/200](protocol-bindings/protocols/http/tests/query_all_actions.rs); concurrent same-Action instances, native status identity, failed/retained outcomes, authority and final release |
 | Remaining described collection operations | No execution claim | Open | Open | No joined native collection evidence |
 
 The [continuing Action integration](protocol-bindings/protocols/http/tests/action_consumer.rs)
@@ -96,8 +97,7 @@ observations. [Qualification](protocol-bindings/protocols/mqtt/tests/collection_
 checks root support, full member meaning, real services and final advertisement.
 The [declared mapping](protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation)
 requires a combined observe/unobserve Form and does not provide deltas, atomic
-snapshots, wildcard extraction or fleet-scale evidence. QueryAllActions and
-SubscribeAllEvents/UnsubscribeAllEvents remain collection gaps.
+snapshots, wildcard extraction or fleet-scale evidence. SubscribeAllEvents/UnsubscribeAllEvents remain collection gaps.
 [Downstream Consumer composition](tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
 exercises prepared finite I/O and TD-selected Property observation with an external test Binding; the
 [notification fixtures](servient/finite/tests/notification.rs) exercise Event

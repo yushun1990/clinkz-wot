@@ -47,3 +47,13 @@ The [Core collection contract](../spec/interaction-core.md) owns exact semantics
 slice and an independent Cargo-linked datagram fixture exercise its scoped
 validation, original selection and late-release obligations. No package, gate,
 milestone or production qualification is inferred from this increment.
+
+## Action collection data and permission
+
+Core now retains Action definitions/output roles separately from scalar values
+and requires an actual aggregate-status validation service. A root query policy
+is distinct from the original per-invocation handler and principal checks.
+[Interaction Core](../spec/interaction-core.md) owns those semantics; the
+[HTTP integration](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+exercises native identity, different member schemas and source-independent
+validation. This introduces no universal status envelope or Action/session store.

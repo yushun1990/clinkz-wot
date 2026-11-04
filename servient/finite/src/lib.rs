@@ -79,6 +79,7 @@ pub struct RawProducerInstance {
     description: Option<Arc<str>>,
     behaviors: Vec<RawFiniteBehavior>,
     actions: Vec<RawActionBehavior>,
+    action_query: Option<Box<dyn clinkz_wot_core::action::ActionQueryPolicy>>,
     notification_sources: Vec<ProducerNotificationSource>,
     notification_work: Cell<usize>,
     // Last to drop: original accepted work retains the actual shared capacity
@@ -93,6 +94,7 @@ impl RawProducerInstance {
             description: None,
             behaviors,
             actions: Vec::new(),
+            action_query: None,
             notification_sources: Vec::new(),
             notification_work: Cell::new(0),
             retained_owner: None,
@@ -103,6 +105,15 @@ impl RawProducerInstance {
     /// may have only Action behaviors; no finite native driver is implied.
     pub fn with_actions(mut self, actions: Vec<RawActionBehavior>) -> Self {
         self.actions = actions;
+        self
+    }
+
+    /// Register permission for a root invocation-status query on this instance.
+    pub fn with_action_query(
+        mut self,
+        policy: impl clinkz_wot_core::action::ActionQueryPolicy + 'static,
+    ) -> Self {
+        self.action_query = Some(Box::new(policy));
         self
     }
 
@@ -148,22 +159,27 @@ impl RawProducerInstance {
             .into_iter()
             .filter(|op| a.supports(*op))
             .all(|op| advertised(clinkz_wot_core::thing::AffordanceSite::Action(a.name()), op))
-        }) && self.notification_sources.iter().all(|e| {
-            advertised(
-                match e {
-                    ProducerNotificationSource::AllProperties => {
-                        clinkz_wot_core::thing::AffordanceSite::Thing
-                    }
-                    ProducerNotificationSource::Property(n) => {
-                        clinkz_wot_core::thing::AffordanceSite::Property(n)
-                    }
-                    ProducerNotificationSource::Event(n) => {
-                        clinkz_wot_core::thing::AffordanceSite::Event(n)
-                    }
-                },
-                e.kind().start_operation(),
-            )
-        })
+        }) && (self.action_query.is_none()
+            || advertised(
+                clinkz_wot_core::thing::AffordanceSite::Thing,
+                Operation::QueryAllActions,
+            ))
+            && self.notification_sources.iter().all(|e| {
+                advertised(
+                    match e {
+                        ProducerNotificationSource::AllProperties => {
+                            clinkz_wot_core::thing::AffordanceSite::Thing
+                        }
+                        ProducerNotificationSource::Property(n) => {
+                            clinkz_wot_core::thing::AffordanceSite::Property(n)
+                        }
+                        ProducerNotificationSource::Event(n) => {
+                            clinkz_wot_core::thing::AffordanceSite::Event(n)
+                        }
+                    },
+                    e.kind().start_operation(),
+                )
+            })
     }
 
     /// Staged actual behavior coverage, queried during pure TD selection.
@@ -171,6 +187,7 @@ impl RawProducerInstance {
     /// query/cancel Form never creates a working control operation.
     pub fn supports(&self, target: &AffordanceTarget, operation: Operation) -> bool {
         match (target, operation) {
+            (AffordanceTarget::Thing, Operation::QueryAllActions) => self.action_query.is_some(),
             (
                 _,
                 Operation::ObserveProperty
@@ -246,6 +263,9 @@ impl RawProducerInstance {
             if let AffordanceTarget::Property(name) = &behavior.target {
                 bytes = bytes.checked_add(name.len() + 2 * size_of::<usize>())?;
             }
+        }
+        if let Some(policy) = &self.action_query {
+            bytes = bytes.checked_add(core::mem::size_of_val(policy.as_ref()))?;
         }
         for behavior in &self.actions {
             bytes = bytes.checked_add(behavior.backing_bytes())?;
@@ -332,10 +352,12 @@ impl RawProducerServient {
     fn valid_instance(instance: &RawProducerInstance, limits: RawProducerRegistryLimits) -> bool {
         (!instance.behaviors.is_empty()
             || !instance.actions.is_empty()
+            || instance.action_query.is_some()
             || !instance.notification_sources.is_empty())
             && instance.behaviors.len()
                 + instance.actions.len()
                 + instance.notification_sources.len()
+                + usize::from(instance.action_query.is_some())
                 <= limits.behaviors_per_instance
             && instance
                 .notification_sources

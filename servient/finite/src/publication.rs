@@ -10,7 +10,7 @@ pub const MAX_PRODUCER_PARTICIPANTS: usize = 32;
 /// validation service; query/cancel routes establish the permitted controls.
 /// Native participants supply these during setup, not individual requests.
 pub struct CapturedActionRoute {
-    pub action: Arc<str>,
+    pub target: AffordanceTarget,
     pub operation: Operation,
     pub route: ActionRoute,
     pub validator: Option<Rc<dyn ActionValidator>>,
@@ -21,7 +21,7 @@ impl CapturedActionRoute {
         routes
             .iter()
             .try_fold(capacity.checked_mul(size_of::<Self>())?, |sum, route| {
-                sum.checked_add(route.action.len() + 2 * size_of::<usize>())
+                sum.checked_add(route.target.name().map_or(0, str::len) + 2 * size_of::<usize>())
             })
     }
 }
@@ -172,28 +172,37 @@ impl ProducerPublication {
             .as_ref()
             .ok_or_else(|| CoreError::Validation(context()))?;
         if routes.iter().enumerate().any(|(i, route)| {
-            !instance.supports_action(&route.action, route.operation)
+            !instance.supports(&route.target, route.operation)
                 || (route.operation == Operation::InvokeAction) != route.validator.is_some()
                 || !matches!(
                     route.operation,
-                    Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction
+                    Operation::InvokeAction
+                        | Operation::QueryAction
+                        | Operation::CancelAction
+                        | Operation::QueryAllActions
                 )
                 || routes[..i].iter().any(|prior| {
-                    prior.action == route.action
+                    prior.target == route.target
                         && prior.operation == route.operation
                         && prior.route == route.route
                 })
-        }) || instance.actions.iter().any(|action| {
-            !routes.iter().any(|route| {
-                route.action.as_ref() == action.name() && route.operation == Operation::InvokeAction
+        }) || (instance.action_query.is_some()
+            && !routes.iter().any(|r| {
+                r.target == AffordanceTarget::Thing && r.operation == Operation::QueryAllActions
+            }))
+            || instance.actions.iter().any(|action| {
+                !routes.iter().any(|route| {
+                    route.target.name() == Some(action.name())
+                        && route.operation == Operation::InvokeAction
+                })
             })
-        }) {
+        {
             return Err(CoreError::Validation(context()));
         }
         if let Some(old) = &self.action_routes {
             if old.len() != routes.len()
                 || old.iter().zip(&routes).any(|(a, b)| {
-                    a.action != b.action
+                    a.target != b.target
                         || a.operation != b.operation
                         || a.route != b.route
                         || !match (&a.validator, &b.validator) {
@@ -550,7 +559,8 @@ impl RawProducerServient {
         expected: Option<ProducerInstanceKey>,
     ) -> CoreResult<()> {
         if !Self::valid_instance(instance, self.limits)
-            || (!instance.actions.is_empty() && self.actions.is_none())
+            || ((!instance.actions.is_empty() || instance.action_query.is_some())
+                && self.actions.is_none())
             || instance.description.is_none()
         {
             return Err(CoreError::Validation(context()));
@@ -628,7 +638,7 @@ impl RawProducerServient {
         if publication
             .instance
             .as_ref()
-            .is_some_and(|i| !i.actions.is_empty())
+            .is_some_and(|i| !i.actions.is_empty() || i.action_query.is_some())
             && publication.action_routes.is_none()
         {
             return Err(CoreError::Validation(context()));

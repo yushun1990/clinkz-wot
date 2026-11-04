@@ -95,11 +95,12 @@ cell. A participant can lease shared native infrastructure for multiple Things.
 HTTP Property Read plus a linked test-only real-UDP continuing Action exercises
 independent readiness, one commit, query/cancel, replacement and retirement;
 it is not a production UDP Binding or a generic Action transport.
-This manual composed path caps an individual prepared definition set but does
-not yet reserve aggregate live bytes across concurrent Things, stage a complete
-native-owner account, or independently track the original participant set for
-retirement. The caller must retain every participant and acknowledge its native
-cleanup; the test's shared UDP socket is not a fully funded Host implementation.
+Direct raw composition remains caller-funded. The optional owned Host handoff
+retains original participant identities and managed controlled backing through
+native/work/result disposal, as specified by [Binding SPI](../spec/binding-spi.md)
+and [Runtime Safety](../spec/runtime-safety.md). Native OS/SDK/shared infrastructure
+has its separate actual Binding owner; a linked test socket does not establish
+production resource qualification.
 
 The same execution-only logical owner can register Action behavior without a
 finite runtime. Core's raw Action contracts and Servient's bounded invocation
@@ -107,34 +108,35 @@ store separate application continuation from the initiating Binding exchange.
 The owner pins the original instance, invocation reference, principal and
 selected invoke/query/cancel mapping associations; controls recheck current
 authority and policy. Cancel/abandon do not assert completion, and a late result
-remains charged until application retirement and settlement acknowledgement.
+remains charged through application retirement, acknowledgement transfer and
+actual settlement disposal. Retained result/target/error data are borrowed from
+that original owner.
 Lost handles cannot orphan work: the owner has a separate paid retirement path;
 root Drop uses only the application's qualified finite local abort for unfinished
 work, not a poll or a claim of completed native delivery.
 Native correlations, replies, cancellation and infrastructure cleanup remain at
 the Binding. The raw Host kernel itself has no native Action adapter or TD
-qualification; the composed handoff is separate. Production Action mapping,
-schema validation and automatic progress remain unimplemented. It does not
-model Property observation or Event notification as finite exchanges: their
+qualification; TD-driven mapping/validation and complete publication are separate
+composed capabilities. Automatic progress is not claimed by these manual facets.
+It does not model Property observation or Event notification as finite exchanges: their
 establishment, delivery, reciprocal responses and stop require separate logical
 conversation owners.
 
-Other runtime availability remains narrow Property Read: the Host HTTP Consumer,
-bounded loopback Producer, static/Host fixtures and manual Consumer runtime.
-The existing `HostSemanticCompiler` Copy/atomic restriction, eager all-bounds
+Executable availability is established by source and scoped tests linked from
+[PLAN's coverage](../../PLAN.md#capability-coverage), not by this boundary model.
+The retained Property Read adapters'  `HostSemanticCompiler` Copy/atomic restriction, eager all-bounds
 transaction, plan-set epochs, route-stage carriers and one-route Producer root
 are un-frozen implementation details for those adapters. They MUST NOT set
 eligibility or shape for new capability families. Replacement must remove a wrong
 abstraction, not preserve it through aliases or a compatibility facade.
 
 Anonymous TDs, empty affordance keys, extension security and no-atomic execution
-are target requirements; the current Consumer's id/key restriction and
-pointer-atomic runtime remain explicit gaps. Unknown security schemes are now
+are target requirements; retained narrow adapters may still have id/key or
+pointer-atomic restrictions, without constraining open composition. Unknown security schemes are now
 preserved, but executable provider support is not implied. TD vocabulary
 availability on a no-atomic target proves tooling compilation only. Identity/shape
-result seals are not full DataSchema validation. No general runtime, production
-shared-native infrastructure, notification implementation or complete Action
-support is claimed here.
+result seals are not full DataSchema validation. The boundary model itself grants
+no implementation, complete-family or production qualification claim.
 
 The withdrawn event broker/subscription queues, old TD-at-call-time facade,
 Zenoh/pico implementations and admission prototypes remain in Git. Their deletion

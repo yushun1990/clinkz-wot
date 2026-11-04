@@ -124,17 +124,46 @@ pub struct RawActionView<'a> {
 pub struct RawActionSettlement {
     pub reference: ActionInvocationRef,
     pub instance: ProducerInstanceKey,
-    pub target: AffordanceTarget,
+    target: AffordanceTarget,
     pub binding: (BindingId, BindingGeneration),
     pub mapping: ActionMappingKey,
     pub query: Option<ActionRoute>,
     pub cancel: Option<ActionRoute>,
-    pub result: CoreResult<InteractionOutput>,
+    result: CoreResult<InteractionOutput>,
     pub effect: ActionEffect,
     pub cancel_requested: bool,
-    pub cancel_failure: Option<CoreError>,
+    cancel_failure: Option<CoreError>,
     pub abandoned: bool,
-    pub close_failure: Option<CoreError>,
+    close_failure: Option<CoreError>,
+    _validator: Option<Rc<dyn clinkz_wot_core::action::ActionValidator>>,
+    // Last: target/result and application owners must die before their original
+    // managed funding. Acknowledgement transfers ownership; it is not disposal.
+    _retained: Rc<super::RawProducerInstance>,
+}
+
+impl RawActionSettlement {
+    /// Borrow the result under this settlement's original funding. Extracting
+    /// the public payload field used to let it outlive that capacity owner.
+    ///
+    /// ```compile_fail,E0616
+    /// use clinkz_wot_servient_finite::RawActionSettlement;
+    /// use clinkz_wot_core::{CoreResult, InteractionOutput};
+    /// fn detach(settlement: RawActionSettlement) -> CoreResult<InteractionOutput> {
+    ///     settlement.result
+    /// }
+    /// ```
+    pub fn result(&self) -> &CoreResult<InteractionOutput> {
+        &self.result
+    }
+    pub fn target(&self) -> &AffordanceTarget {
+        &self.target
+    }
+    pub fn cancel_failure(&self) -> Option<&CoreError> {
+        self.cancel_failure.as_ref()
+    }
+    pub fn close_failure(&self) -> Option<&CoreError> {
+        self.close_failure.as_ref()
+    }
 }
 
 impl core::fmt::Debug for RawActionSettlement {
@@ -406,7 +435,7 @@ impl RawProducerServient {
                 let invoke = routes
                     .iter()
                     .find(|v| {
-                        v.action.as_ref() == name.as_ref()
+                        v.target == *request.target
                             && v.operation == Operation::InvokeAction
                             && v.route == request.invoke
                     })
@@ -417,7 +446,7 @@ impl RawProducerServient {
                 ] {
                     if selected.is_some_and(|selected| {
                         !routes.iter().any(|route| {
-                            route.action.as_ref() == name.as_ref()
+                            route.target == *request.target
                                 && route.operation == operation
                                 && route.route == selected
                         })
@@ -606,6 +635,107 @@ impl RawProducerServient {
         Ok(ActionStore::view(
             &self.actions.as_ref().unwrap().entries[i],
         ))
+    }
+
+    /// One root query of a Binding's original retained invocation inventory.
+    /// The Binding supplies native order/correlation and encodes the views;
+    /// no leaf QueryAction, application progress, cancellation or new authority
+    /// is performed. This borrowed visit cannot outlive the original store.
+    /// Native completeness is a qualified Binding obligation, not inferred
+    /// from the length of this iterator. Security denial filters a member;
+    /// other failures refuse the entire observation.
+    pub fn query_raw_actions<'a>(
+        &self,
+        instance: clinkz_wot_core::producer::ProducerInstanceKey,
+        route: ActionRoute,
+        handles: impl ExactSizeIterator<Item = &'a RawActionHandle>,
+        input: &InteractionInput,
+        budget: &mut WorkBudget,
+        mut observe: impl FnMut(&str, &RawActionHandle, RawActionView<'_>) -> CoreResult<()>,
+    ) -> CoreResult<()> {
+        let store = self
+            .actions
+            .as_ref()
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        if store.retiring || handles.len() > store.limits.invocations {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        let lookup = store
+            .limits
+            .invocations
+            .checked_add(self.limits.target_name_bytes)
+            .and_then(|n| n.checked_add(1))
+            .and_then(|n| n.checked_mul(handles.len()))
+            .ok_or_else(|| CoreError::Backpressure(context()))?;
+        let units = self
+            .limits
+            .instances
+            .checked_add(self.limits.behaviors_per_instance)
+            .and_then(|n| n.checked_add(store.limits.input_bytes))
+            .and_then(|n| n.checked_add(store.limits.input_fields))
+            .and_then(|n| n.checked_add(lookup))
+            .and_then(|n| u64::try_from(n).ok())
+            .ok_or_else(|| CoreError::Backpressure(context()))?;
+        budget
+            .consume(WorkClass::HandlerSteps, units)
+            .map_err(|_| CoreError::Backpressure(context()))?;
+        if !check_input(input, store.limits) {
+            return Err(CoreError::Backpressure(context()));
+        }
+        let current = self
+            .instances
+            .iter()
+            .find(|e| e.current.get() && e.instance.key() == instance)
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        if current.action_routes.as_ref().is_some_and(|routes| {
+            !routes.iter().any(|r| {
+                r.target == AffordanceTarget::Thing
+                    && r.operation == Operation::QueryAllActions
+                    && r.route == route
+            })
+        }) {
+            return Err(CoreError::UnsupportedOperation(context()));
+        }
+        current
+            .instance
+            .action_query
+            .as_ref()
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?
+            .authorize(input)?;
+        if !current.current.get() {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        for handle in handles {
+            let i = store
+                .index(handle)
+                .ok_or_else(|| CoreError::StaleHandle(context()))?;
+            let entry = &store.entries[i];
+            if entry.instance.key() != instance {
+                return Err(CoreError::StaleHandle(context()));
+            }
+            if entry.abandoned
+                || entry.principal.as_ref() != input.principal.as_ref().map(|p| &p.id)
+            {
+                continue;
+            }
+            let behavior = &entry.instance.actions[entry.behavior];
+            match behavior
+                .handler
+                .authorize(Operation::QueryAllActions, input)
+            {
+                Ok(()) => {}
+                Err(CoreError::Security { .. }) => continue,
+                Err(error) => return Err(error),
+            }
+            if !current.current.get() || !entry.current.get() {
+                return Err(CoreError::StaleHandle(context()));
+            }
+            observe(behavior.name(), handle, ActionStore::view(entry))?;
+        }
+        if !current.current.get() {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        Ok(())
     }
 
     /// Request application cancellation only. The caller's native cancel
@@ -885,6 +1015,8 @@ impl ActionStore {
             cancel_failure: entry.cancel_failure,
             abandoned: entry.abandoned,
             close_failure: entry.close_failure,
+            _validator: entry.validator,
+            _retained: entry.instance,
         })
     }
 }

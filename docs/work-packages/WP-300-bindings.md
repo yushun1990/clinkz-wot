@@ -152,6 +152,17 @@ uses one exact topic without N leaf operations. [Real broker tests](../../protoc
 exercise shared native interests, independent logical stop, partial controls,
 publication uncertainty and physical retirement.
 
-Other continuing collection operations remain unimplemented. This scoped capability
+Event collection operations remain unimplemented. This scoped capability
 changes no work-package dependencies, gate, milestone or production qualification
 status.
+
+## Native aggregate Action status
+
+[Binding SPI](../spec/binding-spi.md) now projects the root query route alongside
+leaf Action routes and preserves original exchange identity in native delivery.
+The HTTP participant owns one bounded inventory across several Actions; it
+refuses incomplete inventory instead of calling sibling/remote leaf controls.
+Its [mapping](../../protocol-bindings/protocols/http/README.md#thing-root-action-status-query)
+and [real I/O tests](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+retain native status identity, per-Action output and local delivery/failure evidence.
+This adds no universal session/store or new work-package dependency.
