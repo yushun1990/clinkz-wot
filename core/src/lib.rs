@@ -125,14 +125,14 @@ pub use identity::{
 #[cfg(target_has_atomic = "ptr")]
 pub use interaction::{
     AcceptHint, BindingResponseMetadata, InteractionInput, InteractionOptions, InteractionOutput,
-    InteractionOutputMetadata, InteractionStatus, MediaType, ResponsePayloadRole,
-    ResponseSelection, interaction_output_backing,
+    InteractionOutputMetadata, InteractionOutputView, InteractionStatus, MediaType,
+    ResponsePayloadRole, ResponseSelection, interaction_output_backing,
 };
 pub use operation::Operation;
 #[cfg(target_has_atomic = "ptr")]
 pub use outbound::OutboundRequest;
 #[cfg(target_has_atomic = "ptr")]
-pub use payload::{CodecInput, Payload, PayloadCodec};
+pub use payload::{CodecInput, Payload, PayloadCodec, PayloadView};
 #[cfg(target_has_atomic = "ptr")]
 pub use plan::{BindingCandidate, LogicalInteractionPlan};
 #[cfg(target_has_atomic = "ptr")]

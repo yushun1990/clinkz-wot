@@ -268,6 +268,14 @@ granted named owner is retained as refused evidence while the same original call
 continues manual cleanup; it never becomes a fabricated transfer acknowledgement
 or terminal release. A returned settlement retains
 its native/result/definition/account owners through its final disposal.
+All normal, rejected and late/native payload access lends Core slice-only output
+views. `ConsumerNativeOutcome` separately preserves returned errors or borrowed
+cancellation retry/cleanup evidence. Affordance access lends its original name.
+No accessor exposes a cloneable original output/body allocation. The
+[HTTP ownership regressions](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+retain the exact original response across call/runtime loss and shared settlement
+owners, including invalid output and cancellation/revocation before handoff;
+only final owner disposal returns the original response and cleanup capacity.
 
 Finite facet loss closes its own acceptance. Consumer authority loss revokes the
 incarnation across all attached facets. Existing handles can finish original cleanup;

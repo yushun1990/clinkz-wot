@@ -162,6 +162,13 @@ the Servient result-slot or per-result original-bank reservations. Complete
 managed publication captures that actual bank before ingress. No per-Binding
 copy of the semantic result store or protocol-specific result policy is required.
 
+Finite Consumer settlements use the same Core `InteractionOutputView`/`PayloadView`
+for normal, rejected and late native output. `ConsumerNativeOutcome` exposes
+returned slices/errors or the exact borrowed cancellation disposition; the owning
+Binding settlement remains private to its funded Consumer owner. Neither an
+owning payload nor its body Arc is lent by a diagnostic accessor. This changes
+no native completion, cancellation, transfer or effect evidence.
+
 Producer notification participants additionally supply their exact emission mapping
 and actual validation/security services for each selected Property observe,
 Thing-root observe-all or Event subscribe Form before

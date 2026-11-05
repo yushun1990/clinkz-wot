@@ -190,7 +190,7 @@ progresses application continuations. Raw use alone establishes no TD/native
 completeness. Acknowledgement transfers a complete Action settlement owner;
 original result/target/error storage and validation service remain owned until
 that owner is disposed. Query and settlement output use slice-only
-`RawActionOutputView`/`RawActionPayloadView`; they expose neither InteractionOutput,
+Core `InteractionOutputView`/`PayloadView`; they expose neither InteractionOutput,
 Payload nor the original body's Arc. Target access similarly lends an affordance
 site/name. Shared original data require retaining the settlement owner; an
 explicit byte copy creates separate caller-owned backing. Returning a reference
@@ -482,6 +482,16 @@ The finite Consumer settlement retains `ConsumerEffect` separately from its
 first local cause, original native outcome and validated application result.
 Native progress conservatively marks remote execution uncertain; cancellation
 or a communication/validation failure does not establish remote rollback.
+`result()` and `rejected_output()` lend Core `InteractionOutputView`/`PayloadView`
+slices under that settlement's original backing and cleanup reservations.
+`native_outcome()` returns a `ConsumerNativeOutcome`: normal/late output uses the
+same slice view, while cancellation lends the exact retry/cleanup disposition.
+Neither path exposes an owning output, Payload, or the original body's Arc.
+The original affordance name is likewise borrowed as an `AffordanceSite`.
+Sharing original data requires retaining the settlement owner; explicit byte
+copies create separate caller-owned backing. Dropping a call or runtime cannot
+release funding still held by a settlement. Final disposal destroys original
+native/result/definition backing before releasing its reservations.
 An admitted native success is not by itself a successful application outcome:
 `native_outcome()` retains normal/late native results independently of
 `result()`, which also requires terminal shape, captured validation, live original

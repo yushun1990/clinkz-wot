@@ -432,7 +432,7 @@ fn real_datagram_group_preserves_member_status_atomicity_and_late_evidence_in_bo
         );
         assert_eq!(remote.delivery, FiniteDelivery::Delivered);
         assert!(
-            matches!(local.native_outcome(),BindingCallSettlement::Returned(Ok(o)) if o.metadata().property_write_report()==Some(&r))
+            matches!(local.native_outcome(),ConsumerNativeOutcome::Returned(Ok(o)) if o.metadata().property_write_report()==Some(&r))
         );
         assert_eq!(local.result().is_ok(), fault == "complete");
         assert_eq!(

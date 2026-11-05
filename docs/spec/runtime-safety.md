@@ -44,6 +44,14 @@ data/access work policy and required facets both before and after authorization;
 pre-callback observations cannot authorize the next boundary. The same check
 applies after result validation and when handing off an already validated unread
 result. Fencing retains the original result, authority, first cause and funding.
+Every public finite Consumer result path, including rejected and late native
+output, lends Core `InteractionOutputView`/`PayloadView` slices. No output, Payload
+or body Arc may escape the original reservation through these views. Native
+cancellation still exposes its original retry and borrowed cleanup disposition;
+it grants no transfer ownership. Retain the settlement (including a shared Rc
+owner) to share original bytes. Caller-owned explicit copies have distinct
+backing. Call/root disposal or a local error cannot refund the retained original
+response and cleanup reservations before final settlement disposal.
 Loss during validation fences successful application handoff. The
 Producer validates output against its original retained input, including late
 results across authority/service loss, using the same captured validator rules.

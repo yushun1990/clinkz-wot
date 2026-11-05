@@ -3,6 +3,150 @@
 include!("support/action_collection.rs");
 
 #[test]
+fn consumer_result_views_keep_original_allocation_funded_through_final_owner_disposal() {
+    io().block_on(async {
+        let mut server = Server::new();
+        server.invoke("run", 1);
+        let bank = accounts();
+        let instance =
+            ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2), Generation::INITIAL));
+        let policy = Arc::new(ConsumerPolicy::default());
+        let client = consumer(&server.td, bank.clone(), &instance, policy.clone());
+        let mut call = query(&client);
+        let (settlement, _) = server.exchange(&mut call).await;
+        let original = policy.last_body.lock().unwrap().take().unwrap();
+        let output = settlement.result().unwrap();
+        let body = output.data().unwrap().body;
+        assert_eq!(body.as_ptr(), original.as_ptr() as *const u8);
+        let ConsumerNativeOutcome::Returned(Ok(native)) = settlement.native_outcome() else {
+            panic!("native success must retain its original evidence");
+        };
+        assert_eq!(native.data().unwrap().body.as_ptr(), body.as_ptr());
+        assert_eq!(native.metadata(), output.metadata());
+        // An explicit copy owns a different allocation and may outlive the
+        // Consumer. Sharing the original allocation shares the settlement.
+        let copied = Arc::<[u8]>::from(body);
+        assert_ne!(copied.as_ptr(), body.as_ptr());
+        let settlement = Rc::new(settlement);
+        let held = settlement.clone();
+        drop(call);
+        drop(client);
+        server.close();
+        let retained = ResourceKind::ALL.map(|k| bank.account(k).used());
+        for k in [
+            ResourceKind::EngineLiveBytesGlobalMax,
+            ResourceKind::CleanupBytesMax,
+            ResourceKind::CleanupItemsMax,
+            ResourceKind::PendingHandlerCallsGlobalMax,
+            ResourceKind::BindingResponseBufferBytesGlobalMax,
+        ] {
+            assert!(bank.account(k).used() > 0, "original {k:?} funding");
+        }
+        assert!(original.upgrade().is_some());
+        drop(settlement);
+        assert_eq!(retained, ResourceKind::ALL.map(|k| bank.account(k).used()));
+        assert_eq!(held.result().unwrap().data().unwrap().body, &*copied);
+        drop(held);
+        clean(&bank);
+        assert!(original.upgrade().is_none());
+        assert!(!copied.is_empty());
+    });
+}
+
+#[test]
+fn consumer_late_native_views_retain_original_funding_after_cancellation_or_revocation() {
+    io().block_on(async {
+        for revoke in [false, true] {
+            let mut server = Server::new();
+            server.invoke("run", 1);
+            let bank = accounts();
+            let instance =
+                ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2), Generation::INITIAL));
+            let policy = Arc::new(ConsumerPolicy::default());
+            let client = consumer(&server.td, bank.clone(), &instance, policy.clone());
+            let mut call = query(&client);
+            let access_work = HttpConsumerConfig::for_cleartext_ip()
+                .unwrap()
+                .consumer_services()
+                .access
+                .work()
+                + 1;
+            let end = Instant::now() + Duration::from_secs(5);
+            // Pay the progress check and native/validation work, but withhold
+            // the final authorization quantum. The observer proves that the
+            // original HTTP body was accepted before cancellation/revocation.
+            while policy.last_body.lock().unwrap().is_none() {
+                assert!(
+                    call.poll(
+                        &mut cx(),
+                        now(),
+                        &mut work().with_remaining(WorkClass::ProviderProbes, access_work)
+                    )
+                    .is_pending()
+                );
+                let native = server
+                    .exposure
+                    .participant_mut::<HttpActionRuntime>(0)
+                    .unwrap();
+                let _ = native.step(&mut server.owner, &mut work()).unwrap();
+                if let Some(delivery) = native.take_delivery() {
+                    assert!(delivery.locally_written);
+                }
+                assert!(Instant::now() < end);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            let original = policy.last_body.lock().unwrap().take().unwrap();
+            if revoke {
+                instance.revoke();
+            } else {
+                call.cancel();
+            }
+            let Poll::Ready(result) = call.poll(&mut cx(), now(), &mut work()) else {
+                panic!("the validated native result requires only the final current check");
+            };
+            if revoke {
+                assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));
+            } else {
+                assert!(matches!(result.result(), Err(CoreError::Cancelled(_))));
+            }
+            let ConsumerNativeOutcome::Returned(Ok(output)) = result.native_outcome() else {
+                panic!("fencing application success must preserve original native success");
+            };
+            assert_eq!(
+                output.data().unwrap().body.as_ptr(),
+                original.as_ptr() as *const u8
+            );
+            assert_eq!(
+                output.metadata().binding_response().unwrap().status_code(),
+                200
+            );
+            let copied = output.data().unwrap().body.to_vec();
+            let held = Rc::new(result);
+            let shared = held.clone();
+            drop(call);
+            drop(client);
+            server.close();
+            assert!(original.upgrade().is_some());
+            assert!(
+                bank.account(ResourceKind::BindingResponseBufferBytesGlobalMax)
+                    .used()
+                    > 0
+            );
+            assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
+            drop(held);
+            let ConsumerNativeOutcome::Returned(Ok(output)) = shared.native_outcome() else {
+                panic!()
+            };
+            assert_eq!(output.data().unwrap().body, copied.as_slice());
+            assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+            drop(shared);
+            clean(&bank);
+            assert!(original.upgrade().is_none());
+        }
+    });
+}
+
+#[test]
 fn engine_query_keeps_concurrent_instances_independent_without_leaf_queries() {
     io().block_on(async {
         let mut server = Server::new();
@@ -23,7 +167,10 @@ fn engine_query_keeps_concurrent_instances_independent_without_leaf_queries() {
         assert!(delivery.locally_written);
         assert!(delivery.invocation.is_none());
         assert_eq!(result.operation(), Operation::QueryAllActions);
-        assert_eq!(result.affordance(), &AffordanceTarget::Thing);
+        assert_eq!(
+            result.affordance(),
+            clinkz_wot_core::thing::AffordanceSite::Thing
+        );
         assert_eq!(result.consumer(), &instance.reference());
         assert!(
             result
@@ -250,11 +397,33 @@ fn consumer_rejects_malformed_or_misattributed_status_evidence_and_keeps_native_
                 assert!(bytes.starts_with(b"GET /actions HTTP/1.1\r\n"));
                 socket.write_all(format!("HTTP/1.1 {status} Response\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",response.len()).as_bytes()).unwrap();});
             let bank=accounts();let instance=ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2),Generation::INITIAL));
-            let client=consumer(&description(addr),bank.clone(),&instance,Arc::new(ConsumerPolicy::default()));let mut call=query(&client);let end=Instant::now()+Duration::from_secs(5);
+            let policy=Arc::new(ConsumerPolicy::default());
+            let client=consumer(&description(addr),bank.clone(),&instance,policy.clone());let mut call=query(&client);let end=Instant::now()+Duration::from_secs(5);
             let result=loop{if let Poll::Ready(r)=call.poll(&mut cx(),now(),&mut work()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
             assert_eq!(result.result().is_ok(),valid,"{body}");
-            if !valid&&status==200 { assert_eq!(result.rejected_output().unwrap().data().unwrap().body.as_ref(),body.as_bytes()); }
-            drop(result);drop(call);drop(client);clean(&bank);peer.join().unwrap();
+            if !valid && status == 200 {
+                let original = policy.last_body.lock().unwrap().take().unwrap();
+                let output = result.rejected_output().unwrap();
+                assert_eq!(output.data().unwrap().body, body.as_bytes());
+                assert_eq!(output.data().unwrap().body.as_ptr(), original.as_ptr() as *const u8);
+                assert_eq!(output.metadata().binding_response().unwrap().status_code(), 200);
+                let result = Rc::new(result);
+                let held = result.clone();
+                drop(call);
+                drop(client);
+                peer.join().unwrap();
+                assert!(original.upgrade().is_some());
+                assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+                assert!(bank.account(ResourceKind::BindingResponseBufferBytesGlobalMax).used() > 0);
+                drop(result);
+                assert_eq!(held.rejected_output().unwrap().data().unwrap().body, body.as_bytes());
+                assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
+                drop(held);
+                clean(&bank);
+                assert!(original.upgrade().is_none());
+            } else {
+                drop(result);drop(call);drop(client);clean(&bank);peer.join().unwrap();
+            }
         }
     });
 }

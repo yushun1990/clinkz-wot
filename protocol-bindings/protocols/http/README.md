@@ -1025,10 +1025,17 @@ an HTTP record permits no uncharged result growth: a held settlement keeps its
 slot, and reservation saturation returns 503 before application invocation.
 
 Both completed-query and settlement output lend slices/fixed metadata through
-`RawActionOutputView`; no payload/body Arc can be extracted. To share original
+Core `InteractionOutputView`/`PayloadView`; no payload/body Arc can be extracted. To share original
 bytes, retain the settlement (for example in Rc) through their final use. An
 explicit byte copy is separate caller-owned backing. Result disposal, including
 the final shared settlement reference, returns its slot and byte/cleanup leases.
+Finite Consumer `result()`, `rejected_output()` and `native_outcome()` use these
+same borrowed views, including late native success fenced by cancellation or
+revocation. `ConsumerNativeOutcome` preserves native retry/cleanup evidence
+separately from application failure. Sharing a Consumer settlement keeps the
+original response, native owner and original account reservations alive even
+after call/runtime disposal; final owner disposal releases them. Explicit copies
+own distinct backing and do not retain the original response allocation.
 Consumer QueryAllActions preparation qualifies every resolved response assertion,
 including foreign-vocabulary predicates; unsupported envelope instructions refuse
 that candidate while independent supported operations may remain available.

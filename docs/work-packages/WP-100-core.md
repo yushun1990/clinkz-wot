@@ -57,3 +57,11 @@ is distinct from the original per-invocation handler and principal checks.
 [HTTP integration](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
 exercises native identity, different member schemas and source-independent
 validation. This introduces no universal status envelope or Action/session store.
+
+The Consumer ownership counterexample established a second concrete use of the
+slice-only output carrier. Core `InteractionOutputView`/`PayloadView` now supply
+the shared read-only data representation for finite Consumer and raw Producer
+Action result boundaries, directly replacing the Action-local views. Owned
+`InteractionOutput`/`Payload` remain internal handoff carriers. The
+[ownership contract](../spec/interaction-core.md) requires retaining the original
+funded settlement to share its backing; this adds no generic interaction owner.

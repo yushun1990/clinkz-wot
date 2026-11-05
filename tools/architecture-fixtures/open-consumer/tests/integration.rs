@@ -220,7 +220,7 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
             assert!(
                 matches!(
                     settlement.native_outcome(),
-                    BindingCallSettlement::Returned(Ok(_))
+                    ConsumerNativeOutcome::Returned(Ok(_))
                 ),
                 "{name}: {:?}",
                 settlement.native_outcome()
@@ -514,7 +514,7 @@ fn real_late_result_after_revocation_retains_first_cause_and_original_binding() 
     assert!(
         matches!(
             settlement.native_outcome(),
-            BindingCallSettlement::Returned(Ok(_))
+            ConsumerNativeOutcome::Returned(Ok(_))
         ),
         "late original result preserved: {:?}",
         settlement.native_outcome()
@@ -759,7 +759,7 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
     assert!(new_result.result().is_err());
     assert!(matches!(
         new_result.native_outcome(),
-        BindingCallSettlement::Returned(Ok(_))
+        ConsumerNativeOutcome::Returned(Ok(_))
     ));
     drop(old);
     drop(new);
@@ -1612,7 +1612,7 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
         }
         assert!(matches!(
             settlement.native_outcome(),
-            BindingCallSettlement::Returned(Ok(_))
+            ConsumerNativeOutcome::Returned(Ok(_))
         ));
         assert!(rt.is_idle());
         assert_eq!(p.calls.load(Ordering::Relaxed), 0);

@@ -148,7 +148,8 @@ impl Server {
     }
 }
 #[derive(Default)]
-struct ConsumerPolicy { denied:AtomicBool, unavailable:AtomicBool, lose_on_validate:AtomicBool }
+struct ConsumerPolicy { denied:AtomicBool, unavailable:AtomicBool, lose_on_validate:AtomicBool,
+    last_body:std::sync::Mutex<Option<std::sync::Weak<[u8]>>> }
 struct Data(Arc<ConsumerPolicy>,Arc<dyn ConsumerDataService>);
 impl ConsumerDataService for Data {
     fn content_type(&self)->&str{"application/json"}
@@ -156,7 +157,8 @@ impl ConsumerDataService for Data {
     fn available(&self)->bool{!self.0.unavailable.load(Ordering::Relaxed)}
     fn validate(&self,s:value_type::TypeSchema,p:&Payload)->CoreResult<()>{self.1.validate(s,p)}
     fn supports_action_statuses(&self,s:&ActionCollectionSchema)->bool{self.1.supports_action_statuses(s)}
-    fn validate_action_statuses(&self,s:&ActionCollectionSchema,p:&Payload)->CoreResult<()>{let r=self.1.validate_action_statuses(s,p);
+    fn validate_action_statuses(&self,s:&ActionCollectionSchema,p:&Payload)->CoreResult<()>{
+        *self.0.last_body.lock().unwrap()=Some(Arc::downgrade(&p.body));let r=self.1.validate_action_statuses(s,p);
         if self.0.lose_on_validate.swap(false,Ordering::Relaxed){self.0.unavailable.store(true,Ordering::Relaxed);}r}
 }
 struct Access(Arc<ConsumerPolicy>,Arc<dyn ConsumerAccessService>);
@@ -183,4 +185,4 @@ fn consumer(td:&Value,bank:Arc<HostResourceAccounts>,instance:&ConsumerInstance,
     let(d,f)=p.into_execution();ConsumerRuntime::try_new(instance.reference(),d,f,bank,1).ok().unwrap()
 }
 fn query(client:&ConsumerRuntime)->ConsumerCall{client.query_all_actions(Deadline::NONE,now(),&mut work()).unwrap()}
-fn values(result:&ConsumerSettlement)->Value{serde_json::from_slice(&result.result().unwrap().data().unwrap().body).unwrap()}
+fn values(result:&ConsumerSettlement)->Value{serde_json::from_slice(result.result().unwrap().data().unwrap().body).unwrap()}

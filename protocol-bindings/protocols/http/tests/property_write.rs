@@ -1017,7 +1017,7 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
                 assert_eq!(result.consumer(), &owner.reference());
                 assert!(matches!(
                     result.native_outcome(),
-                    BindingCallSettlement::Cancelled {
+                    ConsumerNativeOutcome::Cancelled {
                         retry_class: RetryClass::Never,
                         ..
                     }

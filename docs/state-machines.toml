@@ -156,12 +156,12 @@ to = "Released"
 
 [[machine]]
 id = "accepted-work"
-requirements = ["SAFE-CANCEL-001", "SAFE-CLEANUP-001", "SPI-DELIVERY-001"]
+requirements = ["SAFE-CANCEL-001", "SAFE-CLEANUP-001", "SPI-DELIVERY-001", "RES-OWNER-001"]
 states = ["Reserved", "Running", "ResultRetained", "Cancelling", "Settled", "CleanupPending", "Released"]
 initial = "Reserved"
 terminal = ["Released"]
 required_events = []
-invariant = "Local terminal and release differ; original identity/program/principal/reply survives. Remote effect uncertainty and physical owner status remain separate."
+invariant = "Local terminal and release differ; original identity/program/principal/reply survives. Remote effect uncertainty and physical owner status remain separate. Finite Consumer normal/rejected/native output views lend slices without exposing original allocation owners; retained settlement owners keep original response/native/definition funding until final disposal."
 
 [[machine.transition]]
 from = "Reserved"

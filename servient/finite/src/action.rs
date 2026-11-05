@@ -10,8 +10,8 @@ use alloc::{
 };
 use clinkz_wot_core::{
     ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
-    ErrorContext, ErrorPhase, InteractionInput, InteractionOutput, Operation, RetryClass,
-    SecurityFailureReason,
+    ErrorContext, ErrorPhase, InteractionInput, InteractionOutput, InteractionOutputView,
+    Operation, RetryClass, SecurityFailureReason,
     action::{
         ActionEffect, ActionMappingKey, ActionRoute, RawActionHandler, RawActionRequest,
         RawActionStart, RawActionWork, raw_action_output_shape,
@@ -108,45 +108,6 @@ impl core::fmt::Debug for RawActionHandle {
     }
 }
 
-/// A result view exposes no cloneable owner of the original payload allocation.
-/// Retain the settlement to share its bytes; an explicit byte copy belongs to
-/// the caller. The same view is used before and after acknowledgement.
-#[derive(Clone, Copy, Debug)]
-pub struct RawActionPayloadView<'a> {
-    pub body: &'a [u8],
-    pub content_type: &'a str,
-    pub content_coding: Option<&'a str>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct RawActionOutputView<'a> {
-    data: Option<RawActionPayloadView<'a>>,
-    status: clinkz_wot_core::InteractionStatus,
-    metadata: clinkz_wot_core::InteractionOutputMetadata,
-}
-impl<'a> RawActionOutputView<'a> {
-    fn new(output: &'a InteractionOutput) -> Self {
-        Self {
-            data: output.data().map(|p| RawActionPayloadView {
-                body: &p.body,
-                content_type: &p.content_type,
-                content_coding: p.content_coding.as_deref(),
-            }),
-            status: output.status(),
-            metadata: *output.metadata(),
-        }
-    }
-    pub fn data(self) -> Option<RawActionPayloadView<'a>> {
-        self.data
-    }
-    pub fn status(self) -> clinkz_wot_core::InteractionStatus {
-        self.status
-    }
-    pub fn metadata(self) -> clinkz_wot_core::InteractionOutputMetadata {
-        self.metadata
-    }
-}
-
 /// Querying a completed invocation lends the same slices as its settlement.
 /// It cannot provide an earlier escape of the original shared allocation.
 ///
@@ -162,7 +123,7 @@ impl<'a> RawActionOutputView<'a> {
 /// ```
 pub enum RawActionState<'a> {
     Running,
-    Complete(Result<RawActionOutputView<'a>, &'a CoreError>),
+    Complete(Result<InteractionOutputView<'a>, &'a CoreError>),
 }
 
 /// Borrowed observation. Completion is retained until acknowledged; a cancel
@@ -224,8 +185,8 @@ impl RawActionSettlement {
     ///     s.result().unwrap().data().unwrap().body
     /// }
     /// ```
-    pub fn result(&self) -> Result<RawActionOutputView<'_>, &CoreError> {
-        self.result.as_ref().map(RawActionOutputView::new)
+    pub fn result(&self) -> Result<InteractionOutputView<'_>, &CoreError> {
+        self.result.as_ref().map(InteractionOutput::view)
     }
     pub fn target(&self) -> clinkz_wot_core::thing::AffordanceSite<'_> {
         let AffordanceTarget::Action(name) = &self.target else {
@@ -459,7 +420,7 @@ impl ActionStore {
     fn view(entry: &Invocation) -> RawActionView<'_> {
         RawActionView {
             state: entry.result.as_ref().map_or(RawActionState::Running, |r| {
-                RawActionState::Complete(r.as_ref().map(RawActionOutputView::new))
+                RawActionState::Complete(r.as_ref().map(InteractionOutput::view))
             }),
             cancel_requested: entry.cancel_requested,
             cancel_failure: entry.cancel_failure.as_ref(),

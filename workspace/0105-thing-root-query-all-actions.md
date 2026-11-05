@@ -114,3 +114,36 @@ store would duplicate the actual Servient owner. Select the bounded result lease
 and exact views, with no compatibility facade. The root Consumer's selected
 response must additionally qualify every resolved assertion under the concrete
 Binding's supported response vocabulary/annotations.
+
+## Consumer result escape counterexample
+
+Re-review of the Action repair demonstrated the inherited finite Consumer
+counterpart with real HTTP QueryAllActions: clone the original Arc through
+`ConsumerSettlement::result()`, then drop settlement, call and runtime. Every
+Consumer account reaches zero while that exact response remains readable.
+`rejected_output()` and `native_outcome()` exposed the same owning carrier, so
+repairing only successful application output would leave the defect executable.
+
+Promote the existing slice representation into Core `InteractionOutputView` and
+`PayloadView`, and remove the Action-local types directly. The finite Consumer
+lends those views through normal, rejected and late/native paths. Its dedicated
+`ConsumerNativeOutcome` read view retains the original returned error or borrowed
+cancellation retry/cleanup disposition without exposing the owning native
+settlement. Affordance identity also lends its name. Per-call result/native and
+definition reservations already follow the settlement, so sharing that owner
+keeps the original response funded through final disposal.
+
+Keeping the Action-local views and duplicating equivalent Consumer data carriers
+would place the same ownership rule in two modules now proven to need it.
+Changing every owned Payload/Arc into a lease-aware allocation would affect raw
+Binding, codec, handler and notification handoffs beyond this counterexample.
+Select shared borrowed data views at the two demonstrated result boundaries;
+retain the existing owning internal handoffs and native outcome evidence. No
+compatibility wrapper, universal lifecycle owner or new Action/session store is
+introduced. Real HTTP regressions compare the exact validation-observed response
+allocation, retain valid/rejected/late views through shared settlement owners and
+call/root disposal, and require original funding until final owner destruction.
+Compile-fail cases independently reject Arc extraction through all three Consumer
+accessors and a slice escaping settlement lifetime. Existing independent native
+Consumer cancellation/transfer tests migrate to the read view without weakening
+their original evidence.

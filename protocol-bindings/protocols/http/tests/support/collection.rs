@@ -783,7 +783,7 @@ fn verify_collection_lifecycle(operation: Operation) {
                 };
                 assert!(result.result().is_err());
                 assert_eq!(result.consumer(), &owner.reference());
-                assert_eq!(result.affordance(), &AffordanceTarget::Thing);
+                assert_eq!(result.affordance(), clinkz_wot_core::thing::AffordanceSite::Thing);
                 assert!(result.first_cause().is_some());
                 drop(result);
             } else {

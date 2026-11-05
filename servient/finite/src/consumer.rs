@@ -806,9 +806,63 @@ impl Drop for ConsumerCall {
 /// Complete original normal/late result and retained cleanup/native owner.
 /// Dropping this owner performs finite local disposal, then releases funding.
 /// A cancellation cause does not overwrite a late result or claim remote success.
+/// Payload access lends slices; share this owner to retain original funded bytes.
+///
+/// Neither normal nor rejected nor late/native outputs lend a cloneable body owner:
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_servient_finite::consumer::ConsumerSettlement;
+/// use std::sync::Arc;
+/// fn detach(s: &ConsumerSettlement) -> Arc<[u8]> {
+///     Arc::clone(&s.result().unwrap().data().unwrap().body)
+/// }
+/// ```
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_servient_finite::consumer::ConsumerSettlement;
+/// use std::sync::Arc;
+/// fn detach(s: &ConsumerSettlement) -> Arc<[u8]> {
+///     Arc::clone(&s.rejected_output().unwrap().data().unwrap().body)
+/// }
+/// ```
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_servient_finite::consumer::{ConsumerNativeOutcome, ConsumerSettlement};
+/// use std::sync::Arc;
+/// fn detach(s: &ConsumerSettlement) -> Arc<[u8]> {
+///     match s.native_outcome() {
+///         ConsumerNativeOutcome::Returned(Ok(output)) => Arc::clone(&output.data().unwrap().body),
+///         _ => panic!(),
+///     }
+/// }
+/// ```
+///
+/// ```compile_fail,E0515
+/// use clinkz_wot_servient_finite::consumer::ConsumerSettlement;
+/// fn escape(s: ConsumerSettlement) -> &'static [u8] {
+///     s.result().unwrap().data().unwrap().body
+/// }
+/// ```
 pub struct ConsumerSettlement {
     call: Call,
 }
+
+/// Read-only original native outcome. A returned value may be late and does
+/// not override the settlement's authoritative error. Cancellation keeps its
+/// exact retry and cleanup evidence, without granting cleanup ownership.
+#[derive(Clone, Copy, Debug)]
+pub enum ConsumerNativeOutcome<'a> {
+    /// Normal or late native result, independent of application acceptance.
+    Returned(Result<InteractionOutputView<'a>, &'a CoreError>),
+    /// Original native cancellation evidence under this settlement's lifetime.
+    Cancelled {
+        /// Original retry classification.
+        retry_class: RetryClass,
+        /// Original cleanup disposition; this borrow grants no ownership.
+        disposition: &'a BindingCancellationDisposition<NoCleanupSuccessor>,
+    },
+}
+
 impl ConsumerSettlement {
     /// Original writable meaning and invocation set, retained even after source
     /// destruction, replacement or native-report rejection. Report indices must
@@ -837,14 +891,24 @@ impl ConsumerSettlement {
     pub fn operation(&self) -> Operation {
         self.call.definition.input.operation
     }
-    pub fn affordance(&self) -> &AffordanceTarget {
-        &self.call.definition.input.affordance
+    /// Lends the original coordinate without exposing its shared name owner.
+    pub fn affordance(&self) -> AffordanceSite<'_> {
+        match &self.call.definition.input.affordance {
+            AffordanceTarget::Thing => AffordanceSite::Thing,
+            AffordanceTarget::Property(name) => AffordanceSite::Property(name),
+            AffordanceTarget::Action(name) => AffordanceSite::Action(name),
+            AffordanceTarget::Event(name) => AffordanceSite::Event(name),
+        }
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
         self.call.first_cause.as_ref()
     }
-    pub fn rejected_output(&self) -> Option<&InteractionOutput> {
-        self.call.rejected_output.as_ref()
+    /// Lends original native output rejected by captured result validation.
+    pub fn rejected_output(&self) -> Option<InteractionOutputView<'_>> {
+        self.call
+            .rejected_output
+            .as_ref()
+            .map(InteractionOutput::view)
     }
     pub fn refused_transfer(&self) -> Option<&CleanupTransferRequest> {
         self.call.refused_transfer.as_ref()
@@ -852,23 +916,35 @@ impl ConsumerSettlement {
     pub fn cleanup_error(&self) -> Option<&CoreError> {
         self.call.cleanup_error.as_ref()
     }
-    pub fn native_outcome(&self) -> &BindingCallSettlement<CoreResult<InteractionOutput>> {
-        self.call.outcome.as_ref().unwrap()
+    /// Lends the complete original outcome without exposing payload owners.
+    pub fn native_outcome(&self) -> ConsumerNativeOutcome<'_> {
+        match self.call.outcome.as_ref().unwrap() {
+            BindingCallSettlement::Returned(result) => {
+                ConsumerNativeOutcome::Returned(result.as_ref().map(InteractionOutput::view))
+            }
+            BindingCallSettlement::Cancelled {
+                retry_class,
+                disposition,
+            } => ConsumerNativeOutcome::Cancelled {
+                retry_class: *retry_class,
+                disposition,
+            },
+        }
     }
     /// Authoritative application outcome. A retained late native success does
     /// not override cancellation, revocation, policy or validation failure.
-    pub fn result(&self) -> CoreResult<&InteractionOutput> {
+    pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
         if let Some(error) = &self.call.first_cause {
             return Err(error.clone());
         }
         match self.native_outcome() {
-            BindingCallSettlement::Returned(Ok(output)) => {
+            ConsumerNativeOutcome::Returned(Ok(output)) => {
                 if let Some(report) = output.metadata().property_write_report() {
                     report.completion()?;
                 }
                 Ok(output)
             }
-            BindingCallSettlement::Returned(Err(error)) => Err(error.clone()),
+            ConsumerNativeOutcome::Returned(Err(error)) => Err(error.clone()),
             _ => Err(CoreError::Cancelled(context())),
         }
     }
