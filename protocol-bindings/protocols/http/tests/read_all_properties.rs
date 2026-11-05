@@ -22,7 +22,10 @@ fn engine_read_all_uses_one_root_request_and_keeps_individual_operations_distinc
         let mut call = start_read(&client);
         let (result, remote) = server.exchange(&mut call).await;
         assert_eq!(result.operation(), Operation::ReadAllProperties);
-        assert_eq!(result.affordance(), &AffordanceTarget::Thing);
+        assert_eq!(
+            result.affordance(),
+            clinkz_wot_core::thing::AffordanceSite::Thing
+        );
         assert_eq!(result.consumer(), &owner.reference());
         assert_eq!(
             result.result().unwrap().data().unwrap().body.as_ref(),
@@ -48,7 +51,10 @@ fn engine_read_all_uses_one_root_request_and_keeps_individual_operations_distinc
             .read_property("level", Deadline::NONE, now(0), &mut work())
             .unwrap();
         let (result, _) = server.exchange(&mut single).await;
-        assert_eq!(result.affordance().name(), Some("level"));
+        assert_eq!(
+            result.affordance(),
+            clinkz_wot_core::thing::AffordanceSite::Property("level")
+        );
         assert_eq!(result.result().unwrap().data().unwrap().body.as_ref(), b"7");
         assert_eq!(server.app.reads.get(), 1);
         assert_eq!(server.app.roots.get(), 1);
@@ -698,7 +704,7 @@ fn captured_collection_service_is_required_and_freshly_checked_after_validation(
         assert!(local.result().is_err());
         assert!(matches!(
             local.native_outcome(),
-            BindingCallSettlement::Returned(Ok(_))
+            ConsumerNativeOutcome::Returned(Ok(_))
         ));
         assert!(remote.result.is_ok());
         assert_eq!(server.app.roots.get(), 1);

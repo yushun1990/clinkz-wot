@@ -156,12 +156,12 @@ to = "Released"
 
 [[machine]]
 id = "accepted-work"
-requirements = ["SAFE-CANCEL-001", "SAFE-CLEANUP-001", "SPI-DELIVERY-001"]
+requirements = ["SAFE-CANCEL-001", "SAFE-CLEANUP-001", "SPI-DELIVERY-001", "RES-OWNER-001"]
 states = ["Reserved", "Running", "ResultRetained", "Cancelling", "Settled", "CleanupPending", "Released"]
 initial = "Reserved"
 terminal = ["Released"]
 required_events = []
-invariant = "Local terminal and release differ; original identity/program/principal/reply survives. Remote effect uncertainty and physical owner status remain separate."
+invariant = "Local terminal and release differ; original identity/program/principal/reply survives. Remote effect uncertainty and physical owner status remain separate. Finite Consumer normal/rejected/native output views lend slices without exposing original allocation owners; retained settlement owners keep original response/native/definition funding until final disposal."
 
 [[machine.transition]]
 from = "Reserved"
@@ -210,7 +210,7 @@ states = ["Admitted", "Running", "Terminal", "CleanupPending", "Released"]
 initial = "Admitted"
 terminal = ["Released"]
 required_events = []
-invariant = "Action lifetime is not initiating exchange lifetime; querying/cancellation requires supported described operations and pinned native continuation. Local abandonment does not assert remote terminal."
+invariant = "Action lifetime is not initiating exchange lifetime; per-invocation querying/cancellation requires supported described operations and pinned native continuation. A root aggregate query observes original authorized invocation owners without changing their states or creating control authority; native inventory and correlation remain Binding-owned. Local abandonment does not assert remote terminal. Acknowledgement transfers the original result slot and per-result backing/cleanup leases until settlement disposal; retained results cannot replenish admission capacity. Query/settlement views lend slices without exposing the original payload Arc."
 
 [[machine.transition]]
 from = "Admitted"
@@ -249,12 +249,12 @@ to = "Released"
 
 [[machine]]
 id = "notification-conversation"
-requirements = ["EXEC-NOTIFY-001", "EXEC-COLLECTION-001", "SAFE-OVERFLOW-001"]
+requirements = ["EXEC-NOTIFY-001", "EXEC-COLLECTION-001", "SAFE-OVERFLOW-001", "RES-OWNER-001"]
 states = ["Reserved", "Establishing", "Active", "Stopping", "CleanupPending", "Closed"]
 initial = "Reserved"
 terminal = ["Closed"]
 required_events = ["Reserved:cancel-or-fail-before-native-start"]
-invariant = "Each Engine logical subscription captures its notification kind and scope and has independent cursor/permission/stop. A Property collection has one root identity and complete named schema; an Event collection retains each occurrence target and its original member data/response roles separately from root scope. Neither creates member cursors. Attribution backing is bounded with data before handoff. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
+invariant = "Each Engine logical subscription captures its notification kind and scope and has independent cursor/permission/stop. A Property collection has one root identity and complete named schema; an Event collection retains each occurrence target and its original member data/response roles separately from root scope. Neither creates member cursors. Attribution backing is bounded with data before handoff. Public delivery views lend payload/media and occurrence-name slices under the exclusive original root borrow; advance/cleanup cannot release their original allocation owners while the loan is used. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
 
 [[machine.transition]]
 from = "Reserved"

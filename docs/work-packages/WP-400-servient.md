@@ -166,6 +166,19 @@ original data, reply jobs, first cause and capacity; bounded owner cleanup can
 return complete terminal reports after all cursors are lost. Host-root Drop uses
 the native owners' required finite local abort and reports no completed drain.
 
+Public notification delivery now lends Core `PayloadView` and `AffordanceSite`
+slices directly, replacing payload/name allocation-owner borrows. Compile-fail
+cases reject original-owner extraction, escaping slice lifetimes and advance
+while a delivery loan remains live. The
+[raw occurrence regression](../../servient/finite/tests/notification.rs) tracks
+exact payload/name allocations through pending reply retirement and final release;
+the [Mosquitto regression](../../protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs)
+repeats delivery/advance without retaining original response allocations or growing
+original charges, then verifies mapped unsubscribe and complete account release.
+Downstream reciprocal-response tests observe allocation liveness at the trusted
+native boundary while using only slices at the public handoff. These corrections
+preserve native ownership, validation, controls, limits and cleanup rules.
+
 `cargo test --locked -p clinkz-wot-servient-finite --test notification` exercises actual
 Core/Servient lifecycle code through deterministic external in-memory Binding
 capabilities: compatible sharing, independent stop/cursors, tenant separation,
@@ -268,6 +281,14 @@ granted named owner is retained as refused evidence while the same original call
 continues manual cleanup; it never becomes a fabricated transfer acknowledgement
 or terminal release. A returned settlement retains
 its native/result/definition/account owners through its final disposal.
+All normal, rejected and late/native payload access lends Core slice-only output
+views. `ConsumerNativeOutcome` separately preserves returned errors or borrowed
+cancellation retry/cleanup evidence. Affordance access lends its original name.
+No accessor exposes a cloneable original output/body allocation. The
+[HTTP ownership regressions](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+retain the exact original response across call/runtime loss and shared settlement
+owners, including invalid output and cancellation/revocation before handoff;
+only final owner disposal returns the original response and cleanup capacity.
 
 Finite facet loss closes its own acceptance. Consumer authority loss revokes the
 incarnation across all attached facets. Existing handles can finish original cleanup;
@@ -474,6 +495,38 @@ The [downstream response fixture](../../tools/architecture-fixtures/open-consume
 checks per-Event response schemas and original retained native reply owners;
 it is not a production protocol or MQTT response claim.
 
-QueryAllActions remains unimplemented. This scoped capability
-changes no work-package dependencies, gate, milestone or production qualification
+This scoped capability changes no work-package dependencies, gate, milestone or production qualification
 status.
+
+## Root Action status ownership
+
+QueryAllActions uses one finite Consumer owner and one root Producer observation
+over original retained invocation owners. [Core](../spec/interaction-core.md) owns
+the semantic distinction and root/member permission; [Runtime Safety](../spec/runtime-safety.md)
+owns paid callbacks, replacement, settlement and final release. The
+[HTTP tests](../../protocol-bindings/protocols/http/tests/query_all_actions.rs) cover
+concurrent same-definition invocations, cancellation uncertainty, invalid output,
+root/member denial, original principal and route, short credit, late replies,
+replacement, native loss, blocked retirement and original bank/socket disposal.
+They also falsified the old acknowledgement path: `RawActionSettlement` now
+retains its original instance/funding until result disposal. Existing raw and
+continuing Action evidence must be rerun for that direct ownership correction.
+No dependency, milestone, gate or production status changes.
+
+
+The result-ownership review corrections use slice-only public query/settlement
+views and a per-admission result lease. Live and acknowledged-but-retained results
+share the original store's bounded slots; managed admission additionally reserves
+each result's maximum byte/cleanup capacity from the captured original bank before
+behavior. The [HTTP regressions](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+retain the exact allocation across shared settlement/root loss, exhaust retained
+result slots, reuse only disposed capacity and verify rollback for each exhausted
+account. Raw lifecycle tests likewise require disposal before slot reuse.
+The exact ownership contract is [Runtime Safety](../spec/runtime-safety.md).
+
+The [mixed collection regression](../../protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs)
+qualifies one Thing with both root families and same-named Action/Event members.
+Its real HTTP/Mosquitto case retains independent Consumer facets under one
+authority, preserves the Action inventory after mapped Event stop, and verifies
+original Producer/Consumer result funding after native and logical root disposal.
+The combined contracts preserve existing limits, native owners and result leases.

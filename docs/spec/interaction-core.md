@@ -43,10 +43,10 @@ represented as schema conformance. Native status mapping remains Binding-owned.
 Consumer data services validate a payload independently of direction. Prepared
 `ConsumerSchemas` keep single-value input and output distinct; absence of a data
 role differs from a present unconstrained value. `ConsumerFiniteSchemas` retains
-either those roles or the derived Property collection member schema explicitly.
+those roles, derived Property collection member schemas or named Action output roles explicitly.
 The current finite path supports Property Read/Write, explicitly synchronous
 Action invocation (including empty data roles), and Thing-root
-ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties. Shape/identity seals require terminal
+ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties and QueryAllActions. Shape/identity seals require terminal
 primary application results and refuse continuing status/invocation references; captured codec/schema
 checks separately precede input effects and validated result handoff.
 
@@ -157,6 +157,55 @@ terminal settlement retains the original slot; acknowledgement returns a complet
 settlement owner, and stale handles cannot address a reused slot. The settlement
 retains original services, native evidence and funding until final disposal.
 
+A Thing-root **QueryAllActions** is a finite status observation, independent of
+any Consumer invocation handle. Action definitions, invocation instances and
+invocation output MUST remain distinct. One definition can have zero or multiple
+concurrent instances and retained terminal records. The query MUST preserve each
+record's Action attribution, native invocation identity, state and any supported
+completed output/error evidence; one value per definition cannot represent it.
+Status-resource links are native evidence, not Engine invocation authority or
+permission to follow them. Query success does not imply invocation success,
+remote cancellation, a complete historical ledger or a distributed snapshot.
+TD 1.1 defines the root interaction, not a universal envelope/retention policy.
+Concrete status vocabulary, representation, ordering and retention require an
+explicit supported mapping. Unsupported native evidence MUST NOT be silently
+collapsed into an unconstrained Object or a single Action result.
+
+The Host Consumer retains `ActionCollectionSchema` separately from scalar data
+roles. Its actual `ConsumerDataService` MUST explicitly support and validate the
+selected status representation, including each named Action's own output schema;
+scalar Object support is insufficient. The original complete native payload and
+response metadata survive validation failure, cancellation and late settlement.
+No aggregate observation creates or replaces local continuing invocation handles.
+
+The Host Producer's `query_raw_actions` is one bounded borrowed observation of
+a qualified Binding's original inventory. A distinct root `ActionQueryPolicy`
+and captured Thing/QueryAllActions route are required; per-record original
+instance/principal and fresh Action-handler permission additionally apply.
+Member Security denial filters that record; root denial or another error refuses
+the query. Authorization cannot confer control of a successor or change the
+original handle association. Native inventory completeness and correlation remain
+Binding obligations; the Engine neither performs N QueryAction calls nor
+progresses application continuations. Raw use alone establishes no TD/native
+completeness. Acknowledgement transfers a complete Action settlement owner;
+original result/target/error storage and validation service remain owned until
+that owner is disposed. Query and settlement output use slice-only
+Core `InteractionOutputView`/`PayloadView`; they expose neither InteractionOutput,
+Payload nor the original body's Arc. Target access similarly lends an affordance
+site/name. Shared original data require retaining the settlement owner; an
+explicit byte copy creates separate caller-owned backing. Returning a reference
+to a cloneable Payload would not establish this ownership guarantee.
+
+Each admitted invocation owns a non-cloneable result lease that moves into its
+acknowledged settlement. `RawActionLimits::invocations` bounds live invocations
+plus acknowledged results still retained by callers. Acknowledgement removes
+logical/native records but does not free this result capacity. Managed publication
+captures the actual original account bank; admission reserves each result's
+maximum output/settlement backing and cleanup before behavior entry. Refusal
+returns provisional reservations without consuming a slot or entering behavior.
+Only actual disposal returns the result slot and byte/cleanup leases. Raw callers
+supply their own bounded backing and receive the same retained-slot guarantee.
+
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property
 observation carries Property values. Event subscription/data/dataResponse/
@@ -183,6 +232,12 @@ The raw Host Consumer facet implements these roles in `core::notification` and
 independent logical subscriptions; separate roots may share compatible native
 infrastructure. A non-cloneable cursor borrows retained raw data until explicit
 advance; cloneable stop intent grants no receive/response or shutdown authority.
+`RawNotificationView` lends Core `PayloadView` byte/media slices and an
+`AffordanceSite` occurrence coordinate. It exposes neither a Payload/body Arc
+nor a cloneable owner of the original occurrence name. The loan is tied to the
+exclusive root borrow, so advance, progress/cleanup and root disposal cannot
+invalidate data still in use. Explicit byte/name copies have separate caller-owned
+backing and may outlive the loan; no detached shared delivery owner is introduced.
 Event control inputs and reciprocal responses have distinct carriers. Required
 responses refuse absent native support; each actual response opportunity has a
 separate retained delivery/retirement owner. An exposed unused optional
@@ -414,11 +469,15 @@ Replacement and late publication retain original authority, mapping and funding
 through retirement and acknowledgement. No initial value, replay, atomicity,
 wildcard attribution or fleet scalability is established.
 
+Root Event collections retain their own notification conversation and mapped
+controls, independently of the finite Action status observation described above.
+
 **SubscribeAllEvents / UnsubscribeAllEvents** retain one root conversation under
 `NotificationKind::SubscribeAllEvents`. An occurrence is one named Event with its
 own optional data, not a complete Property-style map or one occurrence from each
-Event. `NativeNotification::target` and `RawNotificationView::target` retain the
-occurrence's `AffordanceTarget::Event`, separately from the conversation's Thing
+Event. `NativeNotification::target` retains the occurrence's
+`AffordanceTarget::Event`; `RawNotificationView::target` lends its
+`AffordanceSite::Event` name, separately from the conversation's Thing
 target and original recipient. Leaf candidates must equal their original target;
 root Event candidates must name an Event. The composed validator also requires
 membership in the original `EventCollectionSchema`, and validates data and each
@@ -455,7 +514,13 @@ compatible native sharing never merges logical grants. The final actual interest
 owns original unsubscribe/ACK and local socket disposal. Unknown native Event
 names are not silently dropped. Native loss is visible and cannot coalesce Events.
 No per-member subscription fallback or speculative universal notification runtime
-is introduced. QueryAllActions remains an executable collection gap.
+is introduced.
+
+An Event occurrence and an Action invocation remain distinct identities even
+when their affordance names are equal. Their data roles are independent: Event
+data uses the named Event schema; Action completion in a status observation uses
+the named Action output schema. Sharing a Thing-root coordinate confers no
+cross-family dispatch, cancellation, subscription or result ownership.
 
 ## Error and retry contract
 
@@ -472,6 +537,16 @@ The finite Consumer settlement retains `ConsumerEffect` separately from its
 first local cause, original native outcome and validated application result.
 Native progress conservatively marks remote execution uncertain; cancellation
 or a communication/validation failure does not establish remote rollback.
+`result()` and `rejected_output()` lend Core `InteractionOutputView`/`PayloadView`
+slices under that settlement's original backing and cleanup reservations.
+`native_outcome()` returns a `ConsumerNativeOutcome`: normal/late output uses the
+same slice view, while cancellation lends the exact retry/cleanup disposition.
+Neither path exposes an owning output, Payload, or the original body's Arc.
+The original affordance name is likewise borrowed as an `AffordanceSite`.
+Sharing original data requires retaining the settlement owner; explicit byte
+copies create separate caller-owned backing. Dropping a call or runtime cannot
+release funding still held by a settlement. Final disposal destroys original
+native/result/definition backing before releasing its reservations.
 An admitted native success is not by itself a successful application outcome:
 `native_outcome()` retains normal/late native results independently of
 `result()`, which also requires terminal shape, captured validation, live original

@@ -95,6 +95,7 @@ impl OutboundRequest {
                 Operation::ReadProperty
                     | Operation::WriteProperty
                     | Operation::InvokeAction
+                    | Operation::QueryAllActions
                     | Operation::ReadAllProperties
                     | Operation::ReadMultipleProperties
                     | Operation::WriteAllProperties
@@ -102,7 +103,7 @@ impl OutboundRequest {
             )
             || (matches!(
                 operation,
-                Operation::ReadProperty | Operation::ReadAllProperties
+                Operation::ReadProperty | Operation::QueryAllActions | Operation::ReadAllProperties
             ) && input.is_some())
             || (matches!(
                 operation,

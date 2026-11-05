@@ -425,6 +425,15 @@ pub struct InteractionOutput {
 }
 
 impl InteractionOutput {
+    /// Lends slices and metadata without exposing cloneable payload owners.
+    pub fn view(&self) -> InteractionOutputView<'_> {
+        InteractionOutputView {
+            data: self.data.as_ref().map(Payload::view),
+            status: self.status,
+            metadata: &self.metadata,
+        }
+    }
+
     /// Creates an empty output with `Ok` status.
     pub const fn empty() -> Self {
         Self {
@@ -503,6 +512,32 @@ impl InteractionOutput {
         InteractionOutputMetadata,
     ) {
         (self.data, self.status, self.metadata)
+    }
+}
+
+/// Read-only output tied to its original owner. All variable-size data is
+/// borrowed; no `InteractionOutput`, `Payload`, or body `Arc` can be extracted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InteractionOutputView<'a> {
+    data: Option<crate::PayloadView<'a>>,
+    status: InteractionStatus,
+    metadata: &'a InteractionOutputMetadata,
+}
+
+impl<'a> InteractionOutputView<'a> {
+    /// Lends the original response bytes and media metadata, when present.
+    pub const fn data(self) -> Option<crate::PayloadView<'a>> {
+        self.data
+    }
+
+    /// Returns the normalized status, retaining separate member evidence.
+    pub const fn status(self) -> InteractionStatus {
+        self.status
+    }
+
+    /// Lends the original fixed-size metadata, including native evidence.
+    pub const fn metadata(self) -> &'a InteractionOutputMetadata {
+        self.metadata
     }
 }
 

@@ -81,7 +81,10 @@ fn one_retained_td_writes_different_subsets_without_touching_omitted_members() {
                 "HTTP invents no member receipts"
             );
             assert_eq!(local.operation(), WRITE);
-            assert_eq!(local.affordance(), &AffordanceTarget::Thing);
+            assert_eq!(
+                local.affordance(),
+                clinkz_wot_core::thing::AffordanceSite::Thing
+            );
             assert_eq!(local.binding().binding_id(), BindingId::new(98));
             assert_eq!(local.effect(), ConsumerEffect::Completed);
             assert_eq!(remote.effect, FiniteEffect::Completed);

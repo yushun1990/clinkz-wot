@@ -333,6 +333,19 @@ subscriptions, mapped stop uncertainty and final release. QoS 0 supplies no
 application dataResponse. This mapping explicitly refuses unsupported member
 controls/responses, overlap, name encodings and general delivery guarantees.
 
-QueryAllActions remains unimplemented. This scoped capability
-changes no work-package dependencies, gate, milestone or production qualification
+This scoped capability changes no work-package dependencies, gate, milestone or production qualification
 status.
+
+## TD-driven HTTP QueryAllActions
+
+The [declared HTTP mapping](../../protocol-bindings/protocols/http/README.md#thing-root-action-status-query)
+uses one explicit GET/200 and draft-derived Action-name/status arrays, with
+actual Consumer status validation and complete qualified Producer inventory.
+[Real HTTP evidence](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+includes independent malformed/lost native responses, two Action definitions and
+concurrent instances, permissions, full advertisement, original late results,
+replacement, capacity, blocked cleanup and final release. HTTP Profile draft
+status guidance is not Recommendation authority or full profile conformance.
+Distributed aggregation, complete history, optional status metadata, broader
+schema/security, HTTPS, constrained execution and production qualification remain
+outside this bounded Host/manual increment; no package or milestone closes.

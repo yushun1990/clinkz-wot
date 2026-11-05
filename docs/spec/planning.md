@@ -158,8 +158,8 @@ operation, so same-named
 Properties and Actions do not collide. The current finite facets are Property
 Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
 unspecified synchronicity use the separate Action facet below. Thing-root
-ReadAllProperties, ReadMultipleProperties, WriteAllProperties and WriteMultipleProperties use the finite facet; other
-collection operations remain unsupported.
+ReadAllProperties, ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and QueryAllActions use the finite facet; other
+collection operations use their distinct notification facets or remain unsupported.
 Action input/output use distinct prepared type-only schemas; absent roles
 permit no application data. Only one captured media service is currently
 supported for both directions; differing response media is refused.
@@ -350,3 +350,38 @@ The supported schema and HTTP subset are scoped by the
 [HTTP mapping](../../protocol-bindings/protocols/http/README.md#thing-root-readallproperties).
 This adds no universal compiler, eager collection plan set, first-use coordinator,
 new gate or implementation claim for other collection operations.
+
+## Thing-root Action status preparation
+
+Action and Event collection preparation coexist in one TD. Each effective
+operation selects its own family schema and services: QueryAllActions captures
+Action output/status validation, while SubscribeAllEvents captures each Event's
+separate roles and occurrence validation. A loan containing both families does
+not substitute one table for the other. Whole-Thing Producer qualification still
+requires both root behaviors, every advertised leaf mapping and the complete
+final TD, including each family's duplicate-expanded-role checks. Distinct actual
+native participants may implement these operations under one logical instance.
+
+QueryAllActions selects an actual root Form and finite exchange; it MUST NOT
+select N Action controls or require Consumer invocation handles. The root TD loan
+lends Action definitions and their distinct schemas without individual Forms.
+Planning captures each exact name and supported output role in
+`ActionCollectionSchema`, under prepaid name/backing and rollback bounds. Input
+schemas do not become query inputs. A concrete status validator must establish
+complete representation support; a scalar Object validator cannot qualify it.
+Duplicate expanded output assertions, unsupported required output constraints,
+security or response semantics refuse preparation. QueryAllActions qualification
+checks every resolved response predicate, including non-HTTP extension assertions;
+only supported unique response instructions and the Binding's supported class
+annotations are admitted. Another supported leaf cannot make that root selected.
+Consumer partial support may still execute a supported root without executing
+unrelated leaf mappings.
+
+Complete Producer qualification additionally requires the actual root policy,
+all described Action operations, their original validation/control services, a
+captured root route and the concrete Binding's complete native inventory. The
+same immutable member meanings and services are checked against the final retained
+TD at managed admission and again after closed native setup before publication.
+A prepared root definition or installed listener alone supplies none of the
+missing obligations. No dependency, gate or milestone changes follow from this
+bounded increment.

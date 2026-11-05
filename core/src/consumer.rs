@@ -17,6 +17,18 @@ pub trait ConsumerDataService: Send + Sync {
     fn content_type(&self) -> &str;
     fn validate(&self, schema: TypeSchema, payload: &Payload) -> CoreResult<()>;
     fn policy(&self) -> ConsumerDataPolicy;
+    /// Actual status representation support. Scalar Object support cannot
+    /// validate invocation identity, state or each Action's completed output.
+    fn supports_action_statuses(&self, _schema: &crate::action::ActionCollectionSchema) -> bool {
+        false
+    }
+    fn validate_action_statuses(
+        &self,
+        _schema: &crate::action::ActionCollectionSchema,
+        _payload: &Payload,
+    ) -> CoreResult<()> {
+        Err(CoreError::UnsupportedOperation(context()))
+    }
     /// Complete support of the already prepared type-only assertion.
     fn supports_schema(&self, _schema: TypeSchema) -> bool {
         true
@@ -200,6 +212,7 @@ pub struct ConsumerSchemas {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsumerFiniteSchemas {
     Value(ConsumerSchemas),
+    QueryAllActions(crate::action::ActionCollectionSchema),
     ReadAllProperties(PropertyCollectionSchema),
     ReadMultipleProperties(PropertyCollectionSchema),
     /// Complete writable-member input; the value-free result may carry a report.
@@ -211,7 +224,7 @@ impl ConsumerFiniteSchemas {
     pub fn input(&self) -> Option<TypeSchema> {
         match self {
             Self::Value(s) => s.input,
-            Self::ReadAllProperties(_) => None,
+            Self::ReadAllProperties(_) | Self::QueryAllActions(_) => None,
             Self::WriteAllProperties(_) | Self::WriteMultipleProperties(_) => {
                 Some(TypeSchema::Type(crate::value_type::ValueType::Object))
             }
@@ -254,6 +267,7 @@ impl ConsumerFiniteSchemas {
     }
     pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
         match self {
+            Self::QueryAllActions(s) => data.supports_action_statuses(s),
             Self::Value(s) => s
                 .input
                 .into_iter()
@@ -279,6 +293,7 @@ impl ConsumerFiniteSchemas {
         payload: Option<&Payload>,
     ) -> CoreResult<()> {
         match (self, payload) {
+            (Self::QueryAllActions(s), Some(p)) => data.validate_action_statuses(s, p),
             (
                 Self::Value(ConsumerSchemas { output: None, .. })
                 | Self::WriteAllProperties(_)
@@ -300,6 +315,7 @@ impl ConsumerFiniteSchemas {
     }
     pub fn retained_bytes(&self) -> usize {
         match self {
+            Self::QueryAllActions(s) => s.retained_bytes(),
             Self::Value(_) => 0,
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
@@ -309,6 +325,7 @@ impl ConsumerFiniteSchemas {
     }
     pub fn drop_work(&self) -> u64 {
         match self {
+            Self::QueryAllActions(s) => s.members().len() as u64 + 1,
             Self::Value(_) => 0,
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
@@ -536,6 +553,7 @@ impl ConsumerDefinition {
                             | Operation::ReadMultipleProperties
                             | Operation::WriteAllProperties
                             | Operation::WriteMultipleProperties
+                            | Operation::QueryAllActions
                     )
             )
             || !matches!(
@@ -553,6 +571,10 @@ impl ConsumerDefinition {
                     }),
                     Operation::WriteProperty
                 ) | (ConsumerFiniteSchemas::Value(_), Operation::InvokeAction)
+                    | (
+                        ConsumerFiniteSchemas::QueryAllActions(_),
+                        Operation::QueryAllActions
+                    )
                     | (
                         ConsumerFiniteSchemas::ReadAllProperties(_),
                         Operation::ReadAllProperties

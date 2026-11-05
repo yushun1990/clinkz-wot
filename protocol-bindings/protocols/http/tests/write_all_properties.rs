@@ -56,7 +56,10 @@ fn complete_writable_map_uses_actual_root_form_services_and_one_native_put() {
             assert!(local.result().unwrap().data().is_none());
             assert_eq!(local.operation(), WRITE);
             assert_eq!(local.consumer(), &owner.reference());
-            assert_eq!(local.affordance(), &AffordanceTarget::Thing);
+            assert_eq!(
+                local.affordance(),
+                clinkz_wot_core::thing::AffordanceSite::Thing
+            );
             assert_eq!(local.effect(), ConsumerEffect::Completed);
             assert_eq!(remote.recipient, Some(server.exposure.key()));
             assert_eq!(remote.operation, Some(WRITE));

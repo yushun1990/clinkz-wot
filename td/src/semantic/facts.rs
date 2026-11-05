@@ -382,6 +382,25 @@ impl<'a> ResolvedSemanticDocument<'a> {
             synchronous: action.synchronous,
         })
     }
+    /// Definitions in a QueryAllActions root loan. These are not invocations;
+    /// no individual Form or native control mapping is lent.
+    pub fn collection_actions(&self) -> Option<impl Iterator<Item = &str>> {
+        if self.selected.as_ref()?.owner != FormOwner::Thing
+            || !self
+                .scopes
+                .iter()
+                .find_map(|s| s.form)?
+                .op
+                .as_ref()?
+                .contains(&crate::data_type::Operation::QueryAllActions)
+        {
+            return None;
+        }
+        Some(self.scopes.iter().filter_map(|s| match s.key {
+            SemanticScope::Action(name) => Some(name),
+            _ => None,
+        }))
+    }
     pub fn event(&self) -> Option<EventFacts<'_>> {
         let selected = self.selected.as_ref()?;
         let FormOwner::Event(name) = selected.owner else {
@@ -426,9 +445,10 @@ impl<'a> ResolvedSemanticDocument<'a> {
     /// cannot be mistaken for a Property value or an initiating reply.
     pub fn affordance_schema(&self, owner: FormOwner<'_>, role: &str) -> Option<SchemaView<'_>> {
         if self.selected.as_ref()?.owner != owner
-            && !(self.selected.as_ref()?.owner == FormOwner::Thing
-                && matches!(owner, FormOwner::Event(_))
-                && self.collection_events().is_some())
+            && !(matches!(owner, FormOwner::Action(name) if self.collection_actions()
+                .is_some_and(|mut actions| actions.any(|n| n == name))))
+            && !(matches!(owner, FormOwner::Event(name) if self.collection_events()
+                .is_some_and(|mut events| events.any(|event| event.name == name))))
         {
             return None;
         }

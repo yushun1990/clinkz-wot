@@ -134,8 +134,40 @@ work over actual I/O. The HTTP Action participant adds a production loopback
   publication. Missing services or control routes refuse qualification; after
   commit the Servient checks the captured Action and operation routes, so a raw
   request cannot downgrade published execution or invent a control Form.
-UDP remains test-only; HTTP's one-listener-per-Action implementation does not
-constrain other native resource layouts or cross-Binding Action routes.
+UDP remains test-only. The HTTP Action participant may own several Actions and
+one root status mapping on the same listener. Before advertising aggregation it
+MUST prove that every declared Action's entire supported invoke/control set is
+in that actual native owner. A separately prepared listener cannot satisfy that
+inventory through a silent fetch/fan-out. Exact native record-to-Action matching
+precedes control dispatch; an invocation token cannot cross another Action's
+control path even if their original Form ordinals coincide. Native reply
+settlements retain original recipient, target, operation and route, including
+root queries with no single invocation. This concrete topology does not constrain
+other Bindings' infrastructure layouts or cross-Binding Action routes.
+
+QueryAllActions uses a finite Consumer exchange with separately captured actual
+status-validation support. The Producer participant supplies a distinct root
+control route at qualification, alongside invoke validation and leaf controls.
+Native aggregation, status-resource identity, encoding, ordering, history pruning
+and any actual consistency evidence stay inside the Binding. Shared borrowed
+invocation views confer neither dispatch nor infrastructure shutdown authority.
+The [HTTP mapping](../../protocol-bindings/protocols/http/README.md#thing-root-action-status-query)
+is an explicit draft-derived subset, not a universal Action/session protocol.
+
+Producer Action query/settlement output lends byte/media slices and fixed metadata,
+not a clonable InteractionOutput/Payload/body Arc. Native encoding stays under
+its existing Binding owner and envelope; retaining original semantic output
+requires retaining its result owner. Acknowledging a native record does not release
+the Servient result-slot or per-result original-bank reservations. Complete
+managed publication captures that actual bank before ingress. No per-Binding
+copy of the semantic result store or protocol-specific result policy is required.
+
+Finite Consumer settlements use the same Core `InteractionOutputView`/`PayloadView`
+for normal, rejected and late native output. `ConsumerNativeOutcome` exposes
+returned slices/errors or the exact borrowed cancellation disposition; the owning
+Binding settlement remains private to its funded Consumer owner. Neither an
+owning payload nor its body Arc is lent by a diagnostic accessor. This changes
+no native completion, cancellation, transfer or effect evidence.
 
 Producer notification participants additionally supply their exact emission mapping
 and actual validation/security services for each selected Property observe,
@@ -222,7 +254,11 @@ Event collections carry a logical occurrence target in each native candidate,
 separate from its recipient and conversation target. The Binding converts native
 source evidence to the exact TD Event identity before handoff; Core never parses
 topics or native event headers. It must not discard this attribution or relabel
-it using a collection-wide data schema. `poll_next`'s backing limit includes the
+it using a collection-wide data schema. The Engine's public delivery loan lends
+Core `PayloadView` and `AffordanceSite` slices, while the owning native candidate
+and reply remain internal under their original queue/cleanup funding. No protocol
+mapping or native sharing behavior is changed by this read-only boundary.
+`poll_next`'s backing limit includes the
 occurrence name allocation (`notification_item_backing`) as well as payload;
 queue accounting retains both. The Engine checks scope/member/schema before
 logical admission, and each response validates against the retained occurrence.

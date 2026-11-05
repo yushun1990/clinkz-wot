@@ -36,7 +36,10 @@ looks up a replacement handler or maps an old packet into a successor slot.
 
 ## Distinct lifetimes
 
-Action invocation state can outlive its initiating exchange. Logical notification
+Action invocation state can outlive its initiating exchange. A root status query
+is a separate finite observation of original invocation owners; native aggregation
+and correlation remain at the Binding. Acknowledgement transfers result retention
+through settlement disposal. Logical notification
 conversations own establishment/control/delivery/stop and reciprocal responses
 where promised. Producer sources can exist with zero subscribers. Native broker
 subscribers are not necessarily Engine-owned logical subscriptions. Details are

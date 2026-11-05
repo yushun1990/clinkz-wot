@@ -10,17 +10,18 @@ use alloc::{
 };
 use clinkz_wot_core::{
     ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
-    ErrorContext, ErrorPhase, InteractionInput, InteractionOutput, Operation, RetryClass,
-    SecurityFailureReason,
+    ErrorContext, ErrorPhase, InteractionInput, InteractionOutput, InteractionOutputView,
+    Operation, RetryClass, SecurityFailureReason,
     action::{
         ActionEffect, ActionMappingKey, ActionRoute, RawActionHandler, RawActionRequest,
         RawActionStart, RawActionWork, raw_action_output_shape,
     },
+    host_accounts::{HostCapacityReservation, HostResourceAccounts},
     interaction_output_backing,
     producer::ProducerInstanceKey,
     security::PrincipalId,
 };
-use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_foundation::{Generation, ResourceKind, SlotIndex, WorkBudget, WorkClass};
 use core::{cell::Cell, mem::size_of, task::Poll};
 
 const MAX_INVOCATIONS: usize = 128;
@@ -74,6 +75,8 @@ impl RawActionBehavior {
 /// cancellation or replacement. Native backing has a separate Binding owner.
 #[derive(Clone, Copy, Debug)]
 pub struct RawActionLimits {
+    /// Live invocations plus acknowledged results still held by callers.
+    /// Acknowledgement transfers this slot; disposal returns it.
     pub invocations: usize,
     pub application_work_bytes: usize,
     pub input_fields: usize,
@@ -105,9 +108,22 @@ impl core::fmt::Debug for RawActionHandle {
     }
 }
 
+/// Querying a completed invocation lends the same slices as its settlement.
+/// It cannot provide an earlier escape of the original shared allocation.
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_servient_finite::RawActionState;
+/// use std::sync::Arc;
+/// fn detach(state: RawActionState<'_>) -> Option<Arc<[u8]>> {
+///     match state {
+///         RawActionState::Complete(Ok(output)) => Some(Arc::clone(&output.data().unwrap().body)),
+///         _ => None,
+///     }
+/// }
+/// ```
 pub enum RawActionState<'a> {
     Running,
-    Complete(&'a CoreResult<InteractionOutput>),
+    Complete(Result<InteractionOutputView<'a>, &'a CoreError>),
 }
 
 /// Borrowed observation. Completion is retained until acknowledged; a cancel
@@ -124,17 +140,113 @@ pub struct RawActionView<'a> {
 pub struct RawActionSettlement {
     pub reference: ActionInvocationRef,
     pub instance: ProducerInstanceKey,
-    pub target: AffordanceTarget,
+    target: AffordanceTarget,
     pub binding: (BindingId, BindingGeneration),
     pub mapping: ActionMappingKey,
     pub query: Option<ActionRoute>,
     pub cancel: Option<ActionRoute>,
-    pub result: CoreResult<InteractionOutput>,
+    result: CoreResult<InteractionOutput>,
     pub effect: ActionEffect,
     pub cancel_requested: bool,
-    pub cancel_failure: Option<CoreError>,
+    cancel_failure: Option<CoreError>,
     pub abandoned: bool,
-    pub close_failure: Option<CoreError>,
+    close_failure: Option<CoreError>,
+    _validator: Option<Rc<dyn clinkz_wot_core::action::ActionValidator>>,
+    _result_lease: ActionResultLease,
+    // Last: target/result and application owners must die before their original
+    // managed funding. Acknowledgement transfers ownership; it is not disposal.
+    _retained: Rc<super::RawProducerInstance>,
+}
+
+impl RawActionSettlement {
+    /// Lend slices/fixed metadata under the original result slot and funding.
+    /// No InteractionOutput, Payload or body Arc is exposed, including through
+    /// a completed query before acknowledgement.
+    ///
+    /// ```compile_fail,E0616
+    /// use clinkz_wot_servient_finite::RawActionSettlement;
+    /// use clinkz_wot_core::{CoreResult, InteractionOutput};
+    /// fn detach(settlement: RawActionSettlement) -> CoreResult<InteractionOutput> {
+    ///     settlement.result
+    /// }
+    /// ```
+    ///
+    /// ```compile_fail,E0308
+    /// use clinkz_wot_servient_finite::RawActionSettlement;
+    /// use std::sync::Arc;
+    /// fn detach(s: &RawActionSettlement) -> Arc<[u8]> {
+    ///     Arc::clone(&s.result().unwrap().data().unwrap().body)
+    /// }
+    /// ```
+    ///
+    /// ```compile_fail,E0515
+    /// use clinkz_wot_servient_finite::RawActionSettlement;
+    /// fn escape(s: RawActionSettlement) -> &'static [u8] {
+    ///     s.result().unwrap().data().unwrap().body
+    /// }
+    /// ```
+    pub fn result(&self) -> Result<InteractionOutputView<'_>, &CoreError> {
+        self.result.as_ref().map(InteractionOutput::view)
+    }
+    pub fn target(&self) -> clinkz_wot_core::thing::AffordanceSite<'_> {
+        let AffordanceTarget::Action(name) = &self.target else {
+            unreachable!()
+        };
+        clinkz_wot_core::thing::AffordanceSite::Action(name)
+    }
+    pub fn cancel_failure(&self) -> Option<&CoreError> {
+        self.cancel_failure.as_ref()
+    }
+    pub fn close_failure(&self) -> Option<&CoreError> {
+        self.close_failure.as_ref()
+    }
+}
+
+/// One existing result slot and, for managed publication, its original bank's
+/// complete promised backing/cleanup capacity. This owner is never cloned.
+struct ActionResultLease {
+    slots: Rc<Cell<usize>>,
+    _funding: [Option<HostCapacityReservation>; 3],
+}
+impl ActionResultLease {
+    fn acquire(
+        slots: &Rc<Cell<usize>>,
+        limits: RawActionLimits,
+        accounts: Option<&Arc<HostResourceAccounts>>,
+    ) -> CoreResult<Self> {
+        if slots.get() >= limits.invocations {
+            return Err(CoreError::Backpressure(context()));
+        }
+        let mut funding = core::array::from_fn(|_| None);
+        if let Some(accounts) = accounts {
+            let bytes = limits
+                .output_retained_bytes
+                .checked_add(size_of::<RawActionSettlement>())
+                .and_then(|n| u64::try_from(n).ok())
+                .ok_or_else(|| CoreError::Backpressure(context()))?;
+            for (slot, (kind, amount)) in funding.iter_mut().zip([
+                (ResourceKind::EngineLiveBytesGlobalMax, bytes),
+                (ResourceKind::CleanupBytesMax, bytes),
+                (ResourceKind::CleanupItemsMax, 1),
+            ]) {
+                *slot = Some(
+                    accounts
+                        .reserve(kind, amount)
+                        .ok_or_else(|| CoreError::Backpressure(context()))?,
+                );
+            }
+        }
+        slots.set(slots.get() + 1);
+        Ok(Self {
+            slots: slots.clone(),
+            _funding: funding,
+        })
+    }
+}
+impl Drop for ActionResultLease {
+    fn drop(&mut self) {
+        self.slots.set(self.slots.get() - 1);
+    }
 }
 
 impl core::fmt::Debug for RawActionSettlement {
@@ -162,8 +274,6 @@ struct Invocation {
     // Drop. A later funded step can request cancellation even when no mutable
     // Servient was available to the guard at revocation time.
     current: Rc<Cell<bool>>,
-    // Strong retention of the exact behavior/instance, never a successor lookup.
-    instance: Rc<super::RawProducerInstance>,
     behavior: usize,
     binding: (BindingId, BindingGeneration),
     mapping: ActionMappingKey,
@@ -179,6 +289,9 @@ struct Invocation {
     abandoned: bool,
     close_failure: Option<CoreError>,
     work_bytes: usize,
+    result_lease: ActionResultLease,
+    // Last: original behavior/services and retained funding outlive all children.
+    instance: Rc<super::RawProducerInstance>,
 }
 
 pub(super) struct ActionStore {
@@ -188,6 +301,7 @@ pub(super) struct ActionStore {
     next: u32,
     retiring: bool,
     retire_cursor: usize,
+    result_slots: Rc<Cell<usize>>,
 }
 
 impl ActionStore {
@@ -305,10 +419,9 @@ impl ActionStore {
     }
     fn view(entry: &Invocation) -> RawActionView<'_> {
         RawActionView {
-            state: entry
-                .result
-                .as_ref()
-                .map_or(RawActionState::Running, RawActionState::Complete),
+            state: entry.result.as_ref().map_or(RawActionState::Running, |r| {
+                RawActionState::Complete(r.as_ref().map(InteractionOutput::view))
+            }),
             cancel_requested: entry.cancel_requested,
             cancel_failure: entry.cancel_failure.as_ref(),
         }
@@ -337,6 +450,7 @@ impl RawProducerServient {
             next: 0,
             retiring: false,
             retire_cursor: 0,
+            result_slots: Rc::new(Cell::new(0)),
         });
         Ok(())
     }
@@ -406,7 +520,7 @@ impl RawProducerServient {
                 let invoke = routes
                     .iter()
                     .find(|v| {
-                        v.action.as_ref() == name.as_ref()
+                        v.target == *request.target
                             && v.operation == Operation::InvokeAction
                             && v.route == request.invoke
                     })
@@ -417,7 +531,7 @@ impl RawProducerServient {
                 ] {
                     if selected.is_some_and(|selected| {
                         !routes.iter().any(|route| {
-                            route.action.as_ref() == name.as_ref()
+                            route.target == *request.target
                                 && route.operation == operation
                                 && route.route == selected
                         })
@@ -435,7 +549,7 @@ impl RawProducerServient {
         {
             return Err(CoreError::UnsupportedOperation(context()));
         }
-        if store.entries.len() == limits.invocations
+        if store.result_slots.get() == limits.invocations
             || behavior.work_bytes
                 > limits
                     .application_work_bytes
@@ -459,6 +573,11 @@ impl RawProducerServient {
             &target,
             Operation::InvokeAction,
             request.invoke.binding,
+        )?;
+        let result_lease = ActionResultLease::acquire(
+            &store.result_slots,
+            limits,
+            instance.instance.action_result_accounts.as_ref(),
         )?;
         let token = Rc::new(Cell::new(false));
         let id = ActionInvocationRef::new(SlotIndex::new(next), Generation::INITIAL);
@@ -489,6 +608,7 @@ impl RawProducerServient {
             abandoned: false,
             close_failure: None,
             work_bytes: behavior.work_bytes,
+            result_lease,
         });
         let started = behavior.handler.invoke(ctx, request.input);
         let entry = store.entries.last_mut().expect("reserved invocation");
@@ -606,6 +726,107 @@ impl RawProducerServient {
         Ok(ActionStore::view(
             &self.actions.as_ref().unwrap().entries[i],
         ))
+    }
+
+    /// One root query of a Binding's original retained invocation inventory.
+    /// The Binding supplies native order/correlation and encodes the views;
+    /// no leaf QueryAction, application progress, cancellation or new authority
+    /// is performed. This borrowed visit cannot outlive the original store.
+    /// Native completeness is a qualified Binding obligation, not inferred
+    /// from the length of this iterator. Security denial filters a member;
+    /// other failures refuse the entire observation.
+    pub fn query_raw_actions<'a>(
+        &self,
+        instance: clinkz_wot_core::producer::ProducerInstanceKey,
+        route: ActionRoute,
+        handles: impl ExactSizeIterator<Item = &'a RawActionHandle>,
+        input: &InteractionInput,
+        budget: &mut WorkBudget,
+        mut observe: impl FnMut(&str, &RawActionHandle, RawActionView<'_>) -> CoreResult<()>,
+    ) -> CoreResult<()> {
+        let store = self
+            .actions
+            .as_ref()
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        if store.retiring || handles.len() > store.limits.invocations {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        let lookup = store
+            .limits
+            .invocations
+            .checked_add(self.limits.target_name_bytes)
+            .and_then(|n| n.checked_add(1))
+            .and_then(|n| n.checked_mul(handles.len()))
+            .ok_or_else(|| CoreError::Backpressure(context()))?;
+        let units = self
+            .limits
+            .instances
+            .checked_add(self.limits.behaviors_per_instance)
+            .and_then(|n| n.checked_add(store.limits.input_bytes))
+            .and_then(|n| n.checked_add(store.limits.input_fields))
+            .and_then(|n| n.checked_add(lookup))
+            .and_then(|n| u64::try_from(n).ok())
+            .ok_or_else(|| CoreError::Backpressure(context()))?;
+        budget
+            .consume(WorkClass::HandlerSteps, units)
+            .map_err(|_| CoreError::Backpressure(context()))?;
+        if !check_input(input, store.limits) {
+            return Err(CoreError::Backpressure(context()));
+        }
+        let current = self
+            .instances
+            .iter()
+            .find(|e| e.current.get() && e.instance.key() == instance)
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        if current.action_routes.as_ref().is_some_and(|routes| {
+            !routes.iter().any(|r| {
+                r.target == AffordanceTarget::Thing
+                    && r.operation == Operation::QueryAllActions
+                    && r.route == route
+            })
+        }) {
+            return Err(CoreError::UnsupportedOperation(context()));
+        }
+        current
+            .instance
+            .action_query
+            .as_ref()
+            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?
+            .authorize(input)?;
+        if !current.current.get() {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        for handle in handles {
+            let i = store
+                .index(handle)
+                .ok_or_else(|| CoreError::StaleHandle(context()))?;
+            let entry = &store.entries[i];
+            if entry.instance.key() != instance {
+                return Err(CoreError::StaleHandle(context()));
+            }
+            if entry.abandoned
+                || entry.principal.as_ref() != input.principal.as_ref().map(|p| &p.id)
+            {
+                continue;
+            }
+            let behavior = &entry.instance.actions[entry.behavior];
+            match behavior
+                .handler
+                .authorize(Operation::QueryAllActions, input)
+            {
+                Ok(()) => {}
+                Err(CoreError::Security { .. }) => continue,
+                Err(error) => return Err(error),
+            }
+            if !current.current.get() || !entry.current.get() {
+                return Err(CoreError::StaleHandle(context()));
+            }
+            observe(behavior.name(), handle, ActionStore::view(entry))?;
+        }
+        if !current.current.get() {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        Ok(())
     }
 
     /// Request application cancellation only. The caller's native cancel
@@ -885,6 +1106,9 @@ impl ActionStore {
             cancel_failure: entry.cancel_failure,
             abandoned: entry.abandoned,
             close_failure: entry.close_failure,
+            _validator: entry.validator,
+            _result_lease: entry.result_lease,
+            _retained: entry.instance,
         })
     }
 }

@@ -487,6 +487,43 @@ impl<'a> Resolver<'a> {
                         resolver.finish(root);
                     }
                 }
+                let action_collection = thing
+                    .forms
+                    .as_ref()
+                    .and_then(|forms| forms.get(selected_form as usize))
+                    .and_then(|form| form.op.as_ref())
+                    .is_some_and(|ops| ops.contains(&crate::data_type::Operation::QueryAllActions));
+                if let Some(actions) = thing.actions.as_ref().filter(|_| action_collection) {
+                    for (name, action) in actions {
+                        resolver.pay(name.len() as u64 + 1)?;
+                        resolver.metadata_cost(&action._metadata)?;
+                        let action_context = resolver.local(root_context, &action._extra_fields)?;
+                        resolver.scope(
+                            SemanticScope::Action(name),
+                            &action._extra_fields,
+                            action._metadata.tags.as_deref(),
+                            action_context,
+                        )?;
+                        let root = resolver.document.scopes.last().unwrap().root;
+                        for (role, schema) in [("input", &action.input), ("output", &action.output)]
+                        {
+                            if let Some(schema) = schema {
+                                let mut schema_context = action_context;
+                                schema_context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+                                resolver.schema_node(
+                                    SemanticName::Iri(SemanticIri {
+                                        prefix: "https://www.w3.org/2019/wot/td#",
+                                        suffix: role,
+                                    }),
+                                    schema,
+                                    schema_context,
+                                    0,
+                                )?;
+                            }
+                        }
+                        resolver.finish(root);
+                    }
+                }
                 let event_collection = thing
                     .forms
                     .as_ref()

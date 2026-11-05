@@ -47,3 +47,24 @@ The [Core collection contract](../spec/interaction-core.md) owns exact semantics
 slice and an independent Cargo-linked datagram fixture exercise its scoped
 validation, original selection and late-release obligations. No package, gate,
 milestone or production qualification is inferred from this increment.
+
+## Action collection data and permission
+
+Core now retains Action definitions/output roles separately from scalar values
+and requires an actual aggregate-status validation service. A root query policy
+is distinct from the original per-invocation handler and principal checks.
+[Interaction Core](../spec/interaction-core.md) owns those semantics; the
+[HTTP integration](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+exercises native identity, different member schemas and source-independent
+validation. This introduces no universal status envelope or Action/session store.
+
+The Consumer ownership counterexample established a second concrete use of the
+slice-only output carrier. Core `InteractionOutputView`/`PayloadView` now supply
+the shared read-only data representation for finite Consumer and raw Producer
+Action result boundaries, directly replacing the Action-local views. Owned
+`InteractionOutput`/`Payload` remain internal handoff carriers. The
+[ownership contract](../spec/interaction-core.md) requires retaining the original
+funded settlement to share its backing; this adds no generic interaction owner.
+Notification delivery also reuses Core `PayloadView` together with the existing
+`AffordanceSite` name loan. Its queue owner remains exclusively borrowed until
+the slices are no longer used; it creates no detached delivery/result owner.

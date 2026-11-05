@@ -1464,7 +1464,14 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     let result = s.take_raw_action_settlement(&handle).unwrap().unwrap();
     assert_eq!(result.instance, k);
     assert_eq!(
-        result.result.unwrap().data().unwrap().body.as_ref(),
+        result
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
         b"\"done\""
     );
     assert_eq!(counts.work_drops.get(), 1);
@@ -1547,7 +1554,14 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     let result = s.take_raw_action_settlement(&late).unwrap().unwrap();
     assert!(result.cancel_requested);
     assert_eq!(
-        result.result.unwrap().data().unwrap().body.as_ref(),
+        result
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
         b"\"done\""
     );
     assert_eq!(counts.work_drops.get(), 2);
@@ -1629,7 +1643,14 @@ fn lost_publication_guard_requests_cancellation_on_next_funded_action_step() {
     assert_eq!(counts.cancels.get(), 1);
     assert_eq!(counts.work_drops.get(), 1);
     assert_eq!(
-        result.result.unwrap().data().unwrap().body.as_ref(),
+        result
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
         b"\"done\""
     );
     lease.close();
@@ -1752,7 +1773,14 @@ fn shared_native_socket_serves_two_things_and_replacement_does_not_retarget_old_
     assert_eq!(old_result.instance, k1);
     assert!(old_result.cancel_requested);
     assert_eq!(
-        old_result.result.unwrap().data().unwrap().body.as_ref(),
+        old_result
+            .result()
+            .as_ref()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body
+            .as_ref(),
         b"\"done\""
     );
     assert_eq!(

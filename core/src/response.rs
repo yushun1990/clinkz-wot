@@ -163,6 +163,7 @@ fn validate_finite_binding_output(
             Operation::ReadProperty
                 | Operation::WriteProperty
                 | Operation::InvokeAction
+                | Operation::QueryAllActions
                 | Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
                 | Operation::WriteAllProperties
@@ -171,6 +172,7 @@ fn validate_finite_binding_output(
         && (!matches!(
             operation,
             Operation::ReadProperty
+                | Operation::QueryAllActions
                 | Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
         ) || output.data().is_some())

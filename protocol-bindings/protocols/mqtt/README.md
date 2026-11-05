@@ -415,6 +415,13 @@ frames and shared sockets retain their separate fixed service policy. This
 establishes no total-process RAM, fleet throughput, general schema/security,
 constrained-profile or production qualification claim.
 
+The public `front()` loan exposes Core `PayloadView` slices and an
+`AffordanceSite` name, never the original payload or name Arc. The original queue
+owner and its funding remain borrowed while those slices are used; advance and
+cleanup require that loan to end. Explicit byte/name copies own different caller
+backing. Native MQTT frame sharing, reply retirement and unsubscribe ownership
+stay at their existing owners.
+
 [Qualification](tests/event_collection_qualification.rs) and
 [real Mosquitto integration](tests/subscribe_all_events.rs) cover both roles,
 complete final meaning/services, heterogeneous attribution, adversarial data,

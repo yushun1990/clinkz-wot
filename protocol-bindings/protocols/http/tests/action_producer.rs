@@ -240,6 +240,7 @@ fn qualified_http_action_and_property_share_one_authority_with_independent_conti
     assert_eq!(result.instance, logical_key);
     assert_eq!(result.effect, ActionEffect::PossiblyApplied);
     assert!(result.cancel_requested);
+    drop(result); // dispose the transferred result before its managed funding
     let finite = exposure
         .participant_mut::<RawFiniteRuntime<HttpFiniteBinding>>(1)
         .unwrap();
@@ -524,8 +525,9 @@ fn published_action_cannot_skip_validation_through_raw_request() {
         Poll::Ready(())
     );
     let settlement = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
-    assert!(matches!(settlement.result, Err(CoreError::Validation(_))));
+    assert!(matches!(settlement.result(), Err(CoreError::Validation(_))));
     assert_eq!(counts.invoked.get(), 1);
+    drop(settlement);
     counts.immediate.set(true);
     let handle = owner
         .invoke_raw_action(
@@ -541,8 +543,9 @@ fn published_action_cannot_skip_validation_through_raw_request() {
         )
         .unwrap();
     let settlement = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
-    assert!(matches!(settlement.result, Err(CoreError::Validation(_))));
+    assert!(matches!(settlement.result(), Err(CoreError::Validation(_))));
     assert_eq!(counts.invoked.get(), 2);
+    drop(settlement);
     let invalid =
         InteractionInput::with_data(Payload::new(b"\"bad\"".to_vec(), "application/json"));
     assert!(matches!(
@@ -707,6 +710,7 @@ fn published_action_controls_cannot_be_selected_from_unprepared_routes() {
     let settlement = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
     assert_eq!(settlement.query, Some(query));
     assert_eq!(settlement.cancel, Some(cancel));
+    drop(settlement);
     exposure.begin_close();
     exposure.retire(&mut owner, &mut budget()).unwrap();
     drop(exposure);
@@ -1108,7 +1112,8 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
         .unwrap()
         .unwrap();
     assert_eq!(settlement.instance, old_key);
-    assert!(matches!(settlement.result, Err(CoreError::Validation(_))));
+    assert!(matches!(settlement.result(), Err(CoreError::Validation(_))));
+    drop(settlement);
     first.begin_close();
     first.retire(&mut owner, &mut budget()).unwrap();
     drop(first);
@@ -1331,10 +1336,12 @@ fn lost_native_and_exposure_guards_keep_validator_and_original_work_until_acknow
     );
     let result = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
     assert!(result.cancel_requested);
-    assert!(matches!(result.result, Err(CoreError::Validation(_))));
+    assert!(matches!(result.result(), Err(CoreError::Validation(_))));
     owner
         .retire_revoked_publication(key, &mut budget())
         .unwrap();
+    assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+    drop(result);
     assert_eq!(
         bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
         0

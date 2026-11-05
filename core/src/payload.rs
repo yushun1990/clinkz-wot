@@ -17,6 +17,15 @@ pub struct Payload {
 }
 
 impl Payload {
+    /// Borrows bytes and media metadata without lending their allocation owners.
+    pub fn view(&self) -> PayloadView<'_> {
+        PayloadView {
+            body: &self.body,
+            content_type: &self.content_type,
+            content_coding: self.content_coding.as_deref(),
+        }
+    }
+
     /// Creates a payload with explicit media metadata.
     pub fn new(body: impl Into<Arc<[u8]>>, content_type: impl Into<String>) -> Self {
         Self {
@@ -31,6 +40,20 @@ impl Payload {
         self.content_coding = Some(content_coding.into());
         self
     }
+}
+
+/// Read-only payload slices tied to the owner lending them. Cloning this view
+/// cannot retain the original allocation beyond that owner's lifetime. Retain
+/// the original owner and its loan while using funded bytes; explicit byte
+/// copies belong to the caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PayloadView<'a> {
+    /// Original encoded bytes.
+    pub body: &'a [u8],
+    /// Original media type.
+    pub content_type: &'a str,
+    /// Original content coding, when present.
+    pub content_coding: Option<&'a str>,
 }
 
 /// Unencoded application data passed to a payload codec.

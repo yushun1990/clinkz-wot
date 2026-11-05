@@ -83,7 +83,7 @@ fn downstream_write_uses_its_own_native_completion_and_retains_late_success_with
         assert_eq!(settlement.consumer(), &owner.reference());
         assert_eq!(settlement.effect(), ConsumerEffect::Unknown);
         assert!(
-            matches!(settlement.native_outcome(),BindingCallSettlement::Returned(Ok(o)) if o.data().is_none() && o.metadata().binding_response().unwrap().status_code()==0)
+            matches!(settlement.native_outcome(),ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none() && o.metadata().binding_response().unwrap().status_code()==0)
         );
         assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
         drop(rt);
@@ -136,7 +136,10 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
         .unwrap();
     let result = poll(&mut read);
     assert_eq!(result.operation(), Operation::ReadProperty);
-    assert!(matches!(result.affordance(), AffordanceTarget::Property(n) if &**n == "a"));
+    assert!(matches!(
+        result.affordance(),
+        clinkz_wot_core::thing::AffordanceSite::Property("a")
+    ));
     drop(result);
     for n in ["7", "8"] {
         let mut call = rt
@@ -145,7 +148,10 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
         let result = poll(&mut call);
         assert_eq!(result.consumer(), &owner.reference());
         assert_eq!(result.operation(), Operation::InvokeAction);
-        assert!(matches!(result.affordance(), AffordanceTarget::Action(n) if &**n == "a"));
+        assert!(matches!(
+            result.affordance(),
+            clinkz_wot_core::thing::AffordanceSite::Action("a")
+        ));
         assert_eq!(&*result.result().unwrap().data().unwrap().body, b"11");
     }
     assert_eq!(p.starts.load(Ordering::Relaxed), 2, "no warm compilation");
@@ -372,7 +378,7 @@ fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_
         }
         assert!(matches!(
             result.native_outcome(),
-            BindingCallSettlement::Returned(Ok(_))
+            ConsumerNativeOutcome::Returned(Ok(_))
         ));
         assert_eq!(p.validates.load(Ordering::Relaxed), 1);
         assert_eq!(p.calls.load(Ordering::Relaxed), 0);
@@ -553,7 +559,7 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
             );
             assert!(matches!(
                 result.native_outcome(),
-                BindingCallSettlement::Returned(Ok(_))
+                ConsumerNativeOutcome::Returned(Ok(_))
             ));
             peer.join().unwrap();
         }
@@ -601,7 +607,7 @@ fn cancelled_action_retains_original_input_late_result_native_socket_and_charges
     assert!(matches!(late.result(), Err(CoreError::Cancelled(_))));
     assert!(matches!(
         late.native_outcome(),
-        BindingCallSettlement::Returned(Ok(_))
+        ConsumerNativeOutcome::Returned(Ok(_))
     ));
     assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > baseline);
     assert_eq!(
@@ -819,7 +825,7 @@ fn deliver(root: &mut RawNotificationServient<Observe, Access>, cursor: &mut Not
     loop {
         progress(root, cursor);
         if let Some(view) = root.front(cursor, &mut work()).unwrap() {
-            assert_eq!(&*view.data.unwrap().body, b"17");
+            assert_eq!(view.data.unwrap().body, b"17");
             return;
         }
         assert!(start.elapsed() < Duration::from_secs(5));
@@ -965,7 +971,7 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     ));
     assert!(matches!(
         late.native_outcome(),
-        BindingCallSettlement::Returned(Ok(_))
+        ConsumerNativeOutcome::Returned(Ok(_))
     ));
     let replacement = instance();
     assert_ne!(late.consumer(), &replacement.reference());
@@ -1183,7 +1189,7 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
         root.progress(cursor.identity(), &mut cx, &mut work())
             .unwrap();
         if let Some(view) = root.front(&mut cursor, &mut work()).unwrap() {
-            assert_eq!(&*view.data.unwrap().body, b"17");
+            assert_eq!(view.data.unwrap().body, b"17");
             break;
         }
         assert!(start.elapsed() < Duration::from_secs(2));

@@ -651,6 +651,127 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
 }
 
 #[test]
+fn root_action_query_lends_definitions_and_local_output_roles_without_leaf_forms() {
+    let value = serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"status",
+        "security":["n"],"securityDefinitions":{"n":{"scheme":"nosec"}},
+        "forms":[{"op":"queryallactions","href":"http://127.0.0.1/actions"},{"op":"readallproperties","href":"http://127.0.0.1/properties"}],
+        "actions":{"run":{"@context":{"local":"urn:test:"},"input":{"type":"integer"},"output":{"type":"string"},"local:annotation":"meaning",
+            "forms":[{"href":"http://127.0.0.1/run","op":"invokeaction"}]}}});
+    let thing: crate::thing::Thing = serde_json::from_value(value).unwrap();
+    let root = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0)
+        .0
+        .unwrap();
+    assert_eq!(
+        root.collection_actions().unwrap().collect::<Vec<_>>(),
+        ["run"]
+    );
+    assert!(
+        root.scope(SemanticScope::Action("run"))
+            .unwrap()
+            .children()
+            .any(|n| n.name().is("urn:test:annotation"))
+    );
+    assert_eq!(
+        root.affordance_schema(FormOwner::Action("run"), "output")
+            .unwrap()
+            .facts()
+            .declared_type,
+        Some("string")
+    );
+    assert_eq!(
+        root.affordance_schema(FormOwner::Action("run"), "input")
+            .unwrap()
+            .facts()
+            .declared_type,
+        Some("integer")
+    );
+    assert!(root.form(FormOwner::Action("run"), 0).is_none());
+    assert!(root.collection_properties().is_none());
+    let unrelated = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 1)
+        .0
+        .unwrap();
+    assert!(unrelated.collection_actions().is_none());
+    assert!(unrelated.scope(SemanticScope::Action("run")).is_none());
+}
+
+#[test]
+fn action_and_event_collection_loans_coexist_without_cross_family_roles_or_contexts() {
+    let thing = serde_json::from_value(json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Distinct collections",
+        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "forms":[
+            {"href":"https://example.com/actions","op":"queryallactions"},
+            {"href":"https://example.com/events","op":["subscribeallevents","unsubscribeallevents"]},
+            {"href":"https://example.com/both","op":["queryallactions","subscribeallevents","unsubscribeallevents"]}
+        ],
+        "actions":{"same":{"@context":{"x":"urn:action:"},
+            "input":{"type":"boolean"},"output":{"type":"integer","x:meaning":1},
+            "forms":[{"href":"https://example.com/invoke"}]}},
+        "events":{"same":{"@context":{"x":"urn:event:"},
+            "data":{"type":"string","x:meaning":2},"dataResponse":{"type":"boolean"},
+            "forms":[{"href":"https://example.com/subscribe"}]}}
+    })).unwrap();
+    for index in 0..3 {
+        let doc = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, index)
+            .0
+            .unwrap();
+        let action = doc.affordance_schema(FormOwner::Action("same"), "output");
+        let event = doc.affordance_schema(FormOwner::Event("same"), "data");
+        assert_eq!(doc.collection_actions().is_some(), index != 1);
+        assert_eq!(doc.collection_events().is_some(), index != 0);
+        assert_eq!(action.is_some(), index != 1);
+        assert_eq!(event.is_some(), index != 0);
+        if let Some(schema) = action {
+            assert_eq!(schema.facts().declared_type, Some("integer"));
+            assert!(
+                schema
+                    .extension_semantics()
+                    .any(|n| n.name().is("urn:action:meaning"))
+            );
+            assert!(
+                !schema
+                    .extension_semantics()
+                    .any(|n| n.name().is("urn:event:meaning"))
+            );
+        }
+        if let Some(schema) = event {
+            assert_eq!(schema.facts().declared_type, Some("string"));
+            assert!(
+                schema
+                    .extension_semantics()
+                    .any(|n| n.name().is("urn:event:meaning"))
+            );
+            assert_eq!(
+                doc.affordance_schema(FormOwner::Event("same"), "dataResponse")
+                    .unwrap()
+                    .facts()
+                    .declared_type,
+                Some("boolean")
+            );
+        }
+        assert!(
+            doc.affordance_schema(FormOwner::Action("same"), "data")
+                .is_none()
+        );
+        assert!(
+            doc.affordance_schema(FormOwner::Event("same"), "output")
+                .is_none()
+        );
+        assert!(
+            doc.affordance_schema(FormOwner::Action("missing"), "output")
+                .is_none()
+        );
+        assert!(
+            doc.affordance_schema(FormOwner::Event("missing"), "data")
+                .is_none()
+        );
+        assert!(doc.form(FormOwner::Action("same"), 0).is_none());
+        assert!(doc.form(FormOwner::Event("same"), 0).is_none());
+        assert!(doc.collection_properties().is_none());
+    }
+}
+
+#[test]
 fn root_event_collection_lends_exact_members_and_all_roles_without_leaf_forms() {
     let mut value = serde_json::json!({
         "@context":["https://www.w3.org/2022/wot/td/v1.1", {"x":"urn:root:"}],

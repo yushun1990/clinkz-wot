@@ -28,13 +28,16 @@ impl HttpActionProducer {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<HttpActionDefinition>> {
-        let FormSite::Action(name) = input.site else {
-            return Ok(None);
+        let name = match input.site {
+            FormSite::Action(name) => name.as_str(),
+            FormSite::Thing if input.operation == Operation::QueryAllActions => "",
+            _ => return Ok(None),
         };
         let control = match input.operation {
             Operation::InvokeAction => false,
             Operation::QueryAction => true,
             Operation::CancelAction => true,
+            Operation::QueryAllActions => false,
             _ => return Ok(None),
         };
         // Eligibility is native and must precede HTTP-specific schema/security
@@ -57,6 +60,15 @@ impl HttpActionProducer {
         budget
             .consume(WorkClass::BindingPolls, 4096)
             .map_err(|_| producer_unsupported())?;
+        if input.operation == Operation::QueryAllActions {
+            return lower_action_collection(
+                input.document,
+                input.form,
+                input.target,
+                self.identity,
+            )
+            .map(Some);
+        }
         lower_action(
             input.document,
             name,
@@ -77,6 +89,7 @@ impl ProducerCapability for HttpActionProducer {
             std::mem::size_of::<HttpActionDefinition>()
                 + d.action.len()
                 + d.path.len()
+                + d.collection.as_ref().map_or(0, |s| s.retained_bytes())
                 + 4 * std::mem::size_of::<usize>()
         })
     }
@@ -270,5 +283,95 @@ pub(crate) fn lower_action(
         input_schema,
         output_schema,
         control,
+        collection: None,
+    })
+}
+
+fn lower_action_collection(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    form_index: u32,
+    endpoint: &str,
+    identity: (BindingId, BindingGeneration),
+) -> CoreResult<HttpActionDefinition> {
+    let target = Target::parse(endpoint)?;
+    let form = doc
+        .form(FormOwner::Thing, form_index)
+        .ok_or_else(producer_unsupported)?;
+    if form.effective_operations != [Operation::QueryAllActions]
+        || form.content_type != "application/json"
+        || form.subprotocol.is_some()
+        || form.content_coding.is_some()
+        || form.scopes.is_some()
+        || form.additional_responses
+        || form
+            .response_content_type
+            .is_some_and(|m| m != "application/json")
+        || doc.uri_variables(UriVariableScope::Thing).is_some()
+        || doc.scope(SemanticScope::Thing).is_none_or(|n| {
+            n.children()
+                .any(|n| !crate::producer_compiler::class_assertion(n))
+        })
+    {
+        return Err(producer_unsupported());
+    }
+    let [name] = form.effective_security else {
+        return Err(producer_unsupported());
+    };
+    let security = doc.security(name).map_err(|_| producer_unsupported())?;
+    if security.scheme != "nosec"
+        || security.proxy.is_some()
+        || security
+            .semantics
+            .children()
+            .any(|n| !crate::producer_compiler::class_assertion(n))
+    {
+        return Err(producer_unsupported());
+    }
+    let scope = doc
+        .scope(SemanticScope::AffordanceForm {
+            owner: FormOwner::Thing,
+            index: form_index,
+        })
+        .ok_or_else(producer_unsupported)?;
+    let mut nodes = scope.children();
+    let method = nodes.next().ok_or_else(producer_unsupported)?;
+    if !method.name().is("http://www.w3.org/2011/http#methodName")
+        || method.value() != SemanticValue::Text("GET")
+        || nodes.next().is_some()
+    {
+        return Err(producer_unsupported());
+    }
+    if let Some(response) = doc.scope(SemanticScope::AffordanceResponse {
+        owner: FormOwner::Thing,
+        index: form_index,
+    }) {
+        let mut seen = false;
+        for node in response.children() {
+            if seen
+                || !node
+                    .name()
+                    .is("http://www.w3.org/2011/http#statusCodeValue")
+                || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(200))
+            {
+                return Err(producer_unsupported());
+            }
+            seen = true;
+        }
+    }
+    let path = target.uri.path_and_query().map_or("/", |p| p.as_str());
+    if path.len() > 64 || path.contains('?') {
+        return Err(producer_unsupported());
+    }
+    Ok(HttpActionDefinition {
+        instance_binding: identity,
+        action: Arc::from(""),
+        operation: Operation::QueryAllActions,
+        form: form_index,
+        address: target.address,
+        path: Arc::from(path),
+        input_schema: None,
+        output_schema: None,
+        control: false,
+        collection: Some(clinkz_wot_planning::type_schema::prepare_action_collection_schema(doc)?),
     })
 }

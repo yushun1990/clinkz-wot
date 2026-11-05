@@ -57,14 +57,25 @@ the described Property schemas with each Property's own local context, without l
 `collection_properties` is available only for that operation's root loan; its
 scopes, schema branches and name/context resolution use the existing bounded
 arena and work. Unrelated root operations acquire no Property schema closure.
+A QueryAllActions root loan similarly lends `collection_actions` and each Action's
+input/output schema under its own local context, without leaf Forms. Definitions
+are not invocation status records; output is a distinct application data role.
+Only a root Form including that operation acquires this bounded semantic closure;
+expanded extension names cannot introduce a second ignored output assertion.
 SubscribeAllEvents/UnsubscribeAllEvents root loans similarly expose
 `collection_events` and each Event's distinct subscription/data/dataResponse/
 cancellation SchemaViews under that Event's local context. They lend no leaf
 Forms and do not combine occurrences into a Property ObjectSchema. Other root
-operations acquire no Event closure. Both collection closures remain bounded by
+operations acquire no Event closure. All collection closures remain bounded by
 the existing semantic arena/work and refuse incomplete resolution. TD 1.1 fixes
 the root operation meaning; concrete Bindings select an explicit, fully supported
 Event attribution/wire mapping rather than inferring a universal Event envelope.
+When a Form explicitly lists several collection families, its loan includes each
+required closure. Schema access remains scoped by the exact affordance family,
+name and role, including equal Action/Event names with different local contexts.
+Forms of one family do not resolve or charge unrelated families. Planning selects
+the appropriate captured schema for the effective operation; no collection loan
+selects leaf Forms or grants execution authority.
 Selected Combo references are reachable through the same shared security loan.
 Unknown security definitions survive TD decoding and round trips, including
 when unused; selecting one still requires an actual supporting security service.

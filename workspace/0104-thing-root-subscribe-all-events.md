@@ -73,6 +73,31 @@ leaf Property/Event, collection-map and raw lifecycle suites remain regression
 obligations. No milestone, architecture gate, release or fleet-topology claim
 closes; independent acceptance remains separate.
 
+## Delivery ownership counterexample
+
+Integration re-review demonstrated the inherited notification result escape on
+accepted #256 and the integrated tree: `front()` lent a Payload and Arc-backed
+occurrence name, permitting original-allocation clones to survive advance and
+successful mapped unsubscribe after every original account returned to zero.
+Acceptance of the native MQTT mapping does not establish this allocation claim.
+
+Correct the public delivery boundary directly: `RawNotificationView` uses the
+existing Core `PayloadView` and `AffordanceSite`. All variable data is borrowed
+from the original queued occurrence under the exclusive root loan, which prevents
+advance/cleanup while the data remains in use. Raw and composed callers migrate
+directly. Explicit caller-owned copies may survive disposal; the original
+allocation may not escape through a view. Native candidates, replies, queues,
+matching/distribution and captured validation retain their current ownership.
+
+A new shared delivery/session owner or lease-bearing Payload representation
+would change queue admission, advance, codec and native handoffs beyond the
+demonstrated defect. Reusing the existing shared slice views closes the payload
+and name escapes without extending notification lifetime or changing native
+controls. Compile-fail, exact-allocation raw lifetime, real-broker repeated-advance
+and downstream reply-retention evidence reaffirm the affected claims. Exact
+contracts are migrated to Interaction Core, Binding SPI and Runtime Safety;
+independent acceptance remains a separate review of the corrected revision.
+
 Sources: [TD 1.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form),
 [MQTT guidance](https://w3c.github.io/wot-binding-templates/bindings/protocols/mqtt/index.html),
 [MQTT 3.1.1](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html).

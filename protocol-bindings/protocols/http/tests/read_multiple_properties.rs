@@ -13,7 +13,7 @@ fn start_selected(client: &ConsumerRuntime, names: &[&str]) -> ConsumerCall {
         .unwrap()
 }
 fn body(result: &ConsumerSettlement) -> Value {
-    serde_json::from_slice(&result.result().unwrap().data().unwrap().body).unwrap()
+    serde_json::from_slice(result.result().unwrap().data().unwrap().body).unwrap()
 }
 
 #[test]
@@ -60,7 +60,10 @@ fn same_td_supports_different_per_call_subsets_and_distinct_read_all() {
             assert_eq!(body(&local), expected);
             assert_eq!(local.operation(), Operation::ReadMultipleProperties);
             assert_eq!(local.consumer(), &owner.reference());
-            assert_eq!(local.affordance(), &AffordanceTarget::Thing);
+            assert_eq!(
+                local.affordance(),
+                clinkz_wot_core::thing::AffordanceSite::Thing
+            );
             assert_eq!(remote.recipient, Some(server.exposure.key()));
             assert_eq!(remote.operation, Some(Operation::ReadMultipleProperties));
             assert_eq!(remote.effect, FiniteEffect::Unknown);
@@ -619,7 +622,7 @@ fn selected_service_is_actual_static_preparation_never_encodes_and_callback_loss
                 assert!(local.result().is_err());
                 assert!(matches!(
                     local.native_outcome(),
-                    BindingCallSettlement::Returned(Ok(_))
+                    ConsumerNativeOutcome::Returned(Ok(_))
                 ));
                 assert!(remote.result.is_ok());
                 assert_eq!(local.consumer(), &owner.reference());
@@ -1027,7 +1030,7 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                         Some(CoreError::Validation(_))
                     ));
                 }
-                let BindingCallSettlement::Returned(Ok(original)) = local.native_outcome() else {
+                let ConsumerNativeOutcome::Returned(Ok(original)) = local.native_outcome() else {
                     panic!("retain the original validated native output");
                 };
                 assert_eq!(
@@ -1035,7 +1038,10 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                     json!({"on":true})
                 );
                 assert_eq!(local.consumer(), &owner.reference());
-                assert_eq!(local.affordance(), &AffordanceTarget::Thing);
+                assert_eq!(
+                    local.affordance(),
+                    clinkz_wot_core::thing::AffordanceSite::Thing
+                );
                 assert_eq!(local.operation(), Operation::ReadMultipleProperties);
                 assert_eq!(local.effect(), ConsumerEffect::Unknown);
                 assert!(local.rejected_output().is_none());

@@ -15,6 +15,117 @@ use std::{
 use support::*;
 
 type Consumer = ConsumerNotificationRuntime<MqttNotificationConsumer>;
+
+#[derive(Default)]
+struct ObservedData {
+    original: std::sync::Mutex<Option<std::sync::Weak<[u8]>>>,
+}
+impl ConsumerDataService for ObservedData {
+    fn content_type(&self) -> &str {
+        "application/json"
+    }
+    fn policy(&self) -> ConsumerDataPolicy {
+        let mut policy = MqttJsonData.policy();
+        policy.retained_bytes += std::mem::size_of::<Self>() as u64;
+        policy
+    }
+    fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+        // Test instrumentation at the trusted validation boundary records only
+        // a Weak, never a replacement payload or another strong owner.
+        *self.original.lock().unwrap() = Some(Arc::downgrade(&payload.body));
+        MqttJsonData.validate(schema, payload)
+    }
+}
+
+#[test]
+fn occurrence_views_cannot_retain_original_backing_across_repeated_advance_and_unsubscribe() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let service = service(&broker, 8192);
+        let bank = bank();
+        let authority = consumer_owner();
+        let observer = Arc::new(ObservedData::default());
+        let definition = definition(
+            &service,
+            event_collection_td(broker.address, "review/events"),
+            &bank,
+            Arc::new(Access::default()),
+            observer.clone(),
+        );
+        let mut events = from_definition(definition, &authority, 4);
+        let mut cursor = subscribe(&mut events, NotificationOverflow::Terminate);
+        active(&mut events, &cursor).await;
+        let mut peer = Peer::new(&broker);
+        let charged = ResourceKind::ALL.map(|k| bank.account(k).used());
+        let mut copies = Vec::new();
+        let mut names = Vec::new();
+        for n in 0..32 {
+            let expected = n.to_string();
+            peer.publish_raw("review/events/alarm", expected.as_bytes(), false);
+            accounted(&mut events, &cursor, 1).await;
+            let original = observer.original.lock().unwrap().take().unwrap();
+            let item = events.front(&mut cursor, &mut budget()).unwrap().unwrap();
+            let payload = item.data.unwrap();
+            let clinkz_wot_core::thing::AffordanceSite::Event(name) = item.target else {
+                panic!()
+            };
+            assert_eq!(name, "alarm");
+            assert_eq!(payload.body, expected.as_bytes());
+            assert_eq!(payload.body.as_ptr(), original.as_ptr() as *const u8);
+            assert!(original.upgrade().is_some());
+            assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+            assert_eq!(payload.content_type, "application/json");
+            assert!(payload.content_coding.is_none());
+            // Only explicit caller-owned copies may survive advance/cleanup.
+            let copy = Arc::<[u8]>::from(payload.body);
+            let copied_name = Arc::<str>::from(name);
+            assert_ne!(copy.as_ptr(), payload.body.as_ptr());
+            assert_ne!(copied_name.as_ptr(), name.as_ptr());
+            copies.push(copy);
+            names.push(copied_name);
+            events.advance(&mut cursor, &mut budget()).unwrap();
+            assert!(
+                original.upgrade().is_none(),
+                "advance must dispose the exact original response"
+            );
+            assert_eq!(
+                events
+                    .status(cursor.identity())
+                    .unwrap()
+                    .queued_payload_bytes,
+                0
+            );
+            assert_eq!(charged, ResourceKind::ALL.map(|k| bank.account(k).used()));
+        }
+        events
+            .stop(&cursor, Some(CancellationInput(None)), &mut budget())
+            .unwrap_or_else(|_| panic!());
+        assert_eq!(
+            settled(&mut events, &cursor).await.remote_cancellation,
+            RemoteCancellation::Confirmed
+        );
+        assert!(!service.connected());
+        drop(cursor);
+        drop(events);
+        drop(service);
+        drop(authority);
+        drop(observer);
+        for kind in ResourceKind::ALL {
+            assert_eq!(bank.account(kind).used(), 0, "{kind:?}");
+        }
+        for (n, (data, name)) in copies.iter().zip(&names).enumerate() {
+            assert_eq!(&**data, n.to_string().as_bytes());
+            assert_eq!(&**name, "alarm");
+        }
+        assert!(
+            broker
+                .logs()
+                .lines()
+                .any(|line| line.contains("Received UNSUBSCRIBE from cr"))
+        );
+    });
+}
+
 const ONE: &[u8] = b"7";
 const TWO: &[u8] = b"8";
 
@@ -180,8 +291,11 @@ async fn accounted(c: &mut Consumer, id: &NotificationCursor, n: u64) {
 async fn value(c: &mut Consumer, id: &mut NotificationCursor, expected: &[u8]) {
     accounted(c, id, 1).await;
     let v = c.front(id, &mut budget()).unwrap().unwrap();
-    assert_eq!(v.target, &AffordanceTarget::Event(Arc::from("alarm")));
-    assert_eq!(&*v.data.unwrap().body, expected);
+    assert_eq!(
+        v.target,
+        clinkz_wot_core::thing::AffordanceSite::Event("alarm")
+    );
+    assert_eq!(v.data.unwrap().body, expected);
     assert_eq!(v.response, EventResponseState::Unavailable);
     c.advance(id, &mut budget()).unwrap();
 }
@@ -550,7 +664,7 @@ fn collection_loss_and_saturation_preserve_whole_samples_and_never_coalesce() {
             send(&mut po, &mut pe, ONE).await;
             accounted(&mut c, &id, 1).await;
             assert_eq!(
-                &*c.front(&mut id, &mut budget())
+                c.front(&mut id, &mut budget())
                     .unwrap()
                     .unwrap()
                     .data
@@ -563,7 +677,7 @@ fn collection_loss_and_saturation_preserve_whole_samples_and_never_coalesce() {
             assert_eq!(c.status(id.identity()).unwrap().loss.items, 1);
             if policy == NotificationOverflow::DropNewest {
                 assert_eq!(
-                    &*c.front(&mut id, &mut budget())
+                    c.front(&mut id, &mut budget())
                         .unwrap()
                         .unwrap()
                         .data
@@ -1100,8 +1214,11 @@ fn native_topics_preserve_heterogeneous_occurrences_and_two_cursors_stop_indepen
             for cursor in [&mut a, &mut z] {
                 accounted(&mut c, cursor, 1).await;
                 let item = c.front(cursor, &mut budget()).unwrap().unwrap();
-                assert_eq!(item.target, &AffordanceTarget::Event(Arc::from(event)));
-                assert_eq!(&*item.data.unwrap().body, bytes);
+                assert_eq!(
+                    item.target,
+                    clinkz_wot_core::thing::AffordanceSite::Event(event)
+                );
+                assert_eq!(item.data.unwrap().body, bytes);
                 assert_eq!(item.response, EventResponseState::Unavailable);
                 assert!(
                     c.respond(
@@ -1124,7 +1241,7 @@ fn native_topics_preserve_heterogeneous_occurrences_and_two_cursors_stop_indepen
         accounted(&mut c, &z, 1).await;
         assert_eq!(
             c.front(&mut z, &mut budget()).unwrap().unwrap().target,
-            &AffordanceTarget::Event(Arc::from("ready"))
+            clinkz_wot_core::thing::AffordanceSite::Event("ready")
         );
         c.stop(&z, Some(CancellationInput(None)), &mut budget())
             .unwrap_or_else(|_| panic!());

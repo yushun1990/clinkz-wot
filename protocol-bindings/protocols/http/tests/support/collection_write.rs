@@ -421,7 +421,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             let Poll::Ready(local) = call.poll(&mut cx(), now(0), &mut work()) else { panic!("original completed result retained") };
             assert!(local.result().is_err());
             assert_eq!(local.effect(), ConsumerEffect::Completed);
-            assert!(matches!(local.native_outcome(), BindingCallSettlement::Returned(Ok(o)) if o.data().is_none()));
+            assert!(matches!(local.native_outcome(), ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none()));
             assert_eq!(local.consumer(), &owner.reference());
             assert_eq!(retained, ResourceKind::ALL.map(|k| accounts.account(k).used()));
             assert_eq!(server.controls.requests.get(), 1);

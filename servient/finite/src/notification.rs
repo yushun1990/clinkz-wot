@@ -3,6 +3,7 @@
 //! infrastructure may be shared; cursors and logical stop remain independent.
 use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use clinkz_wot_core::consumer::ConsumerInstanceRef;
+use clinkz_wot_core::thing::AffordanceSite;
 use clinkz_wot_core::{notification::*, *};
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
 use core::{
@@ -97,10 +98,58 @@ impl NotificationLoss {
 }
 /// Borrowed raw data, retained by the original root until advance or cleanup.
 /// Sequence counts logical admitted items, not a wire order/replay guarantee.
+/// Payload/media and occurrence names are slices, never cloneable allocation
+/// owners. Keep the root borrowed while using them; explicit copies belong to
+/// the caller. An outstanding loan prevents advance and cleanup of that owner.
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_servient_finite::notification::RawNotificationView;
+/// use std::sync::Arc;
+/// fn detach(view: RawNotificationView<'_>) -> Arc<[u8]> {
+///     Arc::clone(&view.data.unwrap().body)
+/// }
+/// ```
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_servient_finite::notification::RawNotificationView;
+/// use clinkz_wot_core::AffordanceTarget;
+/// fn detach(view: RawNotificationView<'_>) -> AffordanceTarget {
+///     view.target.clone()
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_servient_finite::notification::RawNotificationView;
+/// fn escape(view: RawNotificationView<'_>) -> &'static [u8] {
+///     view.data.unwrap().body
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_servient_finite::notification::RawNotificationView;
+/// use clinkz_wot_core::thing::AffordanceSite;
+/// fn escape(view: RawNotificationView<'_>) -> &'static str {
+///     match view.target { AffordanceSite::Event(name) => name, _ => panic!() }
+/// }
+/// ```
+///
+/// ```compile_fail,E0499
+/// use clinkz_wot_core::notification::{ConsumerNotificationBinding, NotificationAuthorizer};
+/// use clinkz_wot_foundation::WorkBudget;
+/// use clinkz_wot_servient_finite::notification::{NotificationCursor, RawNotificationServient};
+/// fn advance_while_borrowed<B: ConsumerNotificationBinding, A: NotificationAuthorizer>(
+///     root: &mut RawNotificationServient<B, A>, cursor: &mut NotificationCursor,
+///     budget: &mut WorkBudget,
+/// ) {
+///     let bytes = root.front(cursor, budget).unwrap().unwrap().data.unwrap().body;
+///     root.advance(cursor, budget).unwrap();
+///     assert!(!bytes.is_empty());
+/// }
+/// ```
 pub struct RawNotificationView<'a> {
     pub sequence: u64,
-    pub target: &'a AffordanceTarget,
-    pub data: Option<&'a Payload>,
+    pub target: AffordanceSite<'a>,
+    pub data: Option<PayloadView<'a>>,
     pub response: EventResponseState,
 }
 pub struct NotificationStatus<'a> {
@@ -738,9 +787,14 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             e.delivered += 1;
         }
         Ok(Some(RawNotificationView {
-            target: &item.native.target,
+            target: match &item.native.target {
+                AffordanceTarget::Thing => AffordanceSite::Thing,
+                AffordanceTarget::Property(name) => AffordanceSite::Property(name),
+                AffordanceTarget::Action(name) => AffordanceSite::Action(name),
+                AffordanceTarget::Event(name) => AffordanceSite::Event(name),
+            },
             sequence: item.sequence,
-            data: item.native.data.as_ref(),
+            data: item.native.data.as_ref().map(Payload::view),
             response: item.response_state,
         }))
     }

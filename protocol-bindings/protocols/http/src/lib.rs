@@ -57,6 +57,7 @@ const PRIVATE_POLICY: &[u8] = concat!(
     "Thing-root-readmultiple-explicit-POST200;TD-default-name-array4096;original-selection-bitmap;empty-selection;exact-selected-map;no-query-convention;",
     "Thing-root-writeall-PUT204-empty-through-EOF;exact-writable-input-map;no-readOnly;group-completion-not-atomic;noReplay;",
     "Thing-root-writemultiple-PUT204;validated-selected-writable-map;empty-selection-native;no-member-report-or-atomicity;",
+    "Thing-root-queryall-explicit-GET200;draft-status-arrays;unique-absolute-href256;records128;per-Action-output;no-local-control-authority;",
     "Thing-root-readall-GET200;exact-readable-Property-map;type-only-members;no-missing-extra-duplicate-writeOnly;members32-names256-total4096;validation-work=body40+media2;",
     "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
     "fresh;concurrency1-until-release;header32/8192inclusive;body4096;",
@@ -208,6 +209,7 @@ impl binding::ClientBinding for Client {
             operation,
             Operation::ReadProperty
                 | Operation::WriteProperty
+                | Operation::QueryAllActions
                 | Operation::ReadAllProperties
                 | Operation::ReadMultipleProperties
                 | Operation::WriteAllProperties
@@ -250,7 +252,12 @@ impl binding::ClientBinding for Client {
         };
         if target.1.operation != request.operation()
             || match (request.operation(), request.input()) {
-                (Operation::ReadProperty | Operation::ReadAllProperties, None) => false,
+                (
+                    Operation::ReadProperty
+                    | Operation::QueryAllActions
+                    | Operation::ReadAllProperties,
+                    None,
+                ) => false,
                 (
                     Operation::WriteProperty
                     | Operation::WriteAllProperties
@@ -529,7 +536,9 @@ mod qualification {
 mod producer_transport;
 
 mod action_producer;
-pub use action_producer::{HttpActionDefinition, HttpActionDelivery, HttpActionRuntime};
+pub use action_producer::{
+    HttpActionDefinition, HttpActionDelivery, HttpActionExchangeIdentity, HttpActionRuntime,
+};
 #[cfg(feature = "prepare")]
 mod action_preparation;
 #[cfg(feature = "prepare")]
@@ -587,6 +596,16 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
             encoded_selection_bytes: BODY + core::mem::size_of::<Payload>() as u64 + 64,
             validation_work: BODY * 40 + MEDIA * 2,
         }
+    }
+    fn supports_action_statuses(&self, _: &action::ActionCollectionSchema) -> bool {
+        true
+    }
+    fn validate_action_statuses(
+        &self,
+        schema: &action::ActionCollectionSchema,
+        payload: &Payload,
+    ) -> CoreResult<()> {
+        crate::action_status::validate(schema, payload)
     }
     fn supports_property_map(
         &self,
@@ -653,6 +672,7 @@ impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
             || !matches!(
                 operation,
                 Operation::ReadProperty
+                    | Operation::QueryAllActions
                     | Operation::ReadAllProperties
                     | Operation::ReadMultipleProperties
                     | Operation::WriteAllProperties
@@ -678,3 +698,5 @@ impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
         256
     }
 }
+
+mod action_status;

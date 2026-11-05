@@ -170,7 +170,7 @@ async fn value(c: &mut Consumer, cursor: &mut NotificationCursor, expected: &[u8
     let end = Instant::now() + Duration::from_secs(3);
     loop {
         if let Some(view) = c.front(cursor, &mut budget()).unwrap() {
-            assert_eq!(&*view.data.unwrap().body, expected);
+            assert_eq!(view.data.unwrap().body, expected);
             assert_eq!(view.response, EventResponseState::Unavailable);
             c.advance(cursor, &mut budget()).unwrap();
             return;

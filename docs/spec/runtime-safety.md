@@ -44,6 +44,14 @@ data/access work policy and required facets both before and after authorization;
 pre-callback observations cannot authorize the next boundary. The same check
 applies after result validation and when handing off an already validated unread
 result. Fencing retains the original result, authority, first cause and funding.
+Every public finite Consumer result path, including rejected and late native
+output, lends Core `InteractionOutputView`/`PayloadView` slices. No output, Payload
+or body Arc may escape the original reservation through these views. Native
+cancellation still exposes its original retry and borrowed cleanup disposition;
+it grants no transfer ownership. Retain the settlement (including a shared Rc
+owner) to share original bytes. Caller-owned explicit copies have distinct
+backing. Call/root disposal or a local error cannot refund the retained original
+response and cleanup reservations before final settlement disposal.
 Loss during validation fences successful application handoff. The
 Producer validates output against its original retained input, including late
 results across authority/service loss, using the same captured validator rules.
@@ -108,6 +116,13 @@ funds the root queue and validation envelope until root disposal; raw owner-scop
 limits alone are not an aggregate-accounting claim. Native topic sharing,
 distribution, bounded queues and connection/control-frame disposal remain in
 the Binding, independently of each logical recipient's authority and stop.
+Raw and composed notification `front()` lend only payload/media and occurrence
+name slices under the existing exclusive root borrow. No public delivery loan
+exposes cloneable owners of those original allocations. Active loans prevent
+advance and cleanup mutation; queue, reply and original account ownership remain
+with the existing root until the appropriate disposal boundary. Keeping an
+explicit copy after advance does not retain the original allocation. This rule
+applies to leaf Property/Event and root Property/Event notification delivery.
 
 A collection observation retains one root authority and original named schema
 through late candidates, stop and settlement. Complete-map validation accepts
@@ -197,6 +212,48 @@ mandatory pointer atomics/Arc. Profiles use common semantic kernels/invariant
 cases where applicable and their own storage/wake/release evidence. No portable
 compile, matching mock trace or std flag qualifies hardware, SDK, allocator or
 real-time performance. Missing implemented profiles remain gaps, not exclusions.
+
+QueryAllActions retains its finite query's original Consumer authority, root
+mapping, named output schemas, actual services and normal/late native payload
+through settlement disposal. Cancellation of this query closes its native
+exchange; it does not cancel any Action. Short validation or handoff work retains
+the original observation and slot. Recheck authority and service/policy after
+callbacks and before handoff, including an already validated unread result.
+
+Producer root status observation prepays the bounded inventory walk before root
+or member policy callbacks and rechecks original currentness after callbacks.
+It borrows original invocation owners without polling, cancellation, re-binding
+or result acknowledgement. Native formatting/backing retains its own paid bound;
+capacity failure refuses the whole query without truncation. Publication's
+complete inventory check prevents a partial native owner advertising all Actions.
+Pending original replies retain their original identity across replacement and
+close, with native local-write evidence distinct from remote receipt.
+Each admitted Producer Action owns a result-slot lease independently of its
+logical record. The slot covers both live invocation and transferred result;
+acknowledgement does not replenish capacity. It moves into `RawActionSettlement`
+and survives native-record removal, replacement and Servient/exposure loss.
+Retained settlements continue to count against the original store's invocation
+bound; repeated acknowledgement cannot accumulate unbounded results under one
+fixed reservation. Disposing one result permits exactly that slot to be reused.
+
+Managed publication binds its original Host account bank before Serving. Before
+behavior entry, each Action acquires separate EngineLiveBytesGlobalMax and
+CleanupBytesMax reservations for `output_retained_bytes + size_of::<RawActionSettlement>()`,
+plus one CleanupItemsMax reservation. Any failed acquisition releases the partial
+set and leaves application behavior and result-slot usage untouched. Successful
+admission transfers these exact leases through result disposal. These are
+controlled-backing/cleanup allowances, not additive physical RAM measurements;
+native I/O/formatting and application work have their existing separate owners.
+Raw execution remains caller-funded and enforces the same result-slot lifetime.
+
+Original result/target/validator storage is disposed before its result leases and
+retained instance funding. Both completed-query and settlement APIs lend only
+byte/media slices and fixed metadata; they never expose cloneable owners of the
+original payload allocation. Sharing the original requires retaining the result
+owner (for example Rc<RawActionSettlement>); explicitly copying its bytes creates
+separate caller-owned storage. A borrow of InteractionOutput/Payload would permit
+an uncharged Arc escape and is not this contract. Original validator retention
+also survives acknowledgement. Acknowledgement is not final physical release.
 
 `SAFE-OVERFLOW-001`: Every retained input/result/notification queue MUST have item
 and backing-byte limits with visible loss/backpressure/termination policy.

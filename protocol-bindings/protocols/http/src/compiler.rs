@@ -24,6 +24,7 @@ impl HostSemanticCompiler for HttpCompiler {
             && matches!(
                 input.operation,
                 Operation::ReadAllProperties
+                    | Operation::QueryAllActions
                     | Operation::ReadMultipleProperties
                     | Operation::WriteAllProperties
                     | Operation::WriteMultipleProperties
@@ -53,7 +54,9 @@ impl HostSemanticCompiler for HttpCompiler {
                 | Operation::WriteMultipleProperties
         );
         let multiple = input.operation == Operation::ReadMultipleProperties;
+        let actions = input.operation == Operation::QueryAllActions;
         if (multiple
+            || actions
             || matches!(
                 input.operation,
                 Operation::WriteAllProperties | Operation::WriteMultipleProperties
@@ -147,6 +150,9 @@ impl HostSemanticCompiler for HttpCompiler {
                 return Err(unsupported());
             }
         }
+        if actions && unique(form, "http://www.w3.org/2011/http#methodName")?.is_none() {
+            return Err(unsupported()); // TD defines no HTTP default for this operation.
+        }
         if multiple && output.method != "POST" {
             return Err(unsupported());
         }
@@ -187,6 +193,7 @@ impl HostSemanticCompiler for HttpCompiler {
         // Other standardized HTTP instructions are outside this declared slice.
         for node in form.children() {
             if (multiple
+                || actions
                 || matches!(
                     input.operation,
                     Operation::WriteAllProperties | Operation::WriteMultipleProperties
@@ -220,7 +227,8 @@ impl HostSemanticCompiler for HttpCompiler {
                 return Err(unsupported());
             }
             if response.children().any(|n| {
-                http_name(n) && !n.name().is("http://www.w3.org/2011/http#statusCodeValue")
+                (http_name(n) || actions && !crate::producer_compiler::class_assertion(n))
+                    && !n.name().is("http://www.w3.org/2011/http#statusCodeValue")
             }) {
                 return Err(unsupported());
             }

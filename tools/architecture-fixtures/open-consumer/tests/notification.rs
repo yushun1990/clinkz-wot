@@ -7,7 +7,7 @@ use clinkz_wot_servient_finite::{
     consumer_notification::ConsumerNotificationRuntime, notification::*,
 };
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     rc::Rc,
     sync::Arc,
     task::{Context, Poll, Waker},
@@ -16,6 +16,7 @@ use std::{
 const ENDPOINT: &str = "testevent://source/alarm";
 #[derive(Default)]
 struct Responses {
+    last_body: RefCell<Option<std::sync::Weak<[u8]>>>,
     sends: Cell<usize>,
     retire_polls: Cell<usize>,
     releases: Cell<usize>,
@@ -161,6 +162,7 @@ impl NotificationParticipation for Participation {
             Payload::new(self.next.to_string().as_bytes(), "application/json")
         };
         assert!(notification_item_backing(&target, Some(&payload)).unwrap() <= max);
+        *self.responses.last_body.borrow_mut() = Some(Arc::downgrade(&payload.body));
         self.next += 1;
         Poll::Ready(Ok(NotificationSignal::Data(NativeNotification {
             recipient: self.recipient.clone(),
@@ -311,7 +313,11 @@ fn td_prepared_optional_response_can_retire_and_advance_without_sending_or_stopp
     step(&mut root, &cursor);
     let first = root.front(&mut cursor, &mut work()).unwrap().unwrap();
     assert_eq!(first.response, EventResponseState::Awaiting);
-    let original = Arc::downgrade(&first.data.unwrap().body);
+    let original = responses.last_body.borrow_mut().take().unwrap();
+    assert_eq!(
+        first.data.unwrap().body.as_ptr(),
+        original.as_ptr() as *const u8
+    );
     assert!(root.advance(&mut cursor, &mut work()).is_err());
     // Reproduce the admitted optional opportunity waiting for an explicit choice.
     for _ in 0..3 {
@@ -365,7 +371,7 @@ fn td_prepared_optional_response_can_retire_and_advance_without_sending_or_stopp
     assert!(original.upgrade().is_none());
     let next = root.front(&mut cursor, &mut work()).unwrap().unwrap();
     assert_eq!(next.sequence, 1);
-    assert_eq!(&*next.data.unwrap().body, b"2");
+    assert_eq!(next.data.unwrap().body, b"2");
     root.decline_response(&mut cursor, &mut work()).unwrap();
     step(&mut root, &cursor);
     root.advance(&mut cursor, &mut work()).unwrap();
@@ -569,8 +575,12 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
         )
         .unwrap();
         let item = root.front(&mut cursor, &mut work()).unwrap().unwrap();
-        assert_eq!(item.target, &AffordanceTarget::Event(Arc::from(name)));
-        let body = Arc::downgrade(&item.data.unwrap().body);
+        assert_eq!(
+            item.target,
+            clinkz_wot_core::thing::AffordanceSite::Event(name)
+        );
+        let body = responses.last_body.borrow_mut().take().unwrap();
+        assert_eq!(item.data.unwrap().body.as_ptr(), body.as_ptr() as *const u8);
         let wrong = Payload::new(bad, "application/json");
         let original = wrong.body.clone();
         let returned = root
