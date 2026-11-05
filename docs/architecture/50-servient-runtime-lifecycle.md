@@ -34,6 +34,13 @@ recipient, captures behavior and reply capability, and dispatches outside locks.
 Native ACK/control traffic is not application acceptance. Pending/late work never
 looks up a replacement handler or maps an old packet into a successor slot.
 
+In the Host finite Consumer owner, mutable registry access ends before linked
+authorization, data, native progress or destruction. Reserved original slots and
+separately retained passive controls allow nested entry without duplicating work
+or hiding cancellation. [Runtime Safety](../spec/runtime-safety.md)
+owns the callback, handoff, wake and funding guarantees; this is a correction to
+that owner, not a shared scheduler or automatic execution model.
+
 ## Distinct lifetimes
 
 Action invocation state can outlive its initiating exchange. A root status query

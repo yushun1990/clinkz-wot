@@ -204,6 +204,27 @@ acknowledged. Fairness/work budgets prevent unrelated supported logical work
 from being indefinitely blocked by a stalled Binding. This mandates outcomes,
 not a global lock, fixed lane/shard algorithm or identical scheduling traces.
 
+The Host finite Consumer registry is borrowed only to reserve, check out,
+restore or remove an original call slot. Admission/progress callbacks and linked
+destructors run after that borrow ends. A checked-out or admitting slot remains
+occupied; reentrant progress cannot poll it again or overwrite it through nested
+admission. Passive per-call control retains the first cause and abandonment even
+while native work is outside the registry. Explicit cancellation and facet close
+wake registered progress outside registry/control borrows; Drop records intent
+without calling a waker. Close fences the whole finite facet before notifying
+any waiter. Callback-time close/cancellation is observed before another native
+effect or successful handoff, including construction and validated unread output.
+Removing a terminal call is its handoff linearization point. Native/codec late
+evidence remains with that original call regardless of the local first cause.
+
+Slot restoration on unwind retains the original owner; it grants no guarantee
+that arbitrary panicking linked code can resume execution. The independent
+control allocation is funded before native construction and keeps its original
+lease through its last handle/call reference. It cannot address a reused slot.
+This implementation claim covers finite Consumer execution. The continuing
+Action owner's callback isolation remains an identified correction, not evidence
+inherited from the finite owner or from passing operation tests.
+
 `SAFE-PROFILE-001`: Supported Host and constrained interactions MUST have equivalent
 WoT meaning, authority, late-result, loss, cancellation and cleanup guarantees.
 Storage, erasure, async syntax, thread mobility, atomics, allocation and driving

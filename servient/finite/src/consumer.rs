@@ -7,7 +7,7 @@ use clinkz_wot_foundation::{
     Generation, MonotonicInstant, ResourceKind as K, SlotIndex, WorkBudget, WorkClass as W,
 };
 use core::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     cmp::Ordering,
     task::{Context, Poll},
 };
@@ -221,21 +221,202 @@ impl Definition {
 /// Frozen source-free definitions attached to independent Consumer authority. An
 /// accepted call always retains its original definition and original bank.
 pub struct ConsumerRuntime {
-    state: Rc<RefCell<State>>,
+    state: Rc<State>,
 }
 struct State {
     consumer: ConsumerInstanceRef,
     definitions: Vec<Arc<Definition>>,
-    slots: Vec<Option<Call>>,
     bank: Arc<HostResourceAccounts>,
-    active: bool,
-    sequence: u64,
-    next_slot: usize,
+    active: Cell<bool>,
+    registry: RefCell<Registry>,
     // Last to drop, after all definitions, calls, native/result backing.
     _funding: Vec<HostCapacityReservation>,
 }
+struct Registry {
+    slots: Vec<Slot>,
+    sequence: u64,
+    next_slot: usize,
+}
+// Inline slots are prepaid at construction; boxing each active call would add
+// an allocation/retirement edge to checkout. Vacant slots retain that capacity.
+#[allow(clippy::large_enum_variant)]
+enum Slot {
+    Vacant,
+    Reserved {
+        sequence: u64,
+        control: Option<Rc<CallControl>>,
+    },
+    Ready(Call),
+}
+impl Slot {
+    fn control(&self) -> Option<&Rc<CallControl>> {
+        match self {
+            Self::Vacant => None,
+            Self::Reserved { control, .. } => control.as_ref(),
+            Self::Ready(call) => Some(&call.control),
+        }
+    }
+}
+
+/// Control remains reachable while the complete call is outside the registry.
+/// Recording a cause is passive; waking and destroying wakers happen separately.
+struct CallControl {
+    cause: RefCell<Option<CoreError>>,
+    abandoned: Cell<bool>,
+    waker: RefCell<Option<core::task::Waker>>,
+    recheck: Cell<bool>,
+    _funding: HostCapacityReservation,
+}
+impl CallControl {
+    fn new(bank: &Arc<HostResourceAccounts>) -> CoreResult<Rc<Self>> {
+        let bytes = (core::mem::size_of::<Self>() + 2 * core::mem::size_of::<usize>()) as u64;
+        let funding = bank
+            .reserve(K::EngineLiveBytesGlobalMax, bytes)
+            .ok_or_else(busy)?;
+        Ok(Rc::new(Self {
+            cause: RefCell::new(None),
+            abandoned: Cell::new(false),
+            waker: RefCell::new(None),
+            recheck: Cell::new(false),
+            _funding: funding,
+        }))
+    }
+    fn record(&self, cause: CoreError) {
+        self.cause.borrow_mut().get_or_insert(cause);
+    }
+    fn cause(&self) -> Option<CoreError> {
+        self.cause.borrow().clone()
+    }
+    fn register(&self, waker: &core::task::Waker) {
+        let next = waker.clone();
+        let old = self.waker.borrow_mut().replace(next);
+        drop(old);
+    }
+    fn wake(&self) {
+        let waker = self.waker.borrow_mut().take();
+        if let Some(waker) = waker {
+            waker.wake();
+        }
+    }
+}
+
+/// A reserved slot stays occupied during admission/progress, including nested
+/// entry. Unwinding restores the complete original call. Neither restoration
+/// nor removal destroys linked owners under the registry borrow.
+struct SlotLease<'a> {
+    state: &'a State,
+    index: usize,
+    sequence: u64,
+    call: Option<Call>,
+}
+impl State {
+    fn current(&self) -> bool {
+        self.active.get() && self.consumer.is_current()
+    }
+    fn reserve_slot(&self) -> CoreResult<SlotLease<'_>> {
+        let mut registry = self.registry.borrow_mut();
+        let index = registry
+            .slots
+            .iter()
+            .position(|s| matches!(s, Slot::Vacant))
+            .ok_or_else(busy)?;
+        let sequence = registry.sequence.checked_add(1).ok_or_else(busy)?;
+        registry.sequence = sequence;
+        registry.slots[index] = Slot::Reserved {
+            sequence,
+            control: None,
+        };
+        Ok(SlotLease {
+            state: self,
+            index,
+            sequence,
+            call: None,
+        })
+    }
+    fn checkout(&self, index: usize, sequence: Option<u64>) -> Option<SlotLease<'_>> {
+        let mut registry = self.registry.borrow_mut();
+        let slot = &mut registry.slots[index];
+        match slot {
+            Slot::Ready(call) if sequence.is_none_or(|s| s == call.sequence) => {}
+            Slot::Reserved {
+                sequence: original,
+                control: Some(control),
+            } if sequence.is_some_and(|s| s == *original) => {
+                control.recheck.set(true);
+                return None;
+            }
+            _ => return None,
+        }
+        let Slot::Ready(call) = core::mem::replace(slot, Slot::Vacant) else {
+            unreachable!()
+        };
+        let sequence = call.sequence;
+        *slot = Slot::Reserved {
+            sequence,
+            control: Some(call.control.clone()),
+        };
+        Some(SlotLease {
+            state: self,
+            index,
+            sequence,
+            call: Some(call),
+        })
+    }
+    fn revoke(&self) {
+        self.active.set(false);
+        // First record every original cause without calling linked code. A
+        // reentrant wake cannot make sibling cancellation win over this close.
+        {
+            let registry = self.registry.borrow();
+            for control in registry.slots.iter().filter_map(Slot::control) {
+                control.record(stale());
+            }
+        }
+    }
+    fn close(&self) {
+        self.revoke();
+        let count = self.registry.borrow().slots.len();
+        for index in 0..count {
+            let control = self.registry.borrow().slots[index].control().cloned();
+            if let Some(control) = control {
+                control.wake();
+            }
+        }
+    }
+}
+impl SlotLease<'_> {
+    fn attach(&self, control: Rc<CallControl>) {
+        let mut registry = self.state.registry.borrow_mut();
+        let Slot::Reserved { control: slot, .. } = &mut registry.slots[self.index] else {
+            unreachable!()
+        };
+        *slot = Some(control);
+    }
+    fn take(mut self) -> Call {
+        self.call.take().unwrap()
+    }
+}
+impl Drop for SlotLease<'_> {
+    fn drop(&mut self) {
+        let replacement = self.call.take().map_or(Slot::Vacant, Slot::Ready);
+        let old = {
+            let mut registry = self.state.registry.borrow_mut();
+            core::mem::replace(&mut registry.slots[self.index], replacement)
+        };
+        let Slot::Reserved { sequence, control } = old else {
+            unreachable!()
+        };
+        debug_assert_eq!(sequence, self.sequence);
+        if let Some(control) = control
+            && control.recheck.replace(false)
+        {
+            control.wake();
+        }
+    }
+}
 struct Call {
     consumer: ConsumerInstanceRef,
+    control: Rc<CallControl>,
     effect: ConsumerEffect,
     sequence: u64,
     raw: Option<HostBindingCallBox<CoreResult<InteractionOutput>>>,
@@ -250,7 +431,6 @@ struct Call {
     terminal: bool,
     output_validated: bool,
     selection: Option<collection::PropertySelection>,
-    abandoned: bool,
     deadline: Deadline,
     last_time: MonotonicInstant,
     _funding: Vec<HostCapacityReservation>,
@@ -284,7 +464,7 @@ impl ConsumerRuntime {
             return Err(reject((definitions, funding), error));
         }
         let bytes = (core::mem::size_of::<State>()
-            + calls * core::mem::size_of::<Option<Call>>()
+            + calls * core::mem::size_of::<Slot>()
             + definitions.len()
                 * (core::mem::size_of::<Arc<ConsumerDefinition>>()
                     + core::mem::size_of::<ConsumerDefinition>()
@@ -300,7 +480,7 @@ impl ConsumerRuntime {
         {
             return Err(reject((definitions, funding), busy()));
         }
-        slots.resize_with(calls, || None);
+        slots.resize_with(calls, || Slot::Vacant);
         entries.extend(
             definitions
                 .into_iter()
@@ -309,16 +489,18 @@ impl ConsumerRuntime {
         let mut funding = funding;
         funding.extend(extra);
         Ok(Self {
-            state: Rc::new(RefCell::new(State {
+            state: Rc::new(State {
                 consumer,
                 definitions: entries,
-                slots,
                 bank,
-                active: true,
-                sequence: 0,
-                next_slot: 0,
+                active: Cell::new(true),
+                registry: RefCell::new(Registry {
+                    slots,
+                    sequence: 0,
+                    next_slot: 0,
+                }),
                 _funding: funding,
-            })),
+            }),
         })
     }
     pub fn read_property(
@@ -494,9 +676,16 @@ impl ConsumerRuntime {
             CallInput::Value(input) => (input, None),
             CallInput::Members(members) => (None, Some(members)),
         };
-        let mut state = self.state.borrow_mut();
+        let state = &self.state;
+        if !state.current() {
+            return Err(reject(input, stale()));
+        }
+        let mut reserved = match state.reserve_slot() {
+            Ok(reserved) => reserved,
+            Err(error) => return Err(reject(input, error)),
+        };
         let checked = (|| -> CoreResult<_> {
-            if !state.active || !state.consumer.is_current() {
+            if !state.current() {
                 return Err(stale());
             }
             let name_len = match target {
@@ -526,12 +715,6 @@ impl ConsumerRuntime {
                 Some(true) => return Err(CoreError::TimedOut(context())),
                 None => return Err(invalid()),
             }
-            let slot = state
-                .slots
-                .iter()
-                .position(Option::is_none)
-                .ok_or_else(busy)?;
-            let sequence = state.sequence.checked_add(1).ok_or_else(busy)?;
             if !pay(budget, W::ProviderProbes, definition.access_work()) {
                 return Err(busy());
             }
@@ -665,22 +848,20 @@ impl ConsumerRuntime {
                 }
                 definition.check_current(&state.consumer, input_selection.or(selection))?;
             }
-            if !state.consumer.is_current() {
+            if !state.current() {
                 return Err(stale());
             }
-            Ok((
-                slot,
-                sequence,
-                definition,
-                funding,
-                input_selection.or(selection),
-                encoded,
-            ))
+            Ok((definition, funding, input_selection.or(selection), encoded))
         })();
-        let (slot, sequence, definition, funding, selection, encoded) = match checked {
+        let (definition, funding, selection, encoded) = match checked {
             Ok(checked) => checked,
             Err(e) => return Err(reject(input, e)),
         };
+        let control = match CallControl::new(&state.bank) {
+            Ok(control) => control,
+            Err(error) => return Err(reject(input, error)),
+        };
+        reserved.attach(control.clone());
         let raw = match definition.start(encoded.or(input), deadline.instant().map(|_| deadline)) {
             Ok(raw) => raw,
             Err(rejection) if operation == Operation::ReadMultipleProperties => {
@@ -690,8 +871,11 @@ impl ConsumerRuntime {
             }
             Err(rejection) => return Err(rejection),
         };
-        state.slots[slot] = Some(Call {
+        let slot = reserved.index;
+        let sequence = reserved.sequence;
+        let mut call = Call {
             consumer: state.consumer.clone(),
+            control: control.clone(),
             effect: ConsumerEffect::NotAttempted,
             sequence,
             definition,
@@ -706,71 +890,78 @@ impl ConsumerRuntime {
             terminal: false,
             output_validated: false,
             selection,
-            abandoned: false,
             deadline,
             last_time: now,
             _funding: funding,
-        });
-        state.sequence = sequence;
+        };
+        // Native construction is local, but can revoke/close through a linked
+        // callback. Retain that complete work for cancellation before any poll.
+        call.fence(state);
+        reserved.call = Some(call);
+        drop(reserved);
         Ok(ConsumerCall {
             state: self.state.clone(),
             slot,
             sequence,
+            control,
         })
     }
     /// Closes this finite facet. Other facets of the Consumer stay independent;
     /// the ConsumerInstance owner revokes the whole incarnation.
     pub fn begin_close(&self) {
-        self.state.borrow_mut().active = false;
+        self.state.close();
     }
     /// Drive independent cleanup, including after every call handle was lost.
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
-        let mut state = self.state.borrow_mut();
-        let active = state.active;
-        let slots = state.slots.len();
-        let start = state.next_slot;
-        // Rotate priority across steps even when one native poll exhausts the
-        // available credit. Still visit every slot for local fencing; an unpaid
-        // later visit must not reset the next step's scheduling position.
-        state.next_slot = (start + 1) % slots;
-        for offset in 0..slots {
-            let slot = &mut state.slots[(start + offset) % slots];
-            if let Some(call) = slot {
-                let _ = call.step(active, cx, now, budget);
-                if call.abandoned && call.terminal {
-                    *slot = None;
+        let (start, count) = {
+            let mut registry = self.state.registry.borrow_mut();
+            let count = registry.slots.len();
+            let start = registry.next_slot;
+            registry.next_slot = (start + 1) % count;
+            (start, count)
+        };
+        for offset in 0..count {
+            if let Some(mut lease) = self.state.checkout((start + offset) % count, None) {
+                let call = lease.call.as_mut().unwrap();
+                call.control.register(cx.waker());
+                let _ = call.step(&self.state, cx, now, budget);
+                if call.control.abandoned.get() && call.terminal {
+                    // Vacate the slot before disposing linked native owners.
+                    drop(lease.take());
                 }
             }
         }
     }
     pub fn is_idle(&self) -> bool {
-        self.state.borrow().slots.iter().all(Option::is_none)
+        self.state
+            .registry
+            .borrow()
+            .slots
+            .iter()
+            .all(|s| matches!(s, Slot::Vacant))
     }
     pub fn consumer(&self) -> ConsumerInstanceRef {
-        self.state.borrow().consumer.clone()
+        self.state.consumer.clone()
     }
 }
 impl Drop for ConsumerRuntime {
     fn drop(&mut self) {
-        self.state.borrow_mut().active = false;
+        self.state.revoke();
     }
 }
 
-/// A logical call handle; the runtime owns abandoned work until retirement.
-/// Cloning a native Binding or swapping a definition is not exposed here.
+/// A logical call handle. Cancellation and abandonment remain reachable while
+/// its native work is checked out; each incarnation has a distinct control.
 pub struct ConsumerCall {
-    state: Rc<RefCell<State>>,
+    state: Rc<State>,
     slot: usize,
     sequence: u64,
+    control: Rc<CallControl>,
 }
 impl ConsumerCall {
     pub fn cancel(&self) {
-        if let Some(call) = self.state.borrow_mut().slots[self.slot]
-            .as_mut()
-            .filter(|c| c.sequence == self.sequence)
-        {
-            call.cancel(CoreError::Cancelled(context()));
-        }
+        self.control.record(CoreError::Cancelled(context()));
+        self.control.wake();
     }
     pub fn poll(
         &mut self,
@@ -778,29 +969,26 @@ impl ConsumerCall {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Poll<ConsumerSettlement> {
-        let mut state = self.state.borrow_mut();
-        let active = state.active;
-        let slot = &mut state.slots[self.slot];
-        let Some(call) = slot.as_mut().filter(|c| c.sequence == self.sequence) else {
+        self.control.register(cx.waker());
+        let Some(mut lease) = self.state.checkout(self.slot, Some(self.sequence)) else {
             return Poll::Pending;
         };
-        if call.step(active, cx, now, budget).is_pending() {
+        if lease
+            .call
+            .as_mut()
+            .unwrap()
+            .step(&self.state, cx, now, budget)
+            .is_pending()
+        {
             return Poll::Pending;
         }
-        Poll::Ready(ConsumerSettlement {
-            call: slot.take().unwrap(),
-        })
+        Poll::Ready(ConsumerSettlement { call: lease.take() })
     }
 }
 impl Drop for ConsumerCall {
     fn drop(&mut self) {
-        if let Some(call) = self.state.borrow_mut().slots[self.slot]
-            .as_mut()
-            .filter(|c| c.sequence == self.sequence)
-        {
-            call.abandoned = true;
-            call.cancel(CoreError::Cancelled(context()));
-        }
+        self.control.abandoned.set(true);
+        self.control.record(CoreError::Cancelled(context()));
     }
 }
 /// Complete original normal/late result and retained cleanup/native owner.
@@ -954,18 +1142,25 @@ impl ConsumerSettlement {
 }
 impl Call {
     fn cancel(&mut self, error: CoreError) {
-        if self.first_cause.is_none() {
-            self.first_cause = Some(error);
-        }
+        self.control.record(error);
+        self.first_cause = self.control.cause();
         if !self.terminal {
             self.cancelling = true;
+        }
+    }
+    fn fence(&mut self, state: &State) {
+        if !state.current() {
+            self.control.record(stale());
+        }
+        if let Some(cause) = self.control.cause() {
+            self.cancel(cause);
         }
     }
     /// Ready requires a terminal outcome and paid current-policy checks in this
     /// step. A previously terminal, unread result alone cannot authorize delivery.
     fn step(
         &mut self,
-        active: bool,
+        state: &State,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
@@ -985,9 +1180,7 @@ impl Call {
                 RetryClass::Never,
             ))),
         }
-        if !active || !self.consumer.is_current() || self.abandoned {
-            self.cancel(stale());
-        }
+        self.fence(state);
         if !pay(budget, W::ProviderProbes, self.definition.access_work()) {
             return Poll::Pending;
         }
@@ -997,6 +1190,7 @@ impl Call {
         {
             self.cancel(e);
         }
+        self.fence(state);
         // A completed validation survives a yield for the final policy check.
         // The check above is fresh in this step; no codec/native callback can
         // change policy between it and this retained-result handoff.
@@ -1069,16 +1263,14 @@ impl Call {
                     .poll_result(cx, &mut native)
                 {
                     if let Err(error) = &result {
-                        self.first_cause.get_or_insert(error.clone());
+                        self.cancel(error.clone());
                     }
                     self.outcome = Some(BindingCallSettlement::Returned(result));
                 }
                 refund_native(budget, native);
             }
         }
-        if !self.consumer.is_current() {
-            self.cancel(stale());
-        }
+        self.fence(state);
         if matches!(
             self.outcome,
             Some(BindingCallSettlement::Cancelled {
@@ -1128,7 +1320,8 @@ impl Call {
                         }
                     }
                     Poll::Ready(Err(error)) => {
-                        self.first_cause.get_or_insert(error.clone());
+                        self.control.record(error.clone());
+                        self.first_cause = self.control.cause();
                         if let BindingCallSettlement::Returned(Ok(original)) =
                             core::mem::replace(outcome, BindingCallSettlement::Returned(Err(error)))
                         {
@@ -1137,9 +1330,10 @@ impl Call {
                     }
                 }
             }
-            if !self.consumer.is_current() {
-                self.first_cause.get_or_insert_with(stale);
+            if !state.current() {
+                self.control.record(stale());
             }
+            self.first_cause = self.control.cause();
             // The native and codec callbacks may change application policy.
             // Short current-check credit retains the complete original result.
             if self.first_cause.is_none()
@@ -1152,9 +1346,10 @@ impl Call {
                     .definition
                     .check_current(&self.consumer, self.selection)
                 {
-                    self.first_cause.get_or_insert(error);
+                    self.cancel(error);
                 }
             }
+            self.fence(state);
             self.terminal = true;
             return Poll::Ready(());
         }

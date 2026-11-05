@@ -298,6 +298,20 @@ of remote cancellation or completed network drain. The bank and original leases
 are shared with retained legacy Consumer/Producer owners, whose existing resource
 and transfer regressions remain applicable. Notifications are not finite calls.
 
+Finite Consumer registry access now excludes linked callbacks and destruction.
+Admission reserves the original slot before callbacks; progress checks out its
+complete call while passive close/cancel/abandonment remains accessible. Nested
+entry cannot reuse an occupied slot or poll checked-out work. Current controls
+are checked after callbacks before effects/handoff; late native evidence keeps
+its original funding. The control allocation has its own original-bank lease
+through the final reference, including a call handle retained after settlement.
+[Callback regressions](../../protocol-bindings/protocols/http/tests/consumer_callbacks.rs)
+reproduce the prior public-API borrow panic and exercise nested capacity,
+sibling progress, close/cancel, first cause, abandonment, wakers, unwind
+restoration and actual HTTP result retention/physical retirement. Their executed
+revision and validation results belong to the PR; no broad package acceptance
+is inferred. Continuing Action callback isolation remains outstanding.
+
 ## First joined finite Producer
 
 The optional `producer::ProducerServient<C>` captures one frozen actual
