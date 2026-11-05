@@ -1,22 +1,27 @@
 # Architecture Review 09: Engine Maturity and the Next Engineering Roadmap
 
 - Date: 2026-11-05
-- Status: assessment complete; proposed roadmap and objective pending Owner decision
+- Status: assessment retained; Owner-approved reuse and instance-binding direction
+  reflected in the roadmap; first implementation increment scoped below
 - Reviewed source and active authority: master
   [`072bf280b93d2956876536568215c9b4141aec4c`](https://github.com/yushun1990/clinkz-wot/tree/072bf280b93d2956876536568215c9b4141aec4c),
   including the finite Consumer callback correction in PR #258
 
-This is a **non-normative planning assessment** for Owner review. It proposes
-capability priorities and a falsifiable next objective. It changes no accepted
-architecture, roadmap, work-package admission, milestone, or implementation.
-Publishing or merging this report does not itself approve the proposed objective
-or authorize implementation; an explicit Owner decision remains outstanding.
+This is a **non-normative planning assessment**. The Owner has approved making
+the boundary between reusable prepared execution definitions and independently
+bound logical Thing instances the next engineering priority. [PLAN.md](../../PLAN.md)
+records the durable roadmap focus; this report supplies evidence, compatibility
+analysis, alternatives and a falsifiable first increment. This documentation
+change implements no runtime behavior, changes no detailed architecture contract
+or work-package admission, and closes no milestone.
 
-**Recommendation:** build shared DataSchema preparation and validation next,
-with reusable definitions kept separate from live Thing authority. Follow closely
-with TD-described security and production HTTPS. Retain broader instance reuse,
-scalable Servient composition, portable execution, and Discovery as distinct
-architectural capabilities rather than assuming operation coverage completes them.
+**Recommendation:** establish checked reuse and independent instance binding
+through an existing real interaction path. Preserve correct authority,
+interaction and native-infrastructure owners while separating their present
+coupling to immutable prepared content. Shared validation meaning and broader
+DataSchema execution belong on this boundary; implementing more constraints as
+an isolated feature is not the next major objective. Security/HTTPS, composable
+execution, scale, portable profiles and Discovery remain required delivery work.
 
 The assessment starts from the enduring [product goals](../architecture/00-system-goals-and-context.md),
 the [active v6 authority map](../spec/authority.toml), actual source, and executed
@@ -137,26 +142,28 @@ extensibility beyond the current schema/security envelope. The former closed
 security deserializer is no longer a current defect: unknown scheme data is
 preserved, while execution support remains separate.
 
-**Proposed engineering roadmap.** Move from operation breadth to semantic depth,
-secure execution, and reusable deployment. Priorities express concentration,
-not package-wide start barriers or a new completion gate.
+**Selected engineering roadmap.** The near-term focus moves from basic operation
+coverage to completing reusable, composable WoT Engine execution. The first
+priority establishes the definition/instance boundary, rather than postponing it
+until after DataSchema or native-artifact designs have hardened. Priorities
+express concentration, not package-wide start barriers or a new completion gate.
 
 | Priority | Major capability | Dependencies and rationale |
 | --- | --- | --- |
-| 1 | Shared executable DataSchema services | Unlock ordinary structured device data across interaction families. Replace the type-only boundary with bounded prepared validation definitions and explicit role/media support. Address a shared restriction before more Bindings duplicate it. |
-| 2 | TD-described security and production HTTPS | Provide prepared security requirements plus runtime credential, principal, authorization, and trust services. Start with a useful supported scheme over real HTTPS in both roles. Destination checks must cover URI expansion and continuation targets. Narrow transport work can proceed alongside priority 1. |
-| 3 | Reusable Thing definitions and scalable Servient composition | Provide checked binding of immutable content to independent instance contexts, aggregate capacity, and practical mixed-family application composition. Measure duplicated preparation/backing before choosing caches, indexes, pools, or sharding. |
-| 4 | Real Discovery/Directory clients | Join bounded retrieval and TD admission, reusing destination/trust services. Begin with configured URLs and a real Directory peer. Discovery need not wait for fleet optimization or every interaction mapping. |
-| 5 | Broader portable execution | Extend supported semantics through caller-owned/static storage and no-atomic representations. Introduce portability checks during priorities 1-3; complete broader runtime parity as a dedicated capability. Hardware qualification remains separate. |
-| 6 | Integrated v1 production qualification | Qualify the exact advertised HTTP/HTTPS, security, Discovery, resource, and profile envelope with independent peers, sustained workloads, failure recovery, and usable diagnostics. Add mappings where they test an interoperability need or unresolved architectural boundary. |
+| 1 | Reusable prepared definitions and checked instance binding | Separate eligible immutable execution meaning from actual instance binding, permission and accounting. Prove a useful shared definition with existing real I/O, while qualifying each native artifact against its real dependencies. Preserve correct existing owners rather than designing a universal program hierarchy. |
+| 2 | Shared semantic and secure execution services | Broaden DataSchema/media/response meaning and TD security on that boundary. Deliver useful security schemes and Host HTTPS with runtime credentials, verified principals, authorization and transport trust. Actual destination checks cover URI operands and continuation targets. Narrow security/transport work can proceed alongside priority 1. |
+| 3 | Composable runtime, scale and supported profiles | Extend the boundary through continuing Actions, notifications and Producer composition with their existing distinct lifecycles. Measure shared preparation, per-instance costs, active work and native sharing before choosing caches, indexes, pools or scheduling changes. Exercise caller-owned/static and no-atomic representations as supported capabilities grow. |
+| 4 | Real Discovery/Directory clients | Join bounded retrieval and TD admission, reusing destination/trust services. Begin with configured URLs and a real Directory peer. Discovery need not wait for fleet optimization, universal reuse or every interaction mapping. |
+| 5 | Integrated production and v1 qualification | Qualify the exact role/operation, HTTP/HTTPS, security, Discovery and portable shared-layer envelope using independent peers, sustained workloads, failure recovery and usable diagnostics. Hardware/backend qualification remains distinct future work. |
 
-Security, reuse, and portability should influence interfaces built in priority 1.
-They should not require completing a universal security framework, fleet runtime,
-or embedded backend before useful schema support can ship. URI operands and
-response/media branches remain distinct semantic work; broaden their executable
-support with concrete mappings rather than pretending schema validation alone
-completes TD interpretation. Security work must remove common NoSec eligibility
-restrictions as actual security services become available.
+Schema constraints remain an important missing capability. Their compiled meaning
+and actual validator support must fit the reusable definition and instance
+boundary, with explicit roles, limits and ownership. Security work similarly
+separates invariant requirements from mutable credentials and permission and
+removes common NoSec eligibility restrictions as supporting services arrive.
+URI operands, response/media branches and extension execution remain distinct
+semantic work; broaden them with concrete mappings. Existing v1 requirements
+are preserved, not replaced by a reuse-only delivery target.
 
 The [historical performance manifests](../performance/gateway.toml) explicitly
 retain characterization scope rather than successor acceptance. New scalability
@@ -166,83 +173,144 @@ operation, and subscriber counts. Logical allowances are not physical RAM
 measurements. Synchronous linked code remains cooperative; work credits do not
 establish preemption or hard real-time behavior.
 
-**Next major objective: execute ordinary TD-described structured data through
-shared, reusable validation definitions.** The product outcome is concrete: an
-application can describe a structured sensor value or actuator command with
-meaningful constraints, then consume, expose, observe, or publish it through
-existing Bindings with consistent validation.
+**Boundary to establish.** Existing [preparation/reuse contracts](../spec/planning.md),
+[runtime safety](../spec/runtime-safety.md), [resource ownership](../spec/foundation.md)
+and [Binding SPI](../spec/binding-spi.md) already distinguish these concerns.
+They are not a requirement to introduce five new public abstractions.
 
-The architectural outcome separates the following lifetimes:
+| Concern | Existing implementation and correct boundary to retain | Reuse and qualification consequence |
+| --- | --- | --- |
+| Shared semantic definitions and validation meaning | Core already represents operation/data roles and named collection schemas; TD owns common interpretation. The Consumer collection schema is an owned member/name table, while the HTTP Producer program already shares its table through Arc. | Capture invariant meaning once in source-independent prepared content. Reuse the actual content, not just an equal type/name/hash. Its supported schema/media/security meaning is not current permission or an executable-service certificate. |
+| Binding-specific compiled artifacts | The HTTP Consumer artifact embeds operation, complete target, method and headers. The Producer program embeds operation/Form, address, target/path and its schema association. Actual compiler/executor configuration and role are checked separately. | These complete artifacts are endpoint-dependent today. Different endpoints need separately qualified artifacts unless the concrete Binding deliberately implements checked operands. Artifact identity, configuration digest, Rust type or format equality alone cannot prove compatibility. |
+| Per-instance identity, operands, policy, authority and accounts | ConsumerInstance already supplies a move-only authority and passive reference. ConsumerDefinition currently bundles exact mapping, services and funding, and runtime construction requires its bank to match the instance's bank. | Preserve independent authority. Bind an actual endpoint/mapping, supported services, mutable policy and per-instance capacity explicitly; keep the shared backing's original owner/account. An endpoint may be lent from its immutable mapping rather than duplicated as competing truth. |
+| Per-interaction lifecycle and results | Finite calls already retain original definitions, controls, deadlines, native outcomes and settlements. Action invocation, notification and publication owners have separate lifetimes. | Keep these owners. A shared definition cannot become a shared call, cancellation flag, result slot or cleanup budget. Late/unread results retain their original instance association, captured services and backing. |
+| Binding-owned native infrastructure | HTTP currently uses call-owned connections and a one-call-per-registration policy. MQTT already shares native services/interests through separate logical participation. | Definition reuse neither creates a connection pool nor requires one native resource per Thing. Sharing or specializing native infrastructure is a separate actual Binding policy with its own compatible leases, progress and retirement owner. |
 
-- Immutable schema meaning and prepared validation belong to reusable
-  definitions.
-- Thing identity, current permission, behavior, and per-instance operands belong
-  to instance context.
-- Calls, notifications, results, and cleanup retain their own owners.
-- Native encoding and transport remain Binding/codec responsibilities.
+The source distinction is material. [HttpArtifact][http-program] includes the
+entire URL; the [native Consumer][http-consumer] parses and uses that captured
+target. [HttpProducerProgram][http-producer-program] similarly captures native
+address/target facts, and [HttpFiniteConfig][http-finite-config] separately carries
+the logical Producer key. Retargeting either program by relabeling an artifact
+envelope would bypass its existing support/compatibility assumptions. Conversely,
+the [PropertyCollectionSchema][collection-schema] member table has no endpoint or
+live authority and is eligible shared meaning when its exact members, roles and
+supported assertions agree. Existing Producer schema sharing within one prepared
+mapping is useful precedent, not proof of cross-instance accounting or reuse.
 
-This supplies a concrete first use of reusable prepared content without
-committing to a universal compiled program format or claiming general native
-definition reuse. Different endpoint/schema/security/profile dependencies may
-still require specialized native preparation.
+**First engineering increment: checked reuse of prepared ReadAllProperties
+meaning across independently bound HTTP Consumers.** Use the existing
+[real HTTP collection-read path][http-read-all] and its captured JSON/type-only,
+endpoint-NoSec services. Its nontrivial owned member table gives a more useful
+reuse demonstration than sharing a scalar type enum or a common marker. It
+requires no new operation, protocol or DataSchema constraint.
 
-The initial scope should include nested objects and arrays, required members,
-numeric bounds, const/enum, and length constraints under explicit limits.
-Composition and further assertions can follow in coherent increments. Numeric
-precision, annotation handling, format, and unsupported assertions need explicit
-policies; silently weakening a schema is unacceptable. The exact supported
-subset is an engineering decision inside this objective, not a promise of full
-JSON Schema or general extension execution.
+Prepare one immutable Consumer root-read definition with its exact readable
+members, data role and supported common meaning. For two concrete loopback
+endpoints, pure preparation qualifies the actual HTTP mappings and all relevant
+Form/response/extension facts against the actual registrations and services.
+That endpoint preparation may construct distinct native artifacts; it should
+borrow the original shared meaning rather than rebuild an independent retained
+member table. Bind two logical Consumer instances, each with its actual endpoint
+association, policy and accounts, and execute against two existing fully qualified
+Engine Producers returning distinguishable values. Each root read remains one
+native interaction, never a fallback to individual Property reads.
 
-Acceptance requires:
+The first increment's sharing claim is deliberately precise: prepared common
+execution meaning is reused across different endpoints; the present exact-target
+HTTP artifacts remain specialized. An implementation may also share an unchanged
+artifact when the actual Binding establishes all dependencies and associations,
+but that is a separate supported case. This increment does not require splitting
+HTTP bytes into a new parameter language or claiming every native artifact can
+be shared across devices. Endpoint-specific pure preparation can finish before
+instance binding; the first increment need not implement arbitrary first-use
+compilation after source retirement.
 
-1. **Useful execution:** real HTTP Consumer-to-Producer input/output validation
-   and real MQTT notification validation using structured constrained values,
-   including invalid peer input.
-2. **Shared semantics:** Property values, Action roles, Event roles, and
-   collection members use the same underlying schema machinery while retaining
-   their distinct meanings. Family integration can land in coherent increments.
-3. **Source independence:** execution continues after TD, semantic arena, and
-   preparation owners are destroyed.
-4. **Safe reuse:** at least two independent instances reuse one prepared
-   validation definition. Revocation, replacement, or disposal of one cannot
-   alter the other's permission or prematurely release shared backing.
-5. **Truthful support:** unsupported assertions remain distinguishable from
-   invalid descriptions and exhausted capacity. Consumer alternatives remain
-   selectable; Producer final advertisement remains completely qualified.
-6. **Bounded ownership:** compilation, validation, scratch, retained definitions,
-   late results, and destruction have tested limits and original-account
-   retention under failure and cancellation.
-7. **Preserved portability:** the new semantic representation introduces no
-   mandatory Host executor, protocol case, or Arc requirement into its portable
-   core. Portable kernel evidence remains distinct from embedded runtime or
-   hardware qualification.
+Prefer separating the coupling in the present ConsumerDefinition/runtime handoff
+and reusing the existing collection schema, actual registrations, authority and
+call/settlement mechanisms. An owned shared schema view is an implementation
+option, not a prescribed new trait hierarchy. Merely wrapping the entire current
+definition in Arc would still couple per-instance policy/accounting, while
+preparing every instance fully and interning equal outputs afterward would not
+demonstrate preparation reuse.
 
-The implementation boundary spans TD facts, Core data contracts, Planning,
-codecs, and affected validation adapters. Replace the restrictive type-only path
-where necessary; do not preserve it as a mandatory compatibility facade. Correct
-the known Action callback ownership prerequisite before routing richer linked
-services through that owner. Retain the existing distinct finite, Action,
-notification, and publication lifecycles.
+Acceptance requires the following concrete outcomes:
 
-General endpoint parameterization, automatic caches, persistence, broad media
-support, and fleet scheduling belong to later work. Existing HTTP and MQTT
-participants are sufficient to begin. They both use JSON in these paths, so
-success with them does not establish general media independence. Another
-encoding or protocol should earn its place through a concrete use or
-counterexample, rather than a protocol-count requirement.
+1. **Observable prepared-content reuse:** construct the common operation/member
+   meaning once and retain one shared member/name backing across both bound
+   Consumers. Instrument construction and allocation/account ownership, not just
+   byte equality. Any repeated endpoint-specific lowering or compatibility work
+   is measured separately and remains bounded and funded.
+2. **Real independent endpoint binding:** execute root reads at two different
+   endpoints with distinct results, instance identities and independent policies.
+   Denial, revocation, close or replacement of one instance cannot authorize,
+   revoke, retarget or reclaim the other's work. Equal numeric slot values from
+   different authority owners cannot collapse those identities.
+3. **Complete actual qualification:** before effects, each selected Consumer
+   operation passes actual Binding/configuration, endpoint, schema/media/security
+   service, profile and capacity checks. Each Producer peer retains its existing
+   complete final-TD qualification, behavior, collision/readiness and publication
+   checks. Sharing never serves as blanket qualification; Consumer partial
+   support remains distinct from Producer complete advertisement.
+4. **Dependency counterexamples:** changed member/schema meaning requires new
+   common preparation or refusal. Changed target/path/header or native
+   configuration requires appropriate actual native preparation/checking; an old
+   exact-target artifact cannot be relabeled. Foreign actual provider, unsupported
+   security/media, unavailable validator, stale authority and changed captured
+   bounds refuse before effects or fence the original work as applicable.
+5. **Source-independent binding and execution:** after the two endpoint mappings
+   are purely qualified, discard TD, semantic-arena and compiler owners, then
+   bind/install and execute from the retained prepared content and actual runtime
+   registrations. Binding or warm execution cannot recover meaning by reparsing
+   the source or invoking a hidden TD callback.
+6. **Exact independent funding:** the shared definition's physical owner retains
+   its original reservations once. Each instance separately funds its reference,
+   operands/services, records and interaction/result/cleanup obligations at its
+   own account; compatible shared service backing also keeps its actual owner.
+   Do not simply remove the existing foreign-bank guard or move charges to a new
+   instance. Failed second-instance binding must return its owners and reservations
+   without disturbing the first instance or shared content.
+7. **Late-result and final-release truth:** keep an original result or late native
+   outcome while its originating instance and preparation root are dropped and
+   the sibling continues. Original validation, authority association, shared
+   backing and both shared/per-interaction funding survive until their actual
+   final uses. Release occurs exactly once after final disposal, including
+   failure, cancellation, saturation and unread settlements. Independent-instance
+   tests need not change HTTP's declared native concurrency policy.
+
+The implementation boundary is the selected TD/Planning preparation capture,
+Core prepared-content/instance handoff, finite Consumer runtime and the actual
+HTTP preparation/execution association. Existing Producer composition supplies
+the real peer and complete-advertisement regression evidence; Producer reuse is
+not silently claimed. Reuse of the existing codec/validator is sufficient. Retain
+callback isolation and external owned/incremental compiler eligibility. Any
+exposed contract conflict must be corrected at its actual owner, rather than
+hidden behind aliases or a second implementation path.
+
+Do not generalize the first increment into an eager all-family migration,
+automatic cache, serialized image, universal VM, scheduler or Engine session
+manager. It makes no fleet-throughput, new media, new schema, general native
+artifact sharing or embedded-runtime claim. Portable shared meaning must not
+acquire a mandatory Host executor or new Arc requirement solely from the Host
+binding representation. Extend the proved boundary to other capabilities and
+profiles with their own real evidence; the known continuing Action callback
+defect remains a prerequisite where that distinct path is touched.
 
 **Principal risks and alternative directions.**
 
-- Schema work can expand indefinitely. Deliver a bounded useful subset first.
-  Existing TD numeric facets use machine numeric representations; exact value
-  handling requires deliberate limits or correction before claiming broader
-  numeric conformance. Unsupported precision or assertions must refuse
-  explicitly.
-- Reuse can accidentally share authority or trust. Shared schema content is a
-  useful starting point. General native-definition reuse must additionally prove
-  endpoint, configuration, media, security, and profile compatibility, including
-  original physical-owner and account retention.
+- Reuse can accidentally share authority, mutable policy, trust or accounting.
+  Separating content from instance binding is therefore the first objective.
+  Sharing the entire current ConsumerDefinition, a native service or an account
+  bank is not a substitute for proving the actual independent owners.
+- Native artifacts may remain specialized. Requiring an endpoint-independent
+  universal program would invent compatibility the HTTP implementations do not
+  currently have. Keeping every byte per instance would miss eligible common
+  meaning. Select sharing granularity from actual dependencies and report the
+  measured benefit without promising a fleet-scale reduction in advance.
+- Schema expansion remains substantial later work. Existing TD numeric facets
+  use machine numeric representations; exact values, annotations and supported
+  assertions need deliberate policies before broader conformance claims. A
+  larger validator cannot resolve the current instance/account coupling by
+  itself, and unsupported assertions must still refuse.
 - Host convenience can harden into architecture. The current manual local
   ownership model is useful, but synchronous callbacks and Rc/Arc representations
   cannot define every supported deployment. Exercise portable representations
@@ -252,11 +320,12 @@ counterexample, rather than a protocol-count requirement.
   policy and MQTT's QoS 0/control restrictions remain Binding limits. Future
   mappings must preserve legitimate richer native behavior without inventing
   transactional, delivery, or rollback guarantees.
-- A secure deployment deadline could justify security first. This is the
-  strongest alternative ordering because authentication and trust are direct
-  product requirements. A committed large-fleet integration could similarly
-  justify bringing checked instance reuse forward. Without either external
-  commitment, schema execution offers the broadest immediate capability benefit.
+- A secure deployment deadline could justify advancing HTTPS/security alongside
+  the first increment. Security is a direct product requirement, not optional
+  cleanup after reuse. A committed large-fleet workload could justify earlier
+  native parameterization, indexes or sharing measurements, but must not remove
+  dependency checks or independent policy/accounting. Neither need is inferred
+  merely from a desirable optimization.
 
 Discovery remains a client capability rather than a Directory server project.
 Its Introduction/Exploration workflow can be delivered progressively using
@@ -288,10 +357,10 @@ cross-target execution was performed. The automatic required validation workflow
 checks [diff hygiene](../../.github/workflows/mainline.yml), not those broader
 claims.
 
-The proposed Owner decision is to adopt shared executable DataSchema preparation
-and validation as the next major objective, followed closely by security/HTTPS,
-with broader instance reuse and scaling retained as separate architectural work.
-Implementation awaits an explicit decision.
+These executed results are preserved as the assessment baseline. The revised
+direction and first increment above are engineering conclusions from that source
+and the Owner-approved priority; no checked-reuse implementation or new acceptance
+result is claimed by this documentation revision.
 
 [td-facts]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/td/src/semantic/facts.rs
 [type-schema]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/planning/src/type_schema.rs#L138
@@ -313,3 +382,9 @@ Implementation awaits an explicit decision.
 [discovery-resolver]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/discovery/src/resolver.rs
 [discovery-session]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/discovery/src/session.rs
 [action-runtime]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/servient/finite/src/consumer_action.rs#L291
+[http-program]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/protocol-bindings/protocols/http/src/program.rs
+[http-consumer]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/protocol-bindings/protocols/http/src/lib.rs
+[http-producer-program]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/protocol-bindings/protocols/http/src/producer.rs
+[http-finite-config]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/protocol-bindings/protocols/http/src/finite_producer.rs
+[collection-schema]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/core/src/collection.rs
+[http-read-all]: https://github.com/yushun1990/clinkz-wot/blob/072bf280b93d2956876536568215c9b4141aec4c/protocol-bindings/protocols/http/tests/read_all_properties.rs

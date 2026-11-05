@@ -11,14 +11,21 @@ client-only Discovery/Directory, portable shared semantics and Host HTTP/HTTPS
 production delivery. Zenoh/pico and real embedded protocol/hardware qualification
 remain separate future work.
 
-## Delivery strategy: basic capability breadth through joined execution
+## Delivery strategy: reusable, composable Engine execution
 
-The near-term engineering objective is **basic executable coverage of Property,
-Action and Event in both Consumer and Producer roles, including described
-collection operations**. Existing composition footholds are means to that result.
-Interleave semantic kernels with public TD-driven paths and actual Binding I/O;
-use those paths to challenge interface and ownership assumptions. An operation
-enum, unit test or raw kernel cannot complete a WoT capability.
+The near-term engineering objective is **complete the reusable, composable WoT
+Engine execution architecture**, starting with checked reuse of eligible prepared
+execution content across independently bound logical Thing instances. Basic
+Property/Action/Event and described collection coverage in both roles has reached
+a meaningful milestone. The real execution paths below are the foundation for
+this work; they do not establish architecture completion or v1 qualification.
+
+Separate invariant preparation from instance binding and accepted interaction
+work without prescribing a universal program format or new public type hierarchy.
+Broader DataSchema validation and security services must develop on that correct
+boundary, rather than make isolated schema constraints the next major objective.
+Use existing real Bindings to expose compatibility and ownership assumptions,
+then refine the shared architecture with executable evidence.
 
 ### Capability coverage
 
@@ -119,64 +126,52 @@ Current joined paths are bounded Host/manual, type-only schema and NoSec subsets
 their real I/O does not establish complete family, general DataSchema/security,
 HTTPS, constrained-profile or v1 qualification. Those remain delivery work.
 
-### Capability horizons
+### Engineering priorities and dependencies
 
-| Horizon | Primary result | Completion evidence appropriate to that result |
+| Priority | Product and architectural outcome | Evidence appropriate to the outcome |
 | --- | --- | --- |
-| A — Semantic ownership | Finite exchange, continuing Action, notification conversation and Producer publication retain distinct but composable controls and owners. | Executable operation/lifecycle cases, including stale identity, cancellation, late results, saturation and retained cleanup. Raw kernels alone make no TD or native I/O claim. |
-| B — Joined Producer foothold | Whole-Thing composition supports finite Property Read and continuing Action mappings over actual native participants; broaden only with complete final support and retained ownership. | Public real-peer tests plus negative support, prepublication, cancellation, replacement and final-resource-release evidence, scoped to the implemented mappings. |
-| C — Open Consumer and broader operations | Establish basic executable Property/Action/Event and described collection coverage in both roles through open composition with distinct finite, Action and notification lifecycles. | TD-driven selection or qualified publication, actual services and real Binding I/O for each claimed role/operation subset, with its control and cleanup evidence. Raw kernels and mocks alone do not complete a family. |
-| D — Interoperability and product qualification | Verify downstream third-party Binding composition, selected cross-protocol contrasts, Host HTTP/HTTPS and security, Discovery/Directory client, portable shared semantics and supported profiles. | Real native peers, advertised DataSchema/security/profile checks, scoped resource/performance measurements and client Discovery behavior. |
-| E — v1 integration | Reconcile completed WP-400/500/600 capability claims through WP-700 without inheriting historical acceptance. | Independent conformance, security, integration and release evidence for the exact advertised v1 scope. |
+| 1 — Reusable definitions and checked instance binding | Prepare eligible invariant content once and bind independent logical Things with their actual endpoints, services, policy, authority and accounts. Retain existing correct interaction and native ownership boundaries. | Existing real interaction paths demonstrate actual shared content, complete selected support, incompatible-bind refusal, independent revocation/replacement, late results and exact final release. |
+| 2 — Shared semantic and secure execution services | Broaden DataSchema/media/response meaning and TD-described security on the definition/instance boundary; deliver Host HTTPS, authentication, authorization and transport trust. | Supported assertions and security branches execute through actual captured services and native peers, without source-TD callbacks, silent weakening or credential leakage. |
+| 3 — Composable runtime and supported profiles | Extend checked reuse and application composition across finite, Action, notification and Producer capabilities; prove bounded progress, native sharing and portable representations. | Mixed real Binding work retains separate lifecycles and authority; Host/static/no-atomic evidence is scoped to supported capabilities. Measure preparation, per-instance and active-work costs before selecting caches, indexes or scheduling changes. |
+| 4 — Discovery/Directory clients | Compose bounded trusted retrieval, links/continuations and TD admission as an explicit client workflow. | Real endpoints and Directory peers, destination/credential policy, input/result/work limits, cancellation and final cleanup. |
+| 5 — Production and v1 integration | Qualify the retained role/operation, Host HTTP/HTTPS, security, Discovery and portable shared-layer scope through WP-700. | Independent interoperability, conformance, resource/performance, feature/profile and release evidence for the exact advertised scope. |
 
-Horizons express **recommended concentration, not sequential package gates**.
-The present frontier spans A–C: extend working composition into the missing
-role/operation paths while retaining existing lifecycle guarantees. Basic coverage
-is narrower than D's production qualification and E's release integration.
+Priorities express concentration, not sequential package gates. Security/HTTPS,
+Discovery and portable-profile work can advance with available dependencies;
+they need not wait for universal reuse or all-family architectural closure.
+Basic operation evidence remains valuable without closing a package or milestone.
 
 ### Near-term capability growth and priority
 
-The objective covers the following distinct semantics, delivered in coherent,
-independently reviewable increments:
+The roadmap distinguishes shared semantic definitions and validation meaning;
+Binding-specific compiled artifacts with their actual compatibility dependencies;
+per-instance identity, endpoint operands, policy, authority and accounting;
+per-interaction lifecycle and result ownership; and Binding-owned native
+infrastructure that may be shared independently of Thing cardinality. These are
+responsibility and lifetime distinctions, not five mandatory public abstractions.
+Detailed contracts remain in [Planning](docs/spec/planning.md),
+[Core](docs/spec/interaction-core.md), [Binding SPI](docs/spec/binding-spi.md),
+[Runtime safety](docs/spec/runtime-safety.md) and [Foundation](docs/spec/foundation.md).
 
-- **Property:** retain reads and add TD-driven write and observation/stop paths
-  in both roles. Validate written and delivered values; observation establishment
-  fabricates no initial value and performs no hidden read.
-- **Action:** extend the synchronous Consumer subset to continuing invocation
-  and described query/cancel, preserving Producer controls. Retain the original
-  mapping, principal, result and cleanup independently of the initiating exchange;
-  local cancellation does not prove remote rollback.
-- **Event:** join Producer emission and Consumer subscription/unsubscription to
-  TD-driven preparation/publication and real I/O. Keep subscription, data,
-  optional dataResponse and cancellation roles distinct; described reciprocal
-  responses require actual native support and cardinality. Event loss is not
-  Property coalescing.
-- **Collections:** deliver described Thing-root operations alongside family
-  growth: Property read/write all or multiple and observe/unobserve all, Action
-  query all, and Event subscribe/unsubscribe all. Preserve all-versus-selected
-  scope, combined schemas, logical attribution, partial failure and supported
-  atomicity; never silently lower a native group operation into N calls or
-  subscriptions. [TD 1.1 collection Forms](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing)
-  and [Core collection semantics](docs/spec/interaction-core.md) retain authority.
+The first increment should demonstrate checked reuse in the existing Host HTTP
+ReadAllProperties path: share its eligible prepared member/data meaning across
+independent Consumer instances, qualify each actual endpoint/native mapping,
+and retain separate policy, capacity, calls and results. Exact ownership,
+compatibility analysis and falsifiable acceptance are scoped in
+[Review 09](docs/reviews/review-09-engine-maturity-and-roadmap.md). This establishes
+the boundary using existing validation, without requiring new DataSchema
+constraints, automatic caches or universal native-artifact reuse. An endpoint
+embedded in a native artifact cannot become a free instance operand by assertion.
 
-For a basic executable claim, use public TD-driven selection or complete Producer
-qualification, captured actual services, source-independent execution and a real
-Binding peer for the declared subset. Exercise the relevant refusal, validation,
-cancellation, replacement, late-result and final-release paths. Semantic breadth,
-raw lifecycle evidence and production qualification remain separate claims. The
-objective neither requires all operations in one PR nor every Binding to support
-every operation.
-
-Select subsequent increments against the **whole roadmap and remaining product
-gaps**, using the coverage above and exact work-package dependencies. Prefer
-missing executable roles/operations over another mapping of an already exercised
-path unless a concrete interoperability need or defect justifies that choice.
-The implementation PR should explain the capability advanced, why it is valuable
-relative to remaining gaps, its dependencies and the scope of its evidence.
-Correct prerequisite schema, security or ownership defects with the affected
-slice; do not accumulate speculative kernels or universal runtime abstractions.
-This does not impose a fixed cross-family sequence or postpone independent
-Discovery, HTTPS/security and portable-profile work until every operation exists.
+Select subsequent increments against remaining product capabilities and the
+actual assumptions exposed by those integrations. Preserve distinct Property,
+continuing Action, Event/control/response and collection semantics. A native
+collection interaction never silently becomes N leaf calls or subscriptions;
+sharing content never shares current permission or changes effect certainty.
+Complete Producer qualification remains mandatory for the entire retained final
+TD, while Consumer partial support still requires complete support of each
+selected interaction. Correct local defects as prerequisites where relevant;
+do not substitute another isolated repair for the architectural capability.
 
 **HTTP SSE is an optional notification mapping**, selected when it advances the
 chosen capability. It is neither a mandatory predecessor nor a standing next
