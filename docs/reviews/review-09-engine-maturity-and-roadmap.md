@@ -233,13 +233,39 @@ definition in Arc would still couple per-instance policy/accounting, while
 preparing every instance fully and interning equal outputs afterward would not
 demonstrate preparation reuse.
 
+**Architecture acceptance boundary.** The implementation must establish a
+usable prepared-content/instance-binding seam in the actual Engine
+preparation-to-execution handoff. Reusing only the `PropertyCollectionSchema`
+allocation inside otherwise unchanged, independently fully prepared runtimes
+does **not** satisfy this objective. Prepare common semantic execution meaning
+once, then qualify and bind independently owned instances with their actual
+Binding artifacts, endpoint/configuration dependencies, services, policy,
+authority and accounts. Exercise that composition through supported public
+entry points rather than a test-only shortcut. Do not turn the common meaning
+into live permission, and do not pretend two differently targeted HTTP
+artifacts have identical execution dependencies.
+
+The seam must be semantically extensible to richer DataSchema roles and
+TD-described security requirements without assuming those capabilities are
+already implemented. This is a boundary criterion, not permission to invent
+a universal program, a mandatory new public hierarchy or a generic security
+framework in the first PR. If the existing interfaces already satisfy part of
+this separation, retain them and demonstrate the missing binding/reuse behavior
+rather than renaming types to simulate progress.
+
 Acceptance requires the following concrete outcomes:
 
-1. **Observable prepared-content reuse:** construct the common operation/member
-   meaning once and retain one shared member/name backing across both bound
-   Consumers. Instrument construction and allocation/account ownership, not just
-   byte equality. Any repeated endpoint-specific lowering or compatibility work
-   is measured separately and remains bounded and funded.
+1. **Observable prepared-content reuse and actual binding separation:**
+   construct common operation/member meaning once, retain one shared
+   member/name backing, and use it to create at least two independently qualified
+   instance executions through the real preparation/runtime handoff. Instrument
+   semantic preparation invocations, native artifact preparation, actual retained
+   backing and account ownership separately; equality of outputs, a shared `Arc`,
+   or a lowered member count alone is not evidence of architectural separation.
+   Report preparation/retained-memory scaling for increasing instance counts
+   within supported capacity, distinguishing shared content, instance operands,
+   per-call work and native infrastructure. Do not invent a mandatory savings
+   threshold or mistake account reservations for measured physical RAM.
 2. **Real independent endpoint binding:** execute root reads at two different
    endpoints with distinct results, instance identities and independent policies.
    Denial, revocation, close or replacement of one instance cannot authorize,
