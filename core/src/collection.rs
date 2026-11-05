@@ -1,7 +1,54 @@
-//! Source-independent meaning of supported Property collection data.
+//! Source-independent meaning of supported Property and Event collection data.
 //! Native representation and aggregation remain codec/Binding/application work.
 use crate::{CoreResult, value_type::TypeSchema};
 use alloc::{boxed::Box, vec::Vec};
+
+/// One Event's roles. Absence of data is distinct from the JSON null schema;
+/// a dataResponse schema alone grants no native reply opportunity.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventMemberSchema {
+    pub name: Box<str>,
+    pub subscription: Option<TypeSchema>,
+    pub data: Option<TypeSchema>,
+    pub data_response: Option<TypeSchema>,
+    pub cancellation: Option<TypeSchema>,
+}
+/// Original named Event roles, not a Property map or a set of leaf drivers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventCollectionSchema {
+    members: Vec<EventMemberSchema>,
+}
+impl EventCollectionSchema {
+    pub const MAX_MEMBERS: usize = 32;
+    pub const MAX_NAME_BYTES: usize = 256;
+    pub const MAX_TOTAL_NAME_BYTES: usize = 4096;
+    pub fn try_new(members: Vec<EventMemberSchema>) -> CoreResult<Self> {
+        if members.len() > Self::MAX_MEMBERS
+            || members.capacity() > Self::MAX_MEMBERS
+            || members.iter().map(|m| m.name.len()).sum::<usize>() > Self::MAX_TOTAL_NAME_BYTES
+            || members.iter().enumerate().any(|(i, m)| {
+                m.name.len() > Self::MAX_NAME_BYTES
+                    || members[..i].iter().any(|old| old.name == m.name)
+            })
+        {
+            return Err(invalid_selection());
+        }
+        Ok(Self { members })
+    }
+    pub fn members(&self) -> &[EventMemberSchema] {
+        &self.members
+    }
+    pub fn member(&self, name: &str) -> Option<&EventMemberSchema> {
+        self.members.iter().find(|m| m.name.as_ref() == name)
+    }
+    pub fn retained_bytes(&self) -> usize {
+        self.members.capacity() * core::mem::size_of::<EventMemberSchema>()
+            + self.members.iter().map(|m| m.name.len()).sum::<usize>()
+    }
+    pub const fn backing_bound() -> usize {
+        Self::MAX_MEMBERS * core::mem::size_of::<EventMemberSchema>() + Self::MAX_TOTAL_NAME_BYTES
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertyMemberSchema {

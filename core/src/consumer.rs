@@ -342,6 +342,7 @@ pub enum ConsumerNotificationSchemas {
     PropertyValue(TypeSchema),
     /// Complete named readable values; shared backing survives the source TD.
     ObserveAllProperties(Arc<PropertyCollectionSchema>),
+    SubscribeAllEvents(Arc<crate::collection::EventCollectionSchema>),
     Event {
         subscription: Option<TypeSchema>,
         data: Option<TypeSchema>,
@@ -357,8 +358,13 @@ impl ConsumerNotificationSchemas {
                 crate::notification::NotificationKind::ObserveAllProperties
             }
             Self::Event { .. } => crate::notification::NotificationKind::Event,
+            Self::SubscribeAllEvents(_) => {
+                crate::notification::NotificationKind::SubscribeAllEvents
+            }
         }
     }
+    /// Scalar roles only. Event collections retain roles per named member;
+    /// None here does not assert that every collection member lacks that role.
     pub fn subscription(&self) -> Option<TypeSchema> {
         match self {
             Self::Event { subscription, .. } => *subscription,
@@ -370,6 +376,7 @@ impl ConsumerNotificationSchemas {
             Self::PropertyValue(s) => Some(*s),
             Self::Event { data, .. } => *data,
             Self::ObserveAllProperties(_) => None,
+            Self::SubscribeAllEvents(_) => None,
         }
     }
     pub fn data_response(&self) -> Option<TypeSchema> {
@@ -388,6 +395,12 @@ impl ConsumerNotificationSchemas {
     pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
         match self {
             Self::ObserveAllProperties(s) => data.supports_property_map(s),
+            Self::SubscribeAllEvents(s) => s.members().iter().all(|m| {
+                [m.subscription, m.data, m.data_response, m.cancellation]
+                    .into_iter()
+                    .flatten()
+                    .all(|s| data.supports_schema(s))
+            }),
             _ => [
                 self.subscription(),
                 self.data(),

@@ -58,6 +58,7 @@ pub struct MqttConsumerProgram {
     pub(crate) topic: Arc<str>,
     cancellation: bool,
     kind: NotificationKind,
+    target: AffordanceTarget,
 }
 impl MqttConsumerService {
     pub fn new(
@@ -195,13 +196,19 @@ struct Control {
 struct Interest {
     recipient: NotificationIdentity,
     topic: Arc<str>,
+    kind: NotificationKind,
+    target: AffordanceTarget,
     slot: usize,
     started: bool,
     closing: bool,
     authorized_cancel: bool,
     remote: RemoteCancellation,
-    queue: VecDeque<Payload>,
+    queue: VecDeque<Occurrence>,
     loss: u64,
+}
+struct Occurrence {
+    target: AffordanceTarget,
+    data: Payload,
 }
 struct ConsumerSession {
     registration: Rc<ConsumerRegistration>,
@@ -505,13 +512,17 @@ impl ConsumerSession {
             return;
         }
         let topic = &body[2..2 + n];
+        let Ok(topic) = std::str::from_utf8(topic) else {
+            self.fail(io_error());
+            return;
+        };
         let payload = Payload::new(body[2 + n..].to_vec(), "application/json");
         for interest in self.interests.iter().filter_map(Weak::upgrade) {
             let mut i = interest.borrow_mut();
             if !i.started
                 || i.closing
                 || !i.recipient.consumer.is_current()
-                || i.topic.as_bytes() != topic
+                || !topic_matches(&i.topic, topic)
             {
                 continue;
             }
@@ -519,7 +530,16 @@ impl ConsumerSession {
             if header & 1 != 0 || i.queue.len() == QUEUE {
                 i.loss = i.loss.saturating_add(1);
             } else {
-                i.queue.push_back(payload.clone());
+                let target = if i.kind == NotificationKind::SubscribeAllEvents {
+                    let prefix = i.topic.strip_suffix('+').expect("prepared wildcard");
+                    AffordanceTarget::Event(Arc::from(&topic[prefix.len()..]))
+                } else {
+                    i.target.clone()
+                };
+                i.queue.push_back(Occurrence {
+                    target,
+                    data: payload.clone(),
+                });
             }
         }
     }
@@ -623,6 +643,12 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
                         .filter_map(Weak::upgrade)
                         .any(|i| i.borrow().topic == t.name)
             });
+            if s.topics
+                .iter()
+                .any(|t| t.name != program.topic && filters_overlap(&t.name, &program.topic))
+            {
+                return Err(unsupported());
+            }
             let slot = (0..LEASES)
                 .find(|n| {
                     !s.interests
@@ -643,6 +669,8 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
             let interest = Rc::new(RefCell::new(Interest {
                 recipient: recipient.clone(),
                 topic: program.topic.clone(),
+                kind: program.kind,
+                target: program.target.clone(),
                 slot,
                 started: false,
                 closing: false,
@@ -709,13 +737,14 @@ impl NotificationParticipation for MqttSubscription {
         let Some(p) = i.queue.front() else {
             return Poll::Pending;
         };
-        if notification_payload_backing(Some(p)).is_none_or(|n| n > max) {
+        if notification_item_backing(&p.target, Some(&p.data)).is_none_or(|n| n > max) {
             return Poll::Ready(Err(busy()));
         }
-        let data = i.queue.pop_front();
+        let occurrence = i.queue.pop_front().unwrap();
         Poll::Ready(Ok(NotificationSignal::Data(NativeNotification {
             recipient: i.recipient.clone(),
-            data,
+            target: occurrence.target,
+            data: Some(occurrence.data),
             response: None,
         })))
     }
@@ -813,11 +842,13 @@ pub(crate) fn consumer_program(
     topic: Arc<str>,
     cancellation: bool,
     kind: NotificationKind,
+    target: AffordanceTarget,
 ) -> MqttConsumerProgram {
     MqttConsumerProgram {
         registration: b.registration.clone(),
         topic,
         cancellation,
         kind,
+        target,
     }
 }

@@ -49,7 +49,13 @@ pub(crate) fn lower_notification(
         FormSite::Thing => (
             "",
             FormOwner::Thing,
-            NotificationKind::ObserveAllProperties,
+            match NotificationKind::for_operation(input.operation) {
+                Some(
+                    k @ (NotificationKind::ObserveAllProperties
+                    | NotificationKind::SubscribeAllEvents),
+                ) => k,
+                _ => return Ok(None),
+            },
             UriVariableScope::Thing,
         ),
         FormSite::Property(n) => (
@@ -106,6 +112,40 @@ pub(crate) fn lower_notification(
         return Err(unsupported());
     }
     let schema = match kind {
+        NotificationKind::SubscribeAllEvents => {
+            if form.effective_operations.len() != 2
+                || !form.effective_operations.contains(&kind.start_operation())
+                || !form.effective_operations.contains(&kind.stop_operation())
+            {
+                return Err(unsupported());
+            }
+            let schema = clinkz_wot_planning::type_schema::prepare_event_collection_schema(doc)?;
+            if schema.members().is_empty() {
+                return Err(unsupported());
+            }
+            for m in schema.members() {
+                if m.name.is_empty()
+                    || m.name.len() > 64
+                    || m.name
+                        .bytes()
+                        .any(|b| !b.is_ascii_graphic() || matches!(b, b'/' | b'+' | b'#' | b'$'))
+                    || m.subscription.is_some()
+                    || m.cancellation.is_some()
+                    || m.data_response.is_some()
+                    || m.data.is_none()
+                    || doc.scope(SemanticScope::Event(&m.name)).is_none_or(|s| {
+                        // Expanded IRIs and aliases can introduce untyped
+                        // td:data extensions beside the retained typed role.
+                        s.children()
+                            .any(|n| !annotation(n) && !n.name().is(TD_DATA))
+                            || s.children().filter(|n| n.name().is(TD_DATA)).count() != 1
+                    })
+                {
+                    return Err(unsupported());
+                }
+            }
+            MqttDataSchema::Events(Arc::new(schema))
+        }
         NotificationKind::ObserveAllProperties => {
             // This mapping supports a combined root Form, not a fabricated
             // cancellation assembled from unrelated Forms or leaf mappings.
@@ -217,10 +257,27 @@ pub(crate) fn lower_notification(
         }
     }
     let topic = topic.ok_or_else(unsupported)?;
+    let filter_body = if kind == NotificationKind::SubscribeAllEvents {
+        let prefix = topic.strip_suffix("/+").ok_or_else(unsupported)?;
+        let MqttDataSchema::Events(s) = &schema else {
+            return Err(unsupported());
+        };
+        if prefix.is_empty()
+            || explicit_topic.is_some()
+            || s.members()
+                .iter()
+                .any(|m| prefix.len() + 1 + m.name.len() > MAX_TOPIC_BYTES)
+        {
+            return Err(unsupported());
+        }
+        prefix
+    } else {
+        topic
+    };
     if topic.is_empty()
         || topic.len() > MAX_TOPIC_BYTES
         || topic.starts_with('$')
-        || topic
+        || filter_body
             .bytes()
             .any(|b| !b.is_ascii_graphic() || matches!(b, b'+' | b'#'))
         || explicit_topic.is_some_and(|t| t != topic)

@@ -60,6 +60,13 @@ cost remain bounded independently of native registration count. Reducing native
 subscriptions does not erase those costs. No fleet-wide subscription-pool API or
 scalability result follows; this broader topic remains OPEN.
 
+[Event collection evidence](../protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs)
+now adds one terminal single-level wildcard and exact TD Event attribution with
+independent schemas, permissions, cursors and native release. Distinct overlapping
+filters refuse; no deduplication, shared-group, tenant, general extraction or
+scalability policy follows. [Investigation 0104](0104-thing-root-subscribe-all-events.md)
+migrates that bounded correction; this broader topic remains OPEN.
+
 ## Identity and cost dimensions that must not be conflated
 
 - Physical devices and authenticated protocol sources.

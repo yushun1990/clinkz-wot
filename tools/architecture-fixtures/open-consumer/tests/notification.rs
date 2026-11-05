@@ -28,6 +28,7 @@ struct Participation {
     responses: Rc<Responses>,
     recipient: NotificationIdentity,
     next: u8,
+    group: bool,
 }
 struct Response {
     responses: Rc<Responses>,
@@ -96,6 +97,7 @@ impl ConsumerNotificationBinding for EventBinding {
             responses: program,
             recipient: recipient.clone(),
             next: 1,
+            group: false,
         })
     }
 }
@@ -151,11 +153,18 @@ impl NotificationParticipation for Participation {
         if self.next > 2 {
             return Poll::Pending;
         }
-        let payload = Payload::new(self.next.to_string().as_bytes(), "application/json");
-        assert!(notification_payload_backing(Some(&payload)).unwrap() <= max);
+        let ready = self.group && self.next == 2;
+        let target = AffordanceTarget::Event(Arc::from(if ready { "ready" } else { "alarm" }));
+        let payload = if ready {
+            Payload::new(b"true".as_slice(), "application/json")
+        } else {
+            Payload::new(self.next.to_string().as_bytes(), "application/json")
+        };
+        assert!(notification_item_backing(&target, Some(&payload)).unwrap() <= max);
         self.next += 1;
         Poll::Ready(Ok(NotificationSignal::Data(NativeNotification {
             recipient: self.recipient.clone(),
+            target,
             data: Some(payload),
             response: Some(Response {
                 responses: self.responses.clone(),
@@ -405,5 +414,232 @@ fn composed_decline_rejects_required_and_already_submitted_responses() {
         assert_eq!(finish(&mut root, &cursor).responses_delivered, 1);
         drop(root);
         clean(&bank);
+    }
+}
+
+// A downstream collection Binding supplies actual per-item response owners.
+// This fixture is lifecycle evidence, not a production protocol mapping.
+#[derive(Clone)]
+struct CollectionBinding(EventBinding);
+impl ConsumerNotificationBinding for CollectionBinding {
+    type Program = Rc<Responses>;
+    type Configuration = u8;
+    type Participation = Participation;
+    fn identity(&self) -> (BindingId, BindingGeneration) {
+        self.0.identity()
+    }
+    fn configuration(&self) -> &u8 {
+        self.0.configuration()
+    }
+    fn support(
+        &self,
+        p: &Self::Program,
+        kind: NotificationKind,
+    ) -> CoreResult<NotificationSupport> {
+        assert_eq!(kind, NotificationKind::SubscribeAllEvents);
+        self.0.support(p, NotificationKind::Event)
+    }
+    fn prepare(
+        &mut self,
+        p: Self::Program,
+        id: &NotificationIdentity,
+    ) -> Result<Participation, BindingInputRejection<Self::Program>> {
+        let mut participant = self.0.prepare(p, id)?;
+        participant.group = true;
+        Ok(participant)
+    }
+}
+impl ConsumerNotificationPreparation for CollectionBinding {
+    fn registration_identity(&self) -> BindingRegistrationIdentity {
+        self.0.registration_identity()
+    }
+    fn preparation_bounds(&self) -> ConsumerPreparationBounds {
+        self.0.preparation_bounds()
+    }
+    fn compile_notification(
+        &self,
+        input: ConsumerNotificationInput<'_>,
+    ) -> CoreResult<Option<Self::Program>> {
+        assert_eq!(input.target, &AffordanceTarget::Thing);
+        let ConsumerNotificationSchemas::SubscribeAllEvents(s) = input.schemas else {
+            panic!()
+        };
+        assert_eq!(s.members().len(), 2);
+        assert!(s.member("alarm").unwrap().data_response.is_some());
+        assert!(s.member("ready").unwrap().data_response.is_some());
+        Ok(Some(self.0.0.clone()))
+    }
+}
+struct CollectionAccess;
+impl ConsumerAccessService for CollectionAccess {
+    fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
+        assert_eq!(op, Operation::SubscribeAllEvents);
+        Ok(())
+    }
+    fn authorize_instance(
+        &self,
+        _: &ConsumerInstanceRef,
+        id: BindingRegistrationIdentity,
+        t: &str,
+        op: Operation,
+    ) -> CoreResult<()> {
+        self.authorize(id, t, op)
+    }
+    fn retained_bytes(&self) -> u64 {
+        0
+    }
+    fn work(&self) -> u64 {
+        1
+    }
+}
+#[test]
+fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_native_owner() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let responses = Rc::new(Responses::default());
+    let registry = ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+        binding: CollectionBinding(EventBinding(responses.clone())),
+        services: ConsumerServices {
+            data: Arc::new(CollectionData),
+            access: Arc::new(CollectionAccess),
+        },
+    }])
+    .unwrap();
+    let definition = {
+        let source=serde_json::from_value(serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"Collection responses",
+            "security":"n","securityDefinitions":{"n":{"scheme":"nosec"}},
+            "events":{
+                "alarm":{"data":{"type":"integer"},"dataResponse":{"type":"string"},"forms":[{"href":ENDPOINT}]},
+                "ready":{"data":{"type":"boolean"},"dataResponse":{"type":"integer"},"forms":[{"href":ENDPOINT}]}},
+            "forms":[{"href":ENDPOINT,"op":["subscribeallevents","unsubscribeallevents"]}]
+        })).unwrap();
+        registry
+            .prepare_notification(
+                &source,
+                &AffordanceTarget::Thing,
+                NotificationKind::SubscribeAllEvents,
+                ConsumerSelector::default(),
+                GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut work(),
+            )
+            .unwrap()
+    };
+    drop(registry);
+    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
+    let mut root = ConsumerNotificationRuntime::try_new(
+        owner.reference(),
+        definition,
+        RawNotificationLimits {
+            subscriptions: 1,
+            queue_items: 2,
+            queue_payload_bytes: 512,
+            payload_backing_bytes: 256,
+            control_backing_bytes: 256,
+            target_name_bytes: 64,
+            engine_bytes: 32768,
+        },
+    )
+    .unwrap_or_else(|_| panic!());
+    let mut cursor = root
+        .subscribe(
+            SubscriptionInput(None),
+            ResponseRequirement::None,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .unwrap_or_else(|_| panic!());
+    let step = |r: &mut ConsumerNotificationRuntime<CollectionBinding>| {
+        r.progress(
+            cursor.identity(),
+            &mut Context::from_waker(Waker::noop()),
+            &mut work(),
+        )
+        .unwrap()
+    };
+    assert_eq!(step(&mut root), NotificationState::Active);
+    for (name, bad, good) in [
+        ("alarm", b"7".as_slice(), br#""ack""#.as_slice()),
+        ("ready", br#""ack""#, b"7"),
+    ] {
+        root.progress(
+            cursor.identity(),
+            &mut Context::from_waker(Waker::noop()),
+            &mut work(),
+        )
+        .unwrap();
+        let item = root.front(&mut cursor, &mut work()).unwrap().unwrap();
+        assert_eq!(item.target, &AffordanceTarget::Event(Arc::from(name)));
+        let body = Arc::downgrade(&item.data.unwrap().body);
+        let wrong = Payload::new(bad, "application/json");
+        let original = wrong.body.clone();
+        let returned = root
+            .respond(&mut cursor, EventDataResponse(Some(wrong)), &mut work())
+            .err()
+            .unwrap()
+            .into_input();
+        assert!(Arc::ptr_eq(&returned.0.unwrap().body, &original));
+        root.respond(
+            &mut cursor,
+            EventDataResponse(Some(Payload::new(good, "application/json"))),
+            &mut work(),
+        )
+        .unwrap_or_else(|_| panic!());
+        responses.pending_retirement.set(true);
+        for _ in 0..2 {
+            root.progress(
+                cursor.identity(),
+                &mut Context::from_waker(Waker::noop()),
+                &mut work(),
+            )
+            .unwrap();
+        }
+        assert!(root.advance(&mut cursor, &mut work()).is_err());
+        assert!(body.upgrade().is_some());
+        responses.pending_retirement.set(false);
+        root.progress(
+            cursor.identity(),
+            &mut Context::from_waker(Waker::noop()),
+            &mut work(),
+        )
+        .unwrap();
+        root.advance(&mut cursor, &mut work()).unwrap();
+        assert!(body.upgrade().is_none());
+    }
+    assert_eq!(responses.sends.get(), 2);
+    assert_eq!(responses.releases.get(), 2);
+    root.stop(&cursor, None, &mut work())
+        .unwrap_or_else(|_| panic!());
+    for _ in 0..4 {
+        root.progress(
+            cursor.identity(),
+            &mut Context::from_waker(Waker::noop()),
+            &mut work(),
+        )
+        .unwrap();
+    }
+    let report = root.take_settlement(cursor.identity()).unwrap();
+    assert_eq!(report.target, AffordanceTarget::Thing);
+    assert_eq!(report.responses_delivered, 2);
+    drop(root);
+    clean(&bank);
+}
+
+struct CollectionData;
+impl ConsumerDataService for CollectionData {
+    fn content_type(&self) -> &str {
+        "application/json"
+    }
+    fn policy(&self) -> ConsumerDataPolicy {
+        ConsumerDataPolicy {
+            retained_bytes: 0,
+            temporary_bytes: 4096,
+            body_bytes: 1024,
+            encoded_selection_bytes: 0,
+            validation_work: 4096 * 40 + 128,
+        }
+    }
+    fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+        clinkz_wot_codec_json::validate_payload(s, p)
     }
 }

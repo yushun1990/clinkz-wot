@@ -157,3 +157,11 @@ executor and its lifecycle tests now also live in `servient/finite`, with no
 TD/Planning dependency or old-path compatibility re-export. Both facets retain
 the independent Core Consumer authority reference. A finite facet no longer
 manufactures the logical Consumer incarnation.
+
+Thing-root Event subscriptions and Action status queries can share a logical
+instance while using independent notification and finite facets. Their prepared
+Event-role and Action-output tables remain distinct. A composed Producer captures
+the root Event publication route and root Action query route from their actual
+native participants and qualifies the entire final description before publication.
+MQTT keeps subscription/occurrence attribution; HTTP keeps invocation inventory
+and aggregation. Neither native owner inherits the other's logical lifecycle.

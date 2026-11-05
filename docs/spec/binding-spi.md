@@ -171,7 +171,7 @@ no native completion, cancellation, transfer or effect evidence.
 
 Producer notification participants additionally supply their exact emission mapping
 and actual validation/security services for each selected Property observe,
-Thing-root observe-all or Event subscribe Form before
+Thing-root observe-all/subscribe-all or Event subscribe Form before
 publication. These services and the complete data allowance are recaptured and
 compared before commit; missing or substituted services refuse. Native notification
 publication has separate start, progress and retirement controls, not a finite
@@ -248,6 +248,29 @@ subscription pool or per-member fallback is introduced. The
 [mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation)
 refuses partial maps and separate control Forms; these are supported-subset
 restrictions, not a universal collection protocol contract.
+
+
+Event collections carry a logical occurrence target in each native candidate,
+separate from its recipient and conversation target. The Binding converts native
+source evidence to the exact TD Event identity before handoff; Core never parses
+topics or native event headers. It must not discard this attribution or relabel
+it using a collection-wide data schema. `poll_next`'s backing limit includes the
+occurrence name allocation (`notification_item_backing`) as well as payload;
+queue accounting retains both. The Engine checks scope/member/schema before
+logical admission, and each response validates against the retained occurrence.
+The actual native reply opportunity and cardinality remain Binding properties.
+
+The implemented MQTT collection maps one combined root Form to one SUBSCRIBE on
+`prefix/+`. Exact final topic levels are Event names; all declared members must
+fit its explicit single-level ASCII subset. Individual Forms do not determine
+root attribution. Identical compatible filters can share one physical interest;
+overlapping distinct filters in one Consumer service refuse rather than erase
+native duplicate/overlap semantics. Independent Producer slots cannot own
+overlapping publication namespaces; staged replacement retains fresh mapping
+identity. MQTT controls, retained-message filtering and source queues remain
+native. No dataResponse, replay, exactly-once or broker delivery guarantee is
+fabricated from QoS 0. The [mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-event-subscription)
+states all restrictions; other Bindings may supply richer actual opportunities.
 
 Notification kind is an explicit semantic operand, checked against target scope,
 actual native program and captured publication route. Producer route lookup uses

@@ -312,6 +312,47 @@ impl<'a> ResolvedSemanticDocument<'a> {
 }
 #[cfg(any(feature = "validated-thing", test))]
 impl<'a> Resolver<'a> {
+    fn event_scope(
+        &mut self,
+        thing: &'a Thing,
+        name: &'a str,
+        mut context: ActiveContext<'a>,
+    ) -> Result<ActiveContext<'a>, SemanticError> {
+        let resolver = self;
+        let event = &thing.events.as_ref().unwrap()[name];
+        resolver.pay(name.len() as u64 + 1)?;
+        resolver.metadata_cost(&event._metadata)?;
+        context = resolver.local(context, &event._extra_fields)?;
+        resolver.scope(
+            SemanticScope::Event(name),
+            &event._extra_fields,
+            event._metadata.tags.as_deref(),
+            context,
+        )?;
+        let root = resolver.document.scopes.last().unwrap().root;
+        for (role, schema) in [
+            ("subscription", &event.subscription),
+            ("data", &event.data),
+            ("dataResponse", &event.data_response),
+            ("cancellation", &event.cancellation),
+        ] {
+            if let Some(schema) = schema {
+                let mut schema_context = context;
+                schema_context.vocab = "https://www.w3.org/2019/wot/json-schema#";
+                resolver.schema_node(
+                    SemanticName::Iri(SemanticIri {
+                        prefix: "https://www.w3.org/2019/wot/td#",
+                        suffix: role,
+                    }),
+                    schema,
+                    schema_context,
+                    0,
+                )?;
+            }
+        }
+        resolver.finish(root);
+        Ok(context)
+    }
     fn prepare(
         &mut self,
         thing: &'a Thing,
@@ -483,6 +524,25 @@ impl<'a> Resolver<'a> {
                         resolver.finish(root);
                     }
                 }
+                let event_collection = thing
+                    .forms
+                    .as_ref()
+                    .and_then(|forms| forms.get(selected_form as usize))
+                    .and_then(|form| form.op.as_ref())
+                    .is_some_and(|ops| {
+                        ops.iter().any(|op| {
+                            matches!(
+                                op,
+                                crate::data_type::Operation::SubscribeAllEvents
+                                    | crate::data_type::Operation::UnsubscribeAllEvents
+                            )
+                        })
+                    });
+                if let Some(events) = thing.events.as_ref().filter(|_| event_collection) {
+                    for name in events.keys() {
+                        resolver.event_scope(thing, name, root_context)?;
+                    }
+                }
             }
             FormOwner::Property(name) => {
                 let property = &thing.properties.as_ref().unwrap()[name];
@@ -532,38 +592,7 @@ impl<'a> Resolver<'a> {
                 resolver.finish(root);
             }
             FormOwner::Event(name) => {
-                let event = &thing.events.as_ref().unwrap()[name];
-                resolver.pay(name.len() as u64 + 1)?;
-                resolver.metadata_cost(&event._metadata)?;
-                context = resolver.local(context, &event._extra_fields)?;
-                resolver.scope(
-                    SemanticScope::Event(name),
-                    &event._extra_fields,
-                    event._metadata.tags.as_deref(),
-                    context,
-                )?;
-                let root = resolver.document.scopes.last().unwrap().root;
-                for (role, schema) in [
-                    ("subscription", &event.subscription),
-                    ("data", &event.data),
-                    ("dataResponse", &event.data_response),
-                    ("cancellation", &event.cancellation),
-                ] {
-                    if let Some(schema) = schema {
-                        let mut schema_context = context;
-                        schema_context.vocab = "https://www.w3.org/2019/wot/json-schema#";
-                        resolver.schema_node(
-                            SemanticName::Iri(SemanticIri {
-                                prefix: "https://www.w3.org/2019/wot/td#",
-                                suffix: role,
-                            }),
-                            schema,
-                            schema_context,
-                            0,
-                        )?;
-                    }
-                }
-                resolver.finish(root);
+                context = resolver.event_scope(thing, name, context)?;
             }
         }
         let index = selected_form;

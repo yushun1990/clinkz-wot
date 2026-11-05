@@ -223,7 +223,7 @@ The typed `open_consumer::ConsumerNotificationRegistry` is the notification
 facet beside finite preparation. Its operation-scoped `prepare_notification` reuses
 common TD admission and the resolved Form loan with an explicit notification
 kind and target, selecting one named observable
-Property's observe Form, Thing-root observe-all Form or Event's subscribe Form in TD order or by explicit
+Property's observe Form, Thing-root observe-all/subscribe-all Form or Event's subscribe Form in TD order or by explicit
 selector. Unsupported alternatives
 are skipped; missing support and multiple complete actual providers refuse.
 It does not claim whole-Thing Consumer support or Producer qualification.
@@ -267,6 +267,27 @@ schema until final disposal. Collection data services must explicitly support
 the full named map; scalar Object support cannot qualify them. The current
 MQTT mapping requires both operations on the same root Form. Other root control
 topologies require an actually implemented Binding/preparation facet.
+
+
+Event-root selection instead captures every Event's exact name and all four
+independent schema roles in `EventCollectionSchema`. The shared semantic loan
+contains Event declarations and local contexts, without their individual Forms.
+An unrelated root operation acquires no Event schema closure. Construction and
+disposal walks and variable name/table backing are funded before construction;
+selected definitions and captured validation share the original backing. Scalar
+schema support qualifies each Event role; no full Property-map decoder is used.
+The actual Binding must prove native attribution and supported control/response
+roles. The current joined control subset refuses member subscription/cancellation
+data; no common aggregate wire encoding is inferred. MQTT additionally refuses
+any member dataResponse and requires supported data for every Event, a combined
+root Form and terminal single-level wildcard. Unsupported assertions in any
+included Event refuse the whole candidate. Selection authorizes SubscribeAllEvents;
+execution retains it for establishment/delivery and UnsubscribeAllEvents for mapped
+stop. Complete Producer qualification rechecks every root/leaf Form, member role,
+source, actual native definition and final retained TD. See the
+[collection contract](interaction-core.md) for occurrence identity and response
+validation and the [MQTT policy](../../protocol-bindings/protocols/mqtt/README.md#thing-root-event-subscription)
+for the concrete native mapping.
 
 ## Thing-root Property collection preparation
 
@@ -331,6 +352,15 @@ This adds no universal compiler, eager collection plan set, first-use coordinato
 new gate or implementation claim for other collection operations.
 
 ## Thing-root Action status preparation
+
+Action and Event collection preparation coexist in one TD. Each effective
+operation selects its own family schema and services: QueryAllActions captures
+Action output/status validation, while SubscribeAllEvents captures each Event's
+separate roles and occurrence validation. A loan containing both families does
+not substitute one table for the other. Whole-Thing Producer qualification still
+requires both root behaviors, every advertised leaf mapping and the complete
+final TD, including each family's duplicate-expanded-role checks. Distinct actual
+native participants may implement these operations under one logical instance.
 
 QueryAllActions selects an actual root Form and finite exchange; it MUST NOT
 select N Action controls or require Consumer invocation handles. The root TD loan

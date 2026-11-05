@@ -99,6 +99,7 @@ impl NotificationLoss {
 /// Sequence counts logical admitted items, not a wire order/replay guarantee.
 pub struct RawNotificationView<'a> {
     pub sequence: u64,
+    pub target: &'a AffordanceTarget,
     pub data: Option<&'a Payload>,
     pub response: EventResponseState,
 }
@@ -429,7 +430,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             {
                 return Err(capacity());
             }
-            if kind != NotificationKind::Event
+            if !kind.is_event()
                 && (request.responses != ResponseRequirement::None
                     || request.subscription.0.is_some())
             {
@@ -438,7 +439,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             if self.limits.queue_items == 0 {
                 return Err(capacity());
             }
-            if kind != NotificationKind::Event
+            if !kind.is_event()
                 && (self.limits.queue_payload_bytes == 0 || self.limits.payload_backing_bytes == 0)
             {
                 return Err(capacity());
@@ -737,6 +738,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             e.delivered += 1;
         }
         Ok(Some(RawNotificationView {
+            target: &item.native.target,
             sequence: item.sequence,
             data: item.native.data.as_ref(),
             response: item.response_state,
@@ -774,7 +776,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 return Err(unsupported());
             }
             if let Some(validation) = &self.validation {
-                validation.response(&input, budget)?;
+                validation.response(&item.native.target, &input, budget)?;
             }
             e.check_live(binding_paired(
                 &self.binding,
@@ -1043,7 +1045,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         // before checking current authority again; never expose it to the cursor.
         match signal {
             Poll::Ready(Ok(NotificationSignal::Data(native))) => {
-                let bytes = notification_payload_backing(native.data.as_ref());
+                let bytes = notification_item_backing(&native.target, native.data.as_ref());
                 let sequence = e.next_sequence;
                 let has_response = native.response.is_some();
                 e.staged = Some(Buffered {
@@ -1089,10 +1091,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 }
                 let item = e.staged.as_ref().unwrap();
                 let kind = e.request.kind;
-                let validation = self
-                    .validation
-                    .as_ref()
-                    .map_or(Ok(()), |v| v.data(item.native.data.as_ref()));
+                let validation = self.validation.as_ref().map_or(Ok(()), |v| {
+                    v.data(&item.native.target, item.native.data.as_ref())
+                });
                 e.sync_stop();
                 if !binding_paired(&self.binding, &self.configuration, self.binding_identity) {
                     e.fence(stale());
@@ -1103,11 +1104,18 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 let item = e.staged.as_ref().unwrap();
                 if item.native.recipient != e.identity {
                     e.fence(stale());
+                } else if !kind.accepts_occurrence(&e.request.target, &item.native.target)
+                    || item
+                        .native
+                        .target
+                        .name()
+                        .is_some_and(|n| n.len() > self.limits.target_name_bytes)
+                {
+                    e.fence(invalid());
                 } else if let Err(error) = validation {
                     e.fence(error);
                 } else if bytes.is_none_or(|n| n > self.limits.payload_backing_bytes)
-                    || (kind != NotificationKind::Event
-                        && (item.native.data.is_none() || has_response))
+                    || (!kind.is_event() && (item.native.data.is_none() || has_response))
                     || (has_response && !e.support.event_responses)
                     || (e.request.responses == ResponseRequirement::Required && !has_response)
                 {

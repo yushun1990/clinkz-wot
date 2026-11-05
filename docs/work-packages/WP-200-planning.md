@@ -322,8 +322,13 @@ owns its preparation/funding semantics. [Qualification tests](../../protocol-bin
 exercise unsupported members, scalar-only services, ambiguity, source destruction
 and complete final Producer requalification.
 
-Event collection operations remain unimplemented. This scoped capability
-changes no work-package dependencies, gate, milestone or production qualification
+SubscribeAllEvents additionally retains an Event-name table with four separate
+roles, using the operation-scoped shared TD closure and actual scalar validators.
+[Event qualification](../../protocol-bindings/protocols/mqtt/tests/event_collection_qualification.rs)
+checks member roles, source destruction, real services, ambiguity and complete
+final-TD requalification. Root selection does not inherit leaf Forms.
+
+This scoped capability changes no work-package dependencies, gate, milestone or production qualification
 status.
 
 ## Root Action status preparation

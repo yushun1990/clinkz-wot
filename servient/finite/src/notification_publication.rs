@@ -1,13 +1,14 @@
 //! Logical Producer notification authority and settlement. Native matching, fan-out
 //! and physical resources belong exclusively to the selected Binding.
 use super::*;
-use clinkz_wot_core::{notification::notification_payload_backing, publication::*};
+use clinkz_wot_core::publication::*;
 
 /// An application-owned Property value source or Event source, not a Read handler.
 pub enum ProducerNotificationSource {
     Property(Arc<str>),
     /// A distinct root source; does not register individual Property behavior.
     AllProperties,
+    AllEvents,
     Event(Arc<str>),
 }
 impl ProducerNotificationSource {
@@ -20,12 +21,12 @@ impl ProducerNotificationSource {
     pub fn name(&self) -> Option<&str> {
         match self {
             Self::Property(n) | Self::Event(n) => Some(n),
-            Self::AllProperties => None,
+            Self::AllProperties | Self::AllEvents => None,
         }
     }
     pub fn target(&self) -> AffordanceTarget {
         match self {
-            Self::AllProperties => AffordanceTarget::Thing,
+            Self::AllProperties | Self::AllEvents => AffordanceTarget::Thing,
             Self::Property(n) => AffordanceTarget::Property(n.clone()),
             Self::Event(n) => AffordanceTarget::Event(n.clone()),
         }
@@ -34,6 +35,7 @@ impl ProducerNotificationSource {
         use clinkz_wot_core::notification::NotificationKind;
         match self {
             Self::AllProperties => NotificationKind::ObserveAllProperties,
+            Self::AllEvents => NotificationKind::SubscribeAllEvents,
             Self::Property(_) => NotificationKind::PropertyObservation,
             Self::Event(_) => NotificationKind::Event,
         }
@@ -257,7 +259,8 @@ impl RawProducerServient {
             if captured.kind != data.kind() {
                 return Err(CoreError::Validation(context()));
             }
-            let bytes = notification_payload_backing(Some(data.payload()))
+            let bytes = data
+                .backing_bytes()
                 .ok_or_else(|| CoreError::Backpressure(context()))?;
             if bytes > captured.data_bytes || entry.instance.notification_work.get() == usize::MAX {
                 return Err(CoreError::Backpressure(context()));

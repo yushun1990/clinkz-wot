@@ -169,7 +169,8 @@ impl RawProducerInstance {
             && self.notification_sources.iter().all(|e| {
                 advertised(
                     match e {
-                        ProducerNotificationSource::AllProperties => {
+                        ProducerNotificationSource::AllProperties
+                        | ProducerNotificationSource::AllEvents => {
                             clinkz_wot_core::thing::AffordanceSite::Thing
                         }
                         ProducerNotificationSource::Property(n) => {
@@ -197,7 +198,9 @@ impl RawProducerInstance {
                 | Operation::ObserveAllProperties
                 | Operation::UnobserveAllProperties
                 | Operation::SubscribeEvent
-                | Operation::UnsubscribeEvent,
+                | Operation::UnsubscribeEvent
+                | Operation::SubscribeAllEvents
+                | Operation::UnsubscribeAllEvents,
             ) => self.supports_notification(target, operation),
             (
                 AffordanceTarget::Action(name),

@@ -8,6 +8,46 @@ use clinkz_wot_td::semantic::{
     SchemaConstraints, SchemaView, SemanticName, SemanticNode, SemanticValue,
 };
 
+pub(crate) fn event_member_count(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<usize> {
+    let count = doc.collection_events().ok_or_else(refused)?.count();
+    if count > clinkz_wot_core::collection::EventCollectionSchema::MAX_MEMBERS {
+        return Err(refused());
+    }
+    Ok(count)
+}
+/// All exact Event names and four independent roles; no individual Forms.
+pub fn prepare_event_collection_schema(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+) -> CoreResult<clinkz_wot_core::collection::EventCollectionSchema> {
+    use clinkz_wot_core::collection::{EventCollectionSchema as S, EventMemberSchema};
+    let mut members = alloc::vec::Vec::new();
+    members
+        .try_reserve_exact(event_member_count(doc)?)
+        .map_err(|_| clinkz_wot_core::consumer::busy())?;
+    let mut bytes = 0;
+    for event in doc.collection_events().ok_or_else(refused)? {
+        bytes += event.name.len();
+        if event.name.len() > S::MAX_NAME_BYTES || bytes > S::MAX_TOTAL_NAME_BYTES {
+            return Err(refused());
+        }
+        let role = |name| {
+            doc.affordance_schema(clinkz_wot_td::semantic::FormOwner::Event(event.name), name)
+                .map(prepare_type_schema)
+                .transpose()
+        };
+        members.push(EventMemberSchema {
+            name: event.name.into(),
+            subscription: role("subscription")?,
+            data: role("data")?,
+            data_response: role("dataResponse")?,
+            cancellation: role("cancellation")?,
+        });
+    }
+    S::try_new(members)
+}
+
 // Borrowed census lets callers prepay construction and destruction of each
 // role-specific schema, including partial-construction paths.
 #[derive(Clone, Copy)]

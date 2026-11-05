@@ -332,7 +332,7 @@ impl MqttNotificationService {
             }
             l.mappings
                 .iter()
-                .any(|a| mappings.iter().any(|b| a.topic == b.topic))
+                .any(|a| mappings.iter().any(|b| filters_overlap(&a.topic, &b.topic)))
         }) {
             return Err(unsupported());
         }
@@ -377,7 +377,7 @@ impl ProducerNotificationServices for JsonNoSec {
                 MAX_NOTIFICATION_BYTES as u64 * 40 + 128,
             )
             .map_err(|_| busy())?;
-        self.schema.validate(data.payload())
+        self.schema.validate(data)
     }
 }
 struct NotificationMapping {
@@ -652,9 +652,32 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         if data.payload().body.len() > MAX_NOTIFICATION_BYTES {
             return Err(reject(data, busy()));
         }
+        // The root mapping publishes one occurrence on its native Event topic.
+        // A wildcard is never emitted as a PUBLISH Topic Name.
+        let mut event_topic = [0u8; MAX_TOPIC_BYTES];
+        let topic = if let PublicationData::EventOccurrence { event, .. } = &data {
+            let MqttDataSchema::Events(schema) = &e.services.schema else {
+                return Err(reject(data, unsupported()));
+            };
+            if schema.member(event).is_none() {
+                return Err(reject(data, unsupported()));
+            }
+            let Some(prefix) = e.topic.strip_suffix('+') else {
+                return Err(reject(data, unsupported()));
+            };
+            let len = prefix.len() + event.len();
+            if len > event_topic.len() {
+                return Err(reject(data, busy()));
+            }
+            event_topic[..prefix.len()].copy_from_slice(prefix.as_bytes());
+            event_topic[prefix.len()..len].copy_from_slice(event.as_bytes());
+            &event_topic[..len]
+        } else {
+            e.topic.as_bytes()
+        };
         let mut frame = [0; MAX_PACKET];
         frame[0] = 0x30; // QoS 0, DUP 0, RETAIN 0; no MQTT ACK or dataResponse.
-        let remaining = 2 + e.topic.len() + data.payload().body.len();
+        let remaining = 2 + topic.len() + data.payload().body.len();
         let mut n = remaining;
         let mut at = 1;
         loop {
@@ -669,10 +692,10 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
                 break;
             }
         }
-        frame[at..at + 2].copy_from_slice(&(e.topic.len() as u16).to_be_bytes());
+        frame[at..at + 2].copy_from_slice(&(topic.len() as u16).to_be_bytes());
         at += 2;
-        frame[at..at + e.topic.len()].copy_from_slice(e.topic.as_bytes());
-        at += e.topic.len();
+        frame[at..at + topic.len()].copy_from_slice(topic);
+        at += topic.len();
         frame[at..at + data.payload().body.len()].copy_from_slice(&data.payload().body);
         at += data.payload().body.len();
         s.busy = true;

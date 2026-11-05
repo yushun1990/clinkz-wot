@@ -473,8 +473,16 @@ and [Runtime Safety](../spec/runtime-safety.md) own the semantics. The
 exercise invalid members, fresh permission, short validation work, overflow,
 replacement, late work, independent stop and original-bank/final socket release.
 
-Event collection operations remain unimplemented. This scoped capability
-changes no work-package dependencies, gate, milestone or production qualification
+Event collections use one root owner while retaining the occurrence's exact
+Event target through validation, queueing, borrowed exposure and reply retirement.
+[Broker evidence](../../protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs)
+adds heterogeneous member schemas, unknown identity and cross-schema refusal,
+independent cursors over one native filter, pre-start stop and physical release.
+The [downstream response fixture](../../tools/architecture-fixtures/open-consumer/tests/notification.rs)
+checks per-Event response schemas and original retained native reply owners;
+it is not a production protocol or MQTT response claim.
+
+This scoped capability changes no work-package dependencies, gate, milestone or production qualification
 status.
 
 ## Root Action status ownership
@@ -502,3 +510,10 @@ retain the exact allocation across shared settlement/root loss, exhaust retained
 result slots, reuse only disposed capacity and verify rollback for each exhausted
 account. Raw lifecycle tests likewise require disposal before slot reuse.
 The exact ownership contract is [Runtime Safety](../spec/runtime-safety.md).
+
+The [mixed collection regression](../../protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs)
+qualifies one Thing with both root families and same-named Action/Event members.
+Its real HTTP/Mosquitto case retains independent Consumer facets under one
+authority, preserves the Action inventory after mapped Event stop, and verifies
+original Producer/Consumer result funding after native and logical root disposal.
+The combined contracts preserve existing limits, native owners and result leases.

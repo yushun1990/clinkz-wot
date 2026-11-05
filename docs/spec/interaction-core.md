@@ -248,7 +248,7 @@ lost; terminal acknowledgement releases the logical reservation. Native physical
 retirement and remote cancellation/response outcomes remain separate.
 
 The composed `ConsumerNotificationRuntime` consumes the selected source-free
-Property, Property collection or Event definition and captures actual services around that same raw
+Property, Property collection, Event or Event collection definition and captures actual services around that same raw
 lifecycle.
 It exposes the same paid `decline_response` operation for admitted optional
 opportunities, retaining native retirement before advance without sending or
@@ -272,13 +272,13 @@ root operations below; native Event response rights remain outside this subset.
 Producer notification publication has its own Host facet in `core::publication`
 and `servient-finite::notification_publication`; it remains separate from finite
 requests and Consumer conversations. An application registers a
-`ProducerNotificationSource::Property`, `AllProperties` or `Event` on the same logical Producer
+`ProducerNotificationSource::Property`, `AllProperties`, `Event` or `AllEvents` on the same logical Producer
 instance as other behavior. Complete publication captures each selected observe
 or subscribe mapping and its actual data/security services. A Property source is
 not a Read handler, and an Event of the same name cannot satisfy it.
 `publish_notification` checks current authority, exact captured target/mapping,
 backing, fresh policy and validation before native acceptance. `PublicationData`
-distinguishes PropertyValue, PropertyValues and EventData; mismatched family/data refuse before
+distinguishes PropertyValue, PropertyValues, EventData and EventOccurrence; mismatched family/data refuse before
 native acceptance and return the original carrier. Source registration alone
 cannot bypass complete TD qualification or captured services. No Engine record
 is created for a remote broker subscriber and no Engine subscriber loop
@@ -463,9 +463,57 @@ Replacement and late publication retain original authority, mapping and funding
 through retirement and acknowledgement. No initial value, replay, atomicity,
 wildcard attribution or fleet scalability is established.
 
-Other continuing collection operations need their appropriate retained owners
-and mapped controls. SubscribeAllEvents/UnsubscribeAllEvents remain unimplemented;
-QueryAllActions uses the distinct finite status observation described above.
+Root Event collections retain their own notification conversation and mapped
+controls, independently of the finite Action status observation described above.
+
+**SubscribeAllEvents / UnsubscribeAllEvents** retain one root conversation under
+`NotificationKind::SubscribeAllEvents`. An occurrence is one named Event with its
+own optional data, not a complete Property-style map or one occurrence from each
+Event. `NativeNotification::target` and `RawNotificationView::target` retain the
+occurrence's `AffordanceTarget::Event`, separately from the conversation's Thing
+target and original recipient. Leaf candidates must equal their original target;
+root Event candidates must name an Event. The composed validator also requires
+membership in the original `EventCollectionSchema`, and validates data and each
+submitted dataResponse against that specific member's original role. Unknown
+names, wrong-family targets and wrong-member schemas refuse before queue admission
+or response acceptance; the original candidate/reply owner remains through cleanup.
+
+`ConsumerNotificationSchemas::SubscribeAllEvents` shares a bounded table of exact
+Event names and separate subscription/data/dataResponse/cancellation schemas.
+Absent data differs from a JSON null schema. The common schema envelope permits
+32 members, 256 bytes per name and 4096 total name bytes; a concrete Binding or
+the bounded TD semantic closure may refuse earlier. A scalar data/schema accessor
+is not the aggregate schema or evidence that all members lack a role. This joined
+facet supplies no universal aggregate subscription/cancellation encoding; it
+refuses such member control data. Actual response opportunities can vary per
+occurrence and keep their own owners; a member schema never creates one.
+
+Producer `AllEvents` authority and `PublicationData::EventOccurrence { event,
+data }` select one original Event under a separately captured root route. All
+advertised leaf operations still require their actual sources/mappings. The
+captured validator checks the selected name/schema before native acceptance;
+wrong-family carriers, unknown names and invalid data return their original
+backing. Publication has one native outcome; it implies no recipient receipt,
+transactional group delivery or per-Event acknowledgement. Original occurrence
+name/data backing, cleanup and unread settlements remain funded.
+
+TD 1.1 specifies the root operations but does not prescribe a universal Event
+collection payload envelope. The implemented [MQTT mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-event-subscription)
+uses a single terminal /+ filter, attributing native topic names inside the
+Binding. Every known Event's data validates independently. Described member
+controls/responses decline because this QoS 0 mapping has no application channel
+for them. One logical subscription has one cursor/queue/loss/stop/settlement;
+compatible native sharing never merges logical grants. The final actual interest
+owns original unsubscribe/ACK and local socket disposal. Unknown native Event
+names are not silently dropped. Native loss is visible and cannot coalesce Events.
+No per-member subscription fallback or speculative universal notification runtime
+is introduced.
+
+An Event occurrence and an Action invocation remain distinct identities even
+when their affordance names are equal. Their data roles are independent: Event
+data uses the named Event schema; Action completion in a status observation uses
+the named Action output schema. Sharing a Thing-root coordinate confers no
+cross-family dispatch, cancellation, subscription or result ownership.
 
 ## Error and retry contract
 

@@ -324,8 +324,16 @@ this concrete mapping supplies the native policy. Deltas, wildcard extraction,
 atomic snapshots, fleet scaling and general production/profile qualification
 remain outside this evidence.
 
-Event collection operations remain unimplemented. This scoped capability
-changes no work-package dependencies, gate, milestone or production qualification
+Both roles also execute SubscribeAllEvents/UnsubscribeAllEvents over the
+[explicit MQTT wildcard mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-event-subscription).
+[Qualification](../../protocol-bindings/protocols/mqtt/tests/event_collection_qualification.rs)
+and [real broker tests](../../protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs)
+retain native topic-to-Event attribution, independent data schemas and logical
+subscriptions, mapped stop uncertainty and final release. QoS 0 supplies no
+application dataResponse. This mapping explicitly refuses unsupported member
+controls/responses, overlap, name encodings and general delivery guarantees.
+
+This scoped capability changes no work-package dependencies, gate, milestone or production qualification
 status.
 
 ## TD-driven HTTP QueryAllActions

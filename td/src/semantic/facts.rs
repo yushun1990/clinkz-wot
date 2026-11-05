@@ -412,6 +412,34 @@ impl<'a> ResolvedSemanticDocument<'a> {
             metadata: (&event._metadata).into(),
         })
     }
+    /// Only an Event collection root Form lends all Event declarations/roles.
+    /// Individual Forms and unrelated collection families are excluded.
+    pub fn collection_events(&self) -> Option<impl Iterator<Item = EventFacts<'_>>> {
+        let selected = self.selected.as_ref()?;
+        if selected.owner != FormOwner::Thing {
+            return None;
+        }
+        let form = self.scopes.iter().find_map(|s| s.form)?;
+        if !form.op.as_ref()?.iter().any(|op| {
+            matches!(
+                op,
+                crate::data_type::Operation::SubscribeAllEvents
+                    | crate::data_type::Operation::UnsubscribeAllEvents
+            )
+        }) {
+            return None;
+        }
+        Some(self.scopes.iter().filter_map(|scope| {
+            let SemanticScope::Event(name) = scope.key else {
+                return None;
+            };
+            let event = &selected.thing.events.as_ref()?[name];
+            Some(EventFacts {
+                name,
+                metadata: (&event._metadata).into(),
+            })
+        }))
+    }
     /// Typed schema at an Action/Event declaration. The role remains distinct:
     /// Action input/output and Event subscription/data/dataResponse/cancellation
     /// cannot be mistaken for a Property value or an initiating reply.
@@ -419,6 +447,8 @@ impl<'a> ResolvedSemanticDocument<'a> {
         if self.selected.as_ref()?.owner != owner
             && !(matches!(owner, FormOwner::Action(name) if self.collection_actions()
                 .is_some_and(|mut actions| actions.any(|n| n == name))))
+            && !(matches!(owner, FormOwner::Event(name) if self.collection_events()
+                .is_some_and(|mut events| events.any(|event| event.name == name))))
         {
             return None;
         }

@@ -31,6 +31,7 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
                 && !matches!(
                     input.schemas,
                     ConsumerNotificationSchemas::ObserveAllProperties(_)
+                        | ConsumerNotificationSchemas::SubscribeAllEvents(_)
                 )
         {
             return Err(unsupported());
@@ -66,6 +67,9 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
                 ConsumerNotificationSchemas::ObserveAllProperties(b),
             ) => a == b,
             (MqttDataSchema::Value(a), _) => Some(*a) == input.schemas.data(),
+            (MqttDataSchema::Events(a), ConsumerNotificationSchemas::SubscribeAllEvents(b)) => {
+                a == b
+            }
             _ => false,
         };
         if !matches {
@@ -85,6 +89,12 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
                 input.form,
             )
             .is_some_and(|f| f.effective_operations.contains(&kind.stop_operation()));
-        Ok(Some(consumer_program(self, topic, cancellation, kind)))
+        Ok(Some(consumer_program(
+            self,
+            topic,
+            cancellation,
+            kind,
+            input.target.clone(),
+        )))
     }
 }
