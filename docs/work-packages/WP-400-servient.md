@@ -308,7 +308,12 @@ through the final reference, including a call handle retained after settlement.
 [Callback regressions](../../protocol-bindings/protocols/http/tests/consumer_callbacks.rs)
 reproduce the prior public-API borrow panic and exercise nested capacity,
 sibling progress, close/cancel, first cause, abandonment, wakers, unwind
-restoration and actual HTTP result retention/physical retirement. Their executed
+restoration, advancing-time nested progress/admission, genuine clock faults,
+pending-call driver wake retention and actual HTTP result retention/physical
+retirement. Time observations are recorded at API entry and remain accessible
+while a slot is checked out; resumed progress and deadline fences use the latest
+observation. Both direct polls and runtime drivers register wake interest on busy
+slots and request a restoration retry. Their executed
 revision and validation results belong to the PR; no broad package acceptance
 is inferred. Continuing Action callback isolation remains outstanding.
 

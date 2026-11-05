@@ -217,6 +217,18 @@ effect or successful handoff, including construction and validated unread output
 Removing a terminal call is its handoff linearization point. Native/codec late
 evidence remains with that original call regardless of the local first cause.
 
+Runtime driver entry records its time observation on every original live or
+admitting call before invoking callbacks; direct call polling records its own
+entry observation. Resumed progress uses each call's latest accepted observation,
+including later nested progress or admission, rather than replaying an outer
+sweep's earlier timestamp. Genuine caller time regressions and clock-domain
+changes still record an invariant failure. Deadline fences use that latest
+observation after callbacks and before native effects or successful handoff.
+Runtime drivers and direct call polls both retain wake interest when the original
+slot is checked out. Busy entry requests a retry on restoration; waker registration
+and the restoration wake occur outside registry borrows, including when an inline
+cancellation wake reenters a pending call's driver.
+
 Slot restoration on unwind retains the original owner; it grants no guarantee
 that arbitrary panicking linked code can resume execution. The independent
 control allocation is funded before native construction and keeps its original

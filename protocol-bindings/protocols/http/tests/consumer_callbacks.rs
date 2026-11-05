@@ -14,7 +14,7 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     task::{Context, Poll, Wake, Waker},
 };
@@ -54,7 +54,10 @@ fn work() -> WorkBudget {
         .fold(WorkBudget::new(), |b, k| b.with_remaining(k, 1_000_000))
 }
 fn now() -> MonotonicInstant {
-    MonotonicInstant::new(ClockId::new(106), 1)
+    at(1)
+}
+fn at(ticks: u64) -> MonotonicInstant {
+    MonotonicInstant::new(ClockId::new(106), ticks)
 }
 fn cx() -> Context<'static> {
     Context::from_waker(Waker::noop())
@@ -114,6 +117,7 @@ struct Probe {
     polls: AtomicUsize,
     cancels: AtomicUsize,
     drops: AtomicUsize,
+    pending: AtomicBool,
 }
 struct LocalClient {
     configuration: ConsumerBindingConfiguration,
@@ -143,6 +147,7 @@ impl binding::ClientBinding for LocalClient {
         HostBindingCallBox::try_new(LocalCall {
             request: Some(request),
             probe: self.probe.clone(),
+            waker: None,
         })
         .map_err(|mut call| {
             BindingInputRejection::new(
@@ -155,6 +160,7 @@ impl binding::ClientBinding for LocalClient {
 struct LocalCall {
     request: Option<OutboundRequest>,
     probe: Arc<Probe>,
+    waker: Option<Waker>,
 }
 impl Drop for LocalCall {
     fn drop(&mut self) {
@@ -170,15 +176,19 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for LocalCall {
         None
     }
     fn poll_result(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return Poll::Pending;
         }
         self.probe.polls.fetch_add(1, Ordering::Relaxed);
+        self.waker = Some(cx.waker().clone());
         fire(Edge::Poll);
+        if self.probe.pending.load(Ordering::Relaxed) {
+            return Poll::Pending;
+        }
         let r = self.request.as_ref().unwrap();
         let output = if r.operation() == Operation::ReadProperty {
             InteractionOutput::with_data(Payload::new(b"7".as_slice(), "application/json"))
@@ -397,6 +407,113 @@ fn nested_admission_sees_reserved_capacity_and_cannot_overwrite_the_outer_call()
         }
         assert!(h.rt.is_idle());
         assert_eq!(h.probe.starts.load(Ordering::Relaxed), capacity);
+        dispose(h);
+    }
+}
+
+#[test]
+fn advancing_nested_sweep_does_not_regress_a_siblings_call_time() {
+    let h = harness(2, None);
+    let mut first = read(&h.rt).unwrap();
+    let mut sibling = read(&h.rt).unwrap();
+    let rt = h.rt.clone();
+    hook(Edge::Poll, move || rt.step(&mut cx(), at(2), &mut work()));
+    h.rt.step(&mut cx(), at(1), &mut work());
+    for call in [&mut first, &mut sibling] {
+        let Poll::Ready(s) = call.poll(&mut cx(), at(3), &mut work()) else {
+            panic!("not ready")
+        };
+        assert!(s.result().is_ok(), "{:?}", s.result());
+        drop(s);
+    }
+    drop(first);
+    drop(sibling);
+    dispose(h);
+}
+
+#[test]
+fn advancing_nested_admission_keeps_its_own_time_when_the_outer_sweep_resumes() {
+    let h = harness(2, None);
+    let mut first = read(&h.rt).unwrap();
+    let new = Rc::new(RefCell::new(None));
+    let capture = new.clone();
+    let rt = h.rt.clone();
+    hook(Edge::Poll, move || {
+        *capture.borrow_mut() = Some(
+            rt.read_property("level", Deadline::NONE, at(2), &mut work())
+                .unwrap(),
+        );
+    });
+    h.rt.step(&mut cx(), at(1), &mut work());
+    let mut new = new.borrow_mut().take().unwrap();
+    for call in [&mut first, &mut new] {
+        let Poll::Ready(s) = call.poll(&mut cx(), at(3), &mut work()) else {
+            panic!("not ready")
+        };
+        assert!(s.result().is_ok(), "{:?}", s.result());
+        drop(s);
+    }
+    drop(first);
+    drop(new);
+    dispose(h);
+}
+
+#[test]
+fn genuine_caller_clock_regressions_and_domain_changes_still_fence_success() {
+    for direct in [false, true] {
+        for bad in [at(1), MonotonicInstant::new(ClockId::new(107), 3)] {
+            let h = harness(1, None);
+            let mut call = read(&h.rt).unwrap();
+            h.rt.step(&mut cx(), at(2), &mut work());
+            if !direct {
+                h.rt.step(&mut cx(), bad, &mut work());
+            }
+            let Poll::Ready(s) =
+                call.poll(&mut cx(), if direct { bad } else { at(3) }, &mut work())
+            else {
+                panic!("not ready")
+            };
+            assert!(matches!(s.result(), Err(CoreError::InternalInvariant(_))));
+            assert!(matches!(
+                s.native_outcome(),
+                ConsumerNativeOutcome::Returned(Ok(_))
+            ));
+            drop(s);
+            drop(call);
+            dispose(h);
+        }
+    }
+}
+
+#[test]
+fn nested_time_advancement_expires_checked_out_work_before_effects_or_handoff() {
+    for edge in [Edge::Access, Edge::Poll, Edge::Validate] {
+        let h = harness(1, None);
+        let mut call =
+            h.rt.read_property("level", Deadline::at(at(2)), at(1), &mut work())
+                .unwrap();
+        let rt = h.rt.clone();
+        hook(edge, move || rt.step(&mut cx(), at(2), &mut work()));
+        let Poll::Ready(s) = call.poll(&mut cx(), at(1), &mut work()) else {
+            panic!("not ready")
+        };
+        assert!(
+            matches!(s.result(), Err(CoreError::TimedOut(_))),
+            "{:?}",
+            s.result()
+        );
+        assert_eq!(
+            h.probe.polls.load(Ordering::Relaxed),
+            usize::from(edge != Edge::Access)
+        );
+        if edge != Edge::Access {
+            assert!(matches!(
+                s.native_outcome(),
+                ConsumerNativeOutcome::Returned(Ok(_))
+            ));
+        }
+        drop(s);
+        drop(call);
         dispose(h);
     }
 }
@@ -627,6 +744,68 @@ fn nested_poll_registers_interest_and_wakes_after_the_call_is_restored() {
     assert!(settle(&mut call).result().is_ok());
     drop(call);
     drop(handle);
+    drop(counter);
+    dispose(h);
+}
+
+#[test]
+fn nested_runtime_driver_keeps_interest_when_the_outer_quantum_cannot_poll_native_work() {
+    let h = harness(1, None);
+    let mut call = read(&h.rt).unwrap();
+    let counter = Arc::new(WakeProbe(AtomicUsize::new(0)));
+    let capture = counter.clone();
+    let rt = h.rt.clone();
+    hook(Edge::Access, move || {
+        let waker = Waker::from(capture);
+        rt.step(&mut Context::from_waker(&waker), now(), &mut work());
+    });
+    let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 1_000_000);
+    h.rt.step(&mut cx(), now(), &mut budget);
+    call.cancel();
+    assert!(
+        counter.0.load(Ordering::Relaxed) > 0,
+        "nested driver lost its wake registration"
+    );
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 0);
+    drop(settle(&mut call));
+    drop(call);
+    drop(counter);
+    dispose(h);
+}
+
+#[test]
+fn consumed_inline_cancel_wake_is_rearmed_after_pending_native_work_is_restored() {
+    let h = harness(1, None);
+    h.probe.pending.store(true, Ordering::Relaxed);
+    let handle = Rc::new(RefCell::new(Some(read(&h.rt).unwrap())));
+    let capture = handle.clone();
+    let counter = Arc::new(WakeProbe(AtomicUsize::new(0)));
+    let waker = Waker::from(counter.clone());
+    let rt = h.rt.clone();
+    let nested_waker = waker.clone();
+    hook(Edge::Poll, move || {
+        hook(Edge::Wake, move || {
+            rt.step(&mut Context::from_waker(&nested_waker), now(), &mut work())
+        });
+        capture.borrow().as_ref().unwrap().cancel();
+    });
+    h.rt.step(&mut Context::from_waker(&waker), now(), &mut work());
+    assert!(
+        counter.0.load(Ordering::Relaxed) >= 2,
+        "busy-slot restoration lost the inline cancellation wake"
+    );
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+    // The restoration wake supplies the next driver turn; no native I/O or
+    // unrelated event is needed to enter cancellation and retire the owner.
+    h.rt.step(&mut Context::from_waker(&waker), now(), &mut work());
+    assert_eq!(h.probe.cancels.load(Ordering::Relaxed), 1);
+    let mut call = handle.borrow_mut().take().unwrap();
+    let s = settle(&mut call);
+    assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
+    drop(s);
+    drop(call);
+    drop(handle);
+    drop(waker);
     drop(counter);
     dispose(h);
 }
