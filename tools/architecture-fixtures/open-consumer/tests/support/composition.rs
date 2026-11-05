@@ -825,7 +825,7 @@ fn deliver(root: &mut RawNotificationServient<Observe, Access>, cursor: &mut Not
     loop {
         progress(root, cursor);
         if let Some(view) = root.front(cursor, &mut work()).unwrap() {
-            assert_eq!(&*view.data.unwrap().body, b"17");
+            assert_eq!(view.data.unwrap().body, b"17");
             return;
         }
         assert!(start.elapsed() < Duration::from_secs(5));
@@ -1189,7 +1189,7 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
         root.progress(cursor.identity(), &mut cx, &mut work())
             .unwrap();
         if let Some(view) = root.front(&mut cursor, &mut work()).unwrap() {
-            assert_eq!(&*view.data.unwrap().body, b"17");
+            assert_eq!(view.data.unwrap().body, b"17");
             break;
         }
         assert!(start.elapsed() < Duration::from_secs(2));

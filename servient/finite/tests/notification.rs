@@ -2097,3 +2097,80 @@ fn collection_occurrence_scope_and_name_bounds_refuse_without_losing_original_re
         assert!(bus.borrow().physical.is_empty());
     }
 }
+
+#[test]
+fn occurrence_slice_and_name_loans_keep_exact_owners_until_advance_or_reply_cleanup() {
+    use clinkz_wot_core::thing::AffordanceSite;
+    for advance in [true, false] {
+        let bus = Bus::new();
+        let (mut root, _, _) = root(&bus, limits());
+        let baseline = root.reserved_engine_bytes();
+        let mut request = event(false);
+        request.target = AffordanceTarget::Thing;
+        request.kind = NotificationKind::SubscribeAllEvents;
+        let mut cursor = subscribe(&mut root, request, Program::event());
+        let id = cursor.identity().clone();
+        step(&mut root, &id);
+        let payload = payload("exact occurrence").with_content_coding("identity");
+        let body = Arc::downgrade(&payload.body);
+        Bus::publish(&bus, ("sensor", 1), Some(payload));
+        // Observe the actual native occurrence allocation before handoff,
+        // independently of its public read-only loan and subscription target.
+        let endpoint = bus.borrow().endpoints[0].upgrade().unwrap();
+        let name = {
+            let mut native = endpoint.borrow_mut();
+            let item = native.queue.front_mut().unwrap();
+            let name: Arc<str> = Arc::from("alarm");
+            let observed = Arc::downgrade(&name);
+            item.target = AffordanceTarget::Event(name);
+            observed
+        };
+        drop(endpoint);
+        step(&mut root, &id);
+        let charged = root.reserved_engine_bytes();
+        assert!(charged > baseline);
+        let item = root.front(&mut cursor, &mut budget()).unwrap().unwrap();
+        let AffordanceSite::Event(event) = item.target else {
+            panic!()
+        };
+        let payload = item.data.unwrap();
+        assert_eq!(payload.body.as_ptr(), body.as_ptr() as *const u8);
+        assert_eq!(event.as_ptr(), name.as_ptr() as *const u8);
+        assert_eq!(payload.content_type, "application/test");
+        assert_eq!(payload.content_coding, Some("identity"));
+        let copied_body = payload.body.to_vec();
+        let copied_name = event.to_owned();
+        assert_ne!(copied_body.as_ptr(), payload.body.as_ptr());
+        assert_ne!(copied_name.as_ptr(), event.as_ptr());
+        if advance {
+            root.decline_response(&mut cursor, &mut budget()).unwrap();
+        } else {
+            root.stop(&cursor, None, &mut budget())
+                .unwrap_or_else(|_| panic!());
+        }
+        bus.borrow_mut().retire = Mode::Pending;
+        step(&mut root, &id);
+        assert!(root.advance(&mut cursor, &mut budget()).is_err());
+        assert!(body.upgrade().is_some());
+        assert!(name.upgrade().is_some());
+        assert_eq!(root.reserved_engine_bytes(), charged);
+        bus.borrow_mut().retire = Mode::Ready;
+        step(&mut root, &id);
+        if advance {
+            root.advance(&mut cursor, &mut budget()).unwrap();
+            assert!(body.upgrade().is_none());
+            assert!(name.upgrade().is_none());
+            root.stop(&cursor, None, &mut budget())
+                .unwrap_or_else(|_| panic!());
+        }
+        drop(settle(&mut root, &id));
+        assert_eq!(root.reserved_engine_bytes(), baseline);
+        assert!(body.upgrade().is_none());
+        assert!(name.upgrade().is_none());
+        assert!(bus.borrow().physical.is_empty());
+        drop(cursor);
+        drop(root);
+        assert_eq!(copied_body, b"exact occurrence");
+        assert_eq!(copied_name, "alarm");
+    }
+}

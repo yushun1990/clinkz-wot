@@ -44,8 +44,8 @@ impl Payload {
 
 /// Read-only payload slices tied to the owner lending them. Cloning this view
 /// cannot retain the original allocation beyond that owner's lifetime. Retain
-/// the owning settlement to share funded bytes; explicit byte copies belong
-/// to the caller.
+/// the original owner and its loan while using funded bytes; explicit byte
+/// copies belong to the caller.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PayloadView<'a> {
     /// Original encoded bytes.

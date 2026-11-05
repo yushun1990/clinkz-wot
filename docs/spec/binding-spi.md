@@ -254,7 +254,11 @@ Event collections carry a logical occurrence target in each native candidate,
 separate from its recipient and conversation target. The Binding converts native
 source evidence to the exact TD Event identity before handoff; Core never parses
 topics or native event headers. It must not discard this attribution or relabel
-it using a collection-wide data schema. `poll_next`'s backing limit includes the
+it using a collection-wide data schema. The Engine's public delivery loan lends
+Core `PayloadView` and `AffordanceSite` slices, while the owning native candidate
+and reply remain internal under their original queue/cleanup funding. No protocol
+mapping or native sharing behavior is changed by this read-only boundary.
+`poll_next`'s backing limit includes the
 occurrence name allocation (`notification_item_backing`) as well as payload;
 queue accounting retains both. The Engine checks scope/member/schema before
 logical admission, and each response validates against the retained occurrence.

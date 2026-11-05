@@ -232,6 +232,12 @@ The raw Host Consumer facet implements these roles in `core::notification` and
 independent logical subscriptions; separate roots may share compatible native
 infrastructure. A non-cloneable cursor borrows retained raw data until explicit
 advance; cloneable stop intent grants no receive/response or shutdown authority.
+`RawNotificationView` lends Core `PayloadView` byte/media slices and an
+`AffordanceSite` occurrence coordinate. It exposes neither a Payload/body Arc
+nor a cloneable owner of the original occurrence name. The loan is tied to the
+exclusive root borrow, so advance, progress/cleanup and root disposal cannot
+invalidate data still in use. Explicit byte/name copies have separate caller-owned
+backing and may outlive the loan; no detached shared delivery owner is introduced.
 Event control inputs and reciprocal responses have distinct carriers. Required
 responses refuse absent native support; each actual response opportunity has a
 separate retained delivery/retirement owner. An exposed unused optional
@@ -469,8 +475,9 @@ controls, independently of the finite Action status observation described above.
 **SubscribeAllEvents / UnsubscribeAllEvents** retain one root conversation under
 `NotificationKind::SubscribeAllEvents`. An occurrence is one named Event with its
 own optional data, not a complete Property-style map or one occurrence from each
-Event. `NativeNotification::target` and `RawNotificationView::target` retain the
-occurrence's `AffordanceTarget::Event`, separately from the conversation's Thing
+Event. `NativeNotification::target` retains the occurrence's
+`AffordanceTarget::Event`; `RawNotificationView::target` lends its
+`AffordanceSite::Event` name, separately from the conversation's Thing
 target and original recipient. Leaf candidates must equal their original target;
 root Event candidates must name an Event. The composed validator also requires
 membership in the original `EventCollectionSchema`, and validates data and each

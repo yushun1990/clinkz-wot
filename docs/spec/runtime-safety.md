@@ -116,6 +116,13 @@ funds the root queue and validation envelope until root disposal; raw owner-scop
 limits alone are not an aggregate-accounting claim. Native topic sharing,
 distribution, bounded queues and connection/control-frame disposal remain in
 the Binding, independently of each logical recipient's authority and stop.
+Raw and composed notification `front()` lend only payload/media and occurrence
+name slices under the existing exclusive root borrow. No public delivery loan
+exposes cloneable owners of those original allocations. Active loans prevent
+advance and cleanup mutation; queue, reply and original account ownership remain
+with the existing root until the appropriate disposal boundary. Keeping an
+explicit copy after advance does not retain the original allocation. This rule
+applies to leaf Property/Event and root Property/Event notification delivery.
 
 A collection observation retains one root authority and original named schema
 through late candidates, stop and settlement. Complete-map validation accepts

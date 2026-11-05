@@ -65,3 +65,6 @@ Action result boundaries, directly replacing the Action-local views. Owned
 `InteractionOutput`/`Payload` remain internal handoff carriers. The
 [ownership contract](../spec/interaction-core.md) requires retaining the original
 funded settlement to share its backing; this adds no generic interaction owner.
+Notification delivery also reuses Core `PayloadView` together with the existing
+`AffordanceSite` name loan. Its queue owner remains exclusively borrowed until
+the slices are no longer used; it creates no detached delivery/result owner.

@@ -174,7 +174,7 @@ async fn accounted(c: &mut Consumer, id: &NotificationCursor, n: u64) {
 async fn value(c: &mut Consumer, id: &mut NotificationCursor, expected: &[u8]) {
     accounted(c, id, 1).await;
     let v = c.front(id, &mut budget()).unwrap().unwrap();
-    assert_eq!(&*v.data.unwrap().body, expected);
+    assert_eq!(v.data.unwrap().body, expected);
     assert_eq!(v.response, EventResponseState::Unavailable);
     c.advance(id, &mut budget()).unwrap();
 }
@@ -538,7 +538,7 @@ fn collection_loss_and_saturation_preserve_whole_samples_and_never_coalesce() {
             send(&mut po, &mut pe, ONE).await;
             accounted(&mut c, &id, 1).await;
             assert_eq!(
-                &*c.front(&mut id, &mut budget())
+                c.front(&mut id, &mut budget())
                     .unwrap()
                     .unwrap()
                     .data
@@ -551,7 +551,7 @@ fn collection_loss_and_saturation_preserve_whole_samples_and_never_coalesce() {
             assert_eq!(c.status(id.identity()).unwrap().loss.items, 1);
             if policy == NotificationOverflow::DropNewest {
                 assert_eq!(
-                    &*c.front(&mut id, &mut budget())
+                    c.front(&mut id, &mut budget())
                         .unwrap()
                         .unwrap()
                         .data

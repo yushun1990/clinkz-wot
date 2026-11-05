@@ -488,8 +488,11 @@ mod live {
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             let event = events.front(&mut cursor, &mut budget()).unwrap().unwrap();
-            assert_eq!(event.target, &AffordanceTarget::Event(Arc::from("alarm")));
-            assert_eq!(&*event.data.unwrap().body, b"true");
+            assert_eq!(
+                event.target,
+                clinkz_wot_core::thing::AffordanceSite::Event("alarm")
+            );
+            assert_eq!(event.data.unwrap().body, b"true");
             events.advance(&mut cursor, &mut budget()).unwrap();
             events
                 .stop(&cursor, Some(CancellationInput(None)), &mut budget())

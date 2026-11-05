@@ -166,6 +166,19 @@ original data, reply jobs, first cause and capacity; bounded owner cleanup can
 return complete terminal reports after all cursors are lost. Host-root Drop uses
 the native owners' required finite local abort and reports no completed drain.
 
+Public notification delivery now lends Core `PayloadView` and `AffordanceSite`
+slices directly, replacing payload/name allocation-owner borrows. Compile-fail
+cases reject original-owner extraction, escaping slice lifetimes and advance
+while a delivery loan remains live. The
+[raw occurrence regression](../../servient/finite/tests/notification.rs) tracks
+exact payload/name allocations through pending reply retirement and final release;
+the [Mosquitto regression](../../protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs)
+repeats delivery/advance without retaining original response allocations or growing
+original charges, then verifies mapped unsubscribe and complete account release.
+Downstream reciprocal-response tests observe allocation liveness at the trusted
+native boundary while using only slices at the public handoff. These corrections
+preserve native ownership, validation, controls, limits and cleanup rules.
+
 `cargo test --locked -p clinkz-wot-servient-finite --test notification` exercises actual
 Core/Servient lifecycle code through deterministic external in-memory Binding
 capabilities: compatible sharing, independent stop/cursors, tenant separation,
