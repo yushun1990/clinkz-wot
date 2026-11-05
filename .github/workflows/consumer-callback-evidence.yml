@@ -1,0 +1,38 @@
+name: consumer-callback-evidence
+on:
+  push:
+    branches: [validation/consumer-callback-ownership]
+permissions:
+  contents: read
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+      - name: Verify implementation parent and formatting
+        run: |
+          test "$(git rev-parse HEAD^)" = "58abd9672f62d3e58017c1e3384140921808610a"
+          git diff --exit-code HEAD^ HEAD -- . ':!.github/workflows/consumer-callback-evidence.yml'
+          cargo fmt --all --check
+      - name: Validate current authority
+        run: tools/check-design-artifacts.sh
+      - name: Run complete locked workspace including real HTTP and native peers
+        run: cargo test --locked --workspace -- --test-threads=1
+      - name: Exercise independently linked Consumer Binding
+        run: cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml -- --test-threads=1
+      - name: Exercise actual MQTT broker regressions
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mosquitto
+          cargo test --locked -p clinkz-wot-binding-mqtt --features broker-tests -- --test-threads=1
+      - name: Check all supported feature cells
+        run: sh scripts/check-feature-matrix.sh
+      - name: Check callback regression lint
+        run: cargo clippy --locked -p clinkz-wot-binding-http --test consumer_callbacks --no-deps -- -D warnings
