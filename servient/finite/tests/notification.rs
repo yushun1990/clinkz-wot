@@ -20,6 +20,7 @@ enum Mode {
     Fail,
 }
 struct Program {
+    target: AffordanceTarget,
     source: &'static str,
     tenant: u8,
     responses: bool,
@@ -29,6 +30,7 @@ struct Program {
 impl Program {
     fn property() -> Self {
         Self {
+            target: AffordanceTarget::Property(Arc::from("temperature")),
             source: "sensor",
             tenant: 1,
             responses: false,
@@ -39,6 +41,7 @@ impl Program {
     fn event() -> Self {
         Self {
             responses: true,
+            target: AffordanceTarget::Event(Arc::from("alarm")),
             ..Self::property()
         }
     }
@@ -52,6 +55,7 @@ struct Physical {
     jobs: usize,
 }
 struct Endpoint {
+    target: AffordanceTarget,
     identity: NotificationIdentity,
     physical: (&'static str, u8),
     responses: bool,
@@ -143,7 +147,7 @@ impl Bus {
             if !endpoint.joined || endpoint.physical != key {
                 continue;
             }
-            let bytes = notification_payload_backing(data.as_ref()).unwrap();
+            let bytes = notification_item_backing(&endpoint.target, data.as_ref()).unwrap();
             bus.borrow_mut().native_acks += 1; // Native ACK never creates a dataResponse.
             // Explicit native item AND byte limits, independent of Engine credit.
             if endpoint.queue.len() == 4 || bytes > 4096 || endpoint.bytes + bytes > 8192 {
@@ -163,8 +167,10 @@ impl Bus {
                     None
                 };
                 let recipient = endpoint.identity.clone();
+                let target = endpoint.target.clone();
                 endpoint.queue.push_back(NativeNotification {
                     recipient,
+                    target,
                     data: data.clone(),
                     response,
                 });
@@ -326,7 +332,7 @@ impl NotificationParticipation for Participation {
         let Some(mut item) = endpoint.queue.pop_front() else {
             return Poll::Pending;
         };
-        let bytes = notification_payload_backing(item.data.as_ref()).unwrap();
+        let bytes = notification_item_backing(&item.target, item.data.as_ref()).unwrap();
         endpoint.bytes -= bytes;
         drop(endpoint);
         if bytes > max_bytes {
@@ -422,6 +428,7 @@ impl ConsumerNotificationBinding for Binding {
         }
         bus.prepare_calls += 1;
         let endpoint = Rc::new(RefCell::new(Endpoint {
+            target: program.target.clone(),
             identity: identity.clone(),
             physical: program.physical(),
             responses: program.responses,
@@ -922,7 +929,14 @@ fn event_control_data_response_and_delivery_have_distinct_owners() {
 fn empty_event_data_is_supported_without_fabricating_a_property_value_or_response() {
     let bus = Bus::new();
     let (mut root, _, _) = root(&bus, limits());
-    let mut cursor = subscribe(&mut root, event(false), Program::property());
+    let mut cursor = subscribe(
+        &mut root,
+        event(false),
+        Program {
+            responses: false,
+            ..Program::event()
+        },
+    );
     let id = cursor.identity().clone();
     step(&mut root, &id);
     Bus::publish(&bus, ("sensor", 1), None);
@@ -1035,7 +1049,14 @@ fn full_queue_drop_policy_reports_event_loss_without_replacing_unread_data() {
     );
     let mut request = event(false);
     request.overflow = NotificationOverflow::DropNewest;
-    let mut cursor = subscribe(&mut root, request, Program::property());
+    let mut cursor = subscribe(
+        &mut root,
+        request,
+        Program {
+            responses: false,
+            ..Program::event()
+        },
+    );
     let id = cursor.identity().clone();
     step(&mut root, &id);
     Bus::publish(&bus, ("sensor", 1), Some(payload("first event")));
@@ -1061,7 +1082,11 @@ fn full_queue_drop_policy_reports_event_loss_without_replacing_unread_data() {
 #[test]
 fn byte_overflow_terminates_and_cleanup_survives_saturation_and_failure() {
     let p = payload("bounded data");
-    let bytes = notification_payload_backing(Some(&p)).unwrap();
+    let bytes = notification_item_backing(
+        &AffordanceTarget::Property(Arc::from("temperature")),
+        Some(&p),
+    )
+    .unwrap();
     let bus = Bus::new();
     let (mut root, _, _) = root(
         &bus,
@@ -2029,4 +2054,46 @@ fn cursor_loss_during_optional_decline_leaves_prepaid_owner_cleanup_usable() {
     assert_eq!(bus.borrow().reply_send_polls, 0);
     assert!(bus.borrow().physical.is_empty());
     assert!(weak.upgrade().is_none());
+}
+
+#[test]
+fn collection_occurrence_scope_and_name_bounds_refuse_without_losing_original_reply_owner() {
+    for target in [
+        AffordanceTarget::Thing,
+        AffordanceTarget::Property(Arc::from("alarm")),
+        AffordanceTarget::Action(Arc::from("alarm")),
+        AffordanceTarget::Event(Arc::from("x".repeat(65))),
+    ] {
+        let bus = Bus::new();
+        let (mut root, _, _) = root(&bus, limits());
+        let mut request = event(true);
+        request.target = AffordanceTarget::Thing;
+        request.kind = NotificationKind::SubscribeAllEvents;
+        let cursor = subscribe(
+            &mut root,
+            request,
+            Program {
+                target,
+                ..Program::event()
+            },
+        );
+        let id = cursor.identity().clone();
+        step(&mut root, &id);
+        Bus::publish(&bus, ("sensor", 1), Some(payload("original event")));
+        assert_eq!(step(&mut root, &id), NotificationState::Closing);
+        let status = root.status(&id).unwrap();
+        assert_eq!(status.queued_items, 0);
+        assert!(status.has_retained_handoff);
+        bus.borrow_mut().retire = Mode::Pending;
+        assert_eq!(step(&mut root, &id), NotificationState::Closing);
+        assert_eq!(bus.borrow().reply_aborts, 0);
+        assert!(root.take_settlement(&id).is_err());
+        bus.borrow_mut().retire = Mode::Ready;
+        let report = settle(&mut root, &id);
+        assert_eq!(report.responses_delivered, 0);
+        assert_eq!(report.delivered_items, 0);
+        assert!(matches!(report.first_cause, Some(CoreError::Validation(_))));
+        assert_eq!(bus.borrow().reply_aborts, 1);
+        assert!(bus.borrow().physical.is_empty());
+    }
 }

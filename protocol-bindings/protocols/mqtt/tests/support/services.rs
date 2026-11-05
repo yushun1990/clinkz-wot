@@ -7,6 +7,7 @@ use std::{any::Any, cell::Cell};
 pub struct ServicesParticipant {
     pub native: MqttNotificationRuntime,
     pub services: Option<Rc<dyn ProducerNotificationServices>>,
+    route: NotificationRoute,
 }
 impl ClosedProducerParticipation for ServicesParticipant {
     fn participation_id(&self) -> &ProducerParticipationId {
@@ -53,10 +54,17 @@ impl ClosedProducerParticipation for ServicesParticipant {
         Rc<dyn ProducerNotificationServices>,
         usize,
     )> {
-        let (route, _, bytes) = self
+        let (route, original, bytes) = self
             .native
             .notification_publication(key, binding, site, form, definition)?;
-        Some((route, Rc::clone(self.services.as_ref()?), bytes))
+        // Override only the selected mapping. Other advertised sources keep
+        // their own validators, including their distinct data roles.
+        let services = if route.same_mapping(&self.route) {
+            Rc::clone(self.services.as_ref()?)
+        } else {
+            original
+        };
+        Some((route, services, bytes))
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
         self.native.ingress_gate()
@@ -121,16 +129,19 @@ pub fn intercept_with_instance(
     let op = prepared
         .operations()
         .iter()
-        .find(|o| {
-            matches!(
-                o.operation,
-                Operation::SubscribeEvent
-                    | Operation::ObserveProperty
-                    | Operation::ObserveAllProperties
-            )
+        .find(|o| o.operation == Operation::SubscribeAllEvents)
+        .or_else(|| {
+            prepared.operations().iter().find(|o| {
+                matches!(
+                    o.operation,
+                    Operation::SubscribeEvent
+                        | Operation::ObserveProperty
+                        | Operation::ObserveAllProperties
+                )
+            })
         })
         .unwrap();
-    let (_, original, _) = runtime
+    let (route, original, _) = runtime
         .notification_publication(
             instance.key(),
             op.binding,
@@ -158,6 +169,7 @@ pub fn intercept_with_instance(
             participants: vec![Box::new(ServicesParticipant {
                 native: runtime,
                 services,
+                route,
             })],
             expected: None,
             handler_backing_bytes: 0,

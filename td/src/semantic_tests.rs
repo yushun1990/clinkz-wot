@@ -649,3 +649,80 @@ fn root_property_schema_closure_is_selected_operation_scoped() {
             .unwrap();
     assert!(individual.collection_properties().is_none());
 }
+
+#[test]
+fn root_event_collection_lends_exact_members_and_all_roles_without_leaf_forms() {
+    let mut value = serde_json::json!({
+        "@context":["https://www.w3.org/2022/wot/td/v1.1", {"x":"urn:root:"}],
+        "title":"Event roles", "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "events": {
+            "": {"subscription":{"type":"integer"},"data":{"type":"boolean"},
+                "dataResponse":{"type":"string"},"cancellation":{"type":"null"},
+                "forms":[{"href":"https://example.com/empty"}]},
+            "警报": {"@context":{"x":"urn:event:"},"data":{"type":"integer","x:limit":1},
+                "forms":[{"href":"https://example.com/unrelated","x:leaf":true}]}
+        },
+        "forms":[
+            {"href":"https://example.com/events","op":["subscribeallevents","unsubscribeallevents"]},
+            {"href":"https://example.com/properties","op":"readallproperties"}
+        ]
+    });
+    let thing = serde_json::from_value(value.clone()).unwrap();
+    let doc = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0)
+        .0
+        .unwrap();
+    let names: Vec<_> = doc.collection_events().unwrap().map(|e| e.name).collect();
+    assert_eq!(names, ["", "警报"]);
+    for (role, ty) in [
+        ("subscription", "integer"),
+        ("data", "boolean"),
+        ("dataResponse", "string"),
+        ("cancellation", "null"),
+    ] {
+        assert_eq!(
+            doc.affordance_schema(FormOwner::Event(""), role)
+                .unwrap()
+                .facts()
+                .declared_type,
+            Some(ty)
+        );
+    }
+    assert!(
+        doc.affordance_schema(FormOwner::Event("警报"), "subscription")
+            .is_none()
+    );
+    let schema = doc
+        .affordance_schema(FormOwner::Event("警报"), "data")
+        .unwrap();
+    assert!(
+        schema
+            .extension_semantics()
+            .any(|n| n.name().is("urn:event:limit"))
+    );
+    assert!(doc.form(FormOwner::Event("警报"), 0).is_none());
+    assert!(doc.collection_properties().is_none());
+    let unrelated = ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 1)
+        .0
+        .unwrap();
+    assert!(unrelated.collection_events().is_none());
+    assert!(
+        unrelated
+            .affordance_schema(FormOwner::Event(""), "data")
+            .is_none()
+    );
+    // An unrelated root operation does not resolve or charge every Event schema.
+    for n in 0..300 {
+        value["events"][format!("irrelevant{n}")] = value["events"][""].clone();
+    }
+    let thing = serde_json::from_value(value).unwrap();
+    assert!(
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 1)
+            .0
+            .is_ok()
+    );
+    assert!(
+        ResolvedSemanticDocument::resolve_form_metered(&thing, FormOwner::Thing, 0)
+            .0
+            .is_err()
+    );
+}

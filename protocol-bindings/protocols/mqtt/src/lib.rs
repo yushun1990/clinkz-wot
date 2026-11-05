@@ -76,13 +76,14 @@ pub struct MqttNotificationDefinition {
     schema: MqttDataSchema,
 }
 
-/// The concrete MQTT mapping carries either one affordance value or a complete
-/// TD-named root map. No topic parsing or member routing enters the Engine.
+/// Concrete mappings retain one value, a complete Property map or original
+/// named Event roles. Topic parsing and native routing stay inside MQTT.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(not(feature = "prepare"), allow(dead_code))]
 enum MqttDataSchema {
     Value(TypeSchema),
     Properties(Arc<clinkz_wot_core::collection::PropertyCollectionSchema>),
+    Events(Arc<clinkz_wot_core::collection::EventCollectionSchema>),
 }
 impl MqttDataSchema {
     fn retained_bytes(&self) -> usize {
@@ -91,14 +92,51 @@ impl MqttDataSchema {
             Self::Properties(s) => {
                 s.retained_bytes() + std::mem::size_of_val(&**s) + 2 * std::mem::size_of::<usize>()
             }
+            Self::Events(s) => {
+                s.retained_bytes() + std::mem::size_of_val(&**s) + 2 * std::mem::size_of::<usize>()
+            }
         }
     }
-    fn validate(&self, payload: &clinkz_wot_core::Payload) -> clinkz_wot_core::CoreResult<()> {
+    fn validate(
+        &self,
+        data: &clinkz_wot_core::publication::PublicationData,
+    ) -> clinkz_wot_core::CoreResult<()> {
+        let payload = data.payload();
         match self {
             Self::Value(s) => clinkz_wot_codec_json::validate_payload(*s, payload),
             Self::Properties(s) => clinkz_wot_codec_json::validate_property_map(s, payload),
+            Self::Events(s) => {
+                let clinkz_wot_core::publication::PublicationData::EventOccurrence {
+                    event, ..
+                } = data
+                else {
+                    return Err(unsupported());
+                };
+                let schema = s
+                    .member(event)
+                    .and_then(|m| m.data)
+                    .ok_or_else(unsupported)?;
+                clinkz_wot_codec_json::validate_payload(schema, payload)
+            }
         }
     }
+}
+
+/// Only exact filters and a terminal single-level wildcard are supported.
+/// Reject overlapping distinct interests rather than invent duplicate delivery
+/// suppression or competing-consumer semantics.
+fn topic_matches(filter: &str, topic: &str) -> bool {
+    if let Some(prefix) = filter.strip_suffix("/+") {
+        topic
+            .strip_prefix(prefix)
+            .and_then(|s| s.strip_prefix('/'))
+            .is_some_and(|name| !name.contains('/'))
+    } else {
+        filter == topic
+    }
+}
+fn filters_overlap(a: &str, b: &str) -> bool {
+    topic_matches(a, b) || topic_matches(b, a)
 }
 impl PartialEq for MqttNotificationDefinition {
     fn eq(&self, b: &Self) -> bool {

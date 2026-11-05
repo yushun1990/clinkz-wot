@@ -201,6 +201,32 @@ pub fn collection_td(address: SocketAddr, topic: &str) -> serde_json::Value {
     }]);
     value
 }
+
+pub fn event_collection_td(address: SocketAddr, prefix: &str) -> serde_json::Value {
+    let mut value = td(address, &format!("{prefix}/alarm"));
+    let mut ready = value["events"]["alarm"].clone();
+    ready["data"]["type"] = serde_json::json!("boolean");
+    ready["forms"][0]["mqv:filter"] = serde_json::json!(format!("{prefix}/ready"));
+    value["events"]["ready"] = ready;
+    value["forms"] = serde_json::json!([{
+        "href":format!("mqtt://{address}"),
+        "op":["subscribeallevents","unsubscribeallevents"],
+        "mqv:filter":format!("{prefix}/+"), "mqv:qos":"0", "mqv:retain":false
+    }]);
+    value
+}
+pub fn event_collection_instance(
+    authority: ProducerInstanceAuthority,
+    text: &str,
+) -> RawProducerInstance {
+    RawProducerInstance::new(authority, vec![])
+        .with_description(Arc::from(text))
+        .with_notification_sources(vec![
+            ProducerNotificationSource::AllEvents,
+            ProducerNotificationSource::event("alarm"),
+            ProducerNotificationSource::event("ready"),
+        ])
+}
 pub fn collection_instance(
     authority: ProducerInstanceAuthority,
     text: &str,

@@ -57,6 +57,14 @@ the described Property schemas with each Property's own local context, without l
 `collection_properties` is available only for that operation's root loan; its
 scopes, schema branches and name/context resolution use the existing bounded
 arena and work. Unrelated root operations acquire no Property schema closure.
+SubscribeAllEvents/UnsubscribeAllEvents root loans similarly expose
+`collection_events` and each Event's distinct subscription/data/dataResponse/
+cancellation SchemaViews under that Event's local context. They lend no leaf
+Forms and do not combine occurrences into a Property ObjectSchema. Other root
+operations acquire no Event closure. Both collection closures remain bounded by
+the existing semantic arena/work and refuse incomplete resolution. TD 1.1 fixes
+the root operation meaning; concrete Bindings select an explicit, fully supported
+Event attribution/wire mapping rather than inferring a universal Event envelope.
 Selected Combo references are reachable through the same shared security loan.
 Unknown security definitions survive TD decoding and round trips, including
 when unused; selecting one still requires an actual supporting security service.

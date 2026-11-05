@@ -84,6 +84,7 @@ fn capture_notification_routes<'a>(
                 Operation::ObserveProperty
                     | Operation::ObserveAllProperties
                     | Operation::SubscribeEvent
+                    | Operation::SubscribeAllEvents
             )
         })
         .count();
@@ -96,7 +97,7 @@ fn capture_notification_routes<'a>(
     for operation in prepared.operations() {
         use clinkz_wot_planning::producer_composition::FormSite;
         let target = match (&operation.site, operation.operation) {
-            (FormSite::Thing, Operation::ObserveAllProperties) => {
+            (FormSite::Thing, Operation::ObserveAllProperties | Operation::SubscribeAllEvents) => {
                 clinkz_wot_core::AffordanceTarget::Thing
             }
             (FormSite::Property(n), Operation::ObserveProperty) => {

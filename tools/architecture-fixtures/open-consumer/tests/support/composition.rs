@@ -720,6 +720,7 @@ impl NotificationParticipation for Participation {
             .map_or(Poll::Pending, |data| {
                 Poll::Ready(Ok(NotificationSignal::Data(NativeNotification {
                     recipient: self.id.clone(),
+                    target: AffordanceTarget::Property(Arc::from("a")),
                     data: Some(data),
                     response: None,
                 })))

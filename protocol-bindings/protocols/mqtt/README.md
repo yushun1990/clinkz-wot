@@ -323,3 +323,105 @@ remains open beyond this bounded topology.
 General DataSchema/security, QoS 1/2, TLS, broader loss/reconnect policies,
 dataResponse with actual response cardinality, separate control mappings,
 other collections and constrained profiles remain separate work.
+
+## Thing-root Event subscription
+
+**SubscribeAllEvents / UnsubscribeAllEvents** use one combined root Form and one
+native MQTT single-level wildcard subscription. For a Thing declaring `alarm`
+(integer data) and `ready` (boolean data), its root Form can be:
+
+```json
+"forms": [{
+  "href": "mqtt://127.0.0.1:1883",
+  "op": ["subscribeallevents", "unsubscribeallevents"],
+  "mqv:filter": "things/device/events/+",
+  "mqv:qos": "0",
+  "mqv:retain": false
+}]
+```
+
+An `alarm` occurrence is PUBLISH on `things/device/events/alarm` with payload `7`;
+a `ready` occurrence is PUBLISH on `things/device/events/ready` with payload
+`true`. Each occurrence retains its Event identity and validates only its own
+original data schema. There is no complete-map requirement or new JSON envelope.
+A root Consumer does not subscribe to individual Forms; those Forms may describe
+other endpoints. A Producer must still qualify **every** advertised root and leaf
+operation with its actual source, mapping and services.
+
+The [TD 1.1 Recommendation](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form)
+defines these single-interaction root operations. Its combined Property schema
+rule does not prescribe an Event collection wire envelope. The
+[evolving MQTT guidance](https://w3c.github.io/wot-binding-templates/bindings/protocols/mqtt/index.html)
+has no subscribe-all default. The topic rule above is explicit ClinkZ Binding
+policy using existing `mqv:filter`, not standardized WoT extraction semantics.
+No new TD vocabulary or generic mandatory-extension marker is added.
+
+The subset requires a nonempty literal prefix and terminal `/+`, without any
+other wildcard or `$` prefix. `mqv:topic` and `controlPacket` are omitted on the
+combined Form. Every Event name must be 1–64 ASCII graphic bytes excluding `/`,
+`+`, `#` and `$`; every resulting topic fits 128 bytes. Every Event has a supported
+type-only data schema and no subscription, cancellation or dataResponse schema.
+Other name encodings, signal-only Events, separate control Forms and richer
+control/response mappings refuse preparation. Unsupported member assertions or
+extensions refuse the whole candidate. Native protocol ACKs never become Event
+application responses; requesting required responses refuses before effects.
+JSON payloads remain bounded at 4096 bytes, with the same NoSec/loopback policy.
+
+Preparation selects `AffordanceTarget::Thing` with
+`NotificationKind::SubscribeAllEvents`, retaining named `EventCollectionSchema`
+roles after source-TD destruction. The Binding maps native topics to occurrence
+`AffordanceTarget::Event` values; raw topics do not enter application views.
+Captured data services validate each member separately. An unknown Event name,
+wrong-member data or malformed payload is retained for cleanup and refuses the
+logical conversation before delivery. Root establishment/delivery authorizes
+SubscribeAllEvents; mapped cancellation authorizes UnsubscribeAllEvents. This is
+a grant for the whole declared collection, independent of leaf authority.
+
+`ProducerNotificationSource::AllEvents` is a distinct root source.
+`publish_notification` takes the Thing target and
+`PublicationData::EventOccurrence { event, data }`. Captured services validate the
+selected Event before native acceptance; the Binding sends one non-retained
+QoS 0 PUBLISH to its concrete topic. Unknown names, cross-schema data and
+wrong-family carriers return their original backing before effects. Publishing
+a leaf does not synthesize another group publication; the broker naturally
+matches it if its actual topic also matches a live root filter.
+
+Identical compatible filters may share one native registration, including
+independent cursors on one runtime or separate Consumer owners with different
+captured schemas. Every cursor keeps its own bounded queue, permission, loss,
+stop and settlement. Distinct overlapping filters in one Consumer service refuse
+before acceptance: MQTT can deliver extra copies for overlapping subscriptions,
+and this subset supplies no deduplication or exactly-once claim. Independent
+Producer slots likewise refuse overlapping namespaces. A staged successor may
+reuse its original slot's topics with fresh mapping identity and original-work
+fencing. One Thing's leaf/root mappings may coexist.
+
+Stop fences local delivery first. Shared siblings retain their native interest;
+only the last interest sends the original UNSUBSCRIBE and waits for UNSUBACK.
+`Confirmed` describes that mapped ACK, not global subscriber removal or successful
+Event delivery. Partial/failed control preserves `Unknown`; local-only or shared
+removal remains `NotAttempted`. Pending controls, late candidates, original
+publication work and unread settlements keep their original owners and funding.
+Last actual native disposal closes the socket while service objects may remain.
+There is no automatic retry, reconnect, replay, initial Event or wire backpressure.
+Retained deliveries are discarded with visible loss; whole occurrences drop or
+terminate under the chosen policy, without coalescing.
+
+The bounded schema table permits up to 32 Events and 4096 total name bytes;
+semantic-arena, source and operation-definition limits may refuse earlier.
+Per-occurrence attribution backing joins payload in Engine handoff/queue limits;
+construction, disposal and validation are funded before handoff. Binding queues,
+frames and shared sockets retain their separate fixed service policy. This
+establishes no total-process RAM, fleet throughput, general schema/security,
+constrained-profile or production qualification claim.
+
+[Qualification](tests/event_collection_qualification.rs) and
+[real Mosquitto integration](tests/subscribe_all_events.rs) cover both roles,
+complete final meaning/services, heterogeneous attribution, adversarial data,
+shared independent stop, short validation credit, loss, replacement, uncertain
+publication/unsubscribe, late/unread work and final physical/account release.
+The [downstream response fixture](../../../tools/architecture-fixtures/open-consumer/tests/notification.rs)
+checks per-Event response validation with actual retained test reply owners; it
+makes no MQTT response-channel claim. Topic [0082](../../../workspace/0082-logical-physical-subscription-decoupling.md)
+remains open for broader topology, tenant/security, arbitrary wildcard, shared
+group, scaling and profile questions.

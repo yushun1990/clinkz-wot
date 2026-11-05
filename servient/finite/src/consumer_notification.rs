@@ -78,35 +78,66 @@ impl CapturedServices {
 }
 impl NotificationValidation for CapturedServices {
     fn subscription(&self, input: &SubscriptionInput, budget: &mut WorkBudget) -> CoreResult<()> {
+        if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+            // No universal aggregate control encoding is implied by TD 1.1.
+            if input.0.is_some() || s.members().iter().any(|m| m.subscription.is_some()) {
+                return Err(CoreError::UnsupportedOperation(context()));
+            }
+        }
         if self.schemas.subscription().is_some() {
             self.prepay(budget)?;
         }
         self.validate(self.schemas.subscription(), input.0.as_ref())
     }
     fn cancellation(&self, input: &CancellationInput, budget: &mut WorkBudget) -> CoreResult<()> {
+        if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+            if input.0.is_some() || s.members().iter().any(|m| m.cancellation.is_some()) {
+                return Err(CoreError::UnsupportedOperation(context()));
+            }
+        }
         if self.schemas.cancellation().is_some() {
             self.prepay(budget)?;
         }
         self.validate(self.schemas.cancellation(), input.0.as_ref())
     }
-    fn response(&self, input: &EventDataResponse, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.schemas.data_response().is_some() {
+    fn response(
+        &self,
+        target: &AffordanceTarget,
+        input: &EventDataResponse,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        let schema = if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+            let AffordanceTarget::Event(name) = target else {
+                return Err(invalid());
+            };
+            s.member(name).ok_or_else(invalid)?.data_response
+        } else {
+            self.schemas.data_response()
+        };
+        if schema.is_some() {
             self.prepay(budget)?;
         }
-        self.validate(self.schemas.data_response(), input.0.as_ref())
+        self.validate(schema, input.0.as_ref())
     }
     fn prepay_data(&self, budget: &mut WorkBudget) -> CoreResult<()> {
         if self.schemas.data().is_some()
             || matches!(
                 self.schemas,
                 ConsumerNotificationSchemas::ObserveAllProperties(_)
+                    | ConsumerNotificationSchemas::SubscribeAllEvents(_)
             )
         {
             self.prepay(budget)?;
         }
         Ok(())
     }
-    fn data(&self, data: Option<&Payload>) -> CoreResult<()> {
+    fn data(&self, target: &AffordanceTarget, data: Option<&Payload>) -> CoreResult<()> {
+        if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+            let AffordanceTarget::Event(name) = target else {
+                return Err(invalid());
+            };
+            return self.validate(s.member(name).ok_or_else(invalid)?.data, data);
+        }
         if let ConsumerNotificationSchemas::ObserveAllProperties(schema) = &self.schemas {
             let payload = data.ok_or_else(invalid)?;
             if !self.services.data.available()
@@ -122,7 +153,7 @@ impl NotificationValidation for CapturedServices {
     }
 }
 
-/// One reusable selected Property or Event definition with independent cursors.
+/// One reusable selected leaf or root notification definition with independent cursors.
 /// Several such facets may share one ConsumerInstance and native Binding service.
 pub struct ConsumerNotificationRuntime<B: ConsumerNotificationBinding> {
     root: RawNotificationServient<B, CapturedAuthorizer>,

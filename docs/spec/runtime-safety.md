@@ -101,7 +101,7 @@ original slot and funding. Native poll errors and late retirement output retain
 independent evidence; even after an error, captured validation applies to that
 late output before final settlement, without clearing the first cause.
 The composed notification owner captures the actual data/access services and separately
-prepared Property value, root Property map or Event schema roles, prepays validation before native handoff and checks data
+prepared Property value, root Property map, Event or named Event collection schema roles, prepays validation before native handoff and checks data
 before queue acceptance. Invalid/late data and first causes remain with the
 original subscription through cleanup. Its original Host bank conservatively
 funds the root queue and validation envelope until root disposal; raw owner-scoped
@@ -117,6 +117,18 @@ native topic loss/overflow is visible per logical recipient, with whole-sample
 DropNewest or termination and no implicit coalescing. Mapped root unobserve and
 physical housekeeping remain separate: stopping a shared interest may require
 no native unsubscribe, and local disposal alone cannot claim a remote ACK.
+
+An Event collection retains that root authority separately from each occurrence's
+exact Event target. Name backing joins data in the per-handoff/queue byte bound,
+including the extra late/overflow slot. The named schema table and construction,
+destruction and validation work have original funding; native queues have their
+separate fixed Binding owner. Data and reciprocal responses validate the original
+member role. A wrong identity/schema, revoked grant or late callback retains its
+actual data/reply owner until successful retirement or bounded local abort; it
+cannot move into a successor's queue. Group stop fences every occurrence without
+revoking sibling logical subscriptions. Final native interest disposal and mapped
+unsubscribe evidence remain separate from logical closure and unread settlement.
+
 
 `SAFE-PUBLISH-001`: Producer setup MUST validate the draft/known dependencies,
 capture actual providers/behavior and reserve setup/ingress/finalization/cleanup

@@ -42,6 +42,11 @@ pub enum PublicationData {
     /// One named Property collection sample under Thing-root authority.
     PropertyValues(Payload),
     EventData(Payload),
+    /// One Event occurrence under a root collection publication authority.
+    EventOccurrence {
+        event: alloc::sync::Arc<str>,
+        data: Payload,
+    },
 }
 impl PublicationData {
     pub fn kind(&self) -> crate::notification::NotificationKind {
@@ -49,11 +54,26 @@ impl PublicationData {
             Self::PropertyValue(_) => crate::notification::NotificationKind::PropertyObservation,
             Self::PropertyValues(_) => crate::notification::NotificationKind::ObserveAllProperties,
             Self::EventData(_) => crate::notification::NotificationKind::Event,
+            Self::EventOccurrence { .. } => {
+                crate::notification::NotificationKind::SubscribeAllEvents
+            }
         }
     }
     pub fn payload(&self) -> &Payload {
         match self {
             Self::PropertyValue(p) | Self::PropertyValues(p) | Self::EventData(p) => p,
+            Self::EventOccurrence { data, .. } => data,
+        }
+    }
+    pub fn backing_bytes(&self) -> Option<usize> {
+        match self {
+            Self::EventOccurrence { event, data } => {
+                crate::notification::notification_item_backing(
+                    &crate::AffordanceTarget::Event(event.clone()),
+                    Some(data),
+                )
+            }
+            _ => crate::notification::notification_payload_backing(Some(self.payload())),
         }
     }
 }

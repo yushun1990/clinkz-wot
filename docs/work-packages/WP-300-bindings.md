@@ -152,6 +152,15 @@ uses one exact topic without N leaf operations. [Real broker tests](../../protoc
 exercise shared native interests, independent logical stop, partial controls,
 publication uncertainty and physical retirement.
 
-Other continuing collection operations remain unimplemented. This scoped capability
+Event collections extend this facet with an explicit occurrence target, separate
+from the root conversation recipient/scope. The Binding preserves native Event
+attribution; the Engine validates the original named member and reciprocal
+response role. Complete target/data backing is bounded before handoff. The
+[MQTT Event collection mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-event-subscription)
+uses one terminal single-level wildcard, refuses overlapping distinct interests
+and retains compatible shared native ownership. Unsupported application
+control/response roles refuse; protocol ACKs grant no response capability.
+
+QueryAllActions remains unimplemented. This scoped capability
 changes no work-package dependencies, gate, milestone or production qualification
 status.
