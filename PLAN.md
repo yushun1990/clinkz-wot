@@ -163,6 +163,17 @@ the boundary using existing validation, without requiring new DataSchema
 constraints, automatic caches or universal native-artifact reuse. An endpoint
 embedded in a native artifact cannot become a free instance operand by assertion.
 
+Architecture acceptance requires an actual reusable-content/instance-binding
+seam in the preparation-to-execution handoff, not merely an `Arc` around a
+Property member table, an interned copy of fully prepared per-instance output,
+or two unchanged runtimes reading different URLs. The shared content must be
+prepared independently of instance authority; each instance must separately
+qualify and bind actual native mappings, policy, operands and funding without
+repeating that shared semantic preparation. The boundary must remain suitable
+for later shared DataSchema/security meaning without making a protocol-specific
+or ReadAllProperties-only framework. Demonstrate the distinct lifetimes, resource
+owners and measurable sharing benefit; do not require universal native reuse.
+
 Select subsequent increments against remaining product capabilities and the
 actual assumptions exposed by those integrations. Preserve distinct Property,
 continuing Action, Event/control/response and collection semantics. A native
