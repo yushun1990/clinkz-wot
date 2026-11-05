@@ -463,8 +463,8 @@ fn client(
     )
     .unwrap();
     registration.services.access = Arc::new(Access(denied));
-    let registry =
-        ConsumerRegistry::try_new(vec![registration]).unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let registry = ConsumerRegistry::try_new(vec![registration], &accounts)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let td: Thing = serde_json::from_value(td).unwrap();
     let prepared = registry
         .prepare(

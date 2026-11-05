@@ -293,7 +293,7 @@ fn harness(calls: usize, address: Option<std::net::SocketAddr>) -> Harness {
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
     }
     let registry =
-        ConsumerRegistry::try_new(vec![input]).unwrap_or_else(|e| panic!("{:?}", e.error()));
+        ConsumerRegistry::try_new(vec![input], &bank).unwrap_or_else(|e| panic!("{:?}", e.error()));
     let addr = address.unwrap_or_else(|| "127.0.0.1:10600".parse().unwrap());
     let thing = serde_json::from_value(json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"callback ownership",
         "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},

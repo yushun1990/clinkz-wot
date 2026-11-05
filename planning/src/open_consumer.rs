@@ -37,17 +37,21 @@ pub struct ConsumerRegistrationInput {
 struct Registration {
     compiler: HostBindingCompilerRegistration,
     execution: Arc<HostConsumerBindingRegistration>,
-    services: ConsumerServices,
+    data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
+    access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
     metadata: ConsumerCompilerMetadata,
+    execution_funding: Arc<Vec<HostCapacityReservation>>,
 }
 /// Immutable actual startup-linked registrations. Construction is caller-owned
-/// startup work, with recoverable pairing; preparation reserves managed backing.
+/// startup work, with recoverable pairing. Service/registration backing is
+/// reserved once at construction and retained by every prepared user.
 pub struct ConsumerRegistry {
     registrations: Vec<Registration>,
 }
 impl ConsumerRegistry {
     pub fn try_new(
         inputs: Vec<ConsumerRegistrationInput>,
+        bank: &Arc<HostResourceAccounts>,
     ) -> Result<Self, BindingInputRejection<Vec<ConsumerRegistrationInput>>> {
         let valid = !inputs.is_empty()
             && inputs.len() <= MAX_REGISTRATIONS
@@ -76,14 +80,57 @@ impl ConsumerRegistry {
                 BindingOperationalError::new(busy()),
             ));
         }
-        for input in inputs {
+        let mut services = Vec::new();
+        if services.try_reserve_exact(inputs.len()).is_err() {
+            return Err(BindingInputRejection::new(
+                inputs,
+                BindingOperationalError::new(busy()),
+            ));
+        }
+        for input in &inputs {
+            let owners = (|| {
+                Ok::<_, CoreError>((
+                    ConsumerServiceOwner::retain_data(input.services.data.clone(), bank)?,
+                    ConsumerServiceOwner::retain_access(input.services.access.clone(), bank)?,
+                    Arc::new(reserve(
+                        bank,
+                        &[(
+                            K::EngineLiveBytesGlobalMax,
+                            input
+                                .preparation
+                                .resources()
+                                .admitted()
+                                .retained_bytes()
+                                .checked_add(
+                                    ::core::mem::size_of::<HostConsumerBindingRegistration>()
+                                        as u64
+                                        + 128,
+                                )
+                                .ok_or_else(invalid)?,
+                        )],
+                    )?),
+                ))
+            })();
+            match owners {
+                Ok(owners) => services.push(owners),
+                Err(error) => {
+                    return Err(BindingInputRejection::new(
+                        inputs,
+                        BindingOperationalError::new(error),
+                    ));
+                }
+            }
+        }
+        for (input, (data, access, execution_funding)) in inputs.into_iter().zip(services) {
             let metadata = input.preparation.compiler().consumer_metadata().unwrap();
             let (execution, compiler) = input.preparation.into_parts();
             registrations.push(Registration {
                 compiler,
                 execution: Arc::new(execution),
                 metadata,
-                services: input.services,
+                data,
+                access,
+                execution_funding,
             });
         }
         Ok(Self { registrations })
@@ -101,6 +148,37 @@ impl ConsumerRegistry {
         bank: Arc<HostResourceAccounts>,
         selector: ConsumerSelector,
         budget: &mut WorkBudget,
+        drive: impl FnMut(&mut ConsumerCompilation<'_>),
+    ) -> CoreResult<PreparedConsumer> {
+        self.prepare_inner(thing, limits, bank, selector, None, budget, drive)
+    }
+
+    /// Qualify actual mappings for one existing semantic operation. The source
+    /// must have exactly the same supported meaning. This is neither interning
+    /// nor an artifact retarget: every selected native compilation still runs.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_with_content(
+        &self,
+        thing: &Thing,
+        limits: &ResourceLimits,
+        bank: Arc<HostResourceAccounts>,
+        selector: ConsumerSelector,
+        content: &Arc<PreparedConsumerContent>,
+        budget: &mut WorkBudget,
+        drive: impl FnMut(&mut ConsumerCompilation<'_>),
+    ) -> CoreResult<PreparedConsumer> {
+        self.prepare_inner(thing, limits, bank, selector, Some(content), budget, drive)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_inner(
+        &self,
+        thing: &Thing,
+        limits: &ResourceLimits,
+        bank: Arc<HostResourceAccounts>,
+        selector: ConsumerSelector,
+        reuse: Option<&Arc<PreparedConsumerContent>>,
+        budget: &mut WorkBudget,
         mut drive: impl FnMut(&mut ConsumerCompilation<'_>),
     ) -> CoreResult<PreparedConsumer> {
         // Prepay common arena, normalized coordinate/output vectors and TD
@@ -117,7 +195,7 @@ impl ConsumerRegistry {
         )?;
         let vector_bytes = (MAX_OPERATIONS
             * (::core::mem::size_of::<ConsumerSupport>()
-                + ::core::mem::size_of::<ConsumerDefinition>()
+                + ::core::mem::size_of::<ConsumerBinding>()
                 + 512)) as u64;
         let mut output_funding = reserve(
             &bank,
@@ -167,6 +245,7 @@ impl ConsumerRegistry {
         // unsupported operations/Forms below remain reported and may be skipped.
         let mut cursor = validated.into_producer();
         let mut ordinal = 0u32;
+        let mut content_constructions = 0;
         let mut retained_cleanup_work = 4u64;
         let mut retained_artifact_items = 0u64;
         let mut retained_artifact_bytes = 0u64;
@@ -221,9 +300,13 @@ impl ConsumerRegistry {
                                                 | Operation::QueryAllActions
                                         )
                                 );
+                                let requested = reuse.is_none_or(|c| {
+                                    c.operation() == operation
+                                        && Some(c.affordance()) == site_target(&site).as_ref()
+                                });
                                 let mut reason = if !finite {
                                     ConsumerUnsupported::Operation
-                                } else if selector.form.is_some_and(|f| f != index) {
+                                } else if !requested || selector.form.is_some_and(|f| f != index) {
                                     ConsumerUnsupported::Selector
                                 } else if target.len() > 256 {
                                     ConsumerUnsupported::Target
@@ -231,6 +314,7 @@ impl ConsumerRegistry {
                                     ConsumerUnsupported::CommonMeaning
                                 };
                                 if finite
+                                    && requested
                                     && selector.form.is_none_or(|f| f == index)
                                     && target.len() <= 256
                                 {
@@ -240,20 +324,24 @@ impl ConsumerRegistry {
                                     if !pay(budget, W::PlanningItems, 256) {
                                         return Err(busy());
                                     }
-                                    let schemas = match common_services(
+                                    let content = match common_content(
                                         document,
                                         &site,
                                         index,
                                         operation,
                                         limits,
                                         retained_cleanup_work,
+                                        &bank,
+                                        reuse,
+                                        &mut content_constructions,
                                         budget,
                                     ) {
-                                        Ok(schemas) => Some(schemas),
+                                        Ok(content) => Some(content),
                                         Err(CoreError::UnsupportedOperation(_)) => None,
                                         Err(error) => return Err(error),
                                     };
-                                    if let Some(schemas) = schemas {
+                                    if let Some(content) = content {
+                                        let schemas = content.schemas();
                                         reason = ConsumerUnsupported::NoCompleteProvider;
                                         for registration in &self.registrations {
                                             let id = registration.execution.identity();
@@ -266,11 +354,11 @@ impl ConsumerRegistry {
                                             if !pay(budget, W::ProviderProbes, 1) {
                                                 return Err(busy());
                                             }
-                                            let data = &registration.services.data;
+                                            let data = &registration.data;
                                             if !registration.execution.supports_operation(operation)
                                                 || data.content_type() != facts.content_type
                                                 || !data.available()
-                                                || !schemas.supports(data.as_ref())
+                                                || !schemas.supports(data.service())
                                             {
                                                 continue;
                                             }
@@ -304,12 +392,11 @@ impl ConsumerRegistry {
                                             if !pay(
                                                 budget,
                                                 W::ProviderProbes,
-                                                registration.services.access.work(),
+                                                registration.access.work(),
                                             ) {
                                                 return Err(busy());
                                             }
                                             if registration
-                                                .services
                                                 .access
                                                 .authorize(id, target, operation)
                                                 .is_err()
@@ -356,7 +443,7 @@ impl ConsumerRegistry {
                                                 limits,
                                                 K::CleanupWorkItemsPerStepMax,
                                                 retained_cleanup_work
-                                                    .checked_add(schemas.drop_work()) // live temporary
+                                                    .checked_add(schemas.drop_work()) // provisional common owner
                                                     .and_then(|n| {
                                                         n.checked_add(m.contract.abort_work)
                                                     })
@@ -387,11 +474,6 @@ impl ConsumerRegistry {
                                                     .checked_add(artifact_budget.1)
                                                     .ok_or_else(invalid)?,
                                             )?;
-                                            // Prepay the retained clone before native construction.
-                                            // Refusal/rollback never borrows the temporary's credit.
-                                            if !pay(budget, W::CleanupItems, schemas.drop_work()) {
-                                                return Err(busy());
-                                            }
                                             let mut job = ConsumerCompilation::new(
                                                 &registration.compiler,
                                                 input,
@@ -412,28 +494,13 @@ impl ConsumerRegistry {
                                             if chosen.is_some() {
                                                 return Err(ambiguous());
                                             }
-                                            let service_bytes = data
-                                                .policy()
-                                                .retained_bytes
-                                                .checked_add(
-                                                    registration.services.access.retained_bytes(),
-                                                )
-                                                .ok_or_else(invalid)?;
-                                            let retained_services = service_bytes
-                                                .checked_add(
-                                                    registration
-                                                        .execution
-                                                        .resources()
-                                                        .admitted()
-                                                        .retained_bytes(),
-                                                )
-                                                .and_then(|n| n.checked_add(target.len() as u64))
-                                                .and_then(|n| {
-                                                    n.checked_add(site_name(&site).len() as u64)
-                                                })
+                                            let layout =
+                                                ::core::mem::size_of::<ConsumerDefinition>() as u64;
+                                            let retained_services = layout
+                                                .checked_add(target.len() as u64)
                                                 .and_then(|n| n.checked_add(256))
                                                 .and_then(|n| {
-                                                    n.checked_add(schemas.retained_bytes() as u64)
+                                                    n.checked_add(facts.content_type.len() as u64)
                                                 })
                                                 .ok_or_else(invalid)?;
                                             let mut service_funding = reserve(
@@ -457,23 +524,33 @@ impl ConsumerRegistry {
                                                         + 2,
                                                 )
                                                 .ok_or_else(invalid)?;
-                                            chosen = Some(
+                                            let definition = Arc::new(
                                                 ConsumerDefinition::try_new(
                                                     ConsumerDefinitionInput {
-                                                        affordance: site_target(&site).unwrap(),
-                                                        operation,
+                                                        content: content.clone(),
                                                         form: index,
                                                         target: target.into(),
                                                         artifact: compiled.artifact,
                                                         execution: registration.execution.clone(),
                                                         configuration: m.configuration,
-                                                        services: registration.services.clone(),
-                                                        schemas: schemas.clone(),
+                                                        data: registration.data.clone(),
+                                                        content_type: facts.content_type.into(),
+                                                        execution_funding: registration
+                                                            .execution_funding
+                                                            .clone(),
                                                         funding: compiled.funding,
-                                                        bank: bank.clone(),
                                                     },
                                                 )
                                                 .map_err(|e| e.error().error().clone())?,
+                                            );
+                                            chosen = Some(
+                                                definition
+                                                    .bind(
+                                                        registration.access.clone(),
+                                                        bank.clone(),
+                                                        budget,
+                                                    )
+                                                    .map_err(|e| e.error().error().clone())?,
                                             );
                                         }
                                     }
@@ -489,7 +566,7 @@ impl ConsumerRegistry {
                                     return Err(busy());
                                 }
                                 let selected = chosen.as_ref().is_some_and(|candidate| {
-                                    !definitions.iter().any(|old: &ConsumerDefinition| {
+                                    !definitions.iter().any(|old: &ConsumerBinding| {
                                         old.affordance() == candidate.affordance()
                                             && old.operation() == operation
                                     })
@@ -553,6 +630,7 @@ impl ConsumerRegistry {
             definitions,
             support,
             funding: ::core::mem::take(&mut output_funding),
+            content_constructions,
         })
     }
 }
@@ -582,15 +660,22 @@ pub struct ConsumerSupport {
     pub unsupported: Option<ConsumerUnsupported>,
 }
 pub struct PreparedConsumer {
-    definitions: Vec<ConsumerDefinition>,
+    definitions: Vec<ConsumerBinding>,
     support: Vec<ConsumerSupport>,
     funding: Vec<HostCapacityReservation>,
+    content_constructions: usize,
 }
 impl PreparedConsumer {
+    /// Actual common-content owners constructed during this preparation,
+    /// including unselected alternatives. Reuse still qualifies
+    /// borrowed meaning, but constructs no replacement common owner.
+    pub fn content_constructions(&self) -> usize {
+        self.content_constructions
+    }
     pub fn support(&self) -> &[ConsumerSupport] {
         &self.support
     }
-    pub fn into_execution(self) -> (Vec<ConsumerDefinition>, Vec<HostCapacityReservation>) {
+    pub fn into_execution(self) -> (Vec<ConsumerBinding>, Vec<HostCapacityReservation>) {
         (self.definitions, self.funding)
     }
 }
@@ -814,15 +899,74 @@ impl Drop for ConsumerCompilation<'_> {
         drop(self.output.take());
     }
 }
-fn common_services(
+#[allow(clippy::too_many_arguments)]
+fn common_content(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
     site: &FormSite,
     index: u32,
     operation: Operation,
     limits: &ResourceLimits,
     retained_cleanup_work: u64,
+    bank: &Arc<HostResourceAccounts>,
+    reuse: Option<&Arc<PreparedConsumerContent>>,
+    constructions: &mut usize,
     budget: &mut WorkBudget,
-) -> CoreResult<ConsumerFiniteSchemas> {
+) -> CoreResult<Arc<PreparedConsumerContent>> {
+    qualify_common_form(doc, site, index)?;
+    if let Some(content) = reuse {
+        // Retained comparisons and final-reference destruction stay bounded.
+        check_limit(
+            limits,
+            K::CleanupWorkItemsPerStepMax,
+            retained_cleanup_work
+                .checked_add(content.schemas().drop_work())
+                .ok_or_else(invalid)?,
+        )?;
+        if !pay(
+            budget,
+            W::PlanningItems,
+            content.schemas().retained_bytes() as u64 + content.schemas().drop_work() + 1,
+        ) {
+            return Err(busy());
+        }
+        let agrees = match content.schemas() {
+            ConsumerFiniteSchemas::ReadAllProperties(schema) => {
+                crate::type_schema::matches_property_schema(doc, schema, false)?
+            }
+            // Further semantic families need their own borrowed comparison and
+            // real reuse evidence; ordinary preparation remains available.
+            _ => return Err(unsupported()),
+        };
+        if !agrees {
+            return Err(unsupported());
+        }
+        return Ok(content.clone());
+    }
+    let schemas = common_services(
+        doc,
+        site,
+        index,
+        operation,
+        limits,
+        retained_cleanup_work,
+        budget,
+    )?;
+    let content = ConsumerExecutionContent::try_new(
+        site_target(site).ok_or_else(unsupported)?,
+        operation,
+        schemas,
+    )?;
+    let prepared =
+        PreparedConsumerContent::try_new(content, bank).map_err(|e| e.error().error().clone())?;
+    *constructions += 1;
+    Ok(prepared)
+}
+
+fn qualify_common_form(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    site: &FormSite,
+    index: u32,
+) -> CoreResult<()> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
     let [security] = facts.effective_security else {
         return Err(unsupported());
@@ -849,6 +993,17 @@ fn common_services(
     {
         return Err(unsupported());
     }
+    Ok(())
+}
+fn common_services(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    site: &FormSite,
+    _index: u32,
+    operation: Operation,
+    limits: &ResourceLimits,
+    retained_cleanup_work: u64,
+    budget: &mut WorkBudget,
+) -> CoreResult<ConsumerFiniteSchemas> {
     match (site, operation) {
         (FormSite::Property(_), Operation::ReadProperty)
             if !doc.property().schema.facts().write_only =>

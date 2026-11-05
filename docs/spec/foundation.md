@@ -16,6 +16,17 @@ reference, operand and record costs are charged separately. Logical allowances
 or overlapping reservations MUST NOT be presented as additive physical RAM,
 contiguous allocation backing or transitive SDK maxima.
 
+The Host finite Consumer represents these owners separately: common prepared
+content retains its first backing reservations; actual data/access services and
+native registration backing retain their original startup bank; each specialized
+mapping retains its own compilation leases; each binding/runtime/call funds its
+own reference, policy association, records, result and cleanup capacity. Reusing
+content or a qualified mapping never copies, refunds or transfers those physical
+leases. Retirement follows the last actual mapping/call/settlement reference.
+Heap allocation measurements and reservation counters describe different facts;
+temporary allowances and overlapping reservations are reported separately from
+requested retained allocator bytes.
+
 `RES-HANDOFF-001`: Capacity MUST precede each acquisition/acceptance and fund its
 result/status/cleanup path. New growth may fail after acceptance only under a
 declared policy preserving existing owners; admission MUST NOT promise simultaneous

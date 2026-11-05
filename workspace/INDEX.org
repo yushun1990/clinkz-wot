@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0107-reusable-consumer-execution.md][0107 Reusable Consumer execution content and independent binding]]
+
 - [[file:0106-engine-reassessment-and-consumer-callback-ownership.md][0106 Engine reassessment and finite Consumer callback ownership]]
 
 - [[file:0103-thing-root-observe-all-properties.md][0103 TD-driven Thing-root ObserveAllProperties and native subscription ownership]]

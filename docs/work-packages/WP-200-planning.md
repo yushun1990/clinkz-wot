@@ -155,8 +155,13 @@ static capture uses `StaticConsumerBindingPreparation::try_pair` and the same
 portable contract. `BindingCompilerInput::operation_input` carries resolved
 Form/operation facts rather than a Property Read logical record or source TD id.
 
-Core retains completed definitions, service contracts and the shared opaque Host
-bank. `servient-finite::consumer::ConsumerRuntime` owns only finite logical calls,
+Core separates immutable prepared content, qualified native definitions, retained
+actual service backing and instance-local bindings. The scoped
+[checked-reuse contract](../spec/planning.md#open-finite-consumer-implementation)
+supports ReadAllProperties meaning across actual HTTP endpoints, with borrowed
+qualification and separate native compilation. Data/access services and native
+registration backing keep their original explicit startup bank; content/mapping
+leases and instance accounts remain separate. `servient-finite::consumer::ConsumerRuntime` owns only finite logical calls,
 current authority, captured definitions, native calls, unread/late outcomes and
 original leases. Its normal dependency graph contains Core and Foundation only.
 The HTTP example uses this path; method/header/context/framing and prior finite

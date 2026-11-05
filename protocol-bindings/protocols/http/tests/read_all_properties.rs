@@ -727,7 +727,8 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
         let addr = address();
         let td = description(addr);
         let accounts = bank();
-        let registry = ConsumerRegistry::try_new(vec![registration()]).unwrap_or_else(|_| panic!());
+        let registry =
+            ConsumerRegistry::try_new(vec![registration()], &accounts).unwrap_or_else(|_| panic!());
         let thing: Thing = serde_json::from_value(td.clone()).unwrap();
         assert!(
             registry
@@ -741,8 +742,8 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
                 )
                 .is_err()
         );
-        clean(&accounts);
         drop(registry);
+        clean(&accounts);
         drop(thing);
         let owner = consumer_instance();
         let client = client(

@@ -360,15 +360,18 @@ mod live {
                 schema.member("alarm").unwrap().data,
                 Some(value_type::TypeSchema::Type(value_type::ValueType::Boolean))
             );
-            let finite_registry = ConsumerRegistry::try_new(vec![
-                try_consumer_registration(
-                    HttpConsumerConfig::for_cleartext_ip().unwrap(),
-                    BindingId::new(11),
-                    BindingGeneration::INITIAL,
-                    0,
-                )
-                .unwrap(),
-            ])
+            let finite_registry = ConsumerRegistry::try_new(
+                vec![
+                    try_consumer_registration(
+                        HttpConsumerConfig::for_cleartext_ip().unwrap(),
+                        BindingId::new(11),
+                        BindingGeneration::INITIAL,
+                        0,
+                    )
+                    .unwrap(),
+                ],
+                &consumer_bank,
+            )
             .unwrap_or_else(|_| panic!());
             let prepared = finite_registry
                 .prepare(

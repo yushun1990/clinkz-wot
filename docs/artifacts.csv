@@ -52,3 +52,4 @@ docs/work-packages/WP-400-consumer-resource-ownership-admission.md,historical-co
 docs/evidence/WP-200-preparation-execution-boundary.toml,preparation-execution-production-migration-evidence,non-normative-evidence,5.1,1,docs/work-packages/WP-200-planning.md
 docs/spec/authority.toml,current-authority-map,normative,6.0,2,docs/spec/authority.toml
 docs/spec/td.md,shared-td-semantics,normative,6.0,1,docs/spec/authority.toml
+docs/evidence/consumer-execution-reuse.md,consumer-execution-reuse-characterization,non-normative-evidence,6.0,1,docs/spec/planning.md

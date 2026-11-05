@@ -20,6 +20,14 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
+Finite runtime construction consumes `ConsumerBinding` records and still refuses
+an instance bank different from those records' bank. Shared content, qualified
+mapping and retained services may have different original banks; those backing
+charges stay with their actual owners. A binding has no source/compiler callback
+or executor/configuration override. Fresh permission uses the attached original
+instance, and native concurrency is still enforced by the actual registration.
+Dropping the preparation root, closing a sibling or dropping an instance cannot
+reclaim shared content still needed by another mapping or normal/late settlement.
 Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
 rules. Its bounded schema/name backing and destruction stay funded through final

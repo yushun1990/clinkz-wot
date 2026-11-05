@@ -263,7 +263,7 @@ fn writable_input_schema_is_independent_of_readable_members_and_individual_forms
     assert_eq!(definitions.len(), 1);
     assert_eq!(definitions[0].form(), 1);
     let (input, _, _) = definitions.into_iter().next().unwrap().into_parts();
-    match &input.schemas {
+    match input.definition.content().schemas() {
         ConsumerFiniteSchemas::WriteAllProperties(s) => assert_eq!(
             s.members()
                 .iter()
@@ -275,21 +275,27 @@ fn writable_input_schema_is_independent_of_readable_members_and_individual_forms
     }
     assert!(
         input
-            .schemas
-            .validate_output(input.services.data.as_ref(), None, None)
+            .definition
+            .content()
+            .schemas()
+            .validate_output(input.definition.data(), None, None)
             .is_ok()
     );
     assert!(
         input
-            .schemas
-            .validate_input(input.services.data.as_ref(), Some(&payload(VALUES)))
+            .definition
+            .content()
+            .schemas()
+            .validate_input(input.definition.data(), Some(&payload(VALUES)))
             .is_ok()
     );
     assert!(
         input
-            .schemas
+            .definition
+            .content()
+            .schemas()
             .validate_input(
-                input.services.data.as_ref(),
+                input.definition.data(),
                 Some(&payload(br#"{"on":false,"secret":"updated","level":1}"#))
             )
             .is_err()
@@ -316,14 +322,18 @@ fn writable_input_schema_is_independent_of_readable_members_and_individual_forms
     let (input, _, _) = d.into_iter().next().unwrap().into_parts();
     assert!(
         input
-            .schemas
-            .validate_input(input.services.data.as_ref(), Some(&payload(b"{}")))
+            .definition
+            .content()
+            .schemas()
+            .validate_input(input.definition.data(), Some(&payload(b"{}")))
             .is_ok()
     );
     assert!(
         input
-            .schemas
-            .validate_input(input.services.data.as_ref(), Some(&payload(VALUES)))
+            .definition
+            .content()
+            .schemas()
+            .validate_input(input.definition.data(), Some(&payload(VALUES)))
             .is_err()
     );
     drop(input);

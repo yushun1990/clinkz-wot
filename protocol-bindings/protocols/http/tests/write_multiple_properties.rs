@@ -353,7 +353,8 @@ fn selected_write_requires_its_own_data_facet_and_prepares_all_eligible_schemas(
         .find(|d| d.operation() == WRITE)
         .unwrap()
         .into_parts();
-    let ConsumerFiniteSchemas::WriteMultipleProperties(s) = &input.schemas else {
+    let ConsumerFiniteSchemas::WriteMultipleProperties(s) = input.definition.content().schemas()
+    else {
         panic!()
     };
     assert_eq!(
@@ -364,9 +365,11 @@ fn selected_write_requires_its_own_data_facet_and_prepares_all_eligible_schemas(
         ["on", "secret"]
     );
     let selected = input
-        .schemas
+        .definition
+        .content()
+        .schemas()
         .validate_input_selection(
-            input.services.data.as_ref(),
+            input.definition.data(),
             Some(&payload(br#"{"secret":"x"}"#)),
         )
         .unwrap()

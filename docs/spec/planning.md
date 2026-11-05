@@ -183,11 +183,40 @@ Cursor/output slots, declared indirect backing, callback scratch, original paren
 leases and aggregate retained destructor work are acquired/qualified before
 start. There is no partial installation or native I/O during preparation.
 
-Completed `Core::consumer::ConsumerDefinition` includes the exact affordance and
-operation and is immutable owned data with the actual runtime
-registration/configuration/services and original leases; it has
-no native start method, TD, parser, semantic arena or compiler. The source-free
-Servient owner consumes it. Host startup registration/reference construction uses
+`ConsumerExecutionContent` captures immutable affordance, operation and data-role
+meaning without endpoint, service, authority, policy or account fields.
+`PreparedConsumerContent` is its funded Host owner. Ordinary preparation constructs
+that content once; `prepare_with_content` qualifies actual endpoint mappings for
+one retained operation by comparing borrowed source assertions against the same
+content. The initial reusable subset is ReadAllProperties. Included member names,
+order and complete supported assertions must agree; no replacement member/name
+table is built. Unsupported or changed meaning refuses. Other Forms remain
+reported Consumer alternatives, rather than becoming Producer qualification.
+
+Every selected mapping still passes common Form/security/media/URI checks, actual
+provider selection, complete data-service support, native compilation and capacity
+checks. `ConsumerDefinition` retains the shared content, exact native mapping,
+actual executor/configuration and data service with captured bounds. An HTTP
+target/path/header change requires actual native preparation; content reuse grants
+no native artifact compatibility. Native compilation remains owned/incremental,
+and no TD, parser, semantic arena or compiler survives the completed definition.
+
+`ConsumerDefinition::bind` attaches a retained actual access policy and independent
+instance bank without recompilation or source callbacks. `ConsumerBinding` is the
+runtime handoff; Servient attaches its independently current `ConsumerInstanceRef`.
+Bindings may share content or an unchanged qualified mapping while preserving
+separate permission, records, call/result/cleanup accounts and native limits.
+Changed captured service bounds cannot be refreshed by binding another instance.
+Refusal returns the original mapping/policy owners. The convenience `prepare`
+result supplies bindings at the preparation bank; callers can retain definitions,
+discard those initial bindings, and bind independently after source retirement.
+
+`ConsumerRegistry::try_new` reserves actual data/access service and native
+registration backing once at its explicit original bank; prepared users retain
+those owners. Mapping/content backing and instance records have separate funding.
+See [Foundation](foundation.md) for physical retention and accounting. This is a
+Host representation of the boundary, not an Arc field or executor requirement on
+semantic content or a new all-profile execution claim. Host startup reference construction uses
 the existing trusted Host allocation policy; fallible native compiler-slot and
 owned-cursor allocations are exercised independently. This is not an allocator
 interceptor or a claim of recoverable process-wide OOM.
@@ -314,12 +343,16 @@ expansion and native encoding are not universal Engine query conventions; the
 current native slice declines URI templates/variables. Preparation funds retained member/name backing and bounded destruction
 as well as artifacts/services; temporary construction remains inside the existing
 common admission allowance. Native preparation performs no reads or aggregation.
-The borrowed member census prepays `CleanupItems` for the temporary schema before
-its vector/member acquisition, and for each retained clone before native
-construction. Each owner has its own member-count-plus-vector disposal allowance;
-unsupported schemas, cancellation and late refusal use the original paid credit.
-Both live schema owners also count toward the aggregate cleanup ceiling. A short
-payment reports capacity refusal rather than an unsupported alternative.
+The borrowed member census prepays `CleanupItems` before schema vector/member
+acquisition. Finite Consumer preparation moves that schema into its funded
+content owner; native mappings and instance bindings retain references rather
+than cloning the table. Reuse compares borrowed assertions and acquires no new
+schema destruction obligation. Every actual constructed owner has its original
+member-count-plus-vector disposal allowance; partial construction, cancellation
+and late refusal use that paid credit. Rollback bounds include retained and
+provisional owners conservatively. Producer paths that construct additional
+owners still fund each actual construction. A short payment reports capacity
+refusal rather than an unsupported alternative.
 Final Producer qualification compares the original complete member meaning,
 root coordinate and selected actual registration after closed native setup.
 Changing an included schema, role eligibility or member set invalidates prior support.
@@ -332,7 +365,7 @@ cannot qualify it. The runtime invokes that complete map validator under the
 captured work policy, then rechecks group authorization and all dependencies
 before native admission. It does not invoke an additional generic Object
 validator, selection encoder or individual Property operation. The same member
-census, separate temporary/retained funding and cleanup prepayment apply to the
+census, temporary construction allowance, retained funding and cleanup prepayment apply to the
 writable role. Native preparation performs no writes.
 
 `ConsumerFiniteSchemas::WriteMultipleProperties` retains that same complete
