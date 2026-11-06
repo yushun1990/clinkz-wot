@@ -135,7 +135,10 @@ impl HttpProducerConfig {
         if (self.secure
             && (security != crate::security::BASIC
                 || collection
-                || input.operation != Operation::ReadProperty))
+                || !matches!(
+                    input.operation,
+                    Operation::ReadProperty | Operation::WriteProperty
+                )))
             || (!self.secure && security != clinkz_wot_core::security::SecurityRequirement::NOSEC)
             || document
                 .scope(SemanticScope::Thing)

@@ -94,6 +94,22 @@ policy/validation failure. Already accepted Producer writes retain their origina
 behavior/result across replacement, while pending acceptance cannot target the
 successor. Unread results keep native occupancy and original funding; final
 physical release and settlement acknowledgement precede admission reuse.
+Validated Property Write completion is retained independently of that local
+cause and native delivery. Pre-dispatch refusal remains NotInvoked; errors after
+behavior entry without valid completion remain Unknown. Finite authenticated
+acceptance/delivery rechecks application and verifier revisions after all linked
+callbacks as well as original authority/publication and captured services.
+Policy callbacks cannot authorize a stale decision through a later verifier.
+Finite Producer dispatch borrows the logical owner shared and the selected
+runtime exclusively. A callback may progress a different runtime without a
+registry lock or exclusive owner loan; recursively borrowing the same native
+runtime remains unavailable. `ProducerRevocation` captures only one-way control
+of the original incarnation's permission cell and its original funding. It
+performs no lookup, native work, behavior callback or replacement, and cannot
+revoke a successor in a reused slot. Its weak cell cannot preserve liveness;
+the retained capacity lease lasts through the last control handle so late weak
+storage does not outlive its accounting. Passive instance/publication revocation
+inside callbacks is observed at the final acceptance/delivery boundary.
 
 Continuing Action admission reserves the maximum selected native exchange,
 opaque continuation, input, response and validation scratch plus cleanup before

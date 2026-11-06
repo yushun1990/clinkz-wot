@@ -153,6 +153,19 @@ verified Principal enters application input. Authentication carriers and opaque
 capabilities redact formatting. The selected executable subset and limits are
 owned by [the HTTP Binding](../../protocol-bindings/protocols/http/README.md).
 
+Finite application authorization and credential verification remain separate
+services. Each exposes a passive invalidation revision for mutable policy;
+changes MUST advance it without reuse, including callback-time changes. Zero
+is only appropriate for policy that cannot change across callbacks. Revisions
+are bounded metadata reads, with no I/O, reentrancy or application callbacks.
+An acceptance or delivery decision is invalid if either service changes during
+its verification/authorization sequence, even if the last verifier returns the
+same Principal. This does not freeze policy for the lifetime of a listener or
+replace fresh permission with a version comparison. Concurrent policy owners
+must order revision publication with their actual policy changes; acceptance
+linearizes at the final currentness observations. Later revocation cannot retract
+effects already accepted at that edge.
+
 `EXEC-ACTION-001`: Action invocation lifetime MUST be independent of the initiating
 exchange. Completion may yield output/error or, where the mapping supports it,
 a continuing invocation reference retaining its exact mapping, opaque continuation,
@@ -480,8 +493,9 @@ Collection outcome evidence has independent axes:
 | Consumer `ConsumerEffect::Completed` | Selected native mapping returned a validated whole-group completion. Local handoff still requires original authority and fresh policy. |
 | Consumer `ConsumerEffect::Reported` | The original native output contains validated incomplete member evidence; consult that report for exact effects and atomicity. |
 
-Completed/Reported are emitted only for the two root writes. Existing finite Read/Property Write/Action effect reporting
-is unchanged. A completed unread native result keeps its completion evidence if
+Completed is also emitted for a Property Write whose empty terminal completion
+passes the selected validation/mapping. Reported remains exclusive to root
+writes. Finite Read/Action effect reporting is unchanged. A completed unread native result keeps its completion evidence if
 local cancellation, replacement, timeout or policy loss subsequently refuses
 handoff. Original native outcome, first cause, result and delivery remain separate.
 No owner automatically replays an effect-uncertain collection write or claims
@@ -614,7 +628,10 @@ An admitted native success is not by itself a successful application outcome:
 `result()`, which also requires terminal shape, captured validation, live original
 authority and fresh policy. A successful Write result reports completion under
 the selected mapping; it is not a Read or independent confirmation of physical
-state. Producer `FiniteEffect::NotInvoked/Unknown/Completed`, application result and native
+state. `ConsumerEffect::Completed` preserves that validated Write evidence even
+if later local policy loss or cancellation refuses handoff. HTTP failures and
+refusal codes do not establish pre-effect rejection at a remote Producer.
+Producer `FiniteEffect::NotInvoked/Unknown/Completed`, application result and native
 `FiniteDelivery` are separate axes. A handler error or invalid result after entry
 cannot downgrade Unknown to NotInvoked. No finite owner replays a write.
 

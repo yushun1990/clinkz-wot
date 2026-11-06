@@ -45,6 +45,11 @@ The [finite structured DataSchema increment](docs/evidence/structured-dataschema
 adds reusable nested object/required-field constraints, integer boundaries and
 Unicode string lengths through actual HTTP Consumer/Producer execution. Broader
 schema/media/profile coverage remains open.
+The [TD security/HTTPS increment](docs/evidence/td-security-https.md) now executes
+Basic-authenticated finite Property Read and structured Property Write through
+verified TLS, independently bound credentials/policy and complete Producer
+qualification. Other authenticated operation families and production security
+qualification remain open.
 
 | Capability | Raw execution kernels | TD-driven Consumer composition | TD-driven Producer composition | Actual Binding I/O evidence |
 | --- | --- | --- | --- | --- |
@@ -74,9 +79,12 @@ late validation/retirement evidence. These are Host/manual execution claims;
 general security/schema, constrained execution and production qualification remain open.
 
 The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
-proves the bounded JSON/type-only, endpoint NoSec HTTP subset, including
+proves the bounded endpoint NoSec HTTP subset, including
 pre-effect validation/authorization, ambiguous response refusal, cancellation,
-replacement, retained late outcomes and final release. Unsupported required
+replacement, retained late outcomes and final release. The
+[secure Write integration](protocol-bindings/protocols/http/tests/security_write.rs)
+adds structured values, verified HTTPS/Basic and independent effect/delivery
+evidence. Unsupported required
 schema/security assertions refuse preparation; no automatic uncertain-write
 replay or readback confirmation is claimed.
 
@@ -126,10 +134,10 @@ lifecycle semantics in memory. Test Bindings are not production protocols.
 
 **Production qualification:** narrow HTTP Property Read evidence retains its
 [recorded scope](docs/evidence/WP-600-http-consumer-property-read.toml).
-Current joined paths are bounded Host/manual and NoSec subsets, mostly type-only
-with the finite structured increment scoped above;
+Current joined paths are bounded Host/manual subsets, mostly NoSec/type-only
+with the structured and security increments scoped above;
 their real I/O does not establish complete family, general DataSchema/security,
-HTTPS, constrained-profile or v1 qualification. Those remain delivery work.
+production HTTPS, constrained-profile or v1 qualification. Those remain delivery work.
 
 ### Engineering priorities and dependencies
 

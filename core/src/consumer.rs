@@ -598,8 +598,9 @@ pub enum ConsumerEffect {
     NotAttempted,
     /// Remote effects may include a partially applied collection. No replay.
     Unknown,
-    /// A collection's native successful completion was validated. This is
-    /// evidence of the whole group completion, not atomicity or rollback.
+    /// A Property or collection write's native completion was validated. This
+    /// reports completion under the selected mapping, not atomicity, rollback
+    /// or independent confirmation of physical state.
     /// Local cancellation/policy failure can still refuse application handoff.
     Completed,
     /// A validated member report is retained; the whole group is incomplete.

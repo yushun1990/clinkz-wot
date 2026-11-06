@@ -55,7 +55,7 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v14\0",
+    "clinkz-http-ip-v15\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
@@ -72,7 +72,7 @@ const PRIVATE_POLICY: &[u8] = concat!(
     "forbidden-trailer=content-type,content-length,transfer-encoding,content-encoding,trailer,upgrade,connection,host,te;",
     "noTEadvertisement;single-chunked;noTEandCL;singleCL;",
     "call-owned-driver;noSpawn;local-drop-before-settlement;noNetworkWait;",
-    "SDK-disposal-may-allocate;noPool;noRetry;optional-TLS13-basic-PropertyRead;noDNS;",
+    "SDK-disposal-may-allocate;noPool;noRetry;optional-TLS13-basic-PropertyReadWrite;noDNS;",
     "connect-io=DeploymentFailure;",
     "action-consumer-POST202-accepted-id;GET200-running-completed-failed;DELETE200-cancelling-terminal;",
     "action-id=hex16-u32;control-selected-template-id;Location-never-followed;",

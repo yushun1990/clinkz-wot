@@ -375,7 +375,7 @@ No package, architecture gate or milestone acceptance is claimed.
 
 ## Finite TD Security / HTTPS increment
 
-The selected Basic/header Property Read capability and its boundary correction,
+The selected Basic/header Property Read/Write capability and its boundary corrections,
 qualification, negative network evidence, ownership and remaining unsupported
 roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
 The applicable preparation, Core and Binding contracts remain authoritative;

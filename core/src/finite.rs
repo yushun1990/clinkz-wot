@@ -53,7 +53,7 @@ pub enum FiniteEffect {
     /// The handler was entered. Even an error or invalid/oversized result may
     /// follow a committed write; implicit replay is not safe.
     Unknown,
-    /// The root collection behavior reported complete success and its result
+    /// The Property or root collection write reported complete success and its result
     /// passed validation. Does not imply atomic commit, rollback, per-member
     /// receipts or native reply delivery. Errors after entry remain Unknown.
     Completed,
@@ -106,8 +106,8 @@ impl core::fmt::Debug for RawFiniteSettlement {
 
 /// Basic finite Property/collection result shape. Raw mode permits unvalidated
 /// data bytes, not Action metadata, untrusted Binding response claims or a
-/// missing Read value. Supported writes require empty success. A root collection
-/// write handler must report success only after the whole requested group has
+/// missing Read value. Supported writes require empty success. A Property or
+/// collection write handler must report success only after the requested write has
 /// completed; failure after entry cannot establish absence of partial effects.
 pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutput) -> bool {
     match operation {
@@ -196,6 +196,13 @@ pub trait FiniteIngressBinding {
     fn security_work(&self) -> u64 {
         0
     }
+    /// Passive invalidation revision of the actual verification service. Mutable
+    /// verification policy MUST advance this without reuse on every change,
+    /// including callback-time changes. Zero denotes an immutable service.
+    /// This is sampled afresh around acceptance/delivery, not prepared meaning.
+    fn security_revision(&self) -> u64 {
+        0
+    }
     /// Establish identity before semantic acceptance and re-establish it before
     /// delivery. Returning a different identity/claims refuses the original
     /// result. This callback cannot dispatch behavior or acquire native I/O.
@@ -274,6 +281,15 @@ pub trait FiniteValidator {
 /// Implementations that promise schema-validated data must supply a separate
 /// executable validation boundary before making that claim.
 pub trait RawFiniteHandler {
+    /// Passive application-policy invalidation revision. Mutable policy MUST
+    /// advance it without reuse, including changes inside linked callbacks.
+    /// Zero is appropriate only when policy cannot change across callbacks.
+    /// Reading it must be bounded and cannot invoke application code or I/O.
+    fn authorization_revision(&self) -> u64 {
+        0
+    }
+    /// Evaluate current permission without performing the requested behavior's
+    /// effects. Policy/authority changes here obey the revision contract above.
     fn authorize(&self, input: &InteractionInput) -> CoreResult<()>;
     fn handle(
         &self,

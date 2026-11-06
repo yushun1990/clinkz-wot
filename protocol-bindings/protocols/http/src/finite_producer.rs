@@ -284,6 +284,12 @@ impl FiniteIngressBinding for HttpFiniteBinding {
             .as_ref()
             .map_or(0, |s| if s.is_ready() { s.work() } else { 0 })
     }
+    fn security_revision(&self) -> u64 {
+        self.configuration
+            .security
+            .as_ref()
+            .map_or(0, |s| s.revision())
+    }
     fn verify_ingress(
         &self,
         ingress: &FiniteIngress<Self::Reply>,
