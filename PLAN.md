@@ -279,7 +279,7 @@ review gate or milestone status transition.
 | M3 — Preparation | IN_PROGRESS | Actual pairing, pure/deferred construction, coverage and reuse obligations |
 | M4 — Binding capability/lifecycle | IN_PROGRESS | Open native facets, recipient authority and physical retirement |
 | M5A — Servient runtime | IN_PROGRESS | Logical publication, dispatch, accepted work and cleanup |
-| M5B — Discovery client | OPEN | Bounded trusted retrieval/continuation and exact client scope |
+| M5B — Discovery client | IN_PROGRESS | Bounded trusted retrieval/continuation and exact client scope |
 | M5C — Host HTTP/HTTPS production | OPEN | Real supported mapping and security/lifetime qualification |
 | M6 — Integration/conformance | OPEN | Joined capability, profile, resource/performance and removal evidence |
 | M7 — v1 release | OPEN | Independent technical release acceptance after M6 |

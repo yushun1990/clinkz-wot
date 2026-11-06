@@ -51,17 +51,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-trait"
-version = "0.1.89"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -286,11 +275,26 @@ dependencies = [
 name = "clinkz-wot-discovery"
 version = "0.1.0"
 dependencies = [
- "async-trait",
+ "base64",
+ "bytes",
+ "clinkz-wot-binding-http",
  "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-planning",
+ "clinkz-wot-servient-finite",
  "clinkz-wot-td",
+ "fluent-uri",
+ "http-body-util",
+ "httparse",
+ "hyper",
+ "hyper-util",
+ "rcgen",
+ "rustls",
+ "serde",
  "serde_json",
  "tokio",
+ "tokio-rustls",
+ "zeroize",
 ]
 
 [[package]]
@@ -1195,6 +1199,7 @@ version = "1.52.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
 dependencies = [
+ "bytes",
  "libc",
  "mio",
  "pin-project-lite",

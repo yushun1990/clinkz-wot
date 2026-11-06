@@ -48,10 +48,12 @@ echo "=== protocol-bindings-mqtt ==="
 check "mqtt preparation"        -p clinkz-wot-binding-mqtt
 check "mqtt execution-only"     -p clinkz-wot-binding-mqtt --no-default-features
 
+check "umbrella Discovery HTTP" -p clinkz-wot --features discovery-http
+
 echo "=== discovery ==="
 check "discovery default"       -p clinkz-wot-discovery
 check "discovery no-features"   -p clinkz-wot-discovery --no-default-features
-check "discovery async"         -p clinkz-wot-discovery --no-default-features --features async
+check "discovery std"           -p clinkz-wot-discovery --no-default-features --features std
 
 echo "=== servient ==="
 check "servient default"        -p clinkz-wot-servient
