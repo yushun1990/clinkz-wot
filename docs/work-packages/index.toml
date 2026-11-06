@@ -47,9 +47,9 @@ depends_on = ["WP-100", "WP-300"]
 
 [[package]]
 id = "WP-500"
-status = "planned"
+status = "in-progress"
 document = "docs/work-packages/WP-500-discovery.md"
-owner_crates = ["discovery", "core"]
+owner_crates = ["discovery"]
 depends_on = ["WP-100"]
 
 [[package]]

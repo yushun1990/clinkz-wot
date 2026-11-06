@@ -26,7 +26,7 @@ clinkz-wot-codec-cbor = { path = "../codecs/cbor", default-features = false, opt
 [features]
 default = ["std"]
 
-# Host storage, caller-driven Servient progress and async discovery clients.
+# Host storage and caller-driven Servient progress.
 std = [
     "async",
     "clinkz-wot-core/std",
@@ -36,12 +36,14 @@ std = [
     "clinkz-wot-servient/std",
 ]
 
-# Async discovery syntax and neutral-layer compilation-cell identity.
+# Neutral-layer async syntax and compilation-cell identity.
 async = [
     "clinkz-wot-core/async",
-    "clinkz-wot-discovery/async",
     "clinkz-wot-servient/async",
 ]
+
+# Explicit Host HTTP Discovery client.
+discovery-http = ["clinkz-wot-discovery/http"]
 
 # Codec for CBOR payloads (TD 1.1 default content type).
 cbor = ["dep:clinkz-wot-codec-cbor"]

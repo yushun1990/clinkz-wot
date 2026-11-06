@@ -197,7 +197,8 @@ registered evidence establish current capabilities. The retained baseline includ
   borrowed semantic preparation for Properties, Actions, Events and security data;
 - Host HTTP Property Read Producer/Consumer execution and its real-I/O regressions;
 - protocol-neutral static Property Read runtimes and bounded ownership/cleanup;
-- independently composed discovery clients and their in-memory reference backend;
+- explicitly composed HTTP/HTTPS TD-server and Directory clients, with bounded
+  pagination, TD admission and separate Engine interaction authorization;
 - payload codecs, logical clocks, resource accounting and portable shared layers.
 
 The optional Host Producer composition path now prepares all described Forms

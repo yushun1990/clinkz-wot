@@ -83,3 +83,57 @@ current authority and release. Rejected input returns its complete owner;
 accepted work retains original identity through late completion. Failures report
 logical settlement, local release, remote residue and infrastructure state
 separately. Architecture examples select no universal transport topology.
+
+## Host Discovery client contract
+
+The first remote slice uses directly provisioned TD-server or Directory
+collection endpoints, HTTP/1.1 GET and the W3C Discovery Recommendation's array
+listing. A configured Directory collection ends in `/things`; its parent is the
+API base for resolving relative navigation. This is an application-provisioned
+exploration endpoint, not automatic interpretation of a Directory TD.
+
+A trusted retrieval destination binds URL identity, explicit socket pin,
+transport trust and optional credential audience before I/O. TLS verifies the URL
+host against provisioned roots; a pin never replaces certificate identity.
+Cleartext is an explicit loopback development option. Credentials cover only the
+same origin and exact path; no retrieved Form, ThingLink, context, redirect or
+challenge can expand that audience. A separately configured session is required
+for another destination. Core and Servient acquire no Discovery service.
+
+Pagination follows checked RFC 8288 `next` links, with the same collection
+origin/path, unchanged requested limit and an offset immediately after the
+returned members. Canonical collection identity and its `etag` must remain
+consistent across paginated responses. Missing, ambiguous, cyclic, empty-progress
+or out-of-policy navigation refuses the page. Paginated results must remain in
+ascending identifier order, including the final page, and reject cross-page
+repeats. Unpaginated arrays retain peer order and still reject duplicate IDs.
+Continuation exhaustion does not imply a trusted
+or immutable remote inventory beyond the peer's supplied collection state.
+
+The session bounds URL/header/wire/body bytes, JSON structure, TD size, work,
+results, pages and elapsed time. Each request's body reader enforces the smaller
+of the page cap and remaining session byte allowance, for both advertised length
+and streamed frames. An exhausted allowance refuses before socket acquisition;
+overflowing bodies release the request without waiting for EOF or deadline.
+A page is exposed only after complete framing,
+JSON checks and existing bounded TD inspection/Basic admission of every member.
+Admission preserves unknown metadata; it asserts neither full JSON-LD processing
+nor selected interaction support. Planning still owns selected shared semantic
+resolution and actual provider qualification. No transport interpretation is
+added to the TD semantic layer.
+
+The application owns each returned immutable description. It explicitly selects
+a Thing and supplies actual Engine registration, instance authority, interaction
+destination policy, credentials and capacity. Retrieval credentials/trust are
+not implicitly transferred. A Directory-issued description cannot authorize
+native execution. Source/session disposal remains independent of prepared
+execution and original result-resource ownership.
+
+Failure, cancellation, timeout or abandonment of an in-flight page terminates
+that attempt without retry or partial-page delivery. The socket/driver and its
+funding remain request-owned, with no detached task or pool. A dropped future
+retains `Interrupted` as the session's first terminal cause; stop preserves it.
+Previously returned complete pages remain application-owned. Local socket release
+makes no claim about remote request processing or third-party storage cleanup.
+The [WP-500 scope](../work-packages/WP-500-discovery.md) and
+[evidence](../evidence/remote-discovery.md) identify remaining limits.

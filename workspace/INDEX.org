@@ -163,6 +163,8 @@ Topics are retained after migration as decision history.
 
 - [[file:0105-thing-root-query-all-actions.md][0105 Thing-root QueryAllActions]]
 
+- [[file:0110-remote-discovery-client.md][0110 Remote Discovery client]]
+
 * History
 
 - [[file:history/2026-07.org][July 2026 architecture notes]]

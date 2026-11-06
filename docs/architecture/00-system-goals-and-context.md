@@ -123,9 +123,11 @@ owns the exact retained, removed and unimplemented scope. It retains narrow
 Producer/Consumer Property Read paths; the concrete HTTP path now includes Host,
 cleartext-IP, NoSec Consumer reads and a bounded loopback Producer service. Broad legacy Action/Event, write and
 subscription facades have no claimed replacement in that migration.
-[Discovery](../../discovery/src/lib.rs) remains separately available; removal
-of Servient convenience methods does not complete the
-[target Directory client contract](../work-packages/WP-500-discovery.md).
+[Discovery](../../discovery/src/lib.rs) now supplies the explicit bounded Host
+HTTP/HTTPS retrieval slice described by [WP-500](../work-packages/WP-500-discovery.md).
+Its local storage/facade APIs are removed; the new
+[evidence](../evidence/remote-discovery.md) scopes interoperability, admission,
+application selection and remaining client qualification.
 
 The pre-v1 cleanup also withdraws orphaned Core event/subscription APIs and the
 deferred Zenoh/pico transport stack. Their removal adds no replacement capability;
