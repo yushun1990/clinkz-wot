@@ -7,9 +7,9 @@ use clinkz_wot_core::{
 use clinkz_wot_foundation::{MonotonicInstant, ResourceKind as K, WorkBudget, WorkClass as W};
 use core::{
     any::Any,
-    cell::RefCell,
+    cell::{Cell, RefCell},
     cmp::Ordering,
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,24 +78,23 @@ impl Selected {
     }
     fn check(
         &self,
-        consumer: &ConsumerInstanceRef,
+        state: &State,
+        control: &Control,
         continuation: Option<&dyn Any>,
     ) -> CoreResult<()> {
-        if !consumer.is_current() {
-            return Err(stale());
-        }
+        control.check(state)?;
         self.check_services()?;
+        control.check(state)?;
         let destination = self.op.mapping.destination(continuation)?;
+        control.check(state)?;
         self.op.services.access.authorize_instance(
-            consumer,
+            &control.identity.consumer,
             self.identity,
             &destination,
             self.op.mapping.operation(),
         )?;
-        if !consumer.is_current() {
-            return Err(stale());
-        }
-        self.check_services()
+        self.check_services()?;
+        control.check(state)
     }
     fn check_services(&self) -> CoreResult<()> {
         if self.op.services.data.policy() != self.policy
@@ -188,7 +187,7 @@ impl Drop for Exchange {
     }
 }
 struct Invocation {
-    identity: ConsumerActionIdentity,
+    control: Rc<Control>,
     continuation: Option<Box<dyn Any>>,
     exchange: Option<Exchange>,
     reply: Option<ConsumerActionReply>,
@@ -204,25 +203,251 @@ struct Invocation {
     accepted: bool,
     effect: ConsumerEffect,
     remote_cancel: ConsumerActionCancellation,
-    abandoned: bool,
-    deadline: Deadline,
-    last_time: MonotonicInstant,
     definition: Rc<Definition>,
     _funding: Vec<HostCapacityReservation>,
 }
 struct State {
     consumer: ConsumerInstanceRef,
     definitions: Vec<Rc<Definition>>,
-    slots: Vec<Option<Invocation>>,
-    active: bool,
+    active: Cell<bool>,
+    registry: RefCell<Registry>,
+    // Last: all original native, service and control owners precede funding.
+    _funding: Vec<HostCapacityReservation>,
+}
+struct Registry {
+    slots: Vec<Slot>,
     sequence: u64,
     next: usize,
-    _funding: Vec<HostCapacityReservation>,
+}
+#[allow(clippy::large_enum_variant)]
+enum Slot {
+    Vacant,
+    Reserved {
+        sequence: u64,
+        control: Option<Rc<Control>>,
+    },
+    Ready(Invocation),
+}
+impl Slot {
+    fn control(&self) -> Option<&Rc<Control>> {
+        match self {
+            Self::Vacant => None,
+            Self::Reserved { control, .. } => control.as_ref(),
+            Self::Ready(v) => Some(&v.control),
+        }
+    }
+}
+/// Passive intent remains accessible while one stack frame owns an invocation.
+/// This is continuing invocation control, never a second native exchange owner.
+struct Control {
+    identity: ConsumerActionIdentity,
+    cause: RefCell<Option<CoreError>>,
+    deadline: Deadline,
+    last_time: Cell<MonotonicInstant>,
+    abandoned: Cell<bool>,
+    waker: RefCell<Option<Waker>>,
+    recheck: Cell<bool>,
+    _funding: HostCapacityReservation,
+}
+impl Control {
+    fn allocation_bytes() -> u64 {
+        (core::mem::size_of::<Self>() + 4 * core::mem::size_of::<usize>()) as u64
+    }
+    fn new(
+        state: &State,
+        sequence: u64,
+        bank: &Arc<HostResourceAccounts>,
+        deadline: Deadline,
+        now: MonotonicInstant,
+    ) -> CoreResult<Rc<Self>> {
+        // Both Rc allocations, including the separately cloneable identity.
+        let funding = bank
+            .reserve(K::EngineLiveBytesGlobalMax, Self::allocation_bytes())
+            .ok_or_else(busy)?;
+        Ok(Rc::new(Self {
+            identity: ConsumerActionIdentity {
+                consumer: state.consumer.clone(),
+                sequence,
+                authority: Rc::new(()),
+            },
+            cause: RefCell::new(None),
+            deadline,
+            last_time: Cell::new(now),
+            abandoned: Cell::new(false),
+            waker: RefCell::new(None),
+            recheck: Cell::new(false),
+            _funding: funding,
+        }))
+    }
+    fn record(&self, cause: CoreError) {
+        self.cause.borrow_mut().get_or_insert(cause);
+    }
+    fn cause(&self) -> Option<CoreError> {
+        self.cause.borrow().clone()
+    }
+    fn observe_time(&self, now: MonotonicInstant) {
+        match now.checked_cmp(self.last_time.get()) {
+            Some(Ordering::Equal | Ordering::Greater) => self.last_time.set(now),
+            _ => self.record(invalid()),
+        }
+    }
+    fn check(&self, state: &State) -> CoreResult<()> {
+        if let Err(e) = check_time(self.deadline, self.last_time.get()) {
+            self.record(e);
+        }
+        if !state.active.get() || !self.identity.consumer.is_current() {
+            self.record(stale());
+        }
+        self.cause().map_or(Ok(()), Err)
+    }
+    fn register(&self, waker: &Waker) {
+        let next = waker.clone();
+        let old = self.waker.borrow_mut().replace(next);
+        drop(old);
+    }
+    fn wake(&self) {
+        let waker = self.waker.borrow_mut().take();
+        if let Some(waker) = waker {
+            waker.wake();
+        }
+    }
+}
+/// An occupied slot is never temporarily vacant during callbacks or unwind.
+struct Lease<'a> {
+    state: &'a State,
+    slot: usize,
+    sequence: u64,
+    invocation: Option<Invocation>,
+}
+impl State {
+    fn reserve_slot(&self) -> CoreResult<Lease<'_>> {
+        let mut r = self.registry.borrow_mut();
+        let slot = r
+            .slots
+            .iter()
+            .position(|s| matches!(s, Slot::Vacant))
+            .ok_or_else(busy)?;
+        let sequence = r.sequence.checked_add(1).ok_or_else(busy)?;
+        r.sequence = sequence;
+        r.slots[slot] = Slot::Reserved {
+            sequence,
+            control: None,
+        };
+        Ok(Lease {
+            state: self,
+            slot,
+            sequence,
+            invocation: None,
+        })
+    }
+    fn checkout(
+        &self,
+        slot: usize,
+        sequence: Option<u64>,
+        waker: Option<&Waker>,
+    ) -> CoreResult<Lease<'_>> {
+        let (lease, control) = {
+            let mut r = self.registry.borrow_mut();
+            let entry = &mut r.slots[slot];
+            match entry {
+                Slot::Ready(v) if sequence.is_none_or(|n| n == v.control.identity.sequence) => {
+                    let control = v.control.clone();
+                    let sequence = control.identity.sequence;
+                    let Slot::Ready(v) = core::mem::replace(
+                        entry,
+                        Slot::Reserved {
+                            sequence,
+                            control: Some(control.clone()),
+                        },
+                    ) else {
+                        unreachable!()
+                    };
+                    (
+                        Some(Lease {
+                            state: self,
+                            slot,
+                            sequence,
+                            invocation: Some(v),
+                        }),
+                        control,
+                    )
+                }
+                Slot::Reserved {
+                    sequence: original,
+                    control: Some(control),
+                } if sequence.is_none_or(|n| n == *original) => {
+                    if waker.is_some() {
+                        control.recheck.set(true);
+                    }
+                    (None, control.clone())
+                }
+                _ => return Err(stale()),
+            }
+        };
+        // A waker's clone/drop/wake is also linked code. The lease already exists
+        // so even unwinding registration restores the original occupied owner.
+        if let Some(waker) = waker {
+            control.register(waker);
+        }
+        lease.ok_or_else(busy)
+    }
+    fn revoke(&self) {
+        self.active.set(false);
+        for control in self
+            .registry
+            .borrow()
+            .slots
+            .iter()
+            .filter_map(Slot::control)
+        {
+            control.record(stale());
+        }
+    }
+    fn close(&self) {
+        self.revoke();
+        let count = self.registry.borrow().slots.len();
+        for i in 0..count {
+            let control = self.registry.borrow().slots[i].control().cloned();
+            if let Some(control) = control {
+                control.wake();
+            }
+        }
+    }
+}
+impl Lease<'_> {
+    fn attach(&self, control: Rc<Control>) {
+        let mut r = self.state.registry.borrow_mut();
+        let Slot::Reserved { control: c, .. } = &mut r.slots[self.slot] else {
+            unreachable!()
+        };
+        *c = Some(control);
+    }
+    fn take(mut self) -> Invocation {
+        self.invocation.take().unwrap()
+    }
+}
+impl Drop for Lease<'_> {
+    fn drop(&mut self) {
+        let replacement = self.invocation.take().map_or(Slot::Vacant, Slot::Ready);
+        let old = {
+            let mut r = self.state.registry.borrow_mut();
+            core::mem::replace(&mut r.slots[self.slot], replacement)
+        };
+        let Slot::Reserved { sequence, control } = old else {
+            unreachable!()
+        };
+        debug_assert_eq!(sequence, self.sequence);
+        if let Some(control) = control
+            && control.recheck.replace(false)
+        {
+            control.wake();
+        }
+    }
 }
 /// Reusable definitions on one independent Consumer incarnation. Handles keep
 /// original work alive; dropping this root fences new work and local acceptance.
 pub struct ConsumerActionRuntime {
-    state: Rc<RefCell<State>>,
+    state: Rc<State>,
 }
 impl ConsumerActionRuntime {
     pub fn try_new(
@@ -244,7 +469,7 @@ impl ConsumerActionRuntime {
                 return Err(invalid());
             }
             let bytes = (core::mem::size_of::<State>()
-                + invocations * core::mem::size_of::<Option<Invocation>>()
+                + invocations * core::mem::size_of::<Slot>()
                 + definitions.len() * (core::mem::size_of::<Definition>() + 64))
                 as u64;
             // All definitions of this facet share the original accounting bank.
@@ -258,7 +483,7 @@ impl ConsumerActionRuntime {
             let funding = reserve(bank, &[(K::EngineLiveBytesGlobalMax, bytes)])?;
             let mut slots = Vec::new();
             slots.try_reserve_exact(invocations).map_err(|_| busy())?;
-            slots.resize_with(invocations, || None);
+            slots.resize_with(invocations, || Slot::Vacant);
             let mut entries = Vec::new();
             entries
                 .try_reserve_exact(definitions.len())
@@ -275,15 +500,17 @@ impl ConsumerActionRuntime {
                 .map(|d| Rc::new(Definition::from_prepared(d))),
         );
         Ok(Self {
-            state: Rc::new(RefCell::new(State {
+            state: Rc::new(State {
                 consumer,
                 definitions: entries,
-                slots,
-                active: true,
-                sequence: 0,
-                next: 0,
+                active: Cell::new(true),
+                registry: RefCell::new(Registry {
+                    slots,
+                    sequence: 0,
+                    next: 0,
+                }),
                 _funding: funding,
-            })),
+            }),
         })
     }
     /// No input or native opportunity is lost on pre-effect refusal. One
@@ -296,9 +523,9 @@ impl ConsumerActionRuntime {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerActionHandle, BindingInputRejection<Option<Payload>>> {
-        let mut state = self.state.borrow_mut();
+        let state = &self.state;
         let checked = (|| {
-            if !state.active || !state.consumer.is_current() {
+            if !state.active.get() || !state.consumer.is_current() {
                 return Err(stale());
             }
             if name.len() > 256 {
@@ -318,12 +545,9 @@ impl ConsumerActionRuntime {
                 .ok_or_else(unsupported)?
                 .clone();
             check_time(deadline, now)?;
-            let slot = state
-                .slots
-                .iter()
-                .position(Option::is_none)
-                .ok_or_else(busy)?;
-            let sequence = state.sequence.checked_add(1).ok_or_else(busy)?;
+            let reserved = state.reserve_slot()?;
+            let control = Control::new(state, reserved.sequence, &d.bank, deadline, now)?;
+            reserved.attach(control.clone());
             let invoke = d.selected(0)?;
             let mut native = 0;
             let mut temporary = invoke.policy.temporary_bytes;
@@ -359,30 +583,32 @@ impl ConsumerActionRuntime {
                         lifetime.checked_add(temporary).ok_or_else(invalid)?,
                     ),
                     (K::BindingPollTemporaryBytesGlobalMax, temporary),
-                    (K::CleanupBytesMax, lifetime),
+                    (
+                        K::CleanupBytesMax,
+                        lifetime
+                            .checked_add(Control::allocation_bytes())
+                            .ok_or_else(invalid)?,
+                    ),
                     (K::CleanupItemsMax, 1),
                     (K::PendingHandlerCallsGlobalMax, 1),
                     (K::BindingResponseBufferBytesGlobalMax, response),
                 ],
             )?;
             prepay(invoke, budget)?;
-            invoke.check(&state.consumer, None)?;
+            invoke.check(state, &control, None)?;
             d.validate(d.schemas.input.as_ref(), input.as_ref())?;
-            invoke.check(&state.consumer, None)?;
+            invoke.check(state, &control, None)?;
             let raw = invoke.op.mapping.start(input.as_ref(), None)?;
-            Ok((slot, sequence, d, funding, raw))
+            Ok((reserved, control, d, funding, raw))
         })();
-        let (slot, sequence, definition, funding, raw) = match checked {
+        let (mut reserved, control, definition, funding, raw) = match checked {
             Ok(v) => v,
             Err(e) => return Err(reject(input, e)),
         };
-        state.sequence = sequence;
-        state.slots[slot] = Some(Invocation {
-            identity: ConsumerActionIdentity {
-                consumer: state.consumer.clone(),
-                sequence,
-                authority: Rc::new(()),
-            },
+        let slot = reserved.slot;
+        let sequence = reserved.sequence;
+        let mut invocation = Invocation {
+            control: control.clone(),
             definition,
             continuation: None,
             exchange: Some(Exchange(Some(raw))),
@@ -399,76 +625,121 @@ impl ConsumerActionRuntime {
             accepted: false,
             effect: ConsumerEffect::Unknown,
             remote_cancel: ConsumerActionCancellation::NotRequested,
-            abandoned: false,
-            deadline,
-            last_time: now,
             _funding: funding,
-        });
+        };
+        // A successful start may own native effects already. Keep its complete
+        // returned exchange even if the callback closed this invocation.
+        invocation.fence(state);
+        reserved.invocation = Some(invocation);
+        drop(reserved);
         Ok(ConsumerActionHandle {
             state: self.state.clone(),
             slot,
             sequence,
+            control,
         })
     }
     pub fn begin_close(&self) {
-        self.state.borrow_mut().active = false;
+        self.state.close();
     }
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
-        let mut s = self.state.borrow_mut();
-        let active = s.active;
-        let count = s.slots.len();
-        let start = s.next;
-        s.next = (start + 1) % count;
+        let (start, count) = {
+            let mut r = self.state.registry.borrow_mut();
+            for control in r.slots.iter().filter_map(Slot::control) {
+                control.observe_time(now);
+            }
+            let count = r.slots.len();
+            let start = r.next;
+            r.next = (start + 1) % count;
+            (start, count)
+        };
         for i in 0..count {
-            let slot = &mut s.slots[(start + i) % count];
-            if let Some(v) = slot {
-                v.step(active, cx, now, budget);
-                if v.abandoned && v.state.settlement_ready() {
-                    *slot = None;
+            if let Ok(mut lease) = self
+                .state
+                .checkout((start + i) % count, None, Some(cx.waker()))
+            {
+                let v = lease.invocation.as_mut().unwrap();
+                v.step(&self.state, cx, budget);
+                if v.control.abandoned.get() && v.state.settlement_ready() {
+                    drop(lease.take());
                 }
             }
         }
     }
     pub fn is_idle(&self) -> bool {
-        self.state.borrow().slots.iter().all(Option::is_none)
+        self.state
+            .registry
+            .borrow()
+            .slots
+            .iter()
+            .all(|s| matches!(s, Slot::Vacant))
     }
 }
 impl Drop for ConsumerActionRuntime {
     fn drop(&mut self) {
-        self.state.borrow_mut().active = false;
+        self.state.revoke();
     }
 }
 
 /// Unique local authority over an original invocation. No raw token or caller-
 /// supplied operation mapping can address/replace this handle's work.
 pub struct ConsumerActionHandle {
-    state: Rc<RefCell<State>>,
+    state: Rc<State>,
     slot: usize,
     sequence: u64,
+    control: Rc<Control>,
 }
 impl ConsumerActionHandle {
+    fn live(&self) -> CoreResult<()> {
+        if self.state.registry.borrow().slots[self.slot]
+            .control()
+            .is_some_and(|c| Rc::ptr_eq(c, &self.control))
+        {
+            Ok(())
+        } else {
+            Err(stale())
+        }
+    }
     pub fn identity(&self) -> CoreResult<ConsumerActionIdentity> {
-        Ok(self.get(&self.state.borrow())?.identity.clone())
+        self.live()?;
+        Ok(self.control.identity.clone())
     }
-    fn get<'a>(&self, s: &'a State) -> CoreResult<&'a Invocation> {
-        s.slots[self.slot]
-            .as_ref()
-            .filter(|v| v.identity.sequence == self.sequence)
-            .ok_or_else(stale)
+    fn get<'a>(&self, r: &'a Registry) -> CoreResult<&'a Invocation> {
+        match &r.slots[self.slot] {
+            Slot::Ready(v) if v.control.identity.sequence == self.sequence => Ok(v),
+            Slot::Reserved { sequence, .. } if *sequence == self.sequence => Err(busy()),
+            _ => Err(stale()),
+        }
     }
+    /// Inspection of native state while its owner is executing returns Backpressure.
     pub fn state(&self) -> CoreResult<ConsumerActionState> {
-        Ok(self.get(&self.state.borrow())?.state)
+        let r = self.state.registry.borrow();
+        let v = self.get(&r)?;
+        Ok(if self.control.cause().is_some() {
+            if v.exchange.is_some() {
+                ConsumerActionState::Closing
+            } else {
+                ConsumerActionState::Closed
+            }
+        } else {
+            v.state
+        })
     }
     pub fn first_cause(&self) -> CoreResult<Option<CoreError>> {
-        Ok(self.get(&self.state.borrow())?.first_cause.clone())
+        self.live()?;
+        Ok(self.control.cause())
     }
     pub fn cleanup_error(&self) -> CoreResult<Option<CoreError>> {
-        Ok(self.get(&self.state.borrow())?.cleanup_error.clone())
+        Ok(self
+            .get(&self.state.registry.borrow())?
+            .cleanup_error
+            .clone())
     }
     pub fn remote_cancellation(&self) -> CoreResult<ConsumerActionCancellation> {
-        Ok(self.get(&self.state.borrow())?.remote_cancel)
+        Ok(self.get(&self.state.registry.borrow())?.remote_cancel)
     }
     /// Explicit described control; neither call automatically queries/reinvokes.
+    /// A reentrant control of the checked-out original invocation is busy.
     pub fn query(&self, now: MonotonicInstant, budget: &mut WorkBudget) -> CoreResult<()> {
         self.control(1, now, budget)
     }
@@ -481,26 +752,26 @@ impl ConsumerActionHandle {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        let mut s = self.state.borrow_mut();
-        if !s.active {
-            return Err(stale());
-        }
-        let v = s.slots[self.slot]
-            .as_mut()
-            .filter(|v| v.identity.sequence == self.sequence)
-            .ok_or_else(stale)?;
-        if !v.identity.consumer.is_current() || v.first_cause.is_some() {
-            return Err(stale());
-        }
+        self.live()?;
+        self.control.observe_time(now);
+        let mut lease = self.state.checkout(self.slot, Some(self.sequence), None)?;
+        let v = lease.invocation.as_mut().unwrap();
+        v.fence(&self.state);
+        self.control.check(&self.state)?;
         if v.state != ConsumerActionState::Pending || v.exchange.is_some() {
             return Err(busy());
         }
-        v.time(now)?;
-        v.definition.data_current()?;
         let selected = v.definition.selected(operation)?;
         prepay(selected, budget)?;
         let continuation = v.continuation.as_deref().ok_or_else(invalid)?;
-        selected.check(&v.identity.consumer, Some(continuation))?;
+        if let Err(e) = selected
+            .check(&self.state, &self.control, Some(continuation))
+            .and_then(|()| v.definition.data_current())
+            .and_then(|()| self.control.check(&self.state))
+        {
+            v.close(e.clone());
+            return Err(e);
+        }
         let raw = selected.op.mapping.start(None, Some(continuation))?;
         v.exchange = Some(Exchange(Some(raw)));
         v.operation = operation;
@@ -514,66 +785,59 @@ impl ConsumerActionHandle {
         if operation == 2 {
             v.remote_cancel = ConsumerActionCancellation::Uncertain;
         }
+        v.fence(&self.state);
         Ok(())
     }
     /// Stops local work only. Does not send a hidden CancelAction or claim that
     /// a remote effect was undone. First cause and any late result are retained.
     pub fn cancel_local(&self) {
-        let mut s = self.state.borrow_mut();
-        if let Some(v) = s.slots[self.slot]
-            .as_mut()
-            .filter(|v| v.identity.sequence == self.sequence)
-        {
-            v.close(CoreError::Cancelled(context()));
+        if self.live().is_ok() {
+            self.control.record(CoreError::Cancelled(context()));
+            self.control.wake();
         }
     }
+    /// Reentrant progress records time and wake interest but cannot poll twice.
+    /// It returns Backpressure until the outer owner restores the slot.
     pub fn progress(
         &self,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerActionState> {
-        let mut s = self.state.borrow_mut();
-        let active = s.active;
-        let v = s.slots[self.slot]
-            .as_mut()
-            .filter(|v| v.identity.sequence == self.sequence)
-            .ok_or_else(stale)?;
-        v.step(active, cx, now, budget);
+        self.live()?;
+        self.control.observe_time(now);
+        let mut lease = self
+            .state
+            .checkout(self.slot, Some(self.sequence), Some(cx.waker()))?;
+        let v = lease.invocation.as_mut().unwrap();
+        v.step(&self.state, cx, budget);
         Ok(v.state)
     }
-    /// A completed native exchange leaves a revocable unread result. Successful
-    /// handoff requires current time/authority/services and a paid fresh access
-    /// check. Short credit retains the complete original result and slot. A
-    /// fenced settlement retains native evidence without granting success.
+    /// Native completion remains revocable until this paid, fresh handoff.
+    /// Busy/short-credit entry retains the original slot and complete evidence.
     pub fn take_settlement(
         &self,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerActionSettlement> {
-        let mut s = self.state.borrow_mut();
-        let active = s.active;
-        let v = s.slots[self.slot]
-            .as_mut()
-            .filter(|v| v.identity.sequence == self.sequence)
-            .ok_or_else(stale)?;
-        v.fence(active, now);
+        self.live()?;
+        self.control.observe_time(now);
+        let mut lease = self.state.checkout(self.slot, Some(self.sequence), None)?;
+        let v = lease.invocation.as_mut().unwrap();
+        v.fence(&self.state);
         if !v.state.settlement_ready() || !pay(budget, W::CleanupItems, 1) {
             return Err(busy());
         }
-        v.refresh_access(budget)?;
-        Ok(ConsumerActionSettlement(s.slots[self.slot].take().unwrap()))
+        v.refresh_access(&self.state, budget)?;
+        v.fence(&self.state);
+        Ok(ConsumerActionSettlement(lease.take()))
     }
 }
 impl Drop for ConsumerActionHandle {
     fn drop(&mut self) {
-        let mut s = self.state.borrow_mut();
-        if let Some(v) = s.slots[self.slot]
-            .as_mut()
-            .filter(|v| v.identity.sequence == self.sequence)
-        {
-            v.abandoned = true;
-            v.close(CoreError::Cancelled(context()));
+        if self.live().is_ok() {
+            self.control.abandoned.set(true);
+            self.control.record(CoreError::Cancelled(context()));
         }
     }
 }
@@ -583,7 +847,7 @@ impl ConsumerActionSettlement {
         self.0.input.as_ref()
     }
     pub fn identity(&self) -> &ConsumerActionIdentity {
-        &self.0.identity
+        &self.0.control.identity
     }
     pub fn effect(&self) -> ConsumerEffect {
         self.0.effect
@@ -640,20 +904,9 @@ impl ConsumerActionSettlement {
     }
 }
 impl Invocation {
-    fn time(&mut self, now: MonotonicInstant) -> CoreResult<()> {
-        if now
-            .checked_cmp(self.last_time)
-            .is_none_or(|c| c == Ordering::Less)
-        {
-            return Err(invalid());
-        }
-        self.last_time = now;
-        check_time(self.deadline, now)
-    }
     fn close(&mut self, cause: CoreError) {
-        if self.first_cause.is_none() {
-            self.first_cause = Some(cause);
-        }
+        self.control.record(cause);
+        self.first_cause = self.control.cause();
         self.retiring = self.exchange.is_some();
         self.state = if self.retiring {
             ConsumerActionState::Closing
@@ -661,22 +914,21 @@ impl Invocation {
             ConsumerActionState::Closed
         };
     }
-    /// Passive fences also apply after native completion, until the invocation
-    /// is moved out of its slot by the settlement handoff.
-    fn fence(&mut self, active: bool, now: MonotonicInstant) {
-        if let Err(e) = self.time(now) {
+    /// Passive controls are rechecked after linked callbacks, including Pending.
+    fn fence(&mut self, state: &State) {
+        if let Err(e) = self.control.check(state) {
             self.close(e);
-        }
-        if !active || !self.identity.consumer.is_current() {
-            self.close(stale());
         }
         if self.first_cause.is_none()
             && let Err(e) = self.definition.data_current()
         {
             self.close(e);
         }
+        if let Err(e) = self.control.check(state) {
+            self.close(e);
+        }
     }
-    fn refresh_access(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn refresh_access(&mut self, state: &State, budget: &mut WorkBudget) -> CoreResult<()> {
         if self.first_cause.is_some() {
             return Ok(());
         }
@@ -689,23 +941,18 @@ impl Invocation {
             return Err(busy());
         }
         if let Err(e) = selected
-            .check(&self.identity.consumer, self.continuation.as_deref())
+            .check(state, &self.control, self.continuation.as_deref())
             .and_then(|()| self.definition.data_current())
         {
             self.close(e);
         }
         Ok(())
     }
-    fn step(
-        &mut self,
-        active: bool,
-        cx: &mut Context<'_>,
-        now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) {
-        self.fence(active, now);
+    fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+        self.fence(state);
         if self.state.settlement_ready() {
-            let _ = self.refresh_access(budget);
+            let _ = self.refresh_access(state, budget);
+            self.fence(state);
             return;
         }
         let selected = self
@@ -724,15 +971,21 @@ impl Invocation {
             return;
         }
         if self.first_cause.is_none()
-            && let Err(e) = selected.check(&self.identity.consumer, self.continuation.as_deref())
+            && let Err(e) = selected.check(state, &self.control, self.continuation.as_deref())
         {
             self.close(e);
         }
+        self.fence(state);
         if let Some(raw) = self.exchange.as_mut()
             && !self.retiring
         {
             match raw.0.as_mut().expect("owned exchange").poll(cx) {
-                Poll::Pending => return,
+                Poll::Pending => {
+                    self.fence(state);
+                    if self.first_cause.is_none() {
+                        return;
+                    }
+                }
                 Poll::Ready(Ok(reply)) => {
                     self.reply = Some(reply);
                     self.retiring = true;
@@ -747,13 +1000,18 @@ impl Invocation {
                 }
             }
         }
+        self.fence(state);
         if let Some(raw) = self.exchange.as_mut() {
             match raw.0.as_mut().expect("owned exchange").poll_close(cx) {
-                Poll::Pending => return,
+                Poll::Pending => {
+                    self.fence(state);
+                    return;
+                }
                 Poll::Ready(Err(e)) => {
                     if self.cleanup_error.is_none() {
                         self.cleanup_error = Some(e);
                     }
+                    self.fence(state);
                     return;
                 }
                 Poll::Ready(Ok(late)) => {
@@ -766,21 +1024,27 @@ impl Invocation {
                 }
             }
         }
+        self.fence(state);
         if let Some(reply) = self.reply.take() {
-            self.accept_reply(reply);
+            self.accept_reply(state, reply);
         }
+        self.fence(state);
         if self.first_cause.is_some() {
             self.state = ConsumerActionState::Closed;
         }
         self.retiring = false;
     }
-    fn accept_reply(&mut self, reply: ConsumerActionReply) {
+    fn accept_reply(&mut self, state: &State, reply: ConsumerActionReply) {
         // Keep the original output even when validation, cancellation or a
         // replacement prevents it from becoming an application success.
         match reply {
             ConsumerActionReply::Complete(output) if self.operation != 2 => {
-                let validation = if raw_action_output_shape(&output)
-                    && interaction_output_backing(&output).is_some_and(|n| {
+                // Store before validator entry: unwind must retain the original
+                // evidence, even though arbitrary panicking code need not resume.
+                self.native_result = Some(Ok(output));
+                let output = self.native_result.as_ref().unwrap().as_ref().unwrap();
+                let validation = if raw_action_output_shape(output)
+                    && interaction_output_backing(output).is_some_and(|n| {
                         n as u64
                             <= self
                                 .definition
@@ -794,7 +1058,6 @@ impl Invocation {
                 } else {
                     Err(invalid())
                 };
-                self.native_result = Some(Ok(output));
                 if let Err(e) = validation {
                     self.validation_error = Some(e.clone());
                     self.close(e);
@@ -827,11 +1090,12 @@ impl Invocation {
             _ => self.close(invalid()),
         }
         // Native/validator callbacks can revoke original identity or policy.
+        self.fence(state);
         if self.first_cause.is_none() {
             let s = self.definition.selected(self.operation).unwrap();
-            if let Err(e) = s.check(&self.identity.consumer, self.continuation.as_deref()) {
+            if let Err(e) = s.check(state, &self.control, self.continuation.as_deref()) {
                 // Terminal state must not suppress fencing of this late result.
-                self.first_cause = Some(e);
+                self.close(e);
             }
         }
     }

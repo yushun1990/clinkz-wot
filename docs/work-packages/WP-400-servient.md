@@ -260,6 +260,22 @@ returns its original late output through retirement after a poll error; the
 original error, late output and captured validation failure remain independently
 retained and funded. These repairs do not change package acceptance status.
 
+The continuing owner now isolates linked execution from registry borrows under
+[SAFE-CONCUR-001](../spec/runtime-safety.md). Its
+[public callback regressions](../../servient/finite/tests/consumer_action_callbacks.rs)
+reproduce admission/control, native poll/retirement, validation, settlement and
+destruction borrow failures. They cover occupied-slot reentry, independent
+invocation identity, cancellation and service-loss fencing, nested time,
+synchronous native/cancellation wakes, unwind evidence retention, short work,
+original funding and final disposal. The actual HTTP Action integration adds
+reentrant access, validator and native poll/retirement callbacks with retained
+fenced completion; existing HTTP and independent datagram lifecycle evidence
+remains applicable. The
+[investigation](../../workspace/0111-continuing-action-callback-ownership.md)
+distinguishes reproduced defects from already-correct replacement behavior.
+These changes preserve the continuing association and its explicit described
+controls; no finite-call substitution or package/gate acceptance is implied.
+
 ## Open finite Consumer ownership
 
 The source-free `servient-finite::consumer` owner consumes Core instance bindings and
@@ -327,7 +343,7 @@ while a slot is checked out; resumed progress and deadline fences use the latest
 observation. Both direct polls and runtime drivers register wake interest on busy
 slots and request a restoration retry. Their executed
 revision and validation results belong to the PR; no broad package acceptance
-is inferred. Continuing Action callback isolation remains outstanding.
+is inferred. The separate continuing Action correction is evidenced above.
 
 ## First joined finite Producer
 

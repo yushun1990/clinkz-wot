@@ -241,9 +241,36 @@ Slot restoration on unwind retains the original owner; it grants no guarantee
 that arbitrary panicking linked code can resume execution. The independent
 control allocation is funded before native construction and keeps its original
 lease through its last handle/call reference. It cannot address a reused slot.
-This implementation claim covers finite Consumer execution. The continuing
-Action owner's callback isolation remains an identified correction, not evidence
-inherited from the finite owner or from passing operation tests.
+
+The Host continuing Action owner has its own occupied invocation slots and
+separately funded passive controls. Registry borrows end before access,
+validation, destination/start, poll/retirement and linked destruction callbacks.
+The original invocation keeps its opaque token, selected mappings, exchange,
+normal/late evidence and funding across checkout. Admission reserves its slot
+and sequence before callbacks; nested admission cannot reuse or overwrite it.
+Reentrant query/cancel, settlement and native-state inspection return
+`Backpressure` while that invocation is checked out. Identity, first cause and
+local cancellation remain accessible. Reentrant progress records time and wake
+interest, returns `Backpressure`, and requests a retry after restoration; it
+never polls the same exchange concurrently. Runtime drivers retain that interest
+too. Time observations, explicit close/cancellation wakes, passive Drop and
+unwind restoration follow the boundary rules above independently for this owner.
+
+Action access, native and validation callbacks are followed by fresh original
+control/dependency checks before another native effect or successful handoff.
+A control authorization/service failure fences the invocation even if the service
+later recovers. Short work or an unsupported control remains a refusal without
+inventing a remote effect. A successful native start returned after revocation
+is retained for local retirement, without polling it for further effects.
+Required cleanup and late validation continue under original funding; neither
+can erase a first cause or promote uncertain effects to success/rollback.
+Native completion evidence is stored before validator entry, including on
+unwind. A terminal invocation is removed only at the settlement handoff (the
+acceptance linearization point), or for abandoned local disposal outside the
+registry. The control lease survives through its last original handle/owner;
+settlement disposal releases the original native/result/service funding.
+These are distinct Host ownership implementations, not a universal runtime or a
+claim of broader constrained-profile or arbitrary panic recovery support.
 
 `SAFE-PROFILE-001`: Supported Host and constrained interactions MUST have equivalent
 WoT meaning, authority, late-result, loss, cancellation and cleanup guarantees.
