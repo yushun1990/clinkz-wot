@@ -30,9 +30,14 @@ mod producer;
 use clinkz_wot_codec_json as producer_validation;
 pub use finite_producer::{HttpFiniteBinding, HttpFiniteConfig, HttpFiniteReply};
 mod program;
+mod security;
 pub use producer::{
     HttpProducerConfig, HttpProducerExecutor, HttpProducerInstallation, HttpProducerProgram,
     producer_execution,
+};
+pub use security::{
+    HttpBasicClientAccess, HttpBasicCredentials, HttpBasicVerifier, HttpClientTls,
+    HttpServerSecurity,
 };
 #[cfg(feature = "prepare")]
 mod producer_compiler;
@@ -50,7 +55,7 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v13\0",
+    "clinkz-http-ip-v14\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
@@ -67,7 +72,7 @@ const PRIVATE_POLICY: &[u8] = concat!(
     "forbidden-trailer=content-type,content-length,transfer-encoding,content-encoding,trailer,upgrade,connection,host,te;",
     "noTEadvertisement;single-chunked;noTEandCL;singleCL;",
     "call-owned-driver;noSpawn;local-drop-before-settlement;noNetworkWait;",
-    "SDK-disposal-may-allocate;noPool;noRetry;noTLS;noDNS;",
+    "SDK-disposal-may-allocate;noPool;noRetry;optional-TLS13-basic-PropertyRead;noDNS;",
     "connect-io=DeploymentFailure;",
     "action-consumer-POST202-accepted-id;GET200-running-completed-failed;DELETE200-cancelling-terminal;",
     "action-id=hex16-u32;control-selected-template-id;Location-never-followed;",
@@ -83,6 +88,7 @@ const PRIVATE: [u8; 32] = sha2_const_stable::Sha256::new()
 #[derive(Clone, Copy, Debug)]
 pub struct HttpConsumerConfig {
     configuration: ConsumerBindingConfiguration,
+    secure: bool,
 }
 impl HttpConsumerConfig {
     /// Explicitly permits cleartext HTTP to application-selected IP literals.
@@ -96,6 +102,26 @@ impl HttpConsumerConfig {
                 BODY,
                 MEDIA,
             )?,
+            secure: false,
+        })
+    }
+    /// HTTPS/IP, Basic header, finite Property Read only. Trust roots are a
+    /// separate live Binding dependency and are never native program content.
+    pub fn for_https_basic_ip() -> CoreResult<Self> {
+        Ok(Self {
+            configuration: ConsumerBindingConfiguration::for_semantic_host(
+                64,
+                BindingConfigurationDigest::new(
+                    sha2_const_stable::Sha256::new()
+                        .update(PRIVATE_POLICY)
+                        .update(b"TLS13-basic-IP-v1")
+                        .finalize(),
+                ),
+                COMPATIBILITY,
+                BODY,
+                MEDIA,
+            )?,
+            secure: true,
         })
     }
 }
@@ -137,6 +163,9 @@ struct Target {
 }
 impl Target {
     fn parse(text: &str) -> CoreResult<Self> {
+        Self::parse_for(text, false)
+    }
+    fn parse_for(text: &str, secure: bool) -> CoreResult<Self> {
         if text.len() > 64
             || text
                 .bytes()
@@ -150,7 +179,7 @@ impl Target {
         let authority = uri
             .authority()
             .ok_or_else(|| error(601, "missing HTTP authority"))?;
-        if uri.scheme_str() != Some("http")
+        if uri.scheme_str() != Some(if secure { "https" } else { "http" })
             || (authority.as_str().contains('@') || authority.as_str().ends_with(':'))
         {
             return Err(error(601, "cleartext IP target required"));
@@ -165,7 +194,11 @@ impl Target {
         // Distinguish that from absent syntax before applying the default.
         let suffix = &authority.as_str()[host.len()..];
         let port = if suffix.is_empty() {
-            80
+            if uri.scheme_str() == Some("https") {
+                443
+            } else {
+                80
+            }
         } else {
             suffix
                 .strip_prefix(':')
@@ -183,12 +216,14 @@ impl Target {
 }
 
 struct Client {
+    tls: Option<HttpClientTls>,
     config: HttpConsumerConfig,
     busy: Arc<AtomicBool>,
 }
 type Exchange = Pin<Box<dyn Future<Output = CoreResult<(u16, Vec<u8>)>> + Send>>;
 struct Call {
     request: Option<OutboundRequest>,
+    tls: Option<HttpClientTls>,
     target: Option<(Target, HttpArtifact)>,
     handle: tokio::runtime::Handle,
     future: Option<Exchange>,
@@ -241,7 +276,7 @@ impl binding::ClientBinding for Client {
         let target = artifact
             .artifact()
             .try_payload::<HttpArtifact>(COMPATIBILITY)
-            .and_then(|a| Some((Target::parse(a.target()).ok()?, *a)));
+            .and_then(|a| Some((Target::parse_for(a.target(), self.config.secure).ok()?, *a)));
         let Some(target) = target else {
             return Err(reject(
                 request,
@@ -250,6 +285,23 @@ impl binding::ClientBinding for Client {
                 true,
             ));
         };
+        if self.config.secure != (target.0.uri.scheme_str() == Some("https"))
+            || self.config.secure != target.1.basic
+            || (self.config.secure
+                && (self.tls.is_none()
+                    || request
+                        .security()
+                        .and_then(|s| s.downcast_ref::<security::BasicGrant>())
+                        .is_none_or(|g| !g.for_binding(&request))))
+            || (!self.config.secure && request.security().is_some())
+        {
+            return Err(reject(
+                request,
+                self.config,
+                ResourceFailureDomain::BindingPolicy,
+                true,
+            ));
+        }
         if target.1.operation != request.operation()
             || match (request.operation(), request.input()) {
                 (
@@ -312,6 +364,7 @@ impl binding::ClientBinding for Client {
         }
         let call = Call {
             request: Some(request),
+            tls: self.tls.clone(),
             target: Some(target),
             handle,
             future: None,
@@ -348,7 +401,19 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
         // Protocol future/buffers/reactor allocations are private, not engine
         // carrier bytes. Full engine-held call representation is charged here.
-        BindingLifetimeFootprint::new(1, std::mem::size_of::<Self>() as u64)
+        BindingLifetimeFootprint::new(
+            1,
+            (std::mem::size_of::<Self>()
+                + if self
+                    .request
+                    .as_ref()
+                    .is_some_and(|r| r.security().is_some())
+                {
+                    std::mem::size_of::<security::BasicGrant>() + 2 * std::mem::size_of::<usize>()
+                } else {
+                    0
+                }) as u64,
+        )
     }
     fn next_deadline(&self) -> Option<Deadline> {
         self.request.as_ref().unwrap().deadline()
@@ -361,16 +426,36 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return Poll::Pending;
         }
+        if let Some(grant) = self
+            .request
+            .as_ref()
+            .unwrap()
+            .security()
+            .and_then(|s| s.downcast_ref::<security::BasicGrant>())
+        {
+            let target = self
+                .target
+                .as_ref()
+                .map(|(_, instructions)| instructions.target());
+            // The grant owns the exact destination after target moves to the
+            // connection future; its check never refreshes a rotated credential.
+            if let Err(error) = grant.check(target.unwrap_or(grant.target())) {
+                self.retire();
+                return Poll::Ready(Err(error));
+            }
+        }
         self.allowance.store(4096, Ordering::Relaxed);
         if self.future.is_none() {
             let Some((target, instructions)) = self.target.take() else {
                 return Poll::Ready(Err(error(602, "HTTP call already retired")));
             };
-            self.future = Some(Box::pin(transport::exchange(
+            self.future = Some(Box::pin(transport::exchange_secured(
                 target,
                 instructions,
                 self.request.as_ref().unwrap().input().cloned(),
                 self.allowance.clone(),
+                self.tls.clone(),
+                self.request.as_ref().unwrap().security().cloned(),
             )));
         }
         let handle = self.handle.clone();
@@ -381,6 +466,9 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
                 self.retire();
                 let request = self.request.as_ref().unwrap();
                 let result = result.map_err(|cause| {
+                    if cause.security_reason().is_some() {
+                        return cause;
+                    }
                     CoreError::Binding(
                         (*cause.context())
                             .with_plan(request.plan_id())
@@ -444,6 +532,24 @@ pub fn try_consumer_execution(
     binding_generation: BindingGeneration,
     diagnostic_ordinal: u32,
 ) -> CoreResult<HostConsumerBindingRegistration> {
+    if config.secure {
+        return Err(security::denied(SecurityFailureReason::ProviderFailure));
+    }
+    consumer_execution(
+        config,
+        binding_id,
+        binding_generation,
+        diagnostic_ordinal,
+        None,
+    )
+}
+fn consumer_execution(
+    config: HttpConsumerConfig,
+    binding_id: BindingId,
+    binding_generation: BindingGeneration,
+    diagnostic_ordinal: u32,
+    tls: Option<HttpClientTls>,
+) -> CoreResult<HostConsumerBindingRegistration> {
     let identity = BindingRegistrationIdentity::new(
         binding_id,
         binding_generation,
@@ -462,6 +568,7 @@ pub fn try_consumer_execution(
         identity,
         BindingExecutionSupport::host_erased(),
         Box::new(Client {
+            tls,
             config,
             busy: Arc::new(AtomicBool::new(false)),
         }),
@@ -562,6 +669,31 @@ pub fn try_consumer_registration(
     Ok(open_consumer::ConsumerRegistrationInput {
         preparation,
         services: config.consumer_services(),
+    })
+}
+/// Pair actual TLS trust, Basic credential service and JSON validation. Pure:
+/// no certificate handshake, credential use or socket acquisition occurs here.
+#[cfg(feature = "prepare")]
+pub fn try_https_basic_consumer_registration(
+    tls: HttpClientTls,
+    access: Arc<HttpBasicClientAccess>,
+    binding_id: BindingId,
+    generation: BindingGeneration,
+    ordinal: u32,
+) -> CoreResult<clinkz_wot_planning::open_consumer::ConsumerRegistrationInput> {
+    use clinkz_wot_planning::*;
+    let config = HttpConsumerConfig::for_https_basic_ip()?;
+    let compiler = HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(config))
+        .map_err(|e| e.error().error().clone())?;
+    let runtime = consumer_execution(config, binding_id, generation, ordinal, Some(tls))?;
+    let preparation = HostConsumerBindingPreparation::try_pair(runtime, compiler)
+        .map_err(|e| e.error().error().clone())?;
+    Ok(open_consumer::ConsumerRegistrationInput {
+        preparation,
+        services: consumer::ConsumerServices {
+            data: Arc::new(HttpConsumerData),
+            access,
+        },
     })
 }
 impl HttpConsumerConfig {

@@ -374,7 +374,12 @@ impl ConsumerRegistry {
                                                 return Err(busy());
                                             }
                                             let data = &registration.data;
-                                            if !registration.execution.supports_operation(operation)
+                                            if !registration
+                                                .access
+                                                .supports_security(content.security())
+                                                || !registration
+                                                    .execution
+                                                    .supports_operation(operation)
                                                 || data.content_type() != facts.content_type
                                                 || !data.available()
                                                 || !schemas.supports(data.service())
@@ -932,6 +937,10 @@ fn common_content(
     budget: &mut WorkBudget,
 ) -> CoreResult<Arc<PreparedConsumerContent>> {
     qualify_common_form(doc, site, index)?;
+    let security = crate::security::prepare_security(doc, site.owner(), index)?;
+    if reuse.is_some_and(|c| c.security() != &security) {
+        return Err(unsupported());
+    }
     if let Some(content) = reuse {
         // Retained comparisons and final-reference destruction stay bounded.
         check_limit(
@@ -1038,10 +1047,11 @@ fn common_content(
         retained_cleanup_work,
         budget,
     )?;
-    let content = ConsumerExecutionContent::try_new(
+    let content = ConsumerExecutionContent::try_new_with_security(
         site_target(site).ok_or_else(unsupported)?,
         operation,
         schemas,
+        security,
     )?;
     let prepared =
         PreparedConsumerContent::try_new(content, bank).map_err(|e| e.error().error().clone())?;
@@ -1055,14 +1065,7 @@ fn qualify_common_form(
     index: u32,
 ) -> CoreResult<()> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
-    let [security] = facts.effective_security else {
-        return Err(unsupported());
-    };
-    let security = doc.security(security).map_err(|_| unsupported())?;
-    if !matches!(security.details, SecurityDetails::NoSec)
-        || security.proxy.is_some()
-        || security.semantics.children().next().is_some()
-        || facts.scopes.is_some()
+    if facts.scopes.is_some()
         || facts.content_coding.is_some()
         || facts.additional_responses
         || facts

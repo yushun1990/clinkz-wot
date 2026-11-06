@@ -21,11 +21,16 @@ bytes = { version = "=1.11.1", default-features = false }
 tokio = { version = "=1.52.3", default-features = false, features = ["net", "rt"] }
 socket2 = { version = "=0.6.4", default-features = false }
 sha2-const-stable = "=0.1.0"
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "ring"] }
+tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring"] }
+base64 = "=0.22.1"
+zeroize = "=1.9.0"
 
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std", "raw_value"] }
 
 [dev-dependencies]
+rcgen = { version = "=0.14.10", default-features = false, features = ["ring"] }
 clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }
 serde_json = { workspace = true, features = ["std"] }

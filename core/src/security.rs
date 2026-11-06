@@ -5,7 +5,7 @@ use alloc::{string::String, vec::Vec};
 ///
 /// These unverified values do not authenticate a caller, establish a
 /// [`Principal`], or select a security scheme.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum AuthMaterial {
     /// Transport peer locator or identifier (for example a zenoh peer id).
@@ -71,6 +71,19 @@ pub struct Principal {
 }
 
 impl Principal {
+    /// Actual owned indirect backing, used before admitting verifier output.
+    pub fn retained_bytes(&self) -> usize {
+        self.id
+            .0
+            .capacity()
+            .saturating_add(
+                self.scopes
+                    .capacity()
+                    .saturating_mul(core::mem::size_of::<String>()),
+            )
+            .saturating_add(self.scopes.iter().map(String::capacity).sum::<usize>())
+    }
+
     /// Creates an anonymous principal with no scopes, used by the `NoSec`
     /// scheme and other schemes that authenticate but do not establish a
     /// named identity.
@@ -98,5 +111,49 @@ pub fn check_scopes(required: &[String], present: &[String]) -> CoreResult<()> {
             reason: SecurityFailureReason::AuthorizationDenied,
             context: ErrorContext::new(ErrorPhase::Validate, RetryClass::Never),
         })
+    }
+}
+
+/// Immutable, source-independent scheme meaning. Parameters are semantic
+/// operands, never credential values. Static operands keep this small supported
+/// preparation adapter bounded; this is not a universal security expression IR.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SecurityRequirement {
+    pub scheme: &'static str,
+    pub parameters: &'static [(&'static str, &'static str)],
+}
+impl SecurityRequirement {
+    pub const NOSEC: Self = Self {
+        scheme: "nosec",
+        parameters: &[],
+    };
+}
+
+/// Per-call capability issued by an actual security service. Only its concrete
+/// Binding interprets it; Core neither formats nor inspects the live material.
+#[derive(Clone)]
+pub struct OutboundSecurity(alloc::sync::Arc<dyn core::any::Any + Send + Sync>);
+impl OutboundSecurity {
+    pub fn new<T: core::any::Any + Send + Sync>(value: T) -> Self {
+        Self(alloc::sync::Arc::new(value))
+    }
+    pub fn downcast_ref<T: core::any::Any>(&self) -> Option<&T> {
+        self.0.downcast_ref()
+    }
+}
+impl core::fmt::Debug for OutboundSecurity {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("OutboundSecurity([redacted])")
+    }
+}
+impl PartialEq for OutboundSecurity {
+    fn eq(&self, other: &Self) -> bool {
+        alloc::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for OutboundSecurity {}
+impl core::fmt::Debug for AuthMaterial {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("AuthMaterial([redacted])")
     }
 }

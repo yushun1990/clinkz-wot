@@ -174,3 +174,11 @@ Its [mapping](../../protocol-bindings/protocols/http/README.md#thing-root-action
 and [real I/O tests](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
 retain native status identity, per-Action output and local delivery/failure evidence.
 This adds no universal session/store or new work-package dependency.
+
+## Finite TD Security / HTTPS increment
+
+The selected Basic/header Property Read capability and its boundary correction,
+qualification, negative network evidence, ownership and remaining unsupported
+roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
+The applicable preparation, Core and Binding contracts remain authoritative;
+this increment grants no broad scheme/composition or production-profile acceptance.

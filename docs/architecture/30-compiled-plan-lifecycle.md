@@ -14,7 +14,9 @@ unit of execution, publication or physical ownership.
 | Native infrastructure | Binding-owned listeners, sessions, subscriptions, pools, workers and buffers; may serve multiple logical owners |
 | Deployment | Runtime/process/firmware owner, with its own failure and recovery boundary |
 
-Content sharing never shares permission. A physical content owner and its
+Prepared security requirements are immutable content; credential services, verified
+principals and opaque per-call capabilities are live dependencies/work. Native key
+and trust owners remain in the Binding. Content sharing never shares permission. A physical content owner and its
 original account survive every borrowed reference. Each logical owner pays its
 actual reference/operand/record cost. Prepared-definition identity and logical
 instance generation are independent; a plan-set epoch exists only if that object

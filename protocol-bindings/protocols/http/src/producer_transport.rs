@@ -29,6 +29,9 @@ struct Bridge {
     mapping: Option<usize>,
     operation: Option<Operation>,
     input: Option<InteractionInput>,
+    credentials: Option<crate::security::HttpBasicCredentials>,
+    tls_read_left: usize,
+    tls_write_left: usize,
 }
 struct ReplyFuture(Arc<Mutex<Bridge>>);
 impl Future for ReplyFuture {
@@ -78,7 +81,7 @@ impl Service<Request<Incoming>> for BridgeService {
     }
 }
 struct Ingress {
-    socket: TcpStream,
+    socket: NativeSocket,
     bridge: Arc<Mutex<Bridge>>,
     head: [u8; 8192],
     len: usize,
@@ -134,7 +137,17 @@ impl Ingress {
         let mut host = 0;
         let mut length = 0;
         let mut media = 0;
+        let mut authorization = None;
         for h in request.headers.iter() {
+            if h.name.eq_ignore_ascii_case("authorization") {
+                if !program.basic || authorization.is_some() {
+                    return Err(invalid());
+                }
+                authorization = Some(
+                    crate::security::HttpBasicCredentials::parse(h.value).map_err(|_| invalid())?,
+                );
+            }
+
             if h.name.eq_ignore_ascii_case("host") {
                 host += 1;
                 if h.value != program.authority().as_bytes() {
@@ -166,7 +179,6 @@ impl Ingress {
                 "upgrade",
                 "content-encoding",
                 "trailer",
-                "authorization",
                 "proxy-authorization",
                 "cookie",
             ]
@@ -192,10 +204,74 @@ impl Ingress {
             return Err(invalid());
         }
         let mut bridge = self.bridge.lock().unwrap();
+        bridge.credentials = authorization;
         bridge.mapping = Some(mapping);
         bridge.operation = Some(program.operation);
         self.complete = true;
+        zeroize::Zeroize::zeroize(&mut self.head);
         Ok(())
+    }
+}
+impl Drop for Ingress {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.head);
+    }
+}
+// rustls performs record processing and cryptography. Its underlying nonblocking
+// socket has a separate encrypted-byte allowance for every native callback.
+struct QuotaSocket {
+    socket: TcpStream,
+    bridge: Arc<Mutex<Bridge>>,
+}
+impl Read for QuotaSocket {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        let n = bytes.len().min(self.bridge.lock().unwrap().tls_read_left);
+        if n == 0 {
+            return Err(io::ErrorKind::WouldBlock.into());
+        }
+        let n = self.socket.read(&mut bytes[..n])?;
+        self.bridge.lock().unwrap().tls_read_left -= n;
+        Ok(n)
+    }
+}
+impl Write for QuotaSocket {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let n = bytes.len().min(self.bridge.lock().unwrap().tls_write_left);
+        if n == 0 && !bytes.is_empty() {
+            return Err(io::ErrorKind::WouldBlock.into());
+        }
+        let n = self.socket.write(&bytes[..n])?;
+        self.bridge.lock().unwrap().tls_write_left -= n;
+        Ok(n)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.socket.flush()
+    }
+}
+enum NativeSocket {
+    Plain(TcpStream),
+    Tls(Box<rustls::StreamOwned<rustls::ServerConnection, QuotaSocket>>),
+}
+impl Read for NativeSocket {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Plain(s) => s.read(bytes),
+            Self::Tls(s) => s.read(bytes),
+        }
+    }
+}
+impl Write for NativeSocket {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Plain(s) => s.write(bytes),
+            Self::Tls(s) => s.write(bytes),
+        }
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Plain(s) => s.flush(),
+            Self::Tls(s) => s.flush(),
+        }
     }
 }
 impl hyper::rt::Read for Ingress {
@@ -256,11 +332,20 @@ impl hyper::rt::Write for Ingress {
             Err(e) => Poll::Ready(Err(e)),
         }
     }
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.socket.flush() {
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+            result => Poll::Ready(result),
+        }
     }
-    fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if let NativeSocket::Tls(s) = &mut self.socket {
+            s.conn.send_close_notify();
+        }
+        self.poll_flush(cx)
     }
 }
 
@@ -276,7 +361,29 @@ impl NativeConnection {
         Self::from_programs(socket, vec![program.clone()])
     }
     pub(super) fn from_programs(socket: TcpStream, programs: Vec<HttpProducerProgram>) -> Self {
+        Self::from_programs_secured(socket, programs, None)
+    }
+    pub(super) fn from_programs_secured(
+        socket: TcpStream,
+        programs: Vec<HttpProducerProgram>,
+        tls: Option<Arc<rustls::ServerConfig>>,
+    ) -> Self {
         let bridge = Arc::new(Mutex::new(Bridge::default()));
+        let socket = match tls {
+            None => NativeSocket::Plain(socket),
+            Some(config) => {
+                let mut conn = rustls::ServerConnection::new(config)
+                    .expect("validated fixed TLS configuration");
+                conn.set_buffer_limit(Some(8192));
+                NativeSocket::Tls(Box::new(rustls::StreamOwned::new(
+                    conn,
+                    QuotaSocket {
+                        socket,
+                        bridge: bridge.clone(),
+                    },
+                )))
+            }
+        };
         let ingress = Ingress {
             socket,
             bridge: bridge.clone(),
@@ -308,8 +415,13 @@ impl NativeConnection {
             let mut b = self.bridge.lock().unwrap();
             b.read_left = 4096;
             b.write_left = 4096;
+            b.tls_read_left = 4096;
+            b.tls_write_left = 4096;
         }
         self.driver.as_mut().poll(cx)
+    }
+    pub(super) fn take_credentials(&mut self) -> Option<crate::security::HttpBasicCredentials> {
+        self.bridge.lock().unwrap().credentials.take()
     }
     pub(super) fn take_candidate(&mut self) -> bool {
         self.take_request().is_some()
@@ -367,11 +479,24 @@ impl NativeConnection {
         let (status, bytes) = match body {
             Some(p) => (200, Bytes::copy_from_slice(&p.body)),
             None if write_success => (204, Bytes::new()),
-            None => (500, Bytes::from_static(b"null")),
+            None => (
+                match result.err().and_then(|e| e.security_reason()) {
+                    Some(
+                        clinkz_wot_core::SecurityFailureReason::MissingCredentials
+                        | clinkz_wot_core::SecurityFailureReason::InvalidCredentials,
+                    ) => 401,
+                    Some(_) => 403,
+                    None => 500,
+                },
+                Bytes::from_static(b"null"),
+            ),
         };
+        let mut response = Response::builder().status(status);
+        if status == 401 {
+            response = response.header("www-authenticate", "Basic realm=\"wot\"");
+        }
         self.bridge.lock().unwrap().reply = Some(
-            Response::builder()
-                .status(status)
+            response
                 .header("content-type", "application/json")
                 .header("connection", "close")
                 .body(Full::new(bytes))

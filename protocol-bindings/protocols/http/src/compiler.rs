@@ -16,7 +16,7 @@ impl HostSemanticCompiler for HttpCompiler {
         self.0.configuration
     }
     fn schemes(&self) -> &'static [&'static str] {
-        &["http"]
+        if self.0.secure { &["https"] } else { &["http"] }
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         use clinkz_wot_td::data_type::Operation;
@@ -42,7 +42,26 @@ impl HostSemanticCompiler for HttpCompiler {
         {
             return Err(unsupported());
         }
-        Target::parse(input.target).map_err(|_| unsupported())?;
+        let target = Target::parse_for(input.target, self.0.secure).map_err(|_| unsupported())?;
+        let requirement = clinkz_wot_planning::security::prepare_security(
+            input.document,
+            input.owner,
+            input.form_index,
+        )?;
+        if self.0.secure {
+            if input.operation != Operation::ReadProperty
+                || !matches!(input.owner, FormOwner::Property(_))
+                || target.uri.scheme_str() != Some("https")
+                || requirement != crate::security::BASIC
+            {
+                return Err(unsupported());
+            }
+        } else if target.uri.scheme_str() != Some("http")
+            || requirement != clinkz_wot_core::security::SecurityRequirement::NOSEC
+        {
+            return Err(unsupported());
+        }
+
         let facts = input
             .document
             .form(input.owner, input.form_index)
@@ -113,6 +132,7 @@ impl HostSemanticCompiler for HttpCompiler {
             .ok_or_else(unsupported)?;
         let mut output = HttpArtifact {
             operation: input.operation,
+            basic: self.0.secure,
             method: if write { "PUT" } else { "GET" },
             target_len: input.target.len() as u8,
             ..HttpArtifact::default()

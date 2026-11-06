@@ -85,3 +85,11 @@ native retargeting, richer schema assertions, non-JSON interoperability,
 continuing-family reuse and a portable Engine runtime remain unproven. Detailed
 executable scope is in [structured schema evidence](../evidence/structured-dataschema.md).
 No package, architecture gate or milestone acceptance is claimed.
+
+## Finite security contracts
+
+Core now carries immutable security requirement operands and redacted opaque
+per-call capabilities without concrete scheme/transport cases. Access-service
+qualification/revisions and paid finite verification extend EXEC-SECURITY-001;
+TD remains the shared owner of defaulting and Form override. Scope and executable
+negative evidence are in [the security assessment](../evidence/td-security-https.md).

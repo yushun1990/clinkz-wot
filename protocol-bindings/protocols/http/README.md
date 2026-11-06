@@ -1,3 +1,21 @@
+The qualified finite Property Read path additionally supports TD `basic` in the
+Authorization header over verified TLS 1.3. Use
+`try_https_basic_consumer_registration` with `HttpClientTls` and an
+instance-bound `HttpBasicClientAccess`, and `HttpFiniteProducer::try_https_basic`
+with `HttpServerSecurity` / an actual `HttpBasicVerifier`. Attach that same server
+service to `HttpFiniteConfig::with_security` before native installation.
+Credentials stay in runtime services and original reply opportunities. Rotation
+invalidates existing Consumer bindings; rebind the same definition with the
+replacement service state. Verification establishes Principal; the application
+handler authorizes it separately.
+
+This is a Host, IP-literal, loopback Producer, JSON Property Read increment.
+Other authenticated operations/schemes/compositions, credential placements,
+TLS 1.2/mTLS, DNS, redirects, certificate CRL/OCSP and constrained TLS are refused
+or unimplemented. The historical paths described below remain explicit NoSec /
+cleartext capabilities. See [security assessment, guarantees, executable evidence
+and exact limits](../../../docs/evidence/td-security-https.md).
+
 # Host HTTP Properties, Actions and Finite Collections
 
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public

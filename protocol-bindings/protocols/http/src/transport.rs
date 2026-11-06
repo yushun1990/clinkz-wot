@@ -29,8 +29,70 @@ pub(super) fn runtime() -> CoreResult<tokio::runtime::Handle> {
     Ok(handle)
 }
 
-struct Ingress {
+/// Shared per-poll encrypted byte credit. rustls owns record/handshake parsing;
+/// bounded local crypto callbacks can process buffered records atomically.
+struct WireQuota {
     socket: TcpStream,
+    allowance: Arc<AtomicUsize>,
+}
+impl AsyncRead for WireQuota {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        output: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let n = output
+            .remaining()
+            .min(4096)
+            .min(self.allowance.load(Ordering::Relaxed));
+        if n == 0 {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        let mut bytes = [0; 4096];
+        let mut buf = ReadBuf::new(&mut bytes[..n]);
+        match Pin::new(&mut self.socket).poll_read(cx, &mut buf) {
+            Poll::Ready(Ok(())) => {
+                self.allowance
+                    .fetch_sub(buf.filled().len(), Ordering::Relaxed);
+                output.put_slice(buf.filled());
+                Poll::Ready(Ok(()))
+            }
+            result => result,
+        }
+    }
+}
+impl AsyncWrite for WireQuota {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bytes: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let n = bytes
+            .len()
+            .min(4096)
+            .min(self.allowance.load(Ordering::Relaxed));
+        if n == 0 && !bytes.is_empty() {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        match Pin::new(&mut self.socket).poll_write(cx, &bytes[..n]) {
+            Poll::Ready(Ok(n)) => {
+                self.allowance.fetch_sub(n, Ordering::Relaxed);
+                Poll::Ready(Ok(n))
+            }
+            result => result,
+        }
+    }
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.socket).poll_flush(cx)
+    }
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.socket).poll_shutdown(cx)
+    }
+}
+struct Ingress<S = TcpStream> {
+    socket: S,
     head: [u8; 8192],
     head_len: usize,
     head_done: bool,
@@ -58,7 +120,7 @@ fn forbidden_trailer(name: &str) -> bool {
 fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "HTTP ingress rejected")
 }
-impl Ingress {
+impl<S> Ingress<S> {
     fn inspect(&mut self, bytes: &[u8]) -> io::Result<()> {
         self.wire = self.wire.checked_add(bytes.len()).ok_or_else(invalid)?;
         if self.wire > 32768 {
@@ -185,7 +247,7 @@ impl Ingress {
         Poll::Ready(Ok(()))
     }
 }
-impl AsyncRead for Ingress {
+impl<S: AsyncRead + Unpin> AsyncRead for Ingress<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -217,7 +279,11 @@ impl AsyncRead for Ingress {
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Ready(Ok(())) => {
                 let bytes = read.filled();
-                self.allowance.fetch_sub(bytes.len(), Ordering::Relaxed);
+                self.allowance
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                        Some(n.saturating_sub(bytes.len()))
+                    })
+                    .ok();
                 self.inspect(bytes)?;
                 if self.write {
                     if bytes.is_empty() {
@@ -236,7 +302,7 @@ impl AsyncRead for Ingress {
         }
     }
 }
-impl AsyncWrite for Ingress {
+impl<S: AsyncWrite + Unpin> AsyncWrite for Ingress<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -252,18 +318,23 @@ impl AsyncWrite for Ingress {
     }
 }
 
+#[cfg(test)]
 pub(super) async fn exchange(
     target: Target,
     instructions: HttpArtifact,
     input: Option<Payload>,
     allowance: Arc<AtomicUsize>,
 ) -> CoreResult<(u16, Vec<u8>)> {
-    let write = matches!(
-        instructions.operation,
-        Operation::WriteProperty
-            | Operation::WriteAllProperties
-            | Operation::WriteMultipleProperties
-    );
+    exchange_secured(target, instructions, input, allowance, None, None).await
+}
+pub(super) async fn exchange_secured(
+    target: Target,
+    instructions: HttpArtifact,
+    input: Option<Payload>,
+    allowance: Arc<AtomicUsize>,
+    tls: Option<HttpClientTls>,
+    security: Option<clinkz_wot_core::security::OutboundSecurity>,
+) -> CoreResult<(u16, Vec<u8>)> {
     let socket = TcpStream::connect(target.address).await.map_err(|_| {
         // Socket/process/network availability is not a captured ingress or
         // concurrency limit. Keep returned I/O failure structured even when
@@ -274,6 +345,52 @@ pub(super) async fn exchange(
             ResourceFailureDomain::DeploymentFailure,
         )
     })?;
+    if target.uri.scheme_str() == Some("https") {
+        let tls =
+            tls.ok_or_else(|| crate::security::denied(SecurityFailureReason::ProviderFailure))?;
+        let grant = security
+            .as_ref()
+            .and_then(|s| s.downcast_ref::<crate::security::BasicGrant>())
+            .ok_or_else(|| crate::security::denied(SecurityFailureReason::MissingCredentials))?;
+        grant.check(instructions.target())?;
+        let name = rustls::pki_types::ServerName::IpAddress(target.address.ip().into());
+        let socket = tokio_rustls::TlsConnector::from(tls.0)
+            .connect(
+                name,
+                WireQuota {
+                    socket,
+                    allowance: allowance.clone(),
+                },
+            )
+            .await
+            .map_err(|_| crate::security::denied(SecurityFailureReason::ProviderFailure))?;
+        // Obtain transport credentials only after verified TLS. No redirect,
+        // origin rewrite, proxy, retry, resumption or early-data path exists.
+        let header = grant.header(instructions.target())?;
+        send(socket, target, instructions, input, allowance, Some(header)).await
+    } else {
+        if tls.is_some() || security.is_some() || instructions.basic {
+            return Err(crate::security::denied(
+                SecurityFailureReason::UnsupportedScheme,
+            ));
+        }
+        send(socket, target, instructions, input, allowance, None).await
+    }
+}
+async fn send<S: AsyncRead + AsyncWrite + Unpin>(
+    socket: S,
+    target: Target,
+    instructions: HttpArtifact,
+    input: Option<Payload>,
+    allowance: Arc<AtomicUsize>,
+    authorization: Option<hyper::header::HeaderValue>,
+) -> CoreResult<(u16, Vec<u8>)> {
+    let write = matches!(
+        instructions.operation,
+        Operation::WriteProperty
+            | Operation::WriteAllProperties
+            | Operation::WriteMultipleProperties
+    );
     let io = TokioIo::new(Ingress {
         socket,
         head: [0; 8192],
@@ -298,6 +415,9 @@ pub(super) async fn exchange(
         .uri(target.uri.path_and_query().map_or("/", |v| v.as_str()))
         .header("host", target.uri.authority().unwrap().as_str())
         .header("connection", "close");
+    if let Some(value) = authorization {
+        request = request.header("authorization", value);
+    }
     if !instructions
         .headers()
         .any(|(n, _)| n.eq_ignore_ascii_case("accept"))

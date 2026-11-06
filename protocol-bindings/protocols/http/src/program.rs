@@ -2,7 +2,7 @@
 use super::*;
 
 pub(super) const COMPATIBILITY: BindingArtifactCompatibility =
-    BindingArtifactCompatibility::new(*b"clinkz-http-v002");
+    BindingArtifactCompatibility::new(*b"clinkz-http-v003");
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Span {
@@ -13,6 +13,7 @@ pub(super) struct Span {
 #[derive(Clone, Copy, Debug)]
 pub(super) struct HttpArtifact {
     pub(super) operation: Operation,
+    pub(super) basic: bool,
     pub(super) target: [u8; 64],
     pub(super) target_len: u8,
     pub(super) method: &'static str,
@@ -27,6 +28,7 @@ impl Default for HttpArtifact {
     fn default() -> Self {
         Self {
             operation: Operation::ReadProperty,
+            basic: false,
             target: [0; 64],
             target_len: 0,
             method: "GET",

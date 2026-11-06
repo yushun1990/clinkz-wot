@@ -8,7 +8,10 @@ use alloc::{boxed::Box, collections::BTreeMap, string::String};
 /// `AffordanceTarget`. It holds only the selected artifact reference plus
 /// operation, optional application input, call-varying URI variables and deadline
 /// intent; it contains no TD, Form,
-/// options, security provider, candidate list, or fallback authority.
+/// options, provider lookup, candidate list, or fallback authority. An optional
+/// opaque per-call security capability comes from the accepted instance service;
+/// only the selected Binding interprets it. Prepared artifacts hold no live
+/// credential material.
 /// Human-readable Thing/property identity remains only at API/admission
 /// boundaries or in immutable plan/diagnostic storage.
 ///
@@ -32,6 +35,7 @@ pub struct OutboundRequest {
     input: Option<Box<Payload>>,
     uri_variables: BTreeMap<String, String>,
     deadline: Option<Deadline>,
+    security: Option<crate::security::OutboundSecurity>,
 }
 
 impl OutboundRequest {
@@ -142,7 +146,18 @@ impl OutboundRequest {
             input,
             uri_variables,
             deadline,
+            security: None,
         })
+    }
+
+    /// Attach a runtime capability after instance policy acceptance. This never
+    /// changes the immutable selected scheme or native destination.
+    pub fn with_security(mut self, security: Option<crate::security::OutboundSecurity>) -> Self {
+        self.security = security;
+        self
+    }
+    pub fn security(&self) -> Option<&crate::security::OutboundSecurity> {
+        self.security.as_ref()
     }
 
     /// Returns the operation frozen by this request constructor.

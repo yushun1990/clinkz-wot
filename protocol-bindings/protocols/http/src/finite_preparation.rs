@@ -16,6 +16,7 @@ pub struct HttpFiniteProducer {
     id: BindingId,
     generation: BindingGeneration,
     timeout_ticks: u64,
+    security: Option<HttpServerSecurity>,
 }
 
 impl HttpFiniteProducer {
@@ -25,7 +26,7 @@ impl HttpFiniteProducer {
         generation: BindingGeneration,
         timeout_ticks: u64,
     ) -> CoreResult<Self> {
-        if timeout_ticks == 0 {
+        if timeout_ticks == 0 || listen.secure {
             return Err(crate::producer::producer_unsupported());
         }
         Ok(Self {
@@ -33,9 +34,30 @@ impl HttpFiniteProducer {
             id,
             generation,
             timeout_ticks,
+            security: None,
         })
     }
 
+    /// Live verification/key service is paired with this startup registration;
+    /// definitions retain only immutable scheme meaning and native operands.
+    pub fn try_https_basic(
+        listen: HttpProducerConfig,
+        id: BindingId,
+        generation: BindingGeneration,
+        timeout_ticks: u64,
+        security: HttpServerSecurity,
+    ) -> CoreResult<Self> {
+        if !listen.secure || timeout_ticks == 0 {
+            return Err(crate::producer::producer_unsupported());
+        }
+        Ok(Self {
+            listen,
+            id,
+            generation,
+            timeout_ticks,
+            security: Some(security),
+        })
+    }
     fn compile_definition(
         &self,
         input: ProducerOperationInput<'_>,
@@ -55,9 +77,13 @@ impl HttpFiniteProducer {
             ) => "",
             _ => return Ok(None),
         };
-        if Target::parse(input.target).map_or(true, |target| target.address != self.listen.address)
+        if Target::parse_for(input.target, self.listen.secure)
+            .map_or(true, |target| target.address != self.listen.address)
         {
             return Ok(None);
+        }
+        if self.listen.secure && self.security.as_ref().is_none_or(|s| !s.is_ready()) {
+            return Err(crate::producer::producer_unsupported());
         }
         self.listen
             .compile_mapping(
@@ -74,7 +100,11 @@ impl HttpFiniteProducer {
                 budget,
                 expected,
             )?
-            .map(Some)
+            .map(|mut program| {
+                program.security_registration =
+                    self.security.as_ref().map(|s| s.registration.clone());
+                Some(program)
+            })
             .ok_or_else(|| {
                 CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
             })

@@ -20,6 +20,7 @@ pub struct HttpFiniteConfig {
     mappings: Arc<[(AffordanceTarget, HttpProducerProgram)]>,
     instance: ProducerInstanceKey,
     request_timeout_ticks: u64,
+    security: Option<crate::HttpServerSecurity>,
 }
 
 impl HttpFiniteConfig {
@@ -48,7 +49,8 @@ impl HttpFiniteConfig {
     ) -> Result<Self, BindingInputRejection<(HttpProducerProgram, AffordanceTarget)>> {
         // Program fields are private and produced by the HTTP compiler. Check
         // actual listen operands as well as the bounded native target backing.
-        if program.listen_address() != listen.listen_address()
+        if program.basic != listen.secure
+            || program.listen_address() != listen.listen_address()
             || !Self::valid_target(&target, &program)
             || request_timeout_ticks == 0
         {
@@ -62,6 +64,7 @@ impl HttpFiniteConfig {
             mappings: Arc::from([(target, program)]),
             instance,
             request_timeout_ticks,
+            security: None,
         })
     }
 
@@ -79,7 +82,8 @@ impl HttpFiniteConfig {
             || mappings.len() > 32
             || request_timeout_ticks == 0
             || mappings.iter().enumerate().any(|(i, (target, program))| {
-                !Self::valid_target(target, program)
+                program.basic != listen.secure
+                    || !Self::valid_target(target, program)
                     || program.listen_address() != listen.listen_address()
                     || mappings[..i].iter().any(|(_, old)| {
                         old.path_and_query() == program.path_and_query()
@@ -97,9 +101,22 @@ impl HttpFiniteConfig {
             mappings: mappings.into(),
             instance,
             request_timeout_ticks,
+            security: None,
         })
     }
 
+    pub fn with_security(mut self, security: crate::HttpServerSecurity) -> CoreResult<Self> {
+        if !security.is_ready()
+            || !self.listen.secure
+            || self.mappings.iter().any(|(_, p)| {
+                !p.basic || p.security_registration.as_ref() != Some(&security.registration)
+            })
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
+        self.security = Some(security);
+        Ok(self)
+    }
     pub fn listen_address(&self) -> std::net::SocketAddr {
         self.listen.listen_address()
     }
@@ -110,6 +127,7 @@ impl HttpFiniteConfig {
 pub struct HttpFiniteReply {
     correlation: u64,
     issuer: Weak<()>,
+    credentials: Option<crate::security::HttpBasicCredentials>,
 }
 
 /// Manually polled HTTP listener/correlation owner. This facet directly uses
@@ -215,11 +233,22 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                 + self.configuration.mappings.len()
                     * core::mem::size_of::<(AffordanceTarget, HttpProducerProgram)>()
                 + 4 * core::mem::size_of::<usize>()
-                + 64,
+                + 64
+                + if self.configuration.security.is_some() {
+                    8192
+                } else {
+                    0
+                },
         )
     }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.configuration.instance == key
+            && self.configuration.listen.secure == self.configuration.security.is_some()
+            && self
+                .configuration
+                .security
+                .as_ref()
+                .is_none_or(|s| s.is_ready())
     }
     fn covers_definition(
         &self,
@@ -229,7 +258,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         operation: Operation,
         definition: &dyn Any,
     ) -> bool {
-        key == self.configuration.instance
+        self.prepared_for_instance(key)
             && self.configuration.mappings.iter().any(|(target, program)| {
                 (match (target, site) {
                     (AffordanceTarget::Thing, clinkz_wot_core::thing::AffordanceSite::Thing) => {
@@ -249,10 +278,42 @@ impl FiniteIngressBinding for HttpFiniteBinding {
     fn validator(&self) -> Option<&dyn FiniteValidator> {
         Some(&self.configuration)
     }
+    fn security_work(&self) -> u64 {
+        self.configuration
+            .security
+            .as_ref()
+            .map_or(0, |s| if s.is_ready() { s.work() } else { 0 })
+    }
+    fn verify_ingress(
+        &self,
+        ingress: &FiniteIngress<Self::Reply>,
+    ) -> CoreResult<Option<Principal>> {
+        if ingress.reply.issuer.as_ptr() != Arc::as_ptr(&self.issuer)
+            || ingress.reply.correlation != self.correlation
+        {
+            return Err(crate::security::denied(
+                SecurityFailureReason::InvalidCredentials,
+            ));
+        }
+        match &self.configuration.security {
+            Some(security) => security
+                .verify(ingress.reply.credentials.as_ref())
+                .map(Some),
+            None if !self.configuration.listen.secure => Ok(None),
+            None => Err(crate::security::denied(
+                SecurityFailureReason::ProviderFailure,
+            )),
+        }
+    }
     fn request_deadline(&self) -> Deadline {
         self.request_deadline
     }
     fn poll_start(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<()>> {
+        if self.configuration.listen.secure != self.configuration.security.is_some() {
+            return Poll::Ready(Err(crate::security::denied(
+                SecurityFailureReason::ProviderFailure,
+            )));
+        }
         if self.closed {
             return Poll::Ready(Err(crate::producer::producer_unsupported()));
         }
@@ -320,13 +381,14 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                     };
                     self.correlation = next;
                     self.request_deadline = Deadline::at(expires);
-                    self.connection = Some(NativeConnection::from_programs(
+                    self.connection = Some(NativeConnection::from_programs_secured(
                         stream,
                         self.configuration
                             .mappings
                             .iter()
                             .map(|(_, p)| p.clone())
                             .collect(),
+                        self.configuration.security.as_ref().map(|s| s.tls.clone()),
                     ));
                 }
             }
@@ -355,6 +417,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                     reply: HttpFiniteReply {
                         correlation: self.correlation,
                         issuer: Arc::downgrade(&self.issuer),
+                        credentials: connection.take_credentials(),
                     },
                 }))
             }

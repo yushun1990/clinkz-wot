@@ -211,3 +211,6 @@ mod producer_property_read;
 pub use producer_property_read::{
     ProducerPropertyReadAdmission, ProducerPropertyReadStep, ResolvedProducerInput,
 };
+
+#[cfg(all(feature = "std", feature = "validated-thing"))]
+pub mod security;
