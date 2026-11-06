@@ -1,9 +1,19 @@
 # Consumer execution reuse characterization
 
+PR #260 validates the **reusable-content/independent-instance boundary**. The
+Owner accepts this implementation as a valid first increment. It does not
+finalize the Engine's concrete type hierarchy, compilation model, runtime layout
+or scaling architecture. The distinctions below separate existing architectural
+invariants from replaceable implementation choices and unproven capabilities.
+
+## Measured execution evidence
+
 Characterization on Linux x86_64, Rust 1.95.0, debug test build. This is scoped
 implementation evidence for PREP-REUSE-001 and RES-OWNER-001, not independent
 architecture acceptance, fleet throughput, production or profile qualification.
-The PR identifies the validated source revision; the baseline is master `5ccd9ad`.
+The implementation assessed is `89b4359c286f08b78a674fa6af3c56091d62dfb3`;
+the baseline is master `5ccd9ad`. Documentation updates do not extend the
+implementation evidence to additional capabilities or workloads.
 
 The [executable fixture](../../protocol-bindings/protocols/http/tests/reusable_execution.rs)
 uses existing fully qualified Engine HTTP Producers. Each count has independent
@@ -99,3 +109,249 @@ JSON/type-only, endpoint NoSec, fixed bounds and cooperative Host execution limi
 continue. General DataSchema/security, arbitrary first-use compilation after
 source retirement, native retargeting, automatic caching and broad scalability
 are not established by this evidence.
+
+## Architectural invariants to preserve
+
+These are applications of existing contracts, rather than new requirements or
+an endorsement of the present Rust types:
+
+- **Independent meaning, authority and accepted work.** Immutable prepared
+  meaning can outlive its source and be shared without sharing current
+  permission, revocation, call state or result ownership. Completed execution
+  mappings retain no source TD, semantic arena or compiler callback. Each
+  acceptance and successful handoff checks its original logical incarnation and
+  actual services; replacement cannot redirect original or late work.
+  [Planning](../spec/planning.md) and [runtime safety](../spec/runtime-safety.md)
+  own these obligations.
+- **Complete actual qualification.** Reuse establishes no permission or blanket
+  support certificate. Selected Consumer interactions still need their complete
+  schema, media, response, security, endpoint, configuration and service support.
+  Producer publication still qualifies the entire final retained TD, behaviors,
+  native readiness and collisions. Changed dependencies cannot be accepted from
+  a matching name, hash or type. See [Planning](../spec/planning.md).
+- **One funded physical owner, separately funded logical participation.** Shared
+  backing keeps its original account until its last actual use and destruction;
+  each instance funds its own references, operands, records and accepted work.
+  Acquisition, cancellation, rollback and normal/late result disposal remain
+  bounded and funded. Reservations remain distinct from physical RAM
+  measurements. Independent registry or Servient boundaries do not relax
+  [RES-OWNER-001 and RES-HANDOFF-001](../spec/foundation.md).
+- **Distinct interaction semantics and native ownership.** Finite calls,
+  continuing Action invocations/controls, notification cursors/replies and
+  Producer publication keep their different lifecycles and effect certainty.
+  A native collection interaction does not silently become leaf interactions.
+  Native matching, correlation, connections and shared infrastructure remain
+  Binding responsibilities; shared content confers no native shutdown authority.
+  See [Core](../spec/interaction-core.md), [Binding SPI](../spec/binding-spi.md)
+  and [runtime safety](../spec/runtime-safety.md).
+
+## Provisional choices and unproven evolution
+
+`ConsumerExecutionContent`, `PreparedConsumerContent`, `ConsumerDefinition` and
+`ConsumerBinding` demonstrate responsibility and lifetime separation. Their
+number, names, field placement and public hierarchy are provisional. So are
+eager endpoint compilation, repeated admission, exact member-order comparison,
+per-instance runtime objects, fixed capacities and Host ownership carriers.
+Equivalent simpler representations may replace them while preserving the
+invariants above.
+
+Each possible direction below is **unproven**, not an accepted design or a
+mandatory optimization. A functional need or measured bottleneck should justify
+the corresponding experiment against the current implementation. Repetition
+alone does not justify a universal compiler, cache, scheduler or runtime.
+Correctness counterexamples still require preserving the existing invariants,
+whether or not a proposed optimization saves memory or time.
+
+### Endpoint-specific native compilation and instance operands
+
+**Current evidence.** The fixture constructs one common content owner but N
+native artifacts for N endpoints. The
+[HTTP artifact](../../protocol-bindings/protocols/http/src/program.rs) embeds the
+complete target, method and headers. Real peers verify changed paths and headers;
+the owned/incremental compiler path remains supported. Binding an already
+qualified definition needs no compiler or TD.
+
+**Provisional choice and limitation.** Exact-target specialization is safe for
+the current mapping, but repeats lowering and retained instruction storage.
+It proves neither checked retargeting nor a benefit from avoiding compilation.
+The current artifact cannot acquire a new endpoint merely by changing its
+envelope. Native compilation cost has not been isolated as a fleet bottleneck.
+
+**Possible evolution, unproven.** A concrete Binding could separate reusable
+request instructions from explicitly checked endpoint or header operands, with
+complete configuration compatibility, destination policy and operand funding.
+Other Bindings may remain specialized. Program reuse would not by itself imply
+connection pooling, increased native concurrency or shared logical authority.
+
+**Justifying workload/experiment.** Provision hundreds or thousands of devices
+with the same operation/mapping shape and different endpoints, then measure
+native lowering time and retained artifact bytes separately from common
+qualification. Compare specialization with a Binding-local operand prototype
+using real wire requests, changed paths/headers, incompatible configurations,
+denied destinations and retained late results. Pursue reuse if it addresses a
+measured provisioning/storage constraint without weakening those checks.
+
+### Repeated TD admission and reusable normalized preparation
+
+**Current evidence.**
+[`prepare_with_content`](../../planning/src/open_consumer.rs) still performs
+Basic admission, the common semantic walk, borrowed assertion comparison and
+actual provider/service qualification for every endpoint. It avoids constructing
+another retained member/name table. The work/allocation measurements above do
+not establish a preparation latency gain. Warm execution and source-free binding
+already avoid TD scans.
+
+**Provisional choice and limitation.** Reuse of retained output is narrower than
+reuse of all preparation work. New endpoint mappings still require a source
+`Thing` during preparation; destruction of the source after preparation does
+not prove arbitrary new mapping construction after source retirement. Exact
+member order is also a current comparison rule, not proof that every differently
+ordered description has different WoT meaning.
+
+**Possible evolution, unproven.** Retain bounded normalized common meaning and
+the resolved Form facts needed by a demonstrated use case. Reuse unchanged
+admission/defaulting while qualifying the actual endpoint, concrete Binding,
+services and mutable dependencies separately. Unretained or changed assertions
+would still require admission or refusal. This need not introduce a universal
+compiler input format or an automatic cache.
+
+**Justifying workload/experiment.** Use large descriptions whose instances vary
+only in endpoint facts, and independently vary member/schema/security/extension
+meaning in negative controls. Attribute time, work credits, temporary allocation
+and retained backing to admission, semantic resolution, support checks and
+native lowering. Compare a bounded normalized-input prototype, including
+construction after source retirement, only if repeated common interpretation
+materially limits the intended provisioning workload. Check that any accepted
+reordering preserves every member and data role.
+
+### Per-Consumer runtime overhead and multi-instance execution
+
+**Current evidence.** The measured layout uses 2,352 requested live heap bytes
+and 13 allocation calls per instance, including authority, policy association,
+binding, runtime and vacant call storage. External bank provisioning is excluded.
+The [finite runtime](../../servient/finite/src/consumer.rs) owns an `Rc<State>`,
+per-instance definition entries and a prepaid slot vector. Evidence covers
+1–32 instances with manually driven I/O and bounded native concurrency. The
+approximately 82.8 KB active reservation per instance is an allowance, not RAM.
+
+**Provisional choice and limitation.** One runtime object and provisioned slot
+storage per Consumer may be expensive for many mostly idle Things or many
+operations per Thing. The current fixed per-runtime bounds are implementation
+choices, not a demonstrated Engine-wide scaling limit. These measurements do
+not establish sustained throughput, fairness, tail latency or a need for pooling.
+
+**Possible evolution, unproven.** First compare appropriate slot sizing and
+reference/record layout. If necessary, a Servient could hold chunked or pooled
+instance/call records while retaining independent authority, original accounts
+and result/cleanup owners. Shared native progress remains a separate Binding
+decision; compact logical records do not require a universal scheduler or a
+common lifecycle for all interactions.
+
+**Justifying workload/experiment.** Exercise thousands of mostly idle instances,
+several operation counts and a controlled active fraction under the same actual
+native capacity. Include bank provisioning, idle/active heap, allocator traffic,
+CPU/poll cost, throughput, tail latency, progress gaps, replacement and final
+release under saturation. Compare a simpler layout only if idle storage or
+execution overhead exceeds a real deployment budget; keep logical allowances
+separate from physical measurements.
+
+### Physical service ownership across registries and Servients
+
+**Current evidence.** The service regressions prove one retained data/access
+owner for aliased raw `Arc`s **within one `ConsumerRegistry::try_new` call**,
+with separate registration costs and original funding through HTTP result
+disposal. Retained definitions and explicitly retained access owners can already
+be carried into independently funded bindings. This is distinct from importing
+one raw service into separately constructed registries.
+
+**Provisional choice and limitation.** Registry-local pointer matching is not a
+composition-wide physical ownership model. Each independent registry receives
+raw `ConsumerServices`, and
+[`ConsumerServiceOwner::retain_*`](../../core/src/consumer.rs) reserves anew on
+each call. Supplying the same raw service to multiple registries can therefore
+charge its physical backing again, including when those registries belong to
+independent Servients. Cross-registry/Servient exactly-once backing accounting
+and final release are not established. This topology cannot be claimed to
+satisfy the shared-backing invariant merely because each local account is bounded.
+
+**Possible evolution, unproven.** Allow composition roots to propagate an explicit
+retained service owner into each participating registry or Servient, keeping its
+first physical account while separately funding local references and records.
+This need not share instance permission or require a process-global pointer
+registry, cache or service manager. Account-domain compatibility and retirement
+would need an explicit supported contract.
+
+**Justifying workload/experiment.** A deployment with independently loaded
+registries or two Servients using one validator/policy store would expose this
+as a correctness need. Pass one actual 60,000-byte service backing through two
+registry constructions, first with one startup account and then separate startup
+accounts, while keeping per-instance banks distinct. Inspect charges, recoverable
+refusal and original owner identity. Retire roots in both orders while retaining
+normal and late results. A candidate must charge the backing once at its original
+bank, keep local costs separate and release
+only after the final user. No such cross-registry result is claimed here.
+
+### Richer DataSchema, continuing Actions, notifications and Producers
+
+**Current evidence.** Borrowed semantic reuse is implemented only for
+ReadAllProperties with exact supported members/roles, JSON/type-only validation
+and endpoint NoSec. Other finite operations use the corrected handoff with
+ordinary preparation. Existing real HTTP Actions, MQTT notifications and
+qualified Producer paths establish their own interaction behavior, not reuse of
+their prepared content across independent instances.
+
+**Provisional choice and limitation.** The finite schema enum and current
+member comparison do not prove reusable compiled DataSchema constraints,
+security requirements or all operation families. Continuing native tokens,
+notification cursors/replies and Producer behavior/publication cannot simply
+become fields of one shared finite definition. Consumer selected support also
+cannot substitute for complete final-TD Producer qualification.
+
+**Possible evolution, unproven.** Extend eligible immutable schema/data-role and
+security meaning through one useful operation at a time, retaining actual
+validator support and independent runtime credentials/permission. Preserve
+separate invocation, control, conversation and publication owners. Replace the
+present carriers if those lifetimes expose a better boundary; no universal
+program or common interaction state machine follows from reuse.
+
+**Justifying workload/experiment.** A read/write workload with nested required
+fields and numeric bounds can compare shared constraint preparation across two
+endpoints with changed validators and incompatible input/output assertions. A two-instance continuing
+Action can test distinct native tokens, query/cancel and retained late output.
+A shared native notification subscription can test independent cursors, stop,
+loss and any supported reply rights. Two Producers sharing eligible meaning
+can return different behavior results while independently qualifying every final
+Form, service, readiness and publication dependency. Choose the experiment that
+delivers a required capability or exposes a concrete ownership failure; existing
+family I/O alone does not establish any of these reuse claims.
+
+### Host ownership representations and portable/static execution
+
+**Current evidence.** This path uses `Arc` retained owners, `Rc`/`RefCell`
+runtime state, vectors, Host resource accounts and cooperative manual progress.
+The [Consumer Core module](../../core/src/lib.rs) requires `std` and pointer
+atomics. Owned/incremental compiler support and other static/profile fixtures do
+not establish this complete execution path on static, allocation-free or
+non-atomic targets.
+
+**Provisional choice and limitation.** Atomic reference counting, heap ownership,
+interior mutability, current fixed capacities and single-thread runtime layout
+are Host choices. They may impede constrained use, but neither their replacement
+cost nor an equivalent portable implementation is demonstrated. Linear work
+credits do not prove preemption, hard real-time behavior or recoverable Host OOM.
+
+**Possible evolution, unproven.** Compare caller-owned arenas, borrowed immutable
+prepared tables, static storage or generation-checked handles with explicit
+capacity and lifetime owners. A single-thread or allocation-capable profile can
+choose different carriers from a concurrent Host profile. Preserve source
+independence, checked associations, bounded progress and original funding rather
+than requiring the same public pointer hierarchy everywhere.
+
+**Justifying workload/experiment.** A concrete fixed-memory deployment should
+name its supported operations and target budget. First exercise two independently
+revocable instances with caller-owned/static backing and real test-Binding I/O;
+then build and run the selected subset on a chosen `no_std` target without
+pointer atomics. Measure storage/stack, allocation behavior, work/cleanup bounds
+and retained late-result lifetime under exhaustion. Qualify the actual target's
+native backend separately before claiming embedded protocol support. Port the
+needed capability, rather than redesigning every Host path in anticipation.
