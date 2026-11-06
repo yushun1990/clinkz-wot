@@ -12,6 +12,7 @@ use clinkz_wot_td::thing::Thing;
 use serde_json::{Value, json};
 use std::{
     any::Any,
+    cell::RefCell,
     net::TcpListener,
     rc::Rc,
     sync::{
@@ -75,6 +76,7 @@ impl ConsumerDataService for Data {
     }
     fn validate(&self, schema: &PreparedSchema, p: &Payload) -> CoreResult<()> {
         self.0.validations.fetch_add(1, Ordering::Relaxed);
+        callback(CallbackEdge::Validate);
         if self.0.reject_output.load(Ordering::Relaxed) && p.body.as_ref() == b"24" {
             return Err(invalid());
         }
@@ -94,6 +96,7 @@ impl ConsumerAccessService for Access {
         op: Operation,
     ) -> CoreResult<()> {
         self.1.authorize_instance(consumer, b, target, op)?;
+        callback(CallbackEdge::Access);
         if op == Operation::QueryAction
             && self
                 .0
@@ -1338,6 +1341,185 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
             drop(h);
             drop(runtime);
             drop(owner);
+            clean(&b);
+            producer.finish();
+        }
+    });
+}
+
+// Hooks are local to this test thread; services remain the actual captured HTTP
+// services, and all exchanges below perform real Consumer-to-Producer TCP I/O.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CallbackEdge {
+    Access,
+    Validate,
+    Poll,
+    Close,
+}
+type Callback = (CallbackEdge, Box<dyn FnOnce()>);
+thread_local! { static CALLBACK: RefCell<Option<Callback>> = const { RefCell::new(None) }; }
+fn on_callback(edge: CallbackEdge, f: impl FnOnce() + 'static) {
+    CALLBACK.with(|h| assert!(h.borrow_mut().replace((edge, Box::new(f))).is_none()));
+}
+fn callback(edge: CallbackEdge) {
+    let f = CALLBACK.with(|h| {
+        let mut h = h.borrow_mut();
+        if h.as_ref().is_some_and(|(e, _)| *e == edge) {
+            h.take()
+        } else {
+            None
+        }
+    });
+    if let Some((_, f)) = f {
+        f();
+    }
+}
+struct CallbackMapping(Box<dyn ConsumerActionMapping>);
+impl ConsumerActionMapping for CallbackMapping {
+    fn identity(&self) -> BindingRegistrationIdentity {
+        self.0.identity()
+    }
+    fn operation(&self) -> Operation {
+        self.0.operation()
+    }
+    fn bounds(&self) -> ConsumerActionBounds {
+        let mut b = self.0.bounds();
+        b.exchange_bytes += std::mem::size_of::<CallbackExchange>() as u64;
+        b.poll_work += 16;
+        b
+    }
+    fn native_definition(&self) -> &dyn Any {
+        self.0.native_definition()
+    }
+    fn supports_continuation(&self, invoke: &dyn ConsumerActionMapping) -> CoreResult<()> {
+        self.0.supports_continuation(invoke)
+    }
+    fn destination(&self, continuation: Option<&dyn Any>) -> CoreResult<Box<str>> {
+        self.0.destination(continuation)
+    }
+    fn start(
+        &self,
+        input: Option<&Payload>,
+        continuation: Option<&dyn Any>,
+    ) -> CoreResult<Box<dyn ConsumerActionExchange>> {
+        Ok(Box::new(CallbackExchange(
+            self.0.start(input, continuation)?,
+        )))
+    }
+}
+struct CallbackExchange(Box<dyn ConsumerActionExchange>);
+impl ConsumerActionExchange for CallbackExchange {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>> {
+        let result = self.0.poll(cx);
+        if result.is_ready() {
+            callback(CallbackEdge::Poll);
+        }
+        result
+    }
+    fn poll_close(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<CoreResult<Option<ConsumerActionReply>>> {
+        let result = self.0.poll_close(cx);
+        if result.is_ready() {
+            callback(CallbackEdge::Close);
+        }
+        result
+    }
+    fn abort_local(self: Box<Self>) {
+        self.0.abort_local();
+    }
+}
+
+#[test]
+fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_completion() {
+    io().block_on(async {
+        for edge in [
+            CallbackEdge::Validate,
+            CallbackEdge::Poll,
+            CallbackEdge::Close,
+            CallbackEdge::Access,
+        ] {
+            let mut producer = Producer::new();
+            let b = bank();
+            let owner = instance();
+            let p = Arc::new(Policy::default());
+            let mut input = definition(&td(producer.address, None), b.clone(), p.clone(), false)
+                .unwrap()
+                .into_input();
+            // Decorate only native timing; tokens, destination, socket ownership,
+            // serialization and response parsing remain in the HTTP Binding.
+            let original = input.query.take().unwrap();
+            input.query = Some(ConsumerActionOperation {
+                mapping: Box::new(CallbackMapping(original.mapping)),
+                ..original
+            });
+            let d = ConsumerActionDefinition::try_new(input).ok().unwrap();
+            let runtime = Rc::new(
+                ConsumerActionRuntime::try_new(owner.reference(), vec![d], 1)
+                    .ok()
+                    .unwrap(),
+            );
+            let h = Rc::new(
+                runtime
+                    .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                    .ok()
+                    .unwrap(),
+            );
+            producer.drive(&h, ConsumerActionState::Pending).await;
+            producer.counts.complete.set(true);
+            h.query(now(), &mut budget()).unwrap();
+            if edge == CallbackEdge::Access {
+                producer.drive(&h, ConsumerActionState::Completed).await;
+            }
+            let nested = h.clone();
+            let rt = runtime.clone();
+            on_callback(edge, move || {
+                assert!(!rt.is_idle());
+                assert!(nested.identity().is_ok());
+                assert!(nested.query(now(), &mut budget()).is_err());
+                assert!(nested.take_settlement(now(), &mut budget()).is_err());
+                if edge == CallbackEdge::Access || edge == CallbackEdge::Close {
+                    rt.begin_close();
+                } else {
+                    nested.cancel_local();
+                }
+                rt.step(&mut cx(), now(), &mut budget());
+            });
+            if edge != CallbackEdge::Access {
+                producer.drive(&h, ConsumerActionState::Closed).await;
+            }
+            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            CALLBACK.with(|h| assert!(h.borrow().is_none()));
+            if edge == CallbackEdge::Access || edge == CallbackEdge::Close {
+                assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
+            } else {
+                assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
+            }
+            assert!(s.accepted());
+            assert_eq!(s.effect(), ConsumerEffect::Unknown);
+            assert_eq!(
+                s.remote_cancellation(),
+                ConsumerActionCancellation::NotRequested
+            );
+            assert_eq!(
+                s.native_result()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body
+                    .as_ref(),
+                b"24"
+            );
+            assert_eq!(p.validations.load(Ordering::Relaxed), 2);
+            assert_eq!(producer.counts.invoked.get(), 1);
+            drop(h);
+            drop(runtime);
+            drop(owner);
+            assert!(b.account(ResourceKind::CleanupBytesMax).used() > 0);
+            drop(s);
             clean(&b);
             producer.finish();
         }
