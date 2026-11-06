@@ -618,7 +618,7 @@ impl ConsumerDataService for Data {
     }
     fn validate(
         &self,
-        schema: clinkz_wot_core::value_type::TypeSchema,
+        schema: &clinkz_wot_core::data_schema::PreparedSchema,
         p: &Payload,
     ) -> CoreResult<()> {
         self.inner.validate(schema, p)

@@ -176,7 +176,7 @@ fn shared_complete_producer_qualification_refuses_missing_root_behavior_and_unsu
         let mut td = write_description(addr);
         match fault {
             0 => td["properties"]["on"]["const"] = json!(false),
-            1 => td["properties"]["secret"]["minLength"] = json!(1),
+            1 => td["properties"]["secret"]["pattern"] = json!("^x$"),
             2 => td["properties"]["on"]["enum"] = json!([true, false]),
             3 => td["forms"][0]["htv:methodName"] = json!("POST"),
             4 => {

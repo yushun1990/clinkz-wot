@@ -115,8 +115,8 @@ impl ConsumerActionDefinition {
                     || !input
                         .schemas
                         .input
-                        .into_iter()
-                        .chain(input.schemas.output)
+                        .iter()
+                        .chain(input.schemas.output.iter())
                         .all(|s| selected.services.data.supports_schema(s))
                 {
                     return Err(invalid());

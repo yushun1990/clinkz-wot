@@ -229,8 +229,8 @@ fn scalar_only_data_services_short_work_and_ambiguous_registrations_refuse_witho
         fn policy(&self) -> ConsumerDataPolicy {
             MqttJsonData.policy()
         }
-        fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
-            MqttJsonData.validate(s, p)
+        fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
+            MqttJsonData.validate(&s, p)
         }
     }
     let addr = "127.0.0.1:18883".parse().unwrap();

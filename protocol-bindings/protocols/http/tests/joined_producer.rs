@@ -308,7 +308,7 @@ fn every_advertised_alternative_refuses_before_native_setup() {
             6 => {
                 v["forms"] = json!([{"href":format!("http://{addr}/all"),"op":"readallproperties"}])
             }
-            7 => v["properties"]["level"]["minimum"] = json!(0),
+            7 => v["properties"]["level"]["multipleOf"] = json!(2),
             8 => v["security"] = json!(["b"]),
             9 => v["properties"]["level"]["forms"][0]["security"] = json!(["n", "b"]),
             10 => v["properties"]["level"]["forms"][0]["contentType"] = json!("text/plain"),

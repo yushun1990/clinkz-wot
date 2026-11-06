@@ -2,7 +2,7 @@
 //! The public TD-prepared Consumer against the qualified HTTP Producer.
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::{
-    consumer::*, consumer_action::*, host_accounts::*, value_type::TypeSchema, *,
+    consumer::*, consumer_action::*, data_schema::PreparedSchema, host_accounts::*, *,
 };
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::*;
@@ -73,7 +73,7 @@ impl ConsumerDataService for Data {
     fn available(&self) -> bool {
         !self.0.unavailable.load(Ordering::Relaxed)
     }
-    fn validate(&self, schema: TypeSchema, p: &Payload) -> CoreResult<()> {
+    fn validate(&self, schema: &PreparedSchema, p: &Payload) -> CoreResult<()> {
         self.0.validations.fetch_add(1, Ordering::Relaxed);
         if self.0.reject_output.load(Ordering::Relaxed) && p.body.as_ref() == b"24" {
             return Err(invalid());

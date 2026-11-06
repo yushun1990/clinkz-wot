@@ -65,12 +65,55 @@ contradictory Form operation. Explicit Forms never acquire omitted operations.
 Required value constraints and effective security must be supported in full
 before selecting that operation; unimplemented assertions are not ignored.
 
-The implemented `value_type::TypeSchema` is a fixed-size type-only subset, not
-the general schema representation. Planning must refuse every required assertion
-it cannot capture. Concrete codecs classify values; Core evaluates the prepared
-type relation. `integer` includes mathematically integral decimal/exponent
-encodings and is a subset of `number`; binary floating-point rounding cannot
-establish integrality. The restricted Host Producer executor must check output
+`data_schema::PreparedSchema` replaces the former Copy `TypeSchema`. It owns
+bounded source-independent constraints and is borrowed by executable data
+services. The shared semantic representation uses alloc without std or pointer
+atomics; Host content owners choose their own shared/funded representation.
+Core evaluates constraints through `ValueAccess`, whose codec-owned handles
+supply actual kinds, exact numeric evidence, Unicode code-point lengths and
+named child values. Encoding syntax, decoded keys, media and bounded access cost
+remain codec responsibilities. No JSON tree or universal schema VM is required.
+`integer` includes mathematically integral decimal/exponent encodings; binary
+floating-point rounding cannot establish integrality or boundary comparisons.
+
+The finite structured subset captures object properties and required names,
+including required names with otherwise unconstrained values; omitted properties
+remain optional and unspecified members remain unconstrained. It captures signed
+64-bit IntegerSchema inclusive/exclusive bounds and StringSchema code-point
+min/max lengths, plus the existing unconstrained primitive kinds. NumberSchema
+bounds are refused because the current TD facts use f64; integer payload values
+are compared exactly even beyond i64, without truncation or float conversion.
+`multipleOf`, const/enum, oneOf, constrained arrays, pattern/format/content
+transformations and unrecognized assertions remain unsupported. Assertions on
+an omitted type refuse rather than silently disappear. See
+[TD 1.1 Data Schema vocabulary](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#sec-data-schema-vocabulary).
+
+Preparation bounds each schema to 64 nodes, depth 8, 32 fields per object,
+256 UTF-8 bytes per name and 4096 total name bytes. Collection preparation
+bounds the combined member constraints as well. Dynamic field/name backing and
+bounded destruction belong to the original content owner. Actual alloc-only
+semantic compilation is not proof of a static or non-atomic Engine runtime.
+The JSON participant retains its 4096-byte envelope, bounds encoded nesting to
+32, lends raw subvalues and temporarily decodes requested keys/strings under its
+funded scratch policy. Duplicate described names, including escaped aliases,
+refuse. Unknown unconstrained members do not acquire new validation assertions.
+Callbacks remain bounded atomic cooperative work: prepay their declared complete
+work and scratch; check permission/currentness before and after; preserve late
+results and original funding. No mid-callback preemption or recoverable process
+OOM is claimed.
+
+Actual scalar validators explicitly qualify the complete borrowed schema;
+`ConsumerDataService::supports_schema` defaults to primitive type-only support.
+Collection/status facets independently qualify their complete named schemas;
+they do not require an unused bare-scalar validation facet. A marker, successful
+JSON parse or matching outer kind alone cannot qualify structured constraints.
+The real HTTP finite Read/Write and ReadAllProperties integrations exercise this
+subset, source retirement, checked reuse, invalid input before behavior and
+normal/late result validation. Continuing Action/notification reuse, non-JSON
+media interoperability, general schema/security and constrained execution remain
+separate capabilities.
+
+The restricted Host Producer executor must check output
 with its captured program/services before successful delivery. Finite raw mode
 remains explicitly unvalidated. The shared finite owner can require the actual
 captured provider's `FiniteValidator` input/output facet, replacing the finite

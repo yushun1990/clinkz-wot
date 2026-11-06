@@ -298,7 +298,12 @@ pub trait ProducerExecutor: Send + 'static {
     /// value without cloning it, allocating or performing native effects.
     fn configuration_matches(&self, captured: &Self::Configuration) -> bool;
     fn identity(&self) -> BindingRegistrationIdentity;
-    fn install_policy(&self) -> ProducerInstallPolicy;
+    /// Declare complete controlled backing and disposal for this checked
+    /// program. Preparation captures the declaration after native lowering;
+    /// runtime admission and currentness checks re-read it against the same
+    /// program. Shared entry/installation backing is charged once, through its
+    /// final disposal. This query is passive, bounded and allocation-free.
+    fn install_policy(&self, program: &Self::Program) -> ProducerInstallPolicy;
     fn service_policy(&self) -> Option<ProducerServicePolicy> {
         None
     }
@@ -408,7 +413,7 @@ impl<E: ProducerExecutor, H: ReadPropertyHandler> ProducerExecutionRegistration<
     pub fn check_current(&self) -> CoreResult<()> {
         if !self.executor.configuration_matches(&self.configuration)
             || self.executor.identity() != self.entry.binding()
-            || self.executor.install_policy() != self.policy
+            || self.executor.install_policy(self.entry.program()) != self.policy
             || self.executor.service_policy() != self.service
             || self.service.is_some()
                 && self

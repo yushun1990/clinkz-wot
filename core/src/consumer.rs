@@ -1,8 +1,8 @@
 //! Source-independent finite Consumer definitions and captured services.
 //! A definition has no compiler, source TD, semantic arena or parser callback.
 use crate::collection::{PropertyCollectionSchema, PropertySelection};
+use crate::data_schema::PreparedSchema;
 use crate::host_accounts::{HostCapacityReservation, HostResourceAccounts};
-use crate::value_type::TypeSchema;
 use crate::*;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use clinkz_wot_foundation::{ResourceKind, WorkBudget, WorkClass};
@@ -15,7 +15,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// inspection; they acquire no credentials, source documents or native I/O.
 pub trait ConsumerDataService: Send + Sync {
     fn content_type(&self) -> &str;
-    fn validate(&self, schema: TypeSchema, payload: &Payload) -> CoreResult<()>;
+    fn validate(&self, schema: &PreparedSchema, payload: &Payload) -> CoreResult<()>;
     fn policy(&self) -> ConsumerDataPolicy;
     /// Actual status representation support. Scalar Object support cannot
     /// validate invocation identity, state or each Action's completed output.
@@ -29,9 +29,10 @@ pub trait ConsumerDataService: Send + Sync {
     ) -> CoreResult<()> {
         Err(CoreError::UnsupportedOperation(context()))
     }
-    /// Complete support of the already prepared type-only assertion.
-    fn supports_schema(&self, _schema: TypeSchema) -> bool {
-        true
+    /// Complete support of the prepared assertions. The default qualifies only
+    /// type assertions; structured validators must opt in explicitly.
+    fn supports_schema(&self, schema: &PreparedSchema) -> bool {
+        schema.is_type_only()
     }
     /// Complete native representation of a named Property map. Scalar/type
     /// support alone does not establish collection support.
@@ -257,11 +258,11 @@ impl core::fmt::Debug for ConsumerInstanceRef {
 }
 
 /// Distinct finite application-data roles. None means no application payload;
-/// an unconstrained present payload uses Some(TypeSchema::Any).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// an unconstrained present payload uses Some(PreparedSchema::Any).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConsumerSchemas {
-    pub input: Option<TypeSchema>,
-    pub output: Option<TypeSchema>,
+    pub input: Option<PreparedSchema>,
+    pub output: Option<PreparedSchema>,
 }
 
 /// Data roles for the implemented finite operations. Collection meaning is
@@ -278,15 +279,15 @@ pub enum ConsumerFiniteSchemas {
     WriteMultipleProperties(PropertyCollectionSchema),
 }
 impl ConsumerFiniteSchemas {
-    pub fn input(&self) -> Option<TypeSchema> {
+    pub fn input(&self) -> Option<&PreparedSchema> {
         match self {
-            Self::Value(s) => s.input,
+            Self::Value(s) => s.input.as_ref(),
             Self::ReadAllProperties(_) | Self::QueryAllActions(_) => None,
             Self::WriteAllProperties(_) | Self::WriteMultipleProperties(_) => {
-                Some(TypeSchema::Type(crate::value_type::ValueType::Object))
+                Some(&PreparedSchema::Type(crate::data_schema::ValueType::Object))
             }
             Self::ReadMultipleProperties(_) => {
-                Some(TypeSchema::Type(crate::value_type::ValueType::Array))
+                Some(&PreparedSchema::Type(crate::data_schema::ValueType::Array))
             }
         }
     }
@@ -327,8 +328,8 @@ impl ConsumerFiniteSchemas {
             Self::QueryAllActions(s) => data.supports_action_statuses(s),
             Self::Value(s) => s
                 .input
-                .into_iter()
-                .chain(s.output)
+                .iter()
+                .chain(s.output.iter())
                 .all(|s| data.supports_schema(s)),
             Self::ReadAllProperties(s) | Self::WriteAllProperties(s) => {
                 data.supports_property_map(s)
@@ -362,7 +363,7 @@ impl ConsumerFiniteSchemas {
                     output: Some(s), ..
                 }),
                 Some(p),
-            ) => data.validate(*s, p),
+            ) => data.validate(s, p),
             (Self::ReadAllProperties(s), Some(p)) => data.validate_property_map(s, p),
             (Self::ReadMultipleProperties(s), Some(p)) => {
                 data.validate_selected_property_map(s, selection.ok_or_else(invalid)?, p)
@@ -373,7 +374,12 @@ impl ConsumerFiniteSchemas {
     pub fn retained_bytes(&self) -> usize {
         match self {
             Self::QueryAllActions(s) => s.retained_bytes(),
-            Self::Value(_) => 0,
+            Self::Value(s) => s
+                .input
+                .iter()
+                .chain(s.output.iter())
+                .map(PreparedSchema::retained_bytes)
+                .sum(),
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
             | Self::WriteAllProperties(s)
@@ -382,12 +388,31 @@ impl ConsumerFiniteSchemas {
     }
     pub fn drop_work(&self) -> u64 {
         match self {
-            Self::QueryAllActions(s) => s.members().len() as u64 + 1,
-            Self::Value(_) => 0,
+            Self::QueryAllActions(s) => {
+                s.members()
+                    .iter()
+                    .map(|m| m.output.as_ref().map_or(0, |s| s.drop_work()))
+                    .sum::<u64>()
+                    + s.members().len() as u64
+                    + 1
+            }
+            Self::Value(s) => s
+                .input
+                .iter()
+                .chain(s.output.iter())
+                .map(|s| s.drop_work())
+                .sum(),
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
             | Self::WriteAllProperties(s)
-            | Self::WriteMultipleProperties(s) => s.members().len() as u64 + 1,
+            | Self::WriteMultipleProperties(s) => {
+                s.members()
+                    .iter()
+                    .map(|m| m.schema.drop_work())
+                    .sum::<u64>()
+                    + s.members().len() as u64
+                    + 1
+            }
         }
     }
 }
@@ -396,15 +421,15 @@ impl ConsumerFiniteSchemas {
 /// stay distinct; native SUBACK/UNSUBACK packets never become application data.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsumerNotificationSchemas {
-    PropertyValue(TypeSchema),
+    PropertyValue(PreparedSchema),
     /// Complete named readable values; shared backing survives the source TD.
     ObserveAllProperties(Arc<PropertyCollectionSchema>),
     SubscribeAllEvents(Arc<crate::collection::EventCollectionSchema>),
     Event {
-        subscription: Option<TypeSchema>,
-        data: Option<TypeSchema>,
-        data_response: Option<TypeSchema>,
-        cancellation: Option<TypeSchema>,
+        subscription: Option<PreparedSchema>,
+        data: Option<PreparedSchema>,
+        data_response: Option<PreparedSchema>,
+        cancellation: Option<PreparedSchema>,
     },
 }
 impl ConsumerNotificationSchemas {
@@ -422,29 +447,29 @@ impl ConsumerNotificationSchemas {
     }
     /// Scalar roles only. Event collections retain roles per named member;
     /// None here does not assert that every collection member lacks that role.
-    pub fn subscription(&self) -> Option<TypeSchema> {
+    pub fn subscription(&self) -> Option<&PreparedSchema> {
         match self {
-            Self::Event { subscription, .. } => *subscription,
+            Self::Event { subscription, .. } => subscription.as_ref(),
             _ => None,
         }
     }
-    pub fn data(&self) -> Option<TypeSchema> {
+    pub fn data(&self) -> Option<&PreparedSchema> {
         match self {
-            Self::PropertyValue(s) => Some(*s),
-            Self::Event { data, .. } => *data,
+            Self::PropertyValue(s) => Some(s),
+            Self::Event { data, .. } => data.as_ref(),
             Self::ObserveAllProperties(_) => None,
             Self::SubscribeAllEvents(_) => None,
         }
     }
-    pub fn data_response(&self) -> Option<TypeSchema> {
+    pub fn data_response(&self) -> Option<&PreparedSchema> {
         match self {
-            Self::Event { data_response, .. } => *data_response,
+            Self::Event { data_response, .. } => data_response.as_ref(),
             _ => None,
         }
     }
-    pub fn cancellation(&self) -> Option<TypeSchema> {
+    pub fn cancellation(&self) -> Option<&PreparedSchema> {
         match self {
-            Self::Event { cancellation, .. } => *cancellation,
+            Self::Event { cancellation, .. } => cancellation.as_ref(),
             _ => None,
         }
     }
@@ -453,7 +478,7 @@ impl ConsumerNotificationSchemas {
         match self {
             Self::ObserveAllProperties(s) => data.supports_property_map(s),
             Self::SubscribeAllEvents(s) => s.members().iter().all(|m| {
-                [m.subscription, m.data, m.data_response, m.cancellation]
+                [&m.subscription, &m.data, &m.data_response, &m.cancellation]
                     .into_iter()
                     .flatten()
                     .all(|s| data.supports_schema(s))

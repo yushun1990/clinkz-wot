@@ -66,7 +66,7 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
                 MqttDataSchema::Properties(a),
                 ConsumerNotificationSchemas::ObserveAllProperties(b),
             ) => a == b,
-            (MqttDataSchema::Value(a), _) => Some(*a) == input.schemas.data(),
+            (MqttDataSchema::Value(a), _) => Some(a) == input.schemas.data(),
             (MqttDataSchema::Events(a), ConsumerNotificationSchemas::SubscribeAllEvents(b)) => {
                 a == b
             }

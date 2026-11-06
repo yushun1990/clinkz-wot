@@ -1114,7 +1114,7 @@ fn review_service_capacity_failure_keeps_artifact_charged_through_destructor() {
 #[test]
 fn service_accounting_refuses_before_compilation_and_definition_refusal_keeps_artifact_funding() {
     use clinkz_wot_core::consumer::{ConsumerDataPolicy, ConsumerDataService};
-    use clinkz_wot_core::value_type::TypeSchema;
+    use clinkz_wot_core::data_schema::PreparedSchema;
     struct DeclaredBacking {
         inner: Arc<dyn ConsumerDataService>,
         bytes: u64,
@@ -1123,7 +1123,7 @@ fn service_accounting_refuses_before_compilation_and_definition_refusal_keeps_ar
         fn content_type(&self) -> &str {
             self.inner.content_type()
         }
-        fn validate(&self, schema: TypeSchema, output: &Payload) -> CoreResult<()> {
+        fn validate(&self, schema: &PreparedSchema, output: &Payload) -> CoreResult<()> {
             self.inner.validate(schema, output)
         }
         fn policy(&self) -> ConsumerDataPolicy {
@@ -1132,7 +1132,7 @@ fn service_accounting_refuses_before_compilation_and_definition_refusal_keeps_ar
                 ..self.inner.policy()
             }
         }
-        fn supports_schema(&self, schema: TypeSchema) -> bool {
+        fn supports_schema(&self, schema: &PreparedSchema) -> bool {
             self.inner.supports_schema(schema)
         }
         fn available(&self) -> bool {

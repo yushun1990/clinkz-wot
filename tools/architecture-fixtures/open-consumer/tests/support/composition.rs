@@ -498,7 +498,7 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
         }
         fn validate(
             &self,
-            schema: clinkz_wot_core::value_type::TypeSchema,
+            schema: &clinkz_wot_core::data_schema::PreparedSchema,
             payload: &Payload,
         ) -> CoreResult<()> {
             self.inner.validate(schema, payload)?;
@@ -512,7 +512,7 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
         fn policy(&self) -> ConsumerDataPolicy {
             self.inner.policy()
         }
-        fn supports_schema(&self, schema: clinkz_wot_core::value_type::TypeSchema) -> bool {
+        fn supports_schema(&self, schema: &clinkz_wot_core::data_schema::PreparedSchema) -> bool {
             self.inner.supports_schema(schema)
         }
     }

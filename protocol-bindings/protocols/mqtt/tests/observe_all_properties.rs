@@ -901,7 +901,7 @@ fn collection_validator_rechecks_original_authority_after_callback_and_requires_
         fn policy(&self) -> ConsumerDataPolicy {
             MqttJsonData.policy()
         }
-        fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+        fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
             MqttJsonData.validate(s, p)
         }
         fn supports_property_map(&self, s: &collection::PropertyCollectionSchema) -> bool {

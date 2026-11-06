@@ -1,8 +1,9 @@
 //! Pure preparation over the existing Host-only resolved semantic loan.
-//! This implements the explicitly type-only DataSchema subset.
+//! Finite participants use structured constraints; continuing participants can
+//! require the narrower type-only facet of the same interpretation.
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass,
-    value_type::{TypeSchema, ValueType},
+    data_schema::{PreparedSchema, ValueType},
 };
 use clinkz_wot_td::semantic::{
     SchemaConstraints, SchemaView, SemanticName, SemanticNode, SemanticValue,
@@ -106,7 +107,7 @@ pub fn prepare_writable_property_schema(
 /// Compare borrowed assertions against retained meaning. This deliberately
 /// performs qualification again, but allocates no member/name table. Unsupported
 /// assertions refuse even when their declared scalar type would compare equal.
-pub(crate) fn matches_property_schema(
+pub fn matches_property_schema(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
     expected: &clinkz_wot_core::collection::PropertyCollectionSchema,
     writing: bool,
@@ -125,7 +126,7 @@ pub(crate) fn matches_property_schema(
             return Ok(false);
         };
         if property.name != member.name.as_ref()
-            || prepare_type_schema(property.schema)? != member.schema
+            || !matches_schema(property.schema, &member.schema)?
         {
             return Ok(false);
         }
@@ -137,6 +138,21 @@ fn prepare_members(
     role: Members,
 ) -> CoreResult<clinkz_wot_core::collection::PropertyCollectionSchema> {
     use clinkz_wot_core::collection::{PropertyCollectionSchema as S, PropertyMemberSchema};
+    let mut total_nodes = 0;
+    let mut total_names = 0;
+    for property in doc.collection_properties().ok_or_else(refused)? {
+        if !role.includes(property.schema) {
+            continue;
+        }
+        let census = schema_census(property.schema)?;
+        total_nodes += census.nodes;
+        total_names += census.names;
+        if total_nodes > PreparedSchema::MAX_NODES
+            || total_names > PreparedSchema::MAX_TOTAL_NAME_BYTES
+        {
+            return Err(refused());
+        }
+    }
     let mut members = alloc::vec::Vec::new();
     members
         .try_reserve_exact(member_count(doc, role)?)
@@ -153,7 +169,7 @@ fn prepare_members(
         {
             return Err(refused());
         }
-        let schema = prepare_type_schema(p.schema)?;
+        let schema = prepare_schema(p.schema)?;
         members.push(PropertyMemberSchema {
             name: p.name.into(),
             schema,
@@ -162,85 +178,293 @@ fn prepare_members(
     S::try_new(members)
 }
 
-/// Capture all executable assertions or refuse. Metadata, default, unit and
-/// read/write annotations impose no value constraint. No schema tree, literal,
-/// source loan or format implementation survives this fixed-size result.
-pub fn prepare_type_schema(schema: SchemaView<'_>) -> CoreResult<TypeSchema> {
-    let facts = schema.facts();
-    let unsupported = facts.constant.is_some()
-        || facts.enumeration.is_some()
-        || facts.format.is_some()
-        || schema.one_of().is_some()
-        || schema.properties().is_some()
-        || schema.items().is_some()
-        || !schema.extension_semantics().all(annotation)
-        || match facts.constraints {
-            SchemaConstraints::Array {
-                min_items,
-                max_items,
-            } => min_items.is_some() || max_items.is_some(),
-            SchemaConstraints::Object { required } => required.is_some(),
-            SchemaConstraints::Number {
-                minimum,
-                exclusive_minimum,
-                maximum,
-                exclusive_maximum,
-                multiple_of,
-            } => [
-                minimum,
-                exclusive_minimum,
-                maximum,
-                exclusive_maximum,
-                multiple_of,
-            ]
-            .iter()
-            .any(Option::is_some),
-            SchemaConstraints::Integer {
-                minimum,
-                exclusive_minimum,
-                maximum,
-                exclusive_maximum,
-                multiple_of,
-            } => [
-                minimum,
-                exclusive_minimum,
-                maximum,
-                exclusive_maximum,
-                multiple_of,
-            ]
-            .iter()
-            .any(Option::is_some),
-            SchemaConstraints::String {
-                min_length,
-                max_length,
-                pattern,
-                content_encoding,
-                content_media_type,
-            } => {
-                min_length.is_some()
-                    || max_length.is_some()
-                    || pattern.is_some()
-                    || content_encoding.is_some()
-                    || content_media_type.is_some()
-            }
-            SchemaConstraints::Boolean | SchemaConstraints::Null => false,
-        };
-    if unsupported {
+/// The common supported assertions, resolved by TD and retained without source
+/// loans. Pure callbacks run inside their caller's prepaid preparation envelope.
+pub fn prepare_schema(schema: SchemaView<'_>) -> CoreResult<PreparedSchema> {
+    schema_census(schema)?;
+    build_schema(schema)
+}
+/// Current continuing/notification scalar participants retain their existing
+/// admission subset. This is the same interpretation, with a narrower facet.
+pub fn prepare_type_schema(schema: SchemaView<'_>) -> CoreResult<PreparedSchema> {
+    match schema_head(schema)? {
+        Some(s) if s.is_type_only() => Ok(s),
+        _ => Err(refused()),
+    }
+}
+
+fn schema_head(schema: SchemaView<'_>) -> CoreResult<Option<PreparedSchema>> {
+    let f = schema.facts();
+    if f.declared_type.is_some_and(|name| {
+        !matches!(
+            name,
+            "null" | "boolean" | "number" | "integer" | "string" | "array" | "object"
+        )
+    }) {
         return Err(refused());
     }
-    Ok(match facts.declared_type {
-        None => TypeSchema::Any,
-        Some(name) => TypeSchema::Type(match name {
-            "null" => ValueType::Null,
-            "boolean" => ValueType::Boolean,
-            "number" => ValueType::Number,
-            "integer" => ValueType::Integer,
-            "string" => ValueType::String,
-            "object" => ValueType::Object,
-            "array" => ValueType::Array,
-            _ => return Err(refused()),
-        }),
-    })
+    if f.constant.is_some()
+        || f.enumeration.is_some()
+        || f.format.is_some()
+        || schema.one_of().is_some()
+        || schema.items().is_some()
+        || !schema.extension_semantics().all(annotation)
+    {
+        return Err(refused());
+    }
+    let leaf = match f.constraints {
+        SchemaConstraints::Object { required }
+            if schema.properties().is_some() || required.is_some() =>
+        {
+            if f.declared_type != Some("object")
+                || required.is_some_and(|names| names.len() > PreparedSchema::MAX_PROPERTIES)
+            {
+                return Err(refused());
+            }
+            return Ok(None);
+        }
+        SchemaConstraints::Integer {
+            minimum,
+            exclusive_minimum,
+            maximum,
+            exclusive_maximum,
+            multiple_of,
+        } => {
+            if multiple_of.is_some() {
+                return Err(refused());
+            }
+            if [minimum, exclusive_minimum, maximum, exclusive_maximum]
+                .iter()
+                .any(Option::is_some)
+            {
+                if f.declared_type != Some("integer") {
+                    return Err(refused());
+                }
+                return Ok(Some(PreparedSchema::Integer {
+                    minimum,
+                    exclusive_minimum,
+                    maximum,
+                    exclusive_maximum,
+                }));
+            }
+            ValueType::Integer
+        }
+        SchemaConstraints::Number {
+            minimum,
+            exclusive_minimum,
+            maximum,
+            exclusive_maximum,
+            multiple_of,
+        } => {
+            // NumberSchema's upstream f64 bounds cannot prove exact decimal
+            // constraints. Refuse instead of reconstructing a rounded bound.
+            if [
+                minimum,
+                exclusive_minimum,
+                maximum,
+                exclusive_maximum,
+                multiple_of,
+            ]
+            .iter()
+            .any(Option::is_some)
+            {
+                return Err(refused());
+            }
+            ValueType::Number
+        }
+        SchemaConstraints::String {
+            min_length,
+            max_length,
+            pattern,
+            content_encoding,
+            content_media_type,
+        } => {
+            if pattern.is_some() || content_encoding.is_some() || content_media_type.is_some() {
+                return Err(refused());
+            }
+            if min_length.is_some() || max_length.is_some() {
+                if f.declared_type != Some("string") {
+                    return Err(refused());
+                }
+                return Ok(Some(PreparedSchema::String {
+                    min_length,
+                    max_length,
+                }));
+            }
+            ValueType::String
+        }
+        SchemaConstraints::Array {
+            min_items,
+            max_items,
+        } => {
+            if min_items.is_some() || max_items.is_some() {
+                return Err(refused());
+            }
+            ValueType::Array
+        }
+        SchemaConstraints::Object { .. } => ValueType::Object,
+        SchemaConstraints::Boolean => ValueType::Boolean,
+        SchemaConstraints::Null => ValueType::Null,
+    };
+    Ok(Some(if f.declared_type.is_none() {
+        PreparedSchema::Any
+    } else {
+        PreparedSchema::Type(leaf)
+    }))
+}
+
+#[derive(Default)]
+struct SchemaCensus {
+    nodes: usize,
+    names: usize,
+}
+fn required(schema: SchemaView<'_>) -> &[alloc::string::String] {
+    match schema.facts().constraints {
+        SchemaConstraints::Object { required } => required.unwrap_or(&[]),
+        _ => &[],
+    }
+}
+/// Complete bounded recursive/name-walk credit for a pure schema callback.
+pub fn preparation_work(schema: SchemaView<'_>) -> CoreResult<u64> {
+    Ok(schema_preparation_units(schema)?.1)
+}
+pub(crate) fn schema_preparation_units(schema: SchemaView<'_>) -> CoreResult<(u64, u64, usize)> {
+    let c = schema_census(schema)?;
+    Ok((
+        if schema_head(schema)?.is_none() {
+            c.nodes as u64 * 2
+        } else {
+            0
+        },
+        (c.nodes * 8 + c.names * PreparedSchema::MAX_PROPERTIES) as u64,
+        c.nodes,
+    ))
+}
+fn schema_census(schema: SchemaView<'_>) -> CoreResult<SchemaCensus> {
+    fn walk(s: SchemaView<'_>, depth: usize, c: &mut SchemaCensus) -> CoreResult<()> {
+        if depth > PreparedSchema::MAX_DEPTH {
+            return Err(refused());
+        }
+        c.nodes += 1;
+        if c.nodes > PreparedSchema::MAX_NODES {
+            return Err(refused());
+        }
+        if schema_head(s)?.is_some() {
+            return Ok(());
+        }
+        let mut fields = 0;
+        for (name, child) in s.properties().into_iter().flatten() {
+            c.names += name.len();
+            fields += 1;
+            if name.len() > PreparedSchema::MAX_NAME_BYTES
+                || fields > PreparedSchema::MAX_PROPERTIES
+                || c.names > PreparedSchema::MAX_TOTAL_NAME_BYTES
+            {
+                return Err(refused());
+            }
+            walk(child, depth + 1, c)?;
+        }
+        for name in required(s) {
+            if s.properties().into_iter().flatten().any(|(n, _)| n == name) {
+                continue;
+            }
+            fields += 1;
+            c.names += name.len();
+            c.nodes += 1;
+            if fields > PreparedSchema::MAX_PROPERTIES
+                || name.len() > PreparedSchema::MAX_NAME_BYTES
+                || c.names > PreparedSchema::MAX_TOTAL_NAME_BYTES
+                || c.nodes > PreparedSchema::MAX_NODES
+            {
+                return Err(refused());
+            }
+        }
+        Ok(())
+    }
+    let mut census = SchemaCensus::default();
+    walk(schema, 1, &mut census)?;
+    Ok(census)
+}
+fn build_schema(schema: SchemaView<'_>) -> CoreResult<PreparedSchema> {
+    if let Some(leaf) = schema_head(schema)? {
+        return Ok(leaf);
+    }
+    let required = required(schema);
+    let count = schema.properties().into_iter().flatten().count()
+        + required
+            .iter()
+            .filter(|name| {
+                !schema
+                    .properties()
+                    .into_iter()
+                    .flatten()
+                    .any(|(n, _)| n == name.as_str())
+            })
+            .count();
+    let mut fields = alloc::vec::Vec::new();
+    fields
+        .try_reserve_exact(count)
+        .map_err(|_| clinkz_wot_core::consumer::busy())?;
+    for (name, child) in schema.properties().into_iter().flatten() {
+        fields.push(clinkz_wot_core::data_schema::SchemaProperty {
+            name: name.into(),
+            required: required.iter().any(|n| n == name),
+            schema: build_schema(child)?,
+        });
+    }
+    for name in required {
+        if fields.iter().any(|p| p.name.as_ref() == name) {
+            continue;
+        }
+        fields.push(clinkz_wot_core::data_schema::SchemaProperty {
+            name: name.as_str().into(),
+            required: true,
+            schema: PreparedSchema::Any,
+        });
+    }
+    PreparedSchema::object(fields).map_err(|_| refused())
+}
+
+/// Qualification only: compare borrowed facts without compiling or allocating a
+/// second constraint tree. Required names are a set, not a source-order rule.
+pub fn matches_schema(actual: SchemaView<'_>, expected: &PreparedSchema) -> CoreResult<bool> {
+    schema_census(actual)?;
+    fn compare(a: SchemaView<'_>, e: &PreparedSchema) -> CoreResult<bool> {
+        if let Some(leaf) = schema_head(a)? {
+            return Ok(&leaf == e);
+        }
+        let PreparedSchema::Object(object) = e else {
+            return Ok(false);
+        };
+        let required = required(a);
+        let mut seen = 0;
+        for (name, child) in a.properties().into_iter().flatten() {
+            let Some(field) = object.properties().iter().find(|f| f.name.as_ref() == name) else {
+                return Ok(false);
+            };
+            if field.required != required.iter().any(|n| n == name)
+                || !compare(child, &field.schema)?
+            {
+                return Ok(false);
+            }
+            seen += 1;
+        }
+        for name in required {
+            if a.properties().into_iter().flatten().any(|(n, _)| n == name) {
+                continue;
+            }
+            if !object
+                .properties()
+                .iter()
+                .any(|f| f.name.as_ref() == name && f.required && f.schema == PreparedSchema::Any)
+            {
+                return Ok(false);
+            }
+            seen += 1;
+        }
+        Ok(seen == object.properties().len())
+    }
+    compare(actual, expected)
 }
 
 fn annotation(node: SemanticNode<'_>) -> bool {
@@ -254,8 +478,10 @@ fn annotation(node: SemanticNode<'_>) -> bool {
 
 fn refused() -> CoreError {
     CoreError::UnsupportedOperation(
-        ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-            .with_redacted_cause(624, "unsupported type-only schema assertion"),
+        ErrorContext::new(ErrorPhase::Admission, RetryClass::Never).with_redacted_cause(
+            624,
+            "unsupported DataSchema assertion or preparation profile",
+        ),
     )
 }
 

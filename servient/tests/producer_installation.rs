@@ -175,7 +175,7 @@ impl ProducerExecutor for Executor {
             0,
         )
     }
-    fn install_policy(&self) -> ProducerInstallPolicy {
+    fn install_policy(&self, _: &Program) -> ProducerInstallPolicy {
         ProducerInstallPolicy {
             executor_bytes: 0,
             program_bytes: 64,
@@ -793,7 +793,7 @@ fn two_logical_instances_can_retain_one_physical_native_owner() {
                 0,
             )
         }
-        fn install_policy(&self) -> ProducerInstallPolicy {
+        fn install_policy(&self, _: &()) -> ProducerInstallPolicy {
             ProducerInstallPolicy {
                 executor_bytes: 0,
                 program_bytes: 0,
@@ -1157,7 +1157,7 @@ mod funding {
                 0,
             )
         }
-        fn install_policy(&self) -> ProducerInstallPolicy {
+        fn install_policy(&self, _: &()) -> ProducerInstallPolicy {
             ProducerInstallPolicy {
                 // Both actual executor and captured configuration vectors.
                 executor_bytes: (2 * SCRATCH) as u64,

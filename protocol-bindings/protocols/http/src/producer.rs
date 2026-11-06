@@ -37,16 +37,19 @@ pub struct HttpProducerProgram {
     pub(super) authority_end: u8,
     pub(super) origin: [u8; 64],
     pub(super) origin_len: u8,
-    pub(super) value_schema: clinkz_wot_core::value_type::TypeSchema,
+    pub(super) value_schema: Arc<clinkz_wot_core::data_schema::PreparedSchema>,
     pub(super) property_map: Option<Arc<clinkz_wot_core::collection::PropertyCollectionSchema>>,
 }
 impl HttpProducerProgram {
     pub(crate) fn schema_backing_bytes(&self) -> usize {
-        self.property_map.as_ref().map_or(0, |s| {
-            s.retained_bytes()
-                + core::mem::size_of_val(s.as_ref())
-                + 2 * core::mem::size_of::<usize>()
-        })
+        self.value_schema.retained_bytes()
+            + core::mem::size_of_val(self.value_schema.as_ref())
+            + 2 * core::mem::size_of::<usize>()
+            + self.property_map.as_ref().map_or(0, |s| {
+                s.retained_bytes()
+                    + core::mem::size_of_val(s.as_ref())
+                    + 2 * core::mem::size_of::<usize>()
+            })
     }
     pub(crate) fn method(&self) -> &'static str {
         match self.operation {
@@ -88,7 +91,7 @@ use std::{
 
 // Separate role identity: never borrow Consumer policy/seals or StrictV1's
 // transitive disposal claim. Native parser/reply backing remains Binding-owned.
-const INSTALL_POLICY: &[u8] = b"request-reply-v4;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;type-only-schema;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-IgnoredAny+UTF8;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
+const INSTALL_POLICY: &[u8] = b"request-reply-v6;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;prepared-object-integer-string-schema;schema64/depth8;encoded-depth32;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-RawValue+UTF8+codepoints;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/schema-Arc+fields+names/0;temporary=1024+structured-JSON-body*3-not-stack-ceiling;largest-indirect=max-schema,structured-JSON-body*2;local-drop-work=3+schema;finite-SDK-local-drop;no-task;no-network-wait";
 
 /// Runtime-only executor. It retains neither a compiler nor source TD.
 pub struct HttpProducerExecutor {
@@ -123,7 +126,7 @@ pub fn producer_execution(
             id,
             generation,
             BindingConfigurationDigest::new(digest),
-            BindingArtifactCompatibility::new(*b"http-prod-rpl-v4"),
+            BindingArtifactCompatibility::new(*b"http-prod-rpl-v6"),
             ordinal,
         ),
     }
@@ -138,25 +141,44 @@ impl ProducerExecutor for HttpProducerExecutor {
     fn identity(&self) -> BindingRegistrationIdentity {
         self.identity
     }
-    fn install_policy(&self) -> ProducerInstallPolicy {
+    fn install_policy(&self, program: &Self::Program) -> ProducerInstallPolicy {
+        let schema = &program.value_schema;
+        // String lengths and object lookups decode owned strings. With the
+        // locked serde_json slice decoder, a growing scratch Vec can request
+        // up to twice the encoded body size. Its old/new buffers or final
+        // owned String overlap by at most three body sizes. Lookups release
+        // their decoder before recursive child validation, so levels do not
+        // accumulate scratch. Keep the existing wrapper/error allowance too.
+        let decoded_strings = matches!(
+            schema.as_ref(),
+            clinkz_wot_core::data_schema::PreparedSchema::String { .. }
+                | clinkz_wot_core::data_schema::PreparedSchema::Object(_)
+        );
+        let decoder_allocation = if decoded_strings { 2 * BODY } else { 0 };
         ProducerInstallPolicy {
             executor_bytes: 0,
-            program_bytes: 0,
+            // The execution entry and installation share this original owner.
+            program_bytes: program.schema_backing_bytes() as u64,
             installation_bytes: 0,
-            temporary_bytes: 1024,
-            largest_indirect_allocation: 0,
-            local_drop_work: 1,
+            temporary_bytes: 1024 + if decoded_strings { 3 * BODY } else { 0 },
+            largest_indirect_allocation: schema
+                .largest_allocation_bytes()
+                .max(core::mem::size_of_val(schema.as_ref()) + 2 * core::mem::size_of::<usize>())
+                .max(decoder_allocation as usize) as u64,
+            // Native/owner disposal, both Arc releases and final tree disposal.
+            local_drop_work: 3 + schema.drop_work(),
         }
     }
     fn service_policy(&self) -> Option<ProducerServicePolicy> {
         Some(ProducerServicePolicy {
-            response_body_bytes: 4096,
+            response_body_bytes: BODY,
             response_media_capacity: 64,
         })
     }
     fn check_program(&self, program: &Self::Program) -> CoreResult<()> {
         // Inspect native operands, not a caller-supplied compatibility tag.
         if program.operation != Operation::ReadProperty
+            || program.property_map.is_some()
             || program.address != self.config.address
             || program.target_len as usize > program.target.len()
             || program.origin_len as usize > program.origin.len()
@@ -214,7 +236,7 @@ impl ProducerOutputValidator for HttpProducerProgram {
                 output.data().ok_or_else(producer_unsupported)?,
             );
         }
-        super::producer_validation::validate(self.value_schema, output)
+        super::producer_validation::validate(&self.value_schema, output)
     }
 }
 /// Binding-owned native setup, request correlation, reply and retirement.

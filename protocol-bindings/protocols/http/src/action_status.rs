@@ -26,12 +26,12 @@ fn present<'de, D: serde::Deserializer<'de>>(
 
 pub(crate) fn validate(schema: &ActionCollectionSchema, payload: &Payload) -> CoreResult<()> {
     producer_validation::validate_payload(
-        value_type::TypeSchema::Type(value_type::ValueType::Object),
+        &data_schema::PreparedSchema::Type(data_schema::ValueType::Object),
         payload,
     )?;
     struct Members<'a>(&'a ActionCollectionSchema);
     struct Records<'a> {
-        output: Option<value_type::TypeSchema>,
+        output: Option<&'a data_schema::PreparedSchema>,
         identities: &'a mut Vec<String>,
     }
     impl<'de> DeserializeSeed<'de> for Records<'_> {
@@ -99,7 +99,7 @@ pub(crate) fn validate(schema: &ActionCollectionSchema, payload: &Payload) -> Co
                 }
                 seen |= bit;
                 map.next_value_seed(Records {
-                    output: self.0.members()[index].output,
+                    output: self.0.members()[index].output.as_ref(),
                     identities: &mut identities,
                 })?;
             }

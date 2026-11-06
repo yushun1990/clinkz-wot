@@ -23,6 +23,14 @@ use std::{
 // These cases observe process descriptor totals, so serialize this test binary.
 static SERIAL: Mutex<()> = Mutex::new(());
 struct AllocationObserver;
+#[derive(Default)]
+struct ValidationTrace {
+    enabled: bool,
+    blocks: [(usize, usize); 32],
+    live: usize,
+    peak: usize,
+    largest: usize,
+}
 std::thread_local! {
     static TRACE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -31,6 +39,9 @@ std::thread_local! {
     static OBSERVE_FREE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static FUNDED_AT_FREE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static OBSERVED_BANK: std::cell::RefCell<Option<Arc<ProducerInstallationAccounts>>> = const { std::cell::RefCell::new(None) };
+    static VALIDATION_TRACE: std::cell::RefCell<ValidationTrace> = const { std::cell::RefCell::new(ValidationTrace {
+        enabled: false, blocks: [(0, 0); 32], live: 0, peak: 0, largest: 0,
+    }) };
 }
 // SAFETY: forwards the exact Layout/pointer to System; only an explicitly
 // selected allocation on this test thread is refused. Observation allocates
@@ -54,9 +65,33 @@ unsafe impl std::alloc::GlobalAlloc for AllocationObserver {
         {
             return core::ptr::null_mut();
         }
-        unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) }
+        let pointer = unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) };
+        let _ = VALIDATION_TRACE.try_with(|t| {
+            let mut t = t.borrow_mut();
+            if t.enabled && !pointer.is_null() {
+                let slot = t
+                    .blocks
+                    .iter()
+                    .position(|b| b.0 == 0)
+                    .expect("bounded trace slots");
+                t.blocks[slot] = (pointer as usize, layout.size());
+                t.live += layout.size();
+                t.peak = t.peak.max(t.live);
+                t.largest = t.largest.max(layout.size());
+            }
+        });
+        pointer
     }
     unsafe fn dealloc(&self, pointer: *mut u8, layout: std::alloc::Layout) {
+        let _ = VALIDATION_TRACE.try_with(|t| {
+            let mut t = t.borrow_mut();
+            if t.enabled
+                && let Some(i) = t.blocks.iter().position(|b| b.0 == pointer as usize)
+            {
+                t.live -= t.blocks[i].1;
+                t.blocks[i] = (0, 0);
+            }
+        });
         if OBSERVE_FREE
             .try_with(|o| o.get() == layout.size() && o.get() != 0)
             .unwrap_or(false)
@@ -79,6 +114,21 @@ unsafe impl std::alloc::GlobalAlloc for AllocationObserver {
 }
 #[global_allocator]
 static ALLOCATOR: AllocationObserver = AllocationObserver;
+
+fn observe_validation(
+    program: &HttpProducerProgram,
+    output: &InteractionOutput,
+) -> (CoreResult<()>, ValidationTrace) {
+    VALIDATION_TRACE.with(|t| {
+        *t.borrow_mut() = ValidationTrace {
+            enabled: true,
+            ..ValidationTrace::default()
+        }
+    });
+    let result = program.validate(output);
+    let trace = VALIDATION_TRACE.with(|t| std::mem::take(&mut *t.borrow_mut()));
+    (result, trace)
+}
 
 fn accepted<T, I>(r: Result<T, BindingInputRejection<I>>) -> T {
     r.unwrap_or_else(|r| panic!("{:?}", r.error()))
@@ -107,8 +157,22 @@ fn prepare(
     PreparedProducer<HttpProducerExecutor, Handler>,
     ProducerInstanceAuthority,
 ) {
+    prepare_with_schema(address, generation, json!({"type":"number"}))
+}
+fn prepare_with_schema(
+    address: SocketAddr,
+    generation: Generation,
+    mut schema: Value,
+) -> (
+    PreparedProducer<HttpProducerExecutor, Handler>,
+    ProducerInstanceAuthority,
+) {
     let authority = ProducerInstanceAuthority::try_new(slot(generation)).unwrap();
-    let td: Thing = serde_json::from_value(document(address)).unwrap();
+    let mut value = document(address);
+    schema["readOnly"] = json!(true);
+    schema["forms"] = value["properties"][""]["forms"].take();
+    value["properties"][""] = schema;
+    let td: Thing = serde_json::from_value(value).unwrap();
     let config = ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS).unwrap();
     let mut c = ValidatedThingCursor::from_thing(
         &td,
@@ -379,11 +443,463 @@ fn compiler_configuration_and_producer_policy_identity_are_checked_without_io() 
 }
 
 #[test]
+fn schema_backing_counts_toward_public_installation_artifact_quotas() {
+    let _serial = SERIAL.lock().unwrap();
+    use ResourceKind as K;
+    let address = address();
+    let b = bank();
+    let (prepared, authority) =
+        prepare_with_schema(address, Generation::INITIAL, json!({"type":"object"}));
+    let r = accepted(Runtime::try_new(
+        prepared,
+        authority,
+        GatewayDefaultV1::LIMITS.clone(),
+        b.clone(),
+        Deadline::NONE,
+    ));
+    let primitive_bytes = b.account(K::BindingArtifactBytesGlobalMax).used();
+    let inline_bytes = (std::mem::size_of::<ProducerExecutionEntry<HttpProducerProgram>>()
+        + 2 * std::mem::size_of::<usize>()) as u64;
+    assert!(
+        primitive_bytes > inline_bytes,
+        "the primitive schema Arc must be funded"
+    );
+    drop(r);
+    empty(&b);
+
+    let properties: serde_json::Map<_, _> = (0..32)
+        .map(|n| (format!("field{n}"), json!({"type":"integer","minimum":0})))
+        .collect();
+    let schema = json!({"type":"object","properties":properties});
+    for kind in [
+        K::BindingArtifactBytesGlobalMax,
+        K::BindingArtifactBytesPerItemMax,
+        K::BindingArtifactBytesPerThingMax,
+    ] {
+        let limits = GatewayDefaultV1::LIMITS
+            .clone()
+            .try_with_limit(kind, Some(primitive_bytes))
+            .unwrap();
+        let (prepared, authority) =
+            prepare_with_schema(address, Generation::INITIAL, schema.clone());
+        let key = authority.key();
+        let refused = Runtime::try_new(prepared, authority, limits, b.clone(), Deadline::NONE)
+            .err()
+            .expect("structured backing must exceed the primitive program quota");
+        assert!(matches!(
+            refused.error().error(),
+            CoreError::LimitExceeded { resource, requested: Some(n), .. }
+                if *resource == kind && *n > primitive_bytes
+        ));
+        empty(&b);
+        free(address);
+        let (prepared, authority, _, original) = refused.into_input();
+        assert_eq!(authority.key(), key);
+        assert!(Arc::ptr_eq(&original, &b));
+        let r = accepted(Runtime::try_new(
+            prepared,
+            authority,
+            GatewayDefaultV1::LIMITS.clone(),
+            original,
+            Deadline::NONE,
+        ));
+        assert!(b.account(K::BindingArtifactBytesGlobalMax).used() > primitive_bytes);
+        drop(r);
+        empty(&b);
+    }
+}
+
+#[test]
+fn structured_validation_scratch_is_funded_before_execution() {
+    let _serial = SERIAL.lock().unwrap();
+    use ResourceKind as K;
+    let address = address();
+    let string = json!({"type":"string","minLength":1,"maxLength":4094});
+    let object = json!({"type":"object","properties":{"label":string},"required":["label"]});
+    let object_prefix = "{\"la\\u0062el\":\"";
+    let object_suffix = "\\n\"}";
+    let unknown_suffix = "\\u0061\":0,\"la\\u0062el\":\"ok\"}";
+    let duplicate_suffix = "\\u0061\":0,\"label\":\"ok\",\"la\\u0062el\":\"duplicate\"}";
+    let nested_prefix = "{\"co\\u006efig\":{\"la\\u0062el\":\"";
+    let nested_suffix = "\\n\"}}";
+    let cases = [
+        (
+            "plain",
+            string.clone(),
+            format!("\"{}\"", "a".repeat(3000)),
+            true,
+        ),
+        (
+            "body limit",
+            string.clone(),
+            format!("\"{}\"", "a".repeat(4094)),
+            true,
+        ),
+        // A late escape can double a nearly full decoder scratch buffer. The
+        // observer includes old/new allocation overlap and the owned String.
+        (
+            "late escape",
+            string.clone(),
+            format!("\"{}\\n\"", "a".repeat(4092)),
+            true,
+        ),
+        (
+            "late Unicode escape",
+            string.clone(),
+            format!("\"{}\\u0062\"", "a".repeat(4088)),
+            true,
+        ),
+        (
+            "surrogate pair",
+            string.clone(),
+            format!("\"{}\\ud83d\\ude00\"", "a".repeat(4082)),
+            true,
+        ),
+        (
+            "invalid length",
+            json!({"type":"string","maxLength":2}),
+            format!("\"{}\"", "a".repeat(3000)),
+            false,
+        ),
+        (
+            "escaped key/value",
+            object.clone(),
+            format!(
+                "{object_prefix}{}{object_suffix}",
+                "a".repeat(4096 - object_prefix.len() - object_suffix.len())
+            ),
+            true,
+        ),
+        (
+            "long unknown key",
+            object.clone(),
+            format!(
+                "{{\"{}{unknown_suffix}",
+                "k".repeat(4094 - unknown_suffix.len())
+            ),
+            true,
+        ),
+        (
+            "duplicate decoded key",
+            object.clone(),
+            format!(
+                "{{\"{}{duplicate_suffix}",
+                "k".repeat(4094 - duplicate_suffix.len())
+            ),
+            false,
+        ),
+        (
+            "nested lookup",
+            json!({"type":"object","properties":{"config":object},"required":["config"]}),
+            format!(
+                "{nested_prefix}{}{nested_suffix}",
+                "a".repeat(4096 - nested_prefix.len() - nested_suffix.len())
+            ),
+            true,
+        ),
+    ];
+    for (label, schema, body, valid) in cases {
+        assert!(body.len() <= 4096);
+        let (prepared, authority) = prepare_with_schema(address, Generation::INITIAL, schema);
+        let policy = prepared.install_policy();
+        let limits = GatewayDefaultV1::LIMITS
+            .clone()
+            .try_with_limit(
+                K::BindingPollTemporaryBytesPerCallMax,
+                Some(policy.temporary_bytes),
+            )
+            .unwrap()
+            .try_with_limit(
+                K::BindingPollTemporaryBytesGlobalMax,
+                Some(policy.temporary_bytes),
+            )
+            .unwrap()
+            .try_with_limit(
+                K::LargestContiguousAllocationBytesMax,
+                Some(policy.largest_indirect_allocation),
+            )
+            .unwrap();
+        let b = Arc::new(producer_installation_accounts(&limits));
+        let r = accepted(Runtime::try_new(
+            prepared,
+            authority,
+            limits,
+            b.clone(),
+            Deadline::NONE,
+        ));
+        assert_eq!(
+            b.account(K::BindingPollTemporaryBytesGlobalMax).used(),
+            policy.temporary_bytes
+        );
+        let before = b.snapshot(INSTALLATION_ACCOUNT_KINDS);
+        // Provision the output before tracing only the same captured program
+        // validator used by dispatch; no handler or HTTP SDK allocation enters.
+        let output =
+            InteractionOutput::with_data(Payload::new(body.into_bytes(), "application/json"));
+        let (result, trace) = observe_validation(r.entry().unwrap().program(), &output);
+        eprintln!(
+            "{label}: validation peak={}, largest={}, declared={}/{}",
+            trace.peak, trace.largest, policy.temporary_bytes, policy.largest_indirect_allocation
+        );
+        assert_eq!(result.is_ok(), valid, "{label}: {result:?}");
+        assert!(
+            trace.peak > 1024,
+            "{label} must exercise allocating decoding"
+        );
+        assert_eq!(
+            trace.live, 0,
+            "validation scratch must be released on return"
+        );
+        assert!(
+            trace.peak as u64 <= policy.temporary_bytes,
+            "{label}: validation peak {} exceeds declared {}",
+            trace.peak,
+            policy.temporary_bytes
+        );
+        assert!(
+            trace.largest as u64 <= policy.largest_indirect_allocation,
+            "{label}"
+        );
+        assert_eq!(b.snapshot(INSTALLATION_ACCOUNT_KINDS), before);
+        drop(r);
+        empty(&b);
+        free(address);
+    }
+}
+
+#[test]
+fn structured_validation_scratch_limits_refuse_before_native_effects() {
+    let _serial = SERIAL.lock().unwrap();
+    use ResourceKind as K;
+    let address = address();
+    let schema = json!({"type":"string","minLength":1});
+    let (prepared, authority) = prepare_with_schema(address, Generation::INITIAL, schema.clone());
+    let policy = prepared.install_policy();
+    assert!(policy.temporary_bytes > 1024);
+    drop((prepared, authority));
+    for (kind, amount) in [
+        (
+            K::BindingPollTemporaryBytesPerCallMax,
+            policy.temporary_bytes,
+        ),
+        (
+            K::BindingPollTemporaryBytesGlobalMax,
+            policy.temporary_bytes,
+        ),
+        (
+            K::LargestContiguousAllocationBytesMax,
+            policy.largest_indirect_allocation,
+        ),
+    ] {
+        for ceiling in [amount, amount - 1, 1024] {
+            let limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .try_with_limit(kind, Some(ceiling))
+                .unwrap();
+            let b = bank();
+            let (prepared, authority) =
+                prepare_with_schema(address, Generation::INITIAL, schema.clone());
+            let key = authority.key();
+            let result = Runtime::try_new(prepared, authority, limits, b.clone(), Deadline::NONE);
+            assert_eq!(result.is_ok(), ceiling == amount, "{kind:?}/{ceiling}");
+            match result {
+                Ok(r) => drop(r),
+                Err(refused) => {
+                    assert!(
+                        matches!(refused.error().error(), CoreError::LimitExceeded { resource, .. } if *resource == kind)
+                    );
+                    empty(&b);
+                    free(address);
+                    let (prepared, authority, _, original) = refused.into_input();
+                    assert_eq!(authority.key(), key);
+                    assert!(Arc::ptr_eq(&original, &b));
+                    drop(accepted(Runtime::try_new(
+                        prepared,
+                        authority,
+                        GatewayDefaultV1::LIMITS.clone(),
+                        original,
+                        Deadline::NONE,
+                    )));
+                }
+            }
+            empty(&b);
+            free(address);
+        }
+    }
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .try_with_limit(
+            K::BindingPollTemporaryBytesGlobalMax,
+            Some(policy.temporary_bytes - 1),
+        )
+        .unwrap();
+    let b = Arc::new(producer_installation_accounts(&limits));
+    let (prepared, authority) = prepare_with_schema(address, Generation::INITIAL, schema);
+    let refused = Runtime::try_new(
+        prepared,
+        authority,
+        GatewayDefaultV1::LIMITS.clone(),
+        b.clone(),
+        Deadline::NONE,
+    )
+    .err()
+    .expect("the original parent must fund all validator scratch");
+    assert!(matches!(
+        refused.error().error(),
+        CoreError::LimitExceeded {
+            resource: K::BindingPollTemporaryBytesGlobalMax,
+            ..
+        }
+    ));
+    drop(refused);
+    empty(&b);
+    free(address);
+}
+
+#[test]
+fn nested_schema_limits_and_final_disposal_keep_the_original_funding() {
+    let _serial = SERIAL.lock().unwrap();
+    use ResourceKind as K;
+    use clinkz_wot_core::data_schema::{PreparedSchema, SchemaProperty};
+    let address = address();
+    let mut properties: serde_json::Map<_, _> = (0..31)
+        .map(|n| (format!("outer{n}"), json!({"type":"integer","minimum":0})))
+        .collect();
+    let nested: serde_json::Map<_, _> = (0..31)
+        .map(|n| (format!("inner{n}"), json!({"type":"integer","maximum":100})))
+        .collect();
+    let name_bytes = properties
+        .keys()
+        .chain(nested.keys())
+        .map(String::len)
+        .sum::<usize>()
+        + "nested".len();
+    properties.insert(
+        "nested".into(),
+        json!({"type":"object","properties":nested}),
+    );
+    // 64 nodes in two field tables, with total backing larger than any single
+    // allocation. This distinguishes the retained-byte and contiguous limits.
+    let schema = json!({"type":"object","properties":properties});
+    let field_table = 32 * std::mem::size_of::<SchemaProperty>();
+    let schema_bytes = (std::mem::size_of::<PreparedSchema>()
+        + 2 * std::mem::size_of::<usize>()
+        + 63 * std::mem::size_of::<SchemaProperty>()
+        + name_bytes) as u64;
+    let b = bank();
+    let mut required = Vec::new();
+    for close in [true, false] {
+        let (prepared, authority) =
+            prepare_with_schema(address, Generation::INITIAL, schema.clone());
+        let policy = prepared.install_policy();
+        assert_eq!(policy.program_bytes, schema_bytes);
+        assert!(policy.largest_indirect_allocation >= field_table as u64);
+        assert!(policy.local_drop_work >= 2 * PreparedSchema::MAX_NODES as u64);
+        MAX.with(|n| n.set(0));
+        TRACE.with(|n| n.set(true));
+        let result = Runtime::try_new(
+            prepared,
+            authority,
+            GatewayDefaultV1::LIMITS.clone(),
+            b.clone(),
+            Deadline::NONE,
+        );
+        TRACE.with(|n| n.set(false));
+        let mut r = accepted(result);
+        let owner_block = MAX.with(|n| n.get());
+        let used = |kind| b.account(kind).used();
+        if required.is_empty() {
+            for (global, local) in [
+                (K::EngineLiveBytesGlobalMax, K::EngineLiveBytesGlobalMax),
+                (
+                    K::CompiledRuntimeBytesGlobalMax,
+                    K::CompiledRuntimeBytesPerThingMax,
+                ),
+                (
+                    K::BindingArtifactBytesGlobalMax,
+                    K::BindingArtifactBytesPerItemMax,
+                ),
+                (
+                    K::BindingArtifactBytesGlobalMax,
+                    K::BindingArtifactBytesPerThingMax,
+                ),
+                (
+                    K::BindingSlotStateBytesGlobalMax,
+                    K::BindingSlotStateBytesPerItemMax,
+                ),
+                (
+                    K::BindingSlotStateBytesGlobalMax,
+                    K::BindingSlotStateBytesPerThingMax,
+                ),
+                (K::CleanupBytesMax, K::CleanupItemBytesMax),
+            ] {
+                required.push((local, used(global)));
+            }
+            required.push((K::CleanupWorkItemsPerStepMax, policy.local_drop_work));
+            required.push((
+                K::LargestContiguousAllocationBytesMax,
+                owner_block
+                    .max(field_table)
+                    .max(policy.largest_indirect_allocation as usize)
+                    .max(4096 + 2 * std::mem::size_of::<usize>()) as u64,
+            ));
+        }
+        assert!(used(K::BindingArtifactBytesGlobalMax) >= schema_bytes);
+        installed(&mut r);
+        let before = b.snapshot(INSTALLATION_ACCOUNT_KINDS);
+        OBSERVED_BANK.with(|p| *p.borrow_mut() = Some(b.clone()));
+        FUNDED_AT_FREE.with(|f| f.set(false));
+        OBSERVE_FREE.with(|s| s.set(field_table));
+        if close {
+            r.cancel();
+            assert!(step(&mut r, 0).is_pending());
+            assert_eq!(b.snapshot(INSTALLATION_ACCOUNT_KINDS), before);
+            assert_eq!(
+                step(&mut r, 1),
+                Poll::Ready(ProducerInstallationState::Closed)
+            );
+            assert_eq!(used(K::BindingArtifactBytesGlobalMax), 0);
+        }
+        drop(r);
+        assert!(
+            FUNDED_AT_FREE.with(|f| f.get()),
+            "field table must be freed while funded"
+        );
+        OBSERVE_FREE.with(|s| s.set(0));
+        OBSERVED_BANK.with(|p| p.borrow_mut().take());
+        empty(&b);
+        free(address);
+    }
+    for (kind, amount) in required {
+        for ceiling in [amount, amount - 1] {
+            let limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .try_with_limit(kind, Some(ceiling))
+                .unwrap();
+            let (prepared, authority) =
+                prepare_with_schema(address, Generation::INITIAL, schema.clone());
+            let result = Runtime::try_new(prepared, authority, limits, b.clone(), Deadline::NONE);
+            assert_eq!(result.is_ok(), ceiling == amount, "{kind:?}");
+            if let Err(refused) = &result {
+                assert!(
+                    matches!(refused.error().error(), CoreError::LimitExceeded { resource, .. } if *resource == kind)
+                );
+            }
+            drop(result);
+            empty(&b);
+            free(address);
+        }
+    }
+}
+
+#[test]
 fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_funding() {
     let _serial = SERIAL.lock().unwrap();
     let address = address();
     let b = bank();
     let (prepared, authority) = prepare(address, Generation::INITIAL);
+    let policy = prepared.install_policy();
+    let schema_bytes = policy.program_bytes;
     COUNT.with(|n| n.set(0));
     MAX.with(|n| n.set(0));
     TRACE.with(|n| n.set(true));
@@ -408,12 +924,13 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
     );
     {
         let bank = b.snapshot(INSTALLATION_ACCOUNT_KINDS);
-        let extra =
-            2 * std::mem::size_of::<usize>() as u64 + consumer_result_backing(4096, 64).unwrap();
+        let extra = schema_bytes
+            + 2 * std::mem::size_of::<usize>() as u64
+            + consumer_result_backing(4096, 64).unwrap();
         assert_eq!(bank[4].used(), block as u64 + extra);
         assert_eq!(
             bank[0].used(),
-            (block + std::mem::size_of::<Runtime>()) as u64 + extra + 1024
+            (block + std::mem::size_of::<Runtime>()) as u64 + extra + policy.temporary_bytes
         );
         assert_eq!(
             bank[1].used(),
@@ -421,6 +938,7 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
         );
     }
     OBSERVED_BANK.with(|p| *p.borrow_mut() = Some(b.clone()));
+    FUNDED_AT_FREE.with(|f| f.set(false));
     OBSERVE_FREE.with(|s| s.set(block));
     drop(r);
     assert!(

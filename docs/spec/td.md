@@ -86,3 +86,15 @@ Applicable standard: [TD 1.1 §§5–8](https://www.w3.org/TR/2023/REC-wot-thing
 Binding-specific defaults, such as HTTP methods and its multi-operation method
 restriction in §8.3.1, belong to Binding preparation. Shared meaning includes
 schemas/security/defaults, not transport interpretation.
+
+## Executable structured subset
+
+SchemaView already lends nested properties, required names, exact i64 integer
+bounds and string lengths from the shared resolved semantic arena. Planning uses
+those common facts for the [prepared constraint subset](interaction-core.md),
+not independent Binding vocabulary interpretations or raw JSON field inspection.
+The typed NumberSchema representation still exposes f64 bounds; this increment
+refuses those executable assertions rather than inventing a rounded decimal
+meaning. Broader numeric declarations and the strict wire-ingestion contract
+remain separate work. Preserved/default/annotation metadata do not implicitly
+supply executable constraints or mutate an application value.

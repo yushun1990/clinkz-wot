@@ -130,7 +130,7 @@ impl ConsumerNotificationPreparation for EventBinding {
         assert!(input.schemas.cancellation().is_none());
         assert_eq!(
             input.schemas.data(),
-            Some(value_type::TypeSchema::Type(value_type::ValueType::Integer))
+            Some(&data_schema::PreparedSchema::Type(data_schema::ValueType::Integer))
         );
         assert_eq!(input.schemas.data_response(), input.schemas.data());
         Ok(Some(self.0.clone()))
@@ -649,7 +649,7 @@ impl ConsumerDataService for CollectionData {
             validation_work: 4096 * 40 + 128,
         }
     }
-    fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+    fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
         clinkz_wot_codec_json::validate_payload(s, p)
     }
 }

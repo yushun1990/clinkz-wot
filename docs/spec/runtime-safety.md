@@ -343,3 +343,17 @@ acknowledgement. The first cleanup error remains observable alongside the first
 local cause and native publication effect; later successful local disposal is
 required before terminal acknowledgement. Linked native callbacks are followed
 by fresh authority checks before successful local settlement.
+
+## Structured finite data validation
+
+The finite Consumer borrows its original PreparedSchema, with actual validator
+qualification and paid scratch/work at input, output and late-result boundaries.
+Source retirement, cancellation or revocation do not replace or refund the
+constraint owner. Invalid input returns its protected payload before native
+admission. A normal or late native value failing nested constraints remains
+original rejected evidence, never validated application success.
+The qualified HTTP Producer applies the same Core constraints through its
+captured JSON value access before behavior permission/effects and before declared
+output delivery. Its complete final-TD/publication checks remain independent of
+Consumer partial support. Decoder traversal and constraint disposal have the
+bounded envelopes in [Core](interaction-core.md); callbacks remain cooperative.

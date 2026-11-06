@@ -158,7 +158,8 @@ Form/operation facts rather than a Property Read logical record or source TD id.
 Core separates immutable prepared content, qualified native definitions, retained
 actual service backing and instance-local bindings. The scoped
 [checked-reuse contract](../spec/planning.md#open-finite-consumer-implementation)
-supports ReadAllProperties meaning across actual HTTP endpoints, with borrowed
+supports Property Read/Write and ReadAllProperties meaning across actual HTTP
+endpoints, with borrowed
 qualification and separate native compilation. Data/access services and native
 registration backing keep their original explicit startup bank; content/mapping
 leases and instance accounts remain separate. `servient-finite::consumer::ConsumerRuntime` owns only finite logical calls,
@@ -354,3 +355,20 @@ predicate, including extension vocabulary outside HTTP. The response-envelope
 regressions require that root to remain unselected while another supported leaf
 is admitted. The supported response semantics remain Binding-owned; this is not
 a mandatory-extension vocabulary or another selection mechanism.
+
+## Executable reusable structured data
+
+The bounded [prepared DataSchema contract](../spec/interaction-core.md) now
+covers nested object properties/required names, integer boundaries and Unicode
+string lengths for the real HTTP finite slice. Core owns the alloc-only
+constraint model/evaluator; TD supplies common facts, Planning owns pure
+construction/borrowed compatibility, and codecs lend actual encoded values.
+TypeSchema is replaced directly; data-service schema inputs borrow PreparedSchema.
+Property Read/Write and ReadAllProperties demonstrate constraint reuse across
+independent Consumers, while fully qualified Producers validate input before
+behavior and declared output before delivery. Dynamic storage/destruction and
+actual validator qualification remain funded. Whole-TD normalization reuse,
+native retargeting, richer schema assertions, non-JSON interoperability,
+continuing-family reuse and a portable Engine runtime remain unproven. Detailed
+executable scope is in [structured schema evidence](../evidence/structured-dataschema.md).
+No package, architecture gate or milestone acceptance is claimed.

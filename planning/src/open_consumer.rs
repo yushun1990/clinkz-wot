@@ -944,7 +944,11 @@ fn common_content(
         if !pay(
             budget,
             W::PlanningItems,
-            content.schemas().retained_bytes() as u64 + content.schemas().drop_work() + 1,
+            content.schemas().retained_bytes() as u64
+                * clinkz_wot_core::data_schema::PreparedSchema::MAX_PROPERTIES as u64
+                * 2
+                + content.schemas().drop_work()
+                + 64,
         ) {
             return Err(busy());
         }
@@ -952,14 +956,78 @@ fn common_content(
             ConsumerFiniteSchemas::ReadAllProperties(schema) => {
                 crate::type_schema::matches_property_schema(doc, schema, false)?
             }
-            // Further semantic families need their own borrowed comparison and
-            // real reuse evidence; ordinary preparation remains available.
+            ConsumerFiniteSchemas::Value(expected) => match (site, operation) {
+                (FormSite::Property(_), Operation::ReadProperty)
+                    if !doc.property().schema.facts().write_only && expected.input.is_none() =>
+                {
+                    expected.output.as_ref().is_some_and(|s| {
+                        crate::type_schema::matches_schema(doc.property().schema, s)
+                            .unwrap_or(false)
+                    })
+                }
+                (FormSite::Property(_), Operation::WriteProperty)
+                    if !doc.property().schema.facts().read_only && expected.output.is_none() =>
+                {
+                    expected.input.as_ref().is_some_and(|s| {
+                        crate::type_schema::matches_schema(doc.property().schema, s)
+                            .unwrap_or(false)
+                    })
+                }
+                _ => return Err(unsupported()),
+            },
             _ => return Err(unsupported()),
         };
         if !agrees {
             return Err(unsupported());
         }
         return Ok(content.clone());
+    }
+    // Prepay all recursive constraint construction/rollback before allocation.
+    let mut cleanup = 0u64;
+    let mut schema_nodes = 0usize;
+    let mut units = 0u64;
+    let mut add = |schema| -> CoreResult<()> {
+        let (nodes, work, count) = crate::type_schema::schema_preparation_units(schema)?;
+        schema_nodes += count;
+        cleanup += nodes;
+        units += work;
+        Ok(())
+    };
+    match site {
+        FormSite::Property(_) => add(doc.property().schema)?,
+        FormSite::Action(_) => {
+            for role in ["input", "output"] {
+                if let Some(schema) = doc.affordance_schema(site.owner(), role) {
+                    add(schema)?;
+                }
+            }
+        }
+        FormSite::Thing => {
+            if let Some(properties) = doc.collection_properties() {
+                for property in properties {
+                    let f = property.schema.facts();
+                    let writing = matches!(
+                        operation,
+                        Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                    );
+                    if if writing { !f.read_only } else { !f.write_only } {
+                        add(property.schema)?;
+                    }
+                }
+                if schema_nodes > clinkz_wot_core::data_schema::PreparedSchema::MAX_NODES {
+                    return Err(unsupported());
+                }
+            }
+        }
+        _ => {}
+    }
+    check_limit(
+        limits,
+        K::CleanupWorkItemsPerStepMax,
+        retained_cleanup_work + cleanup * 2 + 4,
+    )?;
+    if !pay(budget, W::CleanupItems, cleanup) || !pay(budget, W::PlanningItems, units) {
+        return Err(busy());
     }
     let schemas = common_services(
         doc,
@@ -1029,18 +1097,14 @@ fn common_services(
         {
             Ok(ConsumerFiniteSchemas::Value(ConsumerSchemas {
                 input: None,
-                output: Some(crate::type_schema::prepare_type_schema(
-                    doc.property().schema,
-                )?),
+                output: Some(crate::type_schema::prepare_schema(doc.property().schema)?),
             }))
         }
         (FormSite::Property(_), Operation::WriteProperty)
             if !doc.property().schema.facts().read_only =>
         {
             Ok(ConsumerFiniteSchemas::Value(ConsumerSchemas {
-                input: Some(crate::type_schema::prepare_type_schema(
-                    doc.property().schema,
-                )?),
+                input: Some(crate::type_schema::prepare_schema(doc.property().schema)?),
                 output: None,
             }))
         }
@@ -1053,11 +1117,11 @@ fn common_services(
             Ok(ConsumerFiniteSchemas::Value(ConsumerSchemas {
                 input: doc
                     .affordance_schema(site.owner(), "input")
-                    .map(crate::type_schema::prepare_type_schema)
+                    .map(crate::type_schema::prepare_schema)
                     .transpose()?,
                 output: doc
                     .affordance_schema(site.owner(), "output")
-                    .map(crate::type_schema::prepare_type_schema)
+                    .map(crate::type_schema::prepare_schema)
                     .transpose()?,
             }))
         }

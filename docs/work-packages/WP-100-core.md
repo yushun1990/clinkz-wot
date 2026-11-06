@@ -28,8 +28,8 @@ are outside this architecture migration.
 Core now carries operation-scoped finite definitions, distinct input/output
 payload schema roles, and a separate move-only Consumer authority/passive
 reference. The implementation and independent Binding evidence are scoped in
-WP-200/WP-400. The type-only schema and NoSec service envelope remain supported
-subsets; general DataSchema constraints, security composition/credentials,
+WP-200/WP-400. The bounded finite structured subset and narrower type-only/NoSec facets remain
+supported subsets; general DataSchema, security composition/credentials,
 continuing Consumer Actions and TD-driven Event/observation preparation remain
 open. Existing raw Event control/response/retirement evidence is retained.
 
@@ -68,3 +68,20 @@ funded settlement to share its backing; this adds no generic interaction owner.
 Notification delivery also reuses Core `PayloadView` together with the existing
 `AffordanceSite` name loan. Its queue owner remains exclusively borrowed until
 the slices are no longer used; it creates no detached delivery/result owner.
+
+## Executable reusable structured data
+
+The bounded [prepared DataSchema contract](../spec/interaction-core.md) now
+covers nested object properties/required names, integer boundaries and Unicode
+string lengths for the real HTTP finite slice. Core owns the alloc-only
+constraint model/evaluator; TD supplies common facts, Planning owns pure
+construction/borrowed compatibility, and codecs lend actual encoded values.
+TypeSchema is replaced directly; data-service schema inputs borrow PreparedSchema.
+Property Read/Write and ReadAllProperties demonstrate constraint reuse across
+independent Consumers, while fully qualified Producers validate input before
+behavior and declared output before delivery. Dynamic storage/destruction and
+actual validator qualification remain funded. Whole-TD normalization reuse,
+native retargeting, richer schema assertions, non-JSON interoperability,
+continuing-family reuse and a portable Engine runtime remain unproven. Detailed
+executable scope is in [structured schema evidence](../evidence/structured-dataschema.md).
+No package, architecture gate or milestone acceptance is claimed.

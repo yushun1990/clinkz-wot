@@ -797,7 +797,7 @@ fn missing_status_service_or_unsupported_description_never_falls_back_to_leaf_qu
         fn policy(&self) -> ConsumerDataPolicy {
             self.0.policy()
         }
-        fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+        fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
             self.0.validate(s, p)
         }
     }
@@ -1197,7 +1197,7 @@ fn root_query_refuses_an_application_input_without_authorizing_or_progressing_ac
 
 #[test]
 fn status_output_absence_and_present_json_null_are_distinct_schema_roles() {
-    use clinkz_wot_core::value_type::{TypeSchema, ValueType};
+    use clinkz_wot_core::data_schema::{PreparedSchema, ValueType};
     let schema = ActionCollectionSchema::try_new(vec![
         ActionMemberSchema {
             name: "none".into(),
@@ -1205,7 +1205,7 @@ fn status_output_absence_and_present_json_null_are_distinct_schema_roles() {
         },
         ActionMemberSchema {
             name: "nil".into(),
-            output: Some(TypeSchema::Type(ValueType::Null)),
+            output: Some(PreparedSchema::Type(ValueType::Null)),
         },
     ])
     .unwrap();

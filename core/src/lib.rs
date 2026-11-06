@@ -27,6 +27,7 @@ pub mod collection;
 pub mod consumer;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod consumer_action;
+pub mod data_schema;
 #[cfg(target_has_atomic = "ptr")]
 pub mod deadline;
 #[cfg(target_has_atomic = "ptr")]
@@ -64,7 +65,6 @@ pub mod status;
 pub mod sync;
 #[cfg(target_has_atomic = "ptr")]
 pub mod thing;
-pub mod value_type;
 
 #[cfg(target_has_atomic = "ptr")]
 pub use artifact::{

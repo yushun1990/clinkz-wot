@@ -264,14 +264,14 @@ impl binding::ClientBinding for Client {
                     | Operation::WriteMultipleProperties,
                     Some(payload),
                 ) => producer_validation::validate_payload(
-                    clinkz_wot_core::value_type::TypeSchema::Any,
+                    &clinkz_wot_core::data_schema::PreparedSchema::Any,
                     payload,
                 )
                 .is_err(),
                 (Operation::ReadMultipleProperties, Some(payload)) => {
                     producer_validation::validate_payload(
-                        clinkz_wot_core::value_type::TypeSchema::Type(
-                            clinkz_wot_core::value_type::ValueType::Array,
+                        &clinkz_wot_core::data_schema::PreparedSchema::Type(
+                            clinkz_wot_core::data_schema::ValueType::Array,
                         ),
                         payload,
                     )
@@ -574,12 +574,15 @@ impl HttpConsumerConfig {
 }
 struct HttpConsumerData;
 impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
+    fn supports_schema(&self, _: &clinkz_wot_core::data_schema::PreparedSchema) -> bool {
+        true
+    }
     fn content_type(&self) -> &str {
         "application/json"
     }
     fn validate(
         &self,
-        schema: clinkz_wot_core::value_type::TypeSchema,
+        schema: &clinkz_wot_core::data_schema::PreparedSchema,
         payload: &Payload,
     ) -> CoreResult<()> {
         // The JSON service evaluates a payload independently of its finite
@@ -594,7 +597,7 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
             temporary_bytes: 65_536,
             body_bytes: BODY,
             encoded_selection_bytes: BODY + core::mem::size_of::<Payload>() as u64 + 64,
-            validation_work: BODY * 40 + MEDIA * 2,
+            validation_work: BODY * 80 + MEDIA * 2,
         }
     }
     fn supports_action_statuses(&self, _: &action::ActionCollectionSchema) -> bool {

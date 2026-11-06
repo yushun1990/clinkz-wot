@@ -3,7 +3,7 @@
 //! Local native work makes adversarial scheduling deterministic; real HTTP
 //! evidence uses the unmodified executor in the final tests below.
 use clinkz_wot_binding_http::*;
-use clinkz_wot_core::{consumer::*, host_accounts::*, value_type::TypeSchema, *};
+use clinkz_wot_core::{consumer::*, data_schema::PreparedSchema, host_accounts::*, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::{HostConsumerBindingPreparation, open_consumer::*};
 use clinkz_wot_servient_finite::consumer::*;
@@ -81,10 +81,10 @@ impl ConsumerDataService for Data {
     fn policy(&self) -> ConsumerDataPolicy {
         self.0.policy()
     }
-    fn supports_schema(&self, s: TypeSchema) -> bool {
+    fn supports_schema(&self, s: &PreparedSchema) -> bool {
         self.0.supports_schema(s)
     }
-    fn validate(&self, s: TypeSchema, p: &Payload) -> CoreResult<()> {
+    fn validate(&self, s: &PreparedSchema, p: &Payload) -> CoreResult<()> {
         fire(Edge::Validate);
         self.0.validate(s, p)
     }

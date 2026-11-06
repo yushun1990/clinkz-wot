@@ -320,7 +320,7 @@ fn selected_write_requires_its_own_data_facet_and_prepares_all_eligible_schemas(
         fn policy(&self) -> ConsumerDataPolicy {
             self.0.policy()
         }
-        fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+        fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
             self.0.validate(s, p)
         }
         fn supports_property_map(&self, s: &collection::PropertyCollectionSchema) -> bool {
@@ -379,7 +379,7 @@ fn selected_write_requires_its_own_data_facet_and_prepares_all_eligible_schemas(
     drop(f);
     clean(&accounts);
     // Even an unselected writable member's required schema must be supported at preparation.
-    td["properties"]["secret"]["minLength"] = json!(1);
+    td["properties"]["secret"]["pattern"] = json!("^x$");
     let p = prepare_consumer(
         &td,
         accounts.clone(),
@@ -397,7 +397,7 @@ fn selected_write_requires_its_own_data_facet_and_prepares_all_eligible_schemas(
     td["properties"]["secret"]
         .as_object_mut()
         .unwrap()
-        .remove("minLength");
+        .remove("pattern");
     let mut reg = registration();
     reg.services.data = Arc::new(AllMapOnly(reg.services.data));
     let p = prepare_consumer(
@@ -463,7 +463,7 @@ fn http_refuses_an_unencodable_member_report_instead_of_replacing_it_with_204() 
                 .into_iter()
                 .map(|name| collection::PropertyMemberSchema {
                     name: name.into(),
-                    schema: value_type::TypeSchema::Any,
+                    schema: data_schema::PreparedSchema::Any,
                 })
                 .collect(),
         )
@@ -547,7 +547,7 @@ fn raw_http_delivery_also_refuses_to_erase_member_evidence() {
             .into_iter()
             .map(|name| collection::PropertyMemberSchema {
                 name: name.into(),
-                schema: value_type::TypeSchema::Any,
+                schema: data_schema::PreparedSchema::Any,
             })
             .collect(),
     )

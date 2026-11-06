@@ -2,14 +2,14 @@ use clinkz_wot_codec_json::{
     decode_property_selection, encode_property_selection, validate_property_map,
     validate_property_write_map, validate_selected_property_map,
 };
-use clinkz_wot_core::{Payload, collection::*, value_type::*};
+use clinkz_wot_core::{Payload, collection::*, data_schema::*};
 fn schema(names: &[&str]) -> PropertyCollectionSchema {
     PropertyCollectionSchema::try_new(
         names
             .iter()
             .map(|name| PropertyMemberSchema {
                 name: (*name).into(),
-                schema: TypeSchema::Type(ValueType::Integer),
+                schema: PreparedSchema::Type(ValueType::Integer),
             })
             .collect(),
     )
@@ -24,15 +24,15 @@ fn selected_write_derives_only_validated_members_with_independent_schemas() {
     let s = PropertyCollectionSchema::try_new(vec![
         PropertyMemberSchema {
             name: "on".into(),
-            schema: TypeSchema::Type(ValueType::Boolean),
+            schema: PreparedSchema::Type(ValueType::Boolean),
         },
         PropertyMemberSchema {
             name: "secret".into(),
-            schema: TypeSchema::Type(ValueType::String),
+            schema: PreparedSchema::Type(ValueType::String),
         },
         PropertyMemberSchema {
             name: "level".into(),
-            schema: TypeSchema::Type(ValueType::Integer),
+            schema: PreparedSchema::Type(ValueType::Integer),
         },
     ])
     .unwrap();
@@ -102,7 +102,7 @@ fn descriptor_bounds_and_decoded_duplicate_names_cannot_weaken_the_map() {
     let mut oversized_backing = Vec::with_capacity(64);
     oversized_backing.push(PropertyMemberSchema {
         name: "level".into(),
-        schema: TypeSchema::Any,
+        schema: PreparedSchema::Any,
     });
     assert!(PropertyCollectionSchema::try_new(oversized_backing).is_err());
     let s = schema(&["level"]);
@@ -111,7 +111,7 @@ fn descriptor_bounds_and_decoded_duplicate_names_cannot_weaken_the_map() {
     assert!(
         PropertyCollectionSchema::try_new(vec![PropertyMemberSchema {
             name: "x".repeat(257).into(),
-            schema: TypeSchema::Any
+            schema: PreparedSchema::Any
         }])
         .is_err()
     );
@@ -120,7 +120,7 @@ fn descriptor_bounds_and_decoded_duplicate_names_cannot_weaken_the_map() {
             (0..33)
                 .map(|i| PropertyMemberSchema {
                     name: format!("p{i}").into(),
-                    schema: TypeSchema::Any
+                    schema: PreparedSchema::Any
                 })
                 .collect()
         )
@@ -131,7 +131,7 @@ fn descriptor_bounds_and_decoded_duplicate_names_cannot_weaken_the_map() {
             (0..17)
                 .map(|i| PropertyMemberSchema {
                     name: format!("{i:03}{}", "x".repeat(253)).into(),
-                    schema: TypeSchema::Any
+                    schema: PreparedSchema::Any
                 })
                 .collect()
         )

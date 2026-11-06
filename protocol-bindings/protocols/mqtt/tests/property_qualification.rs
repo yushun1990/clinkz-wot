@@ -148,8 +148,8 @@ fn property_observability_value_schema_and_protocol_limits_are_qualified_in_both
     assert_eq!(definition.input().target, target());
     assert_eq!(
         definition.input().schemas,
-        ConsumerNotificationSchemas::PropertyValue(value_type::TypeSchema::Type(
-            value_type::ValueType::Integer
+        ConsumerNotificationSchemas::PropertyValue(data_schema::PreparedSchema::Type(
+            data_schema::ValueType::Integer
         ))
     );
     assert!(
@@ -249,7 +249,7 @@ fn property_form_selection_keeps_order_actual_registration_and_stop_capability()
     let mut input = d.into_input();
     input.schemas = ConsumerNotificationSchemas::Event {
         subscription: None,
-        data: Some(value_type::TypeSchema::Any),
+        data: Some(data_schema::PreparedSchema::Any),
         data_response: None,
         cancellation: None,
     };

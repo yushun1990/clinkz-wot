@@ -27,6 +27,18 @@ Heap allocation measurements and reservation counters describe different facts;
 temporary allowances and overlapping reservations are reported separately from
 requested retained allocator bytes.
 
+Prepared structured constraints add bounded owned field vectors and names to
+scalar data roles as well as collection members. A source census prepays their
+variable construction/destruction; retained content charges actual backing, not
+just a fixed enum size. Reused views keep the first owner and do not clone the
+tree during calls. HTTP configuration snapshots and accepted native programs
+retain their immutable scalar schema through an Arc in the concrete Host
+participant; this is not an Arc requirement in Core's semantic model. Codec
+scratch/work and instance/call/result allowances remain distinct obligations.
+The external owned-compiler fixture declares artifact bounds using the new
+actual schema/member layout rather than preserving its former 512-byte group
+artifact assumption.
+
 `RES-HANDOFF-001`: Capacity MUST precede each acquisition/acceptance and fund its
 result/status/cleanup path. New growth may fail after acceptance only under a
 declared policy preserving existing owners; admission MUST NOT promise simultaneous

@@ -35,7 +35,7 @@ pub trait ActionQueryPolicy {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActionMemberSchema {
     pub name: alloc::boxed::Box<str>,
-    pub output: Option<crate::value_type::TypeSchema>,
+    pub output: Option<crate::data_schema::PreparedSchema>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActionCollectionSchema {
@@ -64,7 +64,11 @@ impl ActionCollectionSchema {
     }
     pub fn retained_bytes(&self) -> usize {
         self.members.capacity() * core::mem::size_of::<ActionMemberSchema>()
-            + self.members.iter().map(|m| m.name.len()).sum::<usize>()
+            + self
+                .members
+                .iter()
+                .map(|m| m.name.len() + m.output.as_ref().map_or(0, |s| s.retained_bytes()))
+                .sum::<usize>()
     }
 }
 

@@ -412,7 +412,7 @@ fn root_requires_actual_selection_mapping_and_complete_static_member_meaning() {
                     json!(format!("http://{addr}/properties{{?propertyNames}}"));
                 td["uriVariables"] = json!({"propertyNames":{"type":"string"}});
             }
-            "schema" => td["properties"]["level"]["minimum"] = json!(0),
+            "schema" => td["properties"]["level"]["multipleOf"] = json!(2),
             "readability" => {
                 td["properties"]["level"]["writeOnly"] = json!(true);
                 // This is contradictory with readOnly and must not be accepted.
@@ -513,7 +513,7 @@ impl ConsumerDataService for SelectedService {
         p.retained_bytes += 128;
         p
     }
-    fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+    fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
         assert!(
             self.available(),
             "unavailable service entered input validation"
@@ -851,13 +851,13 @@ impl ConsumerDataService for ReviewData {
         self.actual.available()
             && !(self.fault == "availability" && self.changed.load(Ordering::Relaxed))
     }
-    fn supports_schema(&self, schema: value_type::TypeSchema) -> bool {
+    fn supports_schema(&self, schema: &data_schema::PreparedSchema) -> bool {
         self.actual.supports_schema(schema)
             && !(self.fault == "array"
                 && self.changed.load(Ordering::Relaxed)
-                && schema == value_type::TypeSchema::Type(value_type::ValueType::Array))
+                && schema == &data_schema::PreparedSchema::Type(data_schema::ValueType::Array))
     }
-    fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+    fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
         assert!(
             self.available(),
             "unavailable service entered input validation"

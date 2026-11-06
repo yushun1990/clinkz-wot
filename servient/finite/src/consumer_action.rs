@@ -124,8 +124,8 @@ impl Definition {
             || !self
                 .schemas
                 .input
-                .into_iter()
-                .chain(self.schemas.output)
+                .iter()
+                .chain(self.schemas.output.iter())
                 .all(|schema| s.op.services.data.supports_schema(schema))
         {
             return Err(invalid());
@@ -151,7 +151,7 @@ impl Definition {
     }
     fn validate(
         &self,
-        schema: Option<clinkz_wot_core::value_type::TypeSchema>,
+        schema: Option<&clinkz_wot_core::data_schema::PreparedSchema>,
         payload: Option<&Payload>,
     ) -> CoreResult<()> {
         let selected = self.selected(0)?;
@@ -367,7 +367,7 @@ impl ConsumerActionRuntime {
             )?;
             prepay(invoke, budget)?;
             invoke.check(&state.consumer, None)?;
-            d.validate(d.schemas.input, input.as_ref())?;
+            d.validate(d.schemas.input.as_ref(), input.as_ref())?;
             invoke.check(&state.consumer, None)?;
             let raw = invoke.op.mapping.start(input.as_ref(), None)?;
             Ok((slot, sequence, d, funding, raw))
@@ -790,7 +790,7 @@ impl Invocation {
                                 .response_bytes
                     }) {
                     self.definition
-                        .validate(self.definition.schemas.output, output.data())
+                        .validate(self.definition.schemas.output.as_ref(), output.data())
                 } else {
                     Err(invalid())
                 };
