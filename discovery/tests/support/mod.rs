@@ -11,7 +11,7 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpListener,
-    sync::Semaphore,
+    sync::{Semaphore, oneshot},
     task::JoinHandle,
 };
 
@@ -90,6 +90,7 @@ pub struct Peer {
     secure: bool,
     pub requests: Arc<Mutex<Vec<String>>>,
     received: Arc<Semaphore>,
+    stop: oneshot::Sender<()>,
     handle: JoinHandle<usize>,
 }
 async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
@@ -138,11 +139,9 @@ async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
     // Keep the server side alive, including on partial bodies, until the client
     // physically closes it. A successful finish proves no detached/pool socket.
     let mut scratch = [0; 1024];
-    loop {
-        match socket.read(&mut scratch).await {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
+    match socket.read(&mut scratch).await {
+        Ok(0) | Err(_) => {}
+        Ok(n) => panic!("unexpected bytes after the scripted request: {n}"),
     }
 }
 impl Peer {
@@ -154,6 +153,7 @@ impl Peer {
         let saved = requests.clone();
         let signal = received.clone();
         let tls = keys.map(Keys::server);
+        let (stop, finished) = oneshot::channel();
         let handle = tokio::spawn(async move {
             let mut releases = 0;
             for step in steps {
@@ -170,6 +170,17 @@ impl Peer {
                 }
                 releases += 1;
             }
+            // Keep accepting until the caller has settled and explicitly checks
+            // final release. Dropping the listener here would hide a retry as a
+            // refused connection. Check queued connections before the stop signal.
+            tokio::select! {
+                biased;
+                unexpected = listener.accept() => {
+                    let _socket = unexpected.unwrap();
+                    panic!("unexpected connection after scripted exchanges");
+                }
+                _ = finished => {}
+            }
             releases
         });
         Self {
@@ -177,6 +188,7 @@ impl Peer {
             secure: keys.is_some(),
             requests,
             received,
+            stop,
             handle,
         }
     }
@@ -198,6 +210,7 @@ impl Peer {
             .forget();
     }
     pub async fn finish(self, expected: usize) {
+        let _ = self.stop.send(());
         assert_eq!(
             tokio::time::timeout(Duration::from_secs(2), self.handle)
                 .await

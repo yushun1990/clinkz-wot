@@ -561,7 +561,12 @@ async fn in_flight_cancellation_revocation_rotation_and_abandonment_release_the_
             Some(credentials(THING_USER, THING_PASSWORD)),
         );
         let runtime = app.prepare(&selected, 1, &app.instance).unwrap();
-        let mut call = read(&runtime);
+        // Only the injected invalidation may end this stalled exchange. The
+        // external watchdog in settle() fails the test if progress stops; an
+        // Engine deadline must not impersonate cancellation or revocation.
+        let mut call = runtime
+            .read_property("level", Deadline::NONE, now(), &mut work())
+            .unwrap();
         until_request(&runtime, &thing).await;
         match case {
             0 => call.cancel(),
@@ -573,7 +578,23 @@ async fn in_flight_cancellation_revocation_rotation_and_abandonment_release_the_
         }
         if case != 4 {
             let result = settle(&mut call).await;
-            assert!(result.result().is_err(), "case {case}");
+            let error = result.result().expect_err("invalidated read succeeded");
+            let expected = match case {
+                0 => matches!(error, CoreError::Cancelled(_)),
+                1 => matches!(
+                    error,
+                    CoreError::Security {
+                        reason: SecurityFailureReason::AuthorizationDenied,
+                        ..
+                    }
+                ),
+                2 => matches!(error, CoreError::StaleHandle(_)),
+                // Credential removal changes the captured service revision.
+                3 => matches!(error, CoreError::Validation(_)),
+                _ => unreachable!(),
+            };
+            assert!(expected, "unexpected cause in case {case}: {error:?}");
+            assert_eq!(result.first_cause(), Some(&error));
             assert_eq!(result.consumer(), &app.instance.reference());
             drop(result);
         }

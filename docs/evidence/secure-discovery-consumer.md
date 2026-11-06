@@ -92,7 +92,11 @@ include multiple cases and real TLS exchanges:
 - Authenticated HTTP 200 with out-of-range integers, missing required fields,
   excessive string length or wrong types fails the selected DataSchema.
 - In-flight cancellation, policy denial, instance revocation, credential removal
-  and abandonment close an actual stalled TLS response. Already validated but
+  and abandonment close an actual stalled TLS response. The call has no Engine
+  deadline; an external watchdog fails the test if an invalidation does not
+  settle it. The four invalidation cases check the original terminal cause: `Cancelled`,
+  `Security(AuthorizationDenied)`, `StaleHandle`, or `Validation` for a changed
+  captured credential-service revision, respectively. Already validated but
   unread native success is fenced by policy denial/revision or original-instance
   revocation; native evidence and original funding remain until final disposal.
 - Directory cancellation/abandonment during an authenticated partial page returns
@@ -101,11 +105,26 @@ include multiple cases and real TLS exchanges:
 
 The Rust peers independently parse HTTP requests and check one exact Basic
 credential field; they do not use a ClinkZ Directory or Producer. Peer completion
-waits for client EOF/error. No-contact assertions hold a separate listener open.
+waits for client EOF/error and rejects any further request bytes on that same
+connection. After the scripted exchanges, the listener remains open until the
+caller checks final release after settlement. It fails on any extra connection,
+checking queued connections before accepting the caller's stop signal. No-contact
+assertions hold a separate listener open.
 Every Engine case checks all original resource accounts after disposal; the
 success case also observes final access/policy owner destruction. The unread-result
 test delegates to the real validator and observes its completion to synchronize
 the authority change, rather than guessing from elapsed time.
+
+The original evidence revision `43a00421d7851a4734140e11ee39c68a5286502e`
+could accept deadline expiry as cancellation/revocation evidence, and its peer
+closed too early to detect a retry. Those assertions did not establish the
+claimed regression protection. The corrected tests above were checked with
+eight fault injections in a disposable detached checkout: separately removing
+each of the four invalidations fails at the external watchdog; deliberately
+retrying the failed HTTP exchange fails for each of 401, 403 and 302; sending a
+second request on the original TLS connection fails the byte guard. The normal
+tests pass with the production runtime unchanged. These mutations are evidence
+of test sensitivity, not runtime behavior or a new production architecture claim.
 
 [The independent Python/OpenSSL fixture](../../discovery/tests/support/secure_peers.py)
 runs the actual example binary against two standard-library HTTPS servers. It
