@@ -29,7 +29,8 @@ pub trait ConsumerDataService: Send + Sync {
     ) -> CoreResult<()> {
         Err(CoreError::UnsupportedOperation(context()))
     }
-    /// Complete support of the already prepared type-only assertion.
+    /// Complete support of the prepared assertions. The default qualifies only
+    /// type assertions; structured validators must opt in explicitly.
     fn supports_schema(&self, schema: &PreparedSchema) -> bool {
         schema.is_type_only()
     }

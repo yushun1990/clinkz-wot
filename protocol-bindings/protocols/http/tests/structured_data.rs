@@ -444,45 +444,110 @@ fn unsupported_nested_assertions_are_not_weakened_for_either_role() {
 #[test]
 fn consumer_rejects_invalid_wire_values_and_preserves_late_constraint_evidence() {
     io().block_on(async {
-        for mode in ["normal","cancel","replace"] {
-            let listener=TcpListener::bind("127.0.0.1:0").unwrap();let addr=listener.local_addr().unwrap();
-            let sent=Arc::new(AtomicBool::new(false));let done=sent.clone();
-            let wire=std::thread::spawn(move|| {
-                let (mut peer,_)=listener.accept().unwrap();
+        for mode in ["normal", "cancel", "replace"] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            let sent = Arc::new(AtomicBool::new(false));
+            let done = sent.clone();
+            let wire = std::thread::spawn(move || {
+                let (mut peer, _) = listener.accept().unwrap();
                 peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-                let mut request=Vec::new();let mut bytes=[0;512];
-                while !request.windows(4).any(|w|w==b"\r\n\r\n") {let n=peer.read(&mut bytes).unwrap();assert!(n>0);request.extend_from_slice(&bytes[..n]);}
-                let body=br#"{"config":{"level":100,"label":"ok"}}"#;
-                write!(peer,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len()).unwrap();
-                peer.write_all(body).unwrap();done.store(true,Ordering::Release);
+                let mut request = Vec::new();
+                let mut bytes = [0; 512];
+                while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = peer.read(&mut bytes).unwrap();
+                    assert!(n > 0);
+                    request.extend_from_slice(&bytes[..n]);
+                }
+                let body = br#"{"config":{"level":100,"label":"ok"}}"#;
+                write!(
+                    peer,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+                .unwrap();
+                peer.write_all(body).unwrap();
+                done.store(true, Ordering::Release);
             });
-            let td=structured_description(addr);let backing=bank();let accounts=bank();let owner=consumer_instance();
-            let definitions=mappings(&td,&backing,None);
-            let content=Arc::downgrade(definitions.iter().find(|d|d.operation()==Operation::ReadProperty).unwrap().content());
-            let client=bind_mappings(definitions,&owner,&accounts,Arc::new(AtomicBool::new(false)));
+            let td = structured_description(addr);
+            let backing = bank();
+            let accounts = bank();
+            let owner = consumer_instance();
+            let definitions = mappings(&td, &backing, None);
+            let content = Arc::downgrade(
+                definitions
+                    .iter()
+                    .find(|d| d.operation() == Operation::ReadProperty)
+                    .unwrap()
+                    .content(),
+            );
+            let client = bind_mappings(
+                definitions,
+                &owner,
+                &accounts,
+                Arc::new(AtomicBool::new(false)),
+            );
             drop(td);
-            let mut call=client.read_property("on",Deadline::NONE,now(0),&mut work()).unwrap();
-            let start=Instant::now();
+            let mut call = client
+                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .unwrap();
+            let start = Instant::now();
             while !sent.load(Ordering::Acquire) {
-                assert!(call.poll(&mut cx(),now(0),&mut work().with_remaining(WorkClass::CodecInputBytes,0)).is_pending());
-                assert!(start.elapsed()<Duration::from_secs(5));tokio::time::sleep(Duration::from_millis(1)).await;
-            }
-            for _ in 0..4 {
-                assert!(call.poll(&mut cx(),now(0),&mut work().with_remaining(WorkClass::CodecInputBytes,0)).is_pending());
+                assert!(
+                    call.poll(
+                        &mut cx(),
+                        now(0),
+                        &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
+                    )
+                    .is_pending()
+                );
+                assert!(start.elapsed() < Duration::from_secs(5));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
-            match mode {"cancel"=>call.cancel(),"replace"=>owner.revoke(),_=>{}}
-            let settlement=loop {
-                if let Poll::Ready(s)=call.poll(&mut cx(),now(0),&mut work()) {break s;}
-                assert!(start.elapsed()<Duration::from_secs(5));tokio::time::sleep(Duration::from_millis(1)).await;
+            for _ in 0..4 {
+                assert!(
+                    call.poll(
+                        &mut cx(),
+                        now(0),
+                        &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
+                    )
+                    .is_pending()
+                );
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            match mode {
+                "cancel" => call.cancel(),
+                "replace" => owner.revoke(),
+                _ => {}
+            }
+            let settlement = loop {
+                if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+                    break s;
+                }
+                assert!(start.elapsed() < Duration::from_secs(5));
+                tokio::time::sleep(Duration::from_millis(1)).await;
             };
             wire.join().unwrap();
-            assert!(settlement.result().is_err(),"{mode}");
-            assert!(settlement.rejected_output().is_some(),"original schema must validate normal and late output: {mode}");
-            if mode=="cancel" {assert!(matches!(settlement.first_cause(),Some(CoreError::Cancelled(_))));}
-            drop(call);drop(client);drop(owner);
-            assert!(content.upgrade().is_some());assert!(live(&backing)>0 && live(&accounts)>0);
-            drop(settlement);assert!(content.upgrade().is_none());clean(&backing);clean(&accounts);
+            assert!(settlement.result().is_err(), "{mode}");
+            assert!(
+                settlement.rejected_output().is_some(),
+                "original schema must validate normal and late output: {mode}"
+            );
+            if mode == "cancel" {
+                assert!(matches!(
+                    settlement.first_cause(),
+                    Some(CoreError::Cancelled(_))
+                ));
+            }
+            drop(call);
+            drop(client);
+            drop(owner);
+            assert!(content.upgrade().is_some());
+            assert!(live(&backing) > 0 && live(&accounts) > 0);
+            drop(settlement);
+            assert!(content.upgrade().is_none());
+            clean(&backing);
+            clean(&accounts);
         }
     });
 }
