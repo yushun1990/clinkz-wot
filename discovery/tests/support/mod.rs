@@ -11,7 +11,7 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpListener,
-    sync::Semaphore,
+    sync::{Semaphore, oneshot},
     task::JoinHandle,
 };
 
@@ -29,13 +29,20 @@ pub fn reply(body: &str, media: &str, headers: &str) -> String {
 pub struct Step {
     pub path: String,
     pub response: String,
+    credentials: Option<(&'static str, &'static str)>,
 }
 impl Step {
     pub fn new(path: &str, response: String) -> Self {
         Self {
             path: path.into(),
             response,
+            credentials: None,
         }
+    }
+    /// Test peer authentication, independently of ClinkZ's HTTP Binding.
+    pub fn authenticated(mut self, user: &'static str, password: &'static str) -> Self {
+        self.credentials = Some((user, password));
+        self
     }
 }
 pub struct Keys {
@@ -83,6 +90,7 @@ pub struct Peer {
     secure: bool,
     pub requests: Arc<Mutex<Vec<String>>>,
     received: Arc<Semaphore>,
+    stop: oneshot::Sender<()>,
     handle: JoinHandle<usize>,
 }
 async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
@@ -106,17 +114,34 @@ async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
         request.starts_with(&format!("GET {} HTTP/1.1\r\n", step.path)),
         "{request}"
     );
+    let authenticated = step.credentials.is_none_or(|(user, password)| {
+        use base64::Engine;
+        let expected = format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(format!("{user}:{password}"))
+        );
+        let headers: Vec<_> = request
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .filter(|(name, _)| name.eq_ignore_ascii_case("authorization"))
+            .map(|(_, value)| value.trim())
+            .collect();
+        headers == [expected.as_str()]
+    });
     requests.lock().unwrap().push(request);
     received.add_permits(1);
-    let _ = socket.write_all(step.response.as_bytes()).await;
+    let response = if authenticated {
+        step.response.as_bytes()
+    } else {
+        b"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"fixture\"\r\nContent-Length: 0\r\n\r\n"
+    };
+    let _ = socket.write_all(response).await;
     // Keep the server side alive, including on partial bodies, until the client
     // physically closes it. A successful finish proves no detached/pool socket.
     let mut scratch = [0; 1024];
-    loop {
-        match socket.read(&mut scratch).await {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
+    match socket.read(&mut scratch).await {
+        Ok(0) | Err(_) => {}
+        Ok(n) => panic!("unexpected bytes after the scripted request: {n}"),
     }
 }
 impl Peer {
@@ -128,6 +153,7 @@ impl Peer {
         let saved = requests.clone();
         let signal = received.clone();
         let tls = keys.map(Keys::server);
+        let (stop, finished) = oneshot::channel();
         let handle = tokio::spawn(async move {
             let mut releases = 0;
             for step in steps {
@@ -144,6 +170,17 @@ impl Peer {
                 }
                 releases += 1;
             }
+            // Keep accepting until the caller has settled and explicitly checks
+            // final release. Dropping the listener here would hide a retry as a
+            // refused connection. Check queued connections before the stop signal.
+            tokio::select! {
+                biased;
+                unexpected = listener.accept() => {
+                    let _socket = unexpected.unwrap();
+                    panic!("unexpected connection after scripted exchanges");
+                }
+                _ = finished => {}
+            }
             releases
         });
         Self {
@@ -151,6 +188,7 @@ impl Peer {
             secure: keys.is_some(),
             requests,
             received,
+            stop,
             handle,
         }
     }
@@ -172,6 +210,7 @@ impl Peer {
             .forget();
     }
     pub async fn finish(self, expected: usize) {
+        let _ = self.stop.send(());
         assert_eq!(
             tokio::time::timeout(Duration::from_secs(2), self.handle)
                 .await

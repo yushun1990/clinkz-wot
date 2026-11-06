@@ -36,3 +36,7 @@ http = ["std", "dep:clinkz-wot-td", "clinkz-wot-td/std", "clinkz-wot-td/validate
 [[example]]
 name = "discover_read"
 required-features = ["http"]
+
+[[example]]
+name = "secure_discover_read"
+required-features = ["http"]

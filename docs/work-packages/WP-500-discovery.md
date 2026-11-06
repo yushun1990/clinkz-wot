@@ -55,6 +55,13 @@ is `cargo run -p clinkz-wot-discovery --example discover_read -- ...`.
 Existing historical Directory performance recipes remain non-gating inputs and
 supply no resource/performance qualification for this implementation.
 
+The [secure application-composition evidence](../evidence/secure-discovery-consumer.md)
+joins authenticated HTTPS Directory retrieval to an explicitly selected TD
+HTTPS/Basic Property Read, using the existing APIs with independent trust,
+credentials, policy and instance authority. It adds the `secure_discover_read`
+example, real TLS boundary tests and a separately runnable Python/OpenSSL peer
+fixture; it does not expand the client or Binding security/operation subset.
+
 This increment does not close WP-500, M5B, a general security/profile gate or v1.
 Independent architecture/public API acceptance uses a fresh review context over
 the exact diff and executable evidence before merge.
