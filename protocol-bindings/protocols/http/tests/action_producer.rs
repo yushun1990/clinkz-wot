@@ -258,6 +258,139 @@ fn qualified_http_action_and_property_share_one_authority_with_independent_conti
 }
 
 #[test]
+fn callback_time_revocation_fences_qualified_http_action_acceptance_and_controls() {
+    for operation in [
+        Operation::InvokeAction,
+        Operation::QueryAction,
+        Operation::CancelAction,
+    ] {
+        let address = addr();
+        let mut owner = owner();
+        let counts = Rc::new(Counters::default());
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let mut exposure = create(
+            &owner,
+            key(Generation::INITIAL),
+            address,
+            None,
+            Rc::clone(&counts),
+            None,
+            Arc::clone(&bank),
+        );
+        let key = exposure.key();
+        exposure
+            .participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .install_closed()
+            .unwrap();
+        exposure.publish(&mut owner, &mut budget()).unwrap();
+        let (method, path, body, prior_id) = if operation == Operation::InvokeAction {
+            ("POST", "/run".to_owned(), "12", None)
+        } else {
+            let accepted = send(&mut owner, &mut exposure, address, "POST", "/run", "12");
+            assert!(accepted.starts_with("HTTP/1.1 202"), "{accepted}");
+            let wire_id = serde_json::from_str::<serde_json::Value>(
+                accepted.split("\r\n\r\n").nth(1).unwrap(),
+            )
+            .unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            let id = exposure
+                .participant_mut::<HttpActionRuntime>(0)
+                .unwrap()
+                .action_ids()
+                .next()
+                .unwrap();
+            if operation == Operation::QueryAction {
+                counts.complete.set(true);
+                assert_eq!(
+                    exposure
+                        .participant_mut::<HttpActionRuntime>(0)
+                        .unwrap()
+                        .progress_actions(&mut owner, &mut budget())
+                        .unwrap(),
+                    Poll::Ready(Some(id))
+                );
+                ("GET", format!("/status?id={wire_id}"), "", Some(id))
+            } else {
+                ("DELETE", format!("/stop?id={wire_id}"), "", Some(id))
+            }
+        };
+        *counts.revoke_in_authorize.borrow_mut() =
+            Some((operation, owner.revocation(key).unwrap()));
+        let (response, report) = send_report(
+            &mut owner,
+            &mut exposure,
+            address,
+            method,
+            &path,
+            body,
+            &mut budget(),
+        );
+        assert_eq!(counts.invoked.get(), usize::from(prior_id.is_some()));
+        assert!(
+            response.starts_with("HTTP/1.1 410 Gone"),
+            "{operation:?}: {response}"
+        );
+        assert!(!response.contains("\"output\""));
+        assert!(matches!(
+            report.request_error,
+            Some(CoreError::StaleHandle(_))
+        ));
+        assert!(report.locally_written && report.cause.is_none());
+        assert_eq!(report.exchange.as_ref().unwrap().instance, key);
+        assert_eq!(report.exchange.as_ref().unwrap().operation, operation);
+        assert!(owner.description(key).is_none());
+        assert_eq!(counts.cancelled.get(), 0);
+        let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+        assert_eq!(native.records(), usize::from(prior_id.is_some()));
+        if let Some(id) = prior_id {
+            counts.complete.set(true);
+            let handle = native.handle(id).unwrap();
+            assert_eq!(
+                owner.step_raw_action(&handle, &mut budget()).unwrap(),
+                Poll::Ready(())
+            );
+            let result = native.acknowledge(&mut owner, id).unwrap().unwrap();
+            assert_eq!(result.instance, key);
+            assert_eq!(result.reference, handle.reference());
+            assert_eq!(result.effect, ActionEffect::PossiblyApplied);
+            assert_eq!(
+                result
+                    .result()
+                    .as_ref()
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body
+                    .as_ref(),
+                b"24"
+            );
+            assert_eq!(
+                result.cancel_requested,
+                operation == Operation::CancelAction
+            );
+            assert_eq!(
+                counts.cancelled.get(),
+                usize::from(operation == Operation::CancelAction)
+            );
+            drop(result);
+        }
+        exposure.begin_close();
+        exposure.retire(&mut owner, &mut budget()).unwrap();
+        drop(exposure);
+        drop(owner);
+        TcpListener::bind(address).unwrap();
+        assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+        counts.revoke_in_authorize.borrow_mut().take();
+        for kind in ResourceKind::ALL {
+            assert_eq!(bank.account(kind).used(), 0, "{kind:?}");
+        }
+    }
+}
+
+#[test]
 fn action_wire_refusals_distinguish_policy_capacity_and_stale_authority() {
     let address = addr();
     let mut owner = owner();

@@ -62,6 +62,8 @@ struct Application {
     calls: Cell<usize>,
     drops: Cell<usize>,
     denied: Cell<bool>,
+    policy_revision: Cell<u64>,
+    revoke_during_authorize: Cell<bool>,
     body: Cell<&'static [u8]>,
 }
 struct Handler(Rc<Application>);
@@ -71,8 +73,16 @@ impl Drop for Handler {
     }
 }
 impl RawFiniteHandler for Handler {
+    fn authorization_revision(&self) -> u64 {
+        self.0.policy_revision.get()
+    }
     fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
-        if self.0.denied.get() {
+        let denied = self.0.denied.get();
+        if self.0.revoke_during_authorize.replace(false) {
+            self.0.denied.set(true);
+            self.0.policy_revision.set(self.0.policy_revision.get() + 1);
+        }
+        if denied {
             Err(CoreError::Validation(ErrorContext::new(
                 ErrorPhase::Admission,
                 RetryClass::Never,
@@ -438,6 +448,43 @@ fn fresh_currentness_and_authorization_checked_between_ingress_and_dispatch() {
         }
         close(&mut s, &mut e);
     }
+}
+
+#[test]
+fn joined_handler_policy_revision_fences_callback_time_revocation() {
+    let addr = address();
+    let bank = accounts();
+    let application = app();
+    application.revoke_during_authorize.set(true);
+    let mut s = root(compiler(addr), bank.clone());
+    let mut e = prepare(&s, document(addr), authority(), application.clone(), None).unwrap();
+    publish(&mut s, &mut e);
+    let wire = response(&mut s, &mut e, &mut request(addr));
+    assert_eq!(application.policy_revision.get(), 1);
+    // The callback returned its earlier allowed decision; the funded facade
+    // must preserve the revision that makes that decision obsolete.
+    assert_eq!(application.calls.get(), 0);
+    assert!(wire.is_empty(), "invalidated dispatch must retire its reply");
+    let settlement = e.take_settlement().unwrap();
+    assert_eq!(settlement.recipient, Some(e.key()));
+    assert_eq!(settlement.effect, FiniteEffect::NotInvoked);
+    assert_eq!(settlement.delivery, FiniteDelivery::NotDelivered);
+    assert!(matches!(
+        settlement.result,
+        Err(CoreError::Security {
+            reason: SecurityFailureReason::AuthorizationDenied,
+            ..
+        })
+    ));
+    drop(settlement);
+    close(&mut s, &mut e);
+    drop(e);
+    drop(s);
+    assert_eq!(application.drops.get(), 1);
+    for kind in ResourceKind::ALL {
+        assert_eq!(bank.account(kind).used(), 0, "{kind:?}");
+    }
+    assert_released(addr);
 }
 
 #[test]

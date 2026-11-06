@@ -567,6 +567,11 @@ impl RawProducerServient {
         behavior
             .handler
             .authorize(Operation::InvokeAction, request.input)?;
+        // A callback can revoke this incarnation without borrowing the
+        // registry. Fence acceptance before reserving work or invoking it.
+        if !instance.current.get() {
+            return Err(CoreError::StaleHandle(context()));
+        }
         let target = AffordanceTarget::Action(Arc::clone(&behavior.name));
         let ctx = clinkz_wot_core::HandlerContext::for_producer(
             instance.instance.key(),
@@ -686,10 +691,11 @@ impl RawProducerServient {
         {
             return Err(denied());
         }
-        if !self
-            .instances
-            .iter()
-            .any(|e| e.current.get() && e.instance.key() == entry.instance.key())
+        if !entry.current.get()
+            || !self
+                .instances
+                .iter()
+                .any(|e| e.current.get() && e.instance.key() == entry.instance.key())
         {
             return Err(CoreError::StaleHandle(context()));
         }
@@ -702,6 +708,11 @@ impl RawProducerServient {
             return Err(CoreError::UnsupportedOperation(context()));
         }
         behavior.handler.authorize(operation, input)?;
+        // Keep the accepted invocation's original authority through the last
+        // callback; an earlier registry lookup cannot authorize this handoff.
+        if !entry.current.get() {
+            return Err(CoreError::StaleHandle(context()));
+        }
         Ok(i)
     }
 

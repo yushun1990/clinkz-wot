@@ -158,6 +158,8 @@ services. Each exposes a passive invalidation revision for mutable policy;
 changes MUST advance it without reuse, including callback-time changes. Zero
 is only appropriate for policy that cannot change across callbacks. Revisions
 are bounded metadata reads, with no I/O, reentrancy or application callbacks.
+Handler adapters MUST preserve the wrapped service's authorization revision
+along with its authorization and behavior callbacks.
 An acceptance or delivery decision is invalid if either service changes during
 its verification/authorization sequence, even if the last verifier returns the
 same Principal. This does not freeze policy for the lifetime of a listener or
@@ -181,8 +183,11 @@ for finite and Action behavior, but a separate bounded invocation store for
 continuing Action work. It captures separate selected invoke/query/cancel route
 identities (possibly different Bindings), the established principal id and the
 original behavior. Query/cancel require a live local handle, original route,
-current instance and fresh application permission. Cooperative cancellation,
-local abandonment, application result and native delivery are separate outcomes;
+current instance and fresh application permission. Invoke acceptance and
+query/cancel access MUST recheck the original incarnation's currentness after
+authorization callbacks, before reserving invocation work, entering behavior,
+exposing a view or accepting a public cancellation request. Cooperative
+cancellation, local abandonment, application result and native delivery are separate outcomes;
 an error after behavior entry is effect-uncertain. Alone this raw kernel makes
 no TD or native-I/O claim; explicitly raw registrations remain unvalidated
 beyond shape/backing checks. A published Action requires a captured validation

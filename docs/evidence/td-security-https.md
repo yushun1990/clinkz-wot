@@ -153,6 +153,16 @@ Callback-safe one-way instance revocation uses the existing currentness cell and
 retains its original funding, without granting replacement/dispatch authority.
 No universal security service or parallel Write runtime was added.
 
+The public [joined Producer regression](../../protocol-bindings/protocols/http/tests/joined_producer.rs)
+also invalidates application policy inside authorization. Its funded handler
+adapter forwards the actual revision; the old allowed decision cannot enter
+behavior or deliver a result. [Action kernel](../../servient/finite/tests/action_lifecycle.rs)
+and [qualified HTTP Action regressions](../../protocol-bindings/protocols/http/tests/action_producer.rs)
+revoke the original instance during invoke/query/cancel authorization. They fence
+new invocation and public control, retain already accepted work and results,
+and release the original capacity after settlement and final control disposal.
+These are existing NoSec Actions; authenticated Action support remains excluded.
+
 `security_write` uses the same publication/security fixture as `security_https`.
 It prepares and completely qualifies a Producer with default Read/Write Forms,
 then executes actual Engine Consumers after preparation sources retire. It
