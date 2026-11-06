@@ -205,6 +205,14 @@ reservation through native/result disposal, including when moved out of a typed
 loan. Its Drop owes the existing finite local-disposal contract. Shared native
 infrastructure keeps its Binding-owned policy and final-use lifetime.
 
+The retained Property Read `ProducerExecutor::install_policy` borrows the exact
+checked native program. Its declaration covers the program's complete indirect
+backing, largest individual allocation and bounded local destruction, including
+variable schema storage. Preparation captures it after lowering; runtime admission
+and currentness checks compare it against that same program. An installation
+sharing immutable program backing retains the original charge through final
+disposal rather than declaring a second physical allocation.
+
 
 Open finite Consumer registration pairs the actual portable `ConsumerCompiler`
 with the immutable `HostConsumerBindingRegistration`; refusal returns both

@@ -29,7 +29,6 @@ pub struct ProducerBindingPreparation<C, E: ProducerExecutor> {
     executor: E,
     configuration: E::Configuration,
     identity: BindingRegistrationIdentity,
-    policy: ProducerInstallPolicy,
     service: Option<ProducerServicePolicy>,
 }
 
@@ -49,14 +48,12 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
             return Err(refused((compiler, executor, configuration)));
         }
         let identity = executor.identity();
-        let policy = executor.install_policy();
         let service = executor.service_policy();
         Ok(Self {
             compiler,
             executor,
             configuration,
             identity,
-            policy,
             service,
         })
     }
@@ -86,7 +83,6 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
         }
         if !self.executor.configuration_matches(&self.configuration)
             || self.executor.identity() != self.identity
-            || self.executor.install_policy() != self.policy
             || self.executor.service_policy() != self.service
             || self.compiler.configuration() != &self.configuration
         {
@@ -122,13 +118,14 @@ impl<C: ProducerCompiler<E>, E: ProducerExecutor> ProducerBindingPreparation<C, 
         if self.service.is_some() && self.executor.output_validator(&program).is_none() {
             return Err(refused((self, handler)));
         }
+        let policy = self.executor.install_policy(&program);
         let (instance, property, handler, footprint) = handler.into_parts();
         let entry = ProducerExecutionEntry::new(instance, self.identity, property, program);
         // No compiler or source loan is retained in the completed value.
         Ok(PreparedProducer(ProducerExecutionRegistration::new(
             self.executor,
             self.configuration,
-            self.policy,
+            policy,
             self.service,
             entry,
             handler,

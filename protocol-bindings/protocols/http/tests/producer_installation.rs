@@ -107,8 +107,22 @@ fn prepare(
     PreparedProducer<HttpProducerExecutor, Handler>,
     ProducerInstanceAuthority,
 ) {
+    prepare_with_schema(address, generation, json!({"type":"number"}))
+}
+fn prepare_with_schema(
+    address: SocketAddr,
+    generation: Generation,
+    mut schema: Value,
+) -> (
+    PreparedProducer<HttpProducerExecutor, Handler>,
+    ProducerInstanceAuthority,
+) {
     let authority = ProducerInstanceAuthority::try_new(slot(generation)).unwrap();
-    let td: Thing = serde_json::from_value(document(address)).unwrap();
+    let mut value = document(address);
+    schema["readOnly"] = json!(true);
+    schema["forms"] = value["properties"][""]["forms"].take();
+    value["properties"][""] = schema;
+    let td: Thing = serde_json::from_value(value).unwrap();
     let config = ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS).unwrap();
     let mut c = ValidatedThingCursor::from_thing(
         &td,
@@ -379,11 +393,214 @@ fn compiler_configuration_and_producer_policy_identity_are_checked_without_io() 
 }
 
 #[test]
+fn schema_backing_counts_toward_public_installation_artifact_quotas() {
+    let _serial = SERIAL.lock().unwrap();
+    use ResourceKind as K;
+    let address = address();
+    let b = bank();
+    let (prepared, authority) =
+        prepare_with_schema(address, Generation::INITIAL, json!({"type":"object"}));
+    let r = accepted(Runtime::try_new(
+        prepared,
+        authority,
+        GatewayDefaultV1::LIMITS.clone(),
+        b.clone(),
+        Deadline::NONE,
+    ));
+    let primitive_bytes = b.account(K::BindingArtifactBytesGlobalMax).used();
+    let inline_bytes = (std::mem::size_of::<ProducerExecutionEntry<HttpProducerProgram>>()
+        + 2 * std::mem::size_of::<usize>()) as u64;
+    assert!(
+        primitive_bytes > inline_bytes,
+        "the primitive schema Arc must be funded"
+    );
+    drop(r);
+    empty(&b);
+
+    let properties: serde_json::Map<_, _> = (0..32)
+        .map(|n| (format!("field{n}"), json!({"type":"integer","minimum":0})))
+        .collect();
+    let schema = json!({"type":"object","properties":properties});
+    for kind in [
+        K::BindingArtifactBytesGlobalMax,
+        K::BindingArtifactBytesPerItemMax,
+        K::BindingArtifactBytesPerThingMax,
+    ] {
+        let limits = GatewayDefaultV1::LIMITS
+            .clone()
+            .try_with_limit(kind, Some(primitive_bytes))
+            .unwrap();
+        let (prepared, authority) =
+            prepare_with_schema(address, Generation::INITIAL, schema.clone());
+        let key = authority.key();
+        let refused = Runtime::try_new(prepared, authority, limits, b.clone(), Deadline::NONE)
+            .err()
+            .expect("structured backing must exceed the primitive program quota");
+        assert!(matches!(
+            refused.error().error(),
+            CoreError::LimitExceeded { resource, requested: Some(n), .. }
+                if *resource == kind && *n > primitive_bytes
+        ));
+        empty(&b);
+        free(address);
+        let (prepared, authority, _, original) = refused.into_input();
+        assert_eq!(authority.key(), key);
+        assert!(Arc::ptr_eq(&original, &b));
+        let r = accepted(Runtime::try_new(
+            prepared,
+            authority,
+            GatewayDefaultV1::LIMITS.clone(),
+            original,
+            Deadline::NONE,
+        ));
+        assert!(b.account(K::BindingArtifactBytesGlobalMax).used() > primitive_bytes);
+        drop(r);
+        empty(&b);
+    }
+}
+
+#[test]
+fn nested_schema_limits_and_final_disposal_keep_the_original_funding() {
+    let _serial = SERIAL.lock().unwrap();
+    use ResourceKind as K;
+    use clinkz_wot_core::data_schema::{PreparedSchema, SchemaProperty};
+    let address = address();
+    let mut properties: serde_json::Map<_, _> = (0..31)
+        .map(|n| (format!("outer{n}"), json!({"type":"integer","minimum":0})))
+        .collect();
+    let nested: serde_json::Map<_, _> = (0..31)
+        .map(|n| (format!("inner{n}"), json!({"type":"integer","maximum":100})))
+        .collect();
+    let name_bytes = properties
+        .keys()
+        .chain(nested.keys())
+        .map(String::len)
+        .sum::<usize>()
+        + "nested".len();
+    properties.insert(
+        "nested".into(),
+        json!({"type":"object","properties":nested}),
+    );
+    // 64 nodes in two field tables, with total backing larger than any single
+    // allocation. This distinguishes the retained-byte and contiguous limits.
+    let schema = json!({"type":"object","properties":properties});
+    let field_table = 32 * std::mem::size_of::<SchemaProperty>();
+    let schema_bytes = (std::mem::size_of::<PreparedSchema>()
+        + 2 * std::mem::size_of::<usize>()
+        + 63 * std::mem::size_of::<SchemaProperty>()
+        + name_bytes) as u64;
+    let b = bank();
+    let mut required = Vec::new();
+    for close in [true, false] {
+        let (prepared, authority) =
+            prepare_with_schema(address, Generation::INITIAL, schema.clone());
+        let policy = prepared.install_policy();
+        assert_eq!(policy.program_bytes, schema_bytes);
+        assert_eq!(policy.largest_indirect_allocation, field_table as u64);
+        assert!(policy.local_drop_work >= 2 * PreparedSchema::MAX_NODES as u64);
+        MAX.with(|n| n.set(0));
+        TRACE.with(|n| n.set(true));
+        let result = Runtime::try_new(
+            prepared,
+            authority,
+            GatewayDefaultV1::LIMITS.clone(),
+            b.clone(),
+            Deadline::NONE,
+        );
+        TRACE.with(|n| n.set(false));
+        let mut r = accepted(result);
+        let owner_block = MAX.with(|n| n.get());
+        let used = |kind| b.account(kind).used();
+        if required.is_empty() {
+            for (global, local) in [
+                (K::EngineLiveBytesGlobalMax, K::EngineLiveBytesGlobalMax),
+                (
+                    K::CompiledRuntimeBytesGlobalMax,
+                    K::CompiledRuntimeBytesPerThingMax,
+                ),
+                (
+                    K::BindingArtifactBytesGlobalMax,
+                    K::BindingArtifactBytesPerItemMax,
+                ),
+                (
+                    K::BindingArtifactBytesGlobalMax,
+                    K::BindingArtifactBytesPerThingMax,
+                ),
+                (
+                    K::BindingSlotStateBytesGlobalMax,
+                    K::BindingSlotStateBytesPerItemMax,
+                ),
+                (
+                    K::BindingSlotStateBytesGlobalMax,
+                    K::BindingSlotStateBytesPerThingMax,
+                ),
+                (K::CleanupBytesMax, K::CleanupItemBytesMax),
+            ] {
+                required.push((local, used(global)));
+            }
+            required.push((K::CleanupWorkItemsPerStepMax, policy.local_drop_work));
+            required.push((
+                K::LargestContiguousAllocationBytesMax,
+                owner_block
+                    .max(field_table)
+                    .max(4096 + 2 * std::mem::size_of::<usize>()) as u64,
+            ));
+        }
+        assert!(used(K::BindingArtifactBytesGlobalMax) >= schema_bytes);
+        installed(&mut r);
+        let before = b.snapshot(INSTALLATION_ACCOUNT_KINDS);
+        OBSERVED_BANK.with(|p| *p.borrow_mut() = Some(b.clone()));
+        FUNDED_AT_FREE.with(|f| f.set(false));
+        OBSERVE_FREE.with(|s| s.set(field_table));
+        if close {
+            r.cancel();
+            assert!(step(&mut r, 0).is_pending());
+            assert_eq!(b.snapshot(INSTALLATION_ACCOUNT_KINDS), before);
+            assert_eq!(
+                step(&mut r, 1),
+                Poll::Ready(ProducerInstallationState::Closed)
+            );
+            assert_eq!(used(K::BindingArtifactBytesGlobalMax), 0);
+        }
+        drop(r);
+        assert!(
+            FUNDED_AT_FREE.with(|f| f.get()),
+            "field table must be freed while funded"
+        );
+        OBSERVE_FREE.with(|s| s.set(0));
+        OBSERVED_BANK.with(|p| p.borrow_mut().take());
+        empty(&b);
+        free(address);
+    }
+    for (kind, amount) in required {
+        for ceiling in [amount, amount - 1] {
+            let limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .try_with_limit(kind, Some(ceiling))
+                .unwrap();
+            let (prepared, authority) =
+                prepare_with_schema(address, Generation::INITIAL, schema.clone());
+            let result = Runtime::try_new(prepared, authority, limits, b.clone(), Deadline::NONE);
+            assert_eq!(result.is_ok(), ceiling == amount, "{kind:?}");
+            if let Err(refused) = &result {
+                assert!(
+                    matches!(refused.error().error(), CoreError::LimitExceeded { resource, .. } if *resource == kind)
+                );
+            }
+            drop(result);
+            empty(&b);
+            free(address);
+        }
+    }
+}
+
+#[test]
 fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_funding() {
     let _serial = SERIAL.lock().unwrap();
     let address = address();
     let b = bank();
     let (prepared, authority) = prepare(address, Generation::INITIAL);
+    let schema_bytes = prepared.install_policy().program_bytes;
     COUNT.with(|n| n.set(0));
     MAX.with(|n| n.set(0));
     TRACE.with(|n| n.set(true));
@@ -408,8 +625,9 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
     );
     {
         let bank = b.snapshot(INSTALLATION_ACCOUNT_KINDS);
-        let extra =
-            2 * std::mem::size_of::<usize>() as u64 + consumer_result_backing(4096, 64).unwrap();
+        let extra = schema_bytes
+            + 2 * std::mem::size_of::<usize>() as u64
+            + consumer_result_backing(4096, 64).unwrap();
         assert_eq!(bank[4].used(), block as u64 + extra);
         assert_eq!(
             bank[0].used(),
@@ -421,6 +639,7 @@ fn measured_owner_layout_exact_limits_allocation_refusal_and_deallocation_fundin
         );
     }
     OBSERVED_BANK.with(|p| *p.borrow_mut() = Some(b.clone()));
+    FUNDED_AT_FREE.with(|f| f.set(false));
     OBSERVE_FREE.with(|s| s.set(block));
     drop(r);
     assert!(

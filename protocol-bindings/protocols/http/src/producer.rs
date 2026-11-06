@@ -91,7 +91,7 @@ use std::{
 
 // Separate role identity: never borrow Consumer policy/seals or StrictV1's
 // transitive disposal claim. Native parser/reply backing remains Binding-owned.
-const INSTALL_POLICY: &[u8] = b"request-reply-v4;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;prepared-object-integer-string-schema;schema64/depth8;encoded-depth32;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-RawValue+UTF8+codepoints;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
+const INSTALL_POLICY: &[u8] = b"request-reply-v5;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;prepared-object-integer-string-schema;schema64/depth8;encoded-depth32;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-RawValue+UTF8+codepoints;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/schema-Arc+fields+names/0;temporary=1024-not-stack-ceiling;largest-indirect=max-schema-allocation;local-drop-work=3+schema;finite-SDK-local-drop;no-task;no-network-wait";
 
 /// Runtime-only executor. It retains neither a compiler nor source TD.
 pub struct HttpProducerExecutor {
@@ -126,7 +126,7 @@ pub fn producer_execution(
             id,
             generation,
             BindingConfigurationDigest::new(digest),
-            BindingArtifactCompatibility::new(*b"http-prod-rpl-v4"),
+            BindingArtifactCompatibility::new(*b"http-prod-rpl-v5"),
             ordinal,
         ),
     }
@@ -141,14 +141,20 @@ impl ProducerExecutor for HttpProducerExecutor {
     fn identity(&self) -> BindingRegistrationIdentity {
         self.identity
     }
-    fn install_policy(&self) -> ProducerInstallPolicy {
+    fn install_policy(&self, program: &Self::Program) -> ProducerInstallPolicy {
+        let schema = &program.value_schema;
         ProducerInstallPolicy {
             executor_bytes: 0,
-            program_bytes: 0,
+            // The execution entry and installation share this original owner.
+            program_bytes: program.schema_backing_bytes() as u64,
             installation_bytes: 0,
             temporary_bytes: 1024,
-            largest_indirect_allocation: 0,
-            local_drop_work: 1,
+            largest_indirect_allocation: schema
+                .largest_allocation_bytes()
+                .max(core::mem::size_of_val(schema.as_ref()) + 2 * core::mem::size_of::<usize>())
+                as u64,
+            // Native/owner disposal, both Arc releases and final tree disposal.
+            local_drop_work: 3 + schema.drop_work(),
         }
     }
     fn service_policy(&self) -> Option<ProducerServicePolicy> {
@@ -160,6 +166,7 @@ impl ProducerExecutor for HttpProducerExecutor {
     fn check_program(&self, program: &Self::Program) -> CoreResult<()> {
         // Inspect native operands, not a caller-supplied compatibility tag.
         if program.operation != Operation::ReadProperty
+            || program.property_map.is_some()
             || program.address != self.config.address
             || program.target_len as usize > program.target.len()
             || program.origin_len as usize > program.origin.len()

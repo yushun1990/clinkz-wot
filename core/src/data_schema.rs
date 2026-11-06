@@ -253,6 +253,21 @@ impl PreparedSchema {
             _ => 0,
         }
     }
+    /// Largest owned field-table or name allocation, excluding this inline
+    /// schema value. Concrete shared owners account for their own wrapper.
+    pub fn largest_allocation_bytes(&self) -> usize {
+        match self {
+            Self::Object(o) => o.properties.iter().fold(
+                o.properties.capacity() * core::mem::size_of::<SchemaProperty>(),
+                |largest, p| {
+                    largest
+                        .max(p.name.len())
+                        .max(p.schema.largest_allocation_bytes())
+                },
+            ),
+            _ => 0,
+        }
+    }
     fn name_bytes(&self) -> usize {
         match self {
             Self::Object(o) => o

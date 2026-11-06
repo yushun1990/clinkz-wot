@@ -77,6 +77,12 @@ bounded destruction accounting. A reused content reference preserves its first
 account until final use and disposal. Actual instance records/policy/calls remain
 separately funded, including refusal and retained normal/late results.
 
+The retained HTTP Property Read installation path also reports its completed
+program's schema Arc, field-table capacities and names. Its largest-allocation
+declaration distinguishes individual allocations from total backing, and local
+destruction covers both program references and the final constraint tree.
+Entry and installation views share one charged schema owner until final disposal.
+
 The JSON callback retains its 4096-byte body envelope and adds an encoded nesting
 limit of 32, including unknown subtrees. Described duplicate names, including
 escaped equivalents, refuse. Temporary key/string decoding stays within captured
@@ -127,9 +133,19 @@ Existing finite, Action/notification, external owned/incremental compiler and
 feature/profile regressions accompany the interface migration; their unchanged
 claims do not imply structured reuse for those other lifecycles.
 
+[Retained HTTP installation tests](../../protocol-bindings/protocols/http/tests/producer_installation.rs)
+reject a 32-field schema at a primitive program's artifact quota in all three
+scopes, preserve the refused inputs for retry, and account for the primitive Arc.
+A 64-node nested schema exercises exact and one-byte/credit-short live, compiled,
+artifact, slot, cleanup and contiguous-allocation limits. Real listener cancellation
+and direct root disposal observe field-table deallocation while the original bank
+is still funded, followed by final release. These are retained Property Read
+installation/resource claims, separate from complete Producer publication.
+
 ```sh
 cargo test --locked --offline -p clinkz-wot-codec-json --test structured
 cargo test --locked --offline -p clinkz-wot-binding-http --test structured_data -- --test-threads=1
+cargo test --locked --offline -p clinkz-wot-binding-http --test producer_installation -- --test-threads=1
 cargo check --locked --offline -p clinkz-wot-core --no-default-features --target thumbv6m-none-eabi
 ```
 
