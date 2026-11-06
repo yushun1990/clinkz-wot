@@ -564,3 +564,243 @@ async fn session_deadline_and_tls_handshake_timeout_bound_idle_native_work() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn unpaginated_listing_preserves_peer_order_and_rejects_duplicate_ids() {
+    let body = json!([
+        td("urn:b", "http://127.0.0.1:9/no"),
+        td("urn:a", "http://127.0.0.1:9/no")
+    ])
+    .to_string();
+    let peer = Peer::start(
+        vec![Step::new(
+            "/things?limit=2",
+            reply(&body, "application/ld+json", ""),
+        )],
+        None,
+    )
+    .await;
+    let mut session = HttpDiscoverySession::directory(
+        peer.endpoint("/things", DiscoveryTransport::cleartext_loopback()),
+        None,
+        limits(),
+    )
+    .unwrap();
+    let cancel = DiscoveryCancellation::default();
+    let page = session.next_page(&cancel).await.unwrap().unwrap();
+    let ids: Vec<_> = page
+        .iter()
+        .map(|t| t.thing().id.as_ref().unwrap().as_str())
+        .collect();
+    assert_eq!(ids, ["urn:b", "urn:a"]);
+    assert_eq!(session.error(), None);
+    assert!(session.next_page(&cancel).await.unwrap().is_none());
+    peer.finish(1).await;
+
+    let duplicate = json!([
+        td("urn:b", "http://127.0.0.1:9/no"),
+        td("urn:a", "http://127.0.0.1:9/no"),
+        td("urn:b", "http://127.0.0.1:9/no")
+    ])
+    .to_string();
+    rejection(
+        reply(&duplicate, "application/ld+json", ""),
+        E::InvalidContinuation,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn paginated_ordering_remains_required_on_single_and_final_pages() {
+    let unordered = json!([
+        td("urn:c", "http://127.0.0.1:9/no"),
+        td("urn:b", "http://127.0.0.1:9/no")
+    ])
+    .to_string();
+    let canonical = "Link: </things>; rel=canonical; etag=one\r\n";
+    rejection(
+        reply(&unordered, "application/ld+json", canonical),
+        E::InvalidContinuation,
+    )
+    .await;
+
+    let first = json!([td("urn:a", "http://127.0.0.1:9/no")]).to_string();
+    let peer = Peer::start(
+        vec![
+            Step::new(
+                "/things?limit=2",
+                reply(
+                    &first,
+                    "application/ld+json",
+                    &format!("{canonical}Link: </things?offset=1&limit=2>; rel=next\r\n"),
+                ),
+            ),
+            Step::new(
+                "/things?offset=1&limit=2",
+                reply(&unordered, "application/ld+json", canonical),
+            ),
+        ],
+        None,
+    )
+    .await;
+    let mut session = HttpDiscoverySession::directory(
+        peer.endpoint("/things", DiscoveryTransport::cleartext_loopback()),
+        None,
+        limits(),
+    )
+    .unwrap();
+    let cancel = DiscoveryCancellation::default();
+    let first_page = session.next_page(&cancel).await.unwrap().unwrap();
+    assert_eq!(
+        session.next_page(&cancel).await.unwrap_err(),
+        E::InvalidContinuation
+    );
+    assert_eq!(first_page[0].thing().id.as_ref().unwrap().as_str(), "urn:a");
+    peer.finish(2).await;
+}
+
+#[tokio::test]
+async fn remaining_session_bytes_bound_incomplete_continuations_and_release_sockets() {
+    let first = json!([td("urn:a", "http://127.0.0.1:9/no")]).to_string();
+    let first_links = "Link: </things?offset=1&limit=2>; rel=next\r\nLink: </things>; rel=canonical; etag=one\r\n";
+    // Eleven decoded bytes exceed the ten left after the first page. None of
+    // these peers finishes its HTTP message; refusal must precede EOF/deadline.
+    for continuation in [
+        "HTTP/1.1 200 OK\r\nContent-Type: application/ld+json\r\nContent-Length: 12\r\n\r\n           ",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/ld+json\r\nTransfer-Encoding: chunked\r\n\r\nb\r\n           \r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/ld+json\r\nConnection: close\r\n\r\n           ",
+    ] {
+        let peer = Peer::start(
+            vec![
+                Step::new(
+                    "/things?limit=2",
+                    reply(&first, "application/ld+json", first_links),
+                ),
+                Step::new("/things?offset=1&limit=2", continuation.into()),
+            ],
+            None,
+        )
+        .await;
+        let byte_limit = first.len() + 10;
+        let mut session = HttpDiscoverySession::directory(
+            peer.endpoint("/things", DiscoveryTransport::cleartext_loopback()),
+            None,
+            DiscoveryLimits {
+                page_bytes: byte_limit,
+                td_bytes: byte_limit,
+                total_bytes: byte_limit,
+                request_timeout: Duration::from_millis(500),
+                ..limits()
+            },
+        )
+        .unwrap();
+        let cancel = DiscoveryCancellation::default();
+        let first_page = session.next_page(&cancel).await.unwrap().unwrap();
+        let error = session.next_page(&cancel).await.unwrap_err();
+        assert_eq!(
+            error,
+            E::Limit,
+            "incomplete continuation framing: {continuation}"
+        );
+        assert_eq!(session.error(), Some(E::Limit));
+        assert_eq!(first_page[0].thing().id.as_ref().unwrap().as_str(), "urn:a");
+        assert!(session.next_page(&cancel).await.unwrap().is_none());
+        session.stop();
+        assert_eq!(session.error(), Some(E::Limit));
+        peer.finish(2).await;
+    }
+}
+
+#[tokio::test]
+async fn exhausted_session_bytes_refuse_before_acquiring_another_socket() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let body = json!([td("urn:a", "http://127.0.0.1:9/no")]).to_string();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let endpoint = TrustedDiscoveryEndpoint::new(
+        &format!("http://{address}/things"),
+        address,
+        DiscoveryTransport::cleartext_loopback(),
+    )
+    .unwrap();
+    let mut session = HttpDiscoverySession::directory(
+        endpoint,
+        None,
+        DiscoveryLimits {
+            page_bytes: body.len(),
+            td_bytes: body.len(),
+            total_bytes: body.len(),
+            request_timeout: Duration::from_millis(500),
+            ..limits()
+        },
+    )
+    .unwrap();
+    let response = reply(
+        &body,
+        "application/ld+json",
+        "Link: </things?offset=1&limit=2>; rel=next\r\nLink: </things>; rel=canonical; etag=one\r\n",
+    );
+    let cancel = DiscoveryCancellation::default();
+    let (first, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::join!(session.next_page(&cancel), async {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                let mut byte = [0];
+                socket.read_exact(&mut byte).await.unwrap();
+                request.push(byte[0]);
+                assert!(request.len() < 8192);
+            }
+            assert!(request.starts_with(b"GET /things?limit=2 HTTP/1.1\r\n"));
+            socket.write_all(response.as_bytes()).await.unwrap();
+            let mut byte = [0];
+            assert_eq!(socket.read(&mut byte).await.unwrap(), 0);
+        })
+    })
+    .await
+    .expect("first page and physical release must complete");
+    let first_page = first.unwrap().unwrap();
+    assert_eq!(session.next_page(&cancel).await.unwrap_err(), E::Limit);
+    assert_eq!(session.error(), Some(E::Limit));
+    assert_eq!(first_page[0].thing().id.as_ref().unwrap().as_str(), "urn:a");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), listener.accept())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn exact_session_byte_boundary_admits_the_complete_final_page() {
+    let first = json!([td("urn:a", "http://127.0.0.1:9/no")]).to_string();
+    let last = "[]        ";
+    let byte_limit = first.len() + last.len();
+    let peer = Peer::start(vec![
+        Step::new("/things?limit=2", reply(&first, "application/ld+json", "Link: </things?offset=1&limit=2>; rel=next\r\nLink: </things>; rel=canonical; etag=one\r\n")),
+        Step::new("/things?offset=1&limit=2", reply(last, "application/ld+json", "Link: </things>; rel=canonical; etag=one\r\n")),
+    ], None).await;
+    let mut session = HttpDiscoverySession::directory(
+        peer.endpoint("/things", DiscoveryTransport::cleartext_loopback()),
+        None,
+        DiscoveryLimits {
+            page_bytes: byte_limit,
+            td_bytes: byte_limit,
+            total_bytes: byte_limit,
+            ..limits()
+        },
+    )
+    .unwrap();
+    let cancel = DiscoveryCancellation::default();
+    assert_eq!(session.next_page(&cancel).await.unwrap().unwrap().len(), 1);
+    assert!(
+        session
+            .next_page(&cancel)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(session.next_page(&cancel).await.unwrap().is_none());
+    assert_eq!(session.error(), None);
+    peer.finish(2).await;
+}

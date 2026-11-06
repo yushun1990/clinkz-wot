@@ -104,12 +104,18 @@ Pagination follows checked RFC 8288 `next` links, with the same collection
 origin/path, unchanged requested limit and an offset immediately after the
 returned members. Canonical collection identity and its `etag` must remain
 consistent across paginated responses. Missing, ambiguous, cyclic, empty-progress
-or out-of-policy navigation refuses the page. Results preserve identifier order
-and reject cross-page repeats. Continuation exhaustion does not imply a trusted
+or out-of-policy navigation refuses the page. Paginated results must remain in
+ascending identifier order, including the final page, and reject cross-page
+repeats. Unpaginated arrays retain peer order and still reject duplicate IDs.
+Continuation exhaustion does not imply a trusted
 or immutable remote inventory beyond the peer's supplied collection state.
 
 The session bounds URL/header/wire/body bytes, JSON structure, TD size, work,
-results, pages and elapsed time. A page is exposed only after complete framing,
+results, pages and elapsed time. Each request's body reader enforces the smaller
+of the page cap and remaining session byte allowance, for both advertised length
+and streamed frames. An exhausted allowance refuses before socket acquisition;
+overflowing bodies release the request without waiting for EOF or deadline.
+A page is exposed only after complete framing,
 JSON checks and existing bounded TD inspection/Basic admission of every member.
 Admission preserves unknown metadata; it asserts neither full JSON-LD processing
 nor selected interaction support. Planning still owns selected shared semantic

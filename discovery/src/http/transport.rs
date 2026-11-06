@@ -163,6 +163,7 @@ pub(super) async fn get(
     client: &Client,
     url: &str,
     directory: bool,
+    body_limit: usize,
 ) -> Result<(Vec<u8>, hyper::HeaderMap)> {
     let uri = parse_url(url)?;
     if audience(&uri) != audience(&client.endpoint.uri) {
@@ -184,12 +185,12 @@ pub(super) async fn get(
             .await
             .map_err(|_| E::Trust)?;
         // Confidentiality and authenticated host precede credential encoding.
-        send(socket, &uri, client, directory).await
+        send(socket, &uri, client, directory, body_limit).await
     } else {
         if client.credentials.is_some() {
             return Err(E::DestinationDenied);
         }
-        send(wire, &uri, client, directory).await
+        send(wire, &uri, client, directory, body_limit).await
     }
 }
 async fn send<S: AsyncRead + AsyncWrite + Unpin>(
@@ -197,6 +198,7 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
     uri: &Uri,
     client: &Client,
     directory: bool,
+    body_limit: usize,
 ) -> Result<(Vec<u8>, hyper::HeaderMap)> {
     let io = TokioIo::new(Head {
         socket,
@@ -284,7 +286,7 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .ok_or(E::Protocol)?;
-            if length > client.limits.page_bytes {
+            if length > body_limit {
                 return Err(E::Limit);
             }
         }
@@ -297,7 +299,7 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
                 return Err(E::Protocol);
             }
             if let Ok(data) = frame.into_data() {
-                if data.len() > client.limits.page_bytes - bytes.len() {
+                if data.len() > body_limit - bytes.len() {
                     return Err(E::Limit);
                 }
                 bytes.extend_from_slice(&data);

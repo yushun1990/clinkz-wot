@@ -38,11 +38,12 @@ runs independent raw socket/TLS transcript peers and the existing Engine:
 | Evidence | Claim |
 | --- | --- |
 | `remote.rs` listing | Every member survives multi-member pages; base-relative and combined Link fields, quoted comma/semicolon, opaque session values, short intermediate/final pages, JSON and JSON-LD array media |
+| Listing order | Unpaginated descending-ID arrays retain peer order with separate duplicate refusal; single/final paginated pages still enforce ascending IDs |
 | Single TD test | HTTP TD-server GET, TD media, chunked framing and anonymous TD admission |
 | Semantic/JSON refusal | Complete-page refusal for malformed/truncated JSON, duplicate decoded keys, invalid TD structure, undefined security and invalid operation context; no accepted prefix escapes |
 | Navigation refusal | Foreign origin/path, userinfo, fragments, downgrade, unchanged offset, altered/duplicate/encoded limit parameters, ambiguous rel/anchor, missing canonical state, empty progress, repeated IDs and changed etag |
 | Framing/media refusal | Unsupported media/encoding/charset, duplicate media and framing fields, mixed Content-Length/Transfer-Encoding, declared trailers, 302/401/403/503; no redirect/challenge retry |
-| Bounds | TD/page/total input, result/page count and JSON depth; absolute session/request deadlines also bound a stalled TLS handshake |
+| Bounds | TD/page/total input, result/page count and JSON depth; remaining session bytes constrain Content-Length and streamed chunks/EOF-delimited bodies before retention, including incomplete stalled responses; exhausted allowances acquire no socket and exact limits admit complete final pages; absolute session/request deadlines also bound a stalled TLS handshake |
 | Interruption | Cancellation before connect, during a partial page and between pages; timeout, truncated peer close and dropped pending future; no replay and retained first terminal cause |
 | `trust.rs` | Real TLS with a pinned socket and verified DNS or IP identity; exact Basic audience, missing/wrong credentials and 401/403; wrong roots/name/expiry transmit no HTTP credentials |
 | `workflow.rs` | TLS/Basic Directory → admitted TDs → explicit application selection → actual Engine preparation → independently authorized HTTP Property Read against another peer; Directory credentials never reach that native peer |
@@ -63,7 +64,8 @@ Native interaction has a separate deadline and original-account release check.
 
 ## Independent Directory interoperability
 
-The example was additionally executed against unmodified
+The example at `c9f27de3ce5a64d933f64cd4748bb89bf7aa487e` was additionally
+executed against unmodified
 [TinyIoT Thing Directory source `fbec084f189d3c89183db7715805cddd93bba284`](https://github.com/TinyIoT/thing-directory/tree/fbec084f189d3c89183db7715805cddd93bba284),
 built with Go 1.27.3 (`go build -mod=mod`). The server uses its own HTTP router,
 Go JSON serialization and LevelDB store. Its sample configuration was restricted
@@ -116,7 +118,7 @@ fixture-only CI must not claim this external check was executed.
 | Endpoint/session | URL/reference ≤ 2048 bytes; configured pin; TLS 1.3 verified host; ≤ 8 roots of ≤ 16 KiB; Basic username ≤ 64 and password ≤ 128 ASCII bytes |
 | Native request | 64 headers / 16 KiB raw head; aggregate encrypted/plaintext socket traffic ≤ twice page_bytes + 64 KiB, including TLS handshake and chunk overhead; no pooling/tasks/retry; request and session deadlines |
 | Page | Default body 256 KiB, TD 32 KiB; JSON depth 32, 8192 visited values and 1024 members per object; duplicate decoded names refuse; no decompression, alternative envelope or partial delivery |
-| Session | Default 16 pages, 128 results, 1 MiB total bodies, 16 requested members/page, 10 s/request and 60 s/session; constructors reject zero or excessive policies |
+| Session | Default 16 pages, 128 results, 1 MiB total bodies, 16 requested members/page, 10 s/request and 60 s/session; the body reader enforces min(page_bytes, remaining total_bytes) during retrieval; constructors reject zero or excessive policies |
 | TD admission | Existing GatewayDefaultV1 inspection/Basic limits, 8 MiB temporary ledger ceiling and one nonrenewable million credits/class/TD; yield/check cancellation between bounded steps; proof/scratch released before returning the immutable Thing |
 | Returned description | Application-owned typed TD; its allocation/traversal is bounded by wire structure and TD policy. It carries no prepared interaction capability or permission |
 | Engine execution | Existing registration/data/access/preparation/call/result owners and original resource accounts; independent of Directory session or credentials |
@@ -124,9 +126,11 @@ fixture-only CI must not claim this external check was executed.
 These are enforcing capacities/work bounds, not measured additive RAM or a
 transitive allocator/OS/rustls maximum. TLS/Hyper/kernel storage belongs to the
 native request and deployment; application concurrency across sessions and
-retained pages is funded/contained by the application. Allocation failure follows
-the existing Host allocator policy. Parsing and crypto are cooperative bounded
-calls, not preemptible hard-real-time work. Credential source/encoding scratch
+retained pages is funded/contained by the application. Unpaginated duplicate
+checking retains only borrowed ID references in a set bounded by the admitted
+page's result cap; paginated ordering needs only the previous ID. Allocation
+failure follows the existing Host allocator policy. Parsing and crypto are
+cooperative bounded calls, not preemptible hard-real-time work. Credential source/encoding scratch
 is zeroized, native header/kernel copies have no process-wide erasure guarantee.
 Diagnostics retain fixed categories and status codes, without remote text or URLs.
 

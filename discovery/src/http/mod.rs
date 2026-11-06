@@ -9,6 +9,7 @@ use clinkz_wot_td::thing::Thing;
 use hyper::Uri;
 use rustls::pki_types::CertificateDer;
 use std::{
+    collections::BTreeSet,
     format,
     net::SocketAddr,
     sync::{
@@ -464,11 +465,23 @@ impl HttpDiscoverySession {
         if self.pages >= client.limits.max_pages {
             return Err(E::Limit);
         }
+        // Constrain this request before acquiring its socket. The same limit
+        // applies to advertised lengths and streamed frames in the transport.
+        let body_limit = client
+            .limits
+            .total_bytes
+            .checked_sub(self.bytes)
+            .ok_or(E::Limit)?
+            .min(client.limits.page_bytes);
+        if body_limit == 0 {
+            return Err(E::Limit);
+        }
         let end = self
             .deadline
             .min(tokio::time::Instant::now() + client.limits.request_timeout);
         let retrieval = async {
-            let (body, headers) = transport::get(client, url, self.collection.is_some()).await?;
+            let (body, headers) =
+                transport::get(client, url, self.collection.is_some(), body_limit).await?;
             self.bytes = self.bytes.checked_add(body.len()).ok_or(E::Limit)?;
             if self.bytes > client.limits.total_bytes {
                 return Err(E::Limit);
@@ -488,23 +501,37 @@ impl HttpDiscoverySession {
                     things.len(),
                     client.limits.page_size,
                 )?;
-                if (navigation.0.is_some() || navigation.1.is_some())
-                    && things.len() > client.limits.page_size
-                {
+                let paginated =
+                    self.etag.is_some() || navigation.0.is_some() || navigation.1.is_some();
+                if paginated && things.len() > client.limits.page_size {
                     return Err(E::Limit);
                 }
-                let mut previous = self.last_id.as_deref();
-                for thing in &things {
-                    let id = thing
+                let ids = things.iter().map(|thing| {
+                    thing
                         .thing
                         .id
                         .as_ref()
-                        .ok_or(E::InvalidThingDescription)?
-                        .as_str();
-                    if previous.is_some_and(|p| p >= id) {
-                        return Err(E::InvalidContinuation);
+                        .map(|id| id.as_str())
+                        .ok_or(E::InvalidThingDescription)
+                });
+                if paginated {
+                    let mut previous = self.last_id.as_deref();
+                    for id in ids {
+                        let id = id?;
+                        if previous.is_some_and(|p| p >= id) {
+                            return Err(E::InvalidContinuation);
+                        }
+                        previous = Some(id);
                     }
-                    previous = Some(id);
+                } else {
+                    // Pagination is optional. Preserve unpaginated peer order
+                    // while checking uniqueness within this bounded page.
+                    let mut unique = BTreeSet::new();
+                    for id in ids {
+                        if !unique.insert(id?) {
+                            return Err(E::InvalidContinuation);
+                        }
+                    }
                 }
                 navigation
             } else {
