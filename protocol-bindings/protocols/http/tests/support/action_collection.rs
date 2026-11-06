@@ -174,7 +174,7 @@ fn prepare_consumer(td:&Value,bank:Arc<HostResourceAccounts>,policy:Arc<Consumer
     let mut registration=try_consumer_registration(config,BindingId::new(90),BindingGeneration::INITIAL,0)?;
     registration.services=ConsumerServices{data:Arc::new(Data(policy.clone(),services.data)),
         access:Arc::new(Access(policy,services.access))};
-    let registry=ConsumerRegistry::try_new(vec![registration]).map_err(|e|e.error().error().clone())?;let thing:Thing=serde_json::from_value(td.clone()).unwrap();
+    let registry=ConsumerRegistry::try_new(vec![registration], &bank).map_err(|e|e.error().error().clone())?;let thing:Thing=serde_json::from_value(td.clone()).unwrap();
     registry.prepare(&thing,GatewayDefaultV1::LIMITS,bank,ConsumerSelector::default(),&mut work(),|j|{
         while !j.is_finished(){j.step(&mut work(),false);}
     })

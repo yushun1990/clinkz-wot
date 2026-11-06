@@ -28,7 +28,9 @@ fn source(forms: Value) -> clinkz_wot_td::thing::Thing {
     serde_json::from_value(json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"anonymous downstream Thing", "security":["none"], "securityDefinitions":{"none":{"scheme":"nosec"}}, "properties":{"a":{"type":"integer","readOnly":true,"forms":forms}}})).unwrap()
 }
 fn registry(inputs: Vec<ConsumerRegistrationInput>) -> ConsumerRegistry {
-    ConsumerRegistry::try_new(inputs).unwrap_or_else(|e| panic!("{:?}", e.error()))
+    // Startup services have a separate original owner from mapping/call banks.
+    let services = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    ConsumerRegistry::try_new(inputs, &services).unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn drive(job: &mut ConsumerCompilation<'_>) {
     for _ in 0..600 {
@@ -403,7 +405,7 @@ fn unpaid_cancelled_failed_and_capacity_refused_preparation_releases_every_owner
     bad.preparation =
         clinkz_wot_planning::HostConsumerBindingPreparation::try_pair(executor, compiler)
             .unwrap_or_else(|_| panic!());
-    let bad = ConsumerRegistry::try_new(vec![bad]).unwrap_or_else(|_| panic!());
+    let bad = ConsumerRegistry::try_new(vec![bad], &bank).unwrap_or_else(|_| panic!());
     assert!(
         bad.prepare(
             &thing,
@@ -415,6 +417,7 @@ fn unpaid_cancelled_failed_and_capacity_refused_preparation_releases_every_owner
         )
         .is_err()
     );
+    drop(bad);
     clean(&bank);
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
 }
@@ -942,7 +945,8 @@ fn restricted_inline_registration_cannot_misstate_general_callback_costs() {
         preparation: inline.into_registration(),
         services: config.consumer_services(),
     };
-    assert!(ConsumerRegistry::try_new(vec![input]).is_err());
+    let services = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    assert!(ConsumerRegistry::try_new(vec![input], &services).is_err());
 }
 
 #[test]
@@ -1108,7 +1112,7 @@ fn review_service_capacity_failure_keeps_artifact_charged_through_destructor() {
 }
 
 #[test]
-fn service_accounting_arithmetic_and_definition_refusals_keep_original_artifact_funding() {
+fn service_accounting_refuses_before_compilation_and_definition_refusal_keeps_artifact_funding() {
     use clinkz_wot_core::consumer::{ConsumerDataPolicy, ConsumerDataService};
     use clinkz_wot_core::value_type::TypeSchema;
     struct DeclaredBacking {
@@ -1153,7 +1157,16 @@ fn service_accounting_arithmetic_and_definition_refusals_keep_original_artifact_
                 bytes,
             });
         }
-        let registry = registry(vec![input]);
+        let retained = ConsumerRegistry::try_new(vec![input], &bank);
+        if failure != "definition" {
+            assert!(retained.is_err(), "{failure}");
+            drop(retained);
+            assert_eq!(p.programs.load(Ordering::Relaxed), 0);
+            assert_eq!(p.native.load(Ordering::Relaxed), 0);
+            clean(&bank);
+            continue;
+        }
+        let registry = retained.unwrap_or_else(|_| panic!());
         let result = registry.prepare(
             &thing,
             &GatewayDefaultV1::LIMITS,
@@ -1174,6 +1187,7 @@ fn service_accounting_arithmetic_and_definition_refusals_keep_original_artifact_
             "{failure} refunded the original artifact before destruction"
         );
         assert_eq!(p.native.load(Ordering::Relaxed), 0);
+        drop(registry);
         clean(&bank);
     }
 }

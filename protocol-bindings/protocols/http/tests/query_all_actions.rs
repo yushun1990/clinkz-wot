@@ -809,9 +809,9 @@ fn missing_status_service_or_unsupported_description_never_falls_back_to_leaf_qu
     )
     .unwrap();
     r.services.data = Arc::new(Scalar(r.services.data));
-    let registry = ConsumerRegistry::try_new(vec![r]).ok().unwrap();
-    let thing: Thing = serde_json::from_value(original).unwrap();
     let bank = accounts();
+    let registry = ConsumerRegistry::try_new(vec![r], &bank).ok().unwrap();
+    let thing: Thing = serde_json::from_value(original).unwrap();
     assert!(
         registry
             .prepare(
@@ -826,6 +826,7 @@ fn missing_status_service_or_unsupported_description_never_falls_back_to_leaf_qu
             )
             .is_err()
     );
+    drop(registry);
     clean(&bank);
     TcpListener::bind(addr).unwrap();
 }
@@ -1275,7 +1276,6 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
             })
             .collect();
         drop(thing);
-        drop(registry);
         let runtime = ConsumerActionRuntime::try_new(instance.reference(), definitions, 2)
             .ok()
             .unwrap();

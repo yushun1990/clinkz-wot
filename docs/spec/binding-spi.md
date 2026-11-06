@@ -216,7 +216,15 @@ includes variable backing and destruction, not merely its erased slot Layout.
 The actual data and destination/access services remain captured through execution;
 a caller supplies no replacement executor, codec, validator or configuration to a
 finite operation. `ClientBinding::supports_operation` is only coarse eligibility;
-the actual compiler and captured services prove complete Form support. The Host
+the actual compiler and captured services prove complete Form support. Reusable
+semantic content does not qualify another native mapping. The finite preparation
+handoff retains exact native artifacts and actual data/execution dependencies;
+source-free instance binding supplies access policy/accounts over those owners.
+HTTP's current full-target artifact remains specialized for its target, method
+and headers. A later endpoint or changed native configuration must pass its actual
+compiler/compatibility checks; replacing an envelope identity is insufficient.
+Shared actual service/registration backing retains original funding through all
+mapping and result references. The Host
 Consumer entry is `start_finite`; the incorrect Property Read-only entry is
 removed there. Retained dual-role/static Property Read adapters still reject other
 operations explicitly. Finite requests carry their selected operation and optional

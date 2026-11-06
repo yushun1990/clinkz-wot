@@ -141,6 +141,63 @@ pub struct ConsumerServices {
     pub access: Arc<dyn ConsumerAccessService>,
 }
 
+/// An explicitly retained actual service and its original physical funding.
+/// Sharing this owner is distinct from selecting it for a logical instance.
+/// Raw startup service construction remains caller-funded; retained references
+/// use this owner rather than refunding its backing when one instance retires.
+pub struct ConsumerServiceOwner<S: ?Sized> {
+    service: Arc<S>,
+    backing_bytes: u64,
+    _funding: Vec<HostCapacityReservation>,
+}
+impl<S: ?Sized> ConsumerServiceOwner<S> {
+    fn retain(
+        service: Arc<S>,
+        bytes: u64,
+        bank: &Arc<HostResourceAccounts>,
+    ) -> CoreResult<Arc<Self>> {
+        let retained = bytes
+            .checked_add(core::mem::size_of::<Self>() as u64 + 128)
+            .ok_or_else(invalid)?;
+        let funding = reserve(bank, &[(ResourceKind::EngineLiveBytesGlobalMax, retained)])?;
+        Ok(Arc::new(Self {
+            service,
+            backing_bytes: bytes,
+            _funding: funding,
+        }))
+    }
+    pub fn service(&self) -> &S {
+        self.service.as_ref()
+    }
+    pub fn backing_bytes(&self) -> u64 {
+        self.backing_bytes
+    }
+}
+impl ConsumerServiceOwner<dyn ConsumerDataService> {
+    pub fn retain_data(
+        service: Arc<dyn ConsumerDataService>,
+        bank: &Arc<HostResourceAccounts>,
+    ) -> CoreResult<Arc<Self>> {
+        let bytes = service.policy().retained_bytes;
+        Self::retain(service, bytes, bank)
+    }
+}
+impl ConsumerServiceOwner<dyn ConsumerAccessService> {
+    pub fn retain_access(
+        service: Arc<dyn ConsumerAccessService>,
+        bank: &Arc<HostResourceAccounts>,
+    ) -> CoreResult<Arc<Self>> {
+        let bytes = service.retained_bytes();
+        Self::retain(service, bytes, bank)
+    }
+}
+impl<S: ?Sized> core::ops::Deref for ConsumerServiceOwner<S> {
+    type Target = S;
+    fn deref(&self) -> &S {
+        self.service()
+    }
+}
+
 /// One local logical Consumer authority, independent of any capability, TD or
 /// physical connection. Startup construction is caller-funded Host work.
 /// Drop/revoke is immediate and allocation/callback free; there is no reactivation.
@@ -493,134 +550,79 @@ pub enum ConsumerEffect {
     Reported,
 }
 
-/// One immutable selected executor, native definition, actual services and
-/// original resource leases. Constructor refusal returns all original owners.
-/// This carrier does not itself perform TD support assessment.
-pub struct ConsumerDefinition {
+/// Immutable semantic execution content. It contains no endpoint, executor,
+/// service, policy, authority or account. The Host owner below chooses Arc;
+/// this adds no shared-pointer field to semantic content. Existing finite Core
+/// coordinate/schema types and feature gates remain; portable execution is not
+/// established by this Host owner.
+pub struct ConsumerExecutionContent {
     affordance: AffordanceTarget,
     operation: Operation,
-    form: u32,
-    target: Box<str>,
-    artifact: BindingArtifactEnvelope<HostBindingArtifact>,
-    execution: Arc<HostConsumerBindingRegistration>,
-    configuration: ConsumerBindingConfiguration,
-    services: ConsumerServices,
     schemas: ConsumerFiniteSchemas,
-    data_policy: ConsumerDataPolicy,
-    access_work: u64,
-    // Last to drop: artifact destructors, executor/services and backing are
-    // disposed before their original funding returns to the parent bank.
-    _funding: Vec<HostCapacityReservation>,
-    bank: Arc<HostResourceAccounts>,
 }
-pub struct ConsumerDefinitionInput {
-    pub affordance: AffordanceTarget,
-    pub operation: Operation,
-    pub form: u32,
-    pub target: Box<str>,
-    pub artifact: BindingArtifactEnvelope<HostBindingArtifact>,
-    pub execution: Arc<HostConsumerBindingRegistration>,
-    pub configuration: ConsumerBindingConfiguration,
-    pub services: ConsumerServices,
-    pub schemas: ConsumerFiniteSchemas,
-    pub funding: Vec<HostCapacityReservation>,
-    pub bank: Arc<HostResourceAccounts>,
-}
-impl ConsumerDefinition {
+impl ConsumerExecutionContent {
     pub fn try_new(
-        input: ConsumerDefinitionInput,
-    ) -> Result<Self, BindingInputRejection<ConsumerDefinitionInput>> {
-        let id = input.artifact.identity();
-        let actual = input.execution.identity();
-        let policy = input.services.data.policy();
-        if id.binding_id() != actual.binding_id()
-            || id.binding_generation() != actual.binding_generation()
-            || id.configuration() != actual.configuration()
-            || id.compatibility() != actual.artifact_compatibility()
-            || id.role() != BindingArtifactRole::ConsumerCall
-            || input.execution.consumer_configuration() != Some(input.configuration)
-            || !input.services.data.available()
-            || !input.schemas.supports(input.services.data.as_ref())
-            || !matches!(
-                (&input.affordance, input.operation),
-                (
-                    AffordanceTarget::Property(_),
-                    Operation::ReadProperty | Operation::WriteProperty
-                ) | (AffordanceTarget::Action(_), Operation::InvokeAction)
-                    | (
-                        AffordanceTarget::Thing,
-                        Operation::ReadAllProperties
-                            | Operation::ReadMultipleProperties
-                            | Operation::WriteAllProperties
-                            | Operation::WriteMultipleProperties
-                            | Operation::QueryAllActions
-                    )
-            )
-            || !matches!(
-                (&input.schemas, input.operation),
-                (
-                    ConsumerFiniteSchemas::Value(ConsumerSchemas {
-                        input: None,
-                        output: Some(_)
-                    }),
-                    Operation::ReadProperty
-                ) | (
-                    ConsumerFiniteSchemas::Value(ConsumerSchemas {
-                        input: Some(_),
-                        output: None
-                    }),
-                    Operation::WriteProperty
-                ) | (ConsumerFiniteSchemas::Value(_), Operation::InvokeAction)
-                    | (
-                        ConsumerFiniteSchemas::QueryAllActions(_),
-                        Operation::QueryAllActions
-                    )
-                    | (
-                        ConsumerFiniteSchemas::ReadAllProperties(_),
-                        Operation::ReadAllProperties
-                    )
-                    | (
-                        ConsumerFiniteSchemas::ReadMultipleProperties(_),
-                        Operation::ReadMultipleProperties
-                    )
-                    | (
-                        ConsumerFiniteSchemas::WriteAllProperties(_),
-                        Operation::WriteAllProperties
-                    )
-                    | (
-                        ConsumerFiniteSchemas::WriteMultipleProperties(_),
-                        Operation::WriteMultipleProperties
-                    )
-            )
-            || policy.validation_work == 0
-            || input.services.access.work() == 0
-        {
-            return Err(BindingInputRejection::new(
-                input,
-                BindingOperationalError::new(invalid()),
-            ));
+        affordance: AffordanceTarget,
+        operation: Operation,
+        schemas: ConsumerFiniteSchemas,
+    ) -> CoreResult<Self> {
+        if !matches!(
+            (&affordance, operation),
+            (
+                AffordanceTarget::Property(_),
+                Operation::ReadProperty | Operation::WriteProperty
+            ) | (AffordanceTarget::Action(_), Operation::InvokeAction)
+                | (
+                    AffordanceTarget::Thing,
+                    Operation::ReadAllProperties
+                        | Operation::ReadMultipleProperties
+                        | Operation::WriteAllProperties
+                        | Operation::WriteMultipleProperties
+                        | Operation::QueryAllActions
+                )
+        ) || !matches!(
+            (&schemas, operation),
+            (
+                ConsumerFiniteSchemas::Value(ConsumerSchemas {
+                    input: None,
+                    output: Some(_)
+                }),
+                Operation::ReadProperty
+            ) | (
+                ConsumerFiniteSchemas::Value(ConsumerSchemas {
+                    input: Some(_),
+                    output: None
+                }),
+                Operation::WriteProperty
+            ) | (ConsumerFiniteSchemas::Value(_), Operation::InvokeAction)
+                | (
+                    ConsumerFiniteSchemas::QueryAllActions(_),
+                    Operation::QueryAllActions
+                )
+                | (
+                    ConsumerFiniteSchemas::ReadAllProperties(_),
+                    Operation::ReadAllProperties
+                )
+                | (
+                    ConsumerFiniteSchemas::ReadMultipleProperties(_),
+                    Operation::ReadMultipleProperties
+                )
+                | (
+                    ConsumerFiniteSchemas::WriteAllProperties(_),
+                    Operation::WriteAllProperties
+                )
+                | (
+                    ConsumerFiniteSchemas::WriteMultipleProperties(_),
+                    Operation::WriteMultipleProperties
+                )
+        ) {
+            return Err(invalid());
         }
-        let access_work = input.services.access.work();
         Ok(Self {
-            affordance: input.affordance,
-            operation: input.operation,
-            form: input.form,
-            target: input.target,
-            artifact: input.artifact,
-            execution: input.execution,
-            configuration: input.configuration,
-            services: input.services,
-            schemas: input.schemas,
-            data_policy: policy,
-            access_work,
-            _funding: input.funding,
-            bank: input.bank,
+            affordance,
+            operation,
+            schemas,
         })
-    }
-    /// Root operations have no affordance name; the Thing coordinate remains
-    /// distinct from a Property whose name happens to be empty.
-    pub fn name(&self) -> Option<&str> {
-        self.affordance.name()
     }
     pub fn affordance(&self) -> &AffordanceTarget {
         &self.affordance
@@ -628,50 +630,258 @@ impl ConsumerDefinition {
     pub fn operation(&self) -> Operation {
         self.operation
     }
+    pub fn schemas(&self) -> &ConsumerFiniteSchemas {
+        &self.schemas
+    }
+}
+
+/// Physical Host owner of common prepared content. References never transfer
+/// or duplicate its original backing reservations. Drop order keeps every name
+/// and member funded through its last actual user, including late results.
+pub struct PreparedConsumerContent {
+    content: ConsumerExecutionContent,
+    _funding: Vec<HostCapacityReservation>,
+}
+impl PreparedConsumerContent {
+    /// The caller funds temporary construction and prepays content destruction
+    /// before entry. This acquires persistent backing before Host publication.
+    pub fn try_new(
+        content: ConsumerExecutionContent,
+        bank: &Arc<HostResourceAccounts>,
+    ) -> Result<Arc<Self>, BindingInputRejection<ConsumerExecutionContent>> {
+        let bytes = core::mem::size_of::<Self>() as u64
+            + content.schemas.retained_bytes() as u64
+            + content.affordance.name().map_or(0, str::len) as u64
+            + 128; // Arc and reservation-vector backing
+        let funding = match reserve(bank, &[(ResourceKind::EngineLiveBytesGlobalMax, bytes)]) {
+            Ok(f) => f,
+            Err(e) => {
+                return Err(BindingInputRejection::new(
+                    content,
+                    BindingOperationalError::new(e),
+                ));
+            }
+        };
+        Ok(Arc::new(Self {
+            content,
+            _funding: funding,
+        }))
+    }
+    pub fn content(&self) -> &ConsumerExecutionContent {
+        &self.content
+    }
+}
+impl core::ops::Deref for PreparedConsumerContent {
+    type Target = ConsumerExecutionContent;
+    fn deref(&self) -> &Self::Target {
+        &self.content
+    }
+}
+
+/// One purely qualified native mapping and its actual data service. Independent
+/// logical instances bind policy and accounts separately. The complete native
+/// artifact remains specialized unless the actual Binding establishes reuse.
+/// This carrier does not itself perform TD support assessment.
+pub struct ConsumerDefinition {
+    input: ConsumerDefinitionInput,
+    data_policy: ConsumerDataPolicy,
+}
+pub struct ConsumerDefinitionInput {
+    pub content: Arc<PreparedConsumerContent>,
+    pub form: u32,
+    pub target: Box<str>,
+    pub artifact: BindingArtifactEnvelope<HostBindingArtifact>,
+    pub execution: Arc<HostConsumerBindingRegistration>,
+    pub configuration: ConsumerBindingConfiguration,
+    pub data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
+    pub content_type: Box<str>,
+    /// Original shared registration backing, retained by every mapping of that
+    /// actual executor. It never migrates to a later mapping/instance bank.
+    pub execution_funding: Arc<Vec<HostCapacityReservation>>,
+    // Last: native/data/content destruction precedes original funding release.
+    pub funding: Vec<HostCapacityReservation>,
+}
+impl ConsumerDefinition {
+    pub fn try_new(
+        input: ConsumerDefinitionInput,
+    ) -> Result<Self, BindingInputRejection<ConsumerDefinitionInput>> {
+        let id = input.artifact.identity();
+        let actual = input.execution.identity();
+        let policy = input.data.policy();
+        if id.binding_id() != actual.binding_id()
+            || id.binding_generation() != actual.binding_generation()
+            || id.configuration() != actual.configuration()
+            || id.compatibility() != actual.artifact_compatibility()
+            || id.role() != BindingArtifactRole::ConsumerCall
+            || input.execution.consumer_configuration() != Some(input.configuration)
+            || !input
+                .execution
+                .supports_operation(input.content.operation())
+            || !input.data.available()
+            || policy.retained_bytes != input.data.backing_bytes()
+            || input.data.content_type() != input.content_type.as_ref()
+            || !input.content.schemas().supports(input.data.service())
+            || policy.validation_work == 0
+        {
+            return Err(BindingInputRejection::new(
+                input,
+                BindingOperationalError::new(invalid()),
+            ));
+        }
+        Ok(Self {
+            input,
+            data_policy: policy,
+        })
+    }
+    pub fn content(&self) -> &Arc<PreparedConsumerContent> {
+        &self.input.content
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.affordance().name()
+    }
+    pub fn affordance(&self) -> &AffordanceTarget {
+        self.input.content.affordance()
+    }
+    pub fn operation(&self) -> Operation {
+        self.input.content.operation()
+    }
     pub fn form(&self) -> u32 {
-        self.form
+        self.input.form
+    }
+    pub fn target(&self) -> &str {
+        &self.input.target
     }
     pub fn binding(&self) -> BindingRegistrationIdentity {
-        self.execution.identity()
+        self.input.execution.identity()
     }
     pub fn artifact(&self) -> &BindingArtifactEnvelope<HostBindingArtifact> {
-        &self.artifact
+        &self.input.artifact
+    }
+    pub fn execution(&self) -> &HostConsumerBindingRegistration {
+        &self.input.execution
     }
     pub fn resources(&self) -> BindingResourceDeclarations {
-        self.execution.resources()
+        self.input.execution.resources()
     }
     pub fn configuration(&self) -> ConsumerBindingConfiguration {
-        self.configuration
+        self.input.configuration
     }
-    pub fn bank(&self) -> &Arc<HostResourceAccounts> {
-        &self.bank
+    pub fn data(&self) -> &dyn ConsumerDataService {
+        self.input.data.service()
     }
     pub fn data_policy(&self) -> ConsumerDataPolicy {
         self.data_policy
     }
-    pub fn access_work(&self) -> u64 {
-        self.access_work
+    /// Passive dependency checks also run after permission callbacks and at
+    /// result handoff. A new instance cannot refresh changed captured bounds.
+    pub fn check_dependencies(&self) -> CoreResult<()> {
+        if self.execution().consumer_configuration() != Some(self.configuration())
+            || self.binding().configuration() != self.configuration().configuration()
+            || self.data().policy() != self.data_policy
+            || self.data().content_type() != self.input.content_type.as_ref()
+            || !self.data().available()
+            || !self.content().schemas().supports(self.data())
+            || !self.execution().supports_operation(self.operation())
+        {
+            return Err(invalid());
+        }
+        Ok(())
     }
-    /// Consuming handoff for an execution owner. A data carrier is not an
-    /// execution API or support certificate; mutable parts are never lent.
-    pub fn into_parts(self) -> (ConsumerDefinitionInput, ConsumerDataPolicy, u64) {
-        (
-            ConsumerDefinitionInput {
-                affordance: self.affordance,
-                operation: self.operation,
-                form: self.form,
-                target: self.target,
-                artifact: self.artifact,
-                execution: self.execution,
-                configuration: self.configuration,
-                services: self.services,
-                schemas: self.schemas,
-                funding: self._funding,
-                bank: self.bank,
+    /// Source-free instance dependency binding. No TD/compiler lookup or native
+    /// retargeting is possible here. Logical authority is attached by the runtime.
+    /// Refusal returns both original owners, including a caller's last reference.
+    #[allow(clippy::type_complexity)] // Refusal preserves both move-owned inputs.
+    pub fn bind(
+        self: Arc<Self>,
+        access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
+        bank: Arc<HostResourceAccounts>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        ConsumerBinding,
+        BindingInputRejection<(
+            Arc<Self>,
+            Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
+        )>,
+    > {
+        let access_work = access.work();
+        let checked = (|| {
+            if access_work == 0 {
+                return Err(invalid());
+            }
+            if !pay(budget, WorkClass::ProviderProbes, access_work) {
+                return Err(busy());
+            }
+            self.check_dependencies()?;
+            access.authorize(self.binding(), self.target(), self.operation())?;
+            self.check_dependencies()?;
+            if access.work() != access_work || access.retained_bytes() != access.backing_bytes() {
+                return Err(invalid());
+            }
+            let bytes = core::mem::size_of::<ConsumerBinding>() as u64 + 128;
+            reserve(&bank, &[(ResourceKind::EngineLiveBytesGlobalMax, bytes)])
+        })();
+        let funding = match checked {
+            Ok(f) => f,
+            Err(e) => {
+                return Err(BindingInputRejection::new(
+                    (self, access),
+                    BindingOperationalError::new(e),
+                ));
+            }
+        };
+        Ok(ConsumerBinding {
+            input: ConsumerBindingInput {
+                definition: self,
+                access,
+                funding,
+                bank,
             },
-            self.data_policy,
-            self.access_work,
-        )
+            access_work,
+        })
+    }
+    pub fn into_input(self) -> ConsumerDefinitionInput {
+        self.input
+    }
+}
+
+/// Instance-local policy and funding over qualified reusable content/mapping.
+/// Reusing the content never shares permission or moves physical backing to this
+/// bank. Runtime records and every call/result continue to charge this bank.
+pub struct ConsumerBinding {
+    input: ConsumerBindingInput,
+    access_work: u64,
+}
+pub struct ConsumerBindingInput {
+    pub definition: Arc<ConsumerDefinition>,
+    pub access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
+    pub funding: Vec<HostCapacityReservation>,
+    pub bank: Arc<HostResourceAccounts>,
+}
+impl ConsumerBinding {
+    pub fn definition(&self) -> &Arc<ConsumerDefinition> {
+        &self.input.definition
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.definition().name()
+    }
+    pub fn affordance(&self) -> &AffordanceTarget {
+        self.definition().affordance()
+    }
+    pub fn operation(&self) -> Operation {
+        self.definition().operation()
+    }
+    pub fn form(&self) -> u32 {
+        self.definition().form()
+    }
+    pub fn binding(&self) -> BindingRegistrationIdentity {
+        self.definition().binding()
+    }
+    pub fn bank(&self) -> &Arc<HostResourceAccounts> {
+        &self.input.bank
+    }
+    pub fn into_parts(self) -> (ConsumerBindingInput, ConsumerDataPolicy, u64) {
+        let policy = self.definition().data_policy();
+        (self.input, policy, self.access_work)
     }
 }
 

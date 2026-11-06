@@ -262,12 +262,24 @@ retained and funded. These repairs do not change package acceptance status.
 
 ## Open finite Consumer ownership
 
-The source-free `servient-finite::consumer` owner consumes Core definitions and
+The source-free `servient-finite::consumer` owner consumes Core instance bindings and
 pins their exact actual execution/configuration and services. It accepts no
 call-time executor, codec, validator, security or configuration override. Managed
 call admission refuses a foreign parent bank and funds native lifetime, complete
 result backing, callback temporary and cleanup before invocation. The immutable
-startup registry itself remains caller-provisioned Host construction.
+startup registry layout remains caller-provisioned Host construction; actual
+retained services/registration backing have explicit original funding.
+
+The [reusable execution fixture](../../protocol-bindings/protocols/http/tests/reusable_execution.rs)
+executes independent HTTP Consumers from one semantic preparation, specialized
+endpoint artifacts and independently bound policy/authority/accounts. It covers
+incompatible meaning/configuration, actual changed paths/headers, stale authority,
+changed service support/bounds, refusal under saturation, retained late/cancelled
+results and final physical release. Its allocator characterization compares shared
+and separately prepared content over 1–32 instances; measured costs and limits
+are recorded in [the evidence](../evidence/consumer-execution-reuse.md). This does
+not close a package/milestone or qualify Producer reuse, broader schemas/security
+or portable execution.
 
 Calls and abandoned-handle cleanup retain their original native owner and first
 cause through cancellation errors/Pending, policy/service loss, revocation and

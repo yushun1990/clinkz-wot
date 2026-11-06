@@ -19,6 +19,14 @@ owners are distinct. A reference retains identity and passive currentness, not
 revocation power or liveness after authority Drop. Finite calls and raw
 notifications retain that same reference through their separate settlements.
 
+The finite handoff distinguishes immutable `ConsumerExecutionContent`, a
+qualified native `ConsumerDefinition`, and an instance-local `ConsumerBinding`.
+Content records the exact affordance/operation/data roles; it grants neither
+permission nor a service-support certificate. A definition retains its actual
+mapping and data dependencies. Binding policy/accounts and attaching a current
+logical authority remain independent steps. Calls and settlements retain these
+original owners; no sibling or successor content/instance can substitute for them.
+
 `EXEC-HANDLER-001`: Servient MUST select and capture actual registered behavior
 for the accepted target/operation; Bindings MUST NOT call application handlers.
 Requests contain dynamic data and context contains dispatch identity, not mutable

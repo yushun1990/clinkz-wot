@@ -32,8 +32,8 @@ fn main() {
         600,
     )
     .unwrap();
-    let registry =
-        ConsumerRegistry::try_new(vec![registration]).unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let registry = ConsumerRegistry::try_new(vec![registration], &bank)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let prepared = registry
         .prepare(
             &thing,

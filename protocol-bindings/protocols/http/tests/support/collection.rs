@@ -329,23 +329,15 @@ fn exposure(
         .parse()
         .unwrap();
     let key = authority.key();
-    let mut behaviors = vec![
-        RawFiniteBehavior::new(
-            AffordanceTarget::Property(Arc::from("level")),
-            Operation::ReadProperty,
-            Behavior(app.clone()),
-        ),
-        RawFiniteBehavior::new(
-            AffordanceTarget::Property(Arc::from("on")),
-            Operation::ReadProperty,
-            Behavior(app.clone()),
-        ),
-        RawFiniteBehavior::new(
-            AffordanceTarget::Property(Arc::from("secret")),
-            Operation::WriteProperty,
-            Behavior(app.clone()),
-        ),
-    ];
+    let mut behaviors = Vec::new();
+    for (name, operation) in [("level", Operation::ReadProperty),
+        ("on", Operation::ReadProperty), ("secret", Operation::WriteProperty)] {
+        if td["properties"][name]["forms"].as_array().is_some_and(|f| !f.is_empty()) {
+            behaviors.push(RawFiniteBehavior::new(
+                AffordanceTarget::Property(Arc::from(name)), operation, Behavior(app.clone()),
+            ));
+        }
+    }
     if td["properties"]["on"]["readOnly"] == false {
         behaviors.push(RawFiniteBehavior::new(
             AffordanceTarget::Property(Arc::from("on")),
@@ -649,7 +641,7 @@ fn prepare_consumer(
     selector: ConsumerSelector,
 ) -> CoreResult<PreparedConsumer> {
     let registry =
-        ConsumerRegistry::try_new(registrations).unwrap_or_else(|e| panic!("{:?}", e.error()));
+        ConsumerRegistry::try_new(registrations, &accounts).unwrap_or_else(|e| panic!("{:?}", e.error()));
     let td: Thing = serde_json::from_value(td.clone()).unwrap();
     registry.prepare(
         &td,
@@ -1175,8 +1167,8 @@ fn verify_collection_cleanup(operation: Operation) {
             queries: queries.clone(),
             supported: !matches!(mode, Mode::UnsupportedData),
         });
-        let registry = ConsumerRegistry::try_new(vec![reg]).unwrap_or_else(|_| panic!());
         let accounts = bank();
+        let registry = ConsumerRegistry::try_new(vec![reg], &accounts).unwrap_or_else(|_| panic!());
         let mut budget = work().with_remaining(WorkClass::CleanupItems, cleanup);
         let mut jobs = 0;
         let prepared = registry.prepare(
@@ -1208,6 +1200,7 @@ fn verify_collection_cleanup(operation: Operation) {
             Err(e) => (Some(e.clone()), 0),
         };
         drop(prepared);
+        drop(registry);
         clean(&accounts);
         Probe {
             used: cleanup - budget.remaining(WorkClass::CleanupItems),
@@ -1240,25 +1233,25 @@ fn verify_collection_cleanup(operation: Operation) {
         );
         assert!(compiled.error.is_none());
         assert_eq!(compiled.selected, 1);
-        let native_cleanup = compiled.used - temporary.used - schema_drop;
+        let native_cleanup = compiled.used - temporary.used;
         let total = compiled.used - walk.used;
         if let Some(one) = previous {
-            assert_eq!(total - one, 18, "both schema owners grow by nine members");
+            assert_eq!(total - one, 9, "one prepared content owner grows by nine members");
         }
         previous = Some(total);
         println!(
-            "{count} members: schema cleanup={schema_drop} per owner, native cleanup={native_cleanup}, beyond walk={total}"
+            "{count} members: one schema owner cleanup={schema_drop}, native cleanup={native_cleanup}, beyond walk={total}"
         );
 
         // Cancelling the native job fixes the credit spent up to its start,
         // independently of later TD/Form walking. Use that observed boundary to
-        // test one-unit shortages before temporary construction and cloning.
+        // test one-unit shortages before common construction and native preparation.
         let cancelled = attempt(&td, Mode::Cancel, 1_000_000);
         assert!(matches!(cancelled.error, Some(CoreError::Cancelled(_))));
         assert_eq!(cancelled.jobs, 1);
         for (credit, expected_queries) in [
-            (cancelled.used - native_cleanup - schema_drop - 1, 0),
-            (cancelled.used - native_cleanup - 1, 1),
+            (cancelled.used - native_cleanup - 1, 0),
+            (cancelled.used - 1, 1),
         ] {
             let refused = attempt(&td, Mode::Selected, credit);
             assert!(matches!(refused.error, Some(CoreError::Backpressure(_))));
@@ -1278,7 +1271,7 @@ fn verify_collection_cleanup(operation: Operation) {
         assert_eq!(exact.used, compiled.used);
         let rollback = attempt(&td, Mode::Selected, compiled.used - 1);
         assert!(rollback.error.is_some());
-        assert_eq!(rollback.jobs, 1, "late refusal releases the retained clone");
+        assert_eq!(rollback.jobs, 1, "late refusal releases the retained content");
     }
     // A supported first member is acquired before a later unsupported schema;
     // partial construction has the same prepaid temporary disposal bound.

@@ -20,12 +20,12 @@ enum CallInput<'a> {
 }
 
 struct Definition {
-    input: ConsumerDefinitionInput,
+    input: ConsumerBindingInput,
     data_policy: ConsumerDataPolicy,
     access_work: u64,
 }
 impl Definition {
-    fn from_prepared(definition: ConsumerDefinition) -> Self {
+    fn from_prepared(definition: ConsumerBinding) -> Self {
         let (input, data_policy, access_work) = definition.into_parts();
         Self {
             input,
@@ -34,8 +34,8 @@ impl Definition {
         }
     }
     fn matches(&self, target: AffordanceSite<'_>, operation: Operation) -> bool {
-        self.input.operation == operation
-            && match (&self.input.affordance, target) {
+        self.input.definition.operation() == operation
+            && match (self.input.definition.affordance(), target) {
                 (AffordanceTarget::Thing, AffordanceSite::Thing) => true,
                 (AffordanceTarget::Property(a), AffordanceSite::Property(b))
                 | (AffordanceTarget::Action(a), AffordanceSite::Action(b)) => a.as_ref() == b,
@@ -43,13 +43,13 @@ impl Definition {
             }
     }
     fn binding(&self) -> BindingRegistrationIdentity {
-        self.input.execution.identity()
+        self.input.definition.execution().identity()
     }
     fn resources(&self) -> BindingResourceDeclarations {
-        self.input.execution.resources()
+        self.input.definition.execution().resources()
     }
     fn configuration(&self) -> ConsumerBindingConfiguration {
-        self.input.configuration
+        self.input.definition.configuration()
     }
     fn data_policy(&self) -> ConsumerDataPolicy {
         self.data_policy
@@ -58,20 +58,9 @@ impl Definition {
         self.access_work
     }
     fn check_dependencies(&self) -> CoreResult<()> {
-        if self.input.execution.consumer_configuration() != Some(self.input.configuration)
-            || self.input.execution.identity().configuration()
-                != self.input.configuration.configuration()
-            || self.input.services.data.policy() != self.data_policy
-            || self.input.services.access.work() != self.access_work
-            || !self.input.services.data.available()
-            || !self
-                .input
-                .schemas
-                .supports(self.input.services.data.as_ref())
-            || !self
-                .input
-                .execution
-                .supports_operation(self.input.operation)
+        self.input.definition.check_dependencies()?;
+        if self.input.access.work() != self.access_work
+            || self.input.access.retained_bytes() != self.input.access.backing_bytes()
         {
             return Err(invalid());
         }
@@ -90,21 +79,21 @@ impl Definition {
             ConsumerFiniteSchemas::WriteAllProperties(schema)
             | ConsumerFiniteSchemas::WriteMultipleProperties(schema),
             Some(selected),
-        ) = (&self.input.schemas, selection)
+        ) = (self.input.definition.content().schemas(), selection)
         {
-            self.input.services.access.authorize_property_write(
+            self.input.access.authorize_property_write(
                 consumer,
                 self.binding(),
-                &self.input.target,
-                self.input.operation,
+                self.input.definition.target(),
+                self.input.definition.operation(),
                 (schema, selected),
             )?;
         } else {
-            self.input.services.access.authorize_instance(
+            self.input.access.authorize_instance(
                 consumer,
                 self.binding(),
-                &self.input.target,
-                self.input.operation,
+                self.input.definition.target(),
+                self.input.definition.operation(),
             )?;
         }
         if !consumer.is_current() {
@@ -121,12 +110,12 @@ impl Definition {
         selection: Option<collection::PropertySelection>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<()>> {
-        if !self.input.services.data.available()
-            || self.input.services.data.policy() != self.data_policy
+        if !self.input.definition.data().available()
+            || self.input.definition.data().policy() != self.data_policy
         {
             return Poll::Ready(Err(invalid()));
         }
-        let has_output = match &self.input.schemas {
+        let has_output = match self.input.definition.content().schemas() {
             ConsumerFiniteSchemas::Value(s) => s.output.is_some(),
             ConsumerFiniteSchemas::WriteAllProperties(_)
             | ConsumerFiniteSchemas::WriteMultipleProperties(_) => false,
@@ -138,7 +127,7 @@ impl Definition {
             return Poll::Ready(Err(invalid()));
         }
         if let Some(report) = output.metadata().property_write_report() {
-            let selected = match (&self.input.schemas, selection) {
+            let selected = match (self.input.definition.content().schemas(), selection) {
                 (ConsumerFiniteSchemas::WriteAllProperties(schema), _) => schema.all(),
                 (ConsumerFiniteSchemas::WriteMultipleProperties(_), Some(s)) => s,
                 _ => return Poll::Ready(Err(invalid())),
@@ -161,8 +150,8 @@ impl Definition {
         if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
             return Poll::Pending;
         }
-        Poll::Ready(self.input.schemas.validate_output(
-            self.input.services.data.as_ref(),
+        Poll::Ready(self.input.definition.content().schemas().validate_output(
+            self.input.definition.data(),
             selection,
             output.data(),
         ))
@@ -172,25 +161,29 @@ impl Definition {
         payload: Option<&Payload>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<Option<collection::PropertySelection>>> {
-        Poll::Ready(match (self.input.schemas.input(), payload) {
-            (None, None) => Ok(None),
-            (Some(_), Some(payload))
-                if payload.body.len() as u64 <= self.data_policy.body_bytes =>
-            {
-                if !self.input.services.data.available()
-                    || self.input.services.data.policy() != self.data_policy
+        Poll::Ready(
+            match (self.input.definition.content().schemas().input(), payload) {
+                (None, None) => Ok(None),
+                (Some(_), Some(payload))
+                    if payload.body.len() as u64 <= self.data_policy.body_bytes =>
                 {
-                    return Poll::Ready(Err(invalid()));
+                    if !self.input.definition.data().available()
+                        || self.input.definition.data().policy() != self.data_policy
+                    {
+                        return Poll::Ready(Err(invalid()));
+                    }
+                    if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
+                        return Poll::Pending;
+                    }
+                    self.input
+                        .definition
+                        .content()
+                        .schemas()
+                        .validate_input_selection(self.input.definition.data(), Some(payload))
                 }
-                if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
-                    return Poll::Pending;
-                }
-                self.input
-                    .schemas
-                    .validate_input_selection(self.input.services.data.as_ref(), Some(payload))
-            }
-            _ => Err(invalid()),
-        })
+                _ => Err(invalid()),
+            },
+        )
     }
     fn start(
         &self,
@@ -200,16 +193,17 @@ impl Definition {
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<Option<Payload>>,
     > {
-        let artifact = &self.input.artifact;
+        let artifact = self.input.definition.artifact();
         let request = OutboundRequest::finite(
             BindingArtifactRef::new(artifact.identity(), SlotIndex::new(0)),
-            self.input.operation,
+            self.input.definition.operation(),
             input,
             Default::default(),
             deadline,
         )?;
         self.input
-            .execution
+            .definition
+            .execution()
             .start_finite(request, artifact)
             .map_err(|e| {
                 let (request, error) = e.into_parts();
@@ -466,11 +460,11 @@ impl ConsumerRuntime {
     /// executors/services; runtime calls accept no compiler/configuration override.
     pub fn try_new(
         consumer: ConsumerInstanceRef,
-        definitions: Vec<ConsumerDefinition>,
+        definitions: Vec<ConsumerBinding>,
         funding: Vec<HostCapacityReservation>,
         bank: Arc<HostResourceAccounts>,
         calls: usize,
-    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerDefinition>, Vec<HostCapacityReservation>)>>
+    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
     {
         let error = if !consumer.is_current()
             || definitions.is_empty()
@@ -492,8 +486,8 @@ impl ConsumerRuntime {
         let bytes = (core::mem::size_of::<State>()
             + calls * core::mem::size_of::<Slot>()
             + definitions.len()
-                * (core::mem::size_of::<Arc<ConsumerDefinition>>()
-                    + core::mem::size_of::<ConsumerDefinition>()
+                * (core::mem::size_of::<Arc<Definition>>()
+                    + core::mem::size_of::<Definition>()
                     + 32)) as u64;
         let extra = match reserve(&bank, &[(K::EngineLiveBytesGlobalMax, bytes)]) {
             Ok(extra) => extra,
@@ -750,7 +744,7 @@ impl ConsumerRuntime {
                 return Err(busy());
             }
             definition.check_current(&state.consumer, None)?;
-            let selection = match (&definition.input.schemas, members) {
+            let selection = match (definition.input.definition.content().schemas(), members) {
                 (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(names)) => {
                     if names.len() > collection::PropertyCollectionSchema::MAX_MEMBERS {
                         return Err(invalid());
@@ -834,12 +828,12 @@ impl ConsumerRuntime {
             // destruction allowances. On refusal it drops before this funding.
             let encoded =
                 if let (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(selected)) =
-                    (&definition.input.schemas, selection)
+                    (definition.input.definition.content().schemas(), selection)
                 {
                     // Authorization may change service availability or its
                     // work/backing declarations. Check at this callback edge.
-                    if !definition.input.services.data.available()
-                        || definition.input.services.data.policy() != policy
+                    if !definition.input.definition.data().available()
+                        || definition.input.definition.data().policy() != policy
                     {
                         return Err(invalid());
                     }
@@ -848,8 +842,8 @@ impl ConsumerRuntime {
                     }
                     let payload = definition
                         .input
-                        .services
-                        .data
+                        .definition
+                        .data()
                         .encode_property_selection(schema, selected)?;
                     if notification::notification_payload_backing(Some(&payload))
                         .ok_or_else(invalid)? as u64
@@ -1105,7 +1099,10 @@ impl ConsumerSettlement {
         &collection::PropertyCollectionSchema,
         collection::PropertySelection,
     )> {
-        match (&self.call.definition.input.schemas, self.call.selection) {
+        match (
+            self.call.definition.input.definition.content().schemas(),
+            self.call.selection,
+        ) {
             (
                 ConsumerFiniteSchemas::WriteAllProperties(schema)
                 | ConsumerFiniteSchemas::WriteMultipleProperties(schema),
@@ -1121,11 +1118,11 @@ impl ConsumerSettlement {
         &self.call.consumer
     }
     pub fn operation(&self) -> Operation {
-        self.call.definition.input.operation
+        self.call.definition.input.definition.operation()
     }
     /// Lends the original coordinate without exposing its shared name owner.
     pub fn affordance(&self) -> AffordanceSite<'_> {
-        match &self.call.definition.input.affordance {
+        match self.call.definition.input.definition.affordance() {
             AffordanceTarget::Thing => AffordanceSite::Thing,
             AffordanceTarget::Property(name) => AffordanceSite::Property(name),
             AffordanceTarget::Action(name) => AffordanceSite::Action(name),
@@ -1336,7 +1333,7 @@ impl Call {
                     Poll::Ready(Ok(())) => {
                         self.output_validated = true;
                         if matches!(
-                            self.definition.input.operation,
+                            self.definition.input.definition.operation(),
                             Operation::WriteAllProperties | Operation::WriteMultipleProperties
                         ) {
                             self.effect = if output

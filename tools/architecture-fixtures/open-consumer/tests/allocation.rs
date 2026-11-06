@@ -48,7 +48,7 @@ fn allocation_refusal_before_start_and_inside_owned_cursor_releases_reserved_bac
     for after in [0, 1] {
         let probe = Arc::new(Probe::default());
         let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
-        let registry = ConsumerRegistry::try_new(vec![registration(1, probe.clone())])
+        let registry = ConsumerRegistry::try_new(vec![registration(1, probe.clone())], &bank)
             .unwrap_or_else(|_| panic!());
         let result = registry.prepare(
             &thing,
@@ -64,6 +64,7 @@ fn allocation_refusal_before_start_and_inside_owned_cursor_releases_reserved_bac
             },
         );
         assert!(result.is_err());
+        drop(registry);
         assert_eq!(probe.starts.load(Ordering::Relaxed), after);
         assert_eq!(probe.native.load(Ordering::Relaxed), 0);
         assert!(

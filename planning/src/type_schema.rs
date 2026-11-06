@@ -102,6 +102,36 @@ pub fn prepare_writable_property_schema(
 ) -> CoreResult<clinkz_wot_core::collection::PropertyCollectionSchema> {
     prepare_members(doc, Members::Writable)
 }
+
+/// Compare borrowed assertions against retained meaning. This deliberately
+/// performs qualification again, but allocates no member/name table. Unsupported
+/// assertions refuse even when their declared scalar type would compare equal.
+pub(crate) fn matches_property_schema(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    expected: &clinkz_wot_core::collection::PropertyCollectionSchema,
+    writing: bool,
+) -> CoreResult<bool> {
+    let role = if writing {
+        Members::Writable
+    } else {
+        Members::Readable
+    };
+    let mut actual = doc
+        .collection_properties()
+        .ok_or_else(refused)?
+        .filter(|p| role.includes(p.schema));
+    for member in expected.members() {
+        let Some(property) = actual.next() else {
+            return Ok(false);
+        };
+        if property.name != member.name.as_ref()
+            || prepare_type_schema(property.schema)? != member.schema
+        {
+            return Ok(false);
+        }
+    }
+    Ok(actual.next().is_none())
+}
 fn prepare_members(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
     role: Members,
