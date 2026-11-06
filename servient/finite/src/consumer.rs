@@ -198,10 +198,30 @@ impl Definition {
         consumer: &ConsumerInstanceRef,
         input: Option<Payload>,
         deadline: Option<Deadline>,
+        budget: &mut WorkBudget,
     ) -> Result<
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<Option<Payload>>,
     > {
+        // Issuance is a distinct linked callback. The preceding permission
+        // payment cannot fund a second traversal of the credential service.
+        if !pay(budget, W::ProviderProbes, self.access_work()) {
+            return Err(BindingInputRejection::new(
+                input,
+                BindingOperationalError::new(busy()),
+            ));
+        }
+        let current = if consumer.is_current() {
+            self.check_dependencies()
+        } else {
+            Err(stale())
+        };
+        if let Err(error) = current {
+            return Err(BindingInputRejection::new(
+                input,
+                BindingOperationalError::new(error),
+            ));
+        }
         let artifact = self.input.definition.artifact();
         let request = OutboundRequest::finite(
             BindingArtifactRef::new(artifact.identity(), SlotIndex::new(0)),
@@ -225,6 +245,19 @@ impl Definition {
                 ));
             }
         };
+        // Issuance may invalidate its own credentials, wrapped policy or the
+        // original instance. Refuse before constructing native work.
+        let current = if consumer.is_current() {
+            self.check_dependencies()
+        } else {
+            Err(stale())
+        };
+        if let Err(error) = current {
+            return Err(BindingInputRejection::new(
+                request.into_input(),
+                BindingOperationalError::new(error),
+            ));
+        }
         let request = request.with_security(security);
         self.input
             .definition
@@ -919,6 +952,7 @@ impl ConsumerRuntime {
             &self.state.consumer,
             encoded.or(input),
             deadline.instant().map(|_| deadline),
+            budget,
         ) {
             Ok(raw) => raw,
             Err(rejection) if operation == Operation::ReadMultipleProperties => {

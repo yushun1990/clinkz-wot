@@ -22,6 +22,7 @@ use std::{
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Edge {
     Access,
+    Issue,
     Validate,
     Start,
     Poll,
@@ -103,6 +104,17 @@ impl ConsumerAccessService for Access {
     ) -> CoreResult<()> {
         fire(Edge::Access);
         self.0.authorize_instance(c, b, t, o)
+    }
+    fn outbound_security(
+        &self,
+        c: &ConsumerInstanceRef,
+        b: BindingRegistrationIdentity,
+        t: &str,
+        o: Operation,
+        requirement: &security::SecurityRequirement,
+    ) -> CoreResult<Option<security::OutboundSecurity>> {
+        fire(Edge::Issue);
+        self.0.outbound_security(c, b, t, o, requirement)
     }
     fn retained_bytes(&self) -> u64 {
         self.0.retained_bytes()
@@ -958,4 +970,46 @@ fn real_http_retains_one_original_result_when_validation_reenters_close_or_cance
         clean(&bank);
         peer.join().unwrap();
     }
+}
+
+#[test]
+fn short_credential_issuance_credit_recovers_original_input_before_capability_or_native_start() {
+    let h = harness(1, None);
+    let before = usage(&h.bank);
+    let input = Payload::new(b"8".as_slice(), "application/json");
+    let original = input.body.clone();
+    let issued = Rc::new(std::cell::Cell::new(false));
+    let issued_in_hook = issued.clone();
+    hook(Edge::Issue, move || issued_in_hook.set(true));
+    let callback_work = HttpConsumerConfig::for_cleartext_ip()
+        .unwrap()
+        .consumer_services()
+        .access
+        .work();
+    // Writes pay fresh permission before and after data validation. Neither
+    // payment can be reused to enter the new credential-service callback.
+    let mut short = work().with_remaining(WorkClass::ProviderProbes, 2 * callback_work);
+    let refused =
+        h.rt.write_property("level", input, Deadline::NONE, now(), &mut short)
+            .err()
+            .expect("issuance needs separate credit");
+    assert!(matches!(
+        refused.error().error(),
+        CoreError::Backpressure(_)
+    ));
+    let (input, _) = refused.into_parts();
+    assert!(Arc::ptr_eq(&original, &input.body));
+    assert!(!issued.get());
+    assert_eq!(h.probe.starts.load(Ordering::Relaxed), 0);
+    assert!(h.rt.is_idle());
+    assert_eq!(before, usage(&h.bank));
+    let mut retry =
+        h.rt.write_property("level", input, Deadline::NONE, now(), &mut work())
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert!(issued.get());
+    assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
+    drop(settle(&mut retry));
+    drop(retry);
+    drop(original);
+    dispose(h);
 }

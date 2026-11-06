@@ -51,10 +51,22 @@ concrete type hierarchy nor #261's schema representation is an API freeze.
   Basic content. Per-call grants bind the original instance reference, selected
   registration, exact destination, Property Read and credential revision. No
   redirect, proxy, continuation, implicit retry or target rewrite exists.
+  Permission and credential issuance each prepay their complete access-service
+  work independently. Insufficient issuance credit preserves the original input
+  and never enters issuance or native construction.
+  The Basic adapter maintains one nonwrapping local invalidation sequence for
+  credential replacement and observed wrapped-policy revisions. It checks the
+  captured sequence around delegated permission/issuance and again in grants,
+  credential transport and unread handoff. Wrapped metadata is read outside the
+  credential lock; counter exhaustion fences the owner. Freshly binding the same
+  definition can adopt the new revision without refreshing old work.
 - A successful verifier returns an established `Principal`; the username is
   only evidence. Application authorization runs separately. Missing and invalid
   credentials yield HTTP 401 with a Basic challenge; application denial yields
   403. Malformed/duplicate/unsupported credential headers abort the exchange.
+  After the last delivery verifier/authorization callback, the original accepted
+  instance, publication gate and actual service/configuration are rechecked
+  immediately before native send. Callback-time revocation fences retained output.
   Producer verification failure never enters behavior. TLS trust/handshake
   failure yields a redacted provider failure and cannot use credentials.
 - Credential-bearing grants and Basic/authentication carriers have redacted
@@ -93,6 +105,14 @@ independent rustls HTTP peer. Tests cover:
   work/identity and exposure cancellation refuse delivery of retained output.
   Consumer credential replacement and policy changes fence original work and
   unread results.
+- Review regressions exercise real TLS delivery driven independently of the
+  logical owner, with authorization or final-verification callbacks revoking
+  that owner or closing its publication gate. The original output retires as
+  NotDelivered; all original accounts release. A 4096-unit policy cannot issue credentials under one
+  permission payment; exact two-callback credit succeeds. A separate native-start
+  probe checks original Write input recovery and zero issuance/native calls on
+  credit shortage. Wrapped-policy changes fence an already validated unread TLS
+  result and callback-time issuance, while checked rebinding succeeds.
 - Zero verification credit does not call the verifier. Cancellation before native
   progress, before dispatch and after acceptance settles the original call.
   Closed sockets/listeners and all tracked Engine accounts release; a retained

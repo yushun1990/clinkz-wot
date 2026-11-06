@@ -457,4 +457,10 @@ Live credentials and mutable credential revisions belong to instance access
 services. Only a per-call opaque native capability crosses into execution, after
 fresh instance/destination permission. A credential revision change invalidates
 existing bindings and unread results; checked rebinding can retain the original
-immutable security/data content. No compiler or source callback returns at runtime.
+immutable security/data content. Wrapping an access service MUST preserve its
+revision's invalidation as well as local credential changes, including changes
+during authorization or capability issuance. Fresh rebinding adopts the changed
+service state without revalidating prior work. Permission and credential issuance
+are separate callbacks with separate complete work prepayments; insufficient
+issuance credit returns the original input before capability/native construction.
+No compiler or source callback returns at runtime.

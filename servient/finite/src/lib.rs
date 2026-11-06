@@ -1125,6 +1125,20 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
+                        // Verification and application policy are linked
+                        // callbacks: either can invalidate logical authority.
+                        // Only these final observations authorize native send.
+                        if !self.ingress_gate.get()
+                            || self
+                                .accepted_instance
+                                .as_ref()
+                                .is_none_or(|accepted| !accepted.current.get())
+                        {
+                            return Err(CoreError::StaleHandle(context()));
+                        }
+                        if !self.pair_is_current() {
+                            return Err(CoreError::Validation(context()));
+                        }
                         Ok(())
                     })();
                     if let Err(error) = checked {

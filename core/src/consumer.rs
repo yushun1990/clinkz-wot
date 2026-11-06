@@ -104,6 +104,8 @@ pub struct ConsumerDataPolicy {
 pub trait ConsumerAccessService: Send + Sync {
     /// Passive live dependency revision. Changing it invalidates existing
     /// bindings and unread results; rebinding qualifies the new service state.
+    /// Revisions must not be reused while original bindings/grants remain live.
+    /// Wrappers must preserve invalidation by each actual service dependency.
     fn security_revision(&self) -> u64 {
         0
     }
@@ -112,8 +114,9 @@ pub trait ConsumerAccessService: Send + Sync {
     fn supports_security(&self, requirement: &crate::security::SecurityRequirement) -> bool {
         *requirement == crate::security::SecurityRequirement::NOSEC
     }
-    /// Called after fresh destination/instance permission, under work(). Live
-    /// material is scoped to one call, never stored in reusable definitions.
+    /// Called after fresh destination/instance permission, with a separate
+    /// complete work() prepayment. Permission credit cannot fund issuance too.
+    /// Live material is scoped to one call, never stored in reusable definitions.
     fn outbound_security(
         &self,
         _consumer: &ConsumerInstanceRef,

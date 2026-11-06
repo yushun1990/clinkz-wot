@@ -410,8 +410,12 @@ prepaid before semantic acceptance. It establishes a Principal independently of
 application permission, and is repeated after authorization. Before each
 successful native send the runtime repeats verification, requires the original
 identity/claims and instance currentness, and invokes the original handler's
-fresh application permission, then rechecks verification before native entry. Failure retains the original input/result and
-native retirement owner; partial delivery remains Unknown. Redacted protocol
+fresh application permission, then rechecks verification before native entry.
+After those callbacks, the original accepted instance, publication gate and
+actual Binding/service pair MUST still be current immediately before native
+send. A pre-callback currentness observation grants no permission at that edge.
+Failure retains the original input/result and native retirement owner; partial
+delivery remains Unknown. Redacted protocol
 refusals require no permission to deliver application data. The default zero-work
 adapter preserves existing trusted native principal semantics; it establishes no
 new authentication guarantee. Wrappers claiming the authenticated facet must

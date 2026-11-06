@@ -6,6 +6,21 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 const USER: &[u8] = b"device";
 const PASSWORD: &[u8] = b"fixture-secret-not-a-principal";
+type VerificationHook = (usize, Box<dyn FnOnce()>);
+thread_local! { static VERIFICATION_HOOK: RefCell<Option<VerificationHook>> = const { RefCell::new(None) }; }
+fn verification_hook(call: usize) {
+    let hook = VERIFICATION_HOOK.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        if pending.as_ref().is_some_and(|(at, _)| *at == call) {
+            pending.take()
+        } else {
+            None
+        }
+    });
+    if let Some((_, hook)) = hook {
+        hook();
+    }
+}
 struct Verifier {
     expected_password: &'static [u8],
     replacement_identity: AtomicBool,
@@ -15,7 +30,8 @@ struct Verifier {
 }
 impl HttpBasicVerifier for Verifier {
     fn verify(&self, username: &[u8], password: &[u8]) -> CoreResult<Principal> {
-        self.calls.fetch_add(1, Ordering::Relaxed);
+        let call = self.calls.fetch_add(1, Ordering::Relaxed) + 1;
+        verification_hook(call);
         if self.revoked.load(Ordering::Acquire)
             || username != USER
             || password != self.expected_password
@@ -84,6 +100,7 @@ fn secure_description(addr: SocketAddr) -> Value {
 }
 #[derive(Default)]
 struct SecureApp {
+    authority_in_permission: RefCell<Option<Box<dyn FnOnce()>>>,
     revoke_in_permission: RefCell<Option<Arc<Verifier>>>,
     denied: Cell<bool>,
     reads: Cell<usize>,
@@ -93,6 +110,10 @@ struct SecureApp {
 struct SecureBehavior(Rc<SecureApp>);
 impl RawFiniteHandler for SecureBehavior {
     fn authorize(&self, input: &InteractionInput) -> CoreResult<()> {
+        let hook = self.0.authority_in_permission.borrow_mut().take();
+        if let Some(hook) = hook {
+            hook();
+        }
         if let Some(verifier) = self.0.revoke_in_permission.borrow().as_ref() {
             verifier.revoked.store(true, Ordering::Release);
         }
@@ -1057,4 +1078,401 @@ fn cancellation_policy_change_and_zero_verification_credit_retain_original_owner
             server.close();
         }
     });
+}
+
+#[test]
+fn delivery_permission_callback_cannot_revoke_authority_or_publication_and_still_send() {
+    io().block_on(async {
+        for (in_final_verification, revoke_instance) in
+            [(false, true), (false, false), (true, true), (true, false)]
+        {
+            let keys = Keys::for_name("127.0.0.1");
+            let verifier = verifier();
+            let mut server = SecureFixture::new(&keys, verifier.clone());
+            let instance = consumer_instance();
+            let accounts = bank();
+            let access = access(
+                &instance,
+                server.td["properties"]["on"]["forms"][0]["href"]
+                    .as_str()
+                    .unwrap(),
+                true,
+                Arc::new(AtomicBool::new(false)),
+            );
+            let (client, content) =
+                secure_client(&server.td, &keys, &instance, access, &accounts, None);
+            let mut call = read_secure(&client);
+            until(&mut server, &mut call, RawFiniteState::Delivering).await;
+            let gate = ClosedProducerParticipation::ingress_gate(server.server()).clone();
+            let SecureFixture {
+                owner,
+                mut exposure,
+                app,
+                accounts: producer_accounts,
+                ..
+            } = server;
+            let owner = Rc::new(RefCell::new(owner));
+            let key = exposure.key();
+            let changed = Rc::new(Cell::new(false));
+            let changed_in_hook = changed.clone();
+            let callback_owner = owner.clone();
+            let callback: Box<dyn FnOnce()> = Box::new(move || {
+                if revoke_instance {
+                    assert!(callback_owner.borrow_mut().revoke(key));
+                } else {
+                    gate.set(false);
+                }
+                changed_in_hook.set(true);
+            });
+            if in_final_verification {
+                // Each send performs verification before and after permission.
+                let at = verifier.calls.load(Ordering::Relaxed) + 2;
+                VERIFICATION_HOOK.with(|pending| {
+                    assert!(pending.borrow_mut().replace((at, callback)).is_none())
+                });
+            } else {
+                *app.authority_in_permission.borrow_mut() = Some(callback);
+            }
+            // Direct native progress leaves the logical owner available to the
+            // callback, exactly as supported independent ownership permits.
+            let start = Instant::now();
+            let result = loop {
+                let _ = exposure.participant_mut::<SecureServer>(0).unwrap().step(
+                    &mut cx(),
+                    &mut work(),
+                    now(0),
+                );
+                if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) {
+                    break result;
+                }
+                assert!(start.elapsed() < Duration::from_secs(5));
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            };
+            assert!(changed.get());
+            VERIFICATION_HOOK.with(|pending| assert!(pending.borrow().is_none()));
+            assert!(
+                result.result().is_err(),
+                "callback-time revocation must fence application delivery"
+            );
+            let runtime = exposure.participant_mut::<SecureServer>(0).unwrap();
+            let settlement = runtime.take_settlement().unwrap();
+            assert_eq!(settlement.delivery, FiniteDelivery::NotDelivered);
+            assert_eq!(
+                settlement
+                    .result
+                    .as_ref()
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body
+                    .as_ref(),
+                b"17"
+            );
+            assert_eq!(app.reads.get(), 1);
+            drop(settlement);
+            exposure.begin_close();
+            for _ in 0..100 {
+                let _ = exposure.participant_mut::<SecureServer>(0).unwrap().step(
+                    &mut cx(),
+                    &mut work(),
+                    now(0),
+                );
+            }
+            exposure
+                .retire(&mut owner.borrow_mut(), &mut work())
+                .unwrap();
+            drop((exposure, owner, app, client, call, instance, content));
+            assert!(
+                accounts
+                    .account(ResourceKind::EngineLiveBytesGlobalMax)
+                    .used()
+                    > 0
+            );
+            drop(result);
+            clean(&accounts);
+            clean(&producer_accounts);
+        }
+    });
+}
+
+#[derive(Default)]
+struct ReviewPolicy {
+    revision: std::sync::atomic::AtomicU64,
+    calls: std::sync::atomic::AtomicUsize,
+    change_in_authorize: AtomicBool,
+    change_in_instance: AtomicBool,
+}
+impl ConsumerAccessService for ReviewPolicy {
+    fn security_revision(&self) -> u64 {
+        self.revision.load(Ordering::Acquire)
+    }
+    fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        if self.change_in_authorize.swap(false, Ordering::AcqRel) {
+            self.revision.fetch_add(1, Ordering::AcqRel);
+        }
+        Ok(())
+    }
+    fn authorize_instance(
+        &self,
+        _: &ConsumerInstanceRef,
+        _: BindingRegistrationIdentity,
+        _: &str,
+        _: Operation,
+    ) -> CoreResult<()> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        if self.change_in_instance.swap(false, Ordering::AcqRel) {
+            self.revision.fetch_add(1, Ordering::AcqRel);
+        }
+        Ok(())
+    }
+    fn retained_bytes(&self) -> u64 {
+        64
+    }
+    fn work(&self) -> u64 {
+        4096
+    }
+}
+
+#[test]
+fn basic_credential_issuance_prepays_its_own_complete_callback_work() {
+    io().block_on(async {
+        let keys = Keys::for_name("127.0.0.1");
+        let verify = verifier();
+        let mut server = SecureFixture::new(&keys, verify.clone());
+        let instance = consumer_instance();
+        let accounts = bank();
+        let policy = Arc::new(ReviewPolicy::default());
+        let access = Arc::new(
+            HttpBasicClientAccess::try_new(
+                instance.reference(),
+                server.td["properties"]["on"]["forms"][0]["href"]
+                    .as_str()
+                    .unwrap(),
+                policy.clone(),
+                Some(credentials()),
+            )
+            .unwrap(),
+        );
+        let callback_work = access.work();
+        let (client, content) =
+            secure_client(&server.td, &keys, &instance, access, &accounts, None);
+        let baseline: Vec<_> = ResourceKind::ALL.map(|k| accounts.account(k).used()).into();
+        for credit in [callback_work, 2 * callback_work - 1] {
+            policy.calls.store(0, Ordering::Relaxed);
+            let mut budget = work().with_remaining(WorkClass::ProviderProbes, credit);
+            assert!(
+                client
+                    .read_property("on", Deadline::NONE, now(0), &mut budget)
+                    .is_err(),
+                "one permission payment cannot also fund credential issuance"
+            );
+            assert_eq!(policy.calls.load(Ordering::Relaxed), 2);
+            assert_eq!(
+                budget.remaining(WorkClass::ProviderProbes),
+                credit - callback_work
+            );
+            assert_eq!(
+                ResourceKind::ALL
+                    .map(|k| accounts.account(k).used())
+                    .as_slice(),
+                baseline
+            );
+            assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
+        }
+        policy.calls.store(0, Ordering::Relaxed);
+        let mut budget = work().with_remaining(WorkClass::ProviderProbes, 2 * callback_work);
+        let mut call = client
+            .read_property("on", Deadline::NONE, now(0), &mut budget)
+            .unwrap();
+        assert_eq!(budget.remaining(WorkClass::ProviderProbes), 0);
+        assert_eq!(policy.calls.load(Ordering::Relaxed), 4);
+        let result = server.exchange(&mut call).await;
+        assert!(result.result().is_ok());
+        drop((call, result, client, content, instance));
+        clean(&accounts);
+        server.close();
+    });
+}
+
+struct ReviewData {
+    actual: Arc<dyn ConsumerDataService>,
+    validations: Arc<std::sync::atomic::AtomicUsize>,
+}
+impl ConsumerDataService for ReviewData {
+    fn content_type(&self) -> &str {
+        self.actual.content_type()
+    }
+    fn policy(&self) -> ConsumerDataPolicy {
+        let mut policy = self.actual.policy();
+        policy.retained_bytes += 64;
+        policy
+    }
+    fn supports_schema(&self, schema: &data_schema::PreparedSchema) -> bool {
+        self.actual.supports_schema(schema)
+    }
+    fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
+        self.actual.validate(schema, payload)?;
+        self.validations.fetch_add(1, Ordering::Release);
+        Ok(())
+    }
+}
+
+#[test]
+fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fresh_state() {
+    io().block_on(async {
+        let keys = Keys::for_name("127.0.0.1");
+        let mut server = SecureFixture::new(&keys, verifier());
+        let instance = consumer_instance();
+        let accounts = bank();
+        let policy = Arc::new(ReviewPolicy::default());
+        let access = Arc::new(
+            HttpBasicClientAccess::try_new(
+                instance.reference(),
+                server.td["properties"]["on"]["forms"][0]["href"]
+                    .as_str()
+                    .unwrap(),
+                policy.clone(),
+                Some(credentials()),
+            )
+            .unwrap(),
+        );
+        let validations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut registration = try_https_basic_consumer_registration(
+            keys.client(),
+            access.clone(),
+            BindingId::new(198),
+            BindingGeneration::INITIAL,
+            0,
+        )
+        .unwrap();
+        registration.services.data = Arc::new(ReviewData {
+            actual: registration.services.data,
+            validations: validations.clone(),
+        });
+        let prepared = prepare_consumer(
+            &server.td,
+            accounts.clone(),
+            vec![registration],
+            ConsumerSelector::default(),
+        )
+        .unwrap();
+        let (bindings, funding) = prepared.into_execution();
+        let definition = bindings[0].definition().clone();
+        let content = definition.content().clone();
+        let client =
+            ConsumerRuntime::try_new(instance.reference(), bindings, funding, accounts.clone(), 1)
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let mut call = read_secure(&client);
+        let start = Instant::now();
+        while validations.load(Ordering::Acquire) == 0 {
+            server.step();
+            client.step(&mut cx(), now(0), &mut work());
+            assert!(start.elapsed() < Duration::from_secs(5));
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        // Validation has finished, while the original outcome remains unread.
+        let before = access.security_revision();
+        policy.revision.fetch_add(1, Ordering::AcqRel);
+        let result = server.exchange(&mut call).await;
+        assert!(
+            result.result().is_err(),
+            "wrapped revision change must invalidate the already validated result"
+        );
+        assert!(matches!(
+            result.native_outcome(),
+            ConsumerNativeOutcome::Returned(Ok(_))
+        ));
+        assert_ne!(before, access.security_revision());
+        drop((call, result));
+        drop(server.server().take_settlement());
+        policy.calls.store(0, Ordering::Relaxed);
+        assert!(
+            client
+                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .is_err()
+        );
+        assert_eq!(
+            policy.calls.load(Ordering::Relaxed),
+            0,
+            "stale binding cannot authorize a new call"
+        );
+        drop(client);
+        let owner = ConsumerServiceOwner::retain_access(access.clone(), &accounts).unwrap();
+        let binding = definition
+            .bind(owner, accounts.clone(), &mut work())
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let client = ConsumerRuntime::try_new(
+            instance.reference(),
+            vec![binding],
+            vec![],
+            accounts.clone(),
+            1,
+        )
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let mut call = read_secure(&client);
+        let result = server.exchange(&mut call).await;
+        assert!(result.result().is_ok());
+        drop((call, result, client, content, instance, access));
+        clean(&accounts);
+        server.close();
+    });
+}
+
+#[test]
+fn wrapped_policy_changes_inside_permission_and_issuance_cannot_grant_original_work() {
+    let keys = Keys::for_name("127.0.0.1");
+    let td = secure_description(address());
+    let instance = consumer_instance();
+    let accounts = bank();
+    let policy = Arc::new(ReviewPolicy::default());
+    let access = Arc::new(
+        HttpBasicClientAccess::try_new(
+            instance.reference(),
+            td["properties"]["on"]["forms"][0]["href"].as_str().unwrap(),
+            policy.clone(),
+            Some(credentials()),
+        )
+        .unwrap(),
+    );
+    let prepared = secure_prepare(&td, &keys, access.clone(), &accounts, None).unwrap();
+    let (bindings, funding) = prepared.into_execution();
+    let definition = bindings[0].definition().clone();
+    let binding = definition.binding();
+    let target = definition.target();
+    for change_in_first_callback in [false, true] {
+        let revision = access.security_revision();
+        if change_in_first_callback {
+            policy.change_in_authorize.store(true, Ordering::Release);
+        } else {
+            policy.change_in_instance.store(true, Ordering::Release);
+        }
+        assert!(
+            access
+                .outbound_security(
+                    &instance.reference(),
+                    binding,
+                    target,
+                    Operation::ReadProperty,
+                    definition.content().security()
+                )
+                .is_err()
+        );
+        assert_ne!(access.security_revision(), revision);
+    }
+    let grant = access
+        .outbound_security(
+            &instance.reference(),
+            binding,
+            target,
+            Operation::ReadProperty,
+            definition.content().security(),
+        )
+        .unwrap();
+    assert!(
+        grant.is_some(),
+        "freshly qualified state still permits a new grant"
+    );
+    drop((bindings, funding, definition, instance));
+    clean(&accounts);
 }

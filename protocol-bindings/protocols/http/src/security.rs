@@ -7,7 +7,7 @@ use rustls::{
     ClientConfig, RootCertStore, ServerConfig,
     pki_types::{CertificateDer, PrivateKeyDer},
 };
-use std::sync::{Mutex, atomic::AtomicU64};
+use std::sync::Mutex;
 use zeroize::Zeroizing;
 
 pub(crate) const BASIC: SecurityRequirement = SecurityRequirement {
@@ -87,15 +87,65 @@ impl HttpBasicCredentials {
     }
 }
 
+// One local invalidation sequence covers both credential replacement and
+// observed wrapped-policy revision changes. Never hash/XOR independent revisions
+// into a value that could accidentally revalidate original work.
+struct ClientCredentials {
+    current: Option<HttpBasicCredentials>,
+    revision: u64,
+    policy_revision: u64,
+    exhausted: bool,
+}
+impl ClientCredentials {
+    fn advance(&mut self) -> CoreResult<()> {
+        if let Some(next) = self.revision.checked_add(1).filter(|_| !self.exhausted) {
+            self.revision = next;
+            Ok(())
+        } else {
+            self.exhausted = true;
+            Err(denied(SecurityFailureReason::ProviderFailure))
+        }
+    }
+    fn observe_policy(&mut self, revision: u64) {
+        if revision != self.policy_revision {
+            self.policy_revision = revision;
+            let _ = self.advance(); // Exhaustion permanently fences this owner.
+        }
+    }
+}
 struct ClientState {
     instance: ConsumerInstanceRef,
     target: Box<str>,
     policy: Arc<dyn ConsumerAccessService>,
-    credentials: Mutex<Option<HttpBasicCredentials>>,
-    revision: AtomicU64,
+    credentials: Mutex<ClientCredentials>,
 }
-/// Actual per-instance Basic access/credential service. Rotation invalidates
-/// outstanding grants. No global lookup, username-as-principal or session cache.
+impl ClientState {
+    fn snapshot(&self) -> (u64, bool) {
+        // Passive linked metadata is read outside the credential lock.
+        let policy_revision = self.policy.security_revision();
+        let mut credentials = self.credentials.lock().unwrap();
+        credentials.observe_policy(policy_revision);
+        (credentials.revision, !credentials.exhausted)
+    }
+    fn capture_revision(&self) -> CoreResult<u64> {
+        let (revision, valid) = self.snapshot();
+        if valid {
+            Ok(revision)
+        } else {
+            Err(denied(SecurityFailureReason::ProviderFailure))
+        }
+    }
+    fn check_revision(&self, expected: u64) -> CoreResult<()> {
+        if self.capture_revision()? == expected {
+            Ok(())
+        } else {
+            Err(denied(SecurityFailureReason::AuthorizationDenied))
+        }
+    }
+}
+/// Actual per-instance Basic access/credential service. Credential and wrapped
+/// policy revision changes invalidate old bindings/grants. No global lookup,
+/// username-as-principal or session cache.
 pub struct HttpBasicClientAccess {
     state: Arc<ClientState>,
 }
@@ -110,37 +160,39 @@ impl HttpBasicClientAccess {
         if target_info.uri.scheme_str() != Some("https") {
             return Err(denied(SecurityFailureReason::UnsupportedScheme));
         }
+        let policy_revision = policy.security_revision();
         Ok(Self {
             state: Arc::new(ClientState {
                 instance,
                 target: target.into(),
                 policy,
-                credentials: Mutex::new(credentials),
-                revision: AtomicU64::new(0),
+                credentials: Mutex::new(ClientCredentials {
+                    current: credentials,
+                    revision: 0,
+                    policy_revision,
+                    exhausted: false,
+                }),
             }),
         })
     }
     /// Revoke with None or replace credentials. Existing calls cannot adopt the
-    /// replacement identity. Exhausted revision refuses without mutation.
+    /// replacement identity. Exhaustion preserves the current credentials and
+    /// fences this owner.
     pub fn replace_credentials(&self, credentials: Option<HttpBasicCredentials>) -> CoreResult<()> {
-        let mut current = self.state.credentials.lock().unwrap();
-        let revision = self
-            .state
-            .revision
-            .load(Ordering::Acquire)
-            .checked_add(1)
-            .ok_or_else(|| denied(SecurityFailureReason::ProviderFailure))?;
-        *current = credentials;
-        self.state.revision.store(revision, Ordering::Release);
+        let policy_revision = self.state.policy.security_revision();
+        let mut state = self.state.credentials.lock().unwrap();
+        state.observe_policy(policy_revision);
+        state.advance()?;
+        state.current = credentials;
         Ok(())
     }
 }
 impl ConsumerAccessService for HttpBasicClientAccess {
     fn security_revision(&self) -> u64 {
-        self.state.revision.load(Ordering::Acquire)
+        self.state.snapshot().0
     }
     fn supports_security(&self, requirement: &SecurityRequirement) -> bool {
-        *requirement == BASIC
+        *requirement == BASIC && self.state.snapshot().1
     }
     fn authorize(
         &self,
@@ -148,10 +200,12 @@ impl ConsumerAccessService for HttpBasicClientAccess {
         target: &str,
         operation: Operation,
     ) -> CoreResult<()> {
+        let revision = self.state.capture_revision()?;
         if target != self.state.target.as_ref() || operation != Operation::ReadProperty {
             return Err(denied(SecurityFailureReason::AuthorizationDenied));
         }
-        self.state.policy.authorize(binding, target, operation)
+        self.state.policy.authorize(binding, target, operation)?;
+        self.state.check_revision(revision)
     }
     fn authorize_instance(
         &self,
@@ -160,6 +214,7 @@ impl ConsumerAccessService for HttpBasicClientAccess {
         target: &str,
         operation: Operation,
     ) -> CoreResult<()> {
+        let revision = self.state.capture_revision()?;
         if instance != &self.state.instance || !instance.is_current() {
             return Err(denied(SecurityFailureReason::AuthorizationDenied));
         }
@@ -167,7 +222,8 @@ impl ConsumerAccessService for HttpBasicClientAccess {
         self.state
             .policy
             .authorize_instance(instance, binding, target, operation)?;
-        if self.state.credentials.lock().unwrap().is_none() {
+        self.state.check_revision(revision)?;
+        if self.state.credentials.lock().unwrap().current.is_none() {
             return Err(denied(SecurityFailureReason::MissingCredentials));
         }
         Ok(())
@@ -180,14 +236,16 @@ impl ConsumerAccessService for HttpBasicClientAccess {
         operation: Operation,
         requirement: &SecurityRequirement,
     ) -> CoreResult<Option<OutboundSecurity>> {
+        let revision = self.state.capture_revision()?;
         if !self.supports_security(requirement) {
             return Err(denied(SecurityFailureReason::UnsupportedScheme));
         }
         self.authorize_instance(instance, binding, target, operation)?;
+        self.state.check_revision(revision)?;
         Ok(Some(OutboundSecurity::new(BasicGrant {
             state: self.state.clone(),
             binding,
-            revision: self.state.revision.load(Ordering::Acquire),
+            revision,
         })))
     }
     fn retained_bytes(&self) -> u64 {
@@ -213,21 +271,21 @@ impl BasicGrant {
         &self.state.target
     }
     pub(crate) fn check(&self, target: &str) -> CoreResult<()> {
-        if target != self.state.target.as_ref()
-            || !self.state.instance.is_current()
-            || self.state.revision.load(Ordering::Acquire) != self.revision
-        {
+        if target != self.state.target.as_ref() || !self.state.instance.is_current() {
             return Err(denied(SecurityFailureReason::AuthorizationDenied));
         }
-        Ok(())
+        self.state.check_revision(self.revision)
     }
     pub(crate) fn header(&self, target: &str) -> CoreResult<hyper::header::HeaderValue> {
         self.check(target)?;
-        let credentials = self.state.credentials.lock().unwrap();
-        if self.state.revision.load(Ordering::Acquire) != self.revision {
+        let policy_revision = self.state.policy.security_revision();
+        let mut credentials = self.state.credentials.lock().unwrap();
+        credentials.observe_policy(policy_revision);
+        if credentials.exhausted || credentials.revision != self.revision {
             return Err(denied(SecurityFailureReason::AuthorizationDenied));
         }
         credentials
+            .current
             .as_ref()
             .map(HttpBasicCredentials::header)
             .ok_or_else(|| denied(SecurityFailureReason::MissingCredentials))
