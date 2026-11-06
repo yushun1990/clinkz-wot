@@ -80,18 +80,37 @@ impl ConsumerRegistry {
                 BindingOperationalError::new(busy()),
             ));
         }
-        let mut services = Vec::new();
+        let mut services: Vec<(_, _, _)> = Vec::new();
         if services.try_reserve_exact(inputs.len()).is_err() {
             return Err(BindingInputRejection::new(
                 inputs,
                 BindingOperationalError::new(busy()),
             ));
         }
-        for input in &inputs {
+        for (i, input) in inputs.iter().enumerate() {
             let owners = (|| {
+                // Registrations may alias either actual service independently.
+                // Keep its first funded owner; equal policies do not imply
+                // shared backing. Registration/reference costs remain below.
+                let data = match inputs[..i]
+                    .iter()
+                    .position(|old| Arc::ptr_eq(&old.services.data, &input.services.data))
+                {
+                    Some(first) => Arc::clone(&services[first].0),
+                    None => ConsumerServiceOwner::retain_data(input.services.data.clone(), bank)?,
+                };
+                let access = match inputs[..i]
+                    .iter()
+                    .position(|old| Arc::ptr_eq(&old.services.access, &input.services.access))
+                {
+                    Some(first) => Arc::clone(&services[first].1),
+                    None => {
+                        ConsumerServiceOwner::retain_access(input.services.access.clone(), bank)?
+                    }
+                };
                 Ok::<_, CoreError>((
-                    ConsumerServiceOwner::retain_data(input.services.data.clone(), bank)?,
-                    ConsumerServiceOwner::retain_access(input.services.access.clone(), bank)?,
+                    data,
+                    access,
                     Arc::new(reserve(
                         bank,
                         &[(

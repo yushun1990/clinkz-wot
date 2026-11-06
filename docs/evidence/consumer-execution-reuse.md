@@ -81,7 +81,15 @@ equal numeric slots with different authority issuers, changed mapping facts,
 foreign providers/configuration, unavailable or changed validators, stale
 authority, saturated binding refusal, cancellation and retained late native output.
 Shared registration/data backing also retains its first bank across separately
-funded mappings. Existing HTTP and external owned/incremental compiler regressions
+funded mappings. The [service ownership regressions](../../protocol-bindings/protocols/http/tests/support/service_ownership.rs)
+exercise distinct registrations with aliased data, access, or both services:
+60,000 bytes of actual shared backing fit a 100,000-byte account alongside both
+registrations, while equal but distinct service backing refuses. Each
+registration retains its own native/reference costs. Partial refusal returns
+the original aliased inputs and releases acquired reservations; real HTTP
+results keep the shared services funded at their first bank through final
+result disposal after the registry and both instances retire.
+Existing HTTP and external owned/incremental compiler regressions
 continue to supply the broader finite interaction/cleanup evidence.
 
 Reuse qualification currently supports ReadAllProperties meaning. Other finite

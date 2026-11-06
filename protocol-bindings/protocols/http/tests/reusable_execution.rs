@@ -4,6 +4,8 @@
 include!("support/collection.rs");
 #[path = "support/allocation_meter.rs"]
 mod allocation_meter;
+#[path = "support/service_ownership.rs"]
+mod service_ownership;
 #[global_allocator]
 static ALLOCATOR: allocation_meter::Allocator = allocation_meter::Allocator;
 
