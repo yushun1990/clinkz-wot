@@ -441,7 +441,7 @@ fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_mean
                 .read_property("on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
-        drop(call_b);
+        drop((call_b, result_b));
         drop(b.server().take_settlement());
         let mut next_b = read_secure(&client_b);
         let result_next_b = b.exchange(&mut next_b).await;
@@ -459,7 +459,7 @@ fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_mean
                 .used()
                 > 0
         );
-        drop((result_a, result_b, content));
+        drop((result_a, content));
         clean(&bank_a);
         clean(&bank_b);
         a.close();
