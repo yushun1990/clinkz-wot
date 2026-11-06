@@ -82,6 +82,11 @@ program's schema Arc, field-table capacities and names. Its largest-allocation
 declaration distinguishes individual allocations from total backing, and local
 destruction covers both program references and the final constraint tree.
 Entry and installation views share one charged schema owner until final disposal.
+Its temporary and contiguous-allocation declarations also include shared JSON
+key/string decoding when the prepared schema requires it. Decoder buffer growth,
+old/new allocation overlap and the owned decoded string are covered separately
+from native HTTP parser/SDK backing. Object lookup destroys its decoder before
+child validation, so recursive schema levels do not accumulate that scratch.
 
 The JSON callback retains its 4096-byte body envelope and adds an encoded nesting
 limit of 32, including unknown subtrees. Described duplicate names, including
@@ -141,6 +146,18 @@ artifact, slot, cleanup and contiguous-allocation limits. Real listener cancella
 and direct root disposal observe field-table deallocation while the original bank
 is still funded, followed by final release. These are retained Property Read
 installation/resource claims, separate from complete Producer publication.
+
+Validation-only allocation traces around the same captured program validator
+exercise long strings up to the body limit, late escapes, Unicode/surrogate
+escapes, escaped and long unknown keys, nested lookup and invalid results.
+They compare peak live bytes and the largest request against the admitted
+declaration, with the output provisioned before tracing, and verify that scratch
+is gone on return. Exact, one-byte-short and former 1024-byte temporary quotas
+check refusal before native effects, original-input recovery, aggregate parent
+capacity and final release. The
+[retained Serving tests](../../protocol-bindings/protocols/http/tests/producer_serving.rs)
+also deliver a full 4096-byte string with a late escape over HTTP and refuse its
+invalid declared length before wire success.
 
 ```sh
 cargo test --locked --offline -p clinkz-wot-codec-json --test structured

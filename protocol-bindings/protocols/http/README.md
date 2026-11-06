@@ -332,7 +332,14 @@ an application can prepare a fresh generation after retirement.
 
 Native socket/parser/future/encoded-reply allocation is Binding-private under
 the fresh Producer policy identity, separately from reserved Engine owner and
-response backing. Tests report actual allocation/FD disposal observations; these
+response backing. Shared JSON key/string decoding invoked by the Engine is part
+of the installation declaration. Constrained strings and objects reserve 13,312
+temporary bytes: up to three 4096-byte bodies for decoder buffer growth/owned
+strings, plus the existing 1024-byte wrapper/error allowance. A single decoder
+allocation may request up to 8192 bytes, so contiguous-allocation admission also
+covers that bound. Other scalar schemas retain the 1024-byte allowance.
+These bounds cover the locked slice decoder; they are not a native stack ceiling.
+Tests report actual allocation/FD disposal observations; these
 are neither universal SDK maxima nor a strict stack/allocator guarantee. Host
 process OOM remains a deployment assumption. Successful local writes do not
 prove that a peer observed the response. HTTPS, authentication, automatic

@@ -665,6 +665,45 @@ fn prepared_type_schema_survives_source_drop_and_checks_actual_http_results() {
 }
 
 #[test]
+fn retained_structured_validation_handles_a_full_body_with_a_late_escape() {
+    let _serial = SERIAL.lock().unwrap();
+    static BODY: [u8; 4096] = {
+        let mut b = [b'a'; 4096];
+        b[0] = b'"';
+        b[4093] = b'\\';
+        b[4094] = b'n';
+        b[4095] = b'"';
+        b
+    };
+    for max_length in [4093, 4092] {
+        let a = address();
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut s = server_with_schema(
+            a,
+            bank.clone(),
+            calls.clone(),
+            &BODY,
+            false,
+            serde_json::json!({"type":"string","minLength":1,"maxLength":max_length}),
+        );
+        installed(&mut s);
+        s.begin_expose(100).unwrap();
+        let reply = exchange(&mut s, a, request(a).as_bytes());
+        let valid = max_length == 4093;
+        assert_eq!(reply.starts_with(b"HTTP/1.1 200"), valid);
+        let head_end = reply.windows(4).position(|b| b == b"\r\n\r\n").unwrap() + 4;
+        assert_eq!(
+            &reply[head_end..],
+            if valid { BODY.as_slice() } else { b"null" }
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        drop(s);
+        empty(&bank);
+    }
+}
+
+#[test]
 fn response_body_bound_and_json_syntax_are_checked_before_wire_success() {
     let _serial = SERIAL.lock().unwrap();
     static EXACT: [u8; 4096] = {
