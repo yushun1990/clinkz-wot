@@ -1,4 +1,4 @@
-//! Concrete JSON decoding, with the type assertion evaluated by Core. No TD
+//! Concrete JSON decoding, with prepared constraints evaluated by Core. No TD
 //! or Planning dependency; no JSON tree or normalized body copy is constructed.
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass,
@@ -206,8 +206,8 @@ pub fn validate_json(schema: &PreparedSchema, body: &[u8]) -> CoreResult<()> {
         return Err(invalid());
     }
     let json = std::str::from_utf8(body).map_err(|_| invalid())?;
-    // IgnoredAny skips UTF-8 checks inside strings. The check above covers the
-    // complete body, including object keys and nested values.
+    // Raw-value syntax checking does not decode every string. The check above
+    // covers UTF-8 throughout object keys and nested values.
     let root: &serde_json::value::RawValue = serde_json::from_str(json).map_err(|_| invalid())?;
     if !unicode_escapes(json.as_bytes()) || !bounded_depth(json.as_bytes()) {
         return Err(invalid());
@@ -309,7 +309,7 @@ fn bounded_depth(bytes: &[u8]) -> bool {
     true
 }
 
-// IgnoredAny also skips surrogate-pair validation. Check scalar Unicode in
+// Raw-value syntax checking also skips surrogate-pair validation. Check scalar Unicode in
 // every string/key without decoding/copying the strings. JSON syntax was
 // checked above, so each escape and four-digit code unit is already present.
 fn unicode_escapes(mut bytes: &[u8]) -> bool {

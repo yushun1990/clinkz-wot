@@ -1,5 +1,6 @@
 //! Pure preparation over the existing Host-only resolved semantic loan.
-//! This implements the explicitly type-only DataSchema subset.
+//! Finite participants use structured constraints; continuing participants can
+//! require the narrower type-only facet of the same interpretation.
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass,
     data_schema::{PreparedSchema, ValueType},
