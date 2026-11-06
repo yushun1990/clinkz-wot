@@ -407,9 +407,14 @@ A finite Binding may declare nonzero `security_work` and implement
 `verify_ingress` against the evidence retained by the exact original reply.
 The captured work/configuration is checked before progress; verification is
 prepaid before semantic acceptance. It establishes a Principal independently of
-application permission, and is repeated after authorization. Before each
-successful native send the runtime repeats verification, requires the original
-identity/claims and instance currentness, and invokes the original handler's
+application permission, and is repeated after authorization. Dispatch MUST
+refuse an already closed publication gate before callbacks. After the last
+verification, validation or authorization callback and immediately before
+accepting behavior, dispatch MUST recheck the original instance, publication
+gate and actual Binding/service pair. Invalidated candidates retain their
+original ingress/reply for funded native retirement without entering behavior;
+their effect remains NotInvoked. Before each successful native send the runtime
+repeats verification, requires the original identity/claims and instance currentness, and invokes the original handler's
 fresh application permission, then rechecks verification before native entry.
 After those callbacks, the original accepted instance, publication gate and
 actual Binding/service pair MUST still be current immediately before native

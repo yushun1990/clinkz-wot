@@ -67,6 +67,12 @@ concrete type hierarchy nor #261's schema representation is an API freeze.
   After the last delivery verifier/authorization callback, the original accepted
   instance, publication gate and actual service/configuration are rechecked
   immediately before native send. Callback-time revocation fences retained output.
+  Dispatch separately rejects a preclosed publication gate without invoking
+  callbacks or consuming their work. It rechecks the original instance,
+  publication and actual Binding/service pair after the last callback and before
+  behavior acceptance. An invalidated candidate retains its original native
+  exchange for funded retirement with NotInvoked; a later response refusal is
+  insufficient to establish that no unauthorized behavior ran.
   Producer verification failure never enters behavior. TLS trust/handshake
   failure yields a redacted provider failure and cannot use credentials.
 - Credential-bearing grants and Basic/authentication carriers have redacted
@@ -113,6 +119,13 @@ independent rustls HTTP peer. Tests cover:
   probe checks original Write input recovery and zero issuance/native calls on
   credit shortage. Wrapped-policy changes fence an already validated unread TLS
   result and callback-time issuance, while checked rebinding succeeds.
+- Five dispatch regressions use real TLS to close publication before dispatch,
+  during authorization, during either verification callback, or change verifier
+  work during final verification. Each reproduced unauthorized handler entry
+  before the repair; each now proves zero handler calls, NotInvoked/NotDelivered,
+  retained original recipient/operation/Binding and final resource release.
+  A preclosed gate fences even with zero callback/cleanup credit, while native
+  retirement stays pending until its original cleanup allowance is available.
 - Zero verification credit does not call the verifier. Cancellation before native
   progress, before dispatch and after acceptance settles the original call.
   Closed sockets/listeners and all tracked Engine accounts release; a retained

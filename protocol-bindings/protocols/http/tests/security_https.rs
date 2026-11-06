@@ -1476,3 +1476,149 @@ fn wrapped_policy_changes_inside_permission_and_issuance_cannot_grant_original_w
     drop((bindings, funding, definition, instance));
     clean(&accounts);
 }
+
+#[derive(Clone, Copy, Debug)]
+enum DispatchInvalidation {
+    BeforeDispatch,
+    Authorization,
+    FirstVerification,
+    FinalVerification,
+    FinalVerificationWork,
+}
+
+fn verify_dispatch_refuses_callback_invalidation(edge: DispatchInvalidation) {
+    io().block_on(async {
+        let keys = Keys::for_name("127.0.0.1");
+        let verify = verifier();
+        let mut server = SecureFixture::new(&keys, verify.clone());
+        let instance = consumer_instance();
+        let accounts = bank();
+        let access = access(
+            &instance,
+            server.td["properties"]["on"]["forms"][0]["href"]
+                .as_str()
+                .unwrap(),
+            true,
+            Arc::new(AtomicBool::new(false)),
+        );
+        let (client, content) =
+            secure_client(&server.td, &keys, &instance, access, &accounts, None);
+        let key = server.exposure.key();
+        let mut call = read_secure(&client);
+        until(&mut server, &mut call, RawFiniteState::Dispatching).await;
+        assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
+        let gate = ClosedProducerParticipation::ingress_gate(server.server()).clone();
+        let changed = Rc::new(Cell::new(false));
+        let changed_in_hook = changed.clone();
+        let verify_in_hook = verify.clone();
+        let invalidate = move || {
+            if matches!(edge, DispatchInvalidation::FinalVerificationWork) {
+                verify_in_hook.changed_work.store(true, Ordering::Release);
+            } else {
+                gate.set(false);
+            }
+            changed_in_hook.set(true);
+        };
+        match edge {
+            DispatchInvalidation::BeforeDispatch => invalidate(),
+            DispatchInvalidation::Authorization => {
+                *server.app.authority_in_permission.borrow_mut() = Some(Box::new(invalidate));
+            }
+            DispatchInvalidation::FirstVerification
+            | DispatchInvalidation::FinalVerification
+            | DispatchInvalidation::FinalVerificationWork => {
+                let at = if matches!(edge, DispatchInvalidation::FirstVerification) {
+                    1
+                } else {
+                    2
+                };
+                VERIFICATION_HOOK.with(|pending| {
+                    assert!(
+                        pending
+                            .borrow_mut()
+                            .replace((at, Box::new(invalidate)))
+                            .is_none()
+                    );
+                });
+            }
+        }
+        if matches!(edge, DispatchInvalidation::BeforeDispatch) {
+            let mut no_work = WorkBudget::new();
+            let progress = server
+                .owner
+                .step(
+                    server.exposure.participant_mut::<SecureServer>(0).unwrap(),
+                    &mut cx(),
+                    &mut no_work,
+                    now(0),
+                )
+                .unwrap();
+            assert_eq!(progress, Poll::Ready(RawFiniteState::Closing));
+            assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
+            assert_eq!(server.app.reads.get(), 0);
+            // Fencing is immediate; cleanup still waits for its own credit
+            // while retaining the full original unaccepted native exchange.
+            assert!(
+                server
+                    .server()
+                    .step(&mut cx(), &mut no_work, now(0))
+                    .is_pending()
+            );
+            assert!(server.server().take_settlement().is_none());
+        }
+        let result = server.exchange(&mut call).await;
+        let settlement = server.server().take_settlement().unwrap();
+        assert!(changed.get(), "{edge:?} hook must run");
+        VERIFICATION_HOOK.with(|pending| assert!(pending.borrow().is_none()));
+        assert_eq!(
+            server.app.reads.get(),
+            0,
+            "{edge:?}: stale acceptance cannot enter behavior"
+        );
+        assert!(result.result().is_err(), "{edge:?}");
+        assert_eq!(settlement.effect, FiniteEffect::NotInvoked, "{edge:?}");
+        assert_eq!(
+            settlement.delivery,
+            FiniteDelivery::NotDelivered,
+            "{edge:?}"
+        );
+        assert_eq!(settlement.recipient, Some(key));
+        assert_eq!(settlement.operation, Some(Operation::ReadProperty));
+        assert_eq!(
+            settlement.binding,
+            (BindingId::new(197), BindingGeneration::INITIAL)
+        );
+        assert!(settlement.result.is_err());
+        drop((settlement, client, call, instance, content));
+        assert!(
+            accounts
+                .account(ResourceKind::EngineLiveBytesGlobalMax)
+                .used()
+                > 0
+        );
+        drop(result);
+        clean(&accounts);
+        server.close();
+    });
+}
+
+#[test]
+fn dispatch_refuses_preclosed_publication() {
+    verify_dispatch_refuses_callback_invalidation(DispatchInvalidation::BeforeDispatch);
+}
+#[test]
+fn dispatch_refuses_publication_closed_during_authorization() {
+    verify_dispatch_refuses_callback_invalidation(DispatchInvalidation::Authorization);
+}
+#[test]
+fn dispatch_refuses_publication_closed_during_first_verification() {
+    verify_dispatch_refuses_callback_invalidation(DispatchInvalidation::FirstVerification);
+}
+#[test]
+fn dispatch_refuses_publication_closed_during_final_verification() {
+    verify_dispatch_refuses_callback_invalidation(DispatchInvalidation::FinalVerification);
+}
+#[test]
+fn dispatch_refuses_service_work_changed_during_final_verification() {
+    verify_dispatch_refuses_callback_invalidation(DispatchInvalidation::FinalVerificationWork);
+}

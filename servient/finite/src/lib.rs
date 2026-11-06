@@ -509,6 +509,12 @@ impl RawProducerServient {
         if runtime.state != RawFiniteState::Dispatching {
             return Ok(runtime.step(cx, budget, now));
         }
+        // Received input is still only a candidate. Publication may have
+        // closed since receive; fencing consumes no callback/native work.
+        if !runtime.ingress_gate.get() {
+            runtime.fail(CoreError::StaleHandle(context()));
+            return Ok(Poll::Ready(runtime.state));
+        }
         let mut units = (self.limits.instances
             + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
             + 1) as u64;
@@ -554,7 +560,7 @@ impl RawProducerServient {
         let recipient = single.map(|candidate| candidate.instance);
         let operation = single.map(|candidate| candidate.operation);
         let mut effect = FiniteEffect::NotInvoked;
-        let mut validation_failure = None;
+        let mut retirement_cause = None;
         let result = self.resolve(&ingress, runtime.limits).and_then(|(i, b)| {
             let instance = &self.instances[i].instance;
             let behavior = &instance.behaviors[b];
@@ -601,6 +607,21 @@ impl RawProducerServient {
                 behavior.operation,
                 runtime.identity,
             )?;
+            // Verification, validation and application policy can invalidate
+            // publication or captured services. Check after the last callback,
+            // immediately before acquiring behavior authority. The original
+            // ingress stays owned through refusal and native retirement.
+            let current = if !runtime.pair_is_current() {
+                Err(CoreError::Validation(context()))
+            } else if !runtime.ingress_gate.get() || !self.instances[i].current.get() {
+                Err(CoreError::StaleHandle(context()))
+            } else {
+                Ok(())
+            };
+            if let Err(error) = current {
+                retirement_cause = Some(error.clone());
+                return Err(error);
+            }
             // Acceptance is ordered by exclusive access to this owner. No lock,
             // native callback, allocation or re-lookup surrounds application code.
             runtime.accepted_instance = Some(AcceptedBehavior {
@@ -631,7 +652,7 @@ impl RawProducerServient {
                             .with_thing(instance.key().slot())
                             .with_operation(behavior.operation),
                     );
-                    validation_failure = Some(error.clone());
+                    retirement_cause = Some(error.clone());
                     return Err(error);
                 }
                 validator.validate_output(&ingress.candidates[0], &ingress.input, &output)?;
@@ -659,9 +680,9 @@ impl RawProducerServient {
             recipient,
             operation,
         });
-        if let Some(error) = validation_failure {
-            // The original input, reply and accepted behavior remain owned
-            // through native retirement; changed policy grants no delivery.
+        if let Some(error) = retirement_cause {
+            // The original input, reply and any accepted behavior stay owned
+            // through native retirement; invalidation grants no delivery.
             runtime.fail(error);
         } else {
             runtime.state = RawFiniteState::Delivering;
