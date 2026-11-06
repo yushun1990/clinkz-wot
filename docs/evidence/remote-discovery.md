@@ -155,3 +155,9 @@ The example's native operation is the existing NoSec cleartext-IP Property Read;
 Discovery TLS/Basic is exercised in the composed test and against independent TLS peers. General
 cross-vendor authenticated Directory-to-authenticated-Thing qualification remains
 open. Independent architecture/public API acceptance is required before merge.
+
+The follow-on [secure application-composition exercise](secure-discovery-consumer.md)
+demonstrates the supported HTTPS/Basic Property Read workflow with independent
+Directory/Thing trust and credentials, explicit TD Form selection and actual
+Python/OpenSSL peers. It does not turn this earlier NoSec example or its TinyIoT
+run into authenticated Thing interoperability evidence.

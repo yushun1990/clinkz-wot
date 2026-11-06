@@ -29,13 +29,20 @@ pub fn reply(body: &str, media: &str, headers: &str) -> String {
 pub struct Step {
     pub path: String,
     pub response: String,
+    credentials: Option<(&'static str, &'static str)>,
 }
 impl Step {
     pub fn new(path: &str, response: String) -> Self {
         Self {
             path: path.into(),
             response,
+            credentials: None,
         }
+    }
+    /// Test peer authentication, independently of ClinkZ's HTTP Binding.
+    pub fn authenticated(mut self, user: &'static str, password: &'static str) -> Self {
+        self.credentials = Some((user, password));
+        self
     }
 }
 pub struct Keys {
@@ -106,9 +113,28 @@ async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
         request.starts_with(&format!("GET {} HTTP/1.1\r\n", step.path)),
         "{request}"
     );
+    let authenticated = step.credentials.is_none_or(|(user, password)| {
+        use base64::Engine;
+        let expected = format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(format!("{user}:{password}"))
+        );
+        let headers: Vec<_> = request
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .filter(|(name, _)| name.eq_ignore_ascii_case("authorization"))
+            .map(|(_, value)| value.trim())
+            .collect();
+        headers == [expected.as_str()]
+    });
     requests.lock().unwrap().push(request);
     received.add_permits(1);
-    let _ = socket.write_all(step.response.as_bytes()).await;
+    let response = if authenticated {
+        step.response.as_bytes()
+    } else {
+        b"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"fixture\"\r\nContent-Length: 0\r\n\r\n"
+    };
+    let _ = socket.write_all(response).await;
     // Keep the server side alive, including on partial bodies, until the client
     // physically closes it. A successful finish proves no detached/pool socket.
     let mut scratch = [0; 1024];
