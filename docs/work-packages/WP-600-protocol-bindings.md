@@ -349,3 +349,11 @@ status guidance is not Recommendation authority or full profile conformance.
 Distributed aggregation, complete history, optional status metadata, broader
 schema/security, HTTPS, constrained execution and production qualification remain
 outside this bounded Host/manual increment; no package or milestone closes.
+
+## Finite TD Security / HTTPS increment
+
+The selected Basic/header Property Read capability and its boundary correction,
+qualification, negative network evidence, ownership and remaining unsupported
+roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
+The applicable preparation, Core and Binding contracts remain authoritative;
+this increment grants no broad scheme/composition or production-profile acceptance.

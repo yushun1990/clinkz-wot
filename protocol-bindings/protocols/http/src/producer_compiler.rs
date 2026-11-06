@@ -45,7 +45,10 @@ impl HttpProducerConfig {
         input: ResolvedProducerInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<HttpProducerProgram>> {
-        if input.operation() != Operation::ReadProperty || input.document().property().observable {
+        if self.secure
+            || input.operation() != Operation::ReadProperty
+            || input.document().property().observable
+        {
             return Err(producer_unsupported());
         }
         self.compile_property(input, budget)
@@ -124,15 +127,16 @@ impl HttpProducerConfig {
         } {
             return Err(producer_unsupported());
         }
-        let [name] = facts.effective_security else {
-            return Err(producer_unsupported());
-        };
-        let security = document
-            .security(name)
-            .map_err(|_| producer_unsupported())?;
-        if security.scheme != "nosec"
-            || security.proxy.is_some()
-            || security.semantics.children().any(|n| !class_assertion(n))
+        let security = clinkz_wot_planning::security::prepare_security(
+            document,
+            input.owner,
+            input.form_index,
+        )?;
+        if (self.secure
+            && (security != crate::security::BASIC
+                || collection
+                || input.operation != Operation::ReadProperty))
+            || (!self.secure && security != clinkz_wot_core::security::SecurityRequirement::NOSEC)
             || document
                 .scope(SemanticScope::Thing)
                 .ok_or_else(producer_unsupported)?
@@ -300,17 +304,21 @@ impl HttpProducerConfig {
                 status = true;
             }
         }
-        let target = Target::parse(input.target).map_err(|_| producer_unsupported())?;
+        let target =
+            Target::parse_for(input.target, self.secure).map_err(|_| producer_unsupported())?;
         if target.address != self.address {
             return Err(producer_unsupported());
         }
-        let authority_end = 7 + target.uri.authority().unwrap().as_str().len();
+        let authority_end =
+            if self.secure { 8 } else { 7 } + target.uri.authority().unwrap().as_str().len();
         let origin = target.uri.path_and_query().map_or("/", |p| p.as_str());
         if origin.len() > 64 {
             return Err(producer_unsupported());
         }
         let mut program = HttpProducerProgram {
             operation: input.operation,
+            basic: self.secure,
+            security_registration: None,
             form: input.form_index,
             address: self.address,
             target: [0; 64],

@@ -142,6 +142,17 @@ owner. Session sharing respects trust/tenant/credential domains. NoSec does not
 bypass application policy. Extending a scheme MUST NOT require a protocol enum
 in Core or silently broaden a prepared security branch.
 
+The finite implementation carries `SecurityRequirement` as immutable
+scheme/parameter operands and `OutboundSecurity` as an opaque per-call Binding
+capability. Core does not interpret concrete scheme names, HTTP headers, TLS or
+passwords. Actual access services explicitly qualify requirements, issue bounded
+capabilities under their declared work and expose a passive live dependency
+revision. Revocation/rotation never mutates prepared meaning or refreshes old
+work. Authentication evidence stays with the original native reply; only a
+verified Principal enters application input. Authentication carriers and opaque
+capabilities redact formatting. The selected executable subset and limits are
+owned by [the HTTP Binding](../../protocol-bindings/protocols/http/README.md).
+
 `EXEC-ACTION-001`: Action invocation lifetime MUST be independent of the initiating
 exchange. Completion may yield output/error or, where the mapping supports it,
 a continuing invocation reference retaining its exact mapping, opaque continuation,

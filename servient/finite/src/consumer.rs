@@ -59,7 +59,15 @@ impl Definition {
     }
     fn check_dependencies(&self) -> CoreResult<()> {
         self.input.definition.check_dependencies()?;
-        if self.input.access.work() != self.access_work
+        if !self
+            .input
+            .access
+            .supports_security(self.input.definition.content().security())
+        {
+            return Err(invalid());
+        }
+        if self.input.access.security_revision() != self.input.security_revision
+            || self.input.access.work() != self.access_work
             || self.input.access.retained_bytes() != self.input.access.backing_bytes()
         {
             return Err(invalid());
@@ -187,6 +195,7 @@ impl Definition {
     }
     fn start(
         &self,
+        consumer: &ConsumerInstanceRef,
         input: Option<Payload>,
         deadline: Option<Deadline>,
     ) -> Result<
@@ -201,6 +210,22 @@ impl Definition {
             Default::default(),
             deadline,
         )?;
+        let security = match self.input.access.outbound_security(
+            consumer,
+            self.binding(),
+            self.input.definition.target(),
+            self.input.definition.operation(),
+            self.input.definition.content().security(),
+        ) {
+            Ok(capability) => capability,
+            Err(error) => {
+                return Err(BindingInputRejection::new(
+                    request.into_input(),
+                    BindingOperationalError::new(error),
+                ));
+            }
+        };
+        let request = request.with_security(security);
         self.input
             .definition
             .execution()
@@ -890,7 +915,11 @@ impl ConsumerRuntime {
             Ok(checked) => checked,
             Err(e) => return Err(reject(input, e)),
         };
-        let raw = match definition.start(encoded.or(input), deadline.instant().map(|_| deadline)) {
+        let raw = match definition.start(
+            &self.state.consumer,
+            encoded.or(input),
+            deadline.instant().map(|_| deadline),
+        ) {
             Ok(raw) => raw,
             Err(rejection) if operation == Operation::ReadMultipleProperties => {
                 let (payload, error) = rejection.into_parts();

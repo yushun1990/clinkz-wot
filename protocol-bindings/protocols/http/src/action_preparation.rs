@@ -28,6 +28,9 @@ impl HttpActionProducer {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<HttpActionDefinition>> {
+        if self.listen.secure {
+            return Err(producer_unsupported());
+        }
         let name = match input.site {
             FormSite::Action(name) => name.as_str(),
             FormSite::Thing if input.operation == Operation::QueryAllActions => "",

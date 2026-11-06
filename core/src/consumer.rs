@@ -102,6 +102,35 @@ pub struct ConsumerDataPolicy {
 /// Actual destination/authorization policy, selected before compilation. NoSec
 /// means no protocol credential, not permission to contact every destination.
 pub trait ConsumerAccessService: Send + Sync {
+    /// Passive live dependency revision. Changing it invalidates existing
+    /// bindings and unread results; rebinding qualifies the new service state.
+    fn security_revision(&self) -> u64 {
+        0
+    }
+    /// Passive complete requirement qualification. Existing services explicitly
+    /// support NoSec only. Scheme names alone do not qualify parameters.
+    fn supports_security(&self, requirement: &crate::security::SecurityRequirement) -> bool {
+        *requirement == crate::security::SecurityRequirement::NOSEC
+    }
+    /// Called after fresh destination/instance permission, under work(). Live
+    /// material is scoped to one call, never stored in reusable definitions.
+    fn outbound_security(
+        &self,
+        _consumer: &ConsumerInstanceRef,
+        _binding: BindingRegistrationIdentity,
+        _target: &str,
+        _operation: Operation,
+        requirement: &crate::security::SecurityRequirement,
+    ) -> CoreResult<Option<crate::security::OutboundSecurity>> {
+        if *requirement == crate::security::SecurityRequirement::NOSEC {
+            Ok(None)
+        } else {
+            Err(CoreError::Security {
+                reason: SecurityFailureReason::UnsupportedScheme,
+                context: context(),
+            })
+        }
+    }
     fn authorize(
         &self,
         binding: BindingRegistrationIdentity,
@@ -584,12 +613,26 @@ pub struct ConsumerExecutionContent {
     affordance: AffordanceTarget,
     operation: Operation,
     schemas: ConsumerFiniteSchemas,
+    security: crate::security::SecurityRequirement,
 }
 impl ConsumerExecutionContent {
     pub fn try_new(
         affordance: AffordanceTarget,
         operation: Operation,
         schemas: ConsumerFiniteSchemas,
+    ) -> CoreResult<Self> {
+        Self::try_new_with_security(
+            affordance,
+            operation,
+            schemas,
+            crate::security::SecurityRequirement::NOSEC,
+        )
+    }
+    pub fn try_new_with_security(
+        affordance: AffordanceTarget,
+        operation: Operation,
+        schemas: ConsumerFiniteSchemas,
+        security: crate::security::SecurityRequirement,
     ) -> CoreResult<Self> {
         if !matches!(
             (&affordance, operation),
@@ -647,7 +690,11 @@ impl ConsumerExecutionContent {
             affordance,
             operation,
             schemas,
+            security,
         })
+    }
+    pub fn security(&self) -> &crate::security::SecurityRequirement {
+        &self.security
     }
     pub fn affordance(&self) -> &AffordanceTarget {
         &self.affordance
@@ -829,6 +876,7 @@ impl ConsumerDefinition {
         )>,
     > {
         let access_work = access.work();
+        let security_revision = access.security_revision();
         let checked = (|| {
             if access_work == 0 {
                 return Err(invalid());
@@ -837,9 +885,15 @@ impl ConsumerDefinition {
                 return Err(busy());
             }
             self.check_dependencies()?;
+            if !access.supports_security(self.content().security()) {
+                return Err(invalid());
+            }
             access.authorize(self.binding(), self.target(), self.operation())?;
             self.check_dependencies()?;
-            if access.work() != access_work || access.retained_bytes() != access.backing_bytes() {
+            if access.security_revision() != security_revision
+                || access.work() != access_work
+                || access.retained_bytes() != access.backing_bytes()
+            {
                 return Err(invalid());
             }
             let bytes = core::mem::size_of::<ConsumerBinding>() as u64 + 128;
@@ -857,6 +911,7 @@ impl ConsumerDefinition {
         Ok(ConsumerBinding {
             input: ConsumerBindingInput {
                 definition: self,
+                security_revision,
                 access,
                 funding,
                 bank,
@@ -877,6 +932,7 @@ pub struct ConsumerBinding {
     access_work: u64,
 }
 pub struct ConsumerBindingInput {
+    pub security_revision: u64,
     pub definition: Arc<ConsumerDefinition>,
     pub access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
     pub funding: Vec<HostCapacityReservation>,

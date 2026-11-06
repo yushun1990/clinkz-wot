@@ -7,6 +7,7 @@ use super::*;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HttpProducerConfig {
     pub(super) address: SocketAddr,
+    pub(super) secure: bool,
 }
 impl HttpProducerConfig {
     pub fn for_loopback(address: SocketAddr) -> CoreResult<Self> {
@@ -16,7 +17,15 @@ impl HttpProducerConfig {
         {
             return Err(producer_unsupported());
         }
-        Ok(Self { address })
+        Ok(Self {
+            address,
+            secure: false,
+        })
+    }
+    pub fn for_https_loopback(address: SocketAddr) -> CoreResult<Self> {
+        let mut config = Self::for_loopback(address)?;
+        config.secure = true;
+        Ok(config)
     }
     pub fn listen_address(&self) -> SocketAddr {
         self.address
@@ -30,6 +39,8 @@ impl HttpProducerConfig {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpProducerProgram {
     pub(super) operation: Operation,
+    pub(super) basic: bool,
+    pub(super) security_registration: Option<crate::security::SecurityRegistration>,
     pub(super) form: u32,
     pub(super) address: SocketAddr,
     pub(super) target: [u8; 64],
@@ -42,7 +53,10 @@ pub struct HttpProducerProgram {
 }
 impl HttpProducerProgram {
     pub(crate) fn schema_backing_bytes(&self) -> usize {
-        self.value_schema.retained_bytes()
+        self.security_registration
+            .as_ref()
+            .map_or(0, |_| 2 * core::mem::size_of::<usize>())
+            + self.value_schema.retained_bytes()
             + core::mem::size_of_val(self.value_schema.as_ref())
             + 2 * core::mem::size_of::<usize>()
             + self.property_map.as_ref().map_or(0, |s| {
@@ -70,7 +84,7 @@ impl HttpProducerProgram {
         std::str::from_utf8(&self.target[..self.target_len as usize]).unwrap()
     }
     pub fn authority(&self) -> &str {
-        &self.target()[7..self.authority_end as usize]
+        &self.target()[if self.basic { 8 } else { 7 }..self.authority_end as usize]
     }
     pub fn path_and_query(&self) -> &str {
         std::str::from_utf8(&self.origin[..self.origin_len as usize]).unwrap()
@@ -177,7 +191,10 @@ impl ProducerExecutor for HttpProducerExecutor {
     }
     fn check_program(&self, program: &Self::Program) -> CoreResult<()> {
         // Inspect native operands, not a caller-supplied compatibility tag.
-        if program.operation != Operation::ReadProperty
+        if self.config.secure
+            || program.basic
+            || program.security_registration.is_some()
+            || program.operation != Operation::ReadProperty
             || program.property_map.is_some()
             || program.address != self.config.address
             || program.target_len as usize > program.target.len()

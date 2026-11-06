@@ -578,3 +578,11 @@ native retargeting, richer schema assertions, non-JSON interoperability,
 continuing-family reuse and a portable Engine runtime remain unproven. Detailed
 executable scope is in [structured schema evidence](../evidence/structured-dataschema.md).
 No package, architecture gate or milestone acceptance is claimed.
+
+## Finite TD Security / HTTPS increment
+
+The selected Basic/header Property Read capability and its boundary correction,
+qualification, negative network evidence, ownership and remaining unsupported
+roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
+The applicable preparation, Core and Binding contracts remain authoritative;
+this increment grants no broad scheme/composition or production-profile acceptance.

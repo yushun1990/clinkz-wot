@@ -190,6 +190,21 @@ pub trait FiniteIngressBinding {
     fn validator(&self) -> Option<&dyn FiniteValidator> {
         None
     }
+    /// Complete bounded verification work, captured with configuration. Zero
+    /// is the existing trusted-principal adapter. No credential interpretation
+    /// belongs in Core. Evidence remains owned by the original native reply.
+    fn security_work(&self) -> u64 {
+        0
+    }
+    /// Establish identity before semantic acceptance and re-establish it before
+    /// delivery. Returning a different identity/claims refuses the original
+    /// result. This callback cannot dispatch behavior or acquire native I/O.
+    fn verify_ingress(
+        &self,
+        ingress: &FiniteIngress<Self::Reply>,
+    ) -> CoreResult<Option<crate::Principal>> {
+        Ok(ingress.input.principal.clone())
+    }
     /// Passive deadline of the original retained native exchange, including
     /// unfinished ingress and pending delivery. Clock identity belongs to the
     /// caller; native code must not substitute a wall clock or reset on polls.

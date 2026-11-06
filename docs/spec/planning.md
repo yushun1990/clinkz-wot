@@ -183,7 +183,7 @@ Cursor/output slots, declared indirect backing, callback scratch, original paren
 leases and aggregate retained destructor work are acquired/qualified before
 start. There is no partial installation or native I/O during preparation.
 
-`ConsumerExecutionContent` captures immutable affordance, operation and data-role
+`ConsumerExecutionContent` captures immutable affordance, operation, selected security requirement and data-role
 meaning without endpoint, service, authority, policy or account fields.
 `PreparedConsumerContent` is its funded Host owner. Ordinary preparation constructs
 that content once; `prepare_with_content` qualifies actual endpoint mappings for
@@ -439,3 +439,22 @@ TD at managed admission and again after closed native setup before publication.
 A prepared root definition or installed listener alone supplies none of the
 missing obligations. No dependency, gate or milestone changes follow from this
 bounded increment.
+
+## Selected executable security preparation
+
+The finite preparation adapter captures an immutable scheme/parameter requirement
+and compares it during checked content reuse. Actual access services qualify the
+complete requirement, in addition to native compiler and data qualification.
+Existing services default to NoSec only. Instance bind repeats that qualification;
+an equal schema or scheme name does not certify security parameters or services.
+`security::prepare_security` currently prepares exactly one NoSec or Basic/header
+Authorization requirement using TD defaulted facts. Multiple simultaneous
+requirements, combo allOf/oneOf, scopes, proxies, extensions and other schemes or
+placements refuse as complete unsupported expressions. This subset does not
+weaken the general composition obligation in EXEC-SECURITY-001.
+
+Live credentials and mutable credential revisions belong to instance access
+services. Only a per-call opaque native capability crosses into execution, after
+fresh instance/destination permission. A credential revision change invalidates
+existing bindings and unread results; checked rebinding can retain the original
+immutable security/data content. No compiler or source callback returns at runtime.

@@ -117,6 +117,7 @@ fn request(artifact: &BindingArtifactEnvelope<HostBindingArtifact>) -> OutboundR
 fn config(private: [u8; 32], restricted: bool) -> HttpConsumerConfig {
     assert!(restricted);
     HttpConsumerConfig {
+        secure: false,
         configuration: ConsumerBindingConfiguration::for_semantic_host(
             64,
             BindingConfigurationDigest::new(private),
@@ -317,6 +318,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
             // same input; a compiler mismatch is caught during support capture.
             let original = owner.into_input();
             let client = Box::new(Client {
+                tls: None,
                 config: foreign,
                 busy: Arc::new(AtomicBool::new(false)),
             });
@@ -350,6 +352,7 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
                 HostBindingCompilerRegistration::try_new_inline_semantic(HttpCompiler(foreign))
                     .unwrap(),
                 Box::new(Client {
+                    tls: None,
                     config: actual,
                     busy: Arc::new(AtomicBool::new(false)),
                 }),

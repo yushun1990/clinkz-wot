@@ -400,3 +400,19 @@ subset, with larger prepaid validation bounds and schema backing retained by
 native program/configuration snapshots. A native compiler still checks actual
 endpoint/method/header/configuration facts. Non-JSON codecs can implement value
 access without JSON coercion; no non-JSON interoperability claim follows here.
+
+## Finite security verification
+
+A finite Binding may declare nonzero `security_work` and implement
+`verify_ingress` against the evidence retained by the exact original reply.
+The captured work/configuration is checked before progress; verification is
+prepaid before semantic acceptance. It establishes a Principal independently of
+application permission, and is repeated after authorization. Before each
+successful native send the runtime repeats verification, requires the original
+identity/claims and instance currentness, and invokes the original handler's
+fresh application permission, then rechecks verification before native entry. Failure retains the original input/result and
+native retirement owner; partial delivery remains Unknown. Redacted protocol
+refusals require no permission to deliver application data. The default zero-work
+adapter preserves existing trusted native principal semantics; it establishes no
+new authentication guarantee. Wrappers claiming the authenticated facet must
+forward its verification/configuration/work contract.

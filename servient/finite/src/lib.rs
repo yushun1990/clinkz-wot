@@ -305,6 +305,7 @@ struct InstanceEntry {
 }
 
 struct AcceptedBehavior {
+    current: Rc<Cell<bool>>,
     instance: Rc<RawProducerInstance>,
     behavior: usize,
 }
@@ -530,6 +531,14 @@ impl RawProducerServient {
             };
             units = total;
         }
+        let Some(units) = runtime
+            .security_work
+            .checked_mul(2)
+            .and_then(|w| units.checked_add(w))
+        else {
+            runtime.fail(CoreError::Backpressure(context()));
+            return Ok(Poll::Ready(runtime.state));
+        };
         if budget.consume(WorkClass::HandlerSteps, units).is_err() {
             return Ok(Poll::Pending);
         }
@@ -537,7 +546,7 @@ impl RawProducerServient {
             runtime.fail(CoreError::Validation(context()));
             return Ok(Poll::Ready(runtime.state));
         }
-        let ingress = runtime.ingress.take().expect("received exchange retained");
+        let mut ingress = runtime.ingress.take().expect("received exchange retained");
         let single = ingress
             .candidates
             .first()
@@ -549,6 +558,9 @@ impl RawProducerServient {
         let result = self.resolve(&ingress, runtime.limits).and_then(|(i, b)| {
             let instance = &self.instances[i].instance;
             let behavior = &instance.behaviors[b];
+            if runtime.security_work != 0 {
+                ingress.input.principal = runtime.binding.verify_ingress(&ingress)?;
+            }
             if runtime.validation == FiniteValidation::Required {
                 runtime
                     .binding
@@ -564,6 +576,14 @@ impl RawProducerServient {
             // actual service loan through the synchronous callback/validation.
             if !runtime.pair_is_current() {
                 return Err(CoreError::Validation(context()));
+            }
+            if runtime.security_work != 0
+                && runtime.binding.verify_ingress(&ingress)? != ingress.input.principal
+            {
+                return Err(CoreError::Security {
+                    reason: clinkz_wot_core::SecurityFailureReason::InvalidCredentials,
+                    context: context(),
+                });
             }
             let validator = if runtime.validation == FiniteValidation::Required {
                 Some(
@@ -584,6 +604,7 @@ impl RawProducerServient {
             // Acceptance is ordered by exclusive access to this owner. No lock,
             // native callback, allocation or re-lookup surrounds application code.
             runtime.accepted_instance = Some(AcceptedBehavior {
+                current: self.instances[i].current.clone(),
                 instance: Rc::clone(instance),
                 behavior: b,
             });
@@ -702,6 +723,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     first_cause: Option<CoreError>,
     validation: FiniteValidation,
     validation_work: u64,
+    security_work: u64,
     deadline: Deadline,
     io_deadline: Deadline,
     last_now: Option<MonotonicInstant>,
@@ -726,6 +748,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         deadline: Deadline,
     ) -> Result<Self, BindingInputRejection<(B, B::Configuration)>> {
         let identity = binding.identity();
+        let security_work = binding.security_work();
         let validation_work = binding
             .validator()
             .map_or(0, |v| v.additional_validation_work());
@@ -751,6 +774,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             settlement: None,
             validation,
             validation_work,
+            security_work,
             deadline,
             io_deadline: Deadline::NONE,
             last_now: None,
@@ -843,6 +867,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     fn pair_is_current(&self) -> bool {
         self.binding.identity() == self.identity
             && self.binding.configuration() == &self.configuration
+            && self.binding.security_work() == self.security_work
             && (self.validation == FiniteValidation::Raw
                 || self
                     .binding
@@ -1050,22 +1075,80 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     }
                 }
             }
-            Delivering => match self
-                .binding
-                .poll_send(cx, self.reply.as_ref().expect("reply retained"))
-            {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(e)) => {
-                    self.fail(e);
-                    Poll::Ready(self.state)
+            Delivering => {
+                // Security-bearing exchanges recheck identity and application
+                // permission under a fresh complete allowance before each send.
+                if self.security_work != 0 && self.reply.as_ref().is_some_and(|r| r.result.is_ok())
+                {
+                    let Some(work) = self
+                        .security_work
+                        .checked_mul(2)
+                        .and_then(|work| work.checked_add(1))
+                    else {
+                        self.fail(CoreError::Backpressure(context()));
+                        return Poll::Ready(self.state);
+                    };
+                    if budget.consume(WorkClass::HandlerSteps, work).is_err() {
+                        return Poll::Pending;
+                    }
+                    let reply = self.reply.as_ref().expect("reply retained");
+                    let checked = (|| {
+                        if !self.ingress_gate.get() {
+                            return Err(CoreError::StaleHandle(context()));
+                        }
+                        if self.binding.verify_ingress(&reply.ingress)?
+                            != reply.ingress.input.principal
+                        {
+                            return Err(CoreError::Security {
+                                reason: clinkz_wot_core::SecurityFailureReason::InvalidCredentials,
+                                context: context(),
+                            });
+                        }
+                        if let Some(accepted) = &self.accepted_instance {
+                            if !accepted.current.get() {
+                                return Err(CoreError::StaleHandle(context()));
+                            }
+                            accepted.instance.behaviors[accepted.behavior]
+                                .handler
+                                .authorize(&reply.ingress.input)?;
+                        }
+                        if !self.pair_is_current() {
+                            return Err(CoreError::Validation(context()));
+                        }
+                        // Application policy can change an external verifier.
+                        // It cannot grant delivery using a now-revoked identity.
+                        if self.binding.verify_ingress(&reply.ingress)?
+                            != reply.ingress.input.principal
+                        {
+                            return Err(CoreError::Security {
+                                reason: clinkz_wot_core::SecurityFailureReason::InvalidCredentials,
+                                context: context(),
+                            });
+                        }
+                        Ok(())
+                    })();
+                    if let Err(error) = checked {
+                        self.fail(error);
+                        return Poll::Ready(self.state);
+                    }
                 }
-                Poll::Ready(Ok(())) => {
-                    self.settle_reply(FiniteDelivery::Delivered);
-                    self.io_deadline = Deadline::NONE;
-                    self.state = Serving;
-                    Poll::Ready(self.state)
+                match self
+                    .binding
+                    .poll_send(cx, self.reply.as_ref().expect("reply retained"))
+                {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Err(e)) => {
+                        self.fail(e);
+                        Poll::Ready(self.state)
+                    }
+                    Poll::Ready(Ok(())) => {
+                        self.settle_reply(FiniteDelivery::Delivered);
+                        self.io_deadline = Deadline::NONE;
+                        self.state = Serving;
+                        Poll::Ready(self.state)
+                    }
                 }
-            },
+            }
             Closing => match self.binding.poll_close(
                 cx,
                 self.ingress.as_ref(),
