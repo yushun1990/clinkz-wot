@@ -194,6 +194,14 @@ pub fn prepare_type_schema(schema: SchemaView<'_>) -> CoreResult<PreparedSchema>
 
 fn schema_head(schema: SchemaView<'_>) -> CoreResult<Option<PreparedSchema>> {
     let f = schema.facts();
+    if f.declared_type.is_some_and(|name| {
+        !matches!(
+            name,
+            "null" | "boolean" | "number" | "integer" | "string" | "array" | "object"
+        )
+    }) {
+        return Err(refused());
+    }
     if f.constant.is_some()
         || f.enumeration.is_some()
         || f.format.is_some()
