@@ -260,7 +260,7 @@ fn standard_nested_schema_requires_a_validator_and_cannot_be_silently_advertised
 }
 
 #[test]
-fn unsupported_assertions_refuse_even_without_an_explicit_type() {
+fn supported_constraints_require_explicit_types_and_other_assertions_refuse() {
     for (kind, field, value) in [
         ("number", "minimum", json!(0)),
         ("number", "maximum", json!(10)),
@@ -306,8 +306,13 @@ fn unsupported_assertions_refuse_even_without_an_explicit_type() {
             if field == "required" {
                 schema["properties"] = json!({"x":{"type":"number"}});
             }
-            assert!(
-                prepare(td, "level").is_err(),
+            let supported = typed
+                && ((kind == "integer" && field != "multipleOf")
+                    || (kind == "string" && matches!(field, "minLength" | "maxLength"))
+                    || (kind == "object" && matches!(field, "properties" | "required")));
+            assert_eq!(
+                prepare(td, "level").is_ok(),
+                supported,
                 "{kind}/{field}/typed={typed}"
             );
         }

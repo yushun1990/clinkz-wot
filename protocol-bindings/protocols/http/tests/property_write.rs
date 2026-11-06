@@ -637,7 +637,7 @@ fn complete_producer_qualification_refuses_unsupported_or_contradictory_advertis
         let mut td = description(addr);
         let p = &mut td["properties"]["level"];
         match case {
-            0 => p["minimum"] = json!(0),
+            0 => p["multipleOf"] = json!(2),
             1 => p["enum"] = json!([1, 2]),
             2 => p["const"] = json!(1),
             3 => {
@@ -673,7 +673,7 @@ fn complete_producer_qualification_refuses_unsupported_or_contradictory_advertis
             16 => p["oneOf"] = json!([{"type":"integer"},{"type":"string"}]),
             17 => {
                 p["type"] = json!("object");
-                p["required"] = json!(["x"]);
+                p["additionalProperties"] = json!(false);
             }
             _ => unreachable!(),
         }

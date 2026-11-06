@@ -37,16 +37,19 @@ pub struct HttpProducerProgram {
     pub(super) authority_end: u8,
     pub(super) origin: [u8; 64],
     pub(super) origin_len: u8,
-    pub(super) value_schema: clinkz_wot_core::value_type::TypeSchema,
+    pub(super) value_schema: Arc<clinkz_wot_core::data_schema::PreparedSchema>,
     pub(super) property_map: Option<Arc<clinkz_wot_core::collection::PropertyCollectionSchema>>,
 }
 impl HttpProducerProgram {
     pub(crate) fn schema_backing_bytes(&self) -> usize {
-        self.property_map.as_ref().map_or(0, |s| {
-            s.retained_bytes()
-                + core::mem::size_of_val(s.as_ref())
-                + 2 * core::mem::size_of::<usize>()
-        })
+        self.value_schema.retained_bytes()
+            + core::mem::size_of_val(self.value_schema.as_ref())
+            + 2 * core::mem::size_of::<usize>()
+            + self.property_map.as_ref().map_or(0, |s| {
+                s.retained_bytes()
+                    + core::mem::size_of_val(s.as_ref())
+                    + 2 * core::mem::size_of::<usize>()
+            })
     }
     pub(crate) fn method(&self) -> &'static str {
         match self.operation {
@@ -88,7 +91,7 @@ use std::{
 
 // Separate role identity: never borrow Consumer policy/seals or StrictV1's
 // transitive disposal claim. Native parser/reply backing remains Binding-owned.
-const INSTALL_POLICY: &[u8] = b"request-reply-v4;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;type-only-schema;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-IgnoredAny+UTF8;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
+const INSTALL_POLICY: &[u8] = b"request-reply-v4;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;prepared-object-integer-string-schema;schema64/depth8;encoded-depth32;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-RawValue+UTF8+codepoints;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/0/0;temporary=1024-not-stack-ceiling;largest-indirect=0;local-drop-work=1;finite-SDK-local-drop;no-task;no-network-wait";
 
 /// Runtime-only executor. It retains neither a compiler nor source TD.
 pub struct HttpProducerExecutor {
@@ -214,7 +217,7 @@ impl ProducerOutputValidator for HttpProducerProgram {
                 output.data().ok_or_else(producer_unsupported)?,
             );
         }
-        super::producer_validation::validate(self.value_schema, output)
+        super::producer_validation::validate(&self.value_schema, output)
     }
 }
 /// Binding-owned native setup, request correlation, reply and retirement.

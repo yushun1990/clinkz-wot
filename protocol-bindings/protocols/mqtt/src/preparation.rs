@@ -155,6 +155,13 @@ pub(crate) fn lower_notification(
             {
                 return Err(unsupported());
             }
+            // This native notification profile retains its qualified type-only
+            // subset; a broader shared Core schema is not a protocol admission.
+            for property in doc.collection_properties().ok_or_else(unsupported)? {
+                if !property.schema.facts().write_only {
+                    prepare_type_schema(property.schema)?;
+                }
+            }
             let schema = clinkz_wot_planning::type_schema::prepare_readable_property_schema(doc)?;
             if schema.members().is_empty() {
                 return Err(unsupported());

@@ -362,10 +362,10 @@ fn captured_map_service_validates_the_whole_input_and_service_loss_fences_native
         fn available(&self) -> bool {
             !self.lost.load(Ordering::Relaxed)
         }
-        fn validate(&self, _: value_type::TypeSchema, _: &Payload) -> CoreResult<()> {
+        fn validate(&self, _: &data_schema::PreparedSchema, _: &Payload) -> CoreResult<()> {
             panic!("collection input must use its member schema")
         }
-        fn supports_schema(&self, _: value_type::TypeSchema) -> bool {
+        fn supports_schema(&self, _: &data_schema::PreparedSchema) -> bool {
             false
         }
         fn supports_property_map(&self, s: &collection::PropertyCollectionSchema) -> bool {

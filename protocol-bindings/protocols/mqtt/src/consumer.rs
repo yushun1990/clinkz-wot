@@ -802,7 +802,7 @@ impl ConsumerDataService for MqttJsonData {
     fn content_type(&self) -> &str {
         "application/json"
     }
-    fn validate(&self, schema: TypeSchema, payload: &Payload) -> CoreResult<()> {
+    fn validate(&self, schema: &PreparedSchema, payload: &Payload) -> CoreResult<()> {
         clinkz_wot_codec_json::validate_payload(schema, payload)
     }
     fn supports_property_map(
@@ -812,7 +812,7 @@ impl ConsumerDataService for MqttJsonData {
         schema
             .members()
             .iter()
-            .all(|m| self.supports_schema(m.schema))
+            .all(|m| self.supports_schema(&m.schema))
     }
     fn validate_property_map(
         &self,

@@ -1036,7 +1036,7 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
         fn policy(&self) -> ConsumerDataPolicy {
             MqttJsonData.policy()
         }
-        fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+        fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
             let result = MqttJsonData.validate(schema, payload);
             self.0.revoke();
             result

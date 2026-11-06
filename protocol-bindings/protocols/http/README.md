@@ -9,6 +9,16 @@ TD-resolved semantic input. The [composed Write subset](#composed-property-readw
 uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
 uses `try_inline_consumer_registration` and remains a restricted Read adapter.
 
+The open finite path uses the bounded [prepared DataSchema subset](../../../docs/evidence/structured-dataschema.md).
+Nested object properties/required names, exact integer inclusive/exclusive bounds
+and Unicode string lengths are interpreted once by shared TD/Planning and Core;
+JSON supplies bounded value access. Actual scalar or collection validators
+qualify their complete data role. Property Read/Write and ReadAllProperties have
+real structured Consumer/Producer and reuse evidence. Other finite collection
+facets use the same kernel, with their existing role/mapping requirements;
+their older type-only tests do not establish broader structured interoperability.
+Continuing Action preparation retains its narrower type-only subset.
+
 Reads support HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
 chunked and close-delimited bodies. One registration admits one call, including
 its unread terminal result. Each read owns a fresh connection and its driver.
@@ -418,7 +428,7 @@ returns the exact final JSON only while that incarnation is current.
 
 This first scope uses explicit nonzero loopback endpoints, one Property/Form,
 effective `readproperty`, synchronous registered behavior, endpoint NoSec,
-JSON/200 and the type-only schemas described above. It supports anonymous TDs,
+JSON/200 and the bounded prepared schemas described above. It supports anonymous TDs,
 empty Property keys, default/aliased GET and relative hrefs. It does not rewrite
 port-0 endpoints or silently discard alternatives. The current public Consumer
 still needs an id/nonempty key; its joined test supplies those in the original
@@ -464,7 +474,7 @@ precedes fresh application authorization and handler entry; malformed or denied
 input cannot call the write behavior.
 
 The supported mapping is Host/std/manual HTTP/1.1 to nonzero loopback Producer
-addresses, cleartext IP Consumer targets, endpoint NoSec and JSON/type-only
+addresses, cleartext IP Consumer targets, endpoint NoSec and the bounded prepared JSON schema subset
 values up to 4096 bytes. The existing unsupported schema/security assertions
 refuse preparation. Default methods follow [TD 1.1 section 8.3.1](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#http-binding-assertions):
 GET for Read and PUT for Write. Explicit single-operation methods must match on
@@ -717,7 +727,7 @@ Bindings that lack native collection support remain unsupported.
 
 The response is one object containing every readable (non-writeOnly) Property
 exactly once, keyed by its TD name. ReadOnly Properties are included. Every value
-is checked against that Property's complete supported type-only schema, including
+is checked against that Property's complete supported prepared schema, including
 exact mathematical integer validation. Missing, duplicate (including escaped-name
 duplicates), unknown and writeOnly members, invalid values and malformed payloads
 refuse successful settlement. Empty readable sets require `{}`. Unsupported
@@ -848,7 +858,7 @@ security, HTTPS, constrained profiles and production qualification remain open.
 `ConsumerRuntime::write_all_properties(payload, deadline, now, budget)` selects
 one actual Thing-root `writeallproperties` Form and returns the original payload
 on local refusal. Preparation retains every writable (non-readOnly) member's
-name and supported type-only schema, including writeOnly members. The actual
+name and supported prepared schema, including writeOnly members. The actual
 captured map service validates the complete input; missing, unknown, readOnly,
 duplicate (including escaped duplicate), malformed and invalid members refuse
 before native effects. Readable output schemas and individual Property Forms

@@ -11,7 +11,7 @@ pub struct ConsumerActionPreparationInput<'a> {
     pub form: u32,
     pub operation: Operation,
     pub endpoint: &'a str,
-    pub schemas: ConsumerSchemas,
+    pub schemas: &'a ConsumerSchemas,
 }
 /// Startup-linked pure native compiler. Returned mappings own their original
 /// configuration/executor, not source loans. Bounds include rollback and Drop.
@@ -171,7 +171,7 @@ impl ConsumerActionRegistry {
                                     budget,
                                 ) {
                                     Ok(Some((s, op, mut leases))) => {
-                                        if schemas.is_some_and(|old| old != s) {
+                                        if schemas.as_ref().is_some_and(|old| old != &s) {
                                             return Err(invalid());
                                         }
                                         schemas = Some(s);
@@ -279,8 +279,8 @@ impl ConsumerActionRegistry {
                 || r.services.data.content_type() != facts.content_type
                 || !schemas
                     .input
-                    .into_iter()
-                    .chain(schemas.output)
+                    .iter()
+                    .chain(schemas.output.iter())
                     .all(|s| r.services.data.supports_schema(s))
                 || r.services
                     .access
@@ -328,7 +328,7 @@ impl ConsumerActionRegistry {
                     form,
                     operation,
                     endpoint,
-                    schemas,
+                    schemas: &schemas,
                 }) {
                 Ok(Some(m)) => m,
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
@@ -341,7 +341,6 @@ impl ConsumerActionRegistry {
                 return Err(ambiguous());
             }
             chosen = Some((
-                schemas,
                 ConsumerActionOperation {
                     mapping,
                     endpoint: endpoint.into(),
@@ -351,6 +350,6 @@ impl ConsumerActionRegistry {
                 funding,
             ));
         }
-        Ok(chosen)
+        Ok(chosen.map(|(operation, funding)| (schemas, operation, funding)))
     }
 }

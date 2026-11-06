@@ -272,11 +272,15 @@ fn root_retains_exact_per_event_schemas_independently_of_leaf_forms_and_source_t
     assert_eq!(schema.members().len(), 2);
     assert_eq!(
         schema.member("alarm").unwrap().data,
-        Some(value_type::TypeSchema::Type(value_type::ValueType::Integer))
+        Some(data_schema::PreparedSchema::Type(
+            data_schema::ValueType::Integer
+        ))
     );
     assert_eq!(
         schema.member("ready").unwrap().data,
-        Some(value_type::TypeSchema::Type(value_type::ValueType::Boolean))
+        Some(data_schema::PreparedSchema::Type(
+            data_schema::ValueType::Boolean
+        ))
     );
     assert!(schema.members().iter().all(|m| m.subscription.is_none()
         && m.cancellation.is_none()
@@ -292,14 +296,14 @@ fn actual_services_ambiguity_short_credit_and_root_source_coverage_are_checked_w
         fn content_type(&self) -> &str {
             "application/json"
         }
-        fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+        fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
             MqttJsonData.validate(s, p)
         }
         fn policy(&self) -> ConsumerDataPolicy {
             MqttJsonData.policy()
         }
-        fn supports_schema(&self, s: value_type::TypeSchema) -> bool {
-            s != value_type::TypeSchema::Type(value_type::ValueType::Boolean)
+        fn supports_schema(&self, s: &data_schema::PreparedSchema) -> bool {
+            s != &data_schema::PreparedSchema::Type(data_schema::ValueType::Boolean)
         }
     }
     let addr = "127.0.0.1:18883".parse().unwrap();

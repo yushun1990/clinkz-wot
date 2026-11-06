@@ -12,7 +12,7 @@ mod preparation;
 
 use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, CoreError, ErrorContext, ErrorPhase, Operation,
-    RetryClass, notification::NotificationKind, value_type::TypeSchema,
+    RetryClass, data_schema::PreparedSchema, notification::NotificationKind,
 };
 use std::{net::SocketAddr, rc::Rc, sync::Arc};
 
@@ -81,7 +81,7 @@ pub struct MqttNotificationDefinition {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(not(feature = "prepare"), allow(dead_code))]
 enum MqttDataSchema {
-    Value(TypeSchema),
+    Value(PreparedSchema),
     Properties(Arc<clinkz_wot_core::collection::PropertyCollectionSchema>),
     Events(Arc<clinkz_wot_core::collection::EventCollectionSchema>),
 }
@@ -103,7 +103,7 @@ impl MqttDataSchema {
     ) -> clinkz_wot_core::CoreResult<()> {
         let payload = data.payload();
         match self {
-            Self::Value(s) => clinkz_wot_codec_json::validate_payload(*s, payload),
+            Self::Value(s) => clinkz_wot_codec_json::validate_payload(s, payload),
             Self::Properties(s) => clinkz_wot_codec_json::validate_property_map(s, payload),
             Self::Events(s) => {
                 let clinkz_wot_core::publication::PublicationData::EventOccurrence {
@@ -114,9 +114,9 @@ impl MqttDataSchema {
                 };
                 let schema = s
                     .member(event)
-                    .and_then(|m| m.data)
+                    .and_then(|m| m.data.as_ref())
                     .ok_or_else(unsupported)?;
-                clinkz_wot_codec_json::validate_payload(schema, payload)
+                clinkz_wot_codec_json::validate_payload(&schema, payload)
             }
         }
     }

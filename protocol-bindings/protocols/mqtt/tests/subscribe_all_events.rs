@@ -29,7 +29,7 @@ impl ConsumerDataService for ObservedData {
         policy.retained_bytes += std::mem::size_of::<Self>() as u64;
         policy
     }
-    fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+    fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
         // Test instrumentation at the trusted validation boundary records only
         // a Weak, never a replacement payload or another strong owner.
         *self.original.lock().unwrap() = Some(Arc::downgrade(&payload.body));
@@ -1038,7 +1038,7 @@ fn collection_validator_rechecks_original_authority_after_callback_and_requires_
         fn policy(&self) -> ConsumerDataPolicy {
             MqttJsonData.policy()
         }
-        fn validate(&self, s: value_type::TypeSchema, p: &Payload) -> CoreResult<()> {
+        fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
             self.calls.fetch_add(1, Ordering::Relaxed);
             let result = MqttJsonData.validate(s, p);
             self.owner.revoke();

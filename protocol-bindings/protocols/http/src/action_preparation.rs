@@ -204,8 +204,8 @@ pub(crate) fn lower_action(
             };
             if vars.next().is_some()
                 || prepare_type_schema(schema)?
-                    != clinkz_wot_core::value_type::TypeSchema::Type(
-                        clinkz_wot_core::value_type::ValueType::String,
+                    != clinkz_wot_core::data_schema::PreparedSchema::Type(
+                        clinkz_wot_core::data_schema::ValueType::String,
                     )
             {
                 return Err(producer_unsupported());

@@ -365,13 +365,13 @@ impl ConsumerDataService for Data {
             validation_work: 4096 * 40,
         }
     }
-    fn supports_schema(&self, schema: value_type::TypeSchema) -> bool {
-        schema.accepts(value_type::ValueType::Integer)
+    fn supports_schema(&self, schema: &data_schema::PreparedSchema) -> bool {
+        schema.is_type_only() && schema.accepts_kind(data_schema::ValueType::Integer)
     }
     fn available(&self) -> bool {
         !self.0.data_lost.load(Ordering::Relaxed)
     }
-    fn validate(&self, schema: value_type::TypeSchema, data: &Payload) -> CoreResult<()> {
+    fn validate(&self, schema: &data_schema::PreparedSchema, data: &Payload) -> CoreResult<()> {
         self.0.validates.fetch_add(1, Ordering::Relaxed);
         let integer = std::str::from_utf8(&data.body)
             .ok()
@@ -379,7 +379,7 @@ impl ConsumerDataService for Data {
         if data.content_type != "application/json"
             || data.content_coding.is_some()
             || integer.is_none()
-            || !schema.accepts(value_type::ValueType::Integer)
+            || !schema.is_type_only() || !schema.accepts_kind(data_schema::ValueType::Integer)
         {
             return Err(invalid());
         }
@@ -513,6 +513,11 @@ pub mod prepare {
             self.config
         }
     }
+    fn artifact_bytes(operation: Operation) -> u64 {
+        if operation==Operation::WriteMultipleProperties {
+            (std::mem::size_of::<Program>() + 256 + clinkz_wot_core::collection::PropertyCollectionSchema::backing_bound() + std::mem::size_of::<clinkz_wot_core::collection::PropertyCollectionSchema>() + 32) as u64
+        } else {512}
+    }
     impl BindingCompilerExtension for Compiler {
         type Cursor = Cursor;
         type Artifact = Program;
@@ -550,7 +555,7 @@ pub mod prepare {
                 return Err(invalid());
             }
             Ok(BindingCompilerBounds::new(
-                BindingArtifactFootprint::new(1, 512),
+                BindingArtifactFootprint::new(1, artifact_bytes(input.operation())),
                 512,
                 128,
                 WorkBudget::new().with_remaining(
@@ -627,7 +632,7 @@ pub mod prepare {
             let footprint = BindingArtifactFootprint::new(
                 1,
                 if self.probe.invalid_artifact.load(Ordering::Relaxed) {
-                    513
+                    artifact_bytes(cursor.operation)+1
                 } else {
                     (std::mem::size_of::<Program>()
                         + cursor.bytes.capacity()

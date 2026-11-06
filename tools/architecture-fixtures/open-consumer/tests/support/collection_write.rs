@@ -23,7 +23,7 @@ fn source_for(target: &str) -> clinkz_wot_td::thing::Thing {
     .unwrap()
 }
 fn schema() -> Arc<PropertyCollectionSchema> {
-    use value_type::{TypeSchema, ValueType};
+    use data_schema::{PreparedSchema, ValueType};
     Arc::new(
         PropertyCollectionSchema::try_new(
             [
@@ -34,7 +34,7 @@ fn schema() -> Arc<PropertyCollectionSchema> {
             .into_iter()
             .map(|(name, t)| PropertyMemberSchema {
                 name: name.into(),
-                schema: TypeSchema::Type(t),
+                schema: PreparedSchema::Type(t),
             })
             .collect(),
         )

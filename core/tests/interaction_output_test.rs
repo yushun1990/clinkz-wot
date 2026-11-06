@@ -32,7 +32,7 @@ where
 }
 
 #[test]
-fn interaction_value_types_expose_the_frozen_traits() {
+fn interaction_data_schemas_expose_the_frozen_traits() {
     assert_copy_value_traits::<InteractionStatus>();
     assert_copy_value_traits::<ResponsePayloadRole>();
     assert_copy_value_traits::<ResponseSelection>();

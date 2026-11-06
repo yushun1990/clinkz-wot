@@ -5,9 +5,9 @@ use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
     ErrorPhase, InteractionInput, InteractionOutput, Operation, Payload, RetryClass,
     action::{ActionMappingKey, ActionRoute, ActionValidator, RawActionRequest},
+    data_schema::PreparedSchema,
     producer::ProducerInstanceKey,
     thing::AffordanceSite,
-    value_type::TypeSchema,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use clinkz_wot_servient_finite::{
@@ -38,8 +38,8 @@ pub struct HttpActionDefinition {
     pub(crate) form: u32,
     pub(crate) address: SocketAddr,
     pub(crate) path: Arc<str>,
-    pub(crate) input_schema: Option<TypeSchema>,
-    pub(crate) output_schema: Option<TypeSchema>,
+    pub(crate) input_schema: Option<PreparedSchema>,
+    pub(crate) output_schema: Option<PreparedSchema>,
     pub(crate) control: bool,
     pub(crate) collection: Option<clinkz_wot_core::action::ActionCollectionSchema>,
 }
@@ -53,12 +53,12 @@ impl HttpActionDefinition {
 }
 
 struct Schemas {
-    input: Option<TypeSchema>,
-    output: Option<TypeSchema>,
+    input: Option<PreparedSchema>,
+    output: Option<PreparedSchema>,
 }
 impl ActionValidator for Schemas {
     fn validate_input(&self, input: &InteractionInput) -> CoreResult<()> {
-        match (self.input, input.data.as_ref()) {
+        match (self.input.as_ref(), input.data.as_ref()) {
             (Some(schema), Some(data))
                 if data.content_type == "application/json" && data.content_coding.is_none() =>
             {
@@ -69,7 +69,7 @@ impl ActionValidator for Schemas {
         }
     }
     fn validate_output(&self, output: &InteractionOutput) -> CoreResult<()> {
-        match (self.output, output.data()) {
+        match (self.output.as_ref(), output.data()) {
             (Some(schema), Some(_)) => producer_validation::validate(schema, output),
             (None, None) => Ok(()),
             _ => Err(invalid()),
@@ -225,8 +225,8 @@ impl HttpActionRuntime {
                 validators.push((
                     Arc::clone(&d.action),
                     Rc::new(Schemas {
-                        input: d.input_schema,
-                        output: d.output_schema,
+                        input: d.input_schema.clone(),
+                        output: d.output_schema.clone(),
                     }),
                 ));
             }

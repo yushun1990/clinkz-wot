@@ -424,16 +424,23 @@ impl HttpFiniteConfig {
 }
 impl FiniteValidator for HttpFiniteConfig {
     fn additional_validation_work(&self) -> u64 {
+        let structured = self.mappings.iter().any(|(_, p)| {
+            !p.value_schema.is_type_only()
+                || p.property_map
+                    .as_ref()
+                    .is_some_and(|s| s.members().iter().any(|m| !m.schema.is_type_only()))
+        });
+        let extra = if structured { 4096 * 80 } else { 0 };
         if self
             .mappings
             .iter()
             .any(|(_, p)| p.operation == Operation::ReadMultipleProperties)
         {
-            4096 * 120
+            4096 * 120 + extra
         } else if self.mappings.iter().any(|(_, p)| p.property_map.is_some()) {
-            4096 * 40
+            4096 * 40 + extra
         } else {
-            0
+            extra
         }
     }
     fn validate_input(
@@ -474,7 +481,7 @@ impl FiniteValidator for HttpFiniteConfig {
                 )
             }
             (Operation::WriteProperty, Some(payload)) => {
-                crate::producer_validation::validate_payload(program.value_schema, payload)
+                crate::producer_validation::validate_payload(&program.value_schema, payload)
             }
             _ => Err(CoreError::Validation(ErrorContext::new(
                 ErrorPhase::Validate,

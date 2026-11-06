@@ -41,6 +41,10 @@ applicability/defaults and distinct schema roles. The
 [operation vocabulary](core/src/operation.rs) represents all 18 TD 1.1 operations.
 These facts do not establish executable support; schema and extension processing
 still have supported-subset limits.
+The [finite structured DataSchema increment](docs/evidence/structured-dataschema.md)
+adds reusable nested object/required-field constraints, integer boundaries and
+Unicode string lengths through actual HTTP Consumer/Producer execution. Broader
+schema/media/profile coverage remains open.
 
 | Capability | Raw execution kernels | TD-driven Consumer composition | TD-driven Producer composition | Actual Binding I/O evidence |
 | --- | --- | --- | --- | --- |
@@ -122,7 +126,8 @@ lifecycle semantics in memory. Test Bindings are not production protocols.
 
 **Production qualification:** narrow HTTP Property Read evidence retains its
 [recorded scope](docs/evidence/WP-600-http-consumer-property-read.toml).
-Current joined paths are bounded Host/manual, type-only schema and NoSec subsets;
+Current joined paths are bounded Host/manual and NoSec subsets, mostly type-only
+with the finite structured increment scoped above;
 their real I/O does not establish complete family, general DataSchema/security,
 HTTPS, constrained-profile or v1 qualification. Those remain delivery work.
 

@@ -406,7 +406,7 @@ fn schema(
     doc: &ResolvedSemanticDocument<'_>,
     owner: clinkz_wot_td::semantic::FormOwner<'_>,
     role: &str,
-) -> CoreResult<Option<clinkz_wot_core::value_type::TypeSchema>> {
+) -> CoreResult<Option<clinkz_wot_core::data_schema::PreparedSchema>> {
     doc.affordance_schema(owner, role)
         .map(crate::type_schema::prepare_type_schema)
         .transpose()

@@ -1,4 +1,4 @@
-use clinkz_wot_core::{collection::*, value_type::TypeSchema};
+use clinkz_wot_core::{collection::*, data_schema::PreparedSchema};
 
 fn schema() -> PropertyCollectionSchema {
     PropertyCollectionSchema::try_new(
@@ -6,7 +6,7 @@ fn schema() -> PropertyCollectionSchema {
             .into_iter()
             .map(|name| PropertyMemberSchema {
                 name: name.into(),
-                schema: TypeSchema::Any,
+                schema: PreparedSchema::Any,
             })
             .collect(),
     )

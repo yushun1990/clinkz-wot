@@ -53,3 +53,4 @@ docs/evidence/WP-200-preparation-execution-boundary.toml,preparation-execution-p
 docs/spec/authority.toml,current-authority-map,normative,6.0,2,docs/spec/authority.toml
 docs/spec/td.md,shared-td-semantics,normative,6.0,1,docs/spec/authority.toml
 docs/evidence/consumer-execution-reuse.md,consumer-execution-reuse-characterization,non-normative-evidence,6.0,1,docs/spec/planning.md
+docs/evidence/structured-dataschema.md,structured-dataschema-execution-evidence,non-normative-evidence,6.0,1,docs/spec/interaction-core.md

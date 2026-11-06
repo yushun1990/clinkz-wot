@@ -70,6 +70,7 @@ impl HttpProducerConfig {
                 document: input.document(),
             },
             budget,
+            None,
         )
     }
 
@@ -77,6 +78,7 @@ impl HttpProducerConfig {
         &self,
         input: clinkz_wot_planning::ResolvedBindingInput<'_>,
         budget: &mut WorkBudget,
+        expected: Option<&HttpProducerProgram>,
     ) -> CoreResult<Option<HttpProducerProgram>> {
         if budget.consume(WorkClass::BindingPolls, 4096).is_err() {
             return Ok(None);
@@ -141,26 +143,95 @@ impl HttpProducerConfig {
         }
         // Shared DataSchema meaning is prepared once. HTTP supplies JSON
         // decoding; accepting extension-free schemas is not validation support.
+        let mut schema_work = 0;
+        if collection {
+            let writing = matches!(
+                input.operation,
+                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+            );
+            for property in document
+                .collection_properties()
+                .ok_or_else(producer_unsupported)?
+            {
+                let facts = property.schema.facts();
+                if if writing {
+                    !facts.read_only
+                } else {
+                    !facts.write_only
+                } {
+                    schema_work +=
+                        clinkz_wot_planning::type_schema::preparation_work(property.schema)?;
+                }
+            }
+        } else {
+            schema_work =
+                clinkz_wot_planning::type_schema::preparation_work(document.property().schema)?;
+        }
+        if budget
+            .consume(WorkClass::BindingPolls, schema_work)
+            .is_err()
+        {
+            return Ok(None);
+        }
         let property_map = if collection {
-            Some(Arc::new(
-                if matches!(
+            Some(if let Some(original) = expected {
+                let original = original
+                    .property_map
+                    .as_ref()
+                    .ok_or_else(producer_unsupported)?;
+                let writing = matches!(
                     input.operation,
                     Operation::WriteAllProperties | Operation::WriteMultipleProperties
-                ) {
-                    clinkz_wot_planning::type_schema::prepare_writable_property_schema(document)?
-                } else {
-                    clinkz_wot_planning::type_schema::prepare_readable_property_schema(document)?
-                },
-            ))
+                );
+                if !clinkz_wot_planning::type_schema::matches_property_schema(
+                    document, original, writing,
+                )? {
+                    return Err(producer_unsupported());
+                }
+                Arc::clone(original)
+            } else {
+                Arc::new(
+                    if matches!(
+                        input.operation,
+                        Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                    ) {
+                        clinkz_wot_planning::type_schema::prepare_writable_property_schema(
+                            document,
+                        )?
+                    } else {
+                        clinkz_wot_planning::type_schema::prepare_readable_property_schema(
+                            document,
+                        )?
+                    },
+                )
+            })
         } else {
             None
         };
-        let value_schema = if collection {
-            clinkz_wot_core::value_type::TypeSchema::Type(
-                clinkz_wot_core::value_type::ValueType::Object,
-            )
+        let value_schema = if let Some(original) = expected {
+            let agrees = if collection {
+                original.value_schema.as_ref()
+                    == &clinkz_wot_core::data_schema::PreparedSchema::Type(
+                        clinkz_wot_core::data_schema::ValueType::Object,
+                    )
+            } else {
+                clinkz_wot_planning::type_schema::matches_schema(
+                    document.property().schema,
+                    &original.value_schema,
+                )?
+            };
+            if !agrees {
+                return Err(producer_unsupported());
+            }
+            Arc::clone(&original.value_schema)
         } else {
-            clinkz_wot_planning::type_schema::prepare_type_schema(document.property().schema)?
+            Arc::new(if collection {
+                clinkz_wot_core::data_schema::PreparedSchema::Type(
+                    clinkz_wot_core::data_schema::ValueType::Object,
+                )
+            } else {
+                clinkz_wot_planning::type_schema::prepare_schema(document.property().schema)?
+            })
         };
         let form = document
             .scope(if collection {

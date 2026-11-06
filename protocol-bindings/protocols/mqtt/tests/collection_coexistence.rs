@@ -358,7 +358,9 @@ mod live {
             };
             assert_eq!(
                 schema.member("alarm").unwrap().data,
-                Some(value_type::TypeSchema::Type(value_type::ValueType::Boolean))
+                Some(data_schema::PreparedSchema::Type(
+                    data_schema::ValueType::Boolean
+                ))
             );
             let finite_registry = ConsumerRegistry::try_new(
                 vec![

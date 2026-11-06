@@ -82,6 +82,7 @@ fn io() -> tokio::runtime::Runtime {
 }
 #[derive(Default)]
 struct Application {
+    scalar: RefCell<Option<Vec<u8>>>,
     value: RefCell<Vec<u8>>,
     roots: Cell<usize>,
     reads: Cell<usize>,
@@ -196,6 +197,9 @@ impl RawFiniteHandler for Behavior {
             }
             Operation::ReadProperty => {
                 self.0.reads.set(self.0.reads.get() + 1);
+                if let Some(value)=self.0.scalar.borrow().as_ref() {
+                    return Ok(InteractionOutput::with_data(payload(value)));
+                }
                 Ok(InteractionOutput::with_data(payload(
                     if ctx.target().name() == Some("level") {
                         b"7"
@@ -206,6 +210,9 @@ impl RawFiniteHandler for Behavior {
             }
             Operation::WriteProperty => {
                 self.0.writes.set(self.0.writes.get() + 1);
+                if self.0.scalar.borrow().is_some() {
+                    *self.0.scalar.borrow_mut()=Some(input.data.as_ref().unwrap().body.to_vec());
+                }
                 Ok(InteractionOutput::empty())
             }
             _ => unreachable!(),
@@ -318,9 +325,8 @@ fn exposure(
     authority: ProducerInstanceAuthority,
     expected: Option<ProducerInstanceKey>,
 ) -> ComposedProducerExposure {
-    let addr = td["forms"][0]["href"]
-        .as_str()
-        .unwrap()
+    let href=td["forms"][0]["href"].as_str().or_else(||td["properties"]["on"]["forms"][0]["href"].as_str()).unwrap();
+    let addr = href
         .strip_prefix("http://")
         .unwrap()
         .split('/')
@@ -1079,7 +1085,7 @@ fn verify_collection_cleanup(operation: Operation) {
         }
         fn validate(
             &self,
-            s: clinkz_wot_core::value_type::TypeSchema,
+            s: &clinkz_wot_core::data_schema::PreparedSchema,
             p: &Payload,
         ) -> CoreResult<()> {
             self.actual.validate(s, p)
@@ -1273,10 +1279,10 @@ fn verify_collection_cleanup(operation: Operation) {
         assert!(rollback.error.is_some());
         assert_eq!(rollback.jobs, 1, "late refusal releases the retained content");
     }
-    // A supported first member is acquired before a later unsupported schema;
-    // partial construction has the same prepaid temporary disposal bound.
+    // The bounded census now refuses a later unsupported schema before any
+    // constraint/member backing is acquired.
     let mut td = td_with_members(2, operation);
-    td["properties"]["p1"]["minimum"] = json!(0);
+    td["properties"]["p1"]["multipleOf"] = json!(2);
     let walk = attempt(&td, Mode::Unselected, 1_000_000);
     let partial = attempt(&td, Mode::Selected, 1_000_000);
     assert!(matches!(
@@ -1284,7 +1290,7 @@ fn verify_collection_cleanup(operation: Operation) {
         Some(CoreError::UnsupportedOperation(_))
     ));
     assert_eq!((partial.queries, partial.jobs), (0, 0));
-    assert_eq!(partial.used - walk.used, 3);
+    assert_eq!(partial.used, walk.used);
 }
 
 fn verify_collection_validator_bound(operation: Operation) {

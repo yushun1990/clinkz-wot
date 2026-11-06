@@ -155,7 +155,7 @@ impl ConsumerDataService for Data {
     fn content_type(&self)->&str{"application/json"}
     fn policy(&self)->ConsumerDataPolicy{self.1.policy()}
     fn available(&self)->bool{!self.0.unavailable.load(Ordering::Relaxed)}
-    fn validate(&self,s:value_type::TypeSchema,p:&Payload)->CoreResult<()>{self.1.validate(s,p)}
+    fn validate(&self,s:&data_schema::PreparedSchema,p:&Payload)->CoreResult<()>{self.1.validate(s,p)}
     fn supports_action_statuses(&self,s:&ActionCollectionSchema)->bool{self.1.supports_action_statuses(s)}
     fn validate_action_statuses(&self,s:&ActionCollectionSchema,p:&Payload)->CoreResult<()>{
         *self.0.last_body.lock().unwrap()=Some(Arc::downgrade(&p.body));let r=self.1.validate_action_statuses(s,p);

@@ -53,7 +53,7 @@ impl NotificationAuthorizer for CapturedAuthorizer {
 impl CapturedServices {
     fn validate(
         &self,
-        schema: Option<clinkz_wot_core::value_type::TypeSchema>,
+        schema: Option<&clinkz_wot_core::data_schema::PreparedSchema>,
         payload: Option<&Payload>,
     ) -> CoreResult<()> {
         match (schema, payload) {
@@ -110,7 +110,7 @@ impl NotificationValidation for CapturedServices {
             let AffordanceTarget::Event(name) = target else {
                 return Err(invalid());
             };
-            s.member(name).ok_or_else(invalid)?.data_response
+            s.member(name).ok_or_else(invalid)?.data_response.as_ref()
         } else {
             self.schemas.data_response()
         };
@@ -136,7 +136,7 @@ impl NotificationValidation for CapturedServices {
             let AffordanceTarget::Event(name) = target else {
                 return Err(invalid());
             };
-            return self.validate(s.member(name).ok_or_else(invalid)?.data, data);
+            return self.validate(s.member(name).ok_or_else(invalid)?.data.as_ref(), data);
         }
         if let ConsumerNotificationSchemas::ObserveAllProperties(schema) = &self.schemas {
             let payload = data.ok_or_else(invalid)?;

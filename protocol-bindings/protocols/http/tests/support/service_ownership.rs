@@ -8,7 +8,7 @@ impl ConsumerDataService for BackedData {
     fn content_type(&self) -> &str {
         self.inner.content_type()
     }
-    fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+    fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
         self.inner.validate(schema, payload)
     }
     fn supports_property_map(&self, schema: &collection::PropertyCollectionSchema) -> bool {

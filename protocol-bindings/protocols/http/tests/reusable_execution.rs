@@ -494,7 +494,11 @@ fn source_free_binding_and_warm_admission_cannot_refresh_changed_service_bounds(
         fn content_type(&self) -> &str {
             self.inner.content_type()
         }
-        fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+        fn validate(
+            &self,
+            schema: &data_schema::PreparedSchema,
+            payload: &Payload,
+        ) -> CoreResult<()> {
             self.inner.validate(schema, payload)
         }
         fn policy(&self) -> ConsumerDataPolicy {

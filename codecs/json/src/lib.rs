@@ -2,7 +2,7 @@
 //! or Planning dependency; no JSON tree or normalized body copy is constructed.
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass,
-    value_type::{TypeSchema, ValueType},
+    data_schema::{PreparedSchema, ValueType},
 };
 
 use clinkz_wot_core::{
@@ -40,7 +40,7 @@ pub fn decode_property_selection(
     schema: &PropertyCollectionSchema,
     payload: &Payload,
 ) -> CoreResult<PropertySelection> {
-    validate_payload(TypeSchema::Type(ValueType::Array), payload)?;
+    validate_payload(&PreparedSchema::Type(ValueType::Array), payload)?;
     struct Names<'a>(&'a PropertyCollectionSchema);
     impl<'de> Visitor<'de> for Names<'_> {
         type Value = PropertySelection;
@@ -146,7 +146,7 @@ fn property_map(
     if let Some(selected) = selected {
         schema.selection_from_bits(selected.bits())?;
     }
-    validate_payload(TypeSchema::Type(ValueType::Object), payload)?;
+    validate_payload(&PreparedSchema::Type(ValueType::Object), payload)?;
     struct Members<'a>(&'a PropertyCollectionSchema, Option<PropertySelection>);
     impl<'de> Visitor<'de> for Members<'_> {
         type Value = PropertySelection;
@@ -164,7 +164,7 @@ fn property_map(
                     ));
                 }
                 let value: &serde_json::value::RawValue = map.next_value()?;
-                validate_json(self.0.members()[i].schema, value.get().as_bytes())
+                validate_json(&self.0.members()[i].schema, value.get().as_bytes())
                     .map_err(|_| M::Error::custom("invalid collection member"))?;
                 seen |= bit;
             }
@@ -183,12 +183,15 @@ fn property_map(
     Ok(selected)
 }
 
-pub fn validate(schema: TypeSchema, output: &InteractionOutput) -> CoreResult<()> {
+pub fn validate(schema: &PreparedSchema, output: &InteractionOutput) -> CoreResult<()> {
     let payload = output.data().ok_or_else(invalid)?;
     validate_payload(schema, payload)
 }
 
-pub fn validate_payload(schema: TypeSchema, payload: &clinkz_wot_core::Payload) -> CoreResult<()> {
+pub fn validate_payload(
+    schema: &PreparedSchema,
+    payload: &clinkz_wot_core::Payload,
+) -> CoreResult<()> {
     if payload.body.len() > 4096
         || payload.content_type != "application/json"
         || payload.content_coding.is_some()
@@ -198,33 +201,112 @@ pub fn validate_payload(schema: TypeSchema, payload: &clinkz_wot_core::Payload) 
     validate_json(schema, &payload.body)
 }
 
-pub fn validate_json(schema: TypeSchema, body: &[u8]) -> CoreResult<()> {
+pub fn validate_json(schema: &PreparedSchema, body: &[u8]) -> CoreResult<()> {
     if body.len() > 4096 {
         return Err(invalid());
     }
     let json = std::str::from_utf8(body).map_err(|_| invalid())?;
     // IgnoredAny skips UTF-8 checks inside strings. The check above covers the
     // complete body, including object keys and nested values.
-    serde_json::from_str::<serde::de::IgnoredAny>(json).map_err(|_| invalid())?;
-    if !unicode_escapes(json.as_bytes()) {
+    let root: &serde_json::value::RawValue = serde_json::from_str(json).map_err(|_| invalid())?;
+    if !unicode_escapes(json.as_bytes()) || !bounded_depth(json.as_bytes()) {
         return Err(invalid());
     }
-    let token = json.trim_matches([' ', '\t', '\r', '\n']);
-    let actual = match token.as_bytes().first() {
-        Some(b'n') => ValueType::Null,
-        Some(b't' | b'f') => ValueType::Boolean,
-        Some(b'"') => ValueType::String,
-        Some(b'{') => ValueType::Object,
-        Some(b'[') => ValueType::Array,
-        Some(b'-' | b'0'..=b'9') if integral(token) => ValueType::Integer,
-        Some(b'-' | b'0'..=b'9') => ValueType::Number,
-        _ => return Err(invalid()),
-    };
-    if schema.accepts(actual) {
-        Ok(())
-    } else {
-        Err(invalid())
+    schema
+        .validate(&JsonValues { _source: json }, root)
+        .map_err(|_| invalid())
+}
+
+use clinkz_wot_core::data_schema::{NumberValue, SchemaViolation, ValueAccess};
+struct JsonValues<'a> {
+    _source: &'a str,
+}
+impl<'a> ValueAccess for JsonValues<'a> {
+    type Node = &'a serde_json::value::RawValue;
+    fn kind(&self, node: Self::Node) -> Result<ValueType, SchemaViolation> {
+        let token = node.get();
+        Ok(match token.as_bytes().first() {
+            Some(b'n') => ValueType::Null,
+            Some(b't' | b'f') => ValueType::Boolean,
+            Some(b'"') => ValueType::String,
+            Some(b'{') => ValueType::Object,
+            Some(b'[') => ValueType::Array,
+            Some(b'-' | b'0'..=b'9') if NumberValue::Decimal(token).is_integer() => {
+                ValueType::Integer
+            }
+            Some(b'-' | b'0'..=b'9') => ValueType::Number,
+            _ => return Err(SchemaViolation::Value),
+        })
     }
+    fn number(&self, node: Self::Node) -> Result<NumberValue<'_>, SchemaViolation> {
+        Ok(NumberValue::Decimal(node.get()))
+    }
+    fn string_length(&self, node: Self::Node) -> Result<usize, SchemaViolation> {
+        let value: std::string::String =
+            serde_json::from_str(node.get()).map_err(|_| SchemaViolation::Value)?;
+        Ok(value.chars().count())
+    }
+    fn property(
+        &self,
+        node: Self::Node,
+        name: &str,
+    ) -> Result<Option<Self::Node>, SchemaViolation> {
+        struct Find<'n>(&'n str);
+        impl<'de> Visitor<'de> for Find<'_> {
+            type Value = Option<&'de serde_json::value::RawValue>;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an object")
+            }
+            fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
+                use serde::de::Error;
+                let mut found = None;
+                while let Some(key) = map.next_key::<std::borrow::Cow<'de, str>>()? {
+                    let value: &'de serde_json::value::RawValue = map.next_value()?;
+                    if key == self.0 {
+                        if found.is_some() {
+                            return Err(M::Error::custom("duplicate described field"));
+                        }
+                        found = Some(value);
+                    }
+                }
+                Ok(found)
+            }
+        }
+        let mut decoder = serde_json::Deserializer::from_str(node.get());
+        serde::Deserializer::deserialize_map(&mut decoder, Find(name))
+            .map_err(|_| SchemaViolation::Value)
+    }
+}
+// Each callback is atomic under a prepaid bound. Also bound ignored/unknown
+// subtrees: a shallow schema does not authorize unbounded encoded nesting.
+fn bounded_depth(bytes: &[u8]) -> bool {
+    let mut depth = 0usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    for b in bytes {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if *b == b'\\' {
+                escaped = true;
+            } else if *b == b'"' {
+                quoted = false;
+            }
+        } else {
+            match b {
+                b'"' => quoted = true,
+                b'{' | b'[' => {
+                    depth += 1;
+                    if depth > 32 {
+                        return false;
+                    }
+                }
+                b'}' | b']' => depth -= 1,
+                _ => {}
+            }
+        }
+    }
+    true
 }
 
 // IgnoredAny also skips surrogate-pair validation. Check scalar Unicode in
@@ -265,40 +347,6 @@ fn code_unit(bytes: &[u8]) -> u16 {
         };
         unit * 16 + u16::from(digit)
     })
-}
-
-// Exact decimal arithmetic on a previously syntax-checked token. Binary float
-// conversion would misclassify small fractions and large integers. Exponents
-// saturate outside the maximum body length, where further magnitude cannot
-// affect integrality. Zero is integral for every exponent.
-fn integral(token: &str) -> bool {
-    let (mantissa, exponent) = token.split_once(['e', 'E']).unwrap_or((token, "0"));
-    let negative = exponent.starts_with('-');
-    let magnitude = exponent
-        .trim_start_matches(['+', '-'])
-        .bytes()
-        .fold(0i32, |n, b| (n * 10 + i32::from(b - b'0')).min(4097));
-    let exponent = if negative { -magnitude } else { magnitude };
-    let mut fractional = 0i32;
-    let mut trailing_zeroes = 0i32;
-    let mut after_dot = false;
-    let mut nonzero = false;
-    for byte in mantissa.bytes() {
-        match byte {
-            b'.' => after_dot = true,
-            b'0'..=b'9' => {
-                fractional += i32::from(after_dot);
-                if byte == b'0' {
-                    trailing_zeroes += 1;
-                } else {
-                    trailing_zeroes = 0;
-                    nonzero = true;
-                }
-            }
-            _ => {} // A leading minus, already checked by the JSON decoder.
-        }
-    }
-    !nonzero || exponent >= fractional - trailing_zeroes
 }
 
 fn invalid() -> CoreError {

@@ -40,6 +40,7 @@ impl HttpFiniteProducer {
         &self,
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
+        expected: Option<&HttpProducerProgram>,
     ) -> CoreResult<Option<HttpProducerProgram>> {
         let property = match (input.site, input.operation) {
             (FormSite::Property(p), Operation::ReadProperty | Operation::WriteProperty) => {
@@ -71,6 +72,7 @@ impl HttpFiniteProducer {
                     subprotocol: None,
                 },
                 budget,
+                expected,
             )?
             .map(Some)
             .ok_or_else(|| {
@@ -158,7 +160,7 @@ impl ProducerCapability for HttpFiniteProducer {
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<Box<dyn Any>>> {
         Ok(self
-            .compile_definition(input, budget)?
+            .compile_definition(input, budget, None)?
             .map(|program| Box::new(program) as Box<dyn Any>))
     }
     fn supports(
@@ -166,13 +168,13 @@ impl ProducerCapability for HttpFiniteProducer {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<bool> {
-        Ok(self.compile_definition(input, budget)?.is_some())
+        Ok(self.compile_definition(input, budget, None)?.is_some())
     }
     fn final_check_temporary_bytes(&self) -> Option<usize> {
         // Cover the bounded URI/program and collection member/name backing used
         // by a sequential pure support/final-check callback, including its Arc.
         // No replacement definition survives and no native setup occurs.
-        Some(16_384)
+        Some(32_768)
     }
     fn check_final(
         &self,
@@ -183,6 +185,9 @@ impl ProducerCapability for HttpFiniteProducer {
         let Some(expected) = definition.downcast_ref::<HttpProducerProgram>() else {
             return Ok(false);
         };
-        Ok(self.compile_definition(input, budget)?.as_ref() == Some(expected))
+        Ok(self
+            .compile_definition(input, budget, Some(expected))?
+            .as_ref()
+            == Some(expected))
     }
 }

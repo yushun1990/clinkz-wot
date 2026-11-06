@@ -188,9 +188,11 @@ meaning without endpoint, service, authority, policy or account fields.
 `PreparedConsumerContent` is its funded Host owner. Ordinary preparation constructs
 that content once; `prepare_with_content` qualifies actual endpoint mappings for
 one retained operation by comparing borrowed source assertions against the same
-content. The initial reusable subset is ReadAllProperties. Included member names,
-order and complete supported assertions must agree; no replacement member/name
-table is built. Unsupported or changed meaning refuses. Other Forms remain
+content. The reusable subset includes Property Read/Write value constraints and
+ReadAllProperties member constraints. Included member names,
+order and complete supported assertions must agree for the collection; nested
+object fields/required names compare by meaning, independently of source order.
+No replacement constraint/member/name tree is built. Unsupported or changed meaning refuses. Other Forms remain
 reported Consumer alternatives, rather than becoming Producer qualification.
 
 Every selected mapping still passes common Form/security/media/URI checks, actual
@@ -200,6 +202,25 @@ actual executor/configuration and data service with captured bounds. An HTTP
 target/path/header change requires actual native preparation; content reuse grants
 no native artifact compatibility. Native compilation remains owned/incremental,
 and no TD, parser, semantic arena or compiler survives the completed definition.
+
+`type_schema::prepare_schema` captures the bounded structured subset defined in
+[Core](interaction-core.md). A bounded borrowed census checks supported assertions,
+nodes/names/depth and prepays recursive construction/rollback before allocation.
+Scalar input/output roles now own their dynamic constraint storage; their actual
+bytes and disposal work are no longer zero. Reuse uses `matches_schema` or the
+named-member comparison against borrowed TD facts, without compiling another
+constraint tree. Actual data services still qualify the retained complete schema.
+Existing continuing/notification scalar compilers may use the narrower
+`prepare_type_schema` facet; it shares the same interpretation and explicitly
+refuses assertions outside that facet. A JSON service alone does not extend a
+native participant's admitted operation/profile scope.
+
+HTTP Producer selected-definition final checking compares borrowed normalized
+constraints against the original program and retains its existing schema owner;
+it no longer recompiles a second selected constraint tree merely to compare it.
+Other providers still need complete actual support probes, with declared scratch.
+Native endpoint lowering and whole-description admission remain separate work;
+this does not establish general normalized-TD reuse or native retargeting.
 
 `ConsumerDefinition::bind` attaches a retained actual access policy and independent
 instance bank without recompilation or source callbacks. `ConsumerBinding` is the

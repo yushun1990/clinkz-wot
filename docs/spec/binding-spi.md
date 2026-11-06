@@ -378,3 +378,17 @@ HTTP cannot encode member reports and refuses them, including complete reports,
 instead of erasing them or claiming 204 completion. The independent datagram
 fixture tests a different native report mapping through public Cargo APIs; it
 does not establish production protocol or WebDAV support.
+
+## Structured finite validator qualification
+
+Native participants retain actual source-independent validation services.
+PreparedSchema is borrowed, not a Copy kind marker or a protocol program.
+Core owns the constraints; concrete codecs supply ValueAccess and media/syntax
+rules. Scalar schema support and complete collection-map support are independent
+facets: qualification must ask the actual facet used at execution. The default
+scalar data-service support covers only primitive type assertions; structured
+support is explicit. HTTP's captured JSON services support the bounded Core
+subset, with larger prepaid validation bounds and schema backing retained by
+native program/configuration snapshots. A native compiler still checks actual
+endpoint/method/header/configuration facts. Non-JSON codecs can implement value
+access without JSON coercion; no non-JSON interoperability claim follows here.

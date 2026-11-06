@@ -32,7 +32,7 @@ impl ConsumerDataService for Data {
     fn content_type(&self) -> &str {
         "application/json"
     }
-    fn validate(&self, schema: value_type::TypeSchema, payload: &Payload) -> CoreResult<()> {
+    fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
         MqttJsonData.validate(schema, payload)
     }
     fn available(&self) -> bool {
