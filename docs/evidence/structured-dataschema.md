@@ -1,7 +1,9 @@
 # Executable reusable structured DataSchema
 
-Implementation is based on master `e482b6a3e8c6f27d8877bcace0db443afa83bb45`
-(the merged first reuse increment). This record scopes executable evidence;
+The original finite increment was based on master
+`e482b6a3e8c6f27d8877bcace0db443afa83bb45` (the merged first reuse increment).
+The continuing Action increment below uses the same semantic contract. This
+record scopes executable evidence;
 it does not accept an architecture gate, close a milestone, or establish general
 DataSchema, protocol, security or profile conformance. The PR records exact
 validated revisions and command results.
@@ -99,8 +101,8 @@ there is no mid-callback preemption or recoverable process-wide OOM claim.
 Actual scalar validators explicitly qualify the complete borrowed schema; the
 default support method covers only primitive type assertions. A complete
 collection-map validator can independently qualify/validate its named member
-schemas without a bare-scalar facet it never executes. Continuing Action and
-MQTT notification preparation retain their narrower type-only profiles; a shared
+schemas without a bare-scalar facet it never executes. MQTT notification and
+root Action status preparation retain their narrower type-only profiles; a shared
 kernel does not automatically qualify another native mapping or lifecycle.
 
 The semantic module compiles without std on the Cortex-M0 target
@@ -165,6 +167,39 @@ cargo test --locked --offline -p clinkz-wot-binding-http --test structured_data 
 cargo test --locked --offline -p clinkz-wot-binding-http --test producer_installation -- --test-threads=1
 cargo check --locked --offline -p clinkz-wot-core --no-default-features --target thumbv6m-none-eabi
 ```
+
+## Continuing Action execution
+
+Continuing Action input/output now use the same Core evaluator, `ValueSchemas`
+and Planning census as finite execution. The prior type-only eligibility and
+zero variable-backing assumption are removed. Consumer native selection sees
+one retained constraint tree across invoke/query/cancel; HTTP checks its native
+mapping without constructing another Consumer schema. Producer definition clones
+and captured validators retain immutable schema backing; selected final checking
+compares borrowed assertions. Source and compiler disposal do not replace it.
+
+The real [HTTP Consumer-to-Producer tests](../../protocol-bindings/protocols/http/tests/action_consumer.rs)
+exercise nested required objects, distinct input/output roles, exact integral
+decimal/exponent values and Unicode string lengths. Invalid/missing/duplicate
+nested data is refused by both Consumer and an independently contacted Producer
+before handler authorization. Two invocations retain independent identity;
+cancel acknowledgement can precede completion. Normal settlements and structured
+results arriving during retirement retain original funding and validation
+evidence after source retirement, local cancellation and revocation. Short work,
+cleanup bounds, excessive schema depth, unsupported assertions and a type-only
+actual validator refuse preparation and release original accounts.
+
+The [Producer tests](../../protocol-bindings/protocols/http/tests/action_producer.rs)
+also reject changed nested bounds/required fields, unsupported assertions and
+uncovered Forms during complete final-TD qualification. An unsupported structured
+root Action-status profile refuses the whole Producer description. Existing
+scalar Action replacement, effect uncertainty, service loss and cleanup tests
+retain their independent scopes. This is Host/manual, JSON, NoSec execution;
+it does not broaden MQTT, Event controls/responses, root status, security/media
+or constrained-profile support. Cross-instance continuing definition reuse is
+still unproven, independently of immutable schema retention within one definition.
+Independently compiled Producer operation definitions are not deduplicated;
+sharing their normalized TD meaning remains separate preparation work.
 
 ## Assumptions revised and remaining work
 

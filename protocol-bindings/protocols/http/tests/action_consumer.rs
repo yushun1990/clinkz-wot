@@ -13,18 +13,37 @@ use serde_json::{Value, json};
 use std::{
     any::Any,
     cell::RefCell,
-    net::TcpListener,
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
     rc::Rc,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     task::{Context, Poll, Waker},
-    time::Duration,
+    time::{Duration, Instant},
 };
 #[path = "support/action.rs"]
 mod fixture;
 use fixture::{Counters, addr, budget, key, now, td};
+const STRUCTURED_INPUT: &[u8] = br#"{"request":{"level":12.0e0,"label":"\u706f\u5149"}}"#;
+const STRUCTURED_OUTPUT: &[u8] = br#"{"result":{"level":2.4e1,"label":"\u5b8c\u6210"}}"#;
+fn structured_td(address: std::net::SocketAddr) -> Arc<str> {
+    let mut text: Value = serde_json::from_str(&td(address, None)).unwrap();
+    let role = |name: &str, minimum, maximum| {
+        json!({
+            "type":"object", "required":[name], "properties":{
+                name:{"type":"object", "required":["level","label"], "properties":{
+                    "level":{"type":"integer", "minimum":minimum, "maximum":maximum},
+                    "label":{"type":"string", "minLength":2, "maxLength":3}
+                }}
+            }
+        })
+    };
+    text["actions"]["run"]["input"] = role("request", 1, 12);
+    text["actions"]["run"]["output"] = role("result", 20, 30);
+    Arc::from(text.to_string())
+}
 fn cx() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
@@ -73,6 +92,9 @@ impl ConsumerDataService for Data {
     }
     fn available(&self) -> bool {
         !self.0.unavailable.load(Ordering::Relaxed)
+    }
+    fn supports_schema(&self, schema: &PreparedSchema) -> bool {
+        self.1.supports_schema(schema)
     }
     fn validate(&self, schema: &PreparedSchema, p: &Payload) -> CoreResult<()> {
         self.0.validations.fetch_add(1, Ordering::Relaxed);
@@ -225,12 +247,22 @@ impl Producer {
     }
     fn new() -> Self {
         let address = addr();
+        Self::from_text(address, td(address, None), Rc::new(Counters::default()))
+    }
+    fn structured() -> Self {
+        let address = addr();
+        let counts = Rc::new(Counters::default());
+        *counts.input.borrow_mut() = Some(STRUCTURED_INPUT.to_vec());
+        *counts.output.borrow_mut() = Some(STRUCTURED_OUTPUT.to_vec());
+        Self::from_text(address, structured_td(address), counts)
+    }
+    fn from_text(address: std::net::SocketAddr, text: Arc<str>, counts: Rc<Counters>) -> Self {
         let bank = bank();
         let owner = fixture::owner();
-        let counts = Rc::new(Counters::default());
-        let mut exposure = fixture::create(
+        let mut exposure = fixture::create_from_text(
             &owner,
             key(Generation::INITIAL),
+            text,
             address,
             None,
             counts.clone(),
@@ -265,6 +297,24 @@ impl Producer {
         let _ = native
             .progress_actions(&mut self.owner, &mut budget())
             .unwrap();
+    }
+    fn raw_invoke(&mut self, body: &str) -> String {
+        let mut peer = TcpStream::connect(self.address).unwrap();
+        peer.set_nonblocking(true).unwrap();
+        peer.write_all(format!("POST /run HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", self.address, body.len()).as_bytes()).unwrap();
+        let end = Instant::now() + Duration::from_secs(5);
+        let mut bytes = Vec::new();
+        loop {
+            self.step();
+            let mut buffer = [0; 512];
+            match peer.read(&mut buffer) {
+                Ok(0) => return String::from_utf8(bytes).unwrap(),
+                Ok(n) => bytes.extend_from_slice(&buffer[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => panic!("{e}"),
+            }
+            assert!(Instant::now() < end);
+        }
     }
     async fn drive(&mut self, h: &ConsumerActionHandle, expected: ConsumerActionState) {
         for _ in 0..1000 {
@@ -379,6 +429,261 @@ fn definition_identity(id: u32) -> BindingRegistrationIdentity {
     )
     .unwrap();
     input.preparation.identity()
+}
+
+#[test]
+fn structured_actions_validate_both_roles_before_effects_and_keep_original_content_funded() {
+    io().block_on(async {
+        let mut producer = Producer::structured();
+        let b = bank();
+        let owner = instance();
+        let runtime = client(
+            &structured_td(producer.address),
+            b.clone(),
+            Arc::new(Policy::default()),
+            &owner,
+            true,
+            2,
+        );
+        for invalid in [
+            r#"{}"#,
+            r#"{"request":{"level":12}}"#,
+            r#"{"request":{"level":13,"label":"ok"}}"#,
+            r#"{"request":{"level":12,"label":"a"}}"#,
+            r#"{"request":{"level":12,"label":"ok","\u006cevel":11}}"#,
+        ] {
+            assert!(
+                runtime
+                    .invoke_action(
+                        "run",
+                        payload(invalid.as_bytes()),
+                        Deadline::NONE,
+                        now(),
+                        &mut budget()
+                    )
+                    .is_err()
+            );
+            // An independent peer bypasses the Consumer: the qualified Producer
+            // must reject this same nested value before handler authorization.
+            assert!(producer.raw_invoke(invalid).starts_with("HTTP/1.1 400"));
+        }
+        assert_eq!(producer.counts.invoked.get(), 0);
+        assert_eq!(producer.counts.authorized.get(), 0);
+        let first = runtime
+            .invoke_action(
+                "run",
+                payload(STRUCTURED_INPUT),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
+            .ok()
+            .unwrap();
+        producer.drive(&first, ConsumerActionState::Pending).await;
+        let second = runtime
+            .invoke_action(
+                "run",
+                payload(STRUCTURED_INPUT),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        producer.drive(&second, ConsumerActionState::Pending).await;
+        assert_ne!(first.identity().unwrap(), second.identity().unwrap());
+        assert_eq!(producer.counts.invoked.get(), 2);
+        // Remote cancellation is a request; a validated result can still follow.
+        first.request_cancel(now(), &mut budget()).unwrap();
+        producer.drive(&first, ConsumerActionState::Pending).await;
+        assert_eq!(producer.counts.cancelled.get(), 1);
+        producer.counts.complete.set(true);
+        for h in [&first, &second] {
+            h.query(now(), &mut budget()).unwrap();
+            producer.drive(h, ConsumerActionState::Completed).await;
+        }
+        let a = first.take_settlement(now(), &mut budget()).unwrap();
+        let c = second.take_settlement(now(), &mut budget()).unwrap();
+        for s in [&a, &c] {
+            assert_eq!(
+                s.result().unwrap().data().unwrap().body.as_ref(),
+                STRUCTURED_OUTPUT
+            );
+            assert_eq!(s.effect(), ConsumerEffect::Unknown);
+        }
+        drop((first, second, runtime, owner));
+        assert!(b.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+        drop(a);
+        assert!(b.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+        drop(c);
+        clean(&b);
+        producer.finish();
+    });
+}
+
+#[test]
+fn structured_producer_completion_is_checked_against_its_distinct_output_role() {
+    io().block_on(async {
+        let mut producer = Producer::structured();
+        let b = bank();
+        let owner = instance();
+        let runtime = client(
+            &structured_td(producer.address),
+            b.clone(),
+            Arc::new(Policy::default()),
+            &owner,
+            false,
+            1,
+        );
+        let h = runtime
+            .invoke_action(
+                "run",
+                payload(STRUCTURED_INPUT),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
+            .ok()
+            .unwrap();
+        producer.drive(&h, ConsumerActionState::Pending).await;
+        // Valid input shape and bounds do not qualify an output: the result
+        // must have the output role's required names and integer boundaries.
+        *producer.counts.output.borrow_mut() = Some(STRUCTURED_INPUT.to_vec());
+        producer.counts.complete.set(true);
+        h.query(now(), &mut budget()).unwrap();
+        producer.drive(&h, ConsumerActionState::Failed).await;
+        let s = h.take_settlement(now(), &mut budget()).unwrap();
+        assert!(s.native_result().unwrap().is_err());
+        let native = producer
+            .exposure
+            .participant_mut::<HttpActionRuntime>(0)
+            .unwrap();
+        let id = native.action_ids().next().unwrap();
+        let produced = native
+            .acknowledge(&mut producer.owner, id)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(produced.result(), Err(CoreError::Validation(_))));
+        drop(produced);
+        assert_eq!(s.effect(), ConsumerEffect::Unknown);
+        assert_eq!(producer.counts.invoked.get(), 1);
+        drop((s, h, runtime, owner));
+        clean(&b);
+        producer.finish();
+    });
+}
+
+struct TracedPreparation(HttpActionConsumer, Arc<Mutex<Vec<usize>>>);
+impl ConsumerActionPreparation for TracedPreparation {
+    fn identity(&self) -> BindingRegistrationIdentity {
+        self.0.identity()
+    }
+    fn bounds(&self) -> ConsumerPreparationBounds {
+        self.0.bounds()
+    }
+    fn compile_action(
+        &self,
+        input: ConsumerActionPreparationInput<'_>,
+    ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
+        let Some(PreparedSchema::Object(object)) = &input.schemas.input else {
+            panic!()
+        };
+        self.1
+            .lock()
+            .unwrap()
+            .push(object.properties().as_ptr() as usize);
+        self.0.compile_action(input)
+    }
+}
+struct TypesOnly(Arc<dyn ConsumerDataService>);
+impl ConsumerDataService for TypesOnly {
+    fn content_type(&self) -> &str {
+        self.0.content_type()
+    }
+    fn policy(&self) -> ConsumerDataPolicy {
+        self.0.policy()
+    }
+    fn validate(&self, s: &PreparedSchema, p: &Payload) -> CoreResult<()> {
+        self.0.validate(s, p)
+    }
+    // Default support intentionally qualifies only type assertions.
+}
+#[test]
+fn action_meaning_is_built_once_and_actual_support_work_and_schema_bounds_still_qualify() {
+    let address = addr();
+    let text = structured_td(address);
+    let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
+    for case in 0..6 {
+        let b = bank();
+        let traces = Arc::new(Mutex::new(Vec::new()));
+        let mut services = config.consumer_services();
+        if case == 1 {
+            services.data = Arc::new(TypesOnly(services.data));
+        }
+        let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
+            preparation: Box::new(TracedPreparation(
+                HttpActionConsumer::new(config, BindingId::new(90), BindingGeneration::INITIAL, 0),
+                traces.clone(),
+            )),
+            services,
+        }])
+        .unwrap();
+        let mut source: Value = serde_json::from_str(&text).unwrap();
+        let mut limits = limits();
+        match case {
+            2 => {
+                assert!(limits.set(ResourceKind::CleanupWorkItemsPerStepMax, Some(1)));
+            }
+            3 => {
+                source["actions"]["run"]["output"]["properties"]["result"]["properties"]["label"]
+                    ["pattern"] = json!(".*")
+            }
+            4 => {
+                let mut schema = json!({"type":"integer"});
+                for _ in 0..9 {
+                    schema = json!({"type":"object","properties":{"x":schema}});
+                }
+                source["actions"]["run"]["input"] = schema;
+            }
+            _ => {}
+        }
+        let thing: Thing = serde_json::from_value(source).unwrap();
+        let mut work = budget();
+        if case == 5 {
+            work = work.with_remaining(WorkClass::ProviderProbes, 0);
+        }
+        let result = registry.prepare_action(
+            &thing,
+            "run",
+            ConsumerActionSelectors::default(),
+            &limits,
+            b.clone(),
+            &mut work,
+        );
+        if case == 0 {
+            let definition = result.unwrap();
+            let trace = traces.lock().unwrap();
+            assert_eq!(trace.len(), 3);
+            assert!(
+                trace.iter().all(|p| *p == trace[0]),
+                "each native operation sees the same immutable backing"
+            );
+            assert!(definition.input().schemas.retained_bytes() > 0);
+            assert!(
+                b.account(ResourceKind::EngineLiveBytesGlobalMax).used()
+                    >= definition.input().schemas.retained_bytes() as u64
+            );
+            drop(definition);
+        } else {
+            assert!(result.is_err(), "case {case}");
+            assert!(
+                traces.lock().unwrap().is_empty(),
+                "refusal before native compilation"
+            );
+        }
+        drop((registry, thing));
+        clean(&b);
+    }
+    TcpListener::bind(address).unwrap();
 }
 #[test]
 fn described_cancel_acknowledges_request_and_query_can_still_complete() {
@@ -544,7 +849,7 @@ fn unsupported_described_mappings_and_semantics_refuse_before_io() {
         clean(&b);
     }
     let mut constrained = original.clone();
-    constrained["actions"]["run"]["input"]["minimum"] = json!(0);
+    constrained["actions"]["run"]["input"]["multipleOf"] = json!(2);
     let b = bank();
     assert!(
         definition(
@@ -1277,13 +1582,33 @@ fn query_poll_error() -> CoreError {
 #[test]
 fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirement() {
     io().block_on(async {
-        for invalid_output in [false, true] {
-            let mut producer = Producer::new();
+        for (structured, invalid_output) in
+            [(false, false), (false, true), (true, false), (true, true)]
+        {
+            let mut producer = if structured {
+                Producer::structured()
+            } else {
+                Producer::new()
+            };
             let b = bank();
             let owner = instance();
             let p = Arc::new(Policy::default());
             let probe = Arc::new(RetirementProbe::default());
-            let mut input = definition(&td(producer.address, None), b.clone(), p.clone(), false)
+            let text = if structured {
+                let mut value: Value =
+                    serde_json::from_str(&structured_td(producer.address)).unwrap();
+                if invalid_output {
+                    // The Producer legitimately completes with 24. The original
+                    // Consumer's stricter nested bound must reject even a late
+                    // result, using the actual shared evaluator and codec.
+                    value["actions"]["run"]["output"]["properties"]["result"]["properties"]["level"]
+                        ["maximum"] = json!(23);
+                }
+                Arc::from(value.to_string())
+            } else {
+                td(producer.address, None)
+            };
+            let mut input = definition(&text, b.clone(), p.clone(), false)
                 .unwrap()
                 .into_input();
             let mut query = input.query.take().unwrap();
@@ -1299,18 +1624,28 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
                 .ok()
                 .unwrap();
             let h = runtime
-                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .invoke_action(
+                    "run",
+                    payload(if structured { STRUCTURED_INPUT } else { b"12" }),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
                 .ok()
                 .unwrap();
             producer.drive(&h, ConsumerActionState::Pending).await;
             producer.counts.complete.set(true);
-            p.reject_output.store(invalid_output, Ordering::Relaxed);
+            p.reject_output
+                .store(invalid_output && !structured, Ordering::Relaxed);
             probe.blocked.store(true, Ordering::Relaxed);
             h.query(now(), &mut budget()).unwrap();
             h.progress(&mut cx(), now(), &mut budget()).unwrap();
             assert!(h.take_settlement(now(), &mut budget()).is_err());
             assert!(b.account(ResourceKind::CleanupBytesMax).used() > 0);
             assert_eq!(h.first_cause().unwrap(), Some(query_poll_error()));
+            if structured {
+                owner.revoke();
+            }
             h.cancel_local();
             h.progress(&mut cx(), now(), &mut WorkBudget::new())
                 .unwrap();
@@ -1330,7 +1665,7 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
                     .unwrap()
                     .body
                     .as_ref(),
-                b"24"
+                if structured { STRUCTURED_OUTPUT } else { b"24" }
             );
             assert!(s.native_result().unwrap().is_ok(), "late output was lost");
             assert_eq!(s.validation_error().is_some(), invalid_output);

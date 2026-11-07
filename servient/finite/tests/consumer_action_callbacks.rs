@@ -292,7 +292,7 @@ fn harness(slots: usize) -> Harness {
     };
     let d = ConsumerActionDefinition::try_new(ConsumerActionDefinitionInput {
         target: AffordanceTarget::Action("run".into()),
-        schemas: ConsumerSchemas {
+        schemas: ValueSchemas {
             input: Some(PreparedSchema::Any),
             output: Some(PreparedSchema::Any),
         },

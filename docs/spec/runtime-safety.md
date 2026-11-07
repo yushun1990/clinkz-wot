@@ -394,7 +394,7 @@ local cause and native publication effect; later successful local disposal is
 required before terminal acknowledgement. Linked native callbacks are followed
 by fresh authority checks before successful local settlement.
 
-## Structured finite data validation
+## Structured data validation
 
 The finite Consumer borrows its original PreparedSchema, with actual validator
 qualification and paid scratch/work at input, output and late-result boundaries.
@@ -407,3 +407,13 @@ captured JSON value access before behavior permission/effects and before declare
 output delivery. Its complete final-TD/publication checks remain independent of
 Consumer partial support. Decoder traversal and constraint disposal have the
 bounded envelopes in [Core](interaction-core.md); callbacks remain cooperative.
+
+Continuing Action input/output borrow the same prepared constraints and retain
+their original funding through normal or late result disposal. The invoke
+association's actual captured validator checks input before native effects and
+completed output even when it arrives during control-exchange retirement. A
+Producer's captured Action validator checks before behavior authorization and
+before successful result observation. Acceptance/pending/cancel acknowledgements
+do not become application output. Native failure, validation failure, local
+cancellation/revocation and remote effect certainty remain separate evidence;
+replacement cannot retarget the original constraints, work or result.

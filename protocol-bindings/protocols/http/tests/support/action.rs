@@ -65,11 +65,15 @@ pub(crate) struct Counters {
     pub(crate) deny_invoke: Cell<bool>,
     pub(crate) deny_query: Cell<bool>,
     pub(crate) deny_cancel: Cell<bool>,
+    pub(crate) authorized: Cell<usize>,
+    pub(crate) input: RefCell<Option<Vec<u8>>>,
+    pub(crate) output: RefCell<Option<Vec<u8>>>,
     pub(crate) revoke_in_authorize: RefCell<Option<(Operation, ProducerRevocation)>>,
 }
 struct Action(Rc<Counters>);
 impl RawActionHandler for Action {
     fn authorize(&self, op: Operation, _: &InteractionInput) -> CoreResult<()> {
+        self.0.authorized.set(self.0.authorized.get() + 1);
         if let Some((selected, revocation)) = &*self.0.revoke_in_authorize.borrow() {
             if *selected == op {
                 revocation.revoke();
@@ -94,7 +98,10 @@ impl RawActionHandler for Action {
         _: HandlerContext<'_>,
         input: &InteractionInput,
     ) -> CoreResult<RawActionStart> {
-        assert_eq!(input.data.as_ref().unwrap().body.as_ref(), b"12");
+        assert_eq!(
+            input.data.as_ref().unwrap().body.as_ref(),
+            self.0.input.borrow().as_deref().unwrap_or(b"12")
+        );
         self.0.invoked.set(self.0.invoked.get() + 1);
         if self.0.immediate.get() {
             return Ok(RawActionStart::Complete(InteractionOutput::with_data(
@@ -111,7 +118,9 @@ impl RawActionWork for Work {
             return Poll::Pending;
         }
         Poll::Ready(Ok(InteractionOutput::with_data(Payload::new(
-            if self.0.invalid.get() {
+            if let Some(output) = &*self.0.output.borrow() {
+                output.clone()
+            } else if self.0.invalid.get() {
                 b"\"invalid\"".to_vec()
             } else {
                 b"24".to_vec()
@@ -171,6 +180,23 @@ pub(crate) fn create(
     bank: Arc<HostResourceAccounts>,
 ) -> ComposedProducerExposure {
     let text = td(action, property);
+    create_from_text(
+        owner, authority, text, action, property, counts, expected, bank,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_from_text(
+    owner: &RawProducerServient,
+    authority: ProducerInstanceAuthority,
+    text: Arc<str>,
+    action: SocketAddr,
+    property: Option<SocketAddr>,
+    counts: Rc<Counters>,
+    expected: Option<ProducerInstanceKey>,
+    bank: Arc<HostResourceAccounts>,
+) -> ComposedProducerExposure {
+    let handler_backing_bytes = counts.input.borrow().as_ref().map_or(0, Vec::capacity)
+        + counts.output.borrow().as_ref().map_or(0, Vec::capacity);
     let key = authority.key();
     let instance = RawProducerInstance::new(
         authority,
@@ -279,7 +305,7 @@ pub(crate) fn create(
             providers,
             participants,
             expected,
-            handler_backing_bytes: 0,
+            handler_backing_bytes,
         },
         Arc::new(GatewayDefaultV1::LIMITS.clone()),
         bank,

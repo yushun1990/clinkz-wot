@@ -602,6 +602,14 @@ continuing-family reuse and a portable Engine runtime remain unproven. Detailed
 executable scope is in [structured schema evidence](../evidence/structured-dataschema.md).
 No package, architecture gate or milestone acceptance is claimed.
 
+Continuing HTTP Actions also execute this structured input/output subset using
+their existing independent invocation store and native control exchanges. Consumer
+input, completed/late output and Producer input/output use captured validators;
+schema backing survives normal/cancelled/revoked original work and settlements.
+This does not establish cross-instance continuing definition reuse or broaden
+notification and root status profiles. The structured-data evidence records the
+specific runtime tests; no common interaction state machine is introduced.
+
 ## Finite TD Security / HTTPS increment
 
 The selected Basic/header Property Read/Write capability and its boundary corrections,

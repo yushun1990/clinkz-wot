@@ -5,7 +5,7 @@ use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
     ErrorPhase, InteractionInput, InteractionOutput, Operation, Payload, RetryClass,
     action::{ActionMappingKey, ActionRoute, ActionValidator, RawActionRequest},
-    data_schema::PreparedSchema,
+    data_schema::ValueSchemas,
     producer::ProducerInstanceKey,
     thing::AffordanceSite,
 };
@@ -38,8 +38,9 @@ pub struct HttpActionDefinition {
     pub(crate) form: u32,
     pub(crate) address: SocketAddr,
     pub(crate) path: Arc<str>,
-    pub(crate) input_schema: Option<PreparedSchema>,
-    pub(crate) output_schema: Option<PreparedSchema>,
+    // Immutable meaning survives definition clones and captured validators.
+    // It has no invocation, native continuation or logical authority lifetime.
+    pub(crate) schemas: Arc<ValueSchemas>,
     pub(crate) control: bool,
     pub(crate) collection: Option<clinkz_wot_core::action::ActionCollectionSchema>,
 }
@@ -52,13 +53,10 @@ impl HttpActionDefinition {
     }
 }
 
-struct Schemas {
-    input: Option<PreparedSchema>,
-    output: Option<PreparedSchema>,
-}
+struct Schemas(Arc<ValueSchemas>);
 impl ActionValidator for Schemas {
     fn validate_input(&self, input: &InteractionInput) -> CoreResult<()> {
-        match (self.input.as_ref(), input.data.as_ref()) {
+        match (self.0.input.as_ref(), input.data.as_ref()) {
             (Some(schema), Some(data))
                 if data.content_type == "application/json" && data.content_coding.is_none() =>
             {
@@ -69,7 +67,7 @@ impl ActionValidator for Schemas {
         }
     }
     fn validate_output(&self, output: &InteractionOutput) -> CoreResult<()> {
-        match (self.output.as_ref(), output.data()) {
+        match (self.0.output.as_ref(), output.data()) {
             (Some(schema), Some(_)) => producer_validation::validate(schema, output),
             (None, None) => Ok(()),
             _ => Err(invalid()),
@@ -214,8 +212,7 @@ impl HttpActionRuntime {
                     definitions.iter().any(|other| {
                         other.action == d.action
                             && other.operation == *op
-                            && other.input_schema == d.input_schema
-                            && other.output_schema == d.output_schema
+                            && other.schemas == d.schemas
                     })
                 })
             {
@@ -224,10 +221,7 @@ impl HttpActionRuntime {
             if d.operation == Operation::InvokeAction {
                 validators.push((
                     Arc::clone(&d.action),
-                    Rc::new(Schemas {
-                        input: d.input_schema.clone(),
-                        output: d.output_schema.clone(),
-                    }),
+                    Rc::new(Schemas(Arc::clone(&d.schemas))),
                 ));
             }
         }
@@ -251,7 +245,7 @@ impl HttpActionRuntime {
                     !definitions.iter().any(|d| {
                         d.operation == Operation::InvokeAction
                             && d.action.as_ref() == m.name.as_ref()
-                            && d.output_schema == m.output
+                            && d.schemas.output == m.output
                     })
                 })
             {
@@ -977,6 +971,8 @@ impl ClosedProducerParticipation for HttpActionRuntime {
             |sum, d| {
                 sum.checked_add(d.action.len())?
                     .checked_add(d.path.len())?
+                    .checked_add(d.schemas.retained_bytes())?
+                    .checked_add(size_of::<ValueSchemas>() + 2 * size_of::<usize>())?
                     .checked_add(d.collection.as_ref().map_or(0, |s| s.retained_bytes()))?
                     .checked_add(4 * size_of::<usize>())
             },

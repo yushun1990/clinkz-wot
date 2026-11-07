@@ -509,20 +509,13 @@ impl clinkz_wot_planning::open_consumer::ConsumerActionPreparation for HttpActio
         if Target::parse(base).is_err() {
             return Ok(None);
         }
-        let d = crate::action_preparation::lower_action(
+        crate::action_preparation::qualify_action(
             input.document,
             input.name,
             input.form,
             input.operation,
             input.endpoint,
-            (
-                self.identity.binding_id(),
-                self.identity.binding_generation(),
-            ),
         )?;
-        if input.schemas.input != d.input_schema || input.schemas.output != d.output_schema {
-            return Err(invalid());
-        }
         self.mapping(input.endpoint, input.operation).map(Some)
     }
 }

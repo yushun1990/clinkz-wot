@@ -74,7 +74,7 @@ pub struct ConsumerActionOperation {
 }
 pub struct ConsumerActionDefinitionInput {
     pub target: AffordanceTarget,
-    pub schemas: ConsumerSchemas,
+    pub schemas: ValueSchemas,
     pub invoke: ConsumerActionOperation,
     pub query: Option<ConsumerActionOperation>,
     pub cancel: Option<ConsumerActionOperation>,
@@ -112,12 +112,7 @@ impl ConsumerActionDefinition {
                     || !selected.services.data.available()
                     || selected.services.data.policy().validation_work == 0
                     || selected.services.access.work() == 0
-                    || !input
-                        .schemas
-                        .input
-                        .iter()
-                        .chain(input.schemas.output.iter())
-                        .all(|s| selected.services.data.supports_schema(s))
+                    || !input.schemas.supports(selected.services.data.as_ref())
                 {
                     return Err(invalid());
                 }
