@@ -35,6 +35,10 @@ for this exact TD shape: the semantic resolver's 32 scopes include Thing, Form
 and security scopes as well as members. The 29-member case executes normally.
 Refusal records require zero native compilations/requests and complete original
 account rollback; the workload does not raise the resolver's capacities.
+It also checks 896 retained mappings in one shared preparation account and
+refusal of the 897th: retained artifact cleanup reservations overlap the
+128-item output-table allowance during preparation. Partial preparation releases
+all earlier mappings/services and reports the exact quota failure without I/O.
 
 Each instance has independent authority and a destination/instance-bound mutable
 permission service. Independent accounts include a real bank per instance.
@@ -91,6 +95,10 @@ not CPU instruction counts.
 The admitted phase includes the caller's preallocated `ConsumerSettlement`
 carriers as well as call handles. The carrier size is recorded in configuration;
 it is actual heap in this workload, independent of the runtime's vacant slots.
+The idle phase includes the logical root vector and separately reports authority,
+permission service, source-free definition binding and runtime construction.
+Definition root references are allocated in preparation. The fixture-storage
+phase contains only source inputs and expected response bodies.
 
 Generate a median CSV, including the measured ranges for throughput:
 

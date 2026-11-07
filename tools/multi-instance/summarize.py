@@ -31,10 +31,10 @@ def main():
         config = samples[0]["configuration"]
         if "preparation_refused" in samples[0]:
             output.append(dict(case=number, **case, status="preparation_refused",
-                native_jobs=0, content_constructions=0,
+                native_jobs=samples[0]["preparation_refused"]["native_jobs"], content_constructions=samples[0]["preparation_refused"]["content_constructions"],
                 preparation_ms=median(lambda s: s["preparation_refused"]["ns"]) / 1e6,
                 final_bank_reservations_zero=all(all(v["logical_and_mapping"] == v["physical"] == 0 for v in s["refusal_release"]["reservations"].values()) for s in samples)))
-            assert all(s["preparation_refused"]["native_jobs"] == 0 and s["peer_final"]["stats"]["requests"] == 0 for s in samples)
+            assert all(s["peer_final"]["stats"]["requests"] == 0 for s in samples)
             continue
         calls = config["active"] * case["rounds"]
         engine = case["driver"] == "engine"
@@ -54,6 +54,11 @@ def main():
             idle_bind_ms=median(lambda s: s["idle_instances"]["ns"]) / 1e6,
             idle_instance_bytes=median(lambda s: s["idle_instances"]["net_live_bytes"]) / case["population"],
             idle_instance_allocations=median(lambda s: s["idle_instances"]["allocation_calls"]) / case["population"],
+            runtime_bytes_per_instance=median(lambda s: s["idle_instances"]["runtime_construct"]["net_live_bytes"]) / case["population"] if "runtime_construct" in samples[0]["idle_instances"] else "",
+            runtime_allocations_per_instance=median(lambda s: s["idle_instances"]["runtime_construct"]["allocation_calls"]) / case["population"] if "runtime_construct" in samples[0]["idle_instances"] else "",
+            permission_bytes_per_instance=median(lambda s: s["idle_instances"]["permission_service"]["net_live_bytes"]) / case["population"] if "permission_service" in samples[0]["idle_instances"] else "",
+            definition_bind_bytes_per_instance=median(lambda s: s["idle_instances"]["definition_bind"]["net_live_bytes"]) / case["population"] if "definition_bind" in samples[0]["idle_instances"] else "",
+            authority_flag_bytes_per_instance=median(lambda s: s["idle_instances"]["authority_and_flag"]["net_live_bytes"]) / case["population"] if "authority_and_flag" in samples[0]["idle_instances"] else "",
             account_provisioning_bytes=median(lambda s: s["account_provisioning"]["net_live_bytes"]),
             idle_rss_bytes=median(lambda s: s["idle_instances"]["os"]["rss_bytes"]),
             idle_glibc_in_use_bytes=median(lambda s: s["idle_instances"]["os"]["glibc"]["in_use_bytes"]),

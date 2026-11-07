@@ -329,14 +329,21 @@ struct Instance {
     runtime: Option<ConsumerRuntime>,
     denied: Arc<AtomicBool>,
 }
-fn bound(
+#[derive(Default)]
+struct InstanceCosts {
+    authority: meter::Cost,
+    permission: meter::Cost,
+    binding: meter::Cost,
+    runtime: meter::Cost,
+    work: [u64; WorkClass::ALL.len()],
+}
+fn permission(
     definition: &Arc<ConsumerDefinition>,
     owner: &ConsumerInstance,
     account: &Arc<HostResourceAccounts>,
     denied: Arc<AtomicBool>,
-    budget: &mut WorkBudget,
-) -> ConsumerBinding {
-    let access = ConsumerServiceOwner::retain_access(
+) -> Arc<ConsumerServiceOwner<dyn ConsumerAccessService>> {
+    ConsumerServiceOwner::retain_access(
         Arc::new(Policy {
             expected: owner.reference(),
             target: definition.target().into(),
@@ -344,7 +351,16 @@ fn bound(
         }),
         account,
     )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    .unwrap_or_else(|e| panic!("{:?}", e.error()))
+}
+fn bound(
+    definition: &Arc<ConsumerDefinition>,
+    owner: &ConsumerInstance,
+    account: &Arc<HostResourceAccounts>,
+    denied: Arc<AtomicBool>,
+    budget: &mut WorkBudget,
+) -> ConsumerBinding {
+    let access = permission(definition, owner, account, denied);
     definition
         .clone()
         .bind(access, account.clone(), budget)
@@ -356,16 +372,31 @@ impl Instance {
         account: &Arc<HostResourceAccounts>,
         slots: usize,
         index: usize,
-        bind_work: &mut [u64; WorkClass::ALL.len()],
+        cost: &mut InstanceCosts,
     ) -> Self {
+        let before = meter::read();
+        let start = Instant::now();
         let owner = ConsumerInstance::new(ThingSlotId::new(
             SlotIndex::new(index as u32),
             Generation::INITIAL,
         ));
         let denied = Arc::new(AtomicBool::new(false));
+        cost.authority.add(before, start.elapsed().as_nanos());
+        let before = meter::read();
+        let start = Instant::now();
+        let access = permission(definition, &owner, account, denied.clone());
+        cost.permission.add(before, start.elapsed().as_nanos());
+        let before = meter::read();
+        let start = Instant::now();
         let mut budget = work();
-        let binding = bound(definition, &owner, account, denied.clone(), &mut budget);
-        add_work(bind_work, &budget);
+        let binding = definition
+            .clone()
+            .bind(access, account.clone(), &mut budget)
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        add_work(&mut cost.work, &budget);
+        cost.binding.add(before, start.elapsed().as_nanos());
+        let before = meter::read();
+        let start = Instant::now();
         let runtime = ConsumerRuntime::try_new(
             owner.reference(),
             vec![binding],
@@ -374,6 +405,7 @@ impl Instance {
             slots,
         )
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        cost.runtime.add(before, start.elapsed().as_nanos());
         Self {
             owner: Some(owner),
             runtime: Some(runtime),
@@ -593,8 +625,8 @@ async fn lifecycle(
     peer: &peer::Peer,
 ) {
     let account = &banks[0];
-    let mut credits = [0; WorkClass::ALL.len()];
-    let sibling = Instance::new(&definitions[0], account, 1, o.population, &mut credits);
+    let mut costs = InstanceCosts::default();
+    let sibling = Instance::new(&definitions[0], account, 1, o.population, &mut costs);
     instances[0].denied.store(true, Relaxed);
     let requests = peer.stats()["requests"].as_u64().unwrap();
     assert!(instances[0].start(&mut work()).is_err());
@@ -688,7 +720,7 @@ async fn lifecycle(
     drop(instances[0].owner.take());
     drop(instances[0].runtime.take());
     let start = Instant::now();
-    instances[0] = Instance::new(&definitions[0], account, o.slots, 0, &mut credits);
+    instances[0] = Instance::new(&definitions[0], account, o.slots, 0, &mut costs);
     assert_ne!(original, instances[0].owner.as_ref().unwrap().reference());
     let result = poll_fn(|cx| late.poll(cx, now(), &mut work())).await;
     assert_eq!(result.consumer(), &original);
@@ -718,7 +750,7 @@ async fn run(o: Options) {
         "slots": o.slots, "members": o.members, "rounds": o.rounds, "mode": o.mode,
         "driver": o.driver, "accounts": o.accounts, "delay_us": o.delay_us,
         "native_mappings": o.mappings(), "physical_peer_processes": 1,
-        "account_size": size_of::<HostResourceAccounts>(), "result_owner_size": size_of::<ConsumerSettlement>() }),
+        "account_size": size_of::<HostResourceAccounts>(), "result_owner_size": size_of::<ConsumerSettlement>(), "instance_owner_size": size_of::<Instance>() }),
     );
     let phase = meter::Phase::begin();
     let banks: Vec<_> = (0..if o.accounts == "shared" {
@@ -738,8 +770,8 @@ async fn run(o: Options) {
     let expected: Vec<_> = (0..o.mappings())
         .map(|i| peer::body(i, o.members))
         .collect();
-    let mut definitions: Vec<Arc<ConsumerDefinition>> = Vec::with_capacity(o.mappings());
-    let mut instances = Vec::with_capacity(o.population);
+    let mut definitions: Vec<Arc<ConsumerDefinition>> = Vec::new();
+    let mut instances = Vec::new();
     let mut retained = Vec::new();
     report(phase.finish("fixture_storage"), &banks, &physical);
 
@@ -772,6 +804,7 @@ async fn run(o: Options) {
         &physical,
     );
     let phase = meter::Phase::begin();
+    definitions.reserve_exact(o.mappings());
     let mut cost = Preparation::default();
     for (i, td) in inputs.iter().enumerate() {
         let reuse = if i == 0 || o.mode == "cold" {
@@ -785,6 +818,17 @@ async fn run(o: Options) {
                 let mut measured = cost.measurement(phase.finish("preparation_refused"));
                 measured["error"] = json!(format!("{error:?}"));
                 measured["mapping_index"] = json!(i);
+                if let CoreError::LimitExceeded {
+                    resource,
+                    limit,
+                    requested,
+                    observed,
+                    ..
+                } = &error
+                {
+                    measured["limit_failure"] = json!({"resource": format!("{resource:?}"),
+                        "limit": limit, "requested": requested, "observed": observed});
+                }
                 report(measured, &banks, &physical);
                 let phase = meter::Phase::begin();
                 drop(definitions);
@@ -825,18 +869,23 @@ async fn run(o: Options) {
     drop(inputs); // warm binding and execution below have no source TD
     report(source_release.finish("source_release"), &banks, &physical);
     let phase = meter::Phase::begin();
-    let mut credits = [0; WorkClass::ALL.len()];
+    let mut costs = InstanceCosts::default();
+    instances.reserve_exact(o.population);
     for i in 0..o.population {
         instances.push(Instance::new(
             &definitions[o.mapping(i)],
             at(i),
             o.slots,
             i,
-            &mut credits,
+            &mut costs,
         ));
     }
     let mut measured = phase.finish("idle_instances");
-    measured["work"] = work_json(&credits);
+    measured["work"] = work_json(&costs.work);
+    measured["authority_and_flag"] = costs.authority.json();
+    measured["permission_service"] = costs.permission.json();
+    measured["definition_bind"] = costs.binding.json();
+    measured["runtime_construct"] = costs.runtime.json();
     report(measured, &banks, &physical);
 
     hard_limits(&definitions[0]);
