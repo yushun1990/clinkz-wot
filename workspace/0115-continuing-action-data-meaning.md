@@ -60,3 +60,13 @@ WP-200/400/600 and the structured-data evidence now record the selected scope.
 Existing scalar Action/downstream and finite execution retain their original
 evidence obligations. The new HTTP tests exercise the stated data, qualification,
 late-result and original-funding boundaries.
+
+Structured Producer execution also invalidates the old scalar-only callback-work
+assumption: JSON named-field access can scan the payload for every field. The
+shared Action validator contract therefore declares extra per-callback work,
+captured with the actual published invoke service and retained by each invocation.
+Prepay input plus possible immediate output before effects and output before a
+continuing poll; recheck the original bound around validation and application
+callbacks. Reuse the finite HTTP structured envelope, rather than introducing a
+protocol-specific Core accounting case. Bound drift fences validation; it does
+not transfer accepted work or turn validation costs into close/retirement work.

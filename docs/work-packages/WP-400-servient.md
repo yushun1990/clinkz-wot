@@ -609,6 +609,10 @@ schema backing survives normal/cancelled/revoked original work and settlements.
 This does not establish cross-instance continuing definition reuse or broaden
 notification and root status profiles. The structured-data evidence records the
 specific runtime tests; no common interaction state machine is introduced.
+Producer Action publication captures the validator's extra-work allowance;
+invoke prepays both potential validation callbacks and a continuing poll prepays
+output validation. Changed service bounds fence validation without replacing
+original work or requiring handler/codec credits for independent close.
 
 ## Finite TD Security / HTTPS increment
 

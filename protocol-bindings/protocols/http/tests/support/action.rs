@@ -58,6 +58,7 @@ pub(crate) fn td(action: SocketAddr, property: Option<SocketAddr>) -> Arc<str> {
 #[derive(Default)]
 pub(crate) struct Counters {
     pub(crate) invoked: Cell<usize>,
+    pub(crate) polls: Cell<usize>,
     pub(crate) cancelled: Cell<usize>,
     pub(crate) complete: Cell<bool>,
     pub(crate) invalid: Cell<bool>,
@@ -105,7 +106,14 @@ impl RawActionHandler for Action {
         self.0.invoked.set(self.0.invoked.get() + 1);
         if self.0.immediate.get() {
             return Ok(RawActionStart::Complete(InteractionOutput::with_data(
-                Payload::new(b"\"invalid\"".to_vec(), "application/json"),
+                Payload::new(
+                    self.0
+                        .output
+                        .borrow()
+                        .clone()
+                        .unwrap_or_else(|| b"\"invalid\"".to_vec()),
+                    "application/json",
+                ),
             )));
         }
         Ok(RawActionStart::Continue(Box::new(Work(Rc::clone(&self.0)))))
@@ -114,6 +122,7 @@ impl RawActionHandler for Action {
 struct Work(Rc<Counters>);
 impl RawActionWork for Work {
     fn poll(&mut self) -> Poll<CoreResult<InteractionOutput>> {
+        self.0.polls.set(self.0.polls.get() + 1);
         if !self.0.complete.get() {
             return Poll::Pending;
         }

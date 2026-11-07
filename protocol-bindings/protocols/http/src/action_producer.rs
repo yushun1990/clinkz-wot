@@ -55,6 +55,22 @@ impl HttpActionDefinition {
 
 struct Schemas(Arc<ValueSchemas>);
 impl ActionValidator for Schemas {
+    fn additional_validation_work(&self) -> u64 {
+        // The same complete structured JSON envelope used by finite HTTP
+        // validation. Property lookup can scan the payload for every described
+        // field; the owner's single body traversal cannot fund that work.
+        if self
+            .0
+            .input
+            .iter()
+            .chain(self.0.output.iter())
+            .any(|s| !s.is_type_only())
+        {
+            4096 * 80
+        } else {
+            0
+        }
+    }
     fn validate_input(&self, input: &InteractionInput) -> CoreResult<()> {
         match (self.0.input.as_ref(), input.data.as_ref()) {
             (Some(schema), Some(data))

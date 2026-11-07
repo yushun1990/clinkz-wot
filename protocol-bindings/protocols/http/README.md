@@ -634,6 +634,15 @@ captures the source-independent validator at publication and validates structure
 JSON constraints before behavior; each admitted continuation retains that original output service.
 An explicitly raw Servient registration remains unvalidated, but a published
 Action cannot bypass its captured validator through `RawActionRequest`.
+
+Structured Action validators declare an extra 4096 × 80 `HandlerSteps` per
+input/output callback, matching the finite structured JSON envelope. The logical
+owner captures this allowance at publication. Invoke prepays it twice for input
+and possible immediate output; normal continuation progress prepays it once for
+output before polling application work. Short credits prevent permission/dispatch
+or keep continuing work unpolled. Changed validator declarations fence validation
+under the original allowance; native controls and local close retain their
+independent ownership and work budgets.
 `progress_actions` fairly polls retained work after the
 initiating reply; completion stays queryable until explicit `acknowledge` or
 application-selected terminal retention expiry (`reap_completed`, five seconds

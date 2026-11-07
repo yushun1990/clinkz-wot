@@ -201,6 +201,19 @@ still unproven, independently of immutable schema retention within one definitio
 Independently compiled Producer operation definitions are not deduplicated;
 sharing their normalized TD meaning remains separate preparation work.
 
+The [Action work-credit regression](../../protocol-bindings/protocols/http/tests/action_validation_work.rs)
+uses real managed HTTP POST ingress with a 3,489-byte object of 32 constrained
+string fields. Input-only, output-only and combined structured roles reject
+insufficient HandlerSteps before permission/behavior; immediate output is funded
+before entry. Continuing work stays unpolled and unacknowledgeable until its
+complete original output-validation allowance is available, then completes with
+the original result and exact final account/socket release. Type-only objects
+retain their existing base allowance. These deterministic work-credit boundaries
+are not timing or throughput measurements. Captured-service unit tests additionally
+fence changed declarations in validation, authorization and immediate/continuing
+application callbacks, reject overflow before effects, and preserve separately
+funded close without handler/codec credit.
+
 ## Assumptions revised and remaining work
 
 The first reuse increment's fixed-size Copy type assertions, zero scalar-schema
