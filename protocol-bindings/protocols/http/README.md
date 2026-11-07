@@ -49,8 +49,11 @@ their older type-only tests do not establish broader structured interoperability
 Continuing Action preparation retains its narrower type-only subset.
 
 Reads support HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
-chunked and close-delimited bodies. One registration admits one call, including
-its unread terminal result. Each read owns a fresh connection and its driver.
+chunked and close-delimited bodies. One registration admits one unretired native
+exchange. Completion, error or cancellation drops its connection and complete
+driver before releasing occupancy. Retained terminal results keep their original
+services, definitions and funding independently; destroying an old result cannot
+release a successor's occupancy. Each read owns a fresh connection and its driver.
 The selected immutable artifact supplies the exact path/query and Host authority.
 Nonempty URI variables and unsupported targets return the original request before
 raw acceptance. No TD rescan, DNS, TLS, pool, redirect, retry, decompression,

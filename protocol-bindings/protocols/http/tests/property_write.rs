@@ -1445,9 +1445,11 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
             tokio::time::sleep(Duration::from_millis(1)).await;
         };
         assert!(local.result().is_ok());
-        // The actual captured HTTP runtime remains occupied until this result
-        // is released; refusal recovers the new value and cannot trigger I/O.
-        let original = payload(b"57");
+        // The completed native exchange is reusable while its original result
+        // remains funded. A new accepted exchange still excludes a third call;
+        // refusal recovers that value and cannot trigger I/O.
+        let mut pending = start_write(&client, b"57");
+        let original = payload(b"58");
         let returned = client
             .write_property(
                 "level",
@@ -1460,16 +1462,16 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
             .unwrap()
             .into_input();
         assert!(Arc::ptr_eq(&returned.body, &original.body));
-        // A successful unread Producer settlement stops new receives.
-        drop(local);
-        drop(call);
-        let mut pending = start_write(&client, b"57");
+        // A successful unread Producer settlement independently stops receives.
         for _ in 0..10 {
             server.step();
             assert!(pending.poll(&mut cx(), now(0), &mut work()).is_pending());
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         assert_eq!(server.app.writes.get(), 1);
+        assert!(local.result().is_ok());
+        drop(local);
+        drop(call);
         let prior = server.server().take_settlement().unwrap();
         assert!(prior.result.is_ok());
         // Service loss after native receive fences dispatch and preserves the

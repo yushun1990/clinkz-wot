@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0114-multi-instance-native-occupancy.md][0114 Multi-instance HTTP occupancy versus retained result ownership]]
+
 - [[file:0113-cross-registry-service-ownership.md][0113 Physical service ownership across independently composed registries]]
 
 - [[file:0112-secure-property-write.md][0112 Secure effectful Property Write]]

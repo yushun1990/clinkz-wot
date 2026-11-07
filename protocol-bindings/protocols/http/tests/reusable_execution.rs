@@ -6,6 +6,8 @@ include!("support/collection.rs");
 mod allocation_meter;
 #[path = "support/service_ownership.rs"]
 mod service_ownership;
+#[path = "support/native_occupancy.rs"]
+mod native_occupancy;
 #[global_allocator]
 static ALLOCATOR: allocation_meter::Allocator = allocation_meter::Allocator;
 
@@ -240,11 +242,10 @@ fn independent_endpoints_share_preparation_but_keep_policy_authority_and_origina
             br#"{"level":7,"on":true}"#
         );
         assert_eq!(result_a.consumer(), &owner_a.reference());
-        assert!(
-            client_a
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
-                .is_err()
-        );
+        // Native occupancy retired with the exchange, independently of result_a.
+        // This unpolled accepted call has no effects and retires with client_a.
+        let unpolled = start_read(&client_a);
+        drop(unpolled);
         let a_identity = owner_a.reference();
         drop(a);
         drop(client_a);

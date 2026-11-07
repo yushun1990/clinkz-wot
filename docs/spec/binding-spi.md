@@ -332,6 +332,14 @@ versus Property scope without a sentinel name. Native method/path collisions,
 including two different GET operations, refuse before acquisition. Required
 coverage compares the original root Form/operation/definition and actual participant.
 
+The Host HTTP finite Consumer permits one unretired native exchange per actual
+registration. It releases that occupancy only after dropping the complete
+connection/driver, including on error or local cancellation. Original normal,
+error and cancellation settlements retain their services, definitions, evidence
+and funding independently. Their later destruction cannot release a successor's
+occupancy. This concrete policy does not define Thing cardinality, increase
+concurrent exchanges or prescribe occupancy lifetimes for other Bindings.
+
 The captured `FiniteValidator::additional_validation_work` declares complete
 additional callback work beyond the finite owner's base maximum body/media
 traversals. Admission captures that passive bound; a changed bound fences the
