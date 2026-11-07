@@ -58,6 +58,14 @@ The external owned-compiler fixture declares artifact bounds using the new
 actual schema/member layout rather than preserving its former 512-byte group
 artifact assumption.
 
+Continuing Action preparation also prepays the shared borrowed schema census
+and construction/destruction bounds. One original Consumer definition owns its
+input/output constraint backing across native operation selection and accepted
+invocations. Concrete HTTP Producer definition clones and captured validators
+retain immutable schema owners; their variable backing and support-probe scratch
+are included in the participant declarations. These data owners neither fund nor
+replace independent native exchanges, continuing work, result or cleanup owners.
+
 `RES-HANDOFF-001`: Capacity MUST precede each acquisition/acceptance and fund its
 result/status/cleanup path. New growth may fail after acceptance only under a
 declared policy preserving existing owners; admission MUST NOT promise simultaneous

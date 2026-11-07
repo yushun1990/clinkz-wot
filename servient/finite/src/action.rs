@@ -13,8 +13,8 @@ use clinkz_wot_core::{
     ErrorContext, ErrorPhase, InteractionInput, InteractionOutput, InteractionOutputView,
     Operation, RetryClass, SecurityFailureReason,
     action::{
-        ActionEffect, ActionMappingKey, ActionRoute, RawActionHandler, RawActionRequest,
-        RawActionStart, RawActionWork, raw_action_output_shape,
+        ActionEffect, ActionMappingKey, ActionRoute, ActionValidator, RawActionHandler,
+        RawActionRequest, RawActionStart, RawActionWork, raw_action_output_shape,
     },
     host_accounts::{HostCapacityReservation, HostResourceAccounts},
     interaction_output_backing,
@@ -25,6 +25,9 @@ use clinkz_wot_foundation::{Generation, ResourceKind, SlotIndex, WorkBudget, Wor
 use core::{cell::Cell, mem::size_of, task::Poll};
 
 const MAX_INVOCATIONS: usize = 128;
+
+#[cfg(test)]
+mod validation_work_tests;
 
 /// A registered application behavior, not a per-Binding instance. The query
 /// and cancel flags represent actual supported control operations in this raw
@@ -281,6 +284,7 @@ struct Invocation {
     cancel: Option<ActionRoute>,
     principal: Option<PrincipalId>,
     validator: Option<Rc<dyn clinkz_wot_core::action::ActionValidator>>,
+    validation_work: u64,
     work: Option<Box<dyn RawActionWork>>,
     result: Option<CoreResult<InteractionOutput>>,
     cancel_requested: bool,
@@ -403,6 +407,30 @@ fn check_output(output: &InteractionOutput, limits: RawActionLimits) -> CoreResu
     }
 }
 
+fn check_validation_work(validator: Option<&dyn ActionValidator>, expected: u64) -> CoreResult<()> {
+    if validator.map_or(0, |v| v.additional_validation_work()) != expected {
+        return Err(CoreError::Validation(ErrorContext::new(
+            ErrorPhase::Validate,
+            RetryClass::Never,
+        )));
+    }
+    Ok(())
+}
+
+fn validate_action_output(
+    value: &InteractionOutput,
+    limits: RawActionLimits,
+    validator: Option<&dyn ActionValidator>,
+    validation_work: u64,
+) -> CoreResult<()> {
+    check_output(value, limits)?;
+    check_validation_work(validator, validation_work)?;
+    if let Some(validator) = validator {
+        validator.validate_output(value)?;
+    }
+    check_validation_work(validator, validation_work)
+}
+
 impl ActionStore {
     pub(super) fn revoke(&mut self, key: ProducerInstanceKey) {
         for entry in &mut self.entries {
@@ -514,8 +542,8 @@ impl RawProducerServient {
         // A qualified incarnation cannot be downgraded by supplying a raw
         // request. Only the service captured for its exact prepared invoke
         // route can validate its input and retained immediate/late output.
-        let validator = match &instance.action_routes {
-            None => None, // explicitly raw registration, not TD publication
+        let (validator, validation_work) = match &instance.action_routes {
+            None => (None, 0), // explicitly raw registration, not TD publication
             Some(routes) => {
                 let invoke = routes
                     .iter()
@@ -539,9 +567,12 @@ impl RawProducerServient {
                         return Err(CoreError::UnsupportedOperation(context()));
                     }
                 }
-                Some(Rc::clone(
-                    invoke.validator.as_ref().expect("qualified invoke service"),
-                ))
+                (
+                    Some(Rc::clone(
+                        invoke.validator.as_ref().expect("qualified invoke service"),
+                    )),
+                    invoke.validation_work,
+                )
             }
         };
         if (request.query.is_some() && !behavior.query)
@@ -558,7 +589,15 @@ impl RawProducerServient {
             return Err(CoreError::Backpressure(context()));
         }
         if let Some(validator) = &validator {
+            check_validation_work(Some(validator.as_ref()), validation_work)?;
+            let work = validation_work
+                .checked_mul(2)
+                .ok_or_else(|| CoreError::Backpressure(context()))?;
+            budget
+                .consume(WorkClass::HandlerSteps, work)
+                .map_err(|_| CoreError::Backpressure(context()))?;
             validator.validate_input(request.input)?;
+            check_validation_work(Some(validator.as_ref()), validation_work)?;
         }
         let next = store
             .next
@@ -572,6 +611,7 @@ impl RawProducerServient {
         if !instance.current.get() {
             return Err(CoreError::StaleHandle(context()));
         }
+        check_validation_work(validator.as_deref(), validation_work)?;
         let target = AffordanceTarget::Action(Arc::clone(&behavior.name));
         let ctx = clinkz_wot_core::HandlerContext::for_producer(
             instance.instance.key(),
@@ -605,6 +645,7 @@ impl RawProducerServient {
             cancel: request.cancel,
             principal: request.input.principal.as_ref().map(|p| p.id.clone()),
             validator,
+            validation_work,
             work: None,
             result: None,
             cancel_requested: false,
@@ -621,14 +662,13 @@ impl RawProducerServient {
             Ok(RawActionStart::Continue(work)) => entry.work = Some(work),
             Ok(RawActionStart::Complete(value)) => {
                 entry.result = Some(
-                    check_output(&value, limits)
-                        .and_then(|()| {
-                            entry
-                                .validator
-                                .as_ref()
-                                .map_or(Ok(()), |v| v.validate_output(&value))
-                        })
-                        .map(|()| value),
+                    validate_action_output(
+                        &value,
+                        limits,
+                        entry.validator.as_deref(),
+                        entry.validation_work,
+                    )
+                    .map(|()| value),
                 )
             }
             Err(error) => entry.result = Some(Err(error)),
@@ -1046,6 +1086,13 @@ impl ActionStore {
             .saturating_add(1)
             .saturating_add(u64::from(entry.cancel_requested && !entry.cancel_sent))
         };
+        // A normal poll may complete synchronously. Pay for its original
+        // validator before polling; insufficient credit retains all work and
+        // does not poll or materialize an unfunded output. Close has no output
+        // validation callback and remains independently funded.
+        let Some(units) = units.checked_add(if closing { 0 } else { entry.validation_work }) else {
+            return Ok(Poll::Pending);
+        };
         if budget.consume(class, units).is_err() {
             return Ok(Poll::Pending);
         }
@@ -1079,14 +1126,13 @@ impl ActionStore {
                 Poll::Pending => return Ok(Poll::Pending),
                 Poll::Ready(result) => {
                     entry.result = Some(result.and_then(|value| {
-                        check_output(&value, self.limits)
-                            .and_then(|()| {
-                                entry
-                                    .validator
-                                    .as_ref()
-                                    .map_or(Ok(()), |v| v.validate_output(&value))
-                            })
-                            .map(|()| value)
+                        validate_action_output(
+                            &value,
+                            self.limits,
+                            entry.validator.as_deref(),
+                            entry.validation_work,
+                        )
+                        .map(|()| value)
                     }));
                     entry.work = None;
                 }

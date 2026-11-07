@@ -68,15 +68,17 @@ qualification remain open.
 | Thing-root SubscribeAllEvents / UnsubscribeAllEvents | One root conversation with per-occurrence Event identity and independent logical stop | Selected root Form, exact named Event roles and actual captured data/access services | Complete final-TD qualification and distinct AllEvents source/route | [Engine Producer-to-Consumers through Mosquitto](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs); one native wildcard subscription, heterogeneous schemas, adversarial identity, loss/replacement, uncertain controls, borrowed payload/name delivery and original funding through disposal |
 
 The [continuing Action integration](protocol-bindings/protocols/http/tests/action_consumer.rs)
-proves the bounded HTTP JSON/type-only, endpoint NoSec Consumer-to-Producer
-mapping. Acceptance, pending execution, validated completion, local cancellation
+proves bounded structured DataSchema input/output through the HTTP JSON,
+endpoint NoSec Consumer-to-Producer mapping. Acceptance, pending execution,
+validated completion, local cancellation
 and remote cancellation uncertainty remain separate. Described controls use
 independently selected actual registrations; native continuation and original
 services survive the initiating exchange. The
 [downstream Action fixture](tools/architecture-fixtures/open-consumer/tests/action.rs)
 adds real datagrams, different invoke/control Binding implementations and funded
 late validation/retirement evidence. These are Host/manual execution claims;
-general security/schema, constrained execution and production qualification remain open.
+general security/schema, cross-instance continuing definition reuse, constrained
+execution and production qualification remain open.
 
 The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
 proves the bounded endpoint NoSec HTTP subset, including

@@ -31,6 +31,31 @@ pub enum PreparedSchema {
     Object(ObjectSchema),
 }
 
+/// Independent input/output value roles. This is immutable meaning, not an
+/// interaction state or a role-specific support certificate. None means no
+/// payload; Some(Any) requires a present, unconstrained value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ValueSchemas {
+    pub input: Option<PreparedSchema>,
+    pub output: Option<PreparedSchema>,
+}
+impl ValueSchemas {
+    pub fn retained_bytes(&self) -> usize {
+        self.input
+            .iter()
+            .chain(self.output.iter())
+            .map(PreparedSchema::retained_bytes)
+            .sum()
+    }
+    pub fn drop_work(&self) -> u64 {
+        self.input
+            .iter()
+            .chain(self.output.iter())
+            .map(PreparedSchema::drop_work)
+            .sum()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SchemaProperty {
     pub name: Box<str>,

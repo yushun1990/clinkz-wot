@@ -395,7 +395,7 @@ instead of erasing them or claiming 204 completion. The independent datagram
 fixture tests a different native report mapping through public Cargo APIs; it
 does not establish production protocol or WebDAV support.
 
-## Structured finite validator qualification
+## Shared structured validator qualification
 
 Native participants retain actual source-independent validation services.
 PreparedSchema is borrowed, not a Copy kind marker or a protocol program.
@@ -408,6 +408,27 @@ subset, with larger prepaid validation bounds and schema backing retained by
 native program/configuration snapshots. A native compiler still checks actual
 endpoint/method/header/configuration facts. Non-JSON codecs can implement value
 access without JSON coercion; no non-JSON interoperability claim follows here.
+
+Continuing HTTP Action input/output use that same constraint/codec contract.
+Consumer native qualification consumes the already prepared common meaning;
+it does not compile a duplicate schema inside each invoke/control probe. Producer
+definition clones and captured Action validators retain immutable value-role
+backing. Selected final-TD checks compare borrowed constraints against that
+original owner. Native definitions account for variable backing and support-probe
+scratch. Native status, continuation, cancellation and physical exchange owners
+retain their existing independent contracts. Root Action status and MQTT
+notification profiles are separately qualified; this support does not widen them.
+
+An Action participant's captured `ActionValidator::additional_validation_work`
+must cover its complete extra input or output callback cost. The logical owner
+captures it at publication, prepays both potential callbacks before invoke and
+the output callback before each normal continuing poll, and rechecks the
+original allowance around validation, including after application callbacks
+return an output. Changed
+metadata fences validation rather than requalifying accepted work. HTTP declares
+the same bounded structured JSON envelope used by its finite validator, since
+per-field lookup can rescan the complete payload. Its `HandlerSteps` charge is
+separate from Consumer codec credits and from Action close/retirement work.
 
 ## Finite security verification
 

@@ -2,6 +2,7 @@
 //! A definition has no compiler, source TD, semantic arena or parser callback.
 use crate::collection::{PropertyCollectionSchema, PropertySelection};
 use crate::data_schema::PreparedSchema;
+pub use crate::data_schema::ValueSchemas;
 use crate::host_accounts::{HostCapacityReservation, HostResourceAccounts};
 use crate::*;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
@@ -310,19 +311,20 @@ impl core::fmt::Debug for ConsumerInstanceRef {
     }
 }
 
-/// Distinct finite application-data roles. None means no application payload;
-/// an unconstrained present payload uses Some(PreparedSchema::Any).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConsumerSchemas {
-    pub input: Option<PreparedSchema>,
-    pub output: Option<PreparedSchema>,
+impl ValueSchemas {
+    pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
+        self.input
+            .iter()
+            .chain(self.output.iter())
+            .all(|schema| data.supports_schema(schema))
+    }
 }
 
 /// Data roles for the implemented finite operations. Collection meaning is
 /// retained explicitly rather than disguised as an unconstrained object.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsumerFiniteSchemas {
-    Value(ConsumerSchemas),
+    Value(ValueSchemas),
     QueryAllActions(crate::action::ActionCollectionSchema),
     ReadAllProperties(PropertyCollectionSchema),
     ReadMultipleProperties(PropertyCollectionSchema),
@@ -379,11 +381,7 @@ impl ConsumerFiniteSchemas {
     pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
         match self {
             Self::QueryAllActions(s) => data.supports_action_statuses(s),
-            Self::Value(s) => s
-                .input
-                .iter()
-                .chain(s.output.iter())
-                .all(|s| data.supports_schema(s)),
+            Self::Value(s) => s.supports(data),
             Self::ReadAllProperties(s) | Self::WriteAllProperties(s) => {
                 data.supports_property_map(s)
             }
@@ -406,13 +404,13 @@ impl ConsumerFiniteSchemas {
         match (self, payload) {
             (Self::QueryAllActions(s), Some(p)) => data.validate_action_statuses(s, p),
             (
-                Self::Value(ConsumerSchemas { output: None, .. })
+                Self::Value(ValueSchemas { output: None, .. })
                 | Self::WriteAllProperties(_)
                 | Self::WriteMultipleProperties(_),
                 None,
             ) => Ok(()),
             (
-                Self::Value(ConsumerSchemas {
+                Self::Value(ValueSchemas {
                     output: Some(s), ..
                 }),
                 Some(p),
@@ -427,12 +425,7 @@ impl ConsumerFiniteSchemas {
     pub fn retained_bytes(&self) -> usize {
         match self {
             Self::QueryAllActions(s) => s.retained_bytes(),
-            Self::Value(s) => s
-                .input
-                .iter()
-                .chain(s.output.iter())
-                .map(PreparedSchema::retained_bytes)
-                .sum(),
+            Self::Value(s) => s.retained_bytes(),
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
             | Self::WriteAllProperties(s)
@@ -449,12 +442,7 @@ impl ConsumerFiniteSchemas {
                     + s.members().len() as u64
                     + 1
             }
-            Self::Value(s) => s
-                .input
-                .iter()
-                .chain(s.output.iter())
-                .map(|s| s.drop_work())
-                .sum(),
+            Self::Value(s) => s.drop_work(),
             Self::ReadAllProperties(s)
             | Self::ReadMultipleProperties(s)
             | Self::WriteAllProperties(s)
@@ -676,13 +664,13 @@ impl ConsumerExecutionContent {
         ) || !matches!(
             (&schemas, operation),
             (
-                ConsumerFiniteSchemas::Value(ConsumerSchemas {
+                ConsumerFiniteSchemas::Value(ValueSchemas {
                     input: None,
                     output: Some(_)
                 }),
                 Operation::ReadProperty
             ) | (
-                ConsumerFiniteSchemas::Value(ConsumerSchemas {
+                ConsumerFiniteSchemas::Value(ValueSchemas {
                     input: Some(_),
                     output: None
                 }),

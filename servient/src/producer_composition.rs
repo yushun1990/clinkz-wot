@@ -233,6 +233,9 @@ fn capture_action_routes<'a>(
             target,
             operation: operation.operation,
             route,
+            validation_work: validator
+                .as_ref()
+                .map_or(0, |v| v.additional_validation_work()),
             validator,
         });
     }
