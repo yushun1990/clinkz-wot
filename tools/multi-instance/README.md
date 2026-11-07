@@ -30,6 +30,12 @@ neither resource paths nor registration counts count devices. The workload uses
 Thing-root ReadAllProperties over 1–32 integer members. It checks every returned
 body against its selected target.
 
+The full suite also records expected preparation refusals at 30 and 32 members
+for this exact TD shape: the semantic resolver's 32 scopes include Thing, Form
+and security scopes as well as members. The 29-member case executes normally.
+Refusal records require zero native compilations/requests and complete original
+account rollback; the workload does not raise the resolver's capacities.
+
 Each instance has independent authority and a destination/instance-bound mutable
 permission service. Independent accounts include a real bank per instance.
 Shared accounts compare a common quota domain; they preserve independent
@@ -72,6 +78,24 @@ allocations may survive final Engine release. The peer runs in a separate
 process with its own allocations/stacks, and reports actual request and
 concurrent-response counts. Its response delay is a workload input, not a latency
 guarantee. RSS is sampled, not a continuous phase peak.
+
+Source destruction, expected-body fixture destruction and load-driver vectors
+have separate phases. Final result-release timing excludes the subsequent scan
+that verifies all 196 account kinds for every bank. Nested cost `net_live_bytes`
+is the sum of interval net changes (for example, owned parsed Things before
+later destruction), not a concurrently retained peak. Use enclosing phase live
+and peak values for physical storage. Work credits are conservative allowances,
+not CPU instruction counts.
+
+Generate a median CSV, including the measured ranges for throughput:
+
+```sh
+python3 tools/multi-instance/summarize.py /tmp/clinkz-multi-instance > /tmp/clinkz-multi-instance/summary.csv
+```
+
+The summarizer also reads `measurements.jsonl.gz` when only compressed raw data
+is present. Raw per-replicate work, memory and latency observations remain
+available alongside the medians.
 
 This is a bounded Host/manual HTTP characterization, not a release benchmark,
 cross-protocol fairness proof, hardware fit claim, pooling design or all-family

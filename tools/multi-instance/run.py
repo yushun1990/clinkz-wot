@@ -40,7 +40,8 @@ def cases(suite):
         variants += [dict(population=10000, slots=32),
                      dict(population=10000, accounts="shared"),
                      dict(population=10000, accounts="shared", slots=32)]
-        variants += [dict(mode="targeted", members=n) for n in (1, 32)]
+        variants += [dict(mode="targeted", members=n) for n in (1, 29)]
+        variants += [dict(population=1, lanes=1, mode="targeted", members=n, active=0) for n in (30, 32)]
     unique = {}
     for variant in variants:
         case = dict(base, **variant)
@@ -87,6 +88,8 @@ def main():
                     raise RuntimeError(f"case {case}: {run.stderr}\n{run.stdout}")
                 phases = [json.loads(line) for line in run.stdout.splitlines()]
                 assert phases[-1]["phase"] == "release_accounts"
+                refused = any(p["phase"] == "preparation_refused" for p in phases)
+                assert refused == (case["members"] >= 30), f"unexpected preparation disposition: {case}"
                 for row in phases:
                     output.write(json.dumps(dict(case=number, repeat=repeat, **row), separators=(",", ":")) + "\n")
                 output.flush()

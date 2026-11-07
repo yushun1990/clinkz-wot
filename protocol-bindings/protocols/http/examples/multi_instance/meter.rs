@@ -97,12 +97,13 @@ impl Phase {
         let ns = self.time.elapsed().as_nanos();
         let end = read();
         let peak = PEAK.load(Relaxed);
-        let mut cost = Cost::default();
         // No allocations between the end snapshot and this calculation.
-        cost.ns = ns;
-        cost.allocations = end.allocations - self.start.allocations;
-        cost.requested = end.requested - self.start.requested;
-        cost.live = end.live as i64 - self.start.live as i64;
+        let cost = Cost {
+            ns,
+            allocations: end.allocations - self.start.allocations,
+            requested: end.requested - self.start.requested,
+            live: end.live as i64 - self.start.live as i64,
+        };
         let mut out = cost.json();
         out["phase"] = json!(name);
         out["heap_live_bytes"] = json!(end.live);

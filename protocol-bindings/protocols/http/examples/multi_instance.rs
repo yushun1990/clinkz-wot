@@ -220,7 +220,7 @@ impl Preparation {
         bank: &Arc<HostResourceAccounts>,
         lane: usize,
         reuse: Option<&Arc<PreparedConsumerContent>>,
-    ) -> Arc<ConsumerDefinition> {
+    ) -> CoreResult<Arc<ConsumerDefinition>> {
         let before = meter::read();
         let start = Instant::now();
         let thing: Thing = serde_json::from_slice(td).unwrap();
@@ -262,17 +262,29 @@ impl Preparation {
                 &mut budget,
                 &mut drive,
             )
-        }
-        .unwrap();
-        self.contents += p.content_constructions();
+        };
         add_work(&mut self.work, &budget);
-        let (bindings, funding) = p.into_execution();
-        assert_eq!(bindings.len(), 1);
-        let definition = bindings[0].definition().clone();
-        drop(bindings);
-        drop(funding);
+        let result = p.map(|p| {
+            self.contents += p.content_constructions();
+            let (bindings, funding) = p.into_execution();
+            assert_eq!(bindings.len(), 1);
+            let definition = bindings[0].definition().clone();
+            drop(bindings);
+            drop(funding);
+            definition
+        });
         self.qualify.add(before, start.elapsed().as_nanos());
-        definition
+        result
+    }
+    fn measurement(&self, mut value: Value) -> Value {
+        value["parse"] = self.parse.json();
+        value["qualification_including_native"] = self.qualify.json();
+        value["native_job_steps"] = self.native.json();
+        value["native_jobs"] = json!(self.jobs);
+        value["content_constructions"] = json!(self.contents);
+        value["work"] = work_json(&self.work);
+        value["native_work"] = work_json(&self.native_work);
+        value
     }
 }
 struct Policy {
@@ -417,6 +429,9 @@ enum Handle {
     Engine(ConsumerCall),
     Binding(HostBindingCallBox<CoreResult<InteractionOutput>>),
 }
+// Keep the control's return value inline; boxing it would add artificial heap
+// traffic to the Engine-versus-Binding comparison.
+#[allow(clippy::large_enum_variant)]
 enum ResultOwner {
     Engine(ConsumerSettlement),
     Binding(InteractionOutput),
@@ -491,12 +506,14 @@ async fn load(
     banks: &[Arc<HostResourceAccounts>],
     physical: &[Arc<HostResourceAccounts>],
 ) {
+    let storage = meter::Phase::begin();
     let mut flights = Vec::<Flight>::with_capacity(o.lanes);
     let mut service = Vec::with_capacity(o.active * o.rounds);
     let mut queued = Vec::with_capacity(o.active * o.rounds);
     let mut busy = vec![false; o.lanes];
     let mut credits = [0; WorkClass::ALL.len()];
     let (mut admission_ns, mut progress_ns, mut polls) = (0u128, 0u128, 0u64);
+    report(storage.finish("load_driver_storage"), banks, physical);
     let phase = meter::Phase::begin();
     let started = Instant::now();
     for round in 0..o.rounds {
@@ -762,7 +779,35 @@ async fn run(o: Options) {
         } else {
             Some(definitions[0].content())
         };
-        let definition = cost.prepare(&registry, td, at(i), i % o.lanes, reuse);
+        let definition = match cost.prepare(&registry, td, at(i), i % o.lanes, reuse) {
+            Ok(definition) => definition,
+            Err(error) => {
+                let mut measured = cost.measurement(phase.finish("preparation_refused"));
+                measured["error"] = json!(format!("{error:?}"));
+                measured["mapping_index"] = json!(i);
+                report(measured, &banks, &physical);
+                let phase = meter::Phase::begin();
+                drop(definitions);
+                drop(registry);
+                drop(instances);
+                drop(retained);
+                drop(inputs);
+                drop(expected);
+                assert!(weak_data.upgrade().is_none());
+                drop(weak_data);
+                let measured = phase.finish("refusal_release");
+                for b in banks.iter().chain(&physical) {
+                    clean(b);
+                }
+                report(measured, &banks, &physical);
+                emit(json!({"phase": "peer_final", "stats": peer.stats()}));
+                let phase = meter::Phase::begin();
+                drop(banks);
+                drop(physical);
+                emit(phase.finish("release_accounts"));
+                return;
+            }
+        };
         if let Some(content) = reuse {
             assert!(Arc::ptr_eq(content, definition.content()));
         }
@@ -774,16 +819,11 @@ async fn run(o: Options) {
         if o.mode == "cold" { o.mappings() } else { 1 }
     );
     let weak_content = Arc::downgrade(definitions[0].content());
-    let mut measured = phase.finish("preparation");
-    measured["parse"] = cost.parse.json();
-    measured["qualification_including_native"] = cost.qualify.json();
-    measured["native_job_steps"] = cost.native.json();
-    measured["native_jobs"] = json!(cost.jobs);
-    measured["content_constructions"] = json!(cost.contents);
-    measured["work"] = work_json(&cost.work);
-    measured["native_work"] = work_json(&cost.native_work);
+    let measured = cost.measurement(phase.finish("preparation"));
     report(measured, &banks, &physical);
+    let source_release = meter::Phase::begin();
     drop(inputs); // warm binding and execution below have no source TD
+    report(source_release.finish("source_release"), &banks, &physical);
     let phase = meter::Phase::begin();
     let mut credits = [0; WorkClass::ALL.len()];
     for i in 0..o.population {
@@ -832,23 +872,26 @@ async fn run(o: Options) {
         report(phase.finish("retained_results"), &banks, &physical);
     }
     let phase = meter::Phase::begin();
+    drop(expected);
+    report(phase.finish("fixture_release"), &banks, &physical);
+    let phase = meter::Phase::begin();
     drop(instances);
     drop(definitions);
     drop(registry);
-    drop(expected);
     report(phase.finish("retire_roots"), &banks, &physical);
     if !retained.is_empty() {
         assert!(weak_data.upgrade().is_some() && weak_content.upgrade().is_some());
     }
     let phase = meter::Phase::begin();
     drop(retained);
-    for b in banks.iter().chain(&physical) {
-        clean(b);
-    }
     assert!(weak_data.upgrade().is_none() && weak_content.upgrade().is_none());
     drop(weak_data);
     drop(weak_content);
-    report(phase.finish("release_results"), &banks, &physical);
+    let measured = phase.finish("release_results");
+    for b in banks.iter().chain(&physical) {
+        clean(b);
+    }
+    report(measured, &banks, &physical);
     emit(json!({"phase": "peer_final", "stats": peer.stats()}));
     let phase = meter::Phase::begin();
     drop(banks);
