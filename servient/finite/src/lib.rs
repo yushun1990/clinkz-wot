@@ -310,8 +310,33 @@ struct AcceptedBehavior {
     behavior: usize,
 }
 
+/// One-way revocation of an original Producer incarnation. This handle grants
+/// no dispatch, replacement or publication authority and cannot address a reused
+/// slot. Revocation performs only a passive flag update, including in callbacks.
+/// The weak cell and its original capacity owner are retained together; cloning
+/// a handle creates no allocation and dropping the last one releases its lease.
+#[derive(Clone)]
+pub struct ProducerRevocation {
+    key: ProducerInstanceKey,
+    current: Weak<Cell<bool>>,
+    _retained_owner: Option<Rc<dyn core::any::Any>>,
+}
+impl ProducerRevocation {
+    pub fn key(&self) -> ProducerInstanceKey {
+        self.key
+    }
+    /// Does not invoke a handler, native callback, waker or registry mutation.
+    /// Original pending work observes revocation on its next funded step.
+    pub fn revoke(&self) {
+        if let Some(current) = self.current.upgrade() {
+            current.set(false);
+        }
+    }
+}
+
 /// One logical owner shared by independently typed native runtimes. Exclusive
-/// manual access orders acceptance, revocation and replacement without locks.
+/// manual runtime access orders acceptance; passive revocation needs no registry
+/// borrow, while replacement retains exclusive owner access without locks.
 /// This Host facet is single-threaded; retention references confer no authority.
 pub struct RawProducerServient {
     instances: Vec<InstanceEntry>,
@@ -419,6 +444,20 @@ impl RawProducerServient {
         }
     }
 
+    /// Capture callback-safe revocation for this exact current incarnation.
+    /// Managed publication funding survives until every captured handle drops,
+    /// including after registry replacement and native/result disposal.
+    pub fn revocation(&self, key: ProducerInstanceKey) -> Option<ProducerRevocation> {
+        self.instances
+            .iter()
+            .find(|entry| entry.instance.key() == key && entry.current.get())
+            .map(|entry| ProducerRevocation {
+                key,
+                current: Rc::downgrade(&entry.current),
+                _retained_owner: entry.instance.retained_owner.clone(),
+            })
+    }
+
     /// Validate the complete successor, then atomically replace the expected
     /// incarnation (current or revoked) in the same numeric slot. Old accepted
     /// work retains its original instance; no Binding is reconfigured or closed.
@@ -496,7 +535,7 @@ impl RawProducerServient {
     /// returns an error without consuming or altering its exchange. Native polls
     /// and retirement can also be driven directly through `RawFiniteRuntime::step`.
     pub fn step<B: FiniteIngressBinding>(
-        &mut self,
+        &self,
         runtime: &mut RawFiniteRuntime<B>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
@@ -564,6 +603,7 @@ impl RawProducerServient {
         let result = self.resolve(&ingress, runtime.limits).and_then(|(i, b)| {
             let instance = &self.instances[i].instance;
             let behavior = &instance.behaviors[b];
+            let security_revision = runtime.binding.security_revision();
             if runtime.security_work != 0 {
                 ingress.input.principal = runtime.binding.verify_ingress(&ingress)?;
             }
@@ -576,6 +616,7 @@ impl RawProducerServient {
             }
             // Validation is a trusted callback, but fresh authorization still
             // precedes handler entry and cannot be replaced by native parsing.
+            let policy_revision = behavior.handler.authorization_revision();
             behavior.handler.authorize(&ingress.input)?;
             // Policy is application code and can invalidate an externally
             // mutable provider. Recheck before behavior entry, then retain the
@@ -615,6 +656,13 @@ impl RawProducerServient {
                 Err(CoreError::Validation(context()))
             } else if !runtime.ingress_gate.get() || !self.instances[i].current.get() {
                 Err(CoreError::StaleHandle(context()))
+            } else if runtime.binding.security_revision() != security_revision
+                || behavior.handler.authorization_revision() != policy_revision
+            {
+                Err(CoreError::Security {
+                    reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
+                    context: context(),
+                })
             } else {
                 Ok(())
             };
@@ -622,7 +670,7 @@ impl RawProducerServient {
                 retirement_cause = Some(error.clone());
                 return Err(error);
             }
-            // Acceptance is ordered by exclusive access to this owner. No lock,
+            // Acceptance is ordered by exclusive access to this runtime. No lock,
             // native callback, allocation or re-lookup surrounds application code.
             runtime.accepted_instance = Some(AcceptedBehavior {
                 current: self.instances[i].current.clone(),
@@ -659,7 +707,9 @@ impl RawProducerServient {
             }
             if matches!(
                 behavior.operation,
-                Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                Operation::WriteProperty
+                    | Operation::WriteAllProperties
+                    | Operation::WriteMultipleProperties
             ) {
                 effect = if output
                     .metadata()
@@ -1114,6 +1164,12 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     }
                     let reply = self.reply.as_ref().expect("reply retained");
                     let checked = (|| {
+                        let security_revision = self.binding.security_revision();
+                        let accepted = self
+                            .accepted_instance
+                            .as_ref()
+                            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+                        let handler = &accepted.instance.behaviors[accepted.behavior].handler;
                         if !self.ingress_gate.get() {
                             return Err(CoreError::StaleHandle(context()));
                         }
@@ -1125,14 +1181,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
-                        if let Some(accepted) = &self.accepted_instance {
-                            if !accepted.current.get() {
-                                return Err(CoreError::StaleHandle(context()));
-                            }
-                            accepted.instance.behaviors[accepted.behavior]
-                                .handler
-                                .authorize(&reply.ingress.input)?;
+                        if !accepted.current.get() {
+                            return Err(CoreError::StaleHandle(context()));
                         }
+                        let policy_revision = handler.authorization_revision();
+                        handler.authorize(&reply.ingress.input)?;
                         if !self.pair_is_current() {
                             return Err(CoreError::Validation(context()));
                         }
@@ -1159,6 +1212,14 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         }
                         if !self.pair_is_current() {
                             return Err(CoreError::Validation(context()));
+                        }
+                        if self.binding.security_revision() != security_revision
+                            || handler.authorization_revision() != policy_revision
+                        {
+                            return Err(CoreError::Security {
+                                reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
+                                context: context(),
+                            });
                         }
                         Ok(())
                     })();

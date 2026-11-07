@@ -935,7 +935,7 @@ fn close_before_dispatch_returns_original_native_refusal_without_running_handler
 }
 
 #[test]
-fn close_after_write_reports_unknown_effect_and_undelivered_success() {
+fn close_after_write_retains_completed_effect_and_undelivered_success() {
     let a = authority(21);
     let calls = Arc::new(AtomicUsize::new(0));
     let addr = Arc::new(Mutex::new(None));
@@ -989,7 +989,7 @@ fn close_after_write_reports_unknown_effect_and_undelivered_success() {
     client.read_exact(&mut response).unwrap();
     assert_eq!(response, *b"E");
     let settlement = rt.take_settlement().unwrap();
-    assert_eq!(settlement.effect, FiniteEffect::Unknown);
+    assert_eq!(settlement.effect, FiniteEffect::Completed);
     assert_eq!(settlement.delivery, FiniteDelivery::NotDelivered);
     assert!(settlement.result.is_ok());
     assert!(matches!(rt.first_cause(), Some(CoreError::Cancelled(_))));

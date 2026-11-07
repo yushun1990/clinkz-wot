@@ -928,7 +928,7 @@ fn deadline_and_clock_fencing_before_start_require_only_funded_native_cleanup() 
         let authority = new_authority();
         let key = authority.key();
         let addr = address();
-        let mut owner = owner(authority, Rc::new(Application::default()));
+        let owner = owner(authority, Rc::new(Application::default()));
         let binding = native(addr, key, 1, "integer");
         let config = binding.configuration().clone();
         let mut runtime = accepted(RawFiniteRuntime::try_new(

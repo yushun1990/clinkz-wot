@@ -1,4 +1,4 @@
-The qualified finite Property Read path additionally supports TD `basic` in the
+The qualified finite Property Read/Write path additionally supports TD `basic` in the
 Authorization header over verified TLS 1.3. Use
 `try_https_basic_consumer_registration` with `HttpClientTls` and an
 instance-bound `HttpBasicClientAccess`, and `HttpFiniteProducer::try_https_basic`
@@ -7,14 +7,25 @@ service to `HttpFiniteConfig::with_security` before native installation.
 Credentials stay in runtime services and original reply opportunities. Rotation
 invalidates existing Consumer bindings; rebind the same definition with the
 replacement service state. Verification establishes Principal; the application
-handler authorizes it separately.
+handler authorizes it separately. Mutable verification and application policy
+must expose passive, non-reused invalidation revisions through
+`HttpBasicVerifier::revision` and `RawFiniteHandler::authorization_revision`.
+The Engine rechecks them after the last callback before behavior entry or
+successful response delivery. Zero is suitable for immutable policy.
+Use `RawProducerServient::revocation(key)` for one-way original-instance
+revocation inside callbacks. It needs no registry borrow and retains its
+original capacity until the last handle is dropped; it cannot revoke a successor.
 
-This is a Host, IP-literal, loopback Producer, JSON Property Read increment.
+This is a Host, IP-literal, loopback Producer, structured JSON Property Read/Write increment.
 Other authenticated operations/schemes/compositions, credential placements,
 TLS 1.2/mTLS, DNS, redirects, certificate CRL/OCSP and constrained TLS are refused
 or unimplemented. The historical paths described below remain explicit NoSec /
 cleartext capabilities. See [security assessment, guarantees, executable evidence
 and exact limits](../../../docs/evidence/td-security-https.md).
+The [secure Write tests](tests/security_write.rs) execute both Engine roles and
+independent TLS clients/servers, including actual state changes, structured input
+refusal, wrong credentials, trust/authorization failures, callback revocation,
+lost responses, reentrant Consumer cancellation and retained final cleanup.
 
 # Host HTTP Properties, Actions and Finite Collections
 
@@ -514,7 +525,9 @@ One native exchange occupies the listener. Requests have an exact path and Host,
 at most 16 headers/8192 header bytes and 4096 read/write bytes per native poll.
 PUT requires exactly one nonzero Content-Length (<=4096) and exactly one
 `Content-Type: application/json`; chunked input, content coding, trailers,
-Expect, upgrades, pipelining and credential headers are refused. Native parsing
+Expect, upgrades and pipelining are refused. Cleartext NoSec rejects credential
+headers; the HTTPS Basic profile accepts its one bounded Authorization header.
+Native parsing
 collects the entire bounded input before offering a candidate. The shared Engine
 validator then checks its prepared Property schema before effects.
 
@@ -540,8 +553,11 @@ the physical state independently of the application's reported completion.
 Constructor refusal, native exchange, validated application completion and
 remote effect remain separate. `ConsumerSettlement::native_outcome` retains
 late results; `result` also requires original authority and fresh policy.
-`ConsumerEffect::Unknown` after native progress does not imply rollback on error
-or cancellation. Producer result, `FiniteEffect` and `FiniteDelivery` similarly
+Validated Property Write completion reports `ConsumerEffect::Completed` and
+`FiniteEffect::Completed`. Consumer `Unknown` after attempted progress without
+that evidence does not imply rollback on error or cancellation, even for HTTP
+401/403/500. Producer pre-effect refusal is independently `NotInvoked`; an error
+after behavior entry remains `Unknown`. Producer result and `FiniteDelivery`
 retain separate facts. No owner automatically retries a write. Unread settlements
 pin original capacity/native occupancy; cancellation, replacement and root loss
 preserve accepted work until bounded retirement and final acknowledgement.

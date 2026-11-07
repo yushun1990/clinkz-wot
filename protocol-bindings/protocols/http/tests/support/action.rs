@@ -8,7 +8,7 @@ use clinkz_wot_servient::{host_accounts::HostResourceAccounts, producer_composit
 use clinkz_wot_servient_finite::*;
 use clinkz_wot_td::ValidatedProducerScope;
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     rc::Rc,
@@ -65,10 +65,16 @@ pub(crate) struct Counters {
     pub(crate) deny_invoke: Cell<bool>,
     pub(crate) deny_query: Cell<bool>,
     pub(crate) deny_cancel: Cell<bool>,
+    pub(crate) revoke_in_authorize: RefCell<Option<(Operation, ProducerRevocation)>>,
 }
 struct Action(Rc<Counters>);
 impl RawActionHandler for Action {
     fn authorize(&self, op: Operation, _: &InteractionInput) -> CoreResult<()> {
+        if let Some((selected, revocation)) = &*self.0.revoke_in_authorize.borrow() {
+            if *selected == op {
+                revocation.revoke();
+            }
+        }
         if match op {
             Operation::InvokeAction => self.0.deny_invoke.get(),
             Operation::QueryAction => self.0.deny_query.get(),

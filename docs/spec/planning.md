@@ -464,3 +464,9 @@ service state without revalidating prior work. Permission and credential issuanc
 are separate callbacks with separate complete work prepayments; insufficient
 issuance credit returns the original input before capability/native construction.
 No compiler or source callback returns at runtime.
+The HTTPS Basic adapter qualifies Property Read and Write independently with
+their complete input/output roles and exact native mapping. A Basic-capable
+access service does not certify collections, Actions or notifications. A mixed
+Producer TD still requires support of every retained effective operation and
+Form; the selected credential grant retains the exact operation as well as the
+original instance, registration and destination.

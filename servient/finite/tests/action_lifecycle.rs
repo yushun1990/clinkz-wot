@@ -13,8 +13,8 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
 use clinkz_wot_servient_finite::{
-    RawActionBehavior, RawActionLimits, RawActionState, RawFiniteBehavior, RawProducerInstance,
-    RawProducerRegistryLimits, RawProducerServient,
+    ProducerRevocation, RawActionBehavior, RawActionLimits, RawActionState, RawFiniteBehavior,
+    RawProducerInstance, RawProducerRegistryLimits, RawProducerServient,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -87,6 +87,7 @@ struct Trace {
     dropped: usize,
     operations: Vec<Operation>,
     instances: Vec<ProducerInstanceKey>,
+    revoke_in_authorize: Option<(Operation, ProducerRevocation)>,
 }
 struct App {
     trace: Rc<RefCell<Trace>>,
@@ -108,7 +109,13 @@ impl RawActionHandler for App {
                 context: ErrorContext::new(ErrorPhase::Selection, RetryClass::Never),
             });
         }
-        self.trace.borrow_mut().operations.push(operation);
+        let mut trace = self.trace.borrow_mut();
+        trace.operations.push(operation);
+        if let Some((selected, revocation)) = &trace.revoke_in_authorize {
+            if *selected == operation {
+                revocation.revoke();
+            }
+        }
         Ok(())
     }
     fn invoke(
@@ -390,6 +397,151 @@ fn action_outlives_initiating_exchange_and_replacement_without_retargeting() {
         successor_key
     );
     assert_eq!(trace.borrow().instances, vec![old_key, successor_key]);
+}
+
+#[test]
+fn callback_time_revocation_refuses_action_before_invocation() {
+    let authority = key(1);
+    let instance_key = authority.key();
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut owner = owner(instance(
+        authority,
+        Rc::clone(&trace),
+        Rc::new(Cell::new(false)),
+        false,
+        false,
+        false,
+        Rc::new(Cell::new(0)),
+    ));
+    trace.borrow_mut().revoke_in_authorize = Some((
+        Operation::InvokeAction,
+        owner.revocation(instance_key).unwrap(),
+    ));
+    let target = AffordanceTarget::Action(Arc::from("run"));
+    let input = caller("alice");
+    let refused =
+        owner.invoke_raw_action(request(instance_key, &target, &input), &mut work_budget());
+    assert_eq!(trace.borrow().started, 0);
+    assert_eq!(trace.borrow().operations, vec![Operation::InvokeAction]);
+    assert!(matches!(refused, Err(CoreError::StaleHandle(_))));
+    assert!(owner.revocation(instance_key).is_none());
+    owner.begin_raw_action_retirement().unwrap();
+    assert!(matches!(
+        owner
+            .step_raw_action_retirement(&mut work_budget())
+            .unwrap(),
+        Poll::Ready(None)
+    ));
+    assert_eq!(trace.borrow().cancels, 0);
+    assert_eq!(trace.borrow().dropped, 0);
+}
+
+#[test]
+fn callback_time_revocation_refuses_action_controls_but_preserves_original_work() {
+    for operation in [Operation::QueryAction, Operation::CancelAction] {
+        for complete_now in [false, true] {
+            let authority = key(1);
+            let instance_key = authority.key();
+            let trace = Rc::new(RefCell::new(Trace::default()));
+            let ready = Rc::new(Cell::new(false));
+            let mut owner = owner(instance(
+                authority,
+                Rc::clone(&trace),
+                Rc::clone(&ready),
+                complete_now,
+                false,
+                false,
+                Rc::new(Cell::new(0)),
+            ));
+            let target = AffordanceTarget::Action(Arc::from("run"));
+            let input = caller("alice");
+            let handle = owner
+                .invoke_raw_action(request(instance_key, &target, &input), &mut work_budget())
+                .unwrap();
+            trace.borrow_mut().revoke_in_authorize =
+                Some((operation, owner.revocation(instance_key).unwrap()));
+            let refused = match operation {
+                Operation::QueryAction => owner
+                    .query_raw_action(
+                        &handle,
+                        route(2, 22).binding,
+                        ActionMappingKey(22),
+                        &input,
+                        &mut work_budget(),
+                    )
+                    .map(|_| ()),
+                Operation::CancelAction => owner
+                    .cancel_raw_action(
+                        &handle,
+                        route(3, 33).binding,
+                        ActionMappingKey(33),
+                        &input,
+                        &mut work_budget(),
+                    )
+                    .map(|_| ()),
+                _ => unreachable!(),
+            };
+            assert!(
+                matches!(refused, Err(CoreError::StaleHandle(_))),
+                "{operation:?}, complete={complete_now}"
+            );
+            assert!(owner.revocation(instance_key).is_none());
+            assert_eq!(trace.borrow().started, 1);
+            assert_eq!(trace.borrow().cancels, 0);
+            // Revocation fences public control, not settlement. Already
+            // accepted work still gets its paid cooperative cancellation and
+            // may complete with effects and its original result.
+            assert_eq!(
+                owner
+                    .step_raw_action(&handle, &mut WorkBudget::new())
+                    .unwrap(),
+                Poll::Pending
+            );
+            assert_eq!(trace.borrow().cancels, 0);
+            ready.set(true);
+            assert_eq!(
+                owner.step_raw_action(&handle, &mut work_budget()).unwrap(),
+                Poll::Ready(())
+            );
+            let result = owner.take_raw_action_settlement(&handle).unwrap().unwrap();
+            assert_eq!(result.reference, handle.reference());
+            assert_eq!(result.instance, instance_key);
+            assert_eq!(result.binding, route(1, 11).binding);
+            assert_eq!(result.mapping, ActionMappingKey(11));
+            assert_eq!(result.query, Some(route(2, 22)));
+            assert_eq!(result.cancel, Some(route(3, 33)));
+            assert_eq!(
+                result.effect,
+                clinkz_wot_core::action::ActionEffect::PossiblyApplied
+            );
+            assert_eq!(
+                result
+                    .result()
+                    .as_ref()
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body
+                    .as_ref(),
+                if complete_now {
+                    b"now".as_slice()
+                } else {
+                    b"late".as_slice()
+                }
+            );
+            assert_eq!(result.cancel_requested, !complete_now);
+            assert_eq!(trace.borrow().cancels, usize::from(!complete_now));
+            assert_eq!(trace.borrow().dropped, usize::from(!complete_now));
+            drop(result);
+            owner.begin_raw_action_retirement().unwrap();
+            assert!(matches!(
+                owner
+                    .step_raw_action_retirement(&mut work_budget())
+                    .unwrap(),
+                Poll::Ready(None)
+            ));
+        }
+    }
 }
 
 #[test]

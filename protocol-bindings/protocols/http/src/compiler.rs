@@ -49,8 +49,10 @@ impl HostSemanticCompiler for HttpCompiler {
             input.form_index,
         )?;
         if self.0.secure {
-            if input.operation != Operation::ReadProperty
-                || !matches!(input.owner, FormOwner::Property(_))
+            if !matches!(
+                input.operation,
+                Operation::ReadProperty | Operation::WriteProperty
+            ) || !matches!(input.owner, FormOwner::Property(_))
                 || target.uri.scheme_str() != Some("https")
                 || requirement != crate::security::BASIC
             {

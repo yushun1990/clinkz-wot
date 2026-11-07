@@ -69,6 +69,9 @@ struct FundedBehavior<H> {
     _funding: Rc<Funding>,
 }
 impl<H: RawFiniteHandler> RawFiniteHandler for FundedBehavior<H> {
+    fn authorization_revision(&self) -> u64 {
+        self.handler.authorization_revision()
+    }
     fn authorize(&self, input: &InteractionInput) -> CoreResult<()> {
         self.handler.authorize(input)
     }

@@ -513,8 +513,8 @@ fn default_and_explicit_read_write_definitions_coexist_on_one_property_and_liste
                 assert_eq!(result.operation(), Operation::WriteProperty);
                 assert!(result.result().unwrap().data().is_none());
                 assert_eq!(result.result().unwrap().metadata().binding_response().unwrap().status_code(),204);
-                assert_eq!(result.effect(), ConsumerEffect::Unknown, "remote certainty remains independent of reported completion");
-                assert_eq!(remote.effect, FiniteEffect::Unknown);
+                assert_eq!(result.effect(), ConsumerEffect::Completed, "validated completion remains separate from physical-state confirmation");
+                assert_eq!(remote.effect, FiniteEffect::Completed);
                 assert_eq!(remote.delivery, FiniteDelivery::Delivered);
                 assert!(remote.result.unwrap().data().is_none());
                 drop(result); drop(write);
@@ -812,7 +812,7 @@ fn consumer_requires_the_prepared_native_write_completion_and_never_replays_unce
                 assert!(start.elapsed()<Duration::from_secs(5));tokio::time::sleep(Duration::from_millis(1)).await;
             };
             assert_eq!(result.result().is_ok(),reply==b"HTTP/1.1 204 No Content\r\n\r\n","{:?}",String::from_utf8_lossy(reply));
-            assert_eq!(result.effect(),ConsumerEffect::Unknown);
+            assert_eq!(result.effect(), if reply==b"HTTP/1.1 204 No Content\r\n\r\n" { ConsumerEffect::Completed } else { ConsumerEffect::Unknown });
             for _ in 0..10 { client.step(&mut cx(),now(0),&mut work()); }
         });
         let listener=peer.join().unwrap(); listener.set_nonblocking(true).unwrap();
@@ -891,7 +891,7 @@ fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
                         tokio::time::sleep(Duration::from_millis(1)).await;
                     };
                     let success = result.result().is_ok();
-                    assert_eq!(result.effect(), ConsumerEffect::Unknown);
+                    assert_eq!(result.effect(), if success { ConsumerEffect::Completed } else { ConsumerEffect::Unknown });
                     drop(result); drop(call); drop(client); clean(&accounts);
                     let listener = peer.join().unwrap();
                     listener.set_nonblocking(true).unwrap();
@@ -1118,7 +1118,7 @@ fn consumer_cancellation_replacement_timeout_and_policy_loss_preserve_original_r
             server.step();
             let remote = server.server().take_settlement().unwrap();
             assert!(remote.result.is_ok());
-            assert_eq!(remote.effect, FiniteEffect::Unknown);
+            assert_eq!(remote.effect, FiniteEffect::Completed);
             assert_eq!(remote.delivery, FiniteDelivery::NotDelivered);
             drop(result);
             drop(call);
@@ -1400,7 +1400,7 @@ fn producer_replacement_fences_pending_input_and_preserves_already_accepted_writ
             assert_eq!(
                 remote.effect,
                 if accepted {
-                    FiniteEffect::Unknown
+                    FiniteEffect::Completed
                 } else {
                     FiniteEffect::NotInvoked
                 }

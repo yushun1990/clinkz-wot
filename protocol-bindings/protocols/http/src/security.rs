@@ -201,7 +201,12 @@ impl ConsumerAccessService for HttpBasicClientAccess {
         operation: Operation,
     ) -> CoreResult<()> {
         let revision = self.state.capture_revision()?;
-        if target != self.state.target.as_ref() || operation != Operation::ReadProperty {
+        if target != self.state.target.as_ref()
+            || !matches!(
+                operation,
+                Operation::ReadProperty | Operation::WriteProperty
+            )
+        {
             return Err(denied(SecurityFailureReason::AuthorizationDenied));
         }
         self.state.policy.authorize(binding, target, operation)?;
@@ -245,6 +250,7 @@ impl ConsumerAccessService for HttpBasicClientAccess {
         Ok(Some(OutboundSecurity::new(BasicGrant {
             state: self.state.clone(),
             binding,
+            operation,
             revision,
         })))
     }
@@ -258,6 +264,7 @@ impl ConsumerAccessService for HttpBasicClientAccess {
 pub(crate) struct BasicGrant {
     state: Arc<ClientState>,
     binding: BindingRegistrationIdentity,
+    operation: Operation,
     revision: u64,
 }
 impl BasicGrant {
@@ -265,7 +272,7 @@ impl BasicGrant {
         request.binding_id() == self.binding.binding_id()
             && request.binding_generation() == self.binding.binding_generation()
             && request.artifact().identity().configuration() == self.binding.configuration()
-            && request.operation() == Operation::ReadProperty
+            && request.operation() == self.operation
     }
     pub(crate) fn target(&self) -> &str {
         &self.state.target
@@ -298,6 +305,12 @@ impl BasicGrant {
 /// work() includes its complete comparison, identity allocation and disposal;
 /// callbacks are cooperative, cannot acquire I/O or call application behavior.
 pub trait HttpBasicVerifier: Send + Sync {
+    /// Passive non-reused invalidation revision. Mutable verification policy
+    /// must advance this on change, even during verify(). Immutable verifiers
+    /// may use zero. Reading it performs no I/O or linked callbacks.
+    fn revision(&self) -> u64 {
+        0
+    }
     fn verify(&self, username: &[u8], password: &[u8]) -> CoreResult<Principal>;
     fn work(&self) -> u64;
 }
@@ -384,6 +397,9 @@ impl HttpServerSecurity {
     pub(crate) fn work(&self) -> u64 {
         self.work + 4096
     }
+    pub(crate) fn revision(&self) -> u64 {
+        self.verifier.revision()
+    }
     pub(crate) fn verify(
         &self,
         credentials: Option<&HttpBasicCredentials>,
@@ -393,6 +409,7 @@ impl HttpServerSecurity {
         }
         let credentials =
             credentials.ok_or_else(|| denied(SecurityFailureReason::MissingCredentials))?;
+        let revision = self.verifier.revision();
         let principal = self
             .verifier
             .verify(&credentials.username, &credentials.password)
@@ -402,7 +419,9 @@ impl HttpServerSecurity {
                         .unwrap_or(SecurityFailureReason::InvalidCredentials),
                 )
             })?;
-        if principal.retained_bytes() > 2048
+        if self.verifier.revision() != revision
+            || self.verifier.work() != self.work
+            || principal.retained_bytes() > 2048
             || principal.id.as_str().len() > 128
             || principal.scopes.len() > 16
             || principal.scopes.iter().any(|s| s.len() > 64)
@@ -426,3 +445,98 @@ impl PartialEq for HttpServerSecurity {
     }
 }
 impl Eq for HttpServerSecurity {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Policy;
+    impl ConsumerAccessService for Policy {
+        fn authorize(
+            &self,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            op: Operation,
+        ) -> CoreResult<()> {
+            // Application policy authorizes Write independently of scheme support.
+            if op == Operation::WriteProperty {
+                Ok(())
+            } else {
+                Err(denied(SecurityFailureReason::AuthorizationDenied))
+            }
+        }
+        fn authorize_instance(
+            &self,
+            _: &ConsumerInstanceRef,
+            id: BindingRegistrationIdentity,
+            target: &str,
+            op: Operation,
+        ) -> CoreResult<()> {
+            self.authorize(id, target, op)
+        }
+        fn retained_bytes(&self) -> u64 {
+            0
+        }
+        fn work(&self) -> u64 {
+            1
+        }
+    }
+
+    #[test]
+    fn issued_basic_grant_cannot_cross_operation_instance_registration_or_destination() {
+        let config = HttpConsumerConfig::for_https_basic_ip().unwrap();
+        let binding = BindingRegistrationIdentity::new(
+            BindingId::new(77),
+            BindingGeneration::INITIAL,
+            config.configuration.configuration(),
+            COMPATIBILITY,
+            0,
+        );
+        let instance =
+            ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL));
+        let access = HttpBasicClientAccess::try_new(
+            instance.reference(),
+            "https://127.0.0.1:443/on",
+            Arc::new(Policy),
+            Some(HttpBasicCredentials::try_new(b"user", b"password").unwrap()),
+        )
+        .unwrap();
+        let issue = |instance: &ConsumerInstanceRef, op| {
+            access.outbound_security(instance, binding, "https://127.0.0.1:443/on", op, &BASIC)
+        };
+        assert!(issue(&instance.reference(), Operation::ReadProperty).is_err());
+        assert!(issue(&instance.reference(), Operation::WriteAllProperties).is_err());
+        let other = ConsumerInstance::new(instance.reference().slot());
+        assert!(issue(&other.reference(), Operation::WriteProperty).is_err());
+        let capability = issue(&instance.reference(), Operation::WriteProperty)
+            .unwrap()
+            .unwrap();
+        let grant = capability.downcast_ref::<BasicGrant>().unwrap();
+        let request = |id, op| {
+            let artifact = BindingArtifactIdentity::new(
+                PlanSetGeneration::INITIAL,
+                PlanId::new(SlotIndex::new(0), Generation::INITIAL),
+                id,
+                binding.binding_generation(),
+                binding.configuration(),
+                COMPATIBILITY,
+                BindingArtifactRole::ConsumerCall,
+            );
+            OutboundRequest::finite(
+                BindingArtifactRef::new(artifact, SlotIndex::new(0)),
+                op,
+                (op == Operation::WriteProperty)
+                    .then(|| Payload::new(b"1".as_slice(), "application/json")),
+                Default::default(),
+                None,
+            )
+            .unwrap()
+        };
+        assert!(grant.for_binding(&request(binding.binding_id(), Operation::WriteProperty)));
+        assert!(!grant.for_binding(&request(binding.binding_id(), Operation::ReadProperty)));
+        assert!(!grant.for_binding(&request(BindingId::new(78), Operation::WriteProperty)));
+        assert!(grant.check("https://127.0.0.1:443/other").is_err());
+        access.replace_credentials(None).unwrap();
+        assert!(grant.check("https://127.0.0.1:443/on").is_err());
+    }
+}

@@ -3,8 +3,11 @@
 ## Assessment and selected boundary
 
 Assessment basis: master `1893d11403965520b7b4e3563851ea649b4ab65d` after
-#260/#261, v6.0 / ADR-0025. This increment exercises finite Property Read over
-HTTP/1.1 and TLS 1.3, JSON, IP literal endpoints and loopback Producer listeners.
+#260/#261, v6.0 / ADR-0025. The original increment exercises finite Property Read over
+HTTP/1.1 and TLS 1.3. The Property Write extension was independently assessed
+against master `e267ac6241c11692feef986e994e2f501425bd09` after #265; it adds
+structured JSON Write on the same finite owners, IP literal endpoints and
+loopback Producer listeners.
 It does not close a milestone or establish a general production HTTPS profile.
 
 | Boundary | Source finding and disposition |
@@ -49,7 +52,7 @@ concrete type hierarchy nor #261's schema representation is an API freeze.
 - Consumer registration pairs the real TLS trust owner, data service, native
   compiler/executor and Basic access service. NoSec-only services cannot bind
   Basic content. Per-call grants bind the original instance reference, selected
-  registration, exact destination, Property Read and credential revision. No
+  registration, exact destination, exact Property Read or Write operation and credential revision. No
   redirect, proxy, continuation, implicit retry or target rewrite exists.
   Permission and credential issuance each prepay their complete access-service
   work independently. Insufficient issuance credit preserves the original input
@@ -99,7 +102,8 @@ independent rustls HTTP peer. Tests cover:
 - Consumer and Producer refuse unsupported complete security expressions,
   simultaneous requirements, combo alternatives/conjunctions, other schemes,
   locations, scopes, proxies, extensions and cleartext. A mixed Read/Write TD
-  cannot publish through this Read-only security provider. Form override and
+  qualifies both operations independently; adding an unsupported notification
+  operation refuses complete Producer publication. Form override and
   default Basic header semantics execute.
 - Missing credentials refuse before Consumer network effects; a wrong-instance
   service refuses; rebinding a replacement instance succeeds. An independent
@@ -135,6 +139,88 @@ These are focused integration guarantees, not a full WoT interoperability suite.
 The application supplies the credential verifier and its actual verification
 algorithm; the fixture's comparison is test-only, not a password database design.
 
+## Secure effectful Property Write
+
+The [boundary reassessment](../../workspace/0112-secure-property-write.md)
+identified two concrete gaps, independent of TLS/HTTP mechanics: Property Write
+lost validated completion evidence in its effect field, and the final verifier
+could invalidate earlier application authorization while returning the same
+Principal. The existing finite execution and structured schema boundary remain
+suitable. The Core outcome and security contracts now describe completion and
+passive service revisions; the Binding still owns trust, credentials and HTTP.
+Finite dispatch also removes an unnecessary exclusive logical-owner borrow.
+Callback-safe one-way instance revocation uses the existing currentness cell and
+retains its original funding, without granting replacement/dispatch authority.
+No universal security service or parallel Write runtime was added.
+
+The public [joined Producer regression](../../protocol-bindings/protocols/http/tests/joined_producer.rs)
+also invalidates application policy inside authorization. Its funded handler
+adapter forwards the actual revision; the old allowed decision cannot enter
+behavior or deliver a result. [Action kernel](../../servient/finite/tests/action_lifecycle.rs)
+and [qualified HTTP Action regressions](../../protocol-bindings/protocols/http/tests/action_producer.rs)
+revoke the original instance during invoke/query/cancel authorization. They fence
+new invocation and public control, retain already accepted work and results,
+and release the original capacity after settlement and final control disposal.
+These are existing NoSec Actions; authenticated Action support remains excluded.
+
+`security_write` uses the same publication/security fixture as `security_https`.
+It prepares and completely qualifies a Producer with default Read/Write Forms,
+then executes actual Engine Consumers after preparation sources retire. It
+checks the original Principal (different from the Basic username), recipient,
+operation, Binding and retained accounts. Its falsifiable cases cover:
+
+- Structured nested values and a subsequent Read on the same native listener;
+  two independently credentialed Write instances share the exact immutable
+  content. Revoking one leaves the other executable; fresh checked binding can
+  reuse that content without adopting old authority.
+- Invalid required fields, nested strings, types, bounds and duplicate members
+  return original Consumer input before native work. An independent rustls client
+  sends the same invalid data to the Engine Producer, proving pre-effect checks
+  there independently. Wrong/missing credentials yield 401, verified but denied
+  principals/policy yield 403, and neither invokes behavior. An untrusted root
+  fails TLS before verifier/behavior. Forbidden destinations fail preparation;
+  changed application policy refuses original input before network effects.
+- Authorization/final-verification callbacks close publication, revoke the
+  verifier, change application policy, or change the verifier revision.
+  Pre-dispatch refusal is NotInvoked. After behavior completion these changes
+  fence delivery while preserving Completed and the original result/identity.
+  Passive revisions must be non-reused and must cover actual mutable policy;
+  they are sampled around callbacks, not treated as credential verification.
+  With just the final application-revision comparisons disabled, the two TLS
+  callback regressions reproduce unauthorized behavior entry and successful
+  delivery after policy revocation; the comparisons fence both counterexamples.
+  A one-way Producer revocation handle also invalidates the original instance
+  from either callback, without taking a registry borrow.
+- An explicitly lost Producer response after effects leaves Producer Completed /
+  NotDelivered and Consumer Unknown. Handler error or invalid output after state
+  mutation leaves both sides uncertain. An independent TLS server applies a PUT
+  and replies with valid 204, 202, 403, trailing data or no response. Only the
+  supported complete empty-204/EOF mapping yields Consumer Completed; no error
+  causes another connection or automatic replay.
+- Cancellation before network progress and after effects, plus reentrant
+  Consumer permission callbacks that cancel and drive the occupied call,
+  preserve original owners. A validated unread completion stays Completed even
+  when callback-time cancellation refuses handoff. Socket/listener disposal and
+  all tracked accounts are checked separately from effect/delivery outcomes.
+  Credential rotation and original Consumer revocation during the unread check
+  likewise retain Completed while refusing handoff. A retained Producer control
+  keeps its original capacity after listener/result/registry disposal until its
+  last release. Independent TCP/UDP finite regressions additionally exercise
+  sibling dispatch reentrancy and an old handle after same-slot replacement.
+- Full final-TD qualification still refuses authenticated collections, Actions,
+  observation, unsupported response/schema/security assertions, mixed cleartext
+  Forms and contradictory operation applicability. Basic is not an all-operation
+  support certificate. Existing Read trust/identity/work/cleanup regressions are
+  reaffirmed through the shared fixture.
+
+The Property Write completion change also applies to the cleartext finite path
+and independent downstream test Binding. Their prior Unknown assertions for valid
+Write completion are superseded; malformed/ambiguous/error cases remain Unknown.
+Read/Action and incomplete collection report semantics remain unchanged. No HTTP
+status is interpreted in Core, and no new native error implies remote nonexecution.
+These tests establish a bounded Host/manual capability, not production security
+qualification, physical-state confirmation, atomicity, rollback or remote cancellation.
+
 ## Resource and transport limits
 
 ASCII Basic username 1–64 bytes (no colon), password 1–128 bytes, strict canonical
@@ -161,7 +247,7 @@ HTTP/1.1. The caller remains responsible for provisioning current trust roots.
 Certificate CRL/OCSP revocation and root rotation in an existing registration are
 not implemented; replacing the registration is a new trust domain.
 
-Remaining unsupported: authenticated Write/collection/Action/notification roles,
+Remaining unsupported: authenticated collection/Action/notification roles,
 all other WoT security schemes/compositions/placements, OAuth/token refresh,
 TLS 1.2/mTLS/PSK, DNS/proxies/redirects, non-loopback Producer deployment,
 connection pooling, multiple concurrent exchanges, broad production hardening,

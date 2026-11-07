@@ -419,9 +419,17 @@ fresh application permission, then rechecks verification before native entry.
 After those callbacks, the original accepted instance, publication gate and
 actual Binding/service pair MUST still be current immediately before native
 send. A pre-callback currentness observation grants no permission at that edge.
+`FiniteIngressBinding::security_revision` projects the actual verifier's passive
+invalidation revision; `RawFiniteHandler::authorization_revision` belongs to
+application policy. Sample the former before verification and the latter before
+authorization and compare both after the last callback, before behavior/native
+entry. A changed revision refuses that attempt; there is no unbounded loop of
+mutually invalidating callbacks. The concrete verifier also checks its revision
+and declared work after verification before publishing a Principal. The revision
+contract and acceptance linearization are defined by EXEC-SECURITY-001.
 Failure retains the original input/result and native retirement owner; partial
 delivery remains Unknown. Redacted protocol
 refusals require no permission to deliver application data. The default zero-work
 adapter preserves existing trusted native principal semantics; it establishes no
 new authentication guarantee. Wrappers claiming the authenticated facet must
-forward its verification/configuration/work contract.
+forward its verification/configuration/work/revision contract.

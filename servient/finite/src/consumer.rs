@@ -1397,7 +1397,9 @@ impl Call {
                         self.output_validated = true;
                         if matches!(
                             self.definition.input.definition.operation(),
-                            Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                            Operation::WriteProperty
+                                | Operation::WriteAllProperties
+                                | Operation::WriteMultipleProperties
                         ) {
                             self.effect = if output
                                 .metadata()

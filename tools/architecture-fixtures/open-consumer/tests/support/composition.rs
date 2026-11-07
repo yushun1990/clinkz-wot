@@ -81,7 +81,7 @@ fn downstream_write_uses_its_own_native_completion_and_retains_late_success_with
         assert_eq!(settlement.result().is_ok(), !late);
         assert_eq!(settlement.operation(), Operation::WriteProperty);
         assert_eq!(settlement.consumer(), &owner.reference());
-        assert_eq!(settlement.effect(), ConsumerEffect::Unknown);
+        assert_eq!(settlement.effect(), ConsumerEffect::Completed);
         assert!(
             matches!(settlement.native_outcome(),ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none() && o.metadata().binding_response().unwrap().status_code()==0)
         );

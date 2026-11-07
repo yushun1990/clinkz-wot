@@ -365,6 +365,7 @@ fn revocation_and_same_generation_replacement_fence_both_deferred_native_candida
         Poll::Ready(RawFiniteState::Dispatching)
     );
     assert!(dispatches.borrow().is_empty());
+    let original_revocation = servient.revocation(old_key).unwrap();
     assert!(servient.revoke(old_key));
     // Revocation wins for TCP before replacement; replacement wins for UDP.
     assert_eq!(
@@ -374,6 +375,7 @@ fn revocation_and_same_generation_replacement_fence_both_deferred_native_candida
     servient
         .replace(old_key, counted(next, b'5', &dispatches, &dropped))
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    original_revocation.revoke(); // cannot revoke the same-slot successor
     assert_eq!(dropped.get(), 1);
     assert_eq!(
         step(&mut servient, &mut udp_rt),
@@ -564,7 +566,7 @@ fn wrong_issuer_cannot_dispatch_and_owner_drop_fences_unaccepted_but_retains_acc
         vec![counted(old, b'0', &dispatches, &dropped)],
         registry_limits(),
     );
-    let mut other = servient(
+    let other = servient(
         vec![counted(
             authority(203),
             b'5',
@@ -708,4 +710,153 @@ fn failed_replacement_returns_exact_owner_and_does_not_change_current_authority(
     assert_eq!(candidate_dropped.get(), 0);
     drop(recovered);
     assert_eq!(candidate_dropped.get(), 1);
+}
+
+#[test]
+fn finite_authorization_can_progress_a_sibling_without_exclusive_registry_ownership() {
+    type Hook = Rc<RefCell<Option<Box<dyn FnOnce()>>>>;
+    struct NestedHandler(Hook, CountingHandler);
+    impl RawFiniteHandler for NestedHandler {
+        fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+            let hook = self.0.borrow_mut().take();
+            if let Some(hook) = hook {
+                hook();
+            }
+            Ok(())
+        }
+        fn handle(
+            &self,
+            ctx: HandlerContext<'_>,
+            input: &InteractionInput,
+        ) -> CoreResult<InteractionOutput> {
+            self.1.handle(ctx, input)
+        }
+    }
+    let authority = authority(205);
+    let key = authority.key();
+    let hook: Hook = Rc::new(RefCell::new(None));
+    let dispatches = Rc::new(RefCell::new(Vec::new()));
+    let dropped = Rc::new(Cell::new(0));
+    let owner = Rc::new(servient(
+        vec![RawProducerInstance::new(
+            authority,
+            vec![RawFiniteBehavior::new(
+                AffordanceTarget::Property("value".into()),
+                Operation::ReadProperty,
+                NestedHandler(
+                    hook.clone(),
+                    CountingHandler {
+                        value: Cell::new(b'0'),
+                        dispatches: dispatches.clone(),
+                        dropped: dropped.clone(),
+                    },
+                ),
+            )],
+        )],
+        registry_limits(),
+    ));
+    let (binding, tcp_addr) = tcp(key, key);
+    let mut outer = RawFiniteRuntime::try_new(
+        binding,
+        7,
+        &owner,
+        limits(),
+        FiniteValidation::Raw,
+        Deadline::NONE,
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let binding = datagram(key, key);
+    let udp_addr = binding.addr.clone();
+    let inner = Rc::new(RefCell::new(
+        RawFiniteRuntime::try_new(
+            binding,
+            (),
+            &owner,
+            limits(),
+            FiniteValidation::Raw,
+            Deadline::NONE,
+        )
+        .unwrap_or_else(|e| panic!("{:?}", e.error())),
+    ));
+    let _ = owner
+        .step(&mut outer, &mut context(), &mut budget(5000), now())
+        .unwrap();
+    outer.activate_raw().unwrap();
+    let _ = owner
+        .step(
+            &mut inner.borrow_mut(),
+            &mut context(),
+            &mut budget(5000),
+            now(),
+        )
+        .unwrap();
+    inner.borrow_mut().activate_raw().unwrap();
+    let mut tcp_client = TcpStream::connect(tcp_addr.lock().unwrap().unwrap()).unwrap();
+    tcp_client
+        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+        .unwrap();
+    tcp_client.write_all(b"a").unwrap();
+    let udp_client = client(udp_addr.get().unwrap(), b'o');
+    assert_eq!(
+        owner
+            .step(&mut outer, &mut context(), &mut budget(5000), now())
+            .unwrap(),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    assert_eq!(
+        owner
+            .step(
+                &mut inner.borrow_mut(),
+                &mut context(),
+                &mut budget(5000),
+                now()
+            )
+            .unwrap(),
+        Poll::Ready(RawFiniteState::Dispatching)
+    );
+    let callback_owner = Rc::downgrade(&owner);
+    let callback_inner = inner.clone();
+    *hook.borrow_mut() = Some(Box::new(move || {
+        assert_eq!(
+            callback_owner
+                .upgrade()
+                .unwrap()
+                .step(
+                    &mut callback_inner.borrow_mut(),
+                    &mut context(),
+                    &mut budget(5000),
+                    now()
+                )
+                .unwrap(),
+            Poll::Ready(RawFiniteState::Delivering)
+        );
+    }));
+    assert_eq!(
+        owner
+            .step(&mut outer, &mut context(), &mut budget(5000), now())
+            .unwrap(),
+        Poll::Ready(RawFiniteState::Delivering)
+    );
+    assert_eq!(
+        &*dispatches.borrow(),
+        &[(key, BindingId::new(5)), (key, BindingId::new(3))]
+    );
+    let _ = owner
+        .step(&mut outer, &mut context(), &mut budget(5000), now())
+        .unwrap();
+    let _ = owner
+        .step(
+            &mut inner.borrow_mut(),
+            &mut context(),
+            &mut budget(5000),
+            now(),
+        )
+        .unwrap();
+    let mut response = [0];
+    tcp_client.read_exact(&mut response).unwrap();
+    assert_eq!(response, *b"2");
+    udp_client.recv(&mut response).unwrap();
+    assert_eq!(response, *b"1");
+    drop((inner, outer, owner));
+    assert_eq!(dropped.get(), 1);
 }

@@ -1428,7 +1428,7 @@ fn verify_collection_validator_bound(operation: Operation) {
         let hold_close = Rc::new(Cell::new(true));
         let sends = Rc::new(Cell::new(0));
         let validated = Rc::new(Cell::new(false));
-        let mut owner = RawProducerServient::try_new(
+        let owner = RawProducerServient::try_new(
             vec![RawProducerInstance::new(
                 auth,
                 vec![RawFiniteBehavior::new(
