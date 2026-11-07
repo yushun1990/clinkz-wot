@@ -33,10 +33,16 @@ and [separate-process peer](../../protocol-bindings/protocols/http/examples/mult
   `0f0efc48ac504745f8039cc9fb29ec44a615d151`, with unmodified post-#267 production code;
   [CSV](multi-instance/baseline/summary.csv) and
   [raw JSONL, gzip](multi-instance/baseline/measurements.jsonl.gz).
+- [Fully active distinct-target environment](multi-instance/targeted-load/environment.json):
+  `b2fb83863dc822ccf90cadcfef054d162c2921e9`; [CSV](multi-instance/targeted-load/summary.csv) and
+  [raw JSONL, gzip](multi-instance/targeted-load/measurements.jsonl.gz). The native
+  executable is unchanged; its binary hash matches the main sweep.
 
-The final sweep comprises **42 configurations × 3 fresh processes**: 117
-supported runs and nine expected preparation refusals, with **214,794 measured
-calls** plus warm-up/lifecycle exchanges. Populations are 1, 100, 1,000 and
+The archived sweep comprises **42 configurations × 3 fresh consumer processes**,
+plus a focused **10,000-distinct-target, fully active** configuration repeated
+three times: 120 supported runs and nine expected preparation refusals, with
+**304,794 measured calls** plus warm-up/lifecycle exchanges. The current full
+suite includes all 43 configurations. Populations are 1, 100, 1,000 and
 10,000; active fractions are 0, 1%, 10% and 100%; native lanes are 1, 8 and 32.
 Additional cases vary slots, account topology, schema members and preparation
 mode. Three rounds rotate each active cohort through the population. Each
@@ -207,6 +213,12 @@ For 10,000 instances at eight native lanes, changing the active cohort gives:
 At 100% active, the 1,000-instance rate is 11,827 calls/s
 (range 11,647–11,952); the 10,000-instance
 rate is 11,809 (range 11,630–11,830).
+The fully active **distinct-target** control prepares and binds all 10,000
+paths and executes all of them in each of three rounds. It reaches
+11,870 calls/s (range 11,800–11,957), admitted p99
+838 microseconds and cohort p99 834.62 ms. This is
+actual I/O through every target, beyond the sparse 1% targeted cases.
+
 Idle population does not force a whole-population progress sweep in this workload:
 the application explicitly drives only accepted active calls. Queue delay grows
 with offered work at fixed native capacity. No claim is made for an application
@@ -228,15 +240,15 @@ unretired exchange per registration; an accepted unpolled call still owns its
 lane until native retirement. The concrete private policy becomes v16, while
 artifact payload format remains v003.
 
-All **99** post-correction lifecycle probes admit the sibling while retaining the
+All **102** post-correction lifecycle probes admit the sibling while retaining the
 old result. The [real I/O regressions](../../protocol-bindings/protocols/http/tests/support/native_occupancy.rs)
 add normal/error result retention, cancellation, unpolled abandonment, successor
 exclusion and original-account final release. Existing Write/root-query tests
 continue to assert input recovery, current authority, effect evidence and unread
 Engine-slot capacity independently of native occupancy.
 
-Median observed local cancellation-to-settlement is **12.66 microseconds**;
-replacement plus original late-result settlement is **9.41 microseconds**
+Median observed local cancellation-to-settlement is **12.67 microseconds**;
+replacement plus original late-result settlement is **9.42 microseconds**
 across the lifecycle cases. The original identity/error and real returned output
 survive replacement, and independent permission changes refuse before I/O.
 Dropping the last eight results in the representative 10,000-instance case takes
@@ -279,7 +291,7 @@ banks do not prove a shared global quota domain fits the same workload.
 | Alternative | Evidence and disposition |
 | --- | --- |
 | Reuse an already qualified exact definition | Executed across 10,000 independent authorities. Use when target/native facts really agree; it removes repeated TD qualification and native compilation from binding. |
-| Share semantics while independently compiling targets | Prepared and bound 10,000 distinct targets with original banks; the rotating 1% cohort executes 300 target resources per run. Saves retained common meaning but keeps qualification traffic and per-mapping reservations. Preserve this truthful distinction. |
+| Share semantics while independently compiling targets | Prepared and bound 10,000 distinct targets with original banks; the fully active control executes every target three times per run. Saves retained common meaning but keeps qualification traffic and per-mapping reservations. Preserve this truthful distinction. |
 | Binding-specific checked operands / normalized common preparation | Could address repeated TD interpretation and artifact cardinality; native lowering itself is below 1% here. No prototype or safety/equivalence claim is made. It needs a concrete bounded qualification/ownership design, not a mandatory universal program or cache. |
 | Size existing slots for actual concurrency | Measured 555.52 MB idle saving at 10,000 instances. Adequate for this one-call-per-instance workload. It does not supply the 32-call promise of the larger configuration. |
 | Box/pool/chunk runtime records or use sparse account storage | Could reduce vacant-slot and dense-bank costs, but adds allocation, progress or quota-domain trade-offs. No deployment budget or tested operation mix demonstrates those new lifetime/failure mechanisms are needed for this path. Keep the current layout provisional. |
