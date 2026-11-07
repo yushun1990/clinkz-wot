@@ -178,6 +178,12 @@ pub struct ConsumerServices {
 /// Sharing this owner is distinct from selecting it for a logical instance.
 /// Raw startup service construction remains caller-funded; retained references
 /// use this owner rather than refunding its backing when one instance retires.
+/// Adopt a physical service once at the composition root, then pass this owner
+/// to every retained user, including independently constructed registries. A
+/// second adoption of a raw alias creates another charge, not another backing.
+/// Equal configuration does not establish shared ownership. Native resources
+/// and any backing shared internally between distinct services remain the
+/// concrete service's responsibility.
 pub struct ConsumerServiceOwner<S: ?Sized> {
     service: Arc<S>,
     backing_bytes: u64,
@@ -188,11 +194,22 @@ impl<S: ?Sized> ConsumerServiceOwner<S> {
         service: Arc<S>,
         bytes: u64,
         bank: &Arc<HostResourceAccounts>,
-    ) -> CoreResult<Arc<Self>> {
-        let retained = bytes
+    ) -> Result<Arc<Self>, BindingInputRejection<Arc<S>>> {
+        let funding = bytes
             .checked_add(core::mem::size_of::<Self>() as u64 + 128)
-            .ok_or_else(invalid)?;
-        let funding = reserve(bank, &[(ResourceKind::EngineLiveBytesGlobalMax, retained)])?;
+            .ok_or_else(invalid)
+            .and_then(|retained| {
+                reserve(bank, &[(ResourceKind::EngineLiveBytesGlobalMax, retained)])
+            });
+        let funding = match funding {
+            Ok(funding) => funding,
+            Err(error) => {
+                return Err(BindingInputRejection::new(
+                    service,
+                    BindingOperationalError::new(error),
+                ));
+            }
+        };
         Ok(Arc::new(Self {
             service,
             backing_bytes: bytes,
@@ -207,19 +224,23 @@ impl<S: ?Sized> ConsumerServiceOwner<S> {
     }
 }
 impl ConsumerServiceOwner<dyn ConsumerDataService> {
+    /// Adopt this physical service at its original bank. On refusal the entire
+    /// raw service is returned, including the caller's last reference.
     pub fn retain_data(
         service: Arc<dyn ConsumerDataService>,
         bank: &Arc<HostResourceAccounts>,
-    ) -> CoreResult<Arc<Self>> {
+    ) -> Result<Arc<Self>, BindingInputRejection<Arc<dyn ConsumerDataService>>> {
         let bytes = service.policy().retained_bytes;
         Self::retain(service, bytes, bank)
     }
 }
 impl ConsumerServiceOwner<dyn ConsumerAccessService> {
+    /// Adopt this physical service at its original bank. Share the returned
+    /// owner for reuse; refusal preserves the complete raw input for retry.
     pub fn retain_access(
         service: Arc<dyn ConsumerAccessService>,
         bank: &Arc<HostResourceAccounts>,
-    ) -> CoreResult<Arc<Self>> {
+    ) -> Result<Arc<Self>, BindingInputRejection<Arc<dyn ConsumerAccessService>>> {
         let bytes = service.retained_bytes();
         Self::retain(service, bytes, bank)
     }

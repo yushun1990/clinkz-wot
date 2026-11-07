@@ -27,6 +27,25 @@ Heap allocation measurements and reservation counters describe different facts;
 temporary allowances and overlapping reservations are reported separately from
 requested retained allocator bytes.
 
+Independently composed Host finite Consumer registries/Servients share service
+backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the
+composition root. Imports retain the original reservations; they neither move
+them to the importing bank nor acquire another backing reservation there. Data
+and access owners can originate at different banks. Each registry separately
+funds its records/references and actual native registrations; each instance and
+accepted interaction retains its own existing accounts. Registry-only records
+retire with the registry, while retained services/native owners survive through
+their final mapping or normal/late settlement disposal. Owner retention grants
+no permission, credential, policy revision or logical authority.
+
+Raw-service startup adoption matches aliases only within one construction.
+Independently adopting a raw alias again is outside the supported shared-owner
+composition contract: neither equivalent configuration nor an independent
+reservation proves another physical allocation. Composition roots must carry
+the original retained owner. Concrete services still declare and enforce their
+own backing, including any internally shared dependencies; this mechanism does
+not discover shared suballocations or manage Binding-native infrastructure.
+
 Prepared structured constraints add bounded owned field vectors and names to
 scalar data roles as well as collection members. A source census prepays their
 variable construction/destruction; retained content charges actual backing, not

@@ -257,39 +257,84 @@ separate from physical measurements.
 
 ### Physical service ownership across registries and Servients
 
-**Current evidence.** The service regressions prove one retained data/access
-owner for aliased raw `Arc`s **within one `ConsumerRegistry::try_new` call**,
-with separate registration costs and original funding through HTTP result
-disposal. Retained definitions and explicitly retained access owners can already
-be carried into independently funded bindings. This is distinct from importing
-one raw service into separately constructed registries.
+**Reproduced limitation.** At the post-#266 baseline, independently constructed
+registries given the same raw service reserve 69,152 bytes **each** for one
+60,000-byte backing. The characterization checkpoint `3b98056` tests shared data,
+shared access and both, using one bank and separate banks. A second construction
+under a common 100,000-byte limit refuses admission and rolls back. This is
+observable duplicate accounting and false capacity refusal, not a native I/O or
+logical-authority failure. #260 explicitly left this composition unproven; that
+evidence limit did not exempt shared backing from RES-OWNER-001/RES-HANDOFF-001.
 
-**Provisional choice and limitation.** Registry-local pointer matching is not a
-composition-wide physical ownership model. Each independent registry receives
-raw `ConsumerServices`, and
-[`ConsumerServiceOwner::retain_*`](../../core/src/consumer.rs) reserves anew on
-each call. Supplying the same raw service to multiple registries can therefore
-charge its physical backing again, including when those registries belong to
-independent Servients. Cross-registry/Servient exactly-once backing accounting
-and final release are not established. This topology cannot be claimed to
-satisfy the shared-backing invariant merely because each local account is bounded.
+**Supported correction.** A composition root adopts each actual service once
+with `ConsumerServiceOwner::retain_data` / `retain_access` and supplies clones of
+that retained owner to independent `ConsumerRegistry::try_from_retained` calls.
+`RetainedConsumerRegistrationInput` keeps preparation, data and access ownership
+explicit. Different owners may originate at different banks; imports do not move
+or reserve their backing again. Each registry funds its local records/references
+and actual native registration. Instance, mapping, call/result and cleanup costs
+remain independently funded. Raw `try_new` remains local startup adoption; using
+it to adopt aliases in separate constructions is explicitly outside this shared
+composition contract. No global pointer index, configuration-based matching,
+universal manager or Engine-native shutdown right is added.
+The earlier preparation/allocation measurements remain historical at their named
+revision; the service-account figures below come from this successor fixture.
 
-**Possible evolution, unproven.** Allow composition roots to propagate an explicit
-retained service owner into each participating registry or Servient, keeping its
-first physical account while separately funding local references and records.
-This need not share instance permission or require a process-global pointer
-registry, cache or service manager. Account-domain compatibility and retirement
-would need an explicit supported contract.
+The [service regressions](../../protocol-bindings/protocols/http/tests/support/service_ownership.rs)
+exercise same/separate banks and both retirement orders for data-only,
+access-only and combined 60,000-byte backing. Equal but distinct services keep
+separate owners, even with equivalent configuration. Registries can combine data
+and access from different original banks. Zero-credit adoption returns its last
+raw input for retry. Zero-credit and partial registry refusal return original
+retained inputs and roll back only new local acquisitions; retry succeeds at an
+adequate bank. Changed declared backing refuses import without refinancing it.
 
-**Justifying workload/experiment.** A deployment with independently loaded
-registries or two Servients using one validator/policy store would expose this
-as a correctness need. Pass one actual 60,000-byte service backing through two
-registry constructions, first with one startup account and then separate startup
-accounts, while keeping per-instance banks distinct. Inspect charges, recoverable
-refusal and original owner identity. Retire roots in both orders while retaining
-normal and late results. A candidate must charge the backing once at its original
-bank, keep local costs separate and release
-only after the final user. No such cross-registry result is claimed here.
+On the x86-64 Host fixture, the retained shared services reserve **60,632 bytes**
+(including their object/owner envelopes), and each registry reserves **9,384 bytes**:
+**848** for registry-only records and **8,536** for the actual native registration.
+These are declared reservation counters, not additive measured process RAM.
+The additional destructor observers are fixture instrumentation; the pre-change
+raw reproduction above predates them and the new registry record charge.
+
+The real Engine HTTP test uses independently constructed registries and native
+registrations, separate Consumer authorities at equal numeric slots, and separate
+instance banks. It retains a normal result and an actual returned HTTP output
+awaiting validation, then cancels and/or retires the latter's original authority.
+The late result refuses application success while keeping the original native
+outcome. Exact startup-account snapshots are asserted at each transition:
+
+| Transition | One common startup bank | Original bank / second startup bank |
+| --- | ---: | ---: |
+| Both registries admitted | 79,400 | 70,016 / 9,384 |
+| Registries retired; mappings/results retained | 77,704 | 69,168 / 8,536 |
+| Normal result disposed; late result retained | 69,168 | 60,632 / 8,536 |
+| Late result disposed first; normal retained | 69,168 | 69,168 / 0 |
+| Final result disposed | 0 | 0 / 0 |
+
+Every resource account in both startup banks and both instance banks returns to
+zero. Actual data/access service destructors run once each while their original
+owner reservations are still present, then the final leases release. This is
+resource-accounting and actual-disposal evidence alongside identity checks,
+rather than an inference from Arc strong counts.
+
+The [HTTPS regression](../../protocol-bindings/protocols/http/tests/security_https.rs)
+imports one shared data owner into two independently constructed registries with
+separate native trust/registration funding and independent access owners,
+credentials, targets, policies, revisions and instance banks. Distinct real TLS
+peers require different passwords. Changing A's credentials/policy and retiring
+A's authority leaves B's revision and successful execution independent; B's policy
+change fences B's subsequent calls without changing A's revision. Already
+handed-off completions retain their original settled meaning. Original service
+funding survives the registries and instances through the final result.
+
+**Remaining limitations.** This is explicit Host finite Consumer composition,
+not automatic deduplication of separately adopted raw aliases or different
+service objects with shared internal suballocations. Concrete services own those
+internal declarations/limits. It does not add retained-owner import to the
+separate continuing Action, notification or Producer registries, nor prove
+portable/static ownership, general cross-process accounting, native session
+sharing, aggregate OS containment or arbitrary tenant/trust compatibility.
+Physical retention never grants credential, authorization or interaction rights.
 
 ### Richer DataSchema, continuing Actions, notifications and Producers
 
