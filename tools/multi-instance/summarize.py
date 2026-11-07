@@ -85,7 +85,7 @@ def main():
         assert all(s["preparation"]["content_constructions"] == rows["content_constructions"] for s in samples)
         assert all(s["load"]["completed"] == calls for s in samples)
         output.append(rows)
-    writer = csv.DictWriter(sys.stdout, fieldnames=list(output[0]))
+    writer = csv.DictWriter(sys.stdout, fieldnames=list(output[0]), lineterminator="\n")
     writer.writeheader()
     writer.writerows(output)
 
