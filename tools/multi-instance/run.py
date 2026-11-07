@@ -26,6 +26,8 @@ def cases(suite):
                 variants.append(dict(population=16, active=1, lanes=2, mode=mode, driver=driver))
     elif suite == "baseline":
         variants = [dict(), dict(population=10000, slots=32), dict(mode="targeted")]
+    elif suite == "targeted-load":
+        variants = [dict(population=10000, active=1, mode="targeted")]
     else:
         for n in (1, 100, 1000, 10000):
             for active in (0, 0.01, 0.1, 1):
@@ -43,6 +45,7 @@ def cases(suite):
         variants += [dict(mode="targeted", members=n) for n in (1, 29)]
         variants += [dict(population=1, lanes=1, mode="targeted", members=n, active=0) for n in (30, 32)]
         variants += [dict(population=n, mode="targeted", accounts="shared", active=0) for n in (896, 897)]
+        variants.append(dict(population=10000, active=1, mode="targeted"))
     unique = {}
     for variant in variants:
         case = dict(base, **variant)
@@ -52,7 +55,7 @@ def cases(suite):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=("smoke", "baseline", "full"), default="full")
+    parser.add_argument("--suite", choices=("smoke", "baseline", "targeted-load", "full"), default="full")
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--binary", type=Path, default=ROOT / "target/release/examples/multi_instance")

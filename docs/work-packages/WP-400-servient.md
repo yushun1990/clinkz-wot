@@ -297,6 +297,13 @@ are recorded in [the evidence](../evidence/consumer-execution-reuse.md). This do
 not close a package/milestone or qualify Producer reuse, broader schemas/security
 or portable execution.
 
+The [multi-instance characterization](../evidence/consumer-multi-instance-scaling.md)
+extends this finite Host path to increasing populations and active fractions,
+with independent policy/accounts, explicit native lanes, distinct targets,
+allocator/reservation separation and final retirement evidence. It retains the
+current runtime layout as provisional and records its dense account/slot costs
+and preparation limits; no package or profile qualification is implied.
+
 Calls and abandoned-handle cleanup retain their original native owner and first
 cause through cancellation errors/Pending, policy/service loss, revocation and
 late completion. Every native/cleanup callback needs credit. A successful raw
