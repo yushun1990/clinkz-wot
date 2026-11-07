@@ -57,9 +57,11 @@ The Binding driver executes the **same** qualified HTTP artifact and Core finite
 seal through `start_finite`, omitting Consumer Runtime policy, bookkeeping and
 data validation. This is a measurement control, never an authorized application
 entry point. It retains the same idle instances and uses the same peer, target
-bodies, connection policy, queue and warm-up. Compare paired CPU/allocation and
+bodies, connection policy, queue and warm-up. Compare paired synchronous API/allocation and
 wall-time measurements; subtraction and loopback timing alone do not establish
-an exact instruction-level Engine cost. Idle construction/source-free binding
+an exact instruction-level Engine cost. Synchronous API spans use elapsed time
+around admission/poll, exclude waits between polls, include SDK work and possible
+OS preemption, and are not exclusive thread CPU time. Idle construction/source-free binding
 contains no network I/O. Native job-step measurements include the public
 compilation wrapper and exclude earlier snapshot/bounds construction; enclosing
 qualification includes those costs and source admission. Parse, qualification
@@ -86,6 +88,9 @@ is the sum of interval net changes (for example, owned parsed Things before
 later destruction), not a concurrently retained peak. Use enclosing phase live
 and peak values for physical storage. Work credits are conservative allowances,
 not CPU instruction counts.
+The admitted phase includes the caller's preallocated `ConsumerSettlement`
+carriers as well as call handles. The carrier size is recorded in configuration;
+it is actual heap in this workload, independent of the runtime's vacant slots.
 
 Generate a median CSV, including the measured ranges for throughput:
 

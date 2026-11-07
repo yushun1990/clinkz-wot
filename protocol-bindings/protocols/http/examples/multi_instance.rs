@@ -579,8 +579,8 @@ async fn load(
     measured["throughput_per_s"] = json!(service.len() as f64 / elapsed.as_secs_f64());
     measured["admitted_latency"] = summary(&mut service);
     measured["cohort_latency"] = summary(&mut queued);
-    measured["admission_cpu_ns"] = json!(admission_ns);
-    measured["progress_cpu_ns"] = json!(progress_ns);
+    measured["synchronous_admission_ns"] = json!(admission_ns);
+    measured["synchronous_progress_ns"] = json!(progress_ns);
     measured["polls"] = json!(polls);
     measured["work"] = work_json(&credits);
     report(measured, banks, physical);
@@ -718,7 +718,7 @@ async fn run(o: Options) {
         "slots": o.slots, "members": o.members, "rounds": o.rounds, "mode": o.mode,
         "driver": o.driver, "accounts": o.accounts, "delay_us": o.delay_us,
         "native_mappings": o.mappings(), "physical_peer_processes": 1,
-        "account_size": size_of::<HostResourceAccounts>() }),
+        "account_size": size_of::<HostResourceAccounts>(), "result_owner_size": size_of::<ConsumerSettlement>() }),
     );
     let phase = meter::Phase::begin();
     let banks: Vec<_> = (0..if o.accounts == "shared" {
@@ -740,7 +740,7 @@ async fn run(o: Options) {
         .collect();
     let mut definitions: Vec<Arc<ConsumerDefinition>> = Vec::with_capacity(o.mappings());
     let mut instances = Vec::with_capacity(o.population);
-    let mut retained = Vec::with_capacity(o.lanes);
+    let mut retained = Vec::new();
     report(phase.finish("fixture_storage"), &banks, &physical);
 
     let phase = meter::Phase::begin();
@@ -855,6 +855,8 @@ async fn run(o: Options) {
 
     if o.driver == "engine" {
         let phase = meter::Phase::begin();
+        // Actual caller-owned result carriers belong to active storage too.
+        retained.reserve_exact(o.lanes);
         let mut calls: Vec<_> = (0..o.lanes)
             .map(|i| instances[i].start(&mut work()).unwrap())
             .collect();
