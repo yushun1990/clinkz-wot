@@ -165,6 +165,14 @@ registration backing keep their original explicit startup bank; content/mapping
 leases and instance accounts remain separate. `servient-finite::consumer::ConsumerRuntime` owns only finite logical calls,
 current authority, captured definitions, native calls, unread/late outcomes and
 original leases. Its normal dependency graph contains Core and Foundation only.
+Independently composed finite registries can import explicit original service
+owners through `try_from_retained`; each registry funds its own records and
+native registrations. Raw-service `try_new` remains local startup adoption.
+The [service composition evidence](../evidence/consumer-execution-reuse.md#physical-service-ownership-across-registries-and-servients)
+exercises same/separate banks, refusal/rollback, independent HTTPS credentials
+and policy revisions, normal/late HTTP results and exact final release. This
+does not extend retained-owner import to the distinct continuing Action,
+notification or Producer preparation APIs.
 The HTTP example uses this path; method/header/context/framing and prior finite
 ownership regressions continue on the explicitly restricted inline helper.
 `InlineConsumerCompilerSupport`, `InlineConsumerCompilerRegistration`,

@@ -232,9 +232,25 @@ Refusal returns the original mapping/policy owners. The convenience `prepare`
 result supplies bindings at the preparation bank; callers can retain definitions,
 discard those initial bindings, and bind independently after source retirement.
 
-`ConsumerRegistry::try_new` reserves actual data/access service and native
-registration backing once at its explicit original bank; prepared users retain
-those owners. Mapping/content backing and instance records have separate funding.
+`ConsumerRegistry::try_new` adopts raw data/access services at its explicit bank,
+matching raw aliases only within those inputs. It is a startup convenience for
+services not independently adopted elsewhere. Cross-registry/Servient service
+composition uses `ConsumerRegistry::try_from_retained` with
+`RetainedConsumerRegistrationInput`: actual preparation plus separately retained
+data and access owners. The composition root adopts each physical service once
+with `ConsumerServiceOwner::retain_data` / `retain_access` and propagates that
+owner. Adoption refusal returns the complete raw input. Import retains its
+original bank without recharging/transferring backing, including when the data,
+access, registry and instance banks differ. Changed backing declarations refuse
+import rather than refresh the original owner. Complete actual qualification and
+fresh per-instance access/security checks remain mandatory.
+
+Both constructors separately reserve registry-only records/references and each
+actual native registration. Partial refusal rolls back new local reservations
+and returns all protected inputs without refunding pre-existing service owners.
+Registry records retire when their registry does; prepared users keep the original
+service/native owners through normal and late result disposal, in either root
+retirement order. Mapping/content backing and instance records have separate funding.
 See [Foundation](foundation.md) for physical retention and accounting. This is a
 Host representation of the boundary, not an Arc field or executor requirement on
 semantic content or a new all-profile execution claim. Host startup reference construction uses

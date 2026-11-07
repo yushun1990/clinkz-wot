@@ -4,7 +4,7 @@
 include!("support/security.rs");
 
 #[test]
-fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_meaning() {
+fn retained_service_composition_preserves_independent_https_credentials_policy_and_authority() {
     io().block_on(async {
         let keys = Keys::for_name("127.0.0.1");
         let verify_a = verifier();
@@ -15,13 +15,32 @@ fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_mean
         let owner_b = consumer_instance();
         let bank_a = bank();
         let bank_b = bank();
-        let access_a = access(
-            &owner_a,
-            a.td["properties"]["on"]["forms"][0]["href"]
-                .as_str()
-                .unwrap(),
-            true,
-            Arc::new(AtomicBool::new(false)),
+        let service_bank = bank();
+        let startup_a = bank();
+        let startup_b = bank();
+        let data = ConsumerServiceOwner::retain_data(
+            HttpConsumerConfig::for_https_basic_ip()
+                .unwrap()
+                .consumer_services()
+                .data,
+            &service_bank,
+        )
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let original_charge = service_bank
+            .account(ResourceKind::EngineLiveBytesGlobalMax)
+            .used();
+        let policy_a = Arc::new(ReviewPolicy::default());
+        let policy_b = Arc::new(ReviewPolicy::default());
+        let access_a = Arc::new(
+            HttpBasicClientAccess::try_new(
+                owner_a.reference(),
+                a.td["properties"]["on"]["forms"][0]["href"]
+                    .as_str()
+                    .unwrap(),
+                policy_a.clone(),
+                Some(credentials()),
+            )
+            .unwrap(),
         );
         let access_b = Arc::new(
             HttpBasicClientAccess::try_new(
@@ -29,17 +48,93 @@ fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_mean
                 b.td["properties"]["on"]["forms"][0]["href"]
                     .as_str()
                     .unwrap(),
-                Arc::new(Access(Arc::new(AtomicBool::new(false)))),
+                policy_b.clone(),
                 Some(
                     HttpBasicCredentials::try_new(USER, b"independent-instance-password").unwrap(),
                 ),
             )
             .unwrap(),
         );
+        let prepare = |td: &Value,
+                       owner: &ConsumerInstance,
+                       access: Arc<HttpBasicClientAccess>,
+                       startup: &Arc<HostResourceAccounts>,
+                       accounts: &Arc<HostResourceAccounts>,
+                       reuse: Option<&Arc<PreparedConsumerContent>>| {
+            let input = try_https_basic_consumer_registration(
+                keys.client(),
+                access,
+                BindingId::new(198),
+                BindingGeneration::INITIAL,
+                0,
+            )
+            .unwrap();
+            let access = ConsumerServiceOwner::retain_access(input.services.access, startup)
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let registry = ConsumerRegistry::try_from_retained(
+                vec![RetainedConsumerRegistrationInput {
+                    preparation: input.preparation,
+                    data: data.clone(),
+                    access,
+                }],
+                startup,
+            )
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let source = serde_json::from_value(td.clone()).unwrap();
+            let drive = |job: &mut ConsumerCompilation<'_>| {
+                while !job.is_finished() {
+                    job.step(&mut work(), false);
+                }
+            };
+            let prepared = if let Some(content) = reuse {
+                registry.prepare_with_content(
+                    &source,
+                    GatewayDefaultV1::LIMITS,
+                    accounts.clone(),
+                    ConsumerSelector::default(),
+                    content,
+                    &mut work(),
+                    drive,
+                )
+            } else {
+                registry.prepare(
+                    &source,
+                    GatewayDefaultV1::LIMITS,
+                    accounts.clone(),
+                    ConsumerSelector::default(),
+                    &mut work(),
+                    drive,
+                )
+            }
+            .unwrap();
+            let (bindings, funding) = prepared.into_execution();
+            assert!(std::ptr::eq(
+                bindings[0].definition().data(),
+                data.service()
+            ));
+            let content = bindings[0].definition().content().clone();
+            let client =
+                ConsumerRuntime::try_new(owner.reference(), bindings, funding, accounts.clone(), 1)
+                    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            (client, content)
+        };
         let (client_a, content) =
-            secure_client(&a.td, &keys, &owner_a, access_a.clone(), &bank_a, None);
-        let (client_b, content_b) =
-            secure_client(&b.td, &keys, &owner_b, access_b, &bank_b, Some(&content));
+            prepare(&a.td, &owner_a, access_a.clone(), &startup_a, &bank_a, None);
+        let (client_b, content_b) = prepare(
+            &b.td,
+            &owner_b,
+            access_b.clone(),
+            &startup_b,
+            &bank_b,
+            Some(&content),
+        );
+        drop(data);
+        assert_eq!(
+            service_bank
+                .account(ResourceKind::EngineLiveBytesGlobalMax)
+                .used(),
+            original_charge
+        );
         assert!(Arc::ptr_eq(&content, &content_b));
         let mut call_a = read_secure(&client_a);
         let mut call_b = read_secure(&client_b);
@@ -52,6 +147,19 @@ fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_mean
             "verified-account"
         );
         assert!(verify_a.calls.load(Ordering::Relaxed) >= 3);
+        let revision_b = access_b.security_revision();
+        policy_a.revision.fetch_add(1, Ordering::AcqRel);
+        access_a.replace_credentials(None).unwrap();
+        assert!(
+            result_a.result().is_ok(),
+            "an already handed-off completion remains settled"
+        );
+        assert!(matches!(
+            result_a.native_outcome(),
+            ConsumerNativeOutcome::Returned(Ok(_))
+        ));
+        assert_eq!(access_b.security_revision(), revision_b);
+        assert!(result_b.result().is_ok());
         owner_a.revoke();
         assert!(
             client_a
@@ -66,10 +174,26 @@ fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_mean
             result_next_b.result().is_ok(),
             "sibling credentials and authority remain independent"
         );
+        let revision_a = access_a.security_revision();
+        policy_b.revision.fetch_add(1, Ordering::AcqRel);
+        assert!(result_next_b.result().is_ok());
+        assert!(
+            client_b
+                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .is_err()
+        );
+        assert_eq!(access_a.security_revision(), revision_a);
         drop((next_b, result_next_b));
         drop((
-            call_a, client_a, client_b, owner_a, owner_b, content_b, access_a,
+            call_a, client_a, client_b, owner_a, owner_b, content_b, access_a, access_b,
         ));
+        clean(&startup_b);
+        assert_eq!(
+            service_bank
+                .account(ResourceKind::EngineLiveBytesGlobalMax)
+                .used(),
+            original_charge
+        );
         assert!(
             bank_a
                 .account(ResourceKind::EngineLiveBytesGlobalMax)
@@ -79,6 +203,8 @@ fn real_https_verifies_credentials_then_principal_and_reuses_only_immutable_mean
         drop((result_a, content));
         clean(&bank_a);
         clean(&bank_b);
+        clean(&startup_a);
+        clean(&service_bank);
         a.close();
         b.close();
     });
@@ -100,7 +226,7 @@ fn actual_support_refuses_complete_unsupported_expressions_and_incompatible_reus
         Arc::new(Access(Arc::new(AtomicBool::new(false)))),
         &accounts,
     )
-    .unwrap();
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert!(
         definition
             .clone()
@@ -978,7 +1104,8 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
             "stale binding cannot authorize a new call"
         );
         drop(client);
-        let owner = ConsumerServiceOwner::retain_access(access.clone(), &accounts).unwrap();
+        let owner = ConsumerServiceOwner::retain_access(access.clone(), &accounts)
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let binding = definition
             .bind(owner, accounts.clone(), &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));

@@ -121,7 +121,7 @@ fn bind(
         }),
         accounts,
     )
-    .unwrap();
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let binding = definition
         .bind(policy, accounts.clone(), &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -297,7 +297,7 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
         }),
         &account_a,
     )
-    .unwrap();
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let before_a = live(&account_a);
     let before_backing = live(&backing);
     let saturated = account_b
@@ -580,7 +580,7 @@ fn source_free_binding_and_warm_admission_cannot_refresh_changed_service_bounds(
             }),
             &account,
         )
-        .unwrap();
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
         assert!(
             definition
                 .clone()

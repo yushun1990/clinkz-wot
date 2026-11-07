@@ -72,7 +72,8 @@ fn bind_mappings(
     bank: &Arc<HostResourceAccounts>,
     denied: Arc<AtomicBool>,
 ) -> ConsumerRuntime {
-    let access = ConsumerServiceOwner::retain_access(Arc::new(Access(denied)), bank).unwrap();
+    let access = ConsumerServiceOwner::retain_access(Arc::new(Access(denied)), bank)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let bindings = definitions
         .into_iter()
         .map(|d| {
@@ -651,7 +652,7 @@ fn structured_preparation_cancellation_and_binding_refusal_preserve_funded_owner
         Arc::new(Access(Arc::new(AtomicBool::new(false)))),
         &accounts,
     )
-    .unwrap();
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     for saturated in [false, true] {
         let mut limits = GatewayDefaultV1::LIMITS.clone();
         if saturated {

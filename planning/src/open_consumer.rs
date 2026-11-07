@@ -34,6 +34,86 @@ pub struct ConsumerRegistrationInput {
     pub preparation: HostConsumerBindingPreparation,
     pub services: ConsumerServices,
 }
+/// Explicit service ownership for composition across independently funded
+/// registries/Servients. Clone the same owner for shared backing; unrelated
+/// data and access owners (and their original banks) may be combined freely.
+/// Retention grants no credentials, permission or logical interaction authority.
+pub struct RetainedConsumerRegistrationInput {
+    pub preparation: HostConsumerBindingPreparation,
+    pub data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
+    pub access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
+}
+type DataOwner = Arc<ConsumerServiceOwner<dyn ConsumerDataService>>;
+type AccessOwner = Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>;
+type RegistrationFunding = (DataOwner, AccessOwner, Arc<Vec<HostCapacityReservation>>);
+
+// One admission/rollback implementation for raw startup adoption and explicit
+// retained composition. Only the service-ownership acquisition differs.
+trait RegistryInput: Sized {
+    fn preparation(&self) -> &HostConsumerBindingPreparation;
+    fn into_preparation(self) -> HostConsumerBindingPreparation;
+    fn service_owners(
+        &self,
+        previous: &[Self],
+        funded: &[RegistrationFunding],
+        bank: &Arc<HostResourceAccounts>,
+    ) -> CoreResult<(DataOwner, AccessOwner)>;
+}
+impl RegistryInput for ConsumerRegistrationInput {
+    fn preparation(&self) -> &HostConsumerBindingPreparation {
+        &self.preparation
+    }
+    fn into_preparation(self) -> HostConsumerBindingPreparation {
+        self.preparation
+    }
+    fn service_owners(
+        &self,
+        previous: &[Self],
+        funded: &[RegistrationFunding],
+        bank: &Arc<HostResourceAccounts>,
+    ) -> CoreResult<(DataOwner, AccessOwner)> {
+        // Raw aliases are recognized only within this construction. A caller
+        // sharing services across constructions must propagate retained owners.
+        let data = match previous
+            .iter()
+            .position(|old| Arc::ptr_eq(&old.services.data, &self.services.data))
+        {
+            Some(first) => funded[first].0.clone(),
+            None => ConsumerServiceOwner::retain_data(self.services.data.clone(), bank)
+                .map_err(|e| e.error().error().clone())?,
+        };
+        let access = match previous
+            .iter()
+            .position(|old| Arc::ptr_eq(&old.services.access, &self.services.access))
+        {
+            Some(first) => funded[first].1.clone(),
+            None => ConsumerServiceOwner::retain_access(self.services.access.clone(), bank)
+                .map_err(|e| e.error().error().clone())?,
+        };
+        Ok((data, access))
+    }
+}
+impl RegistryInput for RetainedConsumerRegistrationInput {
+    fn preparation(&self) -> &HostConsumerBindingPreparation {
+        &self.preparation
+    }
+    fn into_preparation(self) -> HostConsumerBindingPreparation {
+        self.preparation
+    }
+    fn service_owners(
+        &self,
+        _: &[Self],
+        _: &[RegistrationFunding],
+        _: &Arc<HostResourceAccounts>,
+    ) -> CoreResult<(DataOwner, AccessOwner)> {
+        if self.data.policy().retained_bytes != self.data.backing_bytes()
+            || self.access.retained_bytes() != self.access.backing_bytes()
+        {
+            return Err(invalid());
+        }
+        Ok((self.data.clone(), self.access.clone()))
+    }
+}
 struct Registration {
     compiler: HostBindingCompilerRegistration,
     execution: Arc<HostConsumerBindingRegistration>,
@@ -47,16 +127,38 @@ struct Registration {
 /// reserved once at construction and retained by every prepared user.
 pub struct ConsumerRegistry {
     registrations: Vec<Registration>,
+    // Registry-only records retire independently of retained executor backing.
+    _records: Vec<HostCapacityReservation>,
 }
 impl ConsumerRegistry {
+    /// Adopt raw services at this bank, matching aliases within these inputs.
+    /// The caller must not independently adopt the same backing elsewhere. Use
+    /// `try_from_retained` for services shared across registry/Servient roots.
     pub fn try_new(
         inputs: Vec<ConsumerRegistrationInput>,
         bank: &Arc<HostResourceAccounts>,
     ) -> Result<Self, BindingInputRejection<Vec<ConsumerRegistrationInput>>> {
+        Self::build(inputs, bank)
+    }
+
+    /// Import original service owners without acquiring or moving their backing
+    /// reservations. This bank funds this registry's records, references and
+    /// actual native registrations. Refusal returns every protected input.
+    pub fn try_from_retained(
+        inputs: Vec<RetainedConsumerRegistrationInput>,
+        bank: &Arc<HostResourceAccounts>,
+    ) -> Result<Self, BindingInputRejection<Vec<RetainedConsumerRegistrationInput>>> {
+        Self::build(inputs, bank)
+    }
+
+    fn build<T: RegistryInput>(
+        inputs: Vec<T>,
+        bank: &Arc<HostResourceAccounts>,
+    ) -> Result<Self, BindingInputRejection<Vec<T>>> {
         let valid = !inputs.is_empty()
             && inputs.len() <= MAX_REGISTRATIONS
             && inputs.iter().enumerate().all(|(i, input)| {
-                let p = &input.preparation;
+                let p = input.preparation();
                 let Some(m) = p.compiler().consumer_metadata() else {
                     return false;
                 };
@@ -64,7 +166,7 @@ impl ConsumerRegistry {
                     && m.configuration.configuration() == p.identity().configuration()
                     && p.compiler().compatibility() == p.identity().artifact_compatibility()
                     && !inputs[..i].iter().any(|old| {
-                        old.preparation.identity().binding_id() == p.identity().binding_id()
+                        old.preparation().identity().binding_id() == p.identity().binding_id()
                     })
             });
         if !valid {
@@ -73,6 +175,23 @@ impl ConsumerRegistry {
                 BindingOperationalError::new(invalid()),
             ));
         }
+        let records = match reserve(
+            bank,
+            &[(
+                K::EngineLiveBytesGlobalMax,
+                ::core::mem::size_of::<Self>() as u64
+                    + inputs.len() as u64 * ::core::mem::size_of::<Registration>() as u64
+                    + 128,
+            )],
+        ) {
+            Ok(records) => records,
+            Err(error) => {
+                return Err(BindingInputRejection::new(
+                    inputs,
+                    BindingOperationalError::new(error),
+                ));
+            }
+        };
         let mut registrations = Vec::new();
         if registrations.try_reserve_exact(inputs.len()).is_err() {
             return Err(BindingInputRejection::new(
@@ -80,7 +199,7 @@ impl ConsumerRegistry {
                 BindingOperationalError::new(busy()),
             ));
         }
-        let mut services: Vec<(_, _, _)> = Vec::new();
+        let mut services: Vec<RegistrationFunding> = Vec::new();
         if services.try_reserve_exact(inputs.len()).is_err() {
             return Err(BindingInputRejection::new(
                 inputs,
@@ -89,25 +208,7 @@ impl ConsumerRegistry {
         }
         for (i, input) in inputs.iter().enumerate() {
             let owners = (|| {
-                // Registrations may alias either actual service independently.
-                // Keep its first funded owner; equal policies do not imply
-                // shared backing. Registration/reference costs remain below.
-                let data = match inputs[..i]
-                    .iter()
-                    .position(|old| Arc::ptr_eq(&old.services.data, &input.services.data))
-                {
-                    Some(first) => Arc::clone(&services[first].0),
-                    None => ConsumerServiceOwner::retain_data(input.services.data.clone(), bank)?,
-                };
-                let access = match inputs[..i]
-                    .iter()
-                    .position(|old| Arc::ptr_eq(&old.services.access, &input.services.access))
-                {
-                    Some(first) => Arc::clone(&services[first].1),
-                    None => {
-                        ConsumerServiceOwner::retain_access(input.services.access.clone(), bank)?
-                    }
-                };
+                let (data, access) = input.service_owners(&inputs[..i], &services, bank)?;
                 Ok::<_, CoreError>((
                     data,
                     access,
@@ -116,7 +217,7 @@ impl ConsumerRegistry {
                         &[(
                             K::EngineLiveBytesGlobalMax,
                             input
-                                .preparation
+                                .preparation()
                                 .resources()
                                 .admitted()
                                 .retained_bytes()
@@ -141,8 +242,9 @@ impl ConsumerRegistry {
             }
         }
         for (input, (data, access, execution_funding)) in inputs.into_iter().zip(services) {
-            let metadata = input.preparation.compiler().consumer_metadata().unwrap();
-            let (execution, compiler) = input.preparation.into_parts();
+            let preparation = input.into_preparation();
+            let metadata = preparation.compiler().consumer_metadata().unwrap();
+            let (execution, compiler) = preparation.into_parts();
             registrations.push(Registration {
                 compiler,
                 execution: Arc::new(execution),
@@ -152,7 +254,10 @@ impl ConsumerRegistry {
                 execution_funding,
             });
         }
-        Ok(Self { registrations })
+        Ok(Self {
+            registrations,
+            _records: records,
+        })
     }
 
     /// Eager admission with explicitly resumable native jobs. The driver can
