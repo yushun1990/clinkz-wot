@@ -107,6 +107,46 @@ fn limited_bank(bytes: u64) -> Arc<HostResourceAccounts> {
 }
 
 #[test]
+fn raw_services_in_independent_registries_repeat_the_physical_charge() {
+    for same_bank in [true, false] {
+        for (data_bytes, access_bytes) in [(60_000, 0), (0, 60_000), (30_000, 30_000)] {
+            let a = limited_bank(200_000);
+            let b = if same_bank { a.clone() } else { limited_bank(200_000) };
+            let mut inputs = registrations(data_bytes, access_bytes, true, true);
+            let second = inputs.pop().unwrap();
+            let first = ConsumerRegistry::try_new(inputs, &a)
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let first_charge = live(&a);
+            let before_second = live(&b);
+            let second = ConsumerRegistry::try_new(vec![second], &b)
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let second_charge = live(&b) - before_second;
+            eprintln!("raw independent registries: same_bank={same_bank}, data={data_bytes}, access={access_bytes}, first={first_charge}, second={second_charge}");
+            assert_eq!(first_charge, second_charge);
+            assert!(second_charge >= 60_000);
+            drop(first);
+            assert_eq!(live(&b), second_charge);
+            drop(second);
+            clean(&a);
+            clean(&b);
+        }
+    }
+    let bank = limited_bank(100_000);
+    let mut inputs = registrations(30_000, 30_000, true, true);
+    let second = inputs.pop().unwrap();
+    let first = ConsumerRegistry::try_new(inputs, &bank)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let original = live(&bank);
+    let rejected = ConsumerRegistry::try_new(vec![second], &bank)
+        .err().expect("a second charge refuses despite one 60KB backing");
+    assert!(matches!(rejected.error().error(), CoreError::LimitExceeded { .. }));
+    assert_eq!(rejected.into_input().len(), 1);
+    assert_eq!(live(&bank), original);
+    drop(first);
+    clean(&bank);
+}
+
+#[test]
 fn aliased_services_are_charged_once_and_equal_distinct_services_stay_separate() {
     for (data_bytes, access_bytes, share_data, share_access) in [
         (60_000, 0, true, false),
