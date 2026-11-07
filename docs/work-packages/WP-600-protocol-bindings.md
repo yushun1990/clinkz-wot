@@ -357,3 +357,14 @@ qualification, negative network evidence, ownership and remaining unsupported
 roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
 The applicable preparation, Core and Binding contracts remain authoritative;
 this increment grants no broad scheme/composition or production-profile acceptance.
+
+## Finite HTTP exchange occupancy
+
+Multi-instance execution exposes a coupling between retained result consumption
+and an already retired connection. The concrete HTTP policy now releases its one
+native occupancy lease after connection/driver retirement, while original result,
+service and account owners remain retained. Old result/cancellation destruction
+cannot release a successor's lease. The [investigation and alternatives](../../workspace/0114-multi-instance-native-occupancy.md)
+and [real-I/O regressions](../../protocol-bindings/protocols/http/tests/support/native_occupancy.rs)
+scope this correction. It raises no capacity, introduces no pool/scheduler and
+changes no work-package dependency or qualification status.

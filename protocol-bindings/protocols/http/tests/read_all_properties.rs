@@ -39,7 +39,11 @@ fn engine_read_all_uses_one_root_request_and_keeps_individual_operations_distinc
         assert_eq!(server.app.roots.get(), 1);
         assert_eq!(server.app.reads.get(), 0);
         assert_eq!(server.app.writes.get(), 0);
-        // Unread results retain original call capacity, mapping and schema.
+        // Retained results keep mapping/schema/funding independently of native
+        // occupancy. An accepted Property exchange still excludes another root.
+        let mut single = client
+            .read_property("level", Deadline::NONE, now(0), &mut work())
+            .unwrap();
         assert!(
             client
                 .read_all_properties(Deadline::NONE, now(0), &mut work())
@@ -47,9 +51,6 @@ fn engine_read_all_uses_one_root_request_and_keeps_individual_operations_distinc
         );
         drop(result);
         drop(call);
-        let mut single = client
-            .read_property("level", Deadline::NONE, now(0), &mut work())
-            .unwrap();
         let (result, _) = server.exchange(&mut single).await;
         assert_eq!(
             result.affordance(),

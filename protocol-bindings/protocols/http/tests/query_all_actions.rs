@@ -190,6 +190,9 @@ fn engine_query_keeps_concurrent_instances_independent_without_leaf_queries() {
         assert_eq!(server.app.members.get(), 3);
         assert_eq!(server.app.leaf_queries.get(), 0);
         assert_eq!(server.app.invoked.get(), 3);
+        // The retained result no longer owns native occupancy. The next
+        // unpolled exchange still excludes another call on this registration.
+        let next_call = query(&client);
         assert!(
             client
                 .query_all_actions(Deadline::NONE, now(), &mut work())
@@ -199,7 +202,7 @@ fn engine_query_keeps_concurrent_instances_independent_without_leaf_queries() {
         drop(call);
         server.app.complete.set(true);
         server.progress();
-        let mut call = query(&client);
+        let mut call = next_call;
         let (result, _) = server.exchange(&mut call).await;
         let v = values(&result);
         assert_eq!(v["run"][0]["status"], "completed");
@@ -493,11 +496,9 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
             assert_eq!(result.operation(), Operation::QueryAllActions);
             assert_eq!(server.app.invoked.get(), 1);
             assert_eq!(server.app.cancelled.get(), 0);
-            assert!(
-                client
-                    .query_all_actions(Deadline::NONE, now(), &mut work())
-                    .is_err()
-            );
+            let next = client.query_all_actions(Deadline::NONE, now(), &mut work());
+            assert_eq!(next.is_ok(), matches!(mode, "cancel" | "short-credit"), "{mode}");
+            drop(next); // accepted unpolled work retires with its original runtime
             drop(result);
             drop(call);
             drop(client);

@@ -1,5 +1,12 @@
 # Consumer execution reuse characterization
 
+This records the first reuse increment. The subsequent
+[multi-instance scalability workload](consumer-multi-instance-scaling.md)
+extends measurement to 10,000 logical instances, controlled active fractions,
+native capacity, quota topology, allocator/RSS behavior and sustained execution.
+It also records the later HTTP occupancy correction. The historical numbers
+below retain their original fixture and measurement scope.
+
 PR #260 validates the **reusable-content/independent-instance boundary**. The
 Owner accepts this implementation as a valid first increment. It does not
 finalize the Engine's concrete type hierarchy, compilation model, runtime layout
@@ -77,9 +84,10 @@ a single run and these work credits establish no latency or throughput gain.
 Reservation columns are allowances, not additional allocated bytes. Active
 instance reservation includes native/result/scratch/cleanup guarantees and is
 about 82.8 KB per instance here, substantially larger than admitted live heap.
-Counts use separate actual registrations, respecting HTTP's one-outstanding-call
-policy through settlement disposal. No connection pool or concurrency change is
-claimed. Semantic content introduces no executor or shared-backing pointer; its current
+These historical counts used separate actual registrations and the original
+one-outstanding-call policy through settlement disposal. The later occupancy
+policy and its independent result lifetime are measured in the scalability
+evidence linked above. Semantic content introduces no executor or shared-backing pointer; its current
 coordinate/schema types keep their existing gates. This execution representation
 remains Host/std with pointer atomics.
 

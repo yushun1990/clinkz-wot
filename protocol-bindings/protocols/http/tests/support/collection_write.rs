@@ -397,7 +397,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             reg.services.access = Arc::new(CountAccess(Access(denied.clone()), checks.clone()));
             let p = prepare_consumer(&td, accounts.clone(), vec![reg], ConsumerSelector::default()).unwrap();
             let (d, f) = p.into_execution();
-            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 2).unwrap_or_else(|_| panic!());
+            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1).unwrap_or_else(|_| panic!());
             let mut call = start_write(&client);
             let start = Instant::now();
             // Withhold handoff. Two authorization callbacks in one step witness
@@ -414,7 +414,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             assert_eq!(remote.unwrap().effect, FiniteEffect::Completed);
-            assert!(client.write_all_properties(payload(VALUES), Deadline::NONE, now(0), &mut work()).is_err(), "unread result retains native occupancy");
+            assert!(start_collection_at(&client, operation, Deadline::NONE).is_err(), "unread Engine slot retains original call capacity");
             match fault { "cancel" => call.cancel(), "replace" => owner.revoke(), _ => denied.store(true, Ordering::Relaxed) }
             let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
             assert!(call.poll(&mut cx(), now(0), &mut WorkBudget::new()).is_pending());

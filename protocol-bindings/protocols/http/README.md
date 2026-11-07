@@ -49,8 +49,11 @@ their older type-only tests do not establish broader structured interoperability
 Continuing Action preparation retains its narrower type-only subset.
 
 Reads support HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
-chunked and close-delimited bodies. One registration admits one call, including
-its unread terminal result. Each read owns a fresh connection and its driver.
+chunked and close-delimited bodies. One registration admits one unretired native
+exchange. Completion, error or cancellation drops its connection and complete
+driver before releasing occupancy. Retained terminal results keep their original
+services, definitions and funding independently; destroying an old result cannot
+release a successor's occupancy. Each read owns a fresh connection and its driver.
 The selected immutable artifact supplies the exact path/query and Host authority.
 Nonempty URI variables and unsupported targets return the original request before
 raw acceptance. No TD rescan, DNS, TLS, pool, redirect, retry, decompression,
@@ -558,9 +561,13 @@ Validated Property Write completion reports `ConsumerEffect::Completed` and
 that evidence does not imply rollback on error or cancellation, even for HTTP
 401/403/500. Producer pre-effect refusal is independently `NotInvoked`; an error
 after behavior entry remains `Unknown`. Producer result and `FiniteDelivery`
-retain separate facts. No owner automatically retries a write. Unread settlements
-pin original capacity/native occupancy; cancellation, replacement and root loss
-preserve accepted work until bounded retirement and final acknowledgement.
+retain separate facts. No owner automatically retries a write. Retained Consumer
+settlements pin original result/service funding independently of the native
+exchange lease released at connection/driver retirement. Engine call slots remain
+occupied until settlement handoff or funded abandoned-call disposal. An unread
+Producer settlement keeps that runtime unavailable for the next receive until
+acknowledgement. Cancellation, replacement and root loss preserve original accepted
+work and funding through their required retirement and disposal boundaries.
 
 `property_write` proves actual Consumer-to-Producer state changes and subsequent
 Read, independent definitions, readOnly/writeOnly and explicit operation

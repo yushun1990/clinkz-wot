@@ -1,0 +1,55 @@
+{
+  "revision": "b2fb83863dc822ccf90cadcfef054d162c2921e9",
+  "status": "",
+  "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "binary_sha256": "53f42c63e5887dbd352b3e88990192feaf4d4177d94770237e9b97982f2d6525",
+  "cargo_lock_sha256": "569437b19d74f5ea57ebc9b7759667784bc8325ecefe645d06d4166537e12b46",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 22.1.2",
+  "kernel": "Linux-7.2.12-200.fc44.x86_64-x86_64-with-glibc2.43",
+  "cpu": "Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz",
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "libc": [
+    "glibc",
+    "2.43"
+  ],
+  "started_utc": "2026-11-07T08:56:29Z",
+  "suite": "targeted-load",
+  "repeat": 3,
+  "build": "cargo build --release --locked --offline -p clinkz-wot-binding-http --example multi_instance",
+  "runner_argv": [
+    "tools/multi-instance/run.py",
+    "--suite",
+    "targeted-load",
+    "--repeat",
+    "3",
+    "--output",
+    "/tmp/clinkz-scaling/targeted-load"
+  ],
+  "cases": [
+    {
+      "population": 10000,
+      "active": 1,
+      "lanes": 8,
+      "slots": 1,
+      "members": 16,
+      "rounds": 3,
+      "mode": "targeted",
+      "driver": "engine",
+      "accounts": "independent",
+      "delay_us": 0
+    }
+  ]
+}

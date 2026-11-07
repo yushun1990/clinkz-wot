@@ -55,7 +55,7 @@ const MEDIA: u64 = 16;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v15\0",
+    "clinkz-http-ip-v16\0",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
@@ -65,7 +65,7 @@ const PRIVATE_POLICY: &[u8] = concat!(
     "Thing-root-queryall-explicit-GET200;draft-status-arrays;unique-absolute-href256;records128;per-Action-output;no-local-control-authority;",
     "Thing-root-readall-GET200;exact-readable-Property-map;type-only-members;no-missing-extra-duplicate-writeOnly;members32-names256-total4096;validation-work=body40+media2;",
     "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
-    "fresh;concurrency1-until-release;header32/8192inclusive;body4096;",
+    "fresh;concurrency1-until-exchange-retirement;retained-result-independent;header32/8192inclusive;body4096;",
     "trailer32/8192exclusive-duplicates-count;hyper-cumulative-extensions<16384;",
     "wire32768;read4096;paid-callback4096;hyperbuf8192-adaptive;writevFalse;",
     "trailer-discard-unannounced;declaration-empty-elements-ignore-SP-HTAB;",
@@ -228,13 +228,13 @@ struct Call {
     handle: tokio::runtime::Handle,
     future: Option<Exchange>,
     allowance: Arc<AtomicUsize>,
-    busy: Arc<AtomicBool>,
+    // Only this exchange's occupancy. Retained results keep the Call and its
+    // funding, but must neither occupy nor later unlock a successor exchange.
+    busy: Option<Arc<AtomicBool>>,
 }
 impl Drop for Call {
     fn drop(&mut self) {
-        // Retire the entire connection and its driver before releasing occupancy.
-        drop(self.future.take());
-        self.busy.store(false, Ordering::Release);
+        self.retire();
     }
 }
 
@@ -369,7 +369,7 @@ impl binding::ClientBinding for Client {
             handle,
             future: None,
             allowance: Arc::new(AtomicUsize::new(0)),
-            busy: self.busy.clone(),
+            busy: Some(self.busy.clone()),
         };
         match HostBindingCallBox::try_new(call) {
             Ok(call) => Ok(call),
@@ -386,6 +386,11 @@ impl Call {
     fn retire(&mut self) {
         drop(self.future.take());
         drop(self.target.take());
+        // The connection and complete SDK driver are gone before another call
+        // can acquire the registration. Taking this lease makes later Drop inert.
+        if let Some(busy) = self.busy.take() {
+            busy.store(false, Ordering::Release);
+        }
     }
     fn cancelled(&mut self) -> BindingCallSettlement<CoreResult<InteractionOutput>> {
         self.retire();
