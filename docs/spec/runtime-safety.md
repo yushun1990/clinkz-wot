@@ -92,8 +92,15 @@ effects; a lost required service fences dispatch. A completed native reply canno
 override a retained local cancellation, timeout, revoked original instance or
 policy/validation failure. Already accepted Producer writes retain their original
 behavior/result across replacement, while pending acceptance cannot target the
-successor. Unread results keep native occupancy and original funding; final
-physical release and settlement acknowledgement precede admission reuse.
+successor. Retained Consumer settlements keep their original call/result/service
+funding until final disposal. Consumer Engine call slots remain occupied until
+settlement handoff or funded abandoned-call disposal; reusing a slot cannot refund
+a separately retained settlement. The finite HTTP Consumer's native exchange
+lease follows [Binding SPI](binding-spi.md#native-thing-root-property-collection-reads):
+connection/driver retirement releases that lease independently of retained
+settlements, whose later destruction cannot release a successor's occupancy.
+The finite Producer retires its native exchange before settlement acknowledgement;
+an unread Producer settlement keeps that runtime unavailable for the next receive.
 Validated Property Write completion is retained independently of that local
 cause and native delivery. Pre-dispatch refusal remains NotInvoked; errors after
 behavior entry without valid completion remain Unknown. Finite authenticated

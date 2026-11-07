@@ -561,9 +561,13 @@ Validated Property Write completion reports `ConsumerEffect::Completed` and
 that evidence does not imply rollback on error or cancellation, even for HTTP
 401/403/500. Producer pre-effect refusal is independently `NotInvoked`; an error
 after behavior entry remains `Unknown`. Producer result and `FiniteDelivery`
-retain separate facts. No owner automatically retries a write. Unread settlements
-pin original capacity/native occupancy; cancellation, replacement and root loss
-preserve accepted work until bounded retirement and final acknowledgement.
+retain separate facts. No owner automatically retries a write. Retained Consumer
+settlements pin original result/service funding independently of the native
+exchange lease released at connection/driver retirement. Engine call slots remain
+occupied until settlement handoff or funded abandoned-call disposal. An unread
+Producer settlement keeps that runtime unavailable for the next receive until
+acknowledgement. Cancellation, replacement and root loss preserve original accepted
+work and funding through their required retirement and disposal boundaries.
 
 `property_write` proves actual Consumer-to-Producer state changes and subsequent
 Read, independent definitions, readOnly/writeOnly and explicit operation

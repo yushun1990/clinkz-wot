@@ -53,8 +53,11 @@ justification for a universal scheduler, normalized program or new quota model.
 
 The selected optional occupancy lease is implemented in the concrete HTTP Call;
 private policy v16 invalidates the old configuration without changing artifact
-payload interpretation. The exact policy is projected into Binding SPI and the
-HTTP README. Real HTTP regressions cover retained normal/error results, local
+payload interpretation. Binding SPI owns the exact native occupancy policy;
+runtime safety distinguishes its lease from retained Consumer result funding,
+Engine call slots and Producer settlement acknowledgement. The HTTP README
+reflects those separate lifetimes. Real HTTP regressions cover retained
+normal/error results, local
 cancellation, unpolled abandonment, successor exclusion and final original-bank
 release. Existing Write/root-query tests now distinguish live native occupancy
 from retained Engine slots and continue to assert input recovery, authority,
