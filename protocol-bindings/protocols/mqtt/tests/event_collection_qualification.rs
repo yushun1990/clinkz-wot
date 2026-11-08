@@ -266,7 +266,7 @@ fn root_retains_exact_per_event_schemas_independently_of_leaf_forms_and_source_t
         &mut budget(),
     )
     .unwrap();
-    let ConsumerNotificationSchemas::SubscribeAllEvents(schema) = &d.input().schemas else {
+    let NotificationSchemas::SubscribeAllEvents(schema) = &d.input().schemas else {
         panic!()
     };
     assert_eq!(schema.members().len(), 2);

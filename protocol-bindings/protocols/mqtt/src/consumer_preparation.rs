@@ -1,6 +1,6 @@
 use super::*;
 use clinkz_wot_core::{
-    CoreResult, consumer::ConsumerNotificationSchemas, notification::ConsumerNotificationBinding,
+    CoreResult, notification::ConsumerNotificationBinding, notification::NotificationSchemas,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use clinkz_wot_planning::{
@@ -30,8 +30,8 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
             || input.schemas.data().is_none()
                 && !matches!(
                     input.schemas,
-                    ConsumerNotificationSchemas::ObserveAllProperties(_)
-                        | ConsumerNotificationSchemas::SubscribeAllEvents(_)
+                    NotificationSchemas::ObserveAllProperties(_)
+                        | NotificationSchemas::SubscribeAllEvents(_)
                 )
         {
             return Err(unsupported());
@@ -47,7 +47,7 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
             return Err(unsupported());
         }
         let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 4096);
-        let Some((topic, schema)) = preparation::lower_notification(
+        let Some(topic) = preparation::lower_notification(
             self.configuration().address,
             ProducerOperationInput {
                 document: input.document,
@@ -56,25 +56,12 @@ impl ConsumerNotificationPreparation for MqttNotificationConsumer {
                 operation: kind.start_operation(),
                 target: input.endpoint,
             },
+            input.schemas,
             &mut budget,
         )?
         else {
             return Ok(None);
         };
-        let matches = match (&schema, &input.schemas) {
-            (
-                MqttDataSchema::Properties(a),
-                ConsumerNotificationSchemas::ObserveAllProperties(b),
-            ) => a == b,
-            (MqttDataSchema::Value(a), _) => Some(a) == input.schemas.data(),
-            (MqttDataSchema::Events(a), ConsumerNotificationSchemas::SubscribeAllEvents(b)) => {
-                a == b
-            }
-            _ => false,
-        };
-        if !matches {
-            return Err(unsupported());
-        }
         let cancellation = input
             .document
             .form(

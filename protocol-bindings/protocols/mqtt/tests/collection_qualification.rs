@@ -196,7 +196,7 @@ fn root_selection_is_independent_of_leaf_mappings_and_observable_hint() {
         d.input().schemas.kind(),
         NotificationKind::ObserveAllProperties
     );
-    let ConsumerNotificationSchemas::ObserveAllProperties(schema) = &d.input().schemas else {
+    let NotificationSchemas::ObserveAllProperties(schema) = &d.input().schemas else {
         panic!()
     };
     assert_eq!(

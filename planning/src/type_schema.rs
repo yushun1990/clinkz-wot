@@ -23,6 +23,22 @@ pub fn prepare_event_collection_schema(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
 ) -> CoreResult<clinkz_wot_core::collection::EventCollectionSchema> {
     use clinkz_wot_core::collection::{EventCollectionSchema as S, EventMemberSchema};
+    let mut preparation = SchemaPreparation::default();
+    for event in doc.collection_events().ok_or_else(refused)? {
+        for role in ["subscription", "data", "dataResponse", "cancellation"] {
+            if let Some(s) =
+                doc.affordance_schema(clinkz_wot_td::semantic::FormOwner::Event(event.name), role)
+            {
+                preparation.include(s)?;
+            }
+        }
+    }
+    if preparation.nodes > S::MAX_SCHEMA_NODES
+        || preparation.name_bytes > PreparedSchema::MAX_TOTAL_NAME_BYTES
+        || preparation.backing_bytes > S::SCHEMA_BACKING_BOUND
+    {
+        return Err(refused());
+    }
     let mut members = alloc::vec::Vec::new();
     members
         .try_reserve_exact(event_member_count(doc)?)
@@ -35,7 +51,7 @@ pub fn prepare_event_collection_schema(
         }
         let role = |name| {
             doc.affordance_schema(clinkz_wot_td::semantic::FormOwner::Event(event.name), name)
-                .map(prepare_type_schema)
+                .map(prepare_schema)
                 .transpose()
         };
         members.push(EventMemberSchema {
@@ -47,6 +63,186 @@ pub fn prepare_event_collection_schema(
         });
     }
     S::try_new(members)
+}
+
+/// Select WoT data roles, independently of protocol and execution lifetime.
+/// Callers fund the borrowed census, construction and final owner before entry.
+pub fn prepare_notification_schemas(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    target: &clinkz_wot_core::AffordanceTarget,
+    kind: clinkz_wot_core::notification::NotificationKind,
+) -> CoreResult<clinkz_wot_core::notification::NotificationSchemas> {
+    use alloc::sync::Arc;
+    use clinkz_wot_core::{
+        notification::NotificationKind as N, notification::NotificationSchemas as S,
+    };
+    let owner = notification_owner(target, kind)?;
+    Ok(match kind {
+        N::PropertyObservation => {
+            let p = doc.property();
+            if !p.observable || p.schema.facts().write_only {
+                return Err(refused());
+            }
+            S::PropertyValue(prepare_schema(p.schema)?)
+        }
+        N::Event => {
+            let role = |r| {
+                doc.affordance_schema(owner, r)
+                    .map(prepare_schema)
+                    .transpose()
+            };
+            S::Event {
+                subscription: role("subscription")?,
+                data: role("data")?,
+                data_response: role("dataResponse")?,
+                cancellation: role("cancellation")?,
+            }
+        }
+        N::ObserveAllProperties => {
+            S::ObserveAllProperties(Arc::new(prepare_readable_property_schema(doc)?))
+        }
+        N::SubscribeAllEvents => {
+            S::SubscribeAllEvents(Arc::new(prepare_event_collection_schema(doc)?))
+        }
+    })
+}
+
+fn notification_owner(
+    target: &clinkz_wot_core::AffordanceTarget,
+    kind: clinkz_wot_core::notification::NotificationKind,
+) -> CoreResult<clinkz_wot_td::semantic::FormOwner<'_>> {
+    use clinkz_wot_core::AffordanceTarget as T;
+    use clinkz_wot_td::semantic::FormOwner as O;
+    if !kind.accepts_target(target) {
+        return Err(refused());
+    }
+    Ok(match target {
+        T::Thing => O::Thing,
+        T::Property(n) => O::Property(n),
+        T::Event(n) => O::Event(n),
+        _ => return Err(refused()),
+    })
+}
+
+pub(crate) fn notification_preparation(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    target: &clinkz_wot_core::AffordanceTarget,
+    kind: clinkz_wot_core::notification::NotificationKind,
+) -> CoreResult<SchemaPreparation> {
+    use clinkz_wot_core::notification::NotificationKind as N;
+    use clinkz_wot_td::semantic::FormOwner;
+    let owner = notification_owner(target, kind)?;
+    let mut p = SchemaPreparation::default();
+    match kind {
+        N::PropertyObservation => p.include(doc.property().schema)?,
+        N::Event => {
+            for role in ["subscription", "data", "dataResponse", "cancellation"] {
+                if let Some(s) = doc.affordance_schema(owner, role) {
+                    p.include(s)?;
+                }
+            }
+        }
+        N::ObserveAllProperties => {
+            for member in doc.collection_properties().ok_or_else(refused)? {
+                if !member.schema.facts().write_only {
+                    p.include(member.schema)?;
+                }
+            }
+            if p.nodes > PreparedSchema::MAX_NODES {
+                return Err(refused());
+            }
+        }
+        N::SubscribeAllEvents => {
+            for member in doc.collection_events().ok_or_else(refused)? {
+                for role in ["subscription", "data", "dataResponse", "cancellation"] {
+                    if let Some(s) = doc.affordance_schema(FormOwner::Event(member.name), role) {
+                        p.include(s)?;
+                    }
+                }
+            }
+            use clinkz_wot_core::collection::EventCollectionSchema as S;
+            if p.nodes > S::MAX_SCHEMA_NODES
+                || p.name_bytes > PreparedSchema::MAX_TOTAL_NAME_BYTES
+                || p.backing_bytes > S::SCHEMA_BACKING_BOUND
+            {
+                return Err(refused());
+            }
+        }
+    }
+    Ok(p)
+}
+
+/// Full bounded pure prepare/compare/disposal credit for a native callback.
+/// It does not qualify that callback's media, security or native semantics.
+pub fn notification_preparation_work(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    target: &clinkz_wot_core::AffordanceTarget,
+    kind: clinkz_wot_core::notification::NotificationKind,
+) -> CoreResult<u64> {
+    let p = notification_preparation(doc, target, kind)?;
+    Ok(p.work + p.cleanup + 4096)
+}
+
+/// Final qualification borrows the original role constraints without rebuilding
+/// trees. Collection identity and missing versus unconstrained roles stay exact.
+pub fn matches_notification_schemas(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    target: &clinkz_wot_core::AffordanceTarget,
+    expected: &clinkz_wot_core::notification::NotificationSchemas,
+) -> CoreResult<bool> {
+    use clinkz_wot_core::notification::NotificationSchemas as S;
+    use clinkz_wot_td::semantic::FormOwner;
+    let owner = notification_owner(target, expected.kind())?;
+    let roles = |owner, expected: [Option<&PreparedSchema>; 4]| -> CoreResult<bool> {
+        for (role, expected) in ["subscription", "data", "dataResponse", "cancellation"]
+            .into_iter()
+            .zip(expected)
+        {
+            match (doc.affordance_schema(owner, role), expected) {
+                (Some(a), Some(e)) if matches_schema(a, e)? => {}
+                (None, None) => {}
+                _ => return Ok(false),
+            }
+        }
+        Ok(true)
+    };
+    match expected {
+        S::PropertyValue(s) => Ok(doc.property().observable
+            && !doc.property().schema.facts().write_only
+            && matches_schema(doc.property().schema, s)?),
+        S::Event { .. } => roles(
+            owner,
+            [
+                expected.subscription(),
+                expected.data(),
+                expected.data_response(),
+                expected.cancellation(),
+            ],
+        ),
+        S::ObserveAllProperties(s) => matches_property_schema(doc, s, false),
+        S::SubscribeAllEvents(s) => {
+            let mut actual = doc.collection_events().ok_or_else(refused)?;
+            for member in s.members() {
+                let Some(a) = actual.next() else {
+                    return Ok(false);
+                };
+                if a.name != member.name.as_ref()
+                    || !roles(
+                        FormOwner::Event(a.name),
+                        [
+                            member.subscription.as_ref(),
+                            member.data.as_ref(),
+                            member.data_response.as_ref(),
+                            member.cancellation.as_ref(),
+                        ],
+                    )?
+                {
+                    return Ok(false);
+                }
+            }
+            Ok(actual.next().is_none())
+        }
+    }
 }
 
 // Borrowed census lets callers prepay construction and destruction of each
@@ -338,6 +534,7 @@ pub(crate) struct SchemaPreparation {
     pub cleanup: u64,
     pub work: u64,
     pub nodes: usize,
+    pub name_bytes: usize,
     pub backing_bytes: usize,
 }
 impl SchemaPreparation {
@@ -353,6 +550,7 @@ impl SchemaPreparation {
         }
         self.work += (c.nodes * 8 + c.names * PreparedSchema::MAX_PROPERTIES) as u64;
         self.nodes += c.nodes;
+        self.name_bytes += c.names;
         Ok(())
     }
 }

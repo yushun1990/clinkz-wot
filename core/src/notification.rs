@@ -1,7 +1,11 @@
 //! Consumer notification conversations, independent of native subscriptions.
 //! This initial Host facet is raw: it preserves data roles, not TD qualification
 //! or DataSchema validation. Native matching, ACKs and distribution stay native.
-use alloc::rc::Rc;
+use crate::{
+    collection::PropertyCollectionSchema, consumer::ConsumerDataService,
+    data_schema::PreparedSchema,
+};
+use alloc::{rc::Rc, sync::Arc};
 use core::{
     convert::Infallible,
     task::{Context, Poll},
@@ -122,6 +126,111 @@ impl NotificationKind {
             matches!(item, AffordanceTarget::Event(_))
         } else {
             conversation == item
+        }
+    }
+}
+
+/// A Property's value schema is not Event data. Event control/response roles
+/// stay distinct; native SUBACK/UNSUBACK packets never become application data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NotificationSchemas {
+    PropertyValue(PreparedSchema),
+    /// Complete named readable values; shared backing survives the source TD.
+    ObserveAllProperties(Arc<PropertyCollectionSchema>),
+    SubscribeAllEvents(Arc<crate::collection::EventCollectionSchema>),
+    Event {
+        subscription: Option<PreparedSchema>,
+        data: Option<PreparedSchema>,
+        data_response: Option<PreparedSchema>,
+        cancellation: Option<PreparedSchema>,
+    },
+}
+impl NotificationSchemas {
+    /// Complete indirect backing. Runtime capture borrows this original owner;
+    /// native compilation must not silently deep-clone its variable trees.
+    pub fn retained_bytes(&self) -> usize {
+        match self {
+            Self::ObserveAllProperties(s) => {
+                s.retained_bytes()
+                    + core::mem::size_of_val(&**s)
+                    + 2 * core::mem::size_of::<usize>()
+            }
+            Self::SubscribeAllEvents(s) => {
+                s.retained_bytes()
+                    + core::mem::size_of_val(&**s)
+                    + 2 * core::mem::size_of::<usize>()
+            }
+            _ => [
+                self.subscription(),
+                self.data(),
+                self.data_response(),
+                self.cancellation(),
+            ]
+            .into_iter()
+            .flatten()
+            .map(PreparedSchema::retained_bytes)
+            .sum(),
+        }
+    }
+    pub fn kind(&self) -> crate::notification::NotificationKind {
+        match self {
+            Self::PropertyValue(_) => crate::notification::NotificationKind::PropertyObservation,
+            Self::ObserveAllProperties(_) => {
+                crate::notification::NotificationKind::ObserveAllProperties
+            }
+            Self::Event { .. } => crate::notification::NotificationKind::Event,
+            Self::SubscribeAllEvents(_) => {
+                crate::notification::NotificationKind::SubscribeAllEvents
+            }
+        }
+    }
+    /// Scalar roles only. Event collections retain roles per named member;
+    /// None here does not assert that every collection member lacks that role.
+    pub fn subscription(&self) -> Option<&PreparedSchema> {
+        match self {
+            Self::Event { subscription, .. } => subscription.as_ref(),
+            _ => None,
+        }
+    }
+    pub fn data(&self) -> Option<&PreparedSchema> {
+        match self {
+            Self::PropertyValue(s) => Some(s),
+            Self::Event { data, .. } => data.as_ref(),
+            Self::ObserveAllProperties(_) => None,
+            Self::SubscribeAllEvents(_) => None,
+        }
+    }
+    pub fn data_response(&self) -> Option<&PreparedSchema> {
+        match self {
+            Self::Event { data_response, .. } => data_response.as_ref(),
+            _ => None,
+        }
+    }
+    pub fn cancellation(&self) -> Option<&PreparedSchema> {
+        match self {
+            Self::Event { cancellation, .. } => cancellation.as_ref(),
+            _ => None,
+        }
+    }
+    /// Scalar support cannot qualify a named collection decoder.
+    pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
+        match self {
+            Self::ObserveAllProperties(s) => data.supports_property_map(s),
+            Self::SubscribeAllEvents(s) => s.members().iter().all(|m| {
+                [&m.subscription, &m.data, &m.data_response, &m.cancellation]
+                    .into_iter()
+                    .flatten()
+                    .all(|s| data.supports_schema(s))
+            }),
+            _ => [
+                self.subscription(),
+                self.data(),
+                self.data_response(),
+                self.cancellation(),
+            ]
+            .into_iter()
+            .flatten()
+            .all(|s| data.supports_schema(s)),
         }
     }
 }

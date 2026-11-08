@@ -182,3 +182,13 @@ qualification, negative network evidence, ownership and remaining unsupported
 roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
 The applicable preparation, Core and Binding contracts remain authoritative;
 this increment grants no broad scheme/composition or production-profile acceptance.
+
+## Structured Notification execution
+
+Notification Consumer compilation borrows common prepared roles. MQTT Producer
+definitions and captured services share immutable structured leaf meaning;
+selected final qualification compares the original constraints against borrowed
+TD facts. Complete callback scratch/work and variable role backing are provisioned.
+[Structured Notification evidence](../evidence/structured-dataschema.md#notification-execution)
+retains the existing independent native lifetimes and narrower MQTT collection,
+control/response and NoSec policy. It creates no universal interaction facet.

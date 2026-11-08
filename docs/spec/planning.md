@@ -97,7 +97,7 @@ Whole-Thing Producer preparation also selects Property observe/unobserve and
 Event subscribe/unsubscribe Forms against actual family-qualified notification
 source registration. A Property source supplies no finite Read/Write behavior.
 The MQTT capability interprets its
-own resolved vocabulary, captures type-only data meaning and the exact startup
+own resolved vocabulary, captures common prepared data meaning and the exact startup
 registration, and rejects unsupported control data, dataResponse, response
 branches, security or other effective operations. It creates no native subscriber
 or socket during preparation. Composed publication binds the original native
@@ -210,11 +210,11 @@ Scalar input/output roles now own their dynamic constraint storage; their actual
 bytes and disposal work are no longer zero. Reuse uses `matches_schema` or the
 named-member comparison against borrowed TD facts, without compiling another
 constraint tree. Actual data services still qualify the retained complete schema.
-Finite and continuing Action preparation share the same borrowed constraint
+Finite, continuing Action and Notification preparation share the same borrowed constraint
 census, construction and compatibility interpretation. `prepare_type_schema`
 remains an explicit narrower participant facet; it is not a consequence of a
-continuing lifetime. Generic notification scalar and Action/Event collection
-preparation still have narrower implementation paths. A JSON service alone does
+continuing lifetime. Root Action status and actual MQTT collection mappings
+retain narrower implementation subsets. A JSON service alone does
 not extend a native participant's admitted operation/profile scope.
 
 HTTP Producer selected-definition final checking compares borrowed normalized
@@ -305,7 +305,9 @@ are skipped; missing support and multiple complete actual providers refuse.
 It does not claim whole-Thing Consumer support or Producer qualification.
 
 `ConsumerNotificationPreparation` extends the actual source-free notification
-Binding registration with a bounded pure compilation callback. External linked
+Binding registration with a bounded pure compilation callback. Its schema operand
+borrows the original complete role meaning; native compilation must not rebuild
+that meaning or retain a source loan. External linked
 Bindings can implement it without a finite capability, compiler-name test or
 Core protocol case. The current eager typed facet prepays the complete declared
 callback/temporary/retained bounds and rollback; it introduces no universal
@@ -314,8 +316,15 @@ support and clone/drop callbacks remain trusted finite local work.
 
 The selected `ConsumerNotificationDefinition` owns the actual Binding/program,
 configuration, family-qualified target, endpoint/Form, concrete data and
-access services and original Host funding.
-`ConsumerNotificationSchemas::PropertyValue` captures the Property's
+access services and original Host funding. The shared role selector
+`prepare_notification_schemas` uses the same structured normalizer for a readable
+Property, each of the four Event roles and each named collection member. Its
+borrowed census prepays variable construction, rollback and destruction; exact
+retained field/name backing moves to the definition. Runtime capture retains
+that original funded definition instead of cloning constraint trees. Selected
+MQTT Producer final checks use `matches_notification_schemas` against borrowed
+final TD facts; native compatibility and whole-TD coverage remain independent.
+`NotificationSchemas::PropertyValue` captures the Property's
 own DataSchema and requires `observable: true`; it cannot acquire Event control
 or reciprocal-response schemas. The `ObserveAllProperties` variant owns the
 named readable collection schema; it is not a scalar Object assertion. It shares

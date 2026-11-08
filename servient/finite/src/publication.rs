@@ -396,6 +396,14 @@ pub trait ClosedProducerParticipation {
     ) -> bool {
         false
     }
+    /// Exact number of prepared operation associations retained by this
+    /// participation, when its managed profile supplies a complete inventory.
+    /// This is not physical connection, route or subscription cardinality.
+    /// Shared prepared-backing deductions require this complete inventory;
+    /// wrappers must propagate it. None makes no such inventory claim.
+    fn qualified_operation_count(&self) -> Option<usize> {
+        None
+    }
     /// Supply the actual source-free validation service for an invoke Form
     /// which this participant covers. Missing service refuses publication,
     /// including when the Action has no explicit input/output DataSchema.

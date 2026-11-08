@@ -104,6 +104,9 @@ join the existing Producer to TD-selected Consumer subscriptions, per-item
 validation, stop/unsubscribe and cleanup, with native matching/distribution and
 shared connection ownership inside MQTT. Retained deliveries are discarded with
 visible loss; no replay or reciprocal response capability is claimed.
+[Structured leaf notifications](docs/evidence/structured-dataschema.md#notification-execution)
+apply the common structured DataSchema meaning in both MQTT roles, while actual
+collection/control/response/security support remains separately qualified.
 [Property observation](protocol-bindings/protocols/mqtt/tests/property_observation.rs)
 reuses the notification owner with Property value schemas, future-only native
 values and mapped unobserve. Establishment performs no Read, invents no initial

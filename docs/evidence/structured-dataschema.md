@@ -101,7 +101,7 @@ there is no mid-callback preemption or recoverable process-wide OOM claim.
 Actual scalar validators explicitly qualify the complete borrowed schema; the
 default support method covers only primitive type assertions. A complete
 collection-map validator can independently qualify/validate its named member
-schemas without a bare-scalar facet it never executes. MQTT notification and
+schemas without a bare-scalar facet it never executes. MQTT collection mappings and
 root Action status preparation retain their narrower type-only profiles; a shared
 kernel does not automatically qualify another native mapping or lifecycle.
 
@@ -213,6 +213,92 @@ are not timing or throughput measurements. Captured-service unit tests additiona
 fence changed declarations in validation, authorization and immediate/continuing
 application callbacks, reject overflow before effects, and preserve separately
 funded close without handler/codec credit.
+
+## Notification execution
+
+The Notification correction starts from merged master `1d5d414`. The shared
+structured evaluator was already sufficient; type-only role preparation and
+fixed-size copying assumptions were incomplete integration. Planning now selects
+common meaning for readable Property values, all four independent Event roles,
+readable Property collection members and named Event collection roles. Native
+Consumer compilation borrows it; runtime capture retains the original funded
+definition. MQTT Producer definition clones and captured validators share an
+immutable role owner, and selected final checks compare borrowed final TD facts.
+The private MQTT `MqttDataSchema` value/map/Event-table projection and the
+Consumer-specific `ConsumerNotificationSchemas` ownership are replaced by
+`notification::NotificationSchemas`, a direction-independent Host role carrier.
+This eliminates a second semantic handoff without unifying execution lifecycles.
+
+| Role | Common meaning and executable scope |
+| --- | --- |
+| Property observation | The same readable value schema as Property data; structured leaf MQTT publication/consumption. No implicit Read or initial sample. A writeOnly value is ineligible. |
+| Event data | The Event's own optional data role; structured leaf MQTT publication/consumption requires a present schema and payload. It does not become a Property value. |
+| Event subscription, dataResponse, cancellation | Independent optional schemas, including absent versus unconstrained values. The external fixture executes structured controls and a retained native response opportunity in memory; MQTT refuses every advertised control/response role. No MQTT ACK supplies one. |
+| ObserveAllProperties | Original readable member schemas and complete named maps; shared structured interpretation. The current MQTT map facet remains explicitly type-only. |
+| SubscribeAllEvents | Original Event identity and per-member roles, without a universal control envelope. The downstream fixture validates nested occurrence data and the original occurrence's constrained response. MQTT remains type-only and refuses control/response roles. |
+
+Each concrete codec, native mapping, supported interaction and security requirement
+qualifies independently. This increment retains loopback MQTT 3.1.1, JSON,
+non-retained QoS 0 and NoSec. Unsupported advertised Forms, operations, required
+assertions, security or response roles still refuse complete Producer preparation
+or final qualification; Consumer selection proves only its selected capability.
+This introduces no request runtime or general Event response protocol.
+
+Variable scalar field/name backing is counted exactly in retained definitions,
+with a borrowed census and paid construction/rollback/destruction before allocation.
+Event tables count all four roles' backing and bound their combined constraints
+to 128 nodes and 128 field entries plus 4096 constraint-name bytes; each role also
+retains the existing individual schema limits. The old maximum of 32 Events with
+four scalar roles remains representable. Consumer capture does not allocate a
+second tree. Producer native coverage requires the original schema Arc, not
+merely equal recompiled values. PreparedThing funds that backing once; native
+views fund only their references and retain the same transferred aggregate owner
+through publication acknowledgement. Independently compiled equivalent backing
+refuses managed pairing before native effects. Complete declared native operation
+inventory must also match the covered prepared set; an extra native definition
+cannot borrow selected schema funding. This is checked at admission and before
+publication, without treating the count as physical infrastructure cardinality.
+Actual MQTT JSON validation provisions 65,536 temporary bytes and
+491,648 work credits per callback, covering bounded syntax and repeated field
+lookups. The managed Producer participation provisions its original callback
+scratch; Consumer root funding retains its scratch separately from queues. These
+are admitted envelopes, not timing, throughput, OS-memory or allocator-recovery claims.
+Changed data-service availability, support or policy around validation fences the
+value without widening its captured allowance. Logical/native owners, source
+retirement, cancellation, revocation and unread settlements do not replace the
+original schema, data carrier or funding.
+
+The [structured MQTT tests](../../protocol-bindings/protocols/mqtt/tests/structured_notifications.rs)
+use fully qualified Engine Producers and TD-selected Consumers through real
+Mosquitto, plus an independent raw MQTT publisher. They exercise nested required
+objects, exact integral decimals, Unicode strings, invalid/duplicate/missing
+members, original refused carriers, short Producer and Consumer validation
+credits, type-only actual-service refusal, exact variable retained accounting,
+short cleanup work, aggregate constraint-name refusal, exact original native
+schema sharing without duplicate backing charges, equal-foreign-owner and extra
+native-inventory refusal,
+changed final constraints/Forms/operations/security, one
+native subscription with independent logical stop, revoked buffered delivery,
+captured-service drift and original funding through final publication acknowledgement.
+The complete MQTT broker suite retains its separate loss, uncertain cancellation,
+replacement, cleanup and physical socket-release evidence.
+
+The [external Notification fixture](../../tools/architecture-fixtures/open-consumer/tests/notification.rs)
+implements only the public Notification SPI, without a finite capability or
+Core protocol case. It validates four different structured Event roles and
+checks that runtime validation sees the compiler's original field-table address.
+Invalid subscription/response/cancellation and unpaid response work refuse; a
+response owner retains the original data through pending retirement. Structured
+Event collection data/response remain attributed to each original Event. This
+in-memory fixture proves API composition and ownership. Generic aggregate
+subscription/cancellation encoding, structured MQTT collections, authenticated
+MQTT/TLS, other media, cross-instance notification definition binding and
+constrained execution remain unqualified.
+
+```sh
+MOSQUITTO_BIN=/path/to/mosquitto cargo test --locked --offline -p clinkz-wot-binding-mqtt --features broker-tests -- --test-threads=1
+cargo test --locked --offline --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml
+```
 
 ## Assumptions revised and remaining work
 

@@ -621,3 +621,12 @@ qualification, negative network evidence, ownership and remaining unsupported
 roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
 The applicable preparation, Core and Binding contracts remain authoritative;
 this increment grants no broad scheme/composition or production-profile acceptance.
+
+## Structured Notification execution
+
+Notification validation now retains the original funded definition through the
+existing logical owner, without copying structured role trees. Original queues,
+reply opportunities, first causes, independent stop and cleanup remain in the
+same runtime. [Structured Notification evidence](../evidence/structured-dataschema.md#notification-execution)
+covers real MQTT leaf execution and external structured controls/responses;
+cross-instance reusable definition binding remains separate work.

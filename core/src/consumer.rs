@@ -4,6 +4,7 @@ use crate::collection::{PropertyCollectionSchema, PropertySelection};
 use crate::data_schema::PreparedSchema;
 pub use crate::data_schema::ValueSchemas;
 use crate::host_accounts::{HostCapacityReservation, HostResourceAccounts};
+use crate::notification::NotificationSchemas;
 use crate::*;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use clinkz_wot_foundation::{ResourceKind, WorkBudget, WorkClass};
@@ -458,85 +459,6 @@ impl ConsumerFiniteSchemas {
     }
 }
 
-/// A Property's value schema is not Event data. Event control/response roles
-/// stay distinct; native SUBACK/UNSUBACK packets never become application data.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ConsumerNotificationSchemas {
-    PropertyValue(PreparedSchema),
-    /// Complete named readable values; shared backing survives the source TD.
-    ObserveAllProperties(Arc<PropertyCollectionSchema>),
-    SubscribeAllEvents(Arc<crate::collection::EventCollectionSchema>),
-    Event {
-        subscription: Option<PreparedSchema>,
-        data: Option<PreparedSchema>,
-        data_response: Option<PreparedSchema>,
-        cancellation: Option<PreparedSchema>,
-    },
-}
-impl ConsumerNotificationSchemas {
-    pub fn kind(&self) -> crate::notification::NotificationKind {
-        match self {
-            Self::PropertyValue(_) => crate::notification::NotificationKind::PropertyObservation,
-            Self::ObserveAllProperties(_) => {
-                crate::notification::NotificationKind::ObserveAllProperties
-            }
-            Self::Event { .. } => crate::notification::NotificationKind::Event,
-            Self::SubscribeAllEvents(_) => {
-                crate::notification::NotificationKind::SubscribeAllEvents
-            }
-        }
-    }
-    /// Scalar roles only. Event collections retain roles per named member;
-    /// None here does not assert that every collection member lacks that role.
-    pub fn subscription(&self) -> Option<&PreparedSchema> {
-        match self {
-            Self::Event { subscription, .. } => subscription.as_ref(),
-            _ => None,
-        }
-    }
-    pub fn data(&self) -> Option<&PreparedSchema> {
-        match self {
-            Self::PropertyValue(s) => Some(s),
-            Self::Event { data, .. } => data.as_ref(),
-            Self::ObserveAllProperties(_) => None,
-            Self::SubscribeAllEvents(_) => None,
-        }
-    }
-    pub fn data_response(&self) -> Option<&PreparedSchema> {
-        match self {
-            Self::Event { data_response, .. } => data_response.as_ref(),
-            _ => None,
-        }
-    }
-    pub fn cancellation(&self) -> Option<&PreparedSchema> {
-        match self {
-            Self::Event { cancellation, .. } => cancellation.as_ref(),
-            _ => None,
-        }
-    }
-    /// Scalar support cannot qualify a named collection decoder.
-    pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
-        match self {
-            Self::ObserveAllProperties(s) => data.supports_property_map(s),
-            Self::SubscribeAllEvents(s) => s.members().iter().all(|m| {
-                [&m.subscription, &m.data, &m.data_response, &m.cancellation]
-                    .into_iter()
-                    .flatten()
-                    .all(|s| data.supports_schema(s))
-            }),
-            _ => [
-                self.subscription(),
-                self.data(),
-                self.data_response(),
-                self.cancellation(),
-            ]
-            .into_iter()
-            .flatten()
-            .all(|s| data.supports_schema(s)),
-        }
-    }
-}
-
 /// Source-free typed notification handoff. The actual linked Binding checks
 /// its owned program/configuration; numeric tags alone grant no capability.
 /// Field order retains original funding until every executable owner is gone.
@@ -552,7 +474,7 @@ pub struct ConsumerNotificationDefinitionInput<B: crate::notification::ConsumerN
     pub target: AffordanceTarget,
     pub endpoint: Box<str>,
     pub form: u32,
-    pub schemas: ConsumerNotificationSchemas,
+    pub schemas: NotificationSchemas,
     pub services: ConsumerServices,
     pub funding: Vec<HostCapacityReservation>,
     pub bank: Arc<HostResourceAccounts>,

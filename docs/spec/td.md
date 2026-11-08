@@ -98,3 +98,9 @@ refuses those executable assertions rather than inventing a rounded decimal
 meaning. Broader numeric declarations and the strict wire-ingestion contract
 remain separate work. Preserved/default/annotation metadata do not implicitly
 supply executable constraints or mutate an application value.
+
+Notification role selection consumes these same SchemaViews: observation uses
+the readable Property value; each Event retains subscription, data, dataResponse
+and cancellation separately. Root Property maps derive readable members, while
+root Events retain named occurrences and their original roles. No second TD
+interpreter or schema vocabulary is introduced for a continuing lifetime.

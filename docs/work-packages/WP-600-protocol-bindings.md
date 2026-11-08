@@ -278,7 +278,7 @@ Structured nested input/output, integer bounds and string lengths now execute
 through the shared schema/JSON contract; native probes no longer rebuild Consumer
 schemas. Producer clones/validators share immutable backing, complete final-TD
 checks compare retained constraints, and variable definition/support-probe costs
-are included. Generic notification and root status preparation retain their
+are included. Root status preparation and MQTT collection mappings retain their
 separately declared narrower scope.
 No general HTTP Action interoperability, TLS, arbitrary DataSchema/security,
 constrained/automatic progress or remote effect certainty is claimed.
@@ -375,3 +375,13 @@ cannot release a successor's lease. The [investigation and alternatives](../../w
 and [real-I/O regressions](../../protocol-bindings/protocols/http/tests/support/native_occupancy.rs)
 scope this correction. It raises no capacity, introduces no pool/scheduler and
 changes no work-package dependency or qualification status.
+
+## Structured Notification execution
+
+The real MQTT leaf Property/Event path now executes the shared bounded structured
+JSON subset through completely qualified Producers and TD-selected Consumers.
+[Notification evidence](../evidence/structured-dataschema.md#notification-execution)
+records nested validation, independent adversarial ingress, original ownership,
+sharing and cleanup. MQTT collection mappings remain type-only and unsupported
+Event controls/responses still refuse the complete description; native ACKs grant
+no application response capability.

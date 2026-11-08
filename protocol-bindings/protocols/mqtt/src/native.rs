@@ -1,4 +1,5 @@
 use super::*;
+use clinkz_wot_core::consumer::ConsumerDataService;
 use clinkz_wot_core::{
     BindingInputRejection, BindingOperationalError, CoreResult, producer::ProducerInstanceKey,
     publication::*, thing::AffordanceSite,
@@ -299,7 +300,7 @@ impl MqttNotificationService {
                 topic: Arc::clone(&d.topic),
                 route: NotificationRoute::new(session.registration.binding),
                 services: Rc::new(JsonNoSec {
-                    schema: d.schema.clone(),
+                    schemas: d.schemas.clone(),
                 }),
             });
         }
@@ -309,7 +310,7 @@ impl MqttNotificationService {
                     e.target == d.target
                         && Some(e.kind) == NotificationKind::for_operation(d.operation)
                         && e.topic == d.topic
-                        && e.services.schema == d.schema
+                        && e.services.schemas == d.schemas
                 })
             })
             || definitions.iter().enumerate().any(|(i, d)| {
@@ -362,7 +363,7 @@ impl MqttNotificationService {
 }
 
 struct JsonNoSec {
-    schema: MqttDataSchema,
+    schemas: Arc<clinkz_wot_core::notification::NotificationSchemas>,
 }
 impl ProducerNotificationServices for JsonNoSec {
     fn authorize(&self, _data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
@@ -374,10 +375,10 @@ impl ProducerNotificationServices for JsonNoSec {
         budget
             .consume(
                 WorkClass::CodecInputBytes,
-                MAX_NOTIFICATION_BYTES as u64 * 40 + 128,
+                MqttJsonData.policy().validation_work,
             )
             .map_err(|_| busy())?;
-        self.schema.validate(data)
+        validate_data(&self.schemas, data)
     }
 }
 struct NotificationMapping {
@@ -483,7 +484,9 @@ impl MqttNotificationRuntime {
             && site == target_site(&d.target)
             && form == d.form
             && operation == d.operation
-            && l.definitions.contains(d)
+            && l.definitions
+                .iter()
+                .any(|native| Arc::ptr_eq(&native.schemas, &d.schemas) && native == d)
     }
 }
 impl ClosedProducerParticipation for MqttNotificationRuntime {
@@ -514,15 +517,15 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             + size_of::<Lease>()
             + size_of::<ProducerNotificationPublication<MqttPublication>>()
             + DATA_BACKING
+            // A provisioned callback envelope, including decoded JSON keys and
+            // strings, retained with this original managed participation.
+            + MqttJsonData.policy().temporary_bytes as usize
             + 32 * size_of::<usize>()
             + l.mappings.capacity() * size_of::<NotificationMapping>()
             + l.definitions.capacity() * size_of::<MqttNotificationDefinition>();
         for d in &l.definitions {
             bytes = bytes.checked_add(
-                target_name_bytes(&d.target)
-                    + d.topic.len()
-                    + d.schema.retained_bytes()
-                    + 4 * size_of::<usize>(),
+                target_name_bytes(&d.target) + d.topic.len() + 4 * size_of::<usize>(),
             )?;
         }
         for e in &l.mappings {
@@ -530,10 +533,13 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
                 target_name_bytes(&e.target)
                     + e.topic.len()
                     + size_of::<JsonNoSec>()
-                    + e.services.schema.retained_bytes()
                     + 10 * size_of::<usize>(),
             )?;
         }
+        // Identity coverage plus qualified_operation_count must pair the whole
+        // retained inventory. PreparedThing funds schema backing once; the transferred
+        // aggregate funding is retained by this lease and every publication.
+        // Native reference fields are already included in the layouts above.
         Some(bytes)
     }
     fn begin_retire(&mut self) {
@@ -563,6 +569,9 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         definition: &dyn Any,
     ) -> bool {
         self.covers_definition(key, binding, site, form, operation, definition)
+    }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        Some(self.lease.as_ref().map_or(0, |l| l.definitions.len()))
     }
     fn notification_publication(
         &self,
@@ -656,7 +665,9 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         // A wildcard is never emitted as a PUBLISH Topic Name.
         let mut event_topic = [0u8; MAX_TOPIC_BYTES];
         let topic = if let PublicationData::EventOccurrence { event, .. } = &data {
-            let MqttDataSchema::Events(schema) = &e.services.schema else {
+            let clinkz_wot_core::notification::NotificationSchemas::SubscribeAllEvents(schema) =
+                &*e.services.schemas
+            else {
                 return Err(reject(data, unsupported()));
             };
             if schema.member(event).is_none() {

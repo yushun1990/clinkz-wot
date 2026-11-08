@@ -796,7 +796,7 @@ impl Drop for MqttSubscription {
     }
 }
 
-/// Actual concrete JSON/type decoder for Consumer selection and delivery.
+/// Actual concrete structured JSON decoder for Consumer selection and delivery.
 pub struct MqttJsonData;
 impl ConsumerDataService for MqttJsonData {
     fn content_type(&self) -> &str {
@@ -805,14 +805,14 @@ impl ConsumerDataService for MqttJsonData {
     fn validate(&self, schema: &PreparedSchema, payload: &Payload) -> CoreResult<()> {
         clinkz_wot_codec_json::validate_payload(schema, payload)
     }
+    fn supports_schema(&self, _schema: &PreparedSchema) -> bool {
+        true // Every construct in the bounded Core PreparedSchema is executable.
+    }
     fn supports_property_map(
         &self,
         schema: &clinkz_wot_core::collection::PropertyCollectionSchema,
     ) -> bool {
-        schema
-            .members()
-            .iter()
-            .all(|m| self.supports_schema(&m.schema))
+        schema.members().iter().all(|m| m.schema.is_type_only())
     }
     fn validate_property_map(
         &self,
@@ -824,10 +824,10 @@ impl ConsumerDataService for MqttJsonData {
     fn policy(&self) -> ConsumerDataPolicy {
         ConsumerDataPolicy {
             retained_bytes: 0,
-            temporary_bytes: 4096,
+            temporary_bytes: 65_536,
             body_bytes: MAX_NOTIFICATION_BYTES as u64,
             encoded_selection_bytes: 0,
-            validation_work: MAX_NOTIFICATION_BYTES as u64 * 40 + 128,
+            validation_work: MAX_NOTIFICATION_BYTES as u64 * 120 + 128,
         }
     }
 }

@@ -2,6 +2,8 @@
 mod support;
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::action::*;
+#[cfg(feature = "broker-tests")]
+use clinkz_wot_core::notification::NotificationSchemas;
 use serde_json::{Value, json};
 use support::*;
 
@@ -351,8 +353,7 @@ mod live {
                     &mut budget(),
                 )
                 .unwrap();
-            let ConsumerNotificationSchemas::SubscribeAllEvents(schema) =
-                &event_definition.input().schemas
+            let NotificationSchemas::SubscribeAllEvents(schema) = &event_definition.input().schemas
             else {
                 panic!()
             };

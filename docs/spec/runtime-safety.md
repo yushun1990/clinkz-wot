@@ -141,7 +141,11 @@ independent evidence; even after an error, captured validation applies to that
 late output before final settlement, without clearing the first cause.
 The composed notification owner captures the actual data/access services and separately
 prepared Property value, root Property map, Event or named Event collection schema roles, prepays validation before native handoff and checks data
-before queue acceptance. Invalid/late data and first causes remain with the
+before queue acceptance. Each role borrows the original structured constraint
+backing and funding rather than a second captured tree. Actual validator support,
+availability and its original work/scratch policy are checked around validation;
+changed declarations fence the value, without entering an unfunded callback or
+replacing the original allowance. Invalid/late data and first causes remain with the
 original subscription through cleanup. Its original Host bank conservatively
 funds the root queue and validation envelope until root disposal; raw owner-scoped
 limits alone are not an aggregate-accounting claim. Native topic sharing,
@@ -393,6 +397,13 @@ acknowledgement. The first cleanup error remains observable alongside the first
 local cause and native publication effect; later successful local disposal is
 required before terminal acknowledgement. Linked native callbacks are followed
 by fresh authority checks before successful local settlement.
+
+A managed Producer participant that excludes already funded prepared backing
+from its additional byte declaration must prove complete inventory pairing as
+well as exact shared-owner identity. The existing publication coverage check
+compares its declared operation count with the covered prepared associations at
+admission and before publication. Unpaired native definitions refuse handoff;
+selected-entry equality alone cannot fund an additional retained schema.
 
 ## Structured data validation
 
