@@ -670,6 +670,12 @@ impl HttpServerSecurity {
             )?);
         }
         if let Some(key) = &evidence.api_key {
+            // An earlier verifier can invalidate this callback's captured work
+            // or policy. Reject before invoking it, in addition to the final
+            // whole-conjunction check before publishing the Principal.
+            if self.revision() != revision || !self.is_ready() {
+                return Err(denied(SecurityFailureReason::ProviderFailure));
+            }
             let verified = bounded_principal(
                 self.api_key
                     .as_ref()

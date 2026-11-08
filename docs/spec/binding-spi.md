@@ -507,7 +507,9 @@ placements and simultaneous execution, including conflicts with static Form
 instructions and indistinguishable alternatives. Native evidence selects one
 complete qualified branch and remains with that original reply; it cannot trigger
 weaker fallback on authentication failure. Every required verifier participates
-in the declared complete work/readiness contract. Snapshot all dependency revisions
+in the declared complete work/readiness contract. Before each subsequent verifier
+callback, recheck the original declared work/readiness and dependency revisions;
+a prior callback cannot authorize another verifier's increased work. Snapshot all dependency revisions
 before verification and recheck the whole sequence after the last callback,
 including when one verifier invalidates another. Identity equality cannot replace
 this check. Core's EXEC-SECURITY-001 owns the shared composition/authority contract;

@@ -20,6 +20,37 @@ pub fn prepare_security(
     owner: FormOwner<'_>,
     form: u32,
 ) -> CoreResult<R> {
+    // Retain full standard expansion bounds even when a whole subtree cannot
+    // be interpreted for execution. Availability cannot conceal dependencies.
+    fn group(children: Vec<(R, usize, usize)>, one_of: bool) -> CoreResult<(R, usize, usize)> {
+        let mut alternatives = if one_of { 0usize } else { 1usize };
+        let mut components = 0usize;
+        for (_, count, width) in &children {
+            alternatives = if one_of {
+                alternatives.checked_add(*count)
+            } else {
+                alternatives.checked_mul(*count)
+            }
+            .ok_or_else(unsupported)?;
+            components = if one_of {
+                components.max(*width)
+            } else {
+                components.checked_add(*width).ok_or_else(unsupported)?
+            };
+            if alternatives > R::MAX_ALTERNATIVES || components > R::MAX_COMPONENTS {
+                return Err(unsupported());
+            }
+        }
+        let mut operands: Vec<R> = children.into_iter().map(|(r, _, _)| r).collect();
+        let requirement = if operands.len() == 1 {
+            operands.pop().unwrap()
+        } else if one_of {
+            R::OneOf(operands)
+        } else {
+            R::AllOf(operands)
+        };
+        Ok((requirement, alternatives, components))
+    }
     fn visit(
         doc: &ResolvedSemanticDocument<'_>,
         name: &str,
@@ -27,7 +58,7 @@ pub fn prepare_security(
         path: &mut Vec<String>,
         nodes: &mut usize,
         text: &mut usize,
-    ) -> CoreResult<R> {
+    ) -> CoreResult<(R, usize, usize)> {
         *nodes += 1;
         if *nodes > R::MAX_NODES || path.len() >= R::MAX_DEPTH || path.iter().any(|n| n == name) {
             return Err(unsupported());
@@ -57,10 +88,15 @@ pub fn prepare_security(
         if *text > MAX_TEXT {
             return Err(unsupported());
         }
-        if facts.semantics.children().next().is_some() {
-            return Ok(R::Unavailable {
-                scheme: facts.scheme.into(),
-            });
+        let unavailable = facts.semantics.children().next().is_some();
+        if unavailable && !matches!(facts.details, SecurityDetails::Combo { .. }) {
+            return Ok((
+                R::Unavailable {
+                    scheme: facts.scheme.into(),
+                },
+                1,
+                1,
+            ));
         }
         let mut parameters = Vec::new();
         let mut add = |key: &str, value: &str| -> CoreResult<()> {
@@ -94,11 +130,6 @@ pub fn prepare_security(
                 if one_of.is_some() == all_of.is_some() {
                     return Err(unsupported());
                 }
-                if facts.proxy.is_some() {
-                    return Ok(R::Unavailable {
-                        scheme: facts.scheme.into(),
-                    });
-                }
                 let members = one_of.or(all_of).ok_or_else(unsupported)?;
                 if members.len() < 2 {
                     return Err(unsupported());
@@ -109,14 +140,21 @@ pub fn prepare_security(
                     .map(|n| visit(doc, n, scopes, path, nodes, text))
                     .collect::<CoreResult<Vec<_>>>()?;
                 path.pop();
-                return Ok(if one_of.is_none() {
-                    R::AllOf(children)
-                } else {
-                    R::OneOf(children)
-                });
+                let (requirement, alternatives, components) = group(children, one_of.is_some())?;
+                return Ok((
+                    if unavailable || facts.proxy.is_some() {
+                        R::Unavailable {
+                            scheme: facts.scheme.into(),
+                        }
+                    } else {
+                        requirement
+                    },
+                    alternatives,
+                    components.max(usize::from(unavailable || facts.proxy.is_some())),
+                ));
             }
             SecurityDetails::NoSec if facts.proxy.is_none() && scopes.is_none() => {
-                return Ok(R::NOSEC);
+                return Ok((R::NOSEC, 1, 0));
             }
             SecurityDetails::Basic {
                 name,
@@ -193,16 +231,24 @@ pub fn prepare_security(
                 }
             }
             SecurityDetails::Extension | SecurityDetails::Auto => {
-                return Ok(R::Unavailable {
-                    scheme: facts.scheme.into(),
-                });
+                return Ok((
+                    R::Unavailable {
+                        scheme: facts.scheme.into(),
+                    },
+                    1,
+                    1,
+                ));
             }
             SecurityDetails::NoSec => {}
         }
-        Ok(R::Scheme {
-            scheme: facts.scheme.into(),
-            parameters,
-        })
+        Ok((
+            R::Scheme {
+                scheme: facts.scheme.into(),
+                parameters,
+            },
+            1,
+            1,
+        ))
     }
     let facts = document.form(owner, form).ok_or_else(unsupported)?;
     if facts.effective_security.is_empty() {
@@ -210,7 +256,7 @@ pub fn prepare_security(
     }
     let mut nodes = 0;
     let mut text = 0;
-    let mut requirements = facts
+    let requirements = facts
         .effective_security
         .iter()
         .map(|name| {
@@ -224,11 +270,7 @@ pub fn prepare_security(
             )
         })
         .collect::<CoreResult<Vec<_>>>()?;
-    let expression = if requirements.len() == 1 {
-        requirements.pop().unwrap()
-    } else {
-        R::AllOf(requirements)
-    };
+    let (expression, _, _) = group(requirements, false)?;
     expression.alternatives()?;
     Ok(expression)
 }

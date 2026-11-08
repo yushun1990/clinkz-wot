@@ -10,6 +10,7 @@ struct KeyVerifier {
     revision: AtomicU64,
     revoked: AtomicBool,
     different_identity: AtomicBool,
+    changed_work: AtomicBool,
     calls: AtomicUsize,
 }
 impl HttpApiKeyVerifier for KeyVerifier {
@@ -17,7 +18,11 @@ impl HttpApiKeyVerifier for KeyVerifier {
         self.revision.load(Ordering::Acquire)
     }
     fn work(&self) -> u64 {
-        1024
+        if self.changed_work.load(Ordering::Acquire) {
+            2048
+        } else {
+            1024
+        }
     }
     fn verify(&self, key: &[u8]) -> CoreResult<Principal> {
         self.calls.fetch_add(1, Ordering::Relaxed);
@@ -46,6 +51,7 @@ fn key_verifier() -> Arc<KeyVerifier> {
         revision: AtomicU64::new(0),
         revoked: AtomicBool::new(false),
         different_identity: AtomicBool::new(false),
+        changed_work: AtomicBool::new(false),
         calls: AtomicUsize::new(0),
     })
 }
@@ -655,5 +661,120 @@ fn mutated_typed_discriminators_cannot_turn_advertised_authentication_into_nosec
         );
         drop(registry);
         clean(&accounts);
+    }
+}
+
+#[test]
+fn a_verifier_cannot_increase_the_next_verifiers_work_and_enter_its_callback() {
+    io().block_on(async {
+        let keys = Keys::for_name("127.0.0.1");
+        let addr = address();
+        let basic = verifier();
+        let key = key_verifier();
+        let td = description_for(addr, json!(["both"]));
+        let mut server = SecureFixture::from_security(
+            server_security(&keys, Some(basic.clone()), Some(key.clone())),
+            addr,
+            td,
+            &[Operation::ReadProperty],
+        );
+        let owner = consumer_instance();
+        let accounts = bank();
+        let (client, content) = secure_client(
+            &server.td,
+            &keys,
+            &owner,
+            client_access(&owner, &server.td, true, true),
+            &accounts,
+            None,
+        );
+        let mut call = read_secure(&client);
+        until(&mut server, &mut call, RawFiniteState::Dispatching).await;
+        let changed = key.clone();
+        VERIFICATION_HOOK.with(|h| {
+            *h.borrow_mut() = Some((
+                1,
+                Box::new(move || {
+                    changed.changed_work.store(true, Ordering::Release);
+                }),
+            ))
+        });
+        let result = server.exchange(&mut call).await;
+        assert!(result.result().is_err());
+        assert_eq!(server.app.reads.get(), 0);
+        assert_eq!(basic.calls.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            key.calls.load(Ordering::Relaxed),
+            0,
+            "changed verifier has no original work credit"
+        );
+        drop((result, call, client, content, owner));
+        clean(&accounts);
+        server.close();
+    });
+}
+
+#[test]
+fn unsupported_combo_metadata_cannot_conceal_structural_cycles() {
+    for proxy in [false, true] {
+        let keys = Keys::for_name("127.0.0.1");
+        let mut td = description_for(address(), json!(["root"]));
+        td["securityDefinitions"]["root"] = json!({"scheme":"combo","oneOf":["none","loop"]});
+        td["securityDefinitions"]["loop"] = json!({"scheme":"combo","allOf":["none","loop"]});
+        if proxy {
+            td["securityDefinitions"]["loop"]["proxy"] = json!("https://127.0.0.1/proxy");
+        } else {
+            td["securityDefinitions"]["loop"]["urn:uninterpreted"] = json!(true);
+        }
+        let owner = consumer_instance();
+        let accounts = bank();
+        assert!(
+            secure_prepare(
+                &td,
+                &keys,
+                client_access(&owner, &td, false, false),
+                &accounts,
+                None
+            )
+            .is_err(),
+            "an unavailable cyclic alternative cannot grant the earlier anonymous branch"
+        );
+        clean(&accounts);
+    }
+}
+
+#[test]
+fn unavailable_containers_preserve_full_expansion_bounds_and_remain_unqualified() {
+    for proxy in [false, true] {
+        for overflow in [false, true] {
+            let keys = Keys::for_name("127.0.0.1");
+            let mut td = description_for(address(), json!(["root"]));
+            td["securityDefinitions"]["root"] = json!({"scheme":"combo","oneOf":["none","joined"]});
+            td["securityDefinitions"]["joined"] =
+                json!({"scheme":"combo","allOf":["hidden","either"]});
+            td["securityDefinitions"]["hidden"] = json!({"scheme":"combo","oneOf":if overflow { vec!["none";16] } else { vec!["none","auth"] }});
+            if proxy {
+                td["securityDefinitions"]["hidden"]["proxy"] = json!("https://127.0.0.1/proxy");
+            } else {
+                td["securityDefinitions"]["hidden"]["urn:uninterpreted"] = json!(true);
+            }
+            let owner = consumer_instance();
+            let accounts = bank();
+            let prepared = secure_prepare(
+                &td,
+                &keys,
+                client_access(&owner, &td, false, false),
+                &accounts,
+                None,
+            );
+            assert_eq!(
+                prepared.is_ok(),
+                !overflow,
+                "unsupported metadata cannot hide a 32-branch dependency"
+            );
+            assert!(prepare_producer(&td, server_security(&keys, None, None)).is_err());
+            drop(prepared);
+            clean(&accounts);
+        }
     }
 }

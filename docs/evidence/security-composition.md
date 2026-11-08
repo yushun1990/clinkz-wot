@@ -51,6 +51,11 @@ owners. It exercises:
   refusal through public preparation; mutated typed scheme discriminators cannot
   turn advertised authentication into NoSec. Conjunction Write includes both a
   complete successful exchange and revoked delivery after completed effects.
+- Independent acceptance counterexamples: an earlier verifier increasing the next
+  verifier's work must refuse before that callback; proxy/extension Combo metadata
+  cannot hide cycles or excessive expansion. Both reproductions failed before
+  their corrections. Valid unavailable containers still permit Consumer selection
+  of another complete branch, while retaining full Producer refusal.
 
 The existing `security_https` and `security_write` suites continue to exercise
 certificate trust/identity refusal, exact audience/operation/registration and
