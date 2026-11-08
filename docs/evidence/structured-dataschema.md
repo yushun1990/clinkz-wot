@@ -250,7 +250,11 @@ Event tables count all four roles' backing and bound their combined constraints
 to 128 nodes and 128 field entries plus 4096 constraint-name bytes; each role also
 retains the existing individual schema limits. The old maximum of 32 Events with
 four scalar roles remains representable. Consumer capture does not allocate a
-second tree. Actual MQTT JSON validation provisions 65,536 temporary bytes and
+second tree. Producer native coverage requires the original schema Arc, not
+merely equal recompiled values. PreparedThing funds that backing once; native
+views fund only their references and retain the same transferred aggregate owner
+through publication acknowledgement. Independently compiled equivalent backing
+refuses managed pairing before native effects. Actual MQTT JSON validation provisions 65,536 temporary bytes and
 491,648 work credits per callback, covering bounded syntax and repeated field
 lookups. The managed Producer participation provisions its original callback
 scratch; Consumer root funding retains its scratch separately from queues. These
@@ -266,7 +270,9 @@ Mosquitto, plus an independent raw MQTT publisher. They exercise nested required
 objects, exact integral decimals, Unicode strings, invalid/duplicate/missing
 members, original refused carriers, short Producer and Consumer validation
 credits, type-only actual-service refusal, exact variable retained accounting,
-short cleanup work, changed final constraints/Forms/operations/security, one
+short cleanup work, aggregate constraint-name refusal, exact original native
+schema sharing without duplicate backing charges, equal-foreign-owner refusal,
+changed final constraints/Forms/operations/security, one
 native subscription with independent logical stop, revoked buffered delivery,
 captured-service drift and original funding through final publication acknowledgement.
 The complete MQTT broker suite retains its separate loss, uncertain cancellation,

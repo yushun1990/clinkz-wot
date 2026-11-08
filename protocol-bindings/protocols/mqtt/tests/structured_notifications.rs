@@ -5,10 +5,12 @@ mod broker;
 mod support;
 use clinkz_wot_core::{consumer::*, notification::*};
 use clinkz_wot_planning::open_consumer::*;
+#[cfg(feature = "broker-tests")]
 use clinkz_wot_servient_finite::{consumer_notification::*, notification::*};
 use std::sync::atomic::{AtomicBool, Ordering};
 use support::*;
 
+#[cfg(feature = "broker-tests")]
 type Consumer = ConsumerNotificationRuntime<MqttNotificationConsumer>;
 #[derive(Default)]
 struct Access(AtomicBool);
@@ -78,6 +80,7 @@ fn instance_for(kind: NotificationKind, text: &str) -> RawProducerInstance {
         property_instance(authority(1), text)
     }
 }
+#[cfg(feature = "broker-tests")]
 fn publication(kind: NotificationKind, body: &[u8]) -> PublicationData {
     let p = Payload::new(body.to_vec(), "application/json");
     if kind == NotificationKind::Event {
@@ -329,6 +332,165 @@ fn actual_services_work_schema_backing_and_complete_final_advertisement_are_qual
 }
 fn schema_for_response() -> serde_json::Value {
     serde_json::json!({"type":"object", "required":["accepted"], "properties":{"accepted":{"type":"boolean"}}})
+}
+
+#[test]
+fn native_schema_views_share_the_original_prepared_backing_and_refuse_equal_foreign_owners() {
+    let address = address();
+    let producer = MqttNotificationProducer::new(
+        MqttProducerConfig::for_loopback(address, 8192).unwrap(),
+        BindingId::new(7),
+        BindingGeneration::INITIAL,
+    );
+    let owner = owner();
+    let measure = |structured| {
+        let service = MqttNotificationService::new(&producer).unwrap();
+        let mut value = if structured {
+            description(address, "shared/value", NotificationKind::Event)
+        } else {
+            td(address, "shared/value")
+        };
+        value["events"]["alarm"]["forms"][0]["op"] = serde_json::json!("subscribeevent");
+        let instance = instance(authority(1), &value.to_string());
+        let prepared = prepare(&instance, &[&producer]).unwrap();
+        let definitions = prepared
+            .operations()
+            .iter()
+            .map(|o| {
+                o.definition::<MqttNotificationDefinition>()
+                    .unwrap()
+                    .clone()
+            })
+            .collect();
+        let native = service
+            .participation(&owner, instance.key(), definitions)
+            .unwrap();
+        let native_bytes = native
+            .admission_backing_bytes(&owner, instance.key())
+            .unwrap();
+        let operation = &prepared.operations()[0];
+        assert!(native.covers(
+            instance.key(),
+            producer.identity(),
+            operation.site.site(),
+            operation.form,
+            operation.operation,
+            operation.definition_any()
+        ));
+        let equal = prepare(&instance, &[&producer]).unwrap();
+        assert!(
+            !native.covers(
+                instance.key(),
+                producer.identity(),
+                operation.site.site(),
+                operation.form,
+                operation.operation,
+                equal.operations()[0].definition_any()
+            ),
+            "equal meaning cannot establish original schema backing ownership"
+        );
+        let accounts = bank();
+        let refused = ComposedProducerExposure::try_new(
+            &owner,
+            ComposedProducerInput {
+                instance,
+                prepared: equal,
+                providers: vec![Rc::new(producer.clone())],
+                participants: vec![Box::new(native)],
+                expected: None,
+                handler_backing_bytes: 0,
+            },
+            limits(),
+            accounts.clone(),
+            &mut budget(),
+        )
+        .err()
+        .unwrap()
+        .into_input();
+        drop(refused);
+        assert_empty(&accounts);
+        assert!(!service.connected());
+        (prepared.retained_bytes(), native_bytes)
+    };
+    let primitive = measure(false);
+    let structured = measure(true);
+    assert!(
+        structured.0 > primitive.0,
+        "the prepared owner funds variable backing"
+    );
+    assert_eq!(
+        structured.1, primitive.1,
+        "native views fund references, not a second constraint tree"
+    );
+}
+
+#[test]
+fn common_event_preparation_checks_constraint_name_bytes_before_building_roles() {
+    struct CommonSchema;
+    impl ProducerCapability for CommonSchema {
+        fn identity(&self) -> (BindingId, BindingGeneration) {
+            (BindingId::new(40), BindingGeneration::INITIAL)
+        }
+        fn definition_bytes(&self, d: &dyn std::any::Any) -> Option<usize> {
+            d.downcast_ref::<NotificationSchemas>()
+                .map(|s| std::mem::size_of::<NotificationSchemas>() + s.retained_bytes())
+                .or_else(|| d.is::<()>().then_some(0))
+        }
+        fn prepare(
+            &self,
+            input: ProducerOperationInput<'_>,
+            _: &mut WorkBudget,
+        ) -> CoreResult<Option<Box<dyn std::any::Any>>> {
+            Ok(Some(if input.operation == Operation::SubscribeAllEvents {
+                Box::new(
+                    clinkz_wot_planning::type_schema::prepare_notification_schemas(
+                        input.document,
+                        &AffordanceTarget::Thing,
+                        NotificationKind::SubscribeAllEvents,
+                    )?,
+                )
+            } else {
+                Box::new(())
+            }))
+        }
+        fn supports(&self, _: ProducerOperationInput<'_>, _: &mut WorkBudget) -> CoreResult<bool> {
+            Ok(true)
+        }
+        fn check_final(
+            &self,
+            _: ProducerOperationInput<'_>,
+            _: &dyn std::any::Any,
+            _: &mut WorkBudget,
+        ) -> CoreResult<bool> {
+            Ok(true)
+        }
+    }
+    for (bytes, supported) in [(80, true), (100, false)] {
+        let events: serde_json::Map<_, _> = (0..3).map(|event| {
+            let fields: serde_json::Map<_, _> = (0..16).map(|field| (format!("{field:03}{}", "x".repeat(bytes - 3)), serde_json::json!({"type":"integer"}))).collect();
+            (format!("event{event}"), serde_json::json!({"data":{"type":"object","properties":fields},"forms":[{"href":"test://source"}]}))
+        }).collect();
+        let text = serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Aggregate names",
+            "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}}, "events":events,
+            "forms":[{"href":"test://source", "op":"subscribeallevents"}]
+        })
+        .to_string();
+        let result = prepare_thing(
+            &text,
+            authority(1).key(),
+            GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&CommonSchema],
+            |_, _| true,
+        );
+        assert_eq!(
+            result.is_ok(),
+            supported,
+            "combined constraint-name bytes: {}",
+            3 * 16 * bytes
+        );
+    }
 }
 
 #[cfg(feature = "broker-tests")]

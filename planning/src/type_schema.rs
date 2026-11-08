@@ -34,6 +34,7 @@ pub fn prepare_event_collection_schema(
         }
     }
     if preparation.nodes > S::MAX_SCHEMA_NODES
+        || preparation.name_bytes > PreparedSchema::MAX_TOTAL_NAME_BYTES
         || preparation.backing_bytes > S::SCHEMA_BACKING_BOUND
     {
         return Err(refused());
@@ -160,7 +161,10 @@ pub(crate) fn notification_preparation(
                 }
             }
             use clinkz_wot_core::collection::EventCollectionSchema as S;
-            if p.nodes > S::MAX_SCHEMA_NODES || p.backing_bytes > S::SCHEMA_BACKING_BOUND {
+            if p.nodes > S::MAX_SCHEMA_NODES
+                || p.name_bytes > PreparedSchema::MAX_TOTAL_NAME_BYTES
+                || p.backing_bytes > S::SCHEMA_BACKING_BOUND
+            {
                 return Err(refused());
             }
         }
@@ -530,6 +534,7 @@ pub(crate) struct SchemaPreparation {
     pub cleanup: u64,
     pub work: u64,
     pub nodes: usize,
+    pub name_bytes: usize,
     pub backing_bytes: usize,
 }
 impl SchemaPreparation {
@@ -545,6 +550,7 @@ impl SchemaPreparation {
         }
         self.work += (c.nodes * 8 + c.names * PreparedSchema::MAX_PROPERTIES) as u64;
         self.nodes += c.nodes;
+        self.name_bytes += c.names;
         Ok(())
     }
 }

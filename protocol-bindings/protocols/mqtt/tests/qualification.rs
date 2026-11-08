@@ -53,49 +53,54 @@ fn unrelated_root_operations_are_left_to_their_actual_registered_capability() {
         BindingGeneration::INITIAL,
     );
     let reader = RootRead;
-    let text = serde_json::json!({
-        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Independent operation facet",
-        "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}},
-        "forms":[{"href":format!("mqtt://{address}"), "op":"readallproperties"}]
-    })
-    .to_string();
-    let key = authority(1).key();
-    fn behavior(scope: ValidatedProducerScope<'_>, op: Operation) -> bool {
-        matches!(scope, ValidatedProducerScope::Thing) && op == Operation::ReadAllProperties
-    }
-    assert!(
-        prepare_thing(
+    for endpoint in [
+        format!("mqtt://{address}"),
+        "mqtt://localhost:1883/independent-mapping".into(),
+    ] {
+        let text = serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Independent operation facet",
+            "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}},
+            "forms":[{"href":endpoint, "op":"readallproperties"}]
+        })
+        .to_string();
+        let key = authority(1).key();
+        fn behavior(scope: ValidatedProducerScope<'_>, op: Operation) -> bool {
+            matches!(scope, ValidatedProducerScope::Thing) && op == Operation::ReadAllProperties
+        }
+        assert!(
+            prepare_thing(
+                &text,
+                key,
+                GatewayDefaultV1::LIMITS,
+                &mut budget(),
+                &[&mqtt],
+                behavior
+            )
+            .is_err(),
+            "declining an operation never drops it from Producer qualification"
+        );
+        let prepared = prepare_thing(
             &text,
             key,
             GatewayDefaultV1::LIMITS,
             &mut budget(),
-            &[&mqtt],
-            behavior
+            &[&mqtt, &reader],
+            behavior,
         )
-        .is_err(),
-        "declining an operation never drops it from Producer qualification"
-    );
-    let prepared = prepare_thing(
-        &text,
-        key,
-        GatewayDefaultV1::LIMITS,
-        &mut budget(),
-        &[&mqtt, &reader],
-        behavior,
-    )
-    .unwrap();
-    assert_eq!(prepared.operations().len(), 1);
-    assert_eq!(prepared.operations()[0].binding, reader.identity());
-    check_final_thing(
-        &text,
-        key,
-        GatewayDefaultV1::LIMITS,
-        &mut budget(),
-        &[&mqtt, &reader],
-        &prepared,
-        behavior,
-    )
-    .unwrap();
+        .unwrap();
+        assert_eq!(prepared.operations().len(), 1);
+        assert_eq!(prepared.operations()[0].binding, reader.identity());
+        check_final_thing(
+            &text,
+            key,
+            GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&mqtt, &reader],
+            &prepared,
+            behavior,
+        )
+        .unwrap();
+    }
 }
 
 #[test]

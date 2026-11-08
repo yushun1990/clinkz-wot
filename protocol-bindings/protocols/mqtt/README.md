@@ -166,7 +166,10 @@ before execution.
 The actual JSON service explicitly supports the common structured leaf subset.
 Its captured callback envelope is 65,536 scratch bytes and 491,648 work credits;
 original definition/native-participation funding survives queued data and unread
-publication settlements. MQTT collection mappings below remain explicitly type-only.
+publication settlements. Prepared definitions fund shared schema backing once;
+managed native coverage requires the same actual schema Arc and charges only
+its reference layouts. Equal but independently recompiled schemas cannot claim
+that shared-owner allowance. MQTT collection mappings below remain explicitly type-only.
 The [structured tests](tests/structured_notifications.rs) use real Mosquitto and
 an independent adversarial MQTT publisher.
 

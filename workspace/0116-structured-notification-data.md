@@ -54,3 +54,11 @@ Migration: the Core, TD, Planning, SPI and runtime-safety owners, API ownership
 projection, WP-200/300/400/600, concrete MQTT mapping and structured-data evidence
 now describe this boundary. Real broker and public downstream fixtures implement
 the scoped evidence; existing logical/native lifecycle regressions remain binding.
+
+Independent resource probes exposed duplicate charges for shared Producer schema
+Arcs and a missing aggregate constraint-name cap. The correction charges shared
+backing once in PreparedThing, requires actual Arc identity at native coverage,
+and retains its transferred original funding through native work. Both common
+preparation and Core collection construction separately bound constraint names;
+unused field capacity cannot expand that bound. This is a resource-contract
+correction, not a measurement-driven architecture change.

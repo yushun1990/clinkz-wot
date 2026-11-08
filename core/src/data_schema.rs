@@ -293,7 +293,7 @@ impl PreparedSchema {
             _ => 0,
         }
     }
-    fn name_bytes(&self) -> usize {
+    pub(crate) fn name_bytes(&self) -> usize {
         match self {
             Self::Object(o) => o
                 .properties

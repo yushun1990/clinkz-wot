@@ -32,6 +32,8 @@ impl EventCollectionSchema {
                     || members[..i].iter().any(|old| old.name == m.name)
             })
             || schemas().map(PreparedSchema::node_count).sum::<usize>() > Self::MAX_SCHEMA_NODES
+            || schemas().map(PreparedSchema::name_bytes).sum::<usize>()
+                > PreparedSchema::MAX_TOTAL_NAME_BYTES
             || schemas().map(PreparedSchema::retained_bytes).sum::<usize>()
                 > Self::SCHEMA_BACKING_BOUND
         {
@@ -114,6 +116,8 @@ impl PropertyCollectionSchema {
     pub const MAX_TOTAL_NAME_BYTES: usize = 4096;
     pub fn try_new(members: Vec<PropertyMemberSchema>) -> CoreResult<Self> {
         if members.iter().map(|m| m.schema.node_count()).sum::<usize>() > PreparedSchema::MAX_NODES
+            || members.iter().map(|m| m.schema.name_bytes()).sum::<usize>()
+                > PreparedSchema::MAX_TOTAL_NAME_BYTES
             || members
                 .iter()
                 .map(|m| m.schema.retained_bytes())
@@ -342,6 +346,43 @@ mod schema_tests {
                 ),
             })
             .collect()
+    }
+    fn named_fields(count: usize, name_bytes: usize) -> PreparedSchema {
+        PreparedSchema::object(
+            (0..count)
+                .map(|i| SchemaProperty {
+                    name: format!("{i:02}{}", "x".repeat(name_bytes - 2)).into(),
+                    required: true,
+                    schema: PreparedSchema::Type(ValueType::Integer),
+                })
+                .collect(),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn aggregate_constraint_names_are_bounded_independently_of_unused_field_capacity() {
+        let event = |bytes| {
+            let role = Some(named_fields(8, bytes));
+            EventMemberSchema {
+                name: "event".into(),
+                subscription: role.clone(),
+                data: role.clone(),
+                data_response: role.clone(),
+                cancellation: role,
+            }
+        };
+        assert!(EventCollectionSchema::try_new(vec![event(128)]).is_ok());
+        assert!(EventCollectionSchema::try_new(vec![event(129)]).is_err());
+        let properties = |bytes| {
+            (0..2)
+                .map(|i| PropertyMemberSchema {
+                    name: format!("property{i}").into(),
+                    schema: named_fields(16, bytes),
+                })
+                .collect()
+        };
+        assert!(PropertyCollectionSchema::try_new(properties(128)).is_ok());
+        assert!(PropertyCollectionSchema::try_new(properties(129)).is_err());
     }
     #[test]
     fn event_table_accounts_for_variable_roles_and_bounds_combined_constraints() {

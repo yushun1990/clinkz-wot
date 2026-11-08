@@ -484,7 +484,9 @@ impl MqttNotificationRuntime {
             && site == target_site(&d.target)
             && form == d.form
             && operation == d.operation
-            && l.definitions.contains(d)
+            && l.definitions
+                .iter()
+                .any(|native| Arc::ptr_eq(&native.schemas, &d.schemas) && native == d)
     }
 }
 impl ClosedProducerParticipation for MqttNotificationRuntime {
@@ -523,10 +525,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             + l.definitions.capacity() * size_of::<MqttNotificationDefinition>();
         for d in &l.definitions {
             bytes = bytes.checked_add(
-                target_name_bytes(&d.target)
-                    + d.topic.len()
-                    + schema_backing(&d.schemas)
-                    + 4 * size_of::<usize>(),
+                target_name_bytes(&d.target) + d.topic.len() + 4 * size_of::<usize>(),
             )?;
         }
         for e in &l.mappings {
@@ -534,10 +533,13 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
                 target_name_bytes(&e.target)
                     + e.topic.len()
                     + size_of::<JsonNoSec>()
-                    + schema_backing(&e.services.schemas)
                     + 10 * size_of::<usize>(),
             )?;
         }
+        // Schema Arcs share the exact prepared owners, as covers_definition
+        // requires. PreparedThing funds their backing once; the transferred
+        // aggregate funding is retained by this lease and every publication.
+        // Native reference fields are already included in the layouts above.
         Some(bytes)
     }
     fn begin_retire(&mut self) {

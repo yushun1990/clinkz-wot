@@ -20,6 +20,9 @@ impl MqttNotificationProducer {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<MqttNotificationDefinition>> {
+        let Some(kind) = NotificationKind::for_operation(input.operation) else {
+            return Ok(None);
+        };
         if !matches_address(self.registration.config.address, input.target)? {
             return Ok(None);
         }
@@ -28,11 +31,6 @@ impl MqttNotificationProducer {
             FormSite::Property(n) => AffordanceTarget::Property(Arc::from(n.as_str())),
             FormSite::Event(n) => AffordanceTarget::Event(Arc::from(n.as_str())),
             _ => return Ok(None),
-        };
-        let Some(kind) = NotificationKind::for_operation(input.operation) else {
-            // Another actual capability may implement this operation at the
-            // same broker. Declining it does not waive whole-TD coverage.
-            return Ok(None);
         };
         budget
             .consume(

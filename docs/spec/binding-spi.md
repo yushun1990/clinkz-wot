@@ -434,8 +434,12 @@ separate from Consumer codec credits and from Action close/retirement work.
 
 MQTT's leaf Property/Event JSON services explicitly qualify the same bounded
 structured constraints. Producer definitions and captured validators share the
-original immutable role owner. The managed participation reports variable role
-backing and provisions the complete JSON scratch envelope; Producer and Consumer
+original immutable role owner. Prepared definitions fund variable role backing
+once. Managed native participation proves exact schema-owner identity when
+qualifying coverage, funds its references and JSON scratch envelope, and retains
+the transferred original funding through final work disposal. Equal values from
+an independently compiled schema do not establish this ownership compatibility.
+Producer and Consumer
 prepay the same complete validation-work allowance before publication or native
 handoff. Actual MQTT protocol mapping, NoSec policy, topic attribution and
 control/response refusal remain independent checks. Collection mappings retain
