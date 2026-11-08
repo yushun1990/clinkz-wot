@@ -1,11 +1,12 @@
 //! Core-owned validation of untrusted binding-origin interaction output.
 
 use crate::Operation;
+#[cfg(test)]
+use crate::{BindingGeneration, BindingId, PlanId};
 
 use crate::{
-    BindingArtifactRef, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
-    ErrorPhase, InteractionOutput, InteractionStatus, OutboundRequest, PlanId, ResponsePayloadRole,
-    RetryClass,
+    BindingArtifactRef, CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput,
+    InteractionStatus, OutboundRequest, ResponsePayloadRole, RetryClass,
 };
 
 /// Validates untrusted binding output against one live selected request.
@@ -16,13 +17,15 @@ pub fn validate_untrusted_binding_output(
     request: &OutboundRequest,
     output: InteractionOutput,
 ) -> CoreResult<InteractionOutput> {
-    validate_finite_binding_output(
+    crate::execution::validate_finite_response(
         request.binding_id(),
         request.binding_generation(),
         request.plan_id(),
         request.operation(),
-        output,
-    )
+        request.responses().binding_seal(request.operation()),
+        output.view(),
+    )?;
+    Ok(output)
 }
 
 /// Private single-use authority for sealing one accepted Consumer result.
@@ -34,6 +37,7 @@ pub fn validate_untrusted_binding_output(
 pub(crate) struct ConsumerResultSeal {
     artifact: BindingArtifactRef,
     operation: Operation,
+    responses: crate::execution::responses::FiniteResponseShape,
     result_limits: Option<(u64, u64)>,
 }
 
@@ -64,11 +68,14 @@ impl ConsumerResultSeal {
             artifact: request.artifact(),
             operation: request.operation(),
             result_limits,
+            responses: request.responses(),
         }
     }
 
     pub(crate) fn matches_request(&self, request: &OutboundRequest) -> bool {
-        self.artifact == request.artifact() && self.operation == request.operation()
+        self.artifact == request.artifact()
+            && self.operation == request.operation()
+            && self.responses == request.responses()
     }
 
     pub(crate) fn validate(self, output: InteractionOutput) -> CoreResult<InteractionOutput> {
@@ -88,13 +95,15 @@ impl ConsumerResultSeal {
             }
         }
         let identity = self.artifact.identity();
-        validate_finite_binding_output(
+        crate::execution::validate_finite_response(
             identity.binding_id(),
             identity.binding_generation(),
             identity.plan_id(),
             self.operation,
-            output,
-        )
+            self.responses.binding_seal(self.operation),
+            output.view(),
+        )?;
+        Ok(output)
     }
 
     pub(crate) fn validate_against_request(
@@ -142,6 +151,7 @@ pub(crate) fn validate_property_read_binding_output(
     )
 }
 
+#[cfg(test)]
 fn validate_finite_binding_output(
     expected_binding_id: BindingId,
     expected_binding_generation: BindingGeneration,
@@ -293,7 +303,8 @@ mod tests {
                     .metadata()
                     .binding_response()
                     .expect("validated metadata remains present")
-                    .status_code(),
+                    .status_code()
+                    .unwrap(),
                 status_code
             );
         }
@@ -469,4 +480,5 @@ pub(crate) fn property_read_handler_shape(output: &InteractionOutput) -> bool {
         && metadata.binding_response().is_none()
         && metadata.action_invocation().is_none()
         && metadata.property_write_report().is_none()
+        && metadata.response_selection() == crate::ResponseSelection::Primary
 }

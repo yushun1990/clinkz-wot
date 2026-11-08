@@ -192,3 +192,8 @@ TD facts. Complete callback scratch/work and variable role backing are provision
 [Structured Notification evidence](../evidence/structured-dataschema.md#notification-execution)
 retains the existing independent native lifetimes and narrower MQTT collection,
 control/response and NoSec policy. It creates no universal interaction facet.
+
+## TD-described finite responses
+
+Concrete native response discrimination and captured branch validation follow SPI-NATIVE/DELIVERY-001; the first supported facet is recorded in [response evidence](../evidence/td-responses.md).
+No package, gate or milestone acceptance follows from this increment.

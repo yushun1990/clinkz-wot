@@ -83,7 +83,7 @@ fn downstream_write_uses_its_own_native_completion_and_retains_late_success_with
         assert_eq!(settlement.consumer(), &owner.reference());
         assert_eq!(settlement.effect(), ConsumerEffect::Completed);
         assert!(
-            matches!(settlement.native_outcome(),ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none() && o.metadata().binding_response().unwrap().status_code()==0)
+            matches!(settlement.native_outcome(),ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none() && o.metadata().binding_response().unwrap().status_code().unwrap()==0)
         );
         assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
         drop(rt);

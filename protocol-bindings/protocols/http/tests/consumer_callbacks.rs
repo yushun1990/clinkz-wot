@@ -957,7 +957,7 @@ fn real_http_retains_one_original_result_when_validation_reenters_close_or_cance
         }
         assert!(
             matches!(settlement.native_outcome(), ConsumerNativeOutcome::Returned(Ok(o))
-            if o.data().unwrap().body == b"7" && o.metadata().binding_response().unwrap().status_code() == 200)
+            if o.data().unwrap().body == b"7" && o.metadata().binding_response().unwrap().status_code().unwrap() == 200)
         );
         assert_eq!(settlement.consumer(), &h.owner.reference());
         let Harness {

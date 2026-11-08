@@ -1295,7 +1295,7 @@ fn public_consumer_reads_the_shared_http_participant_after_sources_are_dropped()
         let policy = ConsumerPropertyReadPolicy::try_new_owned(
             BindingResourceContract::ConsumerOwnedHostV2, ResourceProfileId::GATEWAY_DEFAULT_V1,
             GatewayDefaultV1::LIMITS.clone(), BindingLifetimeFootprint::new(8, 8192),
-            BindingLifetimeFootprint::new(8, 4096), [1, 64, 64, 64], [4096, 16],
+            BindingLifetimeFootprint::new(8, 4096), [1, 64, 64, 64], [4096, 32],
             [2, 2, 1, 1, 1, 1, 1], [30_000, 1000], 65536).unwrap();
         let bank = Arc::new(HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap());
         let registration = try_inline_consumer_registration(HttpConsumerConfig::for_cleartext_ip().unwrap(),

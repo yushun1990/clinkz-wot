@@ -1250,8 +1250,9 @@ fn verify_collection_cleanup(operation: Operation) {
             temporary.used - walk.used,
             schema_drop
                 + clinkz_wot_planning::security::CLEANUP_WORK
-                + security::SecurityRequirement::NOSEC.drop_work(),
-            "schema and security owners need independent cleanup credit"
+                + security::SecurityRequirement::NOSEC.drop_work()
+                + 2, // The primary response media/set also needs rollback credit.
+            "schema, security and response owners need independent cleanup credit"
         );
         assert!(compiled.error.is_none());
         assert_eq!(compiled.selected, 1);

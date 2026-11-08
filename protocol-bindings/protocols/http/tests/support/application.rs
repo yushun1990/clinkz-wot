@@ -36,7 +36,7 @@ fn policy() -> ConsumerPropertyReadPolicy {
         BindingLifetimeFootprint::new(8, 8192),
         BindingLifetimeFootprint::new(8, 4096),
         [1, 64, 64, 64],
-        [4096, 16],
+        [4096, 32],
         [2, 2, 1, 1, 1, 1, 1],
         [30_000, 1000],
         65536,

@@ -99,6 +99,8 @@ struct Ingress<S = TcpStream> {
     wire: usize,
     allowance: Arc<AtomicUsize>,
     write: bool,
+    buffer_head: bool,
+    responses: crate::responses::HttpResponses,
     write_eof: bool,
     head_sent: usize,
 }
@@ -148,11 +150,15 @@ impl<S> Ingress<S> {
                 }
             }
             httparse::Status::Complete(end) => {
-                if response.version != Some(1)
-                    || response.code != Some(if self.write { 204 } else { 200 })
-                {
+                if response.version != Some(1) {
                     return Err(invalid());
                 }
+                let (selection, _, empty) = self
+                    .responses
+                    .classify(response.code.ok_or_else(invalid)?)
+                    .map_err(|_| invalid())?;
+                let expected_media = self.responses.media(selection).map_err(|_| invalid())?;
+                self.write = empty;
                 let mut media = 0;
                 let mut transfer = 0;
                 let mut lengths = 0;
@@ -189,7 +195,7 @@ impl<S> Ingress<S> {
                     }
                     if header.name.eq_ignore_ascii_case("content-type") {
                         media += 1;
-                        if header.value != b"application/json" {
+                        if header.value != expected_media.as_bytes() {
                             return Err(invalid());
                         }
                     }
@@ -256,15 +262,20 @@ impl<S: AsyncRead + Unpin> AsyncRead for Ingress<S> {
         if output.remaining() == 0 {
             return Poll::Ready(Ok(()));
         }
-        if self.write_eof {
+        if self.write_eof
+            || self.buffer_head && self.head_done && !self.write && self.head_sent < self.head_len
+        {
             return self.poll_write_head(cx, output);
         }
-        let available = self
+        let mut available = self
             .allowance
             .load(Ordering::Relaxed)
             .min(4096)
             .min(output.remaining())
             .min(32768 - self.wire);
+        if self.buffer_head && !self.head_done {
+            available = available.min(self.head.len() - self.head_len);
+        }
         if self.wire == 32768 {
             return Poll::Ready(Err(invalid()));
         }
@@ -284,6 +295,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for Ingress<S> {
                         Some(n.saturating_sub(bytes.len()))
                     })
                     .ok();
+                let buffering = self.buffer_head && !self.head_done;
                 self.inspect(bytes)?;
                 if self.write {
                     if bytes.is_empty() {
@@ -292,6 +304,16 @@ impl<S: AsyncRead + Unpin> AsyncRead for Ingress<S> {
                         }
                         self.write_eof = true;
                         return self.poll_write_head(cx, output);
+                    }
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                if buffering {
+                    if self.head_done {
+                        return self.poll_write_head(cx, output);
+                    }
+                    if bytes.is_empty() {
+                        return Poll::Ready(Err(invalid()));
                     }
                     cx.waker().wake_by_ref();
                     return Poll::Pending;
@@ -324,7 +346,7 @@ pub(super) async fn exchange(
     instructions: HttpArtifact,
     input: Option<Payload>,
     allowance: Arc<AtomicUsize>,
-) -> CoreResult<(u16, Vec<u8>)> {
+) -> CoreResult<crate::responses::HttpResponse> {
     exchange_secured(target, instructions, input, allowance, None, None).await
 }
 pub(super) async fn exchange_secured(
@@ -334,7 +356,7 @@ pub(super) async fn exchange_secured(
     allowance: Arc<AtomicUsize>,
     tls: Option<HttpClientTls>,
     security: Option<clinkz_wot_core::security::OutboundSecurity>,
-) -> CoreResult<(u16, Vec<u8>)> {
+) -> CoreResult<crate::responses::HttpResponse> {
     let socket = TcpStream::connect(target.address).await.map_err(|_| {
         // Socket/process/network availability is not a captured ingress or
         // concurrency limit. Keep returned I/O failure structured even when
@@ -397,13 +419,7 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
     input: Option<Payload>,
     allowance: Arc<AtomicUsize>,
     credential_headers: Vec<(&'static str, hyper::header::HeaderValue)>,
-) -> CoreResult<(u16, Vec<u8>)> {
-    let write = matches!(
-        instructions.operation,
-        Operation::WriteProperty
-            | Operation::WriteAllProperties
-            | Operation::WriteMultipleProperties
-    );
+) -> CoreResult<crate::responses::HttpResponse> {
     let io = TokioIo::new(Ingress {
         socket,
         head: [0; 8192],
@@ -411,7 +427,19 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
         head_done: false,
         wire: 0,
         allowance,
-        write,
+        write: matches!(
+            instructions.operation,
+            Operation::WriteProperty
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
+        ),
+        buffer_head: matches!(
+            instructions.operation,
+            Operation::WriteProperty
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
+        ),
+        responses: instructions.responses,
         write_eof: false,
         head_sent: 0,
     });
@@ -462,9 +490,7 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
         // Defense in depth; the raw-head guard rejects before Hyper can hide
         // informational messages, normalize whitespace or remove framing fields.
         let status = response.status().as_u16();
-        if status != if write { 204 } else { 200 } {
-            return Err(error(606, "HTTP status rejected"));
-        }
+        let (selection, semantic_status, empty) = instructions.responses.classify(status)?;
         let mut body = response.into_body();
         let mut result = Vec::new();
         result.try_reserve_exact(BODY as usize).map_err(|_| {
@@ -497,10 +523,17 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
                 }
             }
         }
-        if write && !result.is_empty() {
+        if empty && !result.is_empty() {
             return Err(error(606, "HTTP write response body rejected"));
         }
-        Ok((status, result))
+        Ok(crate::responses::HttpResponse {
+            code: status,
+            selection,
+            status: semantic_status,
+            empty,
+            media: instructions.responses.media(selection)?,
+            body: result,
+        })
     };
     let mut operation = std::pin::pin!(operation);
     let mut connection = std::pin::pin!(connection);
@@ -564,6 +597,8 @@ mod tests {
                     wire: 0,
                     allowance: allowance.clone(),
                     write: false,
+                    buffer_head: false,
+                    responses: crate::responses::HttpResponses::default(),
                     write_eof: false,
                     head_sent: 0,
                 };

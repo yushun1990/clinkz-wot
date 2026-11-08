@@ -385,3 +385,8 @@ records nested validation, independent adversarial ingress, original ownership,
 sharing and cleanup. MQTT collection mappings remain type-only and unsupported
 Event controls/responses still refuse the complete description; native ACKs grant
 no application response capability.
+
+## TD-described finite responses
+
+The [HTTP finite response profile](../../protocol-bindings/protocols/http/README.md#td-described-finite-response-alternatives) supplies the bounded real-I/O participant documented in [response evidence](../evidence/td-responses.md).
+No package, gate or milestone acceptance follows from this increment.

@@ -948,7 +948,12 @@ fn static_client_only_aggregate_executes_after_source_destruction_and_explicitly
             panic!("result")
         };
         assert_eq!(
-            output.metadata().binding_response().unwrap().status_code(),
+            output
+                .metadata()
+                .binding_response()
+                .unwrap()
+                .status_code()
+                .unwrap(),
             599
         );
         assert_eq!(output.data().unwrap().body.as_ref(), expected.as_bytes());
@@ -1041,7 +1046,12 @@ fn host_client_only_aggregate_executes_after_source_destruction_and_explicitly_r
             panic!("result")
         };
         assert_eq!(
-            output.metadata().binding_response().unwrap().status_code(),
+            output
+                .metadata()
+                .binding_response()
+                .unwrap()
+                .status_code()
+                .unwrap(),
             599
         );
         assert_eq!(output.data().unwrap().body.as_ref(), expected.as_bytes());

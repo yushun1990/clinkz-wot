@@ -178,6 +178,16 @@ fn native_read_short_work_unread_result_and_exact_final_release() {
     resume.set_remaining(WorkClass::CodecInputBytes, 0);
     let s = completed(runtime.poll(handle, &mut cx, now(3), &mut resume));
     assert_eq!(s.result().unwrap().data().unwrap().body, b"42e0");
+    assert_eq!(
+        s.result()
+            .unwrap()
+            .metadata()
+            .binding_response()
+            .unwrap()
+            .status_code(),
+        None,
+        "a native datagram response needs no numeric status surrogate"
+    );
     assert!(s.consumer() == instance.reference());
     assert_eq!(s.mapping().plan, PROGRAM.plan);
     assert!(runtime.is_idle());
@@ -748,4 +758,36 @@ fn modern_host_prepared_content_lends_identical_meaning_to_caller_owned_executio
     drop(runtime);
     drop(s);
     assert_eq!(bank.used(), 0);
+}
+
+#[test]
+fn caller_owned_primary_read_refuses_lent_additional_response_meaning_before_native_start() {
+    use clinkz_wot_core::execution::responses::{
+        FiniteResponses, ResponseAlternative, ResponseData,
+    };
+    let responses = FiniteResponses::try_new(
+        ResponseAlternative {
+            content_type: "application/json".into(),
+            success: true,
+            data: ResponseData::Operation,
+        },
+        std::vec![ResponseAlternative {
+            content_type: "application/json".into(),
+            success: false,
+            data: ResponseData::Value(PreparedSchema::Any),
+        }],
+    )
+    .unwrap();
+    let peer = Peer::new();
+    let open = || peer.open();
+    let stats = Statistics::default();
+    let binding = TestBinding {
+        open: &open,
+        stats: &stats,
+        configuration: 7,
+    };
+    let codec = NumberCodec::ready();
+    let loan = meaning().with_responses(Some(&responses));
+    assert!(core::ptr::eq(loan.responses().unwrap(), &responses));
+    assert!(ReadDefinition::try_new(loan, &binding, &PROGRAM, 7, &codec).is_err());
 }

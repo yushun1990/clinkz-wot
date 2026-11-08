@@ -2,11 +2,12 @@
 //! and native driving. Owners retain actual work/results and supply bounded
 //! callbacks; this kernel grants no TD support or logical authority by itself.
 pub mod read;
+pub mod responses;
 
 use crate::{
     AffordanceSite, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext, ErrorPhase,
-    InteractionOutputView, InteractionStatus, Operation, PlanId, ResponsePayloadRole,
-    ResponseSelection, RetryClass, data_schema::ValueSchemas, security::SecurityRequirement,
+    InteractionOutputView, Operation, PlanId, ResponsePayloadRole, RetryClass,
+    data_schema::ValueSchemas, security::SecurityRequirement,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::task::Context;
@@ -21,6 +22,7 @@ pub struct ValueExecution<'a> {
     operation: Operation,
     schemas: &'a ValueSchemas,
     security: &'a SecurityRequirement,
+    responses: Option<&'a responses::FiniteResponses>,
 }
 impl<'a> ValueExecution<'a> {
     pub fn try_new(
@@ -47,7 +49,15 @@ impl<'a> ValueExecution<'a> {
             operation,
             schemas,
             security,
+            responses: None,
         })
+    }
+    pub fn with_responses(mut self, responses: Option<&'a responses::FiniteResponses>) -> Self {
+        self.responses = responses;
+        self
+    }
+    pub fn responses(self) -> Option<&'a responses::FiniteResponses> {
+        self.responses
     }
     pub fn site(self) -> AffordanceSite<'a> {
         self.site
@@ -73,12 +83,30 @@ pub fn validate_finite_output(
     operation: Operation,
     output: InteractionOutputView<'_>,
 ) -> CoreResult<()> {
+    validate_finite_response(
+        binding,
+        generation,
+        plan,
+        operation,
+        responses::FiniteResponseShape::primary(operation),
+        output,
+    )
+}
+
+/// Validate only against the original owner's admitted response branches.
+pub fn validate_finite_response(
+    binding: BindingId,
+    generation: BindingGeneration,
+    plan: PlanId,
+    operation: Operation,
+    responses: responses::FiniteResponseShape,
+    output: InteractionOutputView<'_>,
+) -> CoreResult<()> {
     let metadata = output.metadata();
     let valid_response = metadata.binding_response().is_some_and(|response| {
         response.binding_id() == binding
             && response.binding_generation() == generation
             && response.plan_id() == plan
-            && response.selection() == ResponseSelection::Primary
     });
     if valid_response
         && matches!(
@@ -92,20 +120,9 @@ pub fn validate_finite_output(
                 | Operation::WriteAllProperties
                 | Operation::WriteMultipleProperties
         )
-        && (!matches!(
-            operation,
-            Operation::ReadProperty
-                | Operation::QueryAllActions
-                | Operation::ReadAllProperties
-                | Operation::ReadMultipleProperties
-        ) || output.data().is_some())
-        && (!matches!(
-            operation,
-            Operation::WriteProperty
-                | Operation::WriteAllProperties
-                | Operation::WriteMultipleProperties
-        ) || output.data().is_none())
-        && output.status() == InteractionStatus::Ok
+        && responses
+            .validate(metadata.response_selection(), output)
+            .is_ok()
         && metadata.payload_role() == ResponsePayloadRole::Application
         && metadata.action_invocation().is_none()
         && (metadata.property_write_report().is_none()

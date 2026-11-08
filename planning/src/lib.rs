@@ -214,3 +214,7 @@ pub use producer_property_read::{
 
 #[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod security;
+
+/// Common finite response preparation; native identification stays Binding-owned.
+#[cfg(all(feature = "std", feature = "validated-thing"))]
+pub mod responses;

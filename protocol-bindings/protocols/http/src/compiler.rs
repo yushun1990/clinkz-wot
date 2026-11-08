@@ -37,7 +37,8 @@ impl HostSemanticCompiler for HttpCompiler {
                     Operation::ReadProperty | Operation::WriteProperty
                 )
             ))
-            || input.content_type != Some("application/json")
+            || (input.operation != Operation::ReadProperty
+                && input.content_type != Some("application/json"))
             || input.subprotocol.is_some()
         {
             return Err(unsupported());
@@ -98,14 +99,15 @@ impl HostSemanticCompiler for HttpCompiler {
         {
             return Err(unsupported());
         }
-        if facts.content_coding.is_some()
-            || facts.additional_responses
-            || facts
-                .response_content_type
-                .is_some_and(|s| s != "application/json")
-        {
+        if facts.content_coding.is_some() {
             return Err(unsupported());
         }
+        let responses = crate::responses::HttpResponses::compile(
+            input.document,
+            input.owner,
+            input.form_index,
+            input.operation,
+        )?;
         let form = input
             .document
             .scope(if collection {
@@ -122,6 +124,7 @@ impl HostSemanticCompiler for HttpCompiler {
             .ok_or_else(unsupported)?;
         let mut output = HttpArtifact {
             operation: input.operation,
+            responses,
             secure: self.0.secure,
             authentication,
             method: if write { "PUT" } else { "GET" },
@@ -218,29 +221,6 @@ impl HostSemanticCompiler for HttpCompiler {
                 && !node.name().is("http://www.w3.org/2011/http#methodName")
                 && !node.name().is("http://www.w3.org/2011/http#headers")
             {
-                return Err(unsupported());
-            }
-        }
-        if let Some(response) = input.document.scope(if collection {
-            SemanticScope::AffordanceResponse {
-                owner: FormOwner::Thing,
-                index: input.form_index,
-            }
-        } else {
-            SemanticScope::Response {
-                property: input.property,
-                index: input.form_index,
-            }
-        }) {
-            if let Some(status) = unique(response, "http://www.w3.org/2011/http#statusCodeValue")?
-                && !matches!(status.value(), SemanticValue::Number(n) if n.as_u64() == Some(if write { 204 } else { 200 }))
-            {
-                return Err(unsupported());
-            }
-            if response.children().any(|n| {
-                (http_name(n) || actions && !crate::producer_compiler::class_assertion(n))
-                    && !n.name().is("http://www.w3.org/2011/http#statusCodeValue")
-            }) {
                 return Err(unsupported());
             }
         }

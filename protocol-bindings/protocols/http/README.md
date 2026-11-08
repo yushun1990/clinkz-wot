@@ -100,6 +100,69 @@ The [parser-policy amendment](../../../docs/work-packages/WP-600-http-property-r
 defines the stock SDK envelope. Historical v1 refusal and the unmerged PR #197
 fork are not evidence for the new stock SDK paths.
 
+## TD-described finite response alternatives
+
+The open finite Consumer and completely qualified finite Producer execute
+Property Read/Write primary and additional responses. Shared Planning retains
+TD order, response media and parameters, success (default false), and the named
+schemaDefinitions override or ordinary output role. JSON decoding and schema
+validation use the existing shared evaluator. Request input stays independent:
+Write uses JSON Property data, while an additional response may have another
+schema and independently selected media. Bodyless Read requires no request
+encoder; an explicit response can select JSON even if Form contentType differs.
+
+HTTP identifies alternatives by unique explicit `htv:statusCodeValue` values.
+Primary remains 200 Read / 204 Write; these same codes may be explicit.
+Other primary native mappings remain unsupported.
+Each additional entry requires a code, and collisions, missing/malformed codes,
+unhandled response instructions or unsupported representations refuse the whole
+selected interaction. Native codes 200–599 are bounded by this profile; 202 is
+unsupported because continuing acceptance is outside this finite mapping. Data
+responses cannot use 204, 205 or 304. Empty responses use the strict existing
+204-through-peer-EOF policy. In this status-only profile, additional Write
+responses require a named value schema: another empty 204 cannot be uniquely
+distinguished. Class annotations do not select a branch. Core
+never interprets HTTP status classes: an explicitly declared 503 success and
+201 application failure retain their TD meanings. Unexpected undeclared native
+responses are Binding failures; the Binding never guesses a branch from data.
+
+The supported leaf response representations are exactly `application/json` and
+`application/json; charset=utf-8`, with UTF-8 JSON bodies <=4096 bytes, no content
+coding, and a 32-byte media backing ceiling. These share the actual JSON value
+validator; there is no new codec hierarchy or arbitrary charset/suffix promise.
+JSON remains UTF-8 in both cases; the parameter changes no JSON encoding
+semantics ([RFC 8259 §11](https://www.rfc-editor.org/rfc/rfc8259.html#section-11)).
+The raw header guard checks the selected media exactly before Hyper normalization.
+Write keeps response headers private until classification; empty 204 headers
+remain private through EOF. Header/body/trailer/wire limits and call-owned
+connection retirement remain in force. Input still uses exact application/json;
+collection/status facets retain their existing exact JSON representation.
+
+A handler uses with_response_selection and the declared terminal status.
+ApplicationError is a validated application-declared failure with its payload,
+not a CoreError or a claim that no effect happened. Producer finite Write success
+still requires the handler to have completed the work. Consumer additional Write
+responses remain effect-uncertain even when declared successful: this increment
+does not supply a separate native completion proof for them. Ordinary primary
+Write completion retains Completed. Local first cause, invalid response data,
+application failure, remote-effect certainty and native delivery remain distinct.
+Rejected Consumer data keeps the original response branch/body under settlement
+funding. No response failure triggers automatic replay.
+
+Consumer preparation covers every response of the selected interaction. Producer
+preparation/final checking cover every advertised alternative before Serving,
+retain exact response/schema owners and refuse final-TD drift. Security
+composition, original authority, authorization revisions, accepted work,
+cancellation and final physical release retain their existing contracts.
+
+This capability is scoped to finite leaf Properties. Additional responses for
+collections, continuing Actions, notifications, non-JSON media, general native
+header/content-based discrimination and other ownership representations remain
+unsupported. The caller-owned Read representation stays primary-only. The
+restricted adapters below keep their separate admission/evidence scope.
+[Executable response evidence](../../../docs/evidence/td-responses.md) describes
+the actual tests and limits.
+
 ## Framing policy
 
 Hyper `=1.12.0` is an **unmodified crates.io dependency**, with `client,http1` and
@@ -154,7 +217,7 @@ publication. Host, authentication/cookie, connection, upgrade and framing/encodi
 headers cannot override this slice's target, NoSec or transport constraints.
 Explicit Accept must equal `application/json` and may occur once. The default
 Accept is emitted once. Primary `response.contentType` may explicitly be JSON and
-`htv:statusCodeValue` may explicitly be 200; other response codes/media, additional
+`htv:statusCodeValue` follows the [finite response profile](#td-described-finite-response-alternatives); unsupported response media and additional
 responses, coding, scopes and subprotocols remain unsupported.
 Only endpoint NoSec is executable. An effective security definition with a `proxy`
 server is explicitly declined during native compilation; it cannot silently turn

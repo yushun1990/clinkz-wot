@@ -1802,7 +1802,10 @@ fn host_whole_provisioning_request_call_and_global_live_measurements() {
         final_trace.releases
     );
     assert!(accepted.requests - request.requests <= 2);
-    assert!(accepted.live - request.live <= 1024);
+    // The same two call owners now also retain the original response-shape
+    // projection. This observed envelope is not an architecture size target;
+    // original account coverage and complete final release are checked above.
+    assert!(accepted.live - request.live <= 1152);
 }
 
 #[test]

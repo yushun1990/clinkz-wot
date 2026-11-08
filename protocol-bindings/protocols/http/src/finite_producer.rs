@@ -498,7 +498,8 @@ impl HttpFiniteConfig {
 impl FiniteValidator for HttpFiniteConfig {
     fn additional_validation_work(&self) -> u64 {
         let structured = self.mappings.iter().any(|(_, p)| {
-            !p.value_schema.is_type_only()
+            p.response_contract.iter().any(|r| matches!(&r.data, clinkz_wot_core::execution::responses::ResponseData::Value(s) if !s.is_type_only()))
+                || !p.value_schema.is_type_only()
                 || p.property_map
                     .as_ref()
                     .is_some_and(|s| s.members().iter().any(|m| !m.schema.is_type_only()))
@@ -590,10 +591,10 @@ impl FiniteValidator for HttpFiniteConfig {
                         .ok_or_else(crate::producer::producer_unsupported)?,
                 )
             }
-            Operation::ReadProperty | Operation::ReadAllProperties => program.validate(output),
-            Operation::WriteProperty
-            | Operation::WriteAllProperties
-            | Operation::WriteMultipleProperties
+            Operation::ReadProperty | Operation::WriteProperty | Operation::ReadAllProperties => {
+                program.validate(output)
+            }
+            Operation::WriteAllProperties | Operation::WriteMultipleProperties
                 if raw_finite_property_shape(program.operation, output)
                     && output.metadata().property_write_report().is_none() =>
             {

@@ -239,7 +239,7 @@ impl InteractionOptions {
 /// failures even when its native exchange completed normally; its completion
 /// check, rather than this status alone, establishes whole-group success.
 ///
-/// Request failures use [`CoreError`](crate::CoreError), while concrete
+/// Execution failures use [`CoreError`](crate::CoreError), while concrete
 /// protocol status codes remain in binding-response metadata.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
@@ -247,13 +247,16 @@ pub enum InteractionStatus {
     /// Normal terminal output, including a collection member report.
     #[default]
     Ok,
+    /// A validated TD-declared application failure. This is a response, not a
+    /// transport/validation failure and says nothing about absence of effects.
+    ApplicationError,
     /// An addressable asynchronous action status resource was created.
     Created,
     /// An asynchronous action was accepted without an addressable status resource.
     Accepted,
 }
 
-/// Role of the single payload carried by a successful interaction output.
+/// Role of the single payload carried by a validated interaction response.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum ResponsePayloadRole {
@@ -265,10 +268,11 @@ pub enum ResponsePayloadRole {
 }
 
 /// Response branch selected from a compiled form response plan.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum ResponseSelection {
     /// The form's primary response.
+    #[default]
     Primary,
     /// A zero-based entry in the form's compiled additional-response plan.
     Additional(u16),
@@ -284,10 +288,31 @@ pub struct BindingResponseMetadata {
     binding_generation: BindingGeneration,
     plan_id: PlanId,
     selection: ResponseSelection,
-    status_code: u16,
+    status_code: Option<u16>,
 }
 
 impl BindingResponseMetadata {
+    /// Response identity needs no universal numeric native status. A concrete
+    /// Binding may attach its bounded numeric diagnostic when one exists.
+    pub const fn new(
+        binding_id: BindingId,
+        binding_generation: BindingGeneration,
+        plan_id: PlanId,
+        selection: ResponseSelection,
+    ) -> Self {
+        Self {
+            binding_id,
+            binding_generation,
+            plan_id,
+            selection,
+            status_code: None,
+        }
+    }
+    pub const fn with_native_status(mut self, status: u16) -> Self {
+        self.status_code = Some(status);
+        self
+    }
+
     /// Creates metadata for the primary response branch.
     pub const fn primary(
         binding_id: BindingId,
@@ -300,7 +325,7 @@ impl BindingResponseMetadata {
             binding_generation,
             plan_id,
             selection: ResponseSelection::Primary,
-            status_code,
+            status_code: Some(status_code),
         }
     }
 
@@ -326,7 +351,7 @@ impl BindingResponseMetadata {
             binding_generation,
             plan_id,
             selection: ResponseSelection::Additional(index),
-            status_code,
+            status_code: Some(status_code),
         })
     }
 
@@ -351,7 +376,7 @@ impl BindingResponseMetadata {
     }
 
     /// Returns the opaque binding-native status code.
-    pub const fn status_code(&self) -> u16 {
+    pub const fn status_code(&self) -> Option<u16> {
         self.status_code
     }
 }
@@ -363,9 +388,25 @@ pub struct InteractionOutputMetadata {
     binding_response: Option<BindingResponseMetadata>,
     payload_role: ResponsePayloadRole,
     property_write_report: Option<crate::collection::PropertyWriteReport>,
+    // Handler-origin branch. Binding-origin selection stays in its untrusted
+    // identity metadata and is checked against the original request.
+    response_selection: ResponseSelection,
 }
 
 impl InteractionOutputMetadata {
+    /// Handler-selected TD response branch. Consumer metadata remains untrusted
+    /// and is checked against the original request's admitted set.
+    pub const fn with_response_selection(mut self, selection: ResponseSelection) -> Self {
+        self.response_selection = selection;
+        self
+    }
+    pub const fn response_selection(&self) -> ResponseSelection {
+        match self.binding_response {
+            Some(r) => r.selection(),
+            None => self.response_selection,
+        }
+    }
+
     /// Member evidence, independently validated against the original collection
     /// invocation. Unsupported native mappings must refuse, never erase it.
     #[must_use]
@@ -450,6 +491,7 @@ impl InteractionOutput {
                 binding_response: None,
                 payload_role: ResponsePayloadRole::Application,
                 property_write_report: None,
+                response_selection: ResponseSelection::Primary,
             },
         }
     }

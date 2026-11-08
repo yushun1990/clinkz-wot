@@ -197,7 +197,7 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                         let output = result.unwrap();
                         assert_eq!(&*output.data().unwrap().body, b"12");
                         let response = output.metadata().binding_response().unwrap();
-                        assert_eq!(response.status_code(), 200);
+                        assert_eq!(response.status_code().unwrap(), 200);
                         assert_eq!(response.binding_id(), BindingId::new(600));
                     }
                     "deadline-first" => {

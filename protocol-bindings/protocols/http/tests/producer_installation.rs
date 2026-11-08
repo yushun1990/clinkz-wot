@@ -786,13 +786,19 @@ fn nested_schema_limits_and_final_disposal_keep_the_original_funding() {
         + 2 * std::mem::size_of::<usize>()
         + 63 * std::mem::size_of::<SchemaProperty>()
         + name_bytes) as u64;
+    // The program now also retains the common primary response and its media,
+    // sharing that physical owner with configuration/installation snapshots.
+    let response_bytes =
+        (std::mem::size_of::<clinkz_wot_core::execution::responses::FiniteResponses>()
+            + 2 * std::mem::size_of::<usize>()
+            + "application/json".len()) as u64;
     let b = bank();
     let mut required = Vec::new();
     for close in [true, false] {
         let (prepared, authority) =
             prepare_with_schema(address, Generation::INITIAL, schema.clone());
         let policy = prepared.install_policy();
-        assert_eq!(policy.program_bytes, schema_bytes);
+        assert_eq!(policy.program_bytes, schema_bytes + response_bytes);
         assert!(policy.largest_indirect_allocation >= field_table as u64);
         assert!(policy.local_drop_work >= 2 * PreparedSchema::MAX_NODES as u64);
         MAX.with(|n| n.set(0));

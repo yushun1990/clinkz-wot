@@ -28,6 +28,7 @@ struct Bridge {
     wrote: bool,
     mapping: Option<usize>,
     operation: Option<Operation>,
+    responses: crate::responses::HttpResponses,
     input: Option<InteractionInput>,
     credentials: crate::security::HttpEvidence,
     tls_read_left: usize,
@@ -215,6 +216,7 @@ impl Ingress {
         bridge.credentials = evidence;
         bridge.mapping = Some(mapping);
         bridge.operation = Some(program.operation);
+        bridge.responses = program.responses;
         self.complete = true;
         zeroize::Zeroize::zeroize(&mut self.head);
         Ok(())
@@ -453,24 +455,43 @@ impl NativeConnection {
         if self.replied {
             return Ok(());
         }
+        let invalid_output = || {
+            CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+                    .with_redacted_cause(628, "HTTP Producer result cannot be encoded"),
+            )
+        };
         // IgnoredAny checks syntax without building a JSON tree, but skips
         // UTF-8 checks in strings and object keys. Validate the bytes first.
         let body = result.ok().and_then(|o| o.data()).filter(|p| {
-            p.content_type == "application/json"
+            crate::responses::json_media(&p.content_type)
                 && p.content_coding.is_none()
                 && p.body.len() <= 4096
                 && std::str::from_utf8(&p.body)
                     .is_ok_and(|json| serde_json::from_str::<serde::de::IgnoredAny>(json).is_ok())
         });
-        let operation = self.bridge.lock().unwrap().operation;
-        let write_success = operation.is_some_and(|op| {
-            matches!(
-                op,
-                Operation::WriteProperty
-                    | Operation::WriteAllProperties
-                    | Operation::WriteMultipleProperties
-            ) && result.is_ok_and(|o| clinkz_wot_core::finite::raw_finite_property_shape(op, o))
-        });
+        let native = result
+            .ok()
+            .map(|o| {
+                let responses = self.bridge.lock().unwrap().responses;
+                let code = responses
+                    .code(o.metadata().response_selection())
+                    .map_err(|_| invalid_output())?;
+                let (_, status, empty) = responses.classify(code).map_err(|_| invalid_output())?;
+                if o.status() != status
+                    || o.data().is_none() != empty
+                    || o.data().is_some_and(|p| {
+                        responses
+                            .media(o.metadata().response_selection())
+                            .map_or(true, |m| m != p.content_type)
+                    })
+                {
+                    return Err(invalid_output());
+                }
+                Ok((code, empty))
+            })
+            .transpose()?;
+        let write_success = native.is_some_and(|(_, empty)| empty);
         if result.is_ok_and(|o| o.metadata().property_write_report().is_some())
             || (result.is_ok() && body.is_none() && !write_success)
         {
@@ -483,10 +504,19 @@ impl NativeConnection {
                     .with_redacted_cause(628, "HTTP Producer result cannot be encoded"),
             ));
         }
+        let media = match result.ok() {
+            Some(o) => self
+                .bridge
+                .lock()
+                .unwrap()
+                .responses
+                .media(o.metadata().response_selection())?,
+            None => "application/json",
+        };
         self.replied = true;
         let (status, bytes) = match body {
-            Some(p) => (200, Bytes::copy_from_slice(&p.body)),
-            None if write_success => (204, Bytes::new()),
+            Some(p) => (native.unwrap().0, Bytes::copy_from_slice(&p.body)),
+            None if write_success => (native.unwrap().0, Bytes::new()),
             None => (
                 match result.err().and_then(|e| e.security_reason()) {
                     Some(
@@ -505,7 +535,7 @@ impl NativeConnection {
         }
         self.bridge.lock().unwrap().reply = Some(
             response
-                .header("content-type", "application/json")
+                .header("content-type", media)
                 .header("connection", "close")
                 .body(Full::new(bytes))
                 .expect("fixed HTTP response"),

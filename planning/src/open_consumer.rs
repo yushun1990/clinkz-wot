@@ -504,7 +504,6 @@ impl ConsumerRegistry {
                                             Err(error) => return Err(error),
                                         };
                                         if let Some(content) = content {
-                                            let schemas = content.schemas();
                                             reason = ConsumerUnsupported::NoCompleteProvider;
                                             for registration in &self.registrations {
                                                 let id = registration.execution.identity();
@@ -524,9 +523,11 @@ impl ConsumerRegistry {
                                                     || !registration
                                                         .execution
                                                         .supports_operation(operation)
-                                                    || data.content_type() != facts.content_type
                                                     || !data.available()
-                                                    || !schemas.supports(data.service())
+                                                    || !content.supports_data(
+                                                        data.service(),
+                                                        facts.content_type,
+                                                    )
                                                 {
                                                     continue;
                                                 }
@@ -1101,6 +1102,8 @@ fn common_content(
     if reuse.is_some_and(|c| c.security() != &security) {
         return Err(unsupported());
     }
+    let (response_work, response_cleanup) =
+        crate::responses::preparation(doc, site.owner(), index)?;
     if let Some(content) = reuse {
         // Retained comparisons and final-reference destruction stay bounded.
         check_limit(
@@ -1117,6 +1120,7 @@ fn common_content(
                 * clinkz_wot_core::data_schema::PreparedSchema::MAX_PROPERTIES as u64
                 * 2
                 + content.drop_work()
+                + response_work * 2
                 + 64,
         ) {
             return Err(busy());
@@ -1146,7 +1150,11 @@ fn common_content(
             },
             _ => return Err(unsupported()),
         };
-        if !agrees {
+        if !agrees
+            || content.responses().is_none_or(|r| {
+                !crate::responses::matches(doc, site.owner(), index, r).unwrap_or(false)
+            })
+        {
             return Err(unsupported());
         }
         return Ok(content.clone());
@@ -1181,6 +1189,8 @@ fn common_content(
         }
         _ => {}
     }
+    preparation.work += response_work;
+    preparation.cleanup += response_cleanup;
     check_limit(
         limits,
         K::CleanupWorkItemsPerStepMax,
@@ -1209,6 +1219,7 @@ fn common_content(
         schemas,
         security,
     )?;
+    let content = content.with_responses(crate::responses::prepare(doc, site.owner(), index)?);
     let prepared =
         PreparedConsumerContent::try_new(content, bank).map_err(|e| e.error().error().clone())?;
     *constructions += 1;
@@ -1222,10 +1233,6 @@ fn qualify_common_form(
 ) -> CoreResult<()> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
     if facts.content_coding.is_some()
-        || facts.additional_responses
-        || facts
-            .response_content_type
-            .is_some_and(|m| m != facts.content_type)
         || doc
             .uri_variables(UriVariableScope::Thing)
             .is_some_and(|mut vars| vars.next().is_some())

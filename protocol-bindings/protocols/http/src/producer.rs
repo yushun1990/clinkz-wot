@@ -39,6 +39,8 @@ impl HttpProducerConfig {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpProducerProgram {
     pub(super) operation: Operation,
+    pub(super) responses: crate::responses::HttpResponses,
+    pub(super) response_contract: Arc<clinkz_wot_core::execution::responses::FiniteResponses>,
     pub(super) secure: bool,
     pub(super) authentication: crate::security::HttpSecurity,
     pub(super) security_registration: Option<crate::security::SecurityRegistration>,
@@ -54,9 +56,13 @@ pub struct HttpProducerProgram {
 }
 impl HttpProducerProgram {
     pub(crate) fn schema_backing_bytes(&self) -> usize {
-        self.security_registration
-            .as_ref()
-            .map_or(0, |_| 2 * core::mem::size_of::<usize>())
+        self.response_contract.retained_bytes()
+            + core::mem::size_of_val(self.response_contract.as_ref())
+            + 2 * core::mem::size_of::<usize>()
+            + self
+                .security_registration
+                .as_ref()
+                .map_or(0, |_| 2 * core::mem::size_of::<usize>())
             + self.value_schema.retained_bytes()
             + core::mem::size_of_val(self.value_schema.as_ref())
             + 2 * core::mem::size_of::<usize>()
@@ -179,9 +185,14 @@ impl ProducerExecutor for HttpProducerExecutor {
             largest_indirect_allocation: schema
                 .largest_allocation_bytes()
                 .max(core::mem::size_of_val(schema.as_ref()) + 2 * core::mem::size_of::<usize>())
-                .max(decoder_allocation as usize) as u64,
+                .max(decoder_allocation as usize)
+                .max(
+                    program.response_contract.retained_bytes()
+                        + core::mem::size_of_val(program.response_contract.as_ref())
+                        + 2 * core::mem::size_of::<usize>(),
+                ) as u64,
             // Native/owner disposal, both Arc releases and final tree disposal.
-            local_drop_work: 3 + schema.drop_work(),
+            local_drop_work: 4 + schema.drop_work() + program.response_contract.drop_work(),
         }
     }
     fn service_policy(&self) -> Option<ProducerServicePolicy> {
@@ -197,6 +208,7 @@ impl ProducerExecutor for HttpProducerExecutor {
             || program.security_registration.is_some()
             || program.operation != Operation::ReadProperty
             || program.property_map.is_some()
+            || !program.response_contract.additional().is_empty()
             || program.address != self.config.address
             || program.target_len as usize > program.target.len()
             || program.origin_len as usize > program.origin.len()
@@ -248,13 +260,53 @@ impl ProducerOutputValidator for HttpProducerProgram {
             // certified by this legacy output-only Property Read facet.
             return Err(producer_unsupported());
         }
+        if !clinkz_wot_core::finite::finite_handler_shape(output)
+            || output.metadata().property_write_report().is_some()
+        {
+            return Err(CoreError::Validation(ErrorContext::new(
+                ErrorPhase::Validate,
+                RetryClass::Never,
+            )));
+        }
+        self.response_contract
+            .shape(!matches!(
+                self.operation,
+                Operation::WriteProperty
+                    | Operation::WriteAllProperties
+                    | Operation::WriteMultipleProperties
+            ))
+            .validate(output.metadata().response_selection(), output.view())?;
+        let response = self
+            .response_contract
+            .get(output.metadata().response_selection())
+            .ok_or_else(producer_unsupported)?;
+        if let Some(payload) = output.data() {
+            if payload.content_type != response.content_type.as_ref() {
+                return Err(CoreError::Validation(ErrorContext::new(
+                    ErrorPhase::Validate,
+                    RetryClass::Never,
+                )));
+            }
+        }
+        if let clinkz_wot_core::execution::responses::ResponseData::Value(schema) = &response.data {
+            return crate::responses::validate_payload(
+                schema,
+                output.data().ok_or_else(producer_unsupported)?,
+            );
+        }
+        if self.operation == Operation::WriteProperty {
+            return Ok(());
+        }
         if let Some(schema) = &self.property_map {
             return super::producer_validation::validate_property_map(
                 schema,
                 output.data().ok_or_else(producer_unsupported)?,
             );
         }
-        super::producer_validation::validate(&self.value_schema, output)
+        crate::responses::validate_payload(
+            &self.value_schema,
+            output.data().ok_or_else(producer_unsupported)?,
+        )
     }
 }
 /// Binding-owned native setup, request correlation, reply and retirement.

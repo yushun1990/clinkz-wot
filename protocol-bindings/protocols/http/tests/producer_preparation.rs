@@ -129,7 +129,11 @@ fn thirteen_old_lost_semantics_and_uncovered_siblings_refuse_the_whole_draft() {
         ),
         ("no-security", "security", json!([])),
         ("headers", "htv:headers", json!([])),
-        ("additional", "additionalResponses", json!([])),
+        (
+            "additional",
+            "additionalResponses",
+            json!([{"success":false,"htv:statusCodeValue":422}]),
+        ),
         ("subprotocol", "subprotocol", json!("other")),
     ] {
         let mut td = document();

@@ -110,3 +110,17 @@ the readable Property value; each Event retains subscription, data, dataResponse
 and cancellation separately. Root Property maps derive readable members, while
 root Events retain named occurrences and their original roles. No second TD
 interpreter or schema vocabulary is introduced for a continuing lifetime.
+
+## Response facts
+
+The selected semantic closure exposes primary response media and typed ordered
+additional-response facts. Per TD 1.1, omitted primary metadata uses Form media;
+an additional response's omitted media uses the Form media independently of
+primary response metadata, and omitted success is false. A schema name refers
+to schemaDefinitions and replaces the ordinary output schema; absence preserves
+the ordinary role. Referenced definitions enter the selected semantic closure;
+a missing or out-of-scope definition never becomes an unconstrained value.
+Response-local JSON-LD contexts and extension scopes retain original TD indices
+for concrete Binding interpretation. TD does not interpret native error codes,
+choose executable branches, infer effect certainty or turn optional annotations
+into a generic mandatory-extension mechanism.

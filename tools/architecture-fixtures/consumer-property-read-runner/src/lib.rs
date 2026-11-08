@@ -114,7 +114,8 @@ pub fn application(
             .metadata()
             .binding_response()
             .expect("Core sealed binding result")
-            .status_code();
+            .status_code()
+            .unwrap();
     }
     runtime.close();
     for _ in 0..100000 {
@@ -178,7 +179,8 @@ pub fn host_application(
             .metadata()
             .binding_response()
             .expect("Core sealed binding result")
-            .status_code();
+            .status_code()
+            .unwrap();
     }
     drop(handle);
     for _ in 0..100000 {

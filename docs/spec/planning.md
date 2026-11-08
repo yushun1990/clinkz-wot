@@ -37,6 +37,29 @@ indexes alone are insufficient. Refuse ambiguity rather than select by accidenta
 registration order. Preserve native collection semantics. Candidate fallback
 shares its work budget and MUST NOT silently retry uncertain effects.
 
+For finite responses, selected support includes every primary/additional
+alternative of that Form/operation: its exact media parameters, default or
+response-specific data role/schema, declared success, actual validator and
+unambiguous executable native identification. A Consumer may select supported
+interactions from a larger TD, but cannot select only the convenient response
+branches of an interaction. Producer qualification covers every alternative of
+every advertised retained Form/operation, both before native setup and against
+the final TD before publication. Unsupported branches cannot disappear from the
+published description. Native status/header/content discrimination belongs to
+the actual Binding, not common Planning. Scheme/type/media indexes do not prove
+that complete pairing.
+
+Common response preparation preserves additional-response order, applies TD
+media/success defaults and resolves named schemas inside the selected semantic
+closure. It prepays bounded schema construction/rollback before retaining the
+owned response set; current preparation bounds additional constraints together
+to 64 nodes and 4096 name bytes, at most 32 additional entries. Checked content
+reuse compares the complete response set without reconstructing replacement
+schema owners. Request media remains a distinct mapping operand; an unused
+request role does not require an encoder for that media. Present unconstrained
+response data and absent output remain distinct. Exact executable scope is
+[response evidence](../evidence/td-responses.md).
+
 `PREP-DEFER-001`: Consumer admission MUST normalize/index common meaning once
 and return per-operation support information. Default admission requires at least
 one statically supported interaction; a caller MAY require a stricter set. TD
@@ -170,9 +193,11 @@ Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
 unspecified synchronicity use the separate Action facet below. Thing-root
 ReadAllProperties, ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and QueryAllActions use the finite facet; other
 collection operations use their distinct notification facets or remain unsupported.
-Action input/output use distinct prepared schemas; absent roles
-permit no application data. Only one captured media service is currently
-supported for both directions; differing response media is refused.
+Action input/output use distinct prepared schemas; absent roles permit no
+application data unless response metadata explicitly describes a present opaque
+result. One actual captured data service must execute every selected request and
+response representation and constraint. Different media are allowed when that
+complete pairing is qualified; they do not require a new codec abstraction.
 
 Read and Write select independently on the same Property, including one Form
 with default or explicit multiple operations. A Write captures the complete
