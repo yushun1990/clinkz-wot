@@ -439,6 +439,14 @@ once. Managed native participation proves exact schema-owner identity when
 qualifying coverage, funds its references and JSON scratch envelope, and retains
 the transferred original funding through final work disposal. Equal values from
 an independently compiled schema do not establish this ownership compatibility.
+A participant making that deduction also supplies an exact
+`qualified_operation_count`: admission and prepublication coverage must pair its
+entire declared operation inventory, including every retained native definition,
+with the original prepared owners. Extra unpaired definitions refuse handoff;
+wrappers propagate this declaration. This count describes logical preparation
+associations, not physical connections, routes or subscriptions. Other profiles
+may decline the inventory declaration and must fund their complete additional
+backing without an unproved sharing deduction.
 Producer and Consumer
 prepay the same complete validation-work allowance before publication or native
 handoff. Actual MQTT protocol mapping, NoSec policy, topic attribution and

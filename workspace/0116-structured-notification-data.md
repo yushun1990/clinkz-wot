@@ -62,3 +62,10 @@ and retains its transferred original funding through native work. Both common
 preparation and Core collection construction separately bound constraint names;
 unused field capacity cannot expand that bound. This is a resource-contract
 correction, not a measurement-driven architecture change.
+
+Revalidation also exposed why selected-entry coverage alone is insufficient:
+unselected native definitions can retain additional schemas. The existing
+publication coverage seam now checks the exact operation inventory declared by
+participants claiming shared prepared backing. MQTT declares its complete set,
+and wrappers propagate it; unpaired definitions refuse admission/publication.
+No physical runtime inventory or universal interaction representation is imposed.

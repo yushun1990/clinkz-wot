@@ -536,8 +536,8 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
                     + 10 * size_of::<usize>(),
             )?;
         }
-        // Schema Arcs share the exact prepared owners, as covers_definition
-        // requires. PreparedThing funds their backing once; the transferred
+        // Identity coverage plus qualified_operation_count must pair the whole
+        // retained inventory. PreparedThing funds schema backing once; the transferred
         // aggregate funding is retained by this lease and every publication.
         // Native reference fields are already included in the layouts above.
         Some(bytes)
@@ -569,6 +569,9 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         definition: &dyn Any,
     ) -> bool {
         self.covers_definition(key, binding, site, form, operation, definition)
+    }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        Some(self.lease.as_ref().map_or(0, |l| l.definitions.len()))
     }
     fn notification_publication(
         &self,

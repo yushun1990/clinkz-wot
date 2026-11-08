@@ -169,7 +169,10 @@ original definition/native-participation funding survives queued data and unread
 publication settlements. Prepared definitions fund shared schema backing once;
 managed native coverage requires the same actual schema Arc and charges only
 its reference layouts. Equal but independently recompiled schemas cannot claim
-that shared-owner allowance. MQTT collection mappings below remain explicitly type-only.
+that shared-owner allowance. The complete native operation inventory must match
+the covered prepared operations at managed admission and publication; extra
+native definitions refuse rather than retaining unfunded schemas. MQTT collection
+mappings below remain explicitly type-only.
 The [structured tests](tests/structured_notifications.rs) use real Mosquitto and
 an independent adversarial MQTT publisher.
 

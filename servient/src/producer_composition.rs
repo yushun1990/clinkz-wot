@@ -319,16 +319,24 @@ fn check_participant_coverage<'a>(
     // A ready but unselected participant must never be opened: it could make
     // native ingress for a different, already-live logical Thing dispatch.
     if participants.clone().any(|participant| {
-        !prepared.operations().iter().any(|operation| {
-            participant.covers(
-                key,
-                operation.binding,
-                operation.site.site(),
-                operation.form,
-                operation.operation,
-                operation.definition_any(),
-            )
-        })
+        let covered = prepared
+            .operations()
+            .iter()
+            .filter(|operation| {
+                participant.covers(
+                    key,
+                    operation.binding,
+                    operation.site.site(),
+                    operation.form,
+                    operation.operation,
+                    operation.definition_any(),
+                )
+            })
+            .count();
+        covered == 0
+            || participant
+                .qualified_operation_count()
+                .is_some_and(|count| count != covered)
     }) {
         return Err(CoreError::UnsupportedOperation(context()));
     }

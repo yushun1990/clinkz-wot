@@ -398,6 +398,13 @@ local cause and native publication effect; later successful local disposal is
 required before terminal acknowledgement. Linked native callbacks are followed
 by fresh authority checks before successful local settlement.
 
+A managed Producer participant that excludes already funded prepared backing
+from its additional byte declaration must prove complete inventory pairing as
+well as exact shared-owner identity. The existing publication coverage check
+compares its declared operation count with the covered prepared associations at
+admission and before publication. Unpaired native definitions refuse handoff;
+selected-entry equality alone cannot fund an additional retained schema.
+
 ## Structured data validation
 
 The finite Consumer borrows its original PreparedSchema, with actual validator

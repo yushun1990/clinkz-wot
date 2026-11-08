@@ -493,6 +493,76 @@ fn common_event_preparation_checks_constraint_name_bytes_before_building_roles()
     }
 }
 
+#[test]
+fn additional_native_definitions_cannot_borrow_selected_schema_funding() {
+    let address = address();
+    let producer = MqttNotificationProducer::new(
+        MqttProducerConfig::for_loopback(address, 8192).unwrap(),
+        BindingId::new(7),
+        BindingGeneration::INITIAL,
+    );
+    let owner = owner();
+    let accounts = bank();
+    let service = MqttNotificationService::new(&producer).unwrap();
+    let selected = td(address, "qualified/selected");
+    let instance = instance(authority(1), &selected.to_string());
+    let prepared = prepare(&instance, &[&producer]).unwrap();
+    let mut definitions: Vec<_> = prepared
+        .operations()
+        .iter()
+        .map(|o| {
+            o.definition::<MqttNotificationDefinition>()
+                .unwrap()
+                .clone()
+        })
+        .collect();
+    let mut extra = description(address, "qualified/extra", NotificationKind::Event);
+    let event = extra["events"]["alarm"].take();
+    extra["events"] = serde_json::json!({"extra":event});
+    let unselected = prepare_thing(
+        &extra.to_string(),
+        instance.key(),
+        GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&producer],
+        |_, _| true,
+    )
+    .unwrap();
+    definitions.extend(unselected.operations().iter().map(|o| {
+        o.definition::<MqttNotificationDefinition>()
+            .unwrap()
+            .clone()
+    }));
+    let native = service
+        .participation(&owner, instance.key(), definitions)
+        .unwrap();
+    assert_eq!(
+        native.qualified_operation_count(),
+        Some(prepared.operations().len() + unselected.operations().len())
+    );
+    drop(unselected);
+    let refused = ComposedProducerExposure::try_new(
+        &owner,
+        ComposedProducerInput {
+            instance,
+            prepared,
+            providers: vec![Rc::new(producer)],
+            participants: vec![Box::new(native)],
+            expected: None,
+            handler_backing_bytes: 0,
+        },
+        limits(),
+        accounts.clone(),
+        &mut budget(),
+    )
+    .err()
+    .unwrap()
+    .into_input();
+    drop(refused);
+    assert_empty(&accounts);
+    assert!(!service.connected());
+}
+
 #[cfg(feature = "broker-tests")]
 async fn active(c: &mut Consumer, cursor: &NotificationCursor) {
     use std::time::{Duration, Instant};

@@ -10,6 +10,9 @@ pub struct ServicesParticipant {
     route: NotificationRoute,
 }
 impl ClosedProducerParticipation for ServicesParticipant {
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.native.qualified_operation_count()
+    }
     fn participation_id(&self) -> &ProducerParticipationId {
         self.native.participation_id()
     }

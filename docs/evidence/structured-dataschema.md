@@ -254,7 +254,11 @@ second tree. Producer native coverage requires the original schema Arc, not
 merely equal recompiled values. PreparedThing funds that backing once; native
 views fund only their references and retain the same transferred aggregate owner
 through publication acknowledgement. Independently compiled equivalent backing
-refuses managed pairing before native effects. Actual MQTT JSON validation provisions 65,536 temporary bytes and
+refuses managed pairing before native effects. Complete declared native operation
+inventory must also match the covered prepared set; an extra native definition
+cannot borrow selected schema funding. This is checked at admission and before
+publication, without treating the count as physical infrastructure cardinality.
+Actual MQTT JSON validation provisions 65,536 temporary bytes and
 491,648 work credits per callback, covering bounded syntax and repeated field
 lookups. The managed Producer participation provisions its original callback
 scratch; Consumer root funding retains its scratch separately from queues. These
@@ -271,7 +275,8 @@ objects, exact integral decimals, Unicode strings, invalid/duplicate/missing
 members, original refused carriers, short Producer and Consumer validation
 credits, type-only actual-service refusal, exact variable retained accounting,
 short cleanup work, aggregate constraint-name refusal, exact original native
-schema sharing without duplicate backing charges, equal-foreign-owner refusal,
+schema sharing without duplicate backing charges, equal-foreign-owner and extra
+native-inventory refusal,
 changed final constraints/Forms/operations/security, one
 native subscription with independent logical stop, revoked buffered delivery,
 captured-service drift and original funding through final publication acknowledgement.
