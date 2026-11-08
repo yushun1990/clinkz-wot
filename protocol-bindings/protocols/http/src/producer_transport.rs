@@ -29,7 +29,7 @@ struct Bridge {
     mapping: Option<usize>,
     operation: Option<Operation>,
     input: Option<InteractionInput>,
-    credentials: Option<crate::security::HttpBasicCredentials>,
+    credentials: crate::security::HttpEvidence,
     tls_read_left: usize,
     tls_write_left: usize,
 }
@@ -137,15 +137,23 @@ impl Ingress {
         let mut host = 0;
         let mut length = 0;
         let mut media = 0;
-        let mut authorization = None;
+        let mut evidence = crate::security::HttpEvidence::default();
         for h in request.headers.iter() {
             if h.name.eq_ignore_ascii_case("authorization") {
-                if !program.basic || authorization.is_some() {
+                if !program.authentication.uses_basic() || evidence.basic.is_some() {
                     return Err(invalid());
                 }
-                authorization = Some(
+                evidence.basic = Some(
                     crate::security::HttpBasicCredentials::parse(h.value).map_err(|_| invalid())?,
                 );
+            }
+
+            if h.name.eq_ignore_ascii_case("x-api-key") {
+                if !program.authentication.uses_api_key() || evidence.api_key.is_some() {
+                    return Err(invalid());
+                }
+                evidence.api_key =
+                    Some(crate::security::HttpApiKey::try_new(h.value).map_err(|_| invalid())?);
             }
 
             if h.name.eq_ignore_ascii_case("host") {
@@ -204,7 +212,7 @@ impl Ingress {
             return Err(invalid());
         }
         let mut bridge = self.bridge.lock().unwrap();
-        bridge.credentials = authorization;
+        bridge.credentials = evidence;
         bridge.mapping = Some(mapping);
         bridge.operation = Some(program.operation);
         self.complete = true;
@@ -420,8 +428,8 @@ impl NativeConnection {
         }
         self.driver.as_mut().poll(cx)
     }
-    pub(super) fn take_credentials(&mut self) -> Option<crate::security::HttpBasicCredentials> {
-        self.bridge.lock().unwrap().credentials.take()
+    pub(super) fn take_credentials(&mut self) -> crate::security::HttpEvidence {
+        std::mem::take(&mut self.bridge.lock().unwrap().credentials)
     }
     pub(super) fn take_candidate(&mut self) -> bool {
         self.take_request().is_some()

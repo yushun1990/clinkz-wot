@@ -350,9 +350,19 @@ pub(super) async fn exchange_secured(
             tls.ok_or_else(|| crate::security::denied(SecurityFailureReason::ProviderFailure))?;
         let grant = security
             .as_ref()
-            .and_then(|s| s.downcast_ref::<crate::security::BasicGrant>())
-            .ok_or_else(|| crate::security::denied(SecurityFailureReason::MissingCredentials))?;
-        grant.check(instructions.target())?;
+            .and_then(|s| s.downcast_ref::<crate::security::HttpGrant>());
+        let branch = instructions
+            .authentication
+            .selected()
+            .ok_or_else(|| crate::security::denied(SecurityFailureReason::UnsupportedScheme))?;
+        if branch != 0 && grant.is_none_or(|g| g.branch != branch) {
+            return Err(crate::security::denied(
+                SecurityFailureReason::MissingCredentials,
+            ));
+        }
+        if let Some(grant) = grant {
+            grant.check(instructions.target())?;
+        }
         let name = rustls::pki_types::ServerName::IpAddress(target.address.ip().into());
         let socket = tokio_rustls::TlsConnector::from(tls.0)
             .connect(
@@ -366,15 +376,18 @@ pub(super) async fn exchange_secured(
             .map_err(|_| crate::security::denied(SecurityFailureReason::ProviderFailure))?;
         // Obtain transport credentials only after verified TLS. No redirect,
         // origin rewrite, proxy, retry, resumption or early-data path exists.
-        let header = grant.header(instructions.target())?;
-        send(socket, target, instructions, input, allowance, Some(header)).await
+        let headers = grant
+            .map(|g| g.headers(instructions.target()))
+            .transpose()?
+            .unwrap_or_default();
+        send(socket, target, instructions, input, allowance, headers).await
     } else {
-        if tls.is_some() || security.is_some() || instructions.basic {
+        if tls.is_some() || security.is_some() || instructions.secure {
             return Err(crate::security::denied(
                 SecurityFailureReason::UnsupportedScheme,
             ));
         }
-        send(socket, target, instructions, input, allowance, None).await
+        send(socket, target, instructions, input, allowance, Vec::new()).await
     }
 }
 async fn send<S: AsyncRead + AsyncWrite + Unpin>(
@@ -383,7 +396,7 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
     instructions: HttpArtifact,
     input: Option<Payload>,
     allowance: Arc<AtomicUsize>,
-    authorization: Option<hyper::header::HeaderValue>,
+    credential_headers: Vec<(&'static str, hyper::header::HeaderValue)>,
 ) -> CoreResult<(u16, Vec<u8>)> {
     let write = matches!(
         instructions.operation,
@@ -415,8 +428,8 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
         .uri(target.uri.path_and_query().map_or("/", |v| v.as_str()))
         .header("host", target.uri.authority().unwrap().as_str())
         .header("connection", "close");
-    if let Some(value) = authorization {
-        request = request.header("authorization", value);
+    for (name, value) in credential_headers {
+        request = request.header(name, value);
     }
     if !instructions
         .headers()

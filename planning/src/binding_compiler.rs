@@ -171,6 +171,7 @@ impl<'a> BindingCompilerInput<'a> {
                 content_type: self.content_type,
                 subprotocol: self.subprotocol,
                 document,
+                selected_security: None,
             });
         }
         self
@@ -186,6 +187,9 @@ impl<'a> BindingCompilerInput<'a> {
 #[cfg(feature = "std")]
 #[derive(Clone, Copy)]
 pub struct ResolvedBindingInput<'a> {
+    /// Exact complete Consumer conjunction, qualified against the effective
+    /// expression. None requires complete expression qualification.
+    pub selected_security: Option<&'a clinkz_wot_core::security::SecurityRequirement>,
     pub operation: clinkz_wot_td::data_type::Operation,
     pub owner: clinkz_wot_td::semantic::FormOwner<'a>,
     /// Property-only inline adapter convenience; use `owner` for general input.

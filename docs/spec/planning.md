@@ -487,31 +487,44 @@ bounded increment.
 
 ## Selected executable security preparation
 
-The finite preparation adapter captures an immutable scheme/parameter requirement
-and compares it during checked content reuse. Actual access services qualify the
-complete requirement, in addition to native compiler and data qualification.
-Existing services default to NoSec only. Instance bind repeats that qualification;
-an equal schema or scheme name does not certify security parameters or services.
-`security::prepare_security` currently prepares exactly one NoSec or Basic/header
-Authorization requirement using TD defaulted facts. Multiple simultaneous
-requirements, combo allOf/oneOf, scopes, proxies, extensions and other schemes or
-placements refuse as complete unsupported expressions. This subset does not
-weaken the general composition obligation in EXEC-SECURITY-001.
+`security::prepare_security` projects complete effective security from shared TD
+facts, including Form replacement of Thing requirements, conjunctive lists and
+nested Combo alternatives. Standard scheme operands, proxy and requested scopes
+remain part of meaning. Unsupported interpretation (such as extension assertions)
+becomes an explicitly unavailable leaf, never NoSec. Cycles, malformed combinations
+or bounded expansion failure refuse the whole expression before selection.
+The current projection admits at most 64 visited nodes, depth 8, 16 complete
+alternatives and 4 non-NoSec components per conjunction; its 1024-unit text/operand
+envelope also charges reference/scheme names and 32 units per parameter. These
+are processing limits, not authentication protocol support. Temporary construction,
+expansion and rollback are prepaid; selected variable backing/destruction belong
+to the original prepared content owner.
 
-Live credentials and mutable credential revisions belong to instance access
-services. Only a per-call opaque native capability crosses into execution, after
-fresh instance/destination permission. A credential revision change invalidates
-existing bindings and unread results; checked rebinding can retain the original
-immutable security/data content. Wrapping an access service MUST preserve its
-revision's invalidation as well as local credential changes, including changes
-during authorization or capability issuance. Fresh rebinding adopts the changed
-service state without revalidating prior work. Permission and credential issuance
-are separate callbacks with separate complete work prepayments; insufficient
-issuance credit returns the original input before capability/native construction.
-No compiler or source callback returns at runtime.
-The HTTPS Basic adapter qualifies Property Read and Write independently with
-their complete input/output roles and exact native mapping. A Basic-capable
-access service does not certify collections, Actions or notifications. A mixed
-Producer TD still requires support of every retained effective operation and
-Form; the selected credential grant retains the exact operation as well as the
-original instance, registration and destination.
+Consumer preparation tries complete conjunctions in declaration order. For each
+it requires the actual access service and native compiler to support that same
+conjunction, together with independent operation/data/configuration qualification.
+`ResolvedBindingInput::selected_security` lends the exact chosen conjunction;
+a native compiler must not independently choose a different alternative. Provider
+ambiguity within that conjunction refuses. `ConsumerExecutionContent` retains
+only the selected meaning, without endpoint, credentials, policy, trust or live
+authority. Checked reuse must find that complete meaning in the new effective
+expression and repeat actual service/native qualification; it cannot silently
+choose a different branch. Unselected unsupported branches are not Consumer
+support claims and remain disqualifying for full Producer advertisement.
+
+Producer compilation without a Consumer selection qualifies the complete
+expression. Every advertised alternative must execute with the actual paired
+services, including native placement/multiplicity and operation support. Pure
+security refusal precedes native setup; final qualification after allowed closed
+setup still rechecks the complete advertised expression, original services,
+configuration, endpoints and readiness. It never prunes unsupported alternatives.
+
+Live credentials and mutable revisions belong to instance services. Per-call
+capabilities follow fresh audience/instance permission with separate complete
+work prepayments. Rotation invalidates old bindings and unread results; checked
+rebinding may reuse the immutable selected content. Wrappers must preserve every
+actual dependency's non-reused invalidation, including callback-time changes.
+Fresh rebinding never revalidates prior work. No compiler or source callback
+returns at runtime. [HTTP's declared subset](../../protocol-bindings/protocols/http/README.md)
+qualifies finite Property Read and Write; credential availability or a scheme name
+cannot certify other operations, collections or continuing interactions.

@@ -104,6 +104,7 @@ struct SecureApp {
     authority_in_permission: RefCell<Option<Box<dyn FnOnce()>>>,
     revoke_in_permission: RefCell<Option<Arc<Verifier>>>,
     denied: Cell<bool>,
+    allow_anonymous: Cell<bool>,
     revision: Cell<u64>,
     reads: Cell<usize>,
     writes: Cell<usize>,
@@ -141,7 +142,8 @@ impl RawFiniteHandler for SecureBehavior {
         }
         if self.0.denied.get()
             || input.principal.as_ref().is_none_or(|p| {
-                p.id.as_str() != "verified-account" || p.scopes != ["property-access"]
+                !(self.0.allow_anonymous.get() && p == &Principal::anonymous())
+                    && (p.id.as_str() != "verified-account" || p.scopes != ["property-access"])
             })
         {
             return Err(denied());
@@ -203,6 +205,14 @@ impl SecureFixture {
         td: Value,
         operations: &[Operation],
     ) -> Self {
+        Self::from_security(keys.server(verifier), addr, td, operations)
+    }
+    fn from_security(
+        security: HttpServerSecurity,
+        addr: SocketAddr,
+        td: Value,
+        operations: &[Operation],
+    ) -> Self {
         let accounts = bank();
         let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
             instances: 1,
@@ -228,9 +238,8 @@ impl SecureFixture {
         )
         .with_description(Arc::from(td.to_string()));
         let listen = HttpProducerConfig::for_https_loopback(addr).unwrap();
-        let security = keys.server(verifier);
         let provider: Rc<dyn ProducerCapability> = Rc::new(
-            HttpFiniteProducer::try_https_basic(
+            HttpFiniteProducer::try_https(
                 listen,
                 BindingId::new(197),
                 BindingGeneration::INITIAL,
@@ -384,9 +393,9 @@ fn access(
     target: &str,
     present: bool,
     deny: Arc<AtomicBool>,
-) -> Arc<HttpBasicClientAccess> {
+) -> Arc<HttpClientAccess> {
     Arc::new(
-        HttpBasicClientAccess::try_new(
+        HttpClientAccess::try_new(
             owner.reference(),
             target,
             Arc::new(Access(deny)),
@@ -398,11 +407,11 @@ fn access(
 fn secure_prepare(
     td: &Value,
     keys: &Keys,
-    access: Arc<HttpBasicClientAccess>,
+    access: Arc<HttpClientAccess>,
     accounts: &Arc<HostResourceAccounts>,
     reuse: Option<&Arc<PreparedConsumerContent>>,
 ) -> CoreResult<PreparedConsumer> {
-    let registration = try_https_basic_consumer_registration(
+    let registration = try_https_consumer_registration(
         keys.client(),
         access,
         BindingId::new(198),
@@ -442,7 +451,7 @@ fn secure_client(
     td: &Value,
     keys: &Keys,
     owner: &ConsumerInstance,
-    access: Arc<HttpBasicClientAccess>,
+    access: Arc<HttpClientAccess>,
     accounts: &Arc<HostResourceAccounts>,
     reuse: Option<&Arc<PreparedConsumerContent>>,
 ) -> (ConsumerRuntime, Arc<PreparedConsumerContent>) {

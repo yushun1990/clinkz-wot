@@ -1178,12 +1178,18 @@ pub(crate) mod basic_kernel {
             Scheme::Combo => {
                 let one = access.combo_names(definition, Field::OneOf);
                 let all = access.combo_names(definition, Field::AllOf);
-                combo_present(access.names_count(one), access.names_count(all))
-                    .map_err(|rule| reject(Field::Scheme, rule))?;
+                combo_present(
+                    access.endpoint_present(definition, Field::OneOf),
+                    access.endpoint_present(definition, Field::AllOf),
+                )
+                .map_err(|rule| reject(Field::Scheme, rule))?;
                 for (field, names) in [(Field::OneOf, one), (Field::AllOf, all)] {
+                    if !access.endpoint_present(definition, field) {
+                        continue;
+                    }
                     let count = access.names_count(names);
                     // Cardinality rejects before this group's member checks.
-                    if count == 1 {
+                    if count < 2 {
                         combo_group(count, None).map_err(|(member, rule)| {
                             let mut site = Site::new(owner, field);
                             site.member = member;
@@ -1382,8 +1388,8 @@ pub(crate) mod basic_kernel {
             _ => Err(Rule::UnsupportedFlow(flow)),
         }
     }
-    pub fn combo_present(one: usize, all: usize) -> Result<(), Rule<'static>> {
-        if one == 0 && all == 0 {
+    pub fn combo_present(one: bool, all: bool) -> Result<(), Rule<'static>> {
+        if one == all {
             Err(Rule::ComboMissing)
         } else {
             Ok(())
@@ -1393,7 +1399,7 @@ pub(crate) mod basic_kernel {
         count: usize,
         first_empty: Option<usize>,
     ) -> Result<(), (usize, Rule<'static>)> {
-        if count == 1 {
+        if count < 2 {
             Err((0, Rule::ComboCardinality))
         } else if let Some(index) = first_empty {
             Err((index, Rule::ComboEmpty))
@@ -1778,8 +1784,8 @@ pub(crate) mod basic_typed {
         fn combo_names(&self, definition: Self::Definition, field: Field) -> Names<'a> {
             if let SecurityScheme::Combo(value) = definition {
                 return Names::Strings(match field {
-                    Field::OneOf => &value.one_of,
-                    Field::AllOf => &value.all_of,
+                    Field::OneOf => value.one_of.as_deref().unwrap_or(&[]),
+                    Field::AllOf => value.all_of.as_deref().unwrap_or(&[]),
                     _ => unreachable!(),
                 });
             }
@@ -1801,6 +1807,11 @@ pub(crate) mod basic_typed {
         }
         fn endpoint_present(&self, definition: Self::Definition, field: Field) -> bool {
             match (definition, field) {
+                (SecurityScheme::Combo(value), Field::OneOf) => value.one_of.is_some(),
+                (SecurityScheme::Combo(value), Field::AllOf) => value.all_of.is_some(),
+                (_, Field::OneOf | Field::AllOf) => security_context(definition)
+                    ._extra_fields
+                    .contains_key(field.name()),
                 (SecurityScheme::OAuth2(value), Field::Authorization) => {
                     value.authorization.is_some()
                 }
@@ -1980,7 +1991,7 @@ pub(crate) mod basic_diagnostics {
                     ValidateError::InvalidSecurity(format!("unsupported scheme '{}'", scheme))
                 }
                 Rule::ComboMissing => ValidateError::InvalidSecurity(
-                    "combo schemes must define at least one of oneOf or allOf".into(),
+                    "combo schemes must define exactly one of oneOf or allOf".into(),
                 ),
                 Rule::ComboCardinality => ValidateError::InvalidSecurity(format!(
                     "{} must contain at least two references",

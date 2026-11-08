@@ -46,9 +46,11 @@ adds reusable nested object/required-field constraints, integer boundaries and
 Unicode string lengths through actual HTTP Consumer/Producer execution. Broader
 schema/media/profile coverage remains open.
 The [TD security/HTTPS increment](docs/evidence/td-security-https.md) now executes
-Basic-authenticated finite Property Read and structured Property Write through
-verified TLS, independently bound credentials/policy and complete Producer
-qualification. Other authenticated operation families and production security
+finite Property Read and structured Property Write through verified TLS.
+The [composition correction](docs/evidence/security-composition.md) adds Basic,
+header API keys, their conjunction and distinguishable alternatives with actual
+independent services, selected Consumer meaning and complete Producer qualification.
+Other authentication mechanisms/operation families and production security
 qualification remain open.
 
 | Capability | Raw execution kernels | TD-driven Consumer composition | TD-driven Producer composition | Actual Binding I/O evidence |

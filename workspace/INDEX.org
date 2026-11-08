@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0118-security-composition.md][0118 Security composition and qualified execution]]
+
 - [[file:0117-constrained-finite-execution-boundary.md][0117 Finite execution without mandatory Host ownership]]
 
 - [[file:0116-structured-notification-data.md][0116 Structured Notification data meaning]]

@@ -8,6 +8,7 @@ use super::*;
 pub struct HttpProducerConfig {
     pub(super) address: SocketAddr,
     pub(super) secure: bool,
+    pub(super) authentication: crate::security::HttpSecurity,
 }
 impl HttpProducerConfig {
     pub fn for_loopback(address: SocketAddr) -> CoreResult<Self> {
@@ -20,6 +21,7 @@ impl HttpProducerConfig {
         Ok(Self {
             address,
             secure: false,
+            authentication: crate::security::HttpSecurity::default(),
         })
     }
     pub fn for_https_loopback(address: SocketAddr) -> CoreResult<Self> {
@@ -39,7 +41,8 @@ impl HttpProducerConfig {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpProducerProgram {
     pub(super) operation: Operation,
-    pub(super) basic: bool,
+    pub(super) secure: bool,
+    pub(super) authentication: crate::security::HttpSecurity,
     pub(super) security_registration: Option<crate::security::SecurityRegistration>,
     pub(super) form: u32,
     pub(super) address: SocketAddr,
@@ -84,7 +87,7 @@ impl HttpProducerProgram {
         std::str::from_utf8(&self.target[..self.target_len as usize]).unwrap()
     }
     pub fn authority(&self) -> &str {
-        &self.target()[if self.basic { 8 } else { 7 }..self.authority_end as usize]
+        &self.target()[if self.secure { 8 } else { 7 }..self.authority_end as usize]
     }
     pub fn path_and_query(&self) -> &str {
         std::str::from_utf8(&self.origin[..self.origin_len as usize]).unwrap()
@@ -192,7 +195,7 @@ impl ProducerExecutor for HttpProducerExecutor {
     fn check_program(&self, program: &Self::Program) -> CoreResult<()> {
         // Inspect native operands, not a caller-supplied compatibility tag.
         if self.config.secure
-            || program.basic
+            || program.secure
             || program.security_registration.is_some()
             || program.operation != Operation::ReadProperty
             || program.property_map.is_some()

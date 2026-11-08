@@ -291,10 +291,11 @@ pub fn cases() -> Vec<Case> {
                 } else {
                     (vec![first, last.clone()], vec![last, missing])
                 };
-                let mut combo = SecurityScheme::combo_one_of(one);
-                if let SecurityScheme::Combo(value) = &mut combo {
-                    value.all_of = all;
-                }
+                let combo = if location == 2 {
+                    SecurityScheme::combo_one_of(one)
+                } else {
+                    SecurityScheme::combo_all_of(all)
+                };
                 thing.security_definitions.insert("zz-combo".into(), combo);
                 expected.owner = "SecurityDefinition";
                 expected.ordinal = 34; // none, other, 32 shared-prefix names
@@ -324,7 +325,7 @@ pub fn cases() -> Vec<Case> {
         let first = LADDER.get(start).map(|&(owner, field)| First {
             owner,
             ordinal: if start == 3 { 2 } else { 0 },
-            field,
+            field: if start == 2 { "OneOf" } else { field },
             index: if [8, 13, 20, 22].contains(&start) {
                 1
             } else {
@@ -387,6 +388,16 @@ pub fn cases() -> Vec<Case> {
 
     for (input, valid) in [
         (r#"{"scheme":"combo"}"#, false),
+        (r#"{"scheme":"combo","oneOf":[]}"#, false),
+        (r#"{"scheme":"combo","allOf":[]}"#, false),
+        (
+            r#"{"scheme":"combo","oneOf":[],"allOf":["none","other"]}"#,
+            false,
+        ),
+        (
+            r#"{"scheme":"combo","oneOf":["none","other"],"allOf":[]}"#,
+            false,
+        ),
         (r#"{"scheme":"combo","oneOf":["none"]}"#, false),
         (r#"{"scheme":"combo","allOf":["none"]}"#, false),
         (r#"{"scheme":"combo","oneOf":["none",""]}"#, false),
@@ -401,7 +412,7 @@ pub fn cases() -> Vec<Case> {
         ),
         (
             r#"{"scheme":"combo","oneOf":["none","other"],"allOf":["other","none"]}"#,
-            true,
+            false,
         ),
         (r#"{"scheme":"combo","oneOf":["none","none"]}"#, true),
         (r#"{"scheme":"combo","oneOf":["s","none"]}"#, true),

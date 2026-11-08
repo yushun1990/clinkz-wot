@@ -224,8 +224,12 @@ impl Totals {
             SecurityScheme::NoSec(v) => &v._context,
             SecurityScheme::Auto(v) => &v._context,
             SecurityScheme::Combo(v) => {
-                self.strings(&v.one_of);
-                self.strings(&v.all_of);
+                if let Some(names) = &v.one_of {
+                    self.strings(names);
+                }
+                if let Some(names) = &v.all_of {
+                    self.strings(names);
+                }
                 &v._context
             }
             SecurityScheme::Basic(v) => {

@@ -7,8 +7,7 @@ mod application;
 mod support;
 use application::*;
 use clinkz_wot_binding_http::{
-    HttpBasicClientAccess, HttpBasicCredentials, HttpClientTls,
-    try_https_basic_consumer_registration,
+    HttpBasicCredentials, HttpClientAccess, HttpClientTls, try_https_consumer_registration,
 };
 use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, *};
 use clinkz_wot_discovery::{DiscoveryError, http::*};
@@ -146,7 +145,7 @@ struct App {
     instance: ConsumerInstance,
     bank: Arc<HostResourceAccounts>,
     policy: Arc<Permission>,
-    access: Arc<HttpBasicClientAccess>,
+    access: Arc<HttpClientAccess>,
     tls: HttpClientTls,
 }
 impl App {
@@ -156,13 +155,8 @@ impl App {
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
         let policy = Arc::new(Permission::new(target.into()));
         let access = Arc::new(
-            HttpBasicClientAccess::try_new(
-                instance.reference(),
-                target,
-                policy.clone(),
-                credentials,
-            )
-            .unwrap(),
+            HttpClientAccess::try_new(instance.reference(), target, policy.clone(), credentials)
+                .unwrap(),
         );
         Self {
             instance,
@@ -190,7 +184,7 @@ impl App {
     }
     #[allow(clippy::result_large_err)]
     fn registration(&self) -> CoreResult<ConsumerRegistrationInput> {
-        try_https_basic_consumer_registration(
+        try_https_consumer_registration(
             self.tls.clone(),
             self.access.clone(),
             BINDING,
@@ -315,7 +309,7 @@ async fn explicit_form_never_falls_back_or_uses_an_unrelated_supported_property(
                 td["properties"]["level"]["forms"][1]["security"] = json!("other");
             }
             1 => {
-                td["securityDefinitions"]["other"] = json!({"scheme":"nosec"});
+                td["securityDefinitions"]["other"] = json!({"scheme":"digest"});
                 td["properties"]["level"]["forms"][1]["security"] = json!(["basic", "other"]);
             }
             2 => td["properties"]["level"]["forms"][1]["scopes"] = json!(["read"]),

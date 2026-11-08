@@ -197,7 +197,7 @@ impl RawFiniteHandler for Behavior {
             }
             Operation::ReadProperty => {
                 self.0.reads.set(self.0.reads.get() + 1);
-                if let Some(value)=self.0.scalar.borrow().as_ref() {
+                if let Some(value) = self.0.scalar.borrow().as_ref() {
                     return Ok(InteractionOutput::with_data(payload(value)));
                 }
                 Ok(InteractionOutput::with_data(payload(
@@ -211,7 +211,7 @@ impl RawFiniteHandler for Behavior {
             Operation::WriteProperty => {
                 self.0.writes.set(self.0.writes.get() + 1);
                 if self.0.scalar.borrow().is_some() {
-                    *self.0.scalar.borrow_mut()=Some(input.data.as_ref().unwrap().body.to_vec());
+                    *self.0.scalar.borrow_mut() = Some(input.data.as_ref().unwrap().body.to_vec());
                 }
                 Ok(InteractionOutput::empty())
             }
@@ -325,7 +325,10 @@ fn exposure(
     authority: ProducerInstanceAuthority,
     expected: Option<ProducerInstanceKey>,
 ) -> ComposedProducerExposure {
-    let href=td["forms"][0]["href"].as_str().or_else(||td["properties"]["on"]["forms"][0]["href"].as_str()).unwrap();
+    let href = td["forms"][0]["href"]
+        .as_str()
+        .or_else(|| td["properties"]["on"]["forms"][0]["href"].as_str())
+        .unwrap();
     let addr = href
         .strip_prefix("http://")
         .unwrap()
@@ -336,11 +339,19 @@ fn exposure(
         .unwrap();
     let key = authority.key();
     let mut behaviors = Vec::new();
-    for (name, operation) in [("level", Operation::ReadProperty),
-        ("on", Operation::ReadProperty), ("secret", Operation::WriteProperty)] {
-        if td["properties"][name]["forms"].as_array().is_some_and(|f| !f.is_empty()) {
+    for (name, operation) in [
+        ("level", Operation::ReadProperty),
+        ("on", Operation::ReadProperty),
+        ("secret", Operation::WriteProperty),
+    ] {
+        if td["properties"][name]["forms"]
+            .as_array()
+            .is_some_and(|f| !f.is_empty())
+        {
             behaviors.push(RawFiniteBehavior::new(
-                AffordanceTarget::Property(Arc::from(name)), operation, Behavior(app.clone()),
+                AffordanceTarget::Property(Arc::from(name)),
+                operation,
+                Behavior(app.clone()),
             ));
         }
     }
@@ -646,8 +657,8 @@ fn prepare_consumer(
     registrations: Vec<ConsumerRegistrationInput>,
     selector: ConsumerSelector,
 ) -> CoreResult<PreparedConsumer> {
-    let registry =
-        ConsumerRegistry::try_new(registrations, &accounts).unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let registry = ConsumerRegistry::try_new(registrations, &accounts)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let td: Thing = serde_json::from_value(td.clone()).unwrap();
     registry.prepare(
         &td,
@@ -781,7 +792,10 @@ fn verify_collection_lifecycle(operation: Operation) {
                 };
                 assert!(result.result().is_err());
                 assert_eq!(result.consumer(), &owner.reference());
-                assert_eq!(result.affordance(), clinkz_wot_core::thing::AffordanceSite::Thing);
+                assert_eq!(
+                    result.affordance(),
+                    clinkz_wot_core::thing::AffordanceSite::Thing
+                );
                 assert!(result.first_cause().is_some());
                 drop(result);
             } else {
@@ -1234,15 +1248,21 @@ fn verify_collection_cleanup(operation: Operation) {
         assert_eq!((temporary.queries, temporary.jobs), (1, 0));
         assert_eq!(
             temporary.used - walk.used,
-            schema_drop,
-            "temporary owner needs its own credit"
+            schema_drop
+                + clinkz_wot_planning::security::CLEANUP_WORK
+                + security::SecurityRequirement::NOSEC.drop_work(),
+            "schema and security owners need independent cleanup credit"
         );
         assert!(compiled.error.is_none());
         assert_eq!(compiled.selected, 1);
         let native_cleanup = compiled.used - temporary.used;
         let total = compiled.used - walk.used;
         if let Some(one) = previous {
-            assert_eq!(total - one, 9, "one prepared content owner grows by nine members");
+            assert_eq!(
+                total - one,
+                9,
+                "one prepared content owner grows by nine members"
+            );
         }
         previous = Some(total);
         println!(
@@ -1277,7 +1297,10 @@ fn verify_collection_cleanup(operation: Operation) {
         assert_eq!(exact.used, compiled.used);
         let rollback = attempt(&td, Mode::Selected, compiled.used - 1);
         assert!(rollback.error.is_some());
-        assert_eq!(rollback.jobs, 1, "late refusal releases the retained content");
+        assert_eq!(
+            rollback.jobs, 1,
+            "late refusal releases the retained content"
+        );
     }
     // The bounded census now refuses a later unsupported schema before any
     // constraint/member backing is acquired.
@@ -1290,7 +1313,10 @@ fn verify_collection_cleanup(operation: Operation) {
         Some(CoreError::UnsupportedOperation(_))
     ));
     assert_eq!((partial.queries, partial.jobs), (0, 0));
-    assert_eq!(partial.used, walk.used);
+    assert_eq!(
+        partial.used,
+        walk.used + clinkz_wot_planning::security::CLEANUP_WORK
+    );
 }
 
 fn verify_collection_validator_bound(operation: Operation) {

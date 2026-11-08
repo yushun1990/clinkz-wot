@@ -22,6 +22,12 @@ interaction. Producer qualification must support the retained advertised
 alternatives, while Consumer selection can use a supported alternative without
 downgrading required allOf members. Credentials/current permission remain runtime
 facts, not preparation certificates.
+Combo definitions MUST include exactly one of `oneOf` or `allOf`, containing at
+least two references. Owned TD fields preserve absent versus explicitly empty
+operators; synchronous and resumable Basic validation use the same rules and
+reject simultaneous operators, including an empty operator alongside another.
+This deliberately corrects the former permissive Combo representation. A selected
+cyclic dependency cannot become an executable empty or NoSec requirement.
 
 Action `synchronous` is an optional TD 1.1 field: true describes a complete result
 in the invocation response; absence supplies no synchronicity claim. It MUST NOT

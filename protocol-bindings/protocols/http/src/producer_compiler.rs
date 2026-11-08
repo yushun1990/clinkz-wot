@@ -63,6 +63,7 @@ impl HttpProducerConfig {
     ) -> CoreResult<Option<HttpProducerProgram>> {
         self.compile_mapping(
             clinkz_wot_planning::ResolvedBindingInput {
+                selected_security: None,
                 operation: input.operation(),
                 owner: FormOwner::Property(input.property()),
                 property: input.property(),
@@ -83,7 +84,13 @@ impl HttpProducerConfig {
         budget: &mut WorkBudget,
         expected: Option<&HttpProducerProgram>,
     ) -> CoreResult<Option<HttpProducerProgram>> {
-        if budget.consume(WorkClass::BindingPolls, 4096).is_err() {
+        if budget
+            .consume(
+                WorkClass::BindingPolls,
+                4096 + clinkz_wot_planning::security::PREPARATION_WORK,
+            )
+            .is_err()
+        {
             return Ok(None);
         }
         let document = input.document;
@@ -110,7 +117,6 @@ impl HttpProducerConfig {
             || facts.content_type != "application/json"
             || facts.subprotocol.is_some()
             || facts.content_coding.is_some()
-            || facts.scopes.is_some()
             || facts.additional_responses
             || facts
                 .response_content_type
@@ -127,19 +133,16 @@ impl HttpProducerConfig {
         } {
             return Err(producer_unsupported());
         }
-        let security = clinkz_wot_planning::security::prepare_security(
-            document,
-            input.owner,
-            input.form_index,
-        )?;
+        let security = clinkz_wot_planning::security::compilation_security(&input)?;
+        let authentication = crate::security::HttpSecurity::from_requirement(&security)
+            .map_err(|_| producer_unsupported())?;
         if (self.secure
-            && (security != crate::security::BASIC
-                || collection
+            && (collection
                 || !matches!(
                     input.operation,
                     Operation::ReadProperty | Operation::WriteProperty
                 )))
-            || (!self.secure && security != clinkz_wot_core::security::SecurityRequirement::NOSEC)
+            || (!self.secure && authentication != crate::security::HttpSecurity::default())
             || document
                 .scope(SemanticScope::Thing)
                 .ok_or_else(producer_unsupported)?
@@ -320,7 +323,8 @@ impl HttpProducerConfig {
         }
         let mut program = HttpProducerProgram {
             operation: input.operation,
-            basic: self.secure,
+            secure: self.secure,
+            authentication,
             security_registration: None,
             form: input.form_index,
             address: self.address,

@@ -61,8 +61,10 @@ pub const CORPUS: &str = r##"{
         "automatic": { "scheme": "auto" },
         "combined": {
             "scheme": "combo",
-            "oneOf": ["basic", "bearer"],
-            "allOf": ["api_key", "psk"]
+            "oneOf": ["basic", "bearer"]
+        },
+        "combined_all": {
+            "scheme": "combo", "allOf": ["api_key", "psk"]
         },
         "basic": { "scheme": "basic", "name": "account", "in": "cookie" },
         "digest": {
@@ -296,7 +298,7 @@ pub fn typed_corpus() -> Thing {
 
 pub fn assert_complete_security_corpus(thing: &Thing) {
     let definitions = &thing.security_definitions;
-    assert_eq!(definitions.len(), 10);
+    assert_eq!(definitions.len(), 11);
 
     let SecurityScheme::NoSec(none) = &definitions["none"] else {
         panic!("none must retain its NoSec variant");
@@ -333,8 +335,13 @@ pub fn assert_complete_security_corpus(thing: &Thing) {
     let SecurityScheme::Combo(combined) = &definitions["combined"] else {
         panic!("combined must retain its Combo variant");
     };
-    assert_eq!(combined.one_of, ["basic", "bearer"]);
-    assert_eq!(combined.all_of, ["api_key", "psk"]);
+    assert_eq!(combined.one_of.as_deref().unwrap(), ["basic", "bearer"]);
+    assert!(combined.all_of.is_none());
+    let SecurityScheme::Combo(combined_all) = &definitions["combined_all"] else {
+        panic!("allOf variant");
+    };
+    assert_eq!(combined_all.all_of.as_deref().unwrap(), ["api_key", "psk"]);
+    assert!(combined_all.one_of.is_none());
 
     let SecurityScheme::Basic(basic) = &definitions["basic"] else {
         panic!("basic must retain its Basic variant");

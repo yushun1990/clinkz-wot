@@ -49,7 +49,7 @@ impl HttpFiniteConfig {
     ) -> Result<Self, BindingInputRejection<(HttpProducerProgram, AffordanceTarget)>> {
         // Program fields are private and produced by the HTTP compiler. Check
         // actual listen operands as well as the bounded native target backing.
-        if program.basic != listen.secure
+        if program.secure != listen.secure
             || program.listen_address() != listen.listen_address()
             || !Self::valid_target(&target, &program)
             || request_timeout_ticks == 0
@@ -82,7 +82,7 @@ impl HttpFiniteConfig {
             || mappings.len() > 32
             || request_timeout_ticks == 0
             || mappings.iter().enumerate().any(|(i, (target, program))| {
-                program.basic != listen.secure
+                program.secure != listen.secure
                     || !Self::valid_target(target, program)
                     || program.listen_address() != listen.listen_address()
                     || mappings[..i].iter().any(|(_, old)| {
@@ -109,7 +109,9 @@ impl HttpFiniteConfig {
         if !security.is_ready()
             || !self.listen.secure
             || self.mappings.iter().any(|(_, p)| {
-                !p.basic || p.security_registration.as_ref() != Some(&security.registration)
+                !p.secure
+                    || p.security_registration.as_ref() != Some(&security.registration)
+                    || !security.supports(p.authentication)
             })
         {
             return Err(crate::producer::producer_unsupported());
@@ -127,7 +129,8 @@ impl HttpFiniteConfig {
 pub struct HttpFiniteReply {
     correlation: u64,
     issuer: Weak<()>,
-    credentials: Option<crate::security::HttpBasicCredentials>,
+    credentials: crate::security::HttpEvidence,
+    authentication: crate::security::HttpSecurity,
 }
 
 /// Manually polled HTTP listener/correlation owner. This facet directly uses
@@ -303,7 +306,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         }
         match &self.configuration.security {
             Some(security) => security
-                .verify(ingress.reply.credentials.as_ref())
+                .verify(ingress.reply.authentication, &ingress.reply.credentials)
                 .map(Some),
             None if !self.configuration.listen.secure => Ok(None),
             None => Err(crate::security::denied(
@@ -424,6 +427,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                         correlation: self.correlation,
                         issuer: Arc::downgrade(&self.issuer),
                         credentials: connection.take_credentials(),
+                        authentication: program.authentication,
                     },
                 }))
             }
