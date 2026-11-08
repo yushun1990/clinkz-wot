@@ -138,7 +138,12 @@ remain private through EOF. Header/body/trailer/wire limits and call-owned
 connection retirement remain in force. Input still uses exact application/json;
 collection/status facets retain their existing exact JSON representation.
 
-A handler uses with_response_selection and the declared terminal status.
+A handler uses its borrowed `HandlerContext::response_contract` to choose a
+branch and declared terminal status. One behavior can serve Forms with different
+response schemas or branch order. HTTP retains the exact matched native mapping
+in the original exchange/reply; input/output validation and context lending use
+that mapping, never the first target/operation match. No protocol Form token or
+native route manager is added to Core.
 ApplicationError is a validated application-declared failure with its payload,
 not a CoreError or a claim that no effect happened. Producer finite Write success
 still requires the handler to have completed the work. Consumer additional Write

@@ -1449,7 +1449,8 @@ fn verify_collection_validator_bound(operation: Operation) {
             .clone();
         let config = HttpFiniteConfig::try_new(listen, program, key, AffordanceTarget::Thing, 1000)
             .unwrap_or_else(|_| panic!());
-        let initial = config.additional_validation_work();
+        let actual = HttpFiniteBinding::new(config.clone(), BindingId::new(97), BindingGeneration::INITIAL);
+        let initial = actual.validator().unwrap().additional_validation_work();
         let next = if increase { initial + 1 } else { initial - 1 };
         let allowance = Rc::new(Cell::new(initial));
         let hold_close = Rc::new(Cell::new(true));
@@ -1473,11 +1474,7 @@ fn verify_collection_validator_bound(operation: Operation) {
         .unwrap_or_else(|_| panic!());
         let mut native = RawFiniteRuntime::try_new(
             ChangingNative {
-                actual: HttpFiniteBinding::new(
-                    config.clone(),
-                    BindingId::new(97),
-                    BindingGeneration::INITIAL,
-                ),
+                actual,
                 allowance: allowance.clone(),
                 validated: validated.clone(),
                 hold_close: hold_close.clone(),

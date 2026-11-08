@@ -99,7 +99,7 @@ impl RawFiniteHandler for Behavior {
             Operation::ReadProperty => {
                 self.0.reads.set(self.0.reads.get() + 1);
                 if self.0.output.get() >= 4 {
-                    return response_alternatives::response_output(self.0.output.get());
+                    return response_alternatives::response_output(self.0.output.get(), ctx);
                 }
                 Ok(InteractionOutput::with_data(payload(
                     &self.0.value.borrow(),
@@ -109,7 +109,7 @@ impl RawFiniteHandler for Behavior {
                 self.0.writes.set(self.0.writes.get() + 1);
                 *self.0.value.borrow_mut() = input.data.as_ref().unwrap().body.to_vec();
                 if self.0.output.get() >= 4 {
-                    return response_alternatives::response_output(self.0.output.get());
+                    return response_alternatives::response_output(self.0.output.get(), ctx);
                 }
                 match self.0.output.get() {
                     1 => Err(CoreError::Binding(ErrorContext::new(
@@ -461,6 +461,15 @@ fn client(
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
 ) -> ConsumerRuntime {
+    client_with_selector(td, denied, accounts, owner, ConsumerSelector::default())
+}
+fn client_with_selector(
+    td: Value,
+    denied: Arc<AtomicBool>,
+    accounts: Arc<HostResourceAccounts>,
+    owner: &ConsumerInstance,
+    selector: ConsumerSelector,
+) -> ConsumerRuntime {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(98),
@@ -477,7 +486,7 @@ fn client(
             &td,
             GatewayDefaultV1::LIMITS,
             accounts.clone(),
-            ConsumerSelector::default(),
+            selector,
             &mut work(),
             |job| {
                 while !job.is_finished() {

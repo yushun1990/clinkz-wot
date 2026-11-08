@@ -650,7 +650,11 @@ impl RawProducerServient {
                 &behavior.target,
                 behavior.operation,
                 runtime.identity,
-            )?;
+            )?
+            .with_response_contract(match validator {
+                Some(service) => service.response_contract(&ingress.candidates[0])?,
+                None => None,
+            });
             // Verification, validation and application policy can invalidate
             // publication or captured services. Check after the last callback,
             // immediately before acquiring behavior authority. The original

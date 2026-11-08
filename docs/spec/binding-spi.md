@@ -538,3 +538,15 @@ the claimed finite semantics; an HTTP status number has no meaning in Core.
 The [HTTP response profile](../../protocol-bindings/protocols/http/README.md#td-described-finite-response-alternatives)
 provides the first concrete mapping. It does not define a universal response
 manager, codec family, success-code class or replacement for continuing lifetimes.
+
+`FiniteValidator::response_contract` lends the original accepted opportunity's
+common alternatives to HandlerContext; alternative-capable providers/wrappers
+must supply/forward that loan. Its bounded pure work belongs to the captured
+validation allowance. Target/operation equality cannot substitute a sibling
+Form's contract. Actual native attribution/correlation remains Binding-owned:
+HTTP's exclusive exchange retains its matched mapping index through validation
+and reply, and its validator uses that original index for both data roles and
+context lending. The index is checked against the original private reply's
+correlation, rather than exposed as a universal Engine route/Form token.
+Other native concurrency/lifetime strategies must establish equivalent original
+attribution within their own capabilities.

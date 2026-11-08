@@ -61,3 +61,20 @@ activation. Prior primary-only restrictions are superseded only for the new
 qualified finite Property facet. Historical primary, Security, collection and
 portable Read evidence remains regression evidence within its original scope;
 none becomes acceptance for additional responses by inheritance.
+
+## Original response identity counterexample
+
+Two native Forms for one Property/operation can declare different additional
+schemas and branch order. The existing HTTP configuration validator selected
+its first target/operation match; a payload valid only under the first Form
+could pass Producer validation and be delivered under the second. A real-I/O
+regression failed before correction. Binding-owned validation now retains the
+exact original matched mapping with the exclusive exchange/reply. A pure
+FiniteValidator loan supplies that exact common response set to HandlerContext;
+one behavior chooses scoped branches without TD lookup. Normal, invalid and
+sibling-reordered exchanges test both Consumer and Producer execution.
+
+Reject a global Engine Form/mapping token or a restriction requiring all sibling
+Forms to share response meaning. HTTP already owns native correlation and one
+exclusive exchange; retaining that original attribution is its responsibility.
+This does not prove every other protocol's concurrency/lifetime strategy.

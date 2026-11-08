@@ -2,7 +2,39 @@ use super::*;
 
 // Response alternatives use the same actual Consumer/Producer fixture and
 // lifecycle as the existing primary Read/Write exchanges above.
-pub(super) fn response_output(mode: u8) -> CoreResult<InteractionOutput> {
+pub(super) fn response_output(
+    mode: u8,
+    context: HandlerContext<'_>,
+) -> CoreResult<InteractionOutput> {
+    if mode == 11 {
+        use clinkz_wot_core::{data_schema::PreparedSchema, execution::responses::ResponseData};
+        let responses = context
+            .response_contract()
+            .expect("the original accepted native contract");
+        let (i, response) = responses
+            .additional()
+            .iter()
+            .enumerate()
+            .find(|(_, r)| !r.success)
+            .unwrap();
+        let has_code = matches!(&response.data, ResponseData::Value(PreparedSchema::Object(s))
+            if s.properties().iter().any(|p| p.name.as_ref() == "code"));
+        let body = if has_code {
+            br#"{"code":7}"#.as_slice()
+        } else {
+            br#"{"reason":"busy"}"#.as_slice()
+        };
+        return Ok(InteractionOutput::with_data(Payload::new(
+            body,
+            response.content_type.as_ref(),
+        ))
+        .with_status(InteractionStatus::ApplicationError)
+        .try_with_metadata(
+            InteractionOutputMetadata::default()
+                .with_response_selection(ResponseSelection::Additional(i as u16)),
+        )
+        .unwrap());
+    }
     let (branch, bytes, status): (u16, &[u8], _) = match mode {
         4 => (0, br#""ready""#, InteractionStatus::Ok),
         5 | 10 => (
@@ -688,4 +720,96 @@ fn response_content_reuse_and_final_producer_checks_compare_their_exact_semantic
     drop(registry);
     clean(&accounts);
     drop(TcpListener::bind(addr).unwrap());
+}
+
+fn two_form_response_description(addr: SocketAddr) -> Value {
+    let mut td = response_description(addr, false);
+    let mut second = td["properties"]["level"]["forms"][0].clone();
+    second["href"] = json!(format!("http://{addr}/other"));
+    second["additionalResponses"][1]["schema"] = json!("failure2");
+    second["additionalResponses"][1]["htv:statusCodeValue"] = json!(423);
+    td["schemaDefinitions"]["failure2"] =
+        json!({"type":"object","required":["code"],"properties":{"code":{"type":"integer"}}});
+    td["properties"]["level"]["forms"]
+        .as_array_mut()
+        .unwrap()
+        .push(second);
+    td
+}
+#[test]
+fn producer_validates_the_original_native_form_instead_of_a_sibling_response_schema() {
+    io().block_on(async {
+        let addr = address(); let td = two_form_response_description(addr);
+        let mut server = Fixture::new(td.clone()); server.app.output.set(5);
+        let accounts = bank(); let instance = consumer_instance();
+        let client = client_with_selector(td, Arc::new(AtomicBool::new(false)), accounts.clone(), &instance,
+            ConsumerSelector {form:Some(1), ..Default::default()});
+        let mut call = client.read_property("level", Deadline::NONE, now(0), &mut work()).unwrap();
+        let (local, remote) = server.exchange(&mut call).await;
+        assert!(local.result().is_err());
+        assert!(matches!(remote.result, Err(CoreError::Validation(_))),
+            "the first Form's valid reason payload must not certify the selected Form's required code");
+        drop(local); drop(call); drop(client); clean(&accounts); server.close();
+    });
+}
+
+#[test]
+fn one_behavior_borrows_each_original_forms_response_contract_for_scoped_branch_choice() {
+    io().block_on(async {
+        let addr = address();
+        let mut td = two_form_response_description(addr);
+        td["properties"]["level"]["forms"][1]["additionalResponses"]
+            .as_array_mut()
+            .unwrap()
+            .swap(0, 1);
+        let mut server = Fixture::new(td.clone());
+        server.app.output.set(11);
+        for form in [0, 1] {
+            let accounts = bank();
+            let instance = consumer_instance();
+            let client = client_with_selector(
+                td.clone(),
+                Arc::new(AtomicBool::new(false)),
+                accounts.clone(),
+                &instance,
+                ConsumerSelector {
+                    form: Some(form),
+                    ..Default::default()
+                },
+            );
+            let mut call = client
+                .read_property("level", Deadline::NONE, now(0), &mut work())
+                .unwrap();
+            let (local, remote) = server.exchange(&mut call).await;
+            let output = local.result().unwrap();
+            assert_eq!(output.status(), InteractionStatus::ApplicationError);
+            assert_eq!(
+                output.metadata().response_selection(),
+                ResponseSelection::Additional(if form == 0 { 1 } else { 0 })
+            );
+            assert_eq!(
+                output.metadata().binding_response().unwrap().status_code(),
+                Some(if form == 0 { 422 } else { 423 })
+            );
+            assert_eq!(
+                output.data().unwrap().body,
+                if form == 0 {
+                    br#"{"reason":"busy"}"#.as_slice()
+                } else {
+                    br#"{"code":7}"#.as_slice()
+                }
+            );
+            assert_eq!(remote.delivery, FiniteDelivery::Delivered);
+            assert_eq!(
+                remote.result.unwrap().status(),
+                InteractionStatus::ApplicationError
+            );
+            drop(local);
+            drop(call);
+            drop(client);
+            clean(&accounts);
+        }
+        assert_eq!(server.app.reads.get(), 2);
+        server.close();
+    });
 }

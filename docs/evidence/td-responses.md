@@ -15,7 +15,12 @@ The real TCP Consumer/Producer tests in
 [response_alternatives.rs](../../protocol-bindings/protocols/http/tests/support/response_alternatives.rs)
 exercise primary Read/Write, additional success, declared application failure,
 schemaDefinitions overrides, inherited ordinary schemas, media defaults,
-and independent JSON request/UTF-8-parameter response media. Prepared sources
+and independent JSON request/UTF-8-parameter response media. Two Forms of one
+Property use different error schemas and branch order; one behavior chooses
+through its borrowed original contract. A preserved real-I/O counterexample
+proves that sibling target/operation equality cannot certify the wrong Form's
+response. The HTTP validator retains native attribution with the actual
+exclusive exchange/reply. Prepared sources
 and registries are dropped before actual exchanges. Native response identity
 is HTTP-owned; TD success can differ from the native status class. The tests
 retain original instances, actual services, reply opportunities and resource

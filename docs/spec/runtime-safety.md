@@ -496,3 +496,11 @@ Producer failure after behavior entry and Consumer failure after native progress
 remain effect-uncertain; a declared error cannot prove pre-effect refusal or
 rollback. Delivery of that error response is separately observable. The shared
 finite transition kernel and Security verification/revision ordering are unchanged.
+
+The response-context loan is obtained before the final pre-handler currentness,
+service-pair and security-revision checks. It exposes immutable meaning only;
+its callback cannot dispatch, perform I/O or refresh authority. The original
+native work retains its mapping/contract through validation and delivery.
+Clearing native work after physical retirement cannot redirect an accepted or
+late result to a sibling mapping. A borrowed handler context cannot outlive that
+original owner or turn branch inspection into native execution authority.

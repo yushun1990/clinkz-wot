@@ -278,6 +278,16 @@ pub trait FiniteValidator {
     fn additional_validation_work(&self) -> u64 {
         0
     }
+    /// Common response meaning for this exact original native opportunity.
+    /// Pure bounded lending, with no TD lookup, I/O or dispatch authority.
+    /// Alternative-capable mappings lend their original contract to behavior;
+    /// raw/primary-only services may omit it. Work is included above.
+    fn response_contract(
+        &self,
+        _candidate: &FiniteCandidate,
+    ) -> CoreResult<Option<&crate::execution::responses::FiniteResponses>> {
+        Ok(None)
+    }
     fn validate_input(
         &self,
         candidate: &FiniteCandidate,

@@ -221,6 +221,7 @@ pub struct HandlerContext<'a> {
     #[cfg(feature = "std")]
     producer_instance: Option<crate::producer::ProducerInstanceKey>,
     binding: Option<(BindingId, BindingGeneration)>,
+    response_contract: Option<&'a crate::execution::responses::FiniteResponses>,
 }
 
 impl<'a> HandlerContext<'a> {
@@ -285,6 +286,7 @@ impl<'a> HandlerContext<'a> {
             #[cfg(feature = "std")]
             producer_instance: None,
             binding,
+            response_contract: None,
         })
     }
 
@@ -313,7 +315,23 @@ impl<'a> HandlerContext<'a> {
             plan_id: None,
             producer_instance: Some(instance),
             binding: Some(binding),
+            response_contract: None,
         })
+    }
+
+    /// Lend the original mapping's prepared finite alternatives. This is
+    /// inspection/branch-choice context, never native or dispatch authority.
+    pub const fn with_response_contract(
+        mut self,
+        responses: Option<&'a crate::execution::responses::FiniteResponses>,
+    ) -> Self {
+        self.response_contract = responses;
+        self
+    }
+    pub const fn response_contract(
+        self,
+    ) -> Option<&'a crate::execution::responses::FiniteResponses> {
+        self.response_contract
     }
 
     /// Returns the actual native instance identity, when this is native dispatch.

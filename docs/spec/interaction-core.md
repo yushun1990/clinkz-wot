@@ -144,9 +144,14 @@ compatibility checks. The caller-owned Read representation remains primary-only;
 this correction adds no std, pointer-atomic or Host-owner requirement to shared
 meaning/checks.
 
-A handler chooses a response using `with_response_selection` without inventing
-Binding identity or wire metadata. General terminal handler shape is permitted
-only with a captured validator that checks the admitted alternative; raw and
+A handler borrows the exact accepted native mapping's `FiniteResponses` through
+`HandlerContext::response_contract` and chooses a response using
+`with_response_selection` without inventing Binding identity or wire metadata. An alternative index is meaningful only
+inside that original mapping's contract; two Forms for one target/operation can
+have different schemas and branch order. A matching target/operation alone
+cannot select result meaning. The captured finite validator lends this common
+context without a source-TD callback or new authority. General terminal handler
+shape is permitted only with a captured validator that checks the admitted alternative; raw and
 restricted Property Read paths retain their primary-only shape. Binding-origin
 outputs supply original registration/generation/plan identity. Native numeric
 status is optional bounded provenance (`status_code() -> Option<u16>`), not a
