@@ -1,11 +1,13 @@
 //! Pure HTTP Action lowering. No socket, behavior or logical permission is
 //! obtained here; every described operation has its own selected definition.
 use crate::{HttpActionDefinition, HttpProducerConfig, Target, producer::producer_unsupported};
-use clinkz_wot_core::{BindingGeneration, BindingId, CoreResult, Operation};
+use clinkz_wot_core::{
+    BindingGeneration, BindingId, CoreResult, Operation, data_schema::ValueSchemas,
+};
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use clinkz_wot_planning::{
     producer_composition::{FormSite, ProducerCapability, ProducerOperationInput},
-    type_schema::prepare_type_schema,
+    type_schema::{matches_schema, preparation_work, prepare_schema, prepare_type_schema},
 };
 use clinkz_wot_td::semantic::{FormOwner, SemanticScope, SemanticValue, UriVariableScope};
 use std::{any::Any, sync::Arc};
@@ -79,6 +81,8 @@ impl HttpActionProducer {
             input.operation,
             input.target,
             self.identity,
+            budget,
+            None,
         )
         .map(Some)
     }
@@ -92,6 +96,9 @@ impl ProducerCapability for HttpActionProducer {
             std::mem::size_of::<HttpActionDefinition>()
                 + d.action.len()
                 + d.path.len()
+                + d.schemas.retained_bytes()
+                + std::mem::size_of::<ValueSchemas>()
+                + 2 * std::mem::size_of::<usize>()
                 + d.collection.as_ref().map_or(0, |s| s.retained_bytes())
                 + 4 * std::mem::size_of::<usize>()
         })
@@ -113,7 +120,9 @@ impl ProducerCapability for HttpActionProducer {
         Ok(self.lower(input, budget)?.is_some())
     }
     fn final_check_temporary_bytes(&self) -> Option<usize> {
-        Some(8192)
+        // Unselected support probes may construct both supported data roles.
+        // Selected final checking only compares borrowed facts in place.
+        Some(8192 + 2 * clinkz_wot_core::data_schema::PreparedSchema::BACKING_BOUND)
     }
     fn check_final(
         &self,
@@ -124,20 +133,93 @@ impl ProducerCapability for HttpActionProducer {
         let Some(expected) = definition.downcast_ref::<HttpActionDefinition>() else {
             return Ok(false);
         };
+        if let FormSite::Action(name) = input.site {
+            if self.listen.secure
+                || expected.instance_binding != self.identity
+                || expected.address != self.listen.listen_address()
+            {
+                return Ok(false);
+            }
+            budget
+                .consume(WorkClass::BindingPolls, 4096)
+                .map_err(|_| producer_unsupported())?;
+            return Ok(&lower_action(
+                input.document,
+                name,
+                input.form,
+                input.operation,
+                input.target,
+                self.identity,
+                budget,
+                Some(expected),
+            )? == expected);
+        }
         Ok(self.lower(input, budget)?.as_ref() == Some(expected))
     }
 }
 
-/// Shared native contract for the existing POST/GET/DELETE Action mapping.
-/// Producer listener eligibility and Consumer policy remain role-specific.
-pub(crate) fn lower_action(
+// Construct semantic backing only for Producer definitions. The Consumer uses
+// Planning's original schemas and this same native qualification without a
+// second schema compilation hidden inside the Binding callback.
+#[allow(clippy::too_many_arguments)]
+fn lower_action(
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
     name: &str,
     form_index: u32,
     operation: Operation,
     endpoint: &str,
     identity: (BindingId, BindingGeneration),
+    budget: &mut WorkBudget,
+    expected: Option<&HttpActionDefinition>,
 ) -> CoreResult<HttpActionDefinition> {
+    let (address, path, control) = qualify_action(doc, name, form_index, operation, endpoint)?;
+    let role = |role| doc.affordance_schema(FormOwner::Action(name), role);
+    let input = role("input");
+    let output = role("output");
+    for schema in input.into_iter().chain(output) {
+        budget
+            .consume(WorkClass::BindingPolls, preparation_work(schema)?)
+            .map_err(|_| producer_unsupported())?;
+    }
+    let schemas = if let Some(original) = expected {
+        let agrees = |actual, expected: &Option<_>| match (actual, expected) {
+            (None, None) => Ok(true),
+            (Some(a), Some(e)) => matches_schema(a, e),
+            _ => Ok(false),
+        };
+        if !agrees(input, &original.schemas.input)? || !agrees(output, &original.schemas.output)? {
+            return Err(producer_unsupported());
+        }
+        Arc::clone(&original.schemas)
+    } else {
+        Arc::new(ValueSchemas {
+            input: input.map(prepare_schema).transpose()?,
+            output: output.map(prepare_schema).transpose()?,
+        })
+    };
+    Ok(HttpActionDefinition {
+        instance_binding: identity,
+        action: Arc::from(name),
+        operation,
+        form: form_index,
+        address,
+        path,
+        schemas,
+        control,
+        collection: None,
+    })
+}
+
+/// Shared native contract for the existing POST/GET/DELETE Action mapping.
+/// Schema interpretation is Planning-owned; native URI variables, methods,
+/// response conventions and this participant's NoSec profile are checked here.
+pub(crate) fn qualify_action(
+    doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    name: &str,
+    form_index: u32,
+    operation: Operation,
+    endpoint: &str,
+) -> CoreResult<(std::net::SocketAddr, Arc<str>, bool)> {
     let (method, control) = match operation {
         Operation::InvokeAction => ("POST", false),
         Operation::QueryAction => ("GET", true),
@@ -231,14 +313,6 @@ pub(crate) fn lower_action(
     {
         return Err(producer_unsupported());
     }
-    let input_schema = doc
-        .affordance_schema(FormOwner::Action(name), "input")
-        .map(prepare_type_schema)
-        .transpose()?;
-    let output_schema = doc
-        .affordance_schema(FormOwner::Action(name), "output")
-        .map(prepare_type_schema)
-        .transpose()?;
     let form_scope = doc
         .scope(SemanticScope::AffordanceForm {
             owner: FormOwner::Action(name),
@@ -276,18 +350,7 @@ pub(crate) fn lower_action(
     if path.len() > 64 || (control && path.contains('?')) {
         return Err(producer_unsupported());
     }
-    Ok(HttpActionDefinition {
-        instance_binding: identity,
-        action: Arc::from(name),
-        operation,
-        form: form_index,
-        address: target.address,
-        path: Arc::from(path),
-        input_schema,
-        output_schema,
-        control,
-        collection: None,
-    })
+    Ok((target.address, Arc::from(path), control))
 }
 
 fn lower_action_collection(
@@ -372,8 +435,10 @@ fn lower_action_collection(
         form: form_index,
         address: target.address,
         path: Arc::from(path),
-        input_schema: None,
-        output_schema: None,
+        schemas: Arc::new(ValueSchemas {
+            input: None,
+            output: None,
+        }),
         control: false,
         collection: Some(clinkz_wot_planning::type_schema::prepare_action_collection_schema(doc)?),
     })

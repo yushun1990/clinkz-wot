@@ -160,7 +160,7 @@ Read/Write and `InvokeAction` with explicit `synchronous: true`. Continuing and
 unspecified synchronicity use the separate Action facet below. Thing-root
 ReadAllProperties, ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and QueryAllActions use the finite facet; other
 collection operations use their distinct notification facets or remain unsupported.
-Action input/output use distinct prepared type-only schemas; absent roles
+Action input/output use distinct prepared schemas; absent roles
 permit no application data. Only one captured media service is currently
 supported for both directions; differing response media is refused.
 
@@ -210,10 +210,12 @@ Scalar input/output roles now own their dynamic constraint storage; their actual
 bytes and disposal work are no longer zero. Reuse uses `matches_schema` or the
 named-member comparison against borrowed TD facts, without compiling another
 constraint tree. Actual data services still qualify the retained complete schema.
-Existing continuing/notification scalar compilers may use the narrower
-`prepare_type_schema` facet; it shares the same interpretation and explicitly
-refuses assertions outside that facet. A JSON service alone does not extend a
-native participant's admitted operation/profile scope.
+Finite and continuing Action preparation share the same borrowed constraint
+census, construction and compatibility interpretation. `prepare_type_schema`
+remains an explicit narrower participant facet; it is not a consequence of a
+continuing lifetime. Generic notification scalar and Action/Event collection
+preparation still have narrower implementation paths. A JSON service alone does
+not extend a native participant's admitted operation/profile scope.
 
 HTTP Producer selected-definition final checking compares borrowed normalized
 constraints against the original program and retains its existing schema owner;
@@ -273,7 +275,15 @@ original invoke mapping before the association can execute. Registration equalit
 is neither required nor sufficient. No generic continuation URL is constructed.
 
 The actual `ConsumerActionPreparation` compiles pure bounded native mappings,
-while Planning checks the common type-only and endpoint NoSec subset.
+while Planning prepares the same bounded structured data meaning as finite
+execution and checks the current endpoint NoSec subset. Input and output are
+independent `ValueSchemas` roles. A borrowed census prepays construction and
+rollback work, checks aggregate destruction against the cleanup-step allowance,
+and reserves variable backing before constructing the constraints. One original
+owned pair serves invoke/query/cancel selection; subsequent semantic loans compare
+borrowed assertions without rebuilding it. Each actual selected service still
+qualifies the complete retained schemas. No native compiler needs to interpret
+them again to obtain the same common meaning.
 Native vocabulary, URI variables and response conventions stay in the Binding.
 The association owns every selected mapping, both Action data roles, actual
 services and original funding after all TD/compiler owners disappear.

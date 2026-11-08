@@ -14,6 +14,8 @@ pub struct CapturedActionRoute {
     pub operation: Operation,
     pub route: ActionRoute,
     pub validator: Option<Rc<dyn ActionValidator>>,
+    /// Original extra work per validation callback; zero for control routes.
+    pub validation_work: u64,
 }
 
 impl CapturedActionRoute {
@@ -199,6 +201,11 @@ impl ProducerPublication {
         if routes.iter().enumerate().any(|(i, route)| {
             !instance.supports(&route.target, route.operation)
                 || (route.operation == Operation::InvokeAction) != route.validator.is_some()
+                || route
+                    .validator
+                    .as_ref()
+                    .map_or(0, |v| v.additional_validation_work())
+                    != route.validation_work
                 || !matches!(
                     route.operation,
                     Operation::InvokeAction
@@ -230,6 +237,7 @@ impl ProducerPublication {
                     a.target != b.target
                         || a.operation != b.operation
                         || a.route != b.route
+                        || a.validation_work != b.validation_work
                         || !match (&a.validator, &b.validator) {
                             (None, None) => true,
                             (Some(a), Some(b)) => Rc::ptr_eq(a, b),

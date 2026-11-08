@@ -1074,7 +1074,7 @@ fn unsupported_action_meaning_is_refused_before_any_native_setup() {
         let mut candidate = value.clone();
         let action = &mut candidate["actions"]["run"];
         match change {
-            0 => action["input"]["minimum"] = 3.into(),
+            0 => action["input"]["multipleOf"] = 3.into(),
             1 => action["output"]["type"] = "object".into(), // supported type alone, but still complete
             2 => action["synchronous"] = true.into(),
             3 => action["forms"][1]["htv:methodName"] = "POST".into(),
@@ -1130,6 +1130,83 @@ fn unsupported_action_meaning_is_refused_before_any_native_setup() {
         .collect();
     partial.pop();
     assert!(HttpActionRuntime::try_new(&owner(), key, partial, 4).is_err());
+    TcpListener::bind(address).unwrap();
+}
+
+#[test]
+fn structured_action_final_qualification_compares_complete_original_constraints() {
+    let address = addr();
+    let provider = HttpActionProducer::new(
+        HttpProducerConfig::for_loopback(address).unwrap(),
+        BindingId::new(61),
+        BindingGeneration::INITIAL,
+    );
+    let mut value: serde_json::Value = serde_json::from_str(&td(address, None)).unwrap();
+    value["actions"]["run"]["output"] = serde_json::json!({
+        "type":"object", "required":["value"], "properties":{
+            "value":{"type":"integer","minimum":1,"maximum":30}
+        }
+    });
+    let authority = key(Generation::INITIAL);
+    let prepared = prepare_thing(
+        &value.to_string(),
+        authority.key(),
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&provider],
+        |_, _| true,
+    )
+    .unwrap();
+    check_final_thing(
+        &value.to_string(),
+        authority.key(),
+        &GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&provider],
+        &prepared,
+        |_, _| true,
+    )
+    .unwrap();
+    for mutation in 0..4 {
+        let mut changed = value.clone();
+        let output = &mut changed["actions"]["run"]["output"];
+        match mutation {
+            0 => output["properties"]["value"]["maximum"] = 31.into(),
+            1 => output["required"] = serde_json::json!([]),
+            2 => output["properties"]["value"]["multipleOf"] = 2.into(),
+            _ => changed["actions"]["run"]["forms"]
+                .as_array_mut()
+                .unwrap()
+                .push(serde_json::json!({"href":format!("http://{address}/extra"),
+                    "op":"queryaction","htv:methodName":"GET"})),
+        }
+        assert!(
+            check_final_thing(
+                &changed.to_string(),
+                authority.key(),
+                &GatewayDefaultV1::LIMITS,
+                &mut budget(),
+                &[&provider],
+                &prepared,
+                |_, _| true
+            )
+            .is_err()
+        );
+    }
+    // A structured Action does not advertise an unsupported aggregate profile.
+    value["forms"] = serde_json::json!([{"href":format!("http://{address}/actions"),
+        "op":"queryallactions","htv:methodName":"GET"}]);
+    assert!(
+        prepare_thing(
+            &value.to_string(),
+            authority.key(),
+            &GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&provider],
+            |_, _| true
+        )
+        .is_err()
+    );
     TcpListener::bind(address).unwrap();
 }
 

@@ -238,9 +238,13 @@ adds an independent operation-scoped association through `ConsumerActionRegistry
 It selects actual invoke/query/cancel mappings and services after common TD
 admission, checks native continuation compatibility and owns the complete result
 after source/compiler disposal. Missing described control support refuses the
-association; absence never synthesizes a mapping. It retains type-only/NoSec
-limits. The HTTP Engine-to-Engine and downstream datagram Action fixtures cover
-this capability alongside unchanged synchronous finite execution. This adds no
+association; absence never synthesizes a mapping. It now shares finite execution's
+bounded structured input/output meaning and borrowed census/compatibility; the
+selected NoSec and actual native/service qualifications remain explicit. Original
+schema backing/destruction is funded before construction and retained once across
+Consumer invoke/control mappings. The HTTP Engine-to-Engine and downstream
+datagram Action fixtures cover this capability alongside unchanged synchronous
+finite execution. This adds no
 whole-family, package or milestone acceptance claim.
 
 ## Implemented finite join

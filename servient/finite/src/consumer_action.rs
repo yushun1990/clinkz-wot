@@ -110,7 +110,7 @@ impl Selected {
 }
 struct Definition {
     target: AffordanceTarget,
-    schemas: ConsumerSchemas,
+    schemas: ValueSchemas,
     selected: [Option<Selected>; 3],
     bank: Arc<HostResourceAccounts>,
     _funding: Vec<HostCapacityReservation>,
@@ -120,12 +120,7 @@ impl Definition {
         let s = self.selected(0)?;
         if !s.op.services.data.available()
             || s.op.services.data.policy() != s.policy
-            || !self
-                .schemas
-                .input
-                .iter()
-                .chain(self.schemas.output.iter())
-                .all(|schema| s.op.services.data.supports_schema(schema))
+            || !self.schemas.supports(s.op.services.data.as_ref())
         {
             return Err(invalid());
         }

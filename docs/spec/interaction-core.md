@@ -48,8 +48,16 @@ schema/encoding/stream combinations refuse the guarantee. An explicitly raw
 API reports unvalidated data as such. Identity/shape sealing alone MUST NOT be
 represented as schema conformance. Native status mapping remains Binding-owned.
 
-Consumer data services validate a payload independently of direction. Prepared
-`ConsumerSchemas` keep single-value input and output distinct; absence of a data
+DataSchema interpretation is common across Property, Action, Event and collection
+data roles. Value kind, required fields and constraints do not depend on whether
+an interaction is finite or continuing. Shared meaning supplies no operation,
+codec, security, authority or native support certificate. Those are separately
+qualified for the actual selected execution. Operation-specific role selection,
+collection membership and native attribution remain distinct from value validation.
+
+Consumer data services validate a payload independently of direction. Core
+`data_schema::ValueSchemas` keeps single-value input and output distinct, for
+finite and continuing execution in either role; absence of a data
 role differs from a present unconstrained value. `ConsumerFiniteSchemas` retains
 those roles, derived Property collection member schemas or named Action output roles explicitly.
 The current finite path supports Property Read/Write, explicitly synchronous
@@ -76,7 +84,7 @@ remain codec responsibilities. No JSON tree or universal schema VM is required.
 `integer` includes mathematically integral decimal/exponent encodings; binary
 floating-point rounding cannot establish integrality or boundary comparisons.
 
-The finite structured subset captures object properties and required names,
+The shared structured subset captures object properties and required names,
 including required names with otherwise unconstrained values; omitted properties
 remain optional and unspecified members remain unconstrained. It captures signed
 64-bit IntegerSchema inclusive/exclusive bounds and StringSchema code-point
@@ -107,9 +115,12 @@ Actual scalar validators explicitly qualify the complete borrowed schema;
 Collection/status facets independently qualify their complete named schemas;
 they do not require an unused bare-scalar validation facet. A marker, successful
 JSON parse or matching outer kind alone cannot qualify structured constraints.
-The real HTTP finite Read/Write and ReadAllProperties integrations exercise this
-subset, source retirement, checked reuse, invalid input before behavior and
-normal/late result validation. Continuing Action/notification reuse, non-JSON
+The real HTTP finite Read/Write, ReadAllProperties and continuing Action
+integrations exercise this subset, source retirement, invalid input before
+behavior and normal/late result validation. Finite content supports the checked
+cross-instance reuse described above. Continuing Actions retain one immutable
+input/output meaning across their selected native mappings and accepted work;
+that does not establish cross-instance Action/notification reuse. Non-JSON
 media interoperability, general schema/security and constrained execution remain
 separate capabilities.
 
@@ -197,7 +208,19 @@ incarnation as behavior and currentness. Native requests cannot omit or
 replace invoke validation or invent control routes: input is checked before
 behavior and immediate/late output before successful terminal exposure,
 retaining the original service through settlement.
-The composed HTTP Producer supplies source-independent JSON/type validation and
+`ActionValidator::additional_validation_work` declares complete extra work per
+input or output callback beyond the owner's maximum body/media traversals.
+Publication captures that passive bound with the actual invoke service. Invoke
+prepays it twice before validation/behavior, covering input and a possible
+immediate output. Each continuing poll prepays it once before work that may
+return an output. Short credit enters no corresponding callback and retains
+accepted work. The original allowance is rechecked around validation, after
+authorization and before immediate/continuing output validation; a changed
+declaration cannot refresh it or authorize an
+unpaid validator. Explicit close has no output callback and keeps its independent
+cleanup lane. Raw unvalidated registrations and scalar services retain the base
+policy when the extra bound is zero.
+The composed HTTP Producer supplies source-independent structured JSON validation and
 separately described query/cancel routes. Its 202 means locally admitted work,
 not remote terminal success or rollback. Other qualified Bindings must provide
 their actual validation services during publication, not at individual ingress.

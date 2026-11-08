@@ -91,6 +91,16 @@ pub struct RawActionRequest<'a> {
 /// at qualification, never selected by an individual native request. Raw
 /// instances remain explicitly unvalidated beyond their shape/backing checks.
 pub trait ActionValidator {
+    /// Complete additional work for either input or output validation beyond
+    /// the owner's maximum body/media traversals. Passive bounded metadata,
+    /// captured at publication and retained by each original invocation.
+    /// Invoke prepays this twice before input/behavior (input and a possible
+    /// immediate result); a continuing poll prepays it once before work that
+    /// may return an output. A changed bound fences validation, never refreshes
+    /// the original allowance. Zero retains the base scalar policy.
+    fn additional_validation_work(&self) -> u64 {
+        0
+    }
     fn validate_input(&self, input: &InteractionInput) -> CoreResult<()>;
     fn validate_output(&self, output: &InteractionOutput) -> CoreResult<()>;
 }

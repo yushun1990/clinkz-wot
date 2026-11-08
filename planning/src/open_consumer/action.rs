@@ -11,7 +11,7 @@ pub struct ConsumerActionPreparationInput<'a> {
     pub form: u32,
     pub operation: Operation,
     pub endpoint: &'a str,
-    pub schemas: &'a ConsumerSchemas,
+    pub schemas: &'a ValueSchemas,
 }
 /// Startup-linked pure native compiler. Returned mappings own their original
 /// configuration/executor, not source loans. Bounds include rollback and Drop.
@@ -115,7 +115,7 @@ impl ConsumerActionRegistry {
         let mut funding = Vec::new();
         let mut selected: [Option<ConsumerActionOperation>; 3] = [None, None, None];
         let mut described = [false; 3];
-        let mut schemas = None;
+        let mut schemas: Option<ValueSchemas> = None;
         loop {
             if !pay(budget, W::PlanningItems, 1) {
                 return Err(busy());
@@ -159,6 +159,60 @@ impl ConsumerActionRegistry {
                         index,
                         budget,
                         |doc, endpoint, budget| -> CoreResult<()> {
+                            // Data meaning belongs to the Action, not to each
+                            // invoke/control mapping. Build it once under its
+                            // own original funding, before native selection.
+                            let owner = FormOwner::Action(name);
+                            let input = doc.affordance_schema(owner, "input");
+                            let output = doc.affordance_schema(owner, "output");
+                            let mut preparation = crate::type_schema::SchemaPreparation::default();
+                            for schema in input.into_iter().chain(output) {
+                                preparation.include(schema)?;
+                            }
+                            check_limit(
+                                limits,
+                                K::CleanupWorkItemsPerStepMax,
+                                preparation.cleanup * 2 + 4,
+                            )?;
+                            if !pay(budget, W::PlanningItems, preparation.work) {
+                                return Err(busy());
+                            }
+                            if let Some(original) = &schemas {
+                                // Qualification against another Form's loan
+                                // must not construct another constraint tree.
+                                let agrees = |actual, expected: &Option<_>| match (actual, expected)
+                                {
+                                    (None, None) => Ok(true),
+                                    (Some(a), Some(e)) => crate::type_schema::matches_schema(a, e),
+                                    _ => Ok(false),
+                                };
+                                if !agrees(input, &original.input)?
+                                    || !agrees(output, &original.output)?
+                                {
+                                    return Err(unsupported());
+                                }
+                            } else {
+                                if !pay(budget, W::CleanupItems, preparation.cleanup) {
+                                    return Err(busy());
+                                }
+                                let lease = reserve(
+                                    &bank,
+                                    &[(
+                                        K::EngineLiveBytesGlobalMax,
+                                        preparation.backing_bytes as u64,
+                                    )],
+                                )?;
+                                let prepared = ValueSchemas {
+                                    input: input
+                                        .map(crate::type_schema::prepare_schema)
+                                        .transpose()?,
+                                    output: output
+                                        .map(crate::type_schema::prepare_schema)
+                                        .transpose()?,
+                                };
+                                funding.extend(lease);
+                                schemas = Some(prepared);
+                            }
                             for (i, operation, selector) in coordinates {
                                 if !ops.contains(&operation)
                                     || selected[i].is_some()
@@ -167,14 +221,18 @@ impl ConsumerActionRegistry {
                                     continue;
                                 }
                                 match self.select(
-                                    doc, name, index, operation, endpoint, selector, limits, &bank,
+                                    doc,
+                                    name,
+                                    index,
+                                    operation,
+                                    endpoint,
+                                    schemas.as_ref().unwrap(),
+                                    selector,
+                                    limits,
+                                    &bank,
                                     budget,
                                 ) {
-                                    Ok(Some((s, op, mut leases))) => {
-                                        if schemas.as_ref().is_some_and(|old| old != &s) {
-                                            return Err(invalid());
-                                        }
-                                        schemas = Some(s);
+                                    Ok(Some((op, mut leases))) => {
                                         funding.append(&mut leases);
                                         selected[i] = Some(op);
                                     }
@@ -224,17 +282,12 @@ impl ConsumerActionRegistry {
         form: u32,
         operation: Operation,
         endpoint: &str,
+        schemas: &ValueSchemas,
         selector: ConsumerSelector,
         limits: &ResourceLimits,
         bank: &Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
-    ) -> CoreResult<
-        Option<(
-            ConsumerSchemas,
-            ConsumerActionOperation,
-            Vec<HostCapacityReservation>,
-        )>,
-    > {
+    ) -> CoreResult<Option<(ConsumerActionOperation, Vec<HostCapacityReservation>)>> {
         if endpoint.len() > 256 || doc.action().is_none_or(|a| a.synchronous == Some(true)) {
             return Ok(None);
         }
@@ -256,16 +309,6 @@ impl ConsumerActionRegistry {
         {
             return Ok(None);
         }
-        let schemas = ConsumerSchemas {
-            input: doc
-                .affordance_schema(owner, "input")
-                .map(crate::type_schema::prepare_type_schema)
-                .transpose()?,
-            output: doc
-                .affordance_schema(owner, "output")
-                .map(crate::type_schema::prepare_type_schema)
-                .transpose()?,
-        };
         let mut chosen = None;
         for r in &self.registrations {
             let id = r.preparation.identity();
@@ -277,11 +320,7 @@ impl ConsumerActionRegistry {
             }
             if !r.services.data.available()
                 || r.services.data.content_type() != facts.content_type
-                || !schemas
-                    .input
-                    .iter()
-                    .chain(schemas.output.iter())
-                    .all(|s| r.services.data.supports_schema(s))
+                || !schemas.supports(r.services.data.as_ref())
                 || r.services
                     .access
                     .authorize(id, endpoint, operation)
@@ -328,7 +367,7 @@ impl ConsumerActionRegistry {
                     form,
                     operation,
                     endpoint,
-                    schemas: &schemas,
+                    schemas,
                 }) {
                 Ok(Some(m)) => m,
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
@@ -350,6 +389,6 @@ impl ConsumerActionRegistry {
                 funding,
             ));
         }
-        Ok(chosen.map(|(operation, funding)| (schemas, operation, funding)))
+        Ok(chosen)
     }
 }

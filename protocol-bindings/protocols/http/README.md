@@ -46,7 +46,8 @@ qualify their complete data role. Property Read/Write and ReadAllProperties have
 real structured Consumer/Producer and reuse evidence. Other finite collection
 facets use the same kernel, with their existing role/mapping requirements;
 their older type-only tests do not establish broader structured interoperability.
-Continuing Action preparation retains its narrower type-only subset.
+Continuing Action input/output use the same bounded structured subset; root
+Action status preparation retains its narrower type-only profile.
 
 Reads support HTTP/1.1 status 200, IPv4/IPv6 literals and fixed-length,
 chunked and close-delimited bodies. One registration admits one unretired native
@@ -614,8 +615,8 @@ correlation 404, stale logical authority 410 and exhausted admission/work
 capacity 503; unexpected failures receive 500. None of these statuses proves
 that an already accepted Action was undone.
 
-All final TD Forms, effective operations, resolved security and type-only Action
-input/output schemas are qualified through the existing whole-Thing selector,
+All final TD Forms, effective operations, resolved security and complete supported
+Action input/output schemas are qualified through the existing whole-Thing selector,
 closed installation, managed Host resource handoff and local Servient publication.
 Unsupported DataSchema constraints, executable extension assertions, synchronous
 completion promises, alternate media/codings/security, method/response mismatches,
@@ -629,10 +630,19 @@ Thing with separate listeners and one logical behavior authority.
 Native HTTP/1.1 I/O is caller-driven, one connection at a time per participant,
 with 16 headers, 8192 head bytes, 4096 JSON input/output bytes and a 10-second
 per-exchange deadline. Native ingress has no application handler. Servient
-captures the source-independent validator at publication and validates JSON/type
-before behavior; each admitted continuation retains that original output service.
+captures the source-independent validator at publication and validates structured
+JSON constraints before behavior; each admitted continuation retains that original output service.
 An explicitly raw Servient registration remains unvalidated, but a published
 Action cannot bypass its captured validator through `RawActionRequest`.
+
+Structured Action validators declare an extra 4096 × 80 `HandlerSteps` per
+input/output callback, matching the finite structured JSON envelope. The logical
+owner captures this allowance at publication. Invoke prepays it twice for input
+and possible immediate output; normal continuation progress prepays it once for
+output before polling application work. Short credits prevent permission/dispatch
+or keep continuing work unpolled. Changed validator declarations fence validation
+under the original allowance; native controls and local close retain their
+independent ownership and work budgets.
 `progress_actions` fairly polls retained work after the
 initiating reply; completion stays queryable until explicit `acknowledge` or
 application-selected terminal retention expiry (`reap_completed`, five seconds
@@ -681,7 +691,7 @@ query/cancel operation independently. Register `HttpActionConsumer` with
 `HttpConsumerConfig::consumer_services()` (or actual application services) and an
 explicit 4096-unit `PlanCompileWorkUnitsPerStepMax` allowance. This is the same
 bounded pure native callback policy as the existing typed MQTT facet. The shared
-HTTP lowering preserves the qualified Producer mapping above: JSON/type-only,
+HTTP lowering preserves the qualified Producer mapping above: bounded structured JSON,
 endpoint NoSec, cleartext IP literals, POST invoke and independent GET/DELETE
 control Forms ending in `{?id}`, with a string `uriVariables.id`. Absent or false
 `synchronous` uses this continuing facet; the existing explicitly synchronous

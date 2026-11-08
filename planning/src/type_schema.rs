@@ -1,6 +1,6 @@
 //! Pure preparation over the existing Host-only resolved semantic loan.
-//! Finite participants use structured constraints; continuing participants can
-//! require the narrower type-only facet of the same interpretation.
+//! Constraint meaning is independent of an operation's execution lifetime.
+//! Concrete participants can require a narrower facet of that meaning.
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass,
     data_schema::{PreparedSchema, ValueType},
@@ -184,8 +184,8 @@ pub fn prepare_schema(schema: SchemaView<'_>) -> CoreResult<PreparedSchema> {
     schema_census(schema)?;
     build_schema(schema)
 }
-/// Current continuing/notification scalar participants retain their existing
-/// admission subset. This is the same interpretation, with a narrower facet.
+/// A concrete participant's explicitly narrower admission subset. This is the
+/// same interpretation, not a restriction inherent to continuing interactions.
 pub fn prepare_type_schema(schema: SchemaView<'_>) -> CoreResult<PreparedSchema> {
     match schema_head(schema)? {
         Some(s) if s.is_type_only() => Ok(s),
@@ -326,19 +326,35 @@ fn required(schema: SchemaView<'_>) -> &[alloc::string::String] {
 }
 /// Complete bounded recursive/name-walk credit for a pure schema callback.
 pub fn preparation_work(schema: SchemaView<'_>) -> CoreResult<u64> {
-    Ok(schema_preparation_units(schema)?.1)
+    let mut preparation = SchemaPreparation::default();
+    preparation.include(schema)?;
+    Ok(preparation.work)
 }
-pub(crate) fn schema_preparation_units(schema: SchemaView<'_>) -> CoreResult<(u64, u64, usize)> {
-    let c = schema_census(schema)?;
-    Ok((
+/// Borrowed census shared by finite and continuing preparation. It owns no
+/// schemas, services or authority. Callers fund construction, rollback and the
+/// final original owner before building any variable constraint storage.
+#[derive(Default)]
+pub(crate) struct SchemaPreparation {
+    pub cleanup: u64,
+    pub work: u64,
+    pub nodes: usize,
+    pub backing_bytes: usize,
+}
+impl SchemaPreparation {
+    pub fn include(&mut self, schema: SchemaView<'_>) -> CoreResult<()> {
+        let c = schema_census(schema)?;
         if schema_head(schema)?.is_none() {
-            c.nodes as u64 * 2
-        } else {
-            0
-        },
-        (c.nodes * 8 + c.names * PreparedSchema::MAX_PROPERTIES) as u64,
-        c.nodes,
-    ))
+            self.cleanup += c.nodes as u64 * 2;
+            // One entry per child plus decoded names. Counting the root too is
+            // a conservative bound, including partially constructed trees.
+            self.backing_bytes += c.nodes
+                * core::mem::size_of::<clinkz_wot_core::data_schema::SchemaProperty>()
+                + c.names;
+        }
+        self.work += (c.nodes * 8 + c.names * PreparedSchema::MAX_PROPERTIES) as u64;
+        self.nodes += c.nodes;
+        Ok(())
+    }
 }
 fn schema_census(schema: SchemaView<'_>) -> CoreResult<SchemaCensus> {
     fn walk(s: SchemaView<'_>, depth: usize, c: &mut SchemaCensus) -> CoreResult<()> {

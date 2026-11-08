@@ -258,9 +258,10 @@ outside this slice. No package, architecture gate or milestone closes here.
 
 `HttpActionConsumer` is the Consumer counterpart of the existing qualified
 `HttpActionRuntime` POST/GET/DELETE mapping. The shared pure native lowering
-checks each operation's described method, response, URI-variable, schema and
-security subset. Planning captures the independently selected operations and
-actual services; the execution-only facet consumes no TD/compiler. The native
+checks each operation's described method, response, URI-variable and security
+subset. Planning prepares common structured input/output meaning and captures
+the independently selected operations and actual services; the execution-only
+facet consumes no TD/compiler. The native
 token survives exchange/socket disposal and is expanded only in selected control
 Forms, under fresh actual-destination authorization. A wire Location cannot select
 or redirect a control.
@@ -273,7 +274,13 @@ replacements, malformed/fragmented native replies and complete final socket/acco
 release. Existing Producer and synchronous Consumer tests retain their scopes.
 The [HTTP README](../../protocol-bindings/protocols/http/README.md#td-driven-continuing-consumer-actions)
 owns concrete limits, explicit preparation allowance and supported wire outcomes.
-No general HTTP Action interoperability, TLS, broader schema/security,
+Structured nested input/output, integer bounds and string lengths now execute
+through the shared schema/JSON contract; native probes no longer rebuild Consumer
+schemas. Producer clones/validators share immutable backing, complete final-TD
+checks compare retained constraints, and variable definition/support-probe costs
+are included. Generic notification and root status preparation retain their
+separately declared narrower scope.
+No general HTTP Action interoperability, TLS, arbitrary DataSchema/security,
 constrained/automatic progress or remote effect certainty is claimed.
 
 ## TD-driven HTTP Property collection reads

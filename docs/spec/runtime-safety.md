@@ -394,7 +394,7 @@ local cause and native publication effect; later successful local disposal is
 required before terminal acknowledgement. Linked native callbacks are followed
 by fresh authority checks before successful local settlement.
 
-## Structured finite data validation
+## Structured data validation
 
 The finite Consumer borrows its original PreparedSchema, with actual validator
 qualification and paid scratch/work at input, output and late-result boundaries.
@@ -407,3 +407,24 @@ captured JSON value access before behavior permission/effects and before declare
 output delivery. Its complete final-TD/publication checks remain independent of
 Consumer partial support. Decoder traversal and constraint disposal have the
 bounded envelopes in [Core](interaction-core.md); callbacks remain cooperative.
+
+Continuing Action input/output borrow the same prepared constraints and retain
+their original funding through normal or late result disposal. The invoke
+association's actual captured validator checks input before native effects and
+completed output even when it arrives during control-exchange retirement. A
+Producer's captured Action validator checks before behavior authorization and
+before successful result observation. Acceptance/pending/cancel acknowledgements
+do not become application output. Native failure, validation failure, local
+cancellation/revocation and remote effect certainty remain separate evidence;
+replacement cannot retarget the original constraints, work or result.
+
+Producer Action validation also retains the original extra callback-work bound.
+The invoke path funds both input and possible immediate output before entering
+validation or behavior; a continuing poll funds output validation before it can
+materialize a result. Short credit refuses pre-effect invocation or keeps the
+continuation pending without polling it. Metadata is rechecked before/after
+validation, after authorization and before immediate/continuing output validation;
+a changed allowance produces a
+validation failure without calling an unfunded output validator. Restoring the
+declaration cannot reopen that terminal failure. Close continues on its separate
+cleanup budget without handler/codec credits, even if service metadata changed.
