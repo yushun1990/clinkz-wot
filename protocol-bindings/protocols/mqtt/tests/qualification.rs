@@ -6,6 +6,99 @@ use services::*;
 use support::*;
 
 #[test]
+fn unrelated_root_operations_are_left_to_their_actual_registered_capability() {
+    // Pure selection evidence only: this independently typed participant has
+    // no notification facet and makes no native execution claim.
+    struct RootRead;
+    impl ProducerCapability for RootRead {
+        fn identity(&self) -> (BindingId, BindingGeneration) {
+            (BindingId::new(8), BindingGeneration::INITIAL)
+        }
+        fn definition_bytes(&self, d: &dyn std::any::Any) -> Option<usize> {
+            d.is::<()>().then_some(0)
+        }
+        fn prepare(
+            &self,
+            input: ProducerOperationInput<'_>,
+            b: &mut WorkBudget,
+        ) -> CoreResult<Option<Box<dyn std::any::Any>>> {
+            Ok(self
+                .supports(input, b)?
+                .then(|| Box::new(()) as Box<dyn std::any::Any>))
+        }
+        fn supports(
+            &self,
+            input: ProducerOperationInput<'_>,
+            _: &mut WorkBudget,
+        ) -> CoreResult<bool> {
+            Ok(matches!(input.site, FormSite::Thing)
+                && input.operation == Operation::ReadAllProperties)
+        }
+        fn final_check_temporary_bytes(&self) -> Option<usize> {
+            Some(0)
+        }
+        fn check_final(
+            &self,
+            input: ProducerOperationInput<'_>,
+            d: &dyn std::any::Any,
+            b: &mut WorkBudget,
+        ) -> CoreResult<bool> {
+            Ok(d.is::<()>() && self.supports(input, b)?)
+        }
+    }
+    let address = address();
+    let mqtt = MqttNotificationProducer::new(
+        MqttProducerConfig::for_loopback(address, 8192).unwrap(),
+        BindingId::new(7),
+        BindingGeneration::INITIAL,
+    );
+    let reader = RootRead;
+    let text = serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Independent operation facet",
+        "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "forms":[{"href":format!("mqtt://{address}"), "op":"readallproperties"}]
+    })
+    .to_string();
+    let key = authority(1).key();
+    fn behavior(scope: ValidatedProducerScope<'_>, op: Operation) -> bool {
+        matches!(scope, ValidatedProducerScope::Thing) && op == Operation::ReadAllProperties
+    }
+    assert!(
+        prepare_thing(
+            &text,
+            key,
+            GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&mqtt],
+            behavior
+        )
+        .is_err(),
+        "declining an operation never drops it from Producer qualification"
+    );
+    let prepared = prepare_thing(
+        &text,
+        key,
+        GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&mqtt, &reader],
+        behavior,
+    )
+    .unwrap();
+    assert_eq!(prepared.operations().len(), 1);
+    assert_eq!(prepared.operations()[0].binding, reader.identity());
+    check_final_thing(
+        &text,
+        key,
+        GatewayDefaultV1::LIMITS,
+        &mut budget(),
+        &[&mqtt, &reader],
+        &prepared,
+        behavior,
+    )
+    .unwrap();
+}
+
+#[test]
 fn final_qualification_rejects_foreign_definitions_with_matching_numeric_identity() {
     use clinkz_wot_binding_http::{HttpActionProducer, HttpFiniteProducer, HttpProducerConfig};
 

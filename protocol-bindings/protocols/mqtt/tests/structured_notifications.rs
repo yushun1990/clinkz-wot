@@ -86,6 +86,7 @@ fn publication(kind: NotificationKind, body: &[u8]) -> PublicationData {
         PublicationData::PropertyValue(p)
     }
 }
+#[allow(clippy::too_many_arguments)]
 fn definition(
     service: &MqttConsumerService,
     value: serde_json::Value,

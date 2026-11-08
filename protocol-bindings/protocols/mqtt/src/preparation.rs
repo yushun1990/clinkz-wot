@@ -29,7 +29,11 @@ impl MqttNotificationProducer {
             FormSite::Event(n) => AffordanceTarget::Event(Arc::from(n.as_str())),
             _ => return Ok(None),
         };
-        let kind = NotificationKind::for_operation(input.operation).ok_or_else(unsupported)?;
+        let Some(kind) = NotificationKind::for_operation(input.operation) else {
+            // Another actual capability may implement this operation at the
+            // same broker. Declining it does not waive whole-TD coverage.
+            return Ok(None);
+        };
         budget
             .consume(
                 WorkClass::PlanningItems,
