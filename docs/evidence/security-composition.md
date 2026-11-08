@@ -48,7 +48,9 @@ owners. It exercises:
   effectful conjunction Write retaining known completion after API-key revocation.
 - API-key rotation, independent instances sharing selected meaning, cancellation,
   retained original funding and final release; cyclic/expansive whole-expression
-  refusal through public preparation.
+  refusal through public preparation; mutated typed scheme discriminators cannot
+  turn advertised authentication into NoSec. Conjunction Write includes both a
+  complete successful exchange and revoked delivery after completed effects.
 
 The existing `security_https` and `security_write` suites continue to exercise
 certificate trust/identity refusal, exact audience/operation/registration and

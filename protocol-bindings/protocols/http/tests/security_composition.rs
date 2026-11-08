@@ -450,43 +450,47 @@ fn whole_conjunction_revision_checks_fence_cross_verifier_changes_before_dispatc
 #[test]
 fn conjunction_write_preserves_effects_when_a_required_verifier_is_revoked_before_delivery() {
     io().block_on(async {
-        let keys = Keys::for_name("127.0.0.1");
-        let addr = address();
-        let key = key_verifier();
-        let mut td = description_for(addr, json!(["both"]));
-        td["properties"]["on"]["readOnly"] = json!(false);
-        let mut server = SecureFixture::from_security(
-            server_security(&keys, Some(verifier()), Some(key.clone())),
-            addr,
-            td,
-            &[Operation::ReadProperty, Operation::WriteProperty],
-        );
-        let owner = consumer_instance();
-        let accounts = bank();
-        let (client, content) = secure_client(
-            &server.td,
-            &keys,
-            &owner,
-            client_access(&owner, &server.td, true, true),
-            &accounts,
-            None,
-        );
-        let mut call = client
-            .write_property("on", payload(b"42"), Deadline::NONE, now(0), &mut work())
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        until(&mut server, &mut call, RawFiniteState::Delivering).await;
-        key.revoked.store(true, Ordering::Release);
-        key.revision.fetch_add(1, Ordering::AcqRel);
-        let result = server.exchange(&mut call).await;
-        assert!(result.result().is_err());
-        assert_eq!(server.app.writes.get(), 1);
-        assert_eq!(&*server.app.value.borrow(), b"42");
-        let settlement = server.server().take_settlement().unwrap();
-        assert_eq!(settlement.effect, FiniteEffect::Completed);
-        assert_ne!(settlement.delivery, FiniteDelivery::Delivered);
-        drop((settlement, result, call, client, content, owner));
-        clean(&accounts);
-        server.close();
+        for revoked in [false, true] {
+            let keys = Keys::for_name("127.0.0.1");
+            let addr = address();
+            let key = key_verifier();
+            let mut td = description_for(addr, json!(["both"]));
+            td["properties"]["on"]["readOnly"] = json!(false);
+            let mut server = SecureFixture::from_security(
+                server_security(&keys, Some(verifier()), Some(key.clone())),
+                addr,
+                td,
+                &[Operation::ReadProperty, Operation::WriteProperty],
+            );
+            let owner = consumer_instance();
+            let accounts = bank();
+            let (client, content) = secure_client(
+                &server.td,
+                &keys,
+                &owner,
+                client_access(&owner, &server.td, true, true),
+                &accounts,
+                None,
+            );
+            let mut call = client
+                .write_property("on", payload(b"42"), Deadline::NONE, now(0), &mut work())
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            if revoked {
+                until(&mut server, &mut call, RawFiniteState::Delivering).await;
+                key.revoked.store(true, Ordering::Release);
+                key.revision.fetch_add(1, Ordering::AcqRel);
+            }
+            let result = server.exchange(&mut call).await;
+            assert_eq!(result.result().is_ok(), !revoked);
+            assert_eq!(server.app.writes.get(), 1);
+            assert_eq!(&*server.app.value.borrow(), b"42");
+            let settlement = server.server().take_settlement().unwrap();
+            assert_eq!(settlement.effect, FiniteEffect::Completed);
+            assert_eq!(settlement.delivery == FiniteDelivery::Delivered, !revoked);
+            drop((settlement, result, call, client, content, owner));
+            clean(&accounts);
+            server.close();
+        }
     });
 }
 
@@ -596,6 +600,60 @@ fn cyclic_or_explosive_composition_refuses_the_whole_expression_without_truncati
             )
             .is_err()
         );
+        clean(&accounts);
+    }
+}
+
+#[test]
+fn mutated_typed_discriminators_cannot_turn_advertised_authentication_into_nosec() {
+    use clinkz_wot_td::security_scheme::SecurityScheme;
+    for combo in [false, true] {
+        let keys = Keys::for_name("127.0.0.1");
+        let td = description_for(address(), json!(["none"]));
+        let mut source: Thing = serde_json::from_value(td.clone()).unwrap();
+        let mut definition = if combo {
+            SecurityScheme::combo_all_of(["none", "none"])
+        } else {
+            SecurityScheme::nosec()
+        };
+        match &mut definition {
+            SecurityScheme::Combo(s) => s._context.scheme = "basic".into(),
+            SecurityScheme::NoSec(s) => s._context.scheme = "basic".into(),
+            _ => unreachable!(),
+        }
+        source
+            .security_definitions
+            .insert("mutated".into(), definition);
+        source.security = vec!["mutated".into()];
+        let owner = consumer_instance();
+        let accounts = bank();
+        let registration = try_https_consumer_registration(
+            keys.client(),
+            client_access(&owner, &td, false, false),
+            BindingId::new(198),
+            BindingGeneration::INITIAL,
+            0,
+        )
+        .unwrap();
+        let registry = ConsumerRegistry::try_new(vec![registration], &accounts)
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        assert!(
+            registry
+                .prepare(
+                    &source,
+                    GatewayDefaultV1::LIMITS,
+                    accounts.clone(),
+                    ConsumerSelector::default(),
+                    &mut work(),
+                    |job| {
+                        while !job.is_finished() {
+                            job.step(&mut work(), false);
+                        }
+                    }
+                )
+                .is_err()
+        );
+        drop(registry);
         clean(&accounts);
     }
 }

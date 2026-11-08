@@ -33,6 +33,24 @@ pub fn prepare_security(
             return Err(unsupported());
         }
         let facts = doc.security(name).map_err(|_| unsupported())?;
+        // Public typed TD fields can be mutated without a Serde round trip.
+        // A mismatched discriminator must not turn a declared authenticated
+        // scheme into NoSec or a conjunction of anonymous children.
+        let discriminator = match facts.details {
+            SecurityDetails::NoSec => "nosec",
+            SecurityDetails::Auto => "auto",
+            SecurityDetails::Combo { .. } => "combo",
+            SecurityDetails::Basic { .. } => "basic",
+            SecurityDetails::Digest { .. } => "digest",
+            SecurityDetails::ApiKey { .. } => "apikey",
+            SecurityDetails::Bearer { .. } => "bearer",
+            SecurityDetails::Psk { .. } => "psk",
+            SecurityDetails::OAuth2 { .. } => "oauth2",
+            SecurityDetails::Extension => facts.scheme,
+        };
+        if facts.scheme != discriminator {
+            return Err(unsupported());
+        }
         *text = text
             .checked_add(name.len() + facts.scheme.len())
             .ok_or_else(unsupported)?;
