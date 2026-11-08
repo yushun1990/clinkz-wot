@@ -93,7 +93,7 @@ fn property_observability_value_schema_and_protocol_limits_are_qualified_in_both
     let mut bad = Vec::new();
     for (key, value) in [
         ("observable", serde_json::json!(false)),
-        ("minimum", serde_json::json!(0)),
+        ("multipleOf", serde_json::json!(2)),
         ("enum", serde_json::json!([0, 1])),
         ("format", serde_json::json!("int32")),
         ("mqv:unknown", serde_json::json!(true)),
@@ -148,7 +148,7 @@ fn property_observability_value_schema_and_protocol_limits_are_qualified_in_both
     assert_eq!(definition.input().target, target());
     assert_eq!(
         definition.input().schemas,
-        ConsumerNotificationSchemas::PropertyValue(data_schema::PreparedSchema::Type(
+        NotificationSchemas::PropertyValue(data_schema::PreparedSchema::Type(
             data_schema::ValueType::Integer
         ))
     );
@@ -247,7 +247,7 @@ fn property_form_selection_keeps_order_actual_registration_and_stop_capability()
     );
     // Even a trusted source-free caller cannot pair a Property program with Event schemas.
     let mut input = d.into_input();
-    input.schemas = ConsumerNotificationSchemas::Event {
+    input.schemas = NotificationSchemas::Event {
         subscription: None,
         data: Some(data_schema::PreparedSchema::Any),
         data_response: None,

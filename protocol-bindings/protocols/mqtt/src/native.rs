@@ -1,4 +1,5 @@
 use super::*;
+use clinkz_wot_core::consumer::ConsumerDataService;
 use clinkz_wot_core::{
     BindingInputRejection, BindingOperationalError, CoreResult, producer::ProducerInstanceKey,
     publication::*, thing::AffordanceSite,
@@ -299,7 +300,7 @@ impl MqttNotificationService {
                 topic: Arc::clone(&d.topic),
                 route: NotificationRoute::new(session.registration.binding),
                 services: Rc::new(JsonNoSec {
-                    schema: d.schema.clone(),
+                    schemas: d.schemas.clone(),
                 }),
             });
         }
@@ -309,7 +310,7 @@ impl MqttNotificationService {
                     e.target == d.target
                         && Some(e.kind) == NotificationKind::for_operation(d.operation)
                         && e.topic == d.topic
-                        && e.services.schema == d.schema
+                        && e.services.schemas == d.schemas
                 })
             })
             || definitions.iter().enumerate().any(|(i, d)| {
@@ -362,7 +363,7 @@ impl MqttNotificationService {
 }
 
 struct JsonNoSec {
-    schema: MqttDataSchema,
+    schemas: Arc<clinkz_wot_core::notification::NotificationSchemas>,
 }
 impl ProducerNotificationServices for JsonNoSec {
     fn authorize(&self, _data: &PublicationData, budget: &mut WorkBudget) -> CoreResult<()> {
@@ -374,10 +375,10 @@ impl ProducerNotificationServices for JsonNoSec {
         budget
             .consume(
                 WorkClass::CodecInputBytes,
-                MAX_NOTIFICATION_BYTES as u64 * 40 + 128,
+                MqttJsonData.policy().validation_work,
             )
             .map_err(|_| busy())?;
-        self.schema.validate(data)
+        validate_data(&self.schemas, data)
     }
 }
 struct NotificationMapping {
@@ -514,6 +515,9 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             + size_of::<Lease>()
             + size_of::<ProducerNotificationPublication<MqttPublication>>()
             + DATA_BACKING
+            // A provisioned callback envelope, including decoded JSON keys and
+            // strings, retained with this original managed participation.
+            + MqttJsonData.policy().temporary_bytes as usize
             + 32 * size_of::<usize>()
             + l.mappings.capacity() * size_of::<NotificationMapping>()
             + l.definitions.capacity() * size_of::<MqttNotificationDefinition>();
@@ -521,7 +525,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             bytes = bytes.checked_add(
                 target_name_bytes(&d.target)
                     + d.topic.len()
-                    + d.schema.retained_bytes()
+                    + schema_backing(&d.schemas)
                     + 4 * size_of::<usize>(),
             )?;
         }
@@ -530,7 +534,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
                 target_name_bytes(&e.target)
                     + e.topic.len()
                     + size_of::<JsonNoSec>()
-                    + e.services.schema.retained_bytes()
+                    + schema_backing(&e.services.schemas)
                     + 10 * size_of::<usize>(),
             )?;
         }
@@ -656,7 +660,9 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         // A wildcard is never emitted as a PUBLISH Topic Name.
         let mut event_topic = [0u8; MAX_TOPIC_BYTES];
         let topic = if let PublicationData::EventOccurrence { event, .. } = &data {
-            let MqttDataSchema::Events(schema) = &e.services.schema else {
+            let clinkz_wot_core::notification::NotificationSchemas::SubscribeAllEvents(schema) =
+                &*e.services.schemas
+            else {
                 return Err(reject(data, unsupported()));
             };
             if schema.member(event).is_none() {

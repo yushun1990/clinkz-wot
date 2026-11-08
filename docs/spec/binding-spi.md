@@ -240,7 +240,9 @@ application input; they do not represent continuing Action or notification
 conversations. Existing inline aggregate and raw finite APIs retain their
 restricted purposes. Notification preparation uses a separate typed facet:
 `ConsumerNotificationPreparation` compiles owned programs on the actual
-`ConsumerNotificationBinding` registration. Its operation-scoped Property/collection/Event registry
+`ConsumerNotificationBinding` registration. The schema operand is borrowed complete
+common meaning, not a by-value tree to copy or a native support certificate.
+Its operation-scoped Property/collection/Event registry
 captures actual services and configuration without adding finite methods or
 passing TD/compiler owners into execution. MQTT supplies that real native facet;
 its shared topic interests, queues, control correlation, wakers and final socket
@@ -417,7 +419,7 @@ backing. Selected final-TD checks compare borrowed constraints against that
 original owner. Native definitions account for variable backing and support-probe
 scratch. Native status, continuation, cancellation and physical exchange owners
 retain their existing independent contracts. Root Action status and MQTT
-notification profiles are separately qualified; this support does not widen them.
+notification profiles are separately qualified; this Action support does not widen them.
 
 An Action participant's captured `ActionValidator::additional_validation_work`
 must cover its complete extra input or output callback cost. The logical owner
@@ -429,6 +431,16 @@ metadata fences validation rather than requalifying accepted work. HTTP declares
 the same bounded structured JSON envelope used by its finite validator, since
 per-field lookup can rescan the complete payload. Its `HandlerSteps` charge is
 separate from Consumer codec credits and from Action close/retirement work.
+
+MQTT's leaf Property/Event JSON services explicitly qualify the same bounded
+structured constraints. Producer definitions and captured validators share the
+original immutable role owner. The managed participation reports variable role
+backing and provisions the complete JSON scratch envelope; Producer and Consumer
+prepay the same complete validation-work allowance before publication or native
+handoff. Actual MQTT protocol mapping, NoSec policy, topic attribution and
+control/response refusal remain independent checks. Collection mappings retain
+their explicitly narrower type-only subset; no Event response follows from a
+protocol ACK. See [the concrete mapping](../../protocol-bindings/protocols/mqtt/README.md).
 
 ## Finite security verification
 

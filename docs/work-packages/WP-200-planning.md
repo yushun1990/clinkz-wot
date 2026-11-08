@@ -392,3 +392,13 @@ qualification, negative network evidence, ownership and remaining unsupported
 roles/profiles are recorded in [the security evidence](../evidence/td-security-https.md).
 The applicable preparation, Core and Binding contracts remain authoritative;
 this increment grants no broad scheme/composition or production-profile acceptance.
+
+## Structured Notification execution
+
+Notification preparation now uses the same bounded structured normalizer and
+borrowed census for leaf values, all four Event roles and collection members.
+Native Consumer callbacks borrow the original schemas; variable backing and
+disposal remain funded through the selected definition. MQTT selected final
+checking compares borrowed final roles. Its leaf execution and downstream role
+evidence are in [structured data](../evidence/structured-dataschema.md#notification-execution).
+Actual collection/control/security support still qualifies independently.

@@ -16,6 +16,10 @@ use std::{
 const ENDPOINT: &str = "testevent://source/alarm";
 #[derive(Default)]
 struct Responses {
+    structured: bool,
+    collection_structured: bool,
+    starts: Cell<usize>,
+    compiled_data: Arc<std::sync::atomic::AtomicUsize>,
     last_body: RefCell<Option<std::sync::Weak<[u8]>>>,
     sends: Cell<usize>,
     retire_polls: Cell<usize>,
@@ -36,7 +40,17 @@ struct Response {
     sent: bool,
 }
 impl NotificationResponse for Response {
-    fn poll_deliver(&mut self, _: &mut Context<'_>, _: &EventDataResponse) -> Poll<CoreResult<()>> {
+    fn poll_deliver(
+        &mut self,
+        _: &mut Context<'_>,
+        data: &EventDataResponse,
+    ) -> Poll<CoreResult<()>> {
+        if self.responses.structured {
+            assert_eq!(
+                data.0.as_ref().unwrap().body.as_ref(),
+                br#"{"accepted":true}"#
+            );
+        }
         assert!(!self.sent);
         self.sent = true;
         self.responses.sends.set(self.responses.sends.get() + 1);
@@ -85,7 +99,7 @@ impl ConsumerNotificationBinding for EventBinding {
         assert_eq!(kind, NotificationKind::Event);
         Ok(NotificationSupport {
             event_responses: true,
-            cancellation: false,
+            cancellation: self.0.structured,
         })
     }
     fn prepare(
@@ -126,13 +140,28 @@ impl ConsumerNotificationPreparation for EventBinding {
     ) -> CoreResult<Option<Self::Program>> {
         assert_eq!(input.target, &AffordanceTarget::Event(Arc::from("alarm")));
         assert_eq!(input.endpoint, ENDPOINT);
-        assert!(input.schemas.subscription().is_none());
-        assert!(input.schemas.cancellation().is_none());
-        assert_eq!(
-            input.schemas.data(),
-            Some(&data_schema::PreparedSchema::Type(data_schema::ValueType::Integer))
-        );
-        assert_eq!(input.schemas.data_response(), input.schemas.data());
+        if self.0.structured {
+            assert!(input.schemas.subscription().is_some());
+            assert!(input.schemas.cancellation().is_some());
+            assert_ne!(input.schemas.data(), input.schemas.data_response());
+            let data_schema::PreparedSchema::Object(o) = input.schemas.data().unwrap() else {
+                panic!()
+            };
+            self.0.compiled_data.store(
+                o.properties().as_ptr() as usize,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        } else {
+            assert!(input.schemas.subscription().is_none());
+            assert!(input.schemas.cancellation().is_none());
+            assert_eq!(
+                input.schemas.data(),
+                Some(&data_schema::PreparedSchema::Type(
+                    data_schema::ValueType::Integer
+                ))
+            );
+            assert_eq!(input.schemas.data_response(), input.schemas.data());
+        }
         Ok(Some(self.0.clone()))
     }
 }
@@ -143,7 +172,12 @@ impl NotificationParticipation for Participation {
         _: &mut Context<'_>,
         input: &SubscriptionInput,
     ) -> Poll<CoreResult<()>> {
-        assert!(input.0.is_none());
+        if self.responses.structured {
+            assert_eq!(input.0.as_ref().unwrap().body.as_ref(), br#"{"filter":1}"#);
+        } else {
+            assert!(input.0.is_none());
+        }
+        self.responses.starts.set(self.responses.starts.get() + 1);
         Poll::Ready(Ok(()))
     }
     fn poll_next(
@@ -158,6 +192,11 @@ impl NotificationParticipation for Participation {
         let target = AffordanceTarget::Event(Arc::from(if ready { "ready" } else { "alarm" }));
         let payload = if ready {
             Payload::new(b"true".as_slice(), "application/json")
+        } else if self.responses.structured || self.responses.collection_structured {
+            Payload::new(
+                format!(r#"{{"reading":{{"level":{}}}}}"#, self.next).as_bytes(),
+                "application/json",
+            )
         } else {
             Payload::new(self.next.to_string().as_bytes(), "application/json")
         };
@@ -179,7 +218,16 @@ impl NotificationParticipation for Participation {
         _: &mut Context<'_>,
         input: Option<&CancellationInput>,
     ) -> Poll<CoreResult<RemoteCancellation>> {
-        assert!(input.is_none());
+        if self.responses.structured {
+            if let Some(input) = input {
+                assert_eq!(
+                    input.0.as_ref().unwrap().body.as_ref(),
+                    br#"{"reason":"done"}"#
+                );
+            }
+        } else {
+            assert!(input.is_none());
+        }
         self.responses.closes.set(self.responses.closes.get() + 1);
         Poll::Ready(Ok(RemoteCancellation::NotAttempted))
     }
@@ -294,6 +342,226 @@ fn clean(bank: &HostResourceAccounts) {
     for kind in ResourceKind::ALL {
         assert_eq!(bank.account(kind).used(), 0, "{kind:?}");
     }
+}
+
+struct StructuredData(Arc<std::sync::atomic::AtomicUsize>);
+impl ConsumerDataService for StructuredData {
+    fn content_type(&self) -> &str {
+        "application/json"
+    }
+    fn supports_schema(&self, _: &data_schema::PreparedSchema) -> bool {
+        true
+    }
+    fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
+        if let data_schema::PreparedSchema::Object(o) = schema {
+            if o.properties()
+                .first()
+                .is_some_and(|p| &*p.name == "reading")
+            {
+                assert_eq!(
+                    o.properties().as_ptr() as usize,
+                    self.0.load(std::sync::atomic::Ordering::Relaxed),
+                    "runtime must borrow the compiler's original field backing"
+                );
+            }
+        }
+        clinkz_wot_codec_json::validate_payload(schema, payload)
+    }
+    fn policy(&self) -> ConsumerDataPolicy {
+        ConsumerDataPolicy {
+            retained_bytes: 0,
+            temporary_bytes: 65_536,
+            body_bytes: 4096,
+            encoded_selection_bytes: 0,
+            validation_work: 4096 * 120,
+        }
+    }
+}
+struct ControlAccess;
+impl ConsumerAccessService for ControlAccess {
+    fn authorize(
+        &self,
+        _: BindingRegistrationIdentity,
+        endpoint: &str,
+        op: Operation,
+    ) -> CoreResult<()> {
+        assert_eq!(endpoint, ENDPOINT);
+        assert!(matches!(
+            op,
+            Operation::SubscribeEvent | Operation::UnsubscribeEvent
+        ));
+        Ok(())
+    }
+    fn authorize_instance(
+        &self,
+        _: &ConsumerInstanceRef,
+        id: BindingRegistrationIdentity,
+        endpoint: &str,
+        op: Operation,
+    ) -> CoreResult<()> {
+        self.authorize(id, endpoint, op)
+    }
+    fn retained_bytes(&self) -> u64 {
+        0
+    }
+    fn work(&self) -> u64 {
+        1
+    }
+}
+#[test]
+fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_roles() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let responses = Rc::new(Responses {
+        structured: true,
+        ..Responses::default()
+    });
+    let definition = {
+        let source = serde_json::from_value(serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Structured roles",
+            "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}},
+            "events":{"alarm":{
+                "subscription":{"type":"object","required":["filter"],"properties":{"filter":{"type":"integer","minimum":1}}},
+                "data":{"type":"object","required":["reading"],"properties":{"reading":{"type":"object","required":["level"],"properties":{"level":{"type":"integer","minimum":1,"maximum":2}}}}},
+                "dataResponse":{"type":"object","required":["accepted"],"properties":{"accepted":{"type":"boolean"}}},
+                "cancellation":{"type":"object","required":["reason"],"properties":{"reason":{"type":"string","minLength":4,"maxLength":4}}},
+                "forms":[{"href":ENDPOINT}]
+            }}
+        })).unwrap();
+        ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+            binding: EventBinding(responses.clone()),
+            services: ConsumerServices {
+                data: Arc::new(StructuredData(responses.compiled_data.clone())),
+                access: Arc::new(ControlAccess),
+            },
+        }])
+        .unwrap()
+        .prepare_notification(
+            &source,
+            &AffordanceTarget::Event(Arc::from("alarm")),
+            NotificationKind::Event,
+            ConsumerSelector::default(),
+            GatewayDefaultV1::LIMITS,
+            bank.clone(),
+            &mut work(),
+        )
+        .unwrap()
+    };
+    assert!(definition.input().schemas.retained_bytes() > 0);
+    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
+    let mut root = Runtime::try_new(
+        owner.reference(),
+        definition,
+        RawNotificationLimits {
+            subscriptions: 1,
+            queue_items: 2,
+            queue_payload_bytes: 512,
+            payload_backing_bytes: 256,
+            control_backing_bytes: 256,
+            target_name_bytes: 64,
+            engine_bytes: 32768,
+        },
+    )
+    .unwrap_or_else(|_| panic!());
+    let payload = |s: &'static [u8]| Some(Payload::new(s, "application/json"));
+    let original = payload(br#"{"filter":0}"#).unwrap();
+    let weak = Arc::downgrade(&original.body);
+    let refused = root
+        .subscribe(
+            SubscriptionInput(Some(original)),
+            ResponseRequirement::Required,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .err()
+        .unwrap()
+        .into_input();
+    assert!(weak.upgrade().is_some());
+    assert_eq!(responses.starts.get(), 0);
+    drop(refused);
+    assert!(weak.upgrade().is_none());
+    let mut cursor = root
+        .subscribe(
+            SubscriptionInput(payload(br#"{"filter":1}"#)),
+            ResponseRequirement::Required,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .ok()
+        .unwrap();
+    assert_eq!(step(&mut root, &cursor), NotificationState::Active);
+    step(&mut root, &cursor);
+    assert_eq!(responses.starts.get(), 1);
+    assert_eq!(
+        root.front(&mut cursor, &mut work())
+            .unwrap()
+            .unwrap()
+            .data
+            .unwrap()
+            .body,
+        br#"{"reading":{"level":1}}"#
+    );
+    let body = responses.last_body.borrow_mut().take().unwrap();
+    // Valid data/subscription shapes do not satisfy the reciprocal response role.
+    assert!(
+        root.respond(
+            &mut cursor,
+            EventDataResponse(payload(br#"{"reading":{"level":1}}"#)),
+            &mut work()
+        )
+        .is_err()
+    );
+    assert!(
+        root.respond(
+            &mut cursor,
+            EventDataResponse(payload(br#"{"accepted":true}"#)),
+            &mut WorkBudget::new()
+        )
+        .is_err()
+    );
+    assert_eq!(responses.sends.get(), 0);
+    root.respond(
+        &mut cursor,
+        EventDataResponse(payload(br#"{"accepted":true}"#)),
+        &mut work(),
+    )
+    .ok()
+    .unwrap();
+    responses.pending_retirement.set(true);
+    step(&mut root, &cursor);
+    assert_eq!(responses.sends.get(), 1);
+    assert!(root.advance(&mut cursor, &mut work()).is_err());
+    assert!(body.upgrade().is_some());
+    let funded = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    responses.pending_retirement.set(false);
+    step(&mut root, &cursor);
+    root.advance(&mut cursor, &mut work()).unwrap();
+    assert!(body.upgrade().is_none());
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        funded
+    );
+    // Invalid cancellation still fences delivery locally; a corrected control
+    // can be admitted before native close starts. It never becomes Event data.
+    assert!(
+        root.stop(
+            &cursor,
+            Some(CancellationInput(payload(br#"{"reason":"x"}"#))),
+            &mut work()
+        )
+        .is_err()
+    );
+    root.stop(
+        &cursor,
+        Some(CancellationInput(payload(br#"{"reason":"done"}"#))),
+        &mut work(),
+    )
+    .ok()
+    .unwrap();
+    let settlement = finish(&mut root, &cursor);
+    assert_eq!(settlement.responses_delivered, 1);
+    assert_eq!(responses.closes.get(), 1);
+    drop(root);
+    clean(&bank);
 }
 
 #[test]
@@ -467,7 +735,7 @@ impl ConsumerNotificationPreparation for CollectionBinding {
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<Self::Program>> {
         assert_eq!(input.target, &AffordanceTarget::Thing);
-        let ConsumerNotificationSchemas::SubscribeAllEvents(s) = input.schemas else {
+        let NotificationSchemas::SubscribeAllEvents(s) = input.schemas else {
             panic!()
         };
         assert_eq!(s.members().len(), 2);
@@ -501,7 +769,10 @@ impl ConsumerAccessService for CollectionAccess {
 #[test]
 fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_native_owner() {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
-    let responses = Rc::new(Responses::default());
+    let responses = Rc::new(Responses {
+        collection_structured: true,
+        ..Responses::default()
+    });
     let registry = ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
         binding: CollectionBinding(EventBinding(responses.clone())),
         services: ConsumerServices {
@@ -515,8 +786,8 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
             "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"Collection responses",
             "security":"n","securityDefinitions":{"n":{"scheme":"nosec"}},
             "events":{
-                "alarm":{"data":{"type":"integer"},"dataResponse":{"type":"string"},"forms":[{"href":ENDPOINT}]},
-                "ready":{"data":{"type":"boolean"},"dataResponse":{"type":"integer"},"forms":[{"href":ENDPOINT}]}},
+                "alarm":{"data":{"type":"object","required":["reading"],"properties":{"reading":{"type":"object","required":["level"],"properties":{"level":{"type":"integer","minimum":1,"maximum":2}}}}},"dataResponse":{"type":"string","minLength":3,"maxLength":3},"forms":[{"href":ENDPOINT}]},
+                "ready":{"data":{"type":"boolean"},"dataResponse":{"type":"integer","minimum":7,"maximum":7},"forms":[{"href":ENDPOINT}]}},
             "forms":[{"href":ENDPOINT,"op":["subscribeallevents","unsubscribeallevents"]}]
         })).unwrap();
         registry
@@ -640,13 +911,16 @@ impl ConsumerDataService for CollectionData {
     fn content_type(&self) -> &str {
         "application/json"
     }
+    fn supports_schema(&self, _: &data_schema::PreparedSchema) -> bool {
+        true
+    }
     fn policy(&self) -> ConsumerDataPolicy {
         ConsumerDataPolicy {
             retained_bytes: 0,
-            temporary_bytes: 4096,
+            temporary_bytes: 65_536,
             body_bytes: 1024,
             encoded_selection_bytes: 0,
-            validation_work: 4096 * 40 + 128,
+            validation_work: 4096 * 120 + 128,
         }
     }
     fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {

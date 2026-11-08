@@ -1,7 +1,9 @@
 //! Typed, startup-linked notification preparation over the common admitted TD.
 //! This facet deliberately does not force subscriptions through finite calls.
 use super::*;
-use clinkz_wot_core::notification::{ConsumerNotificationBinding, NotificationKind};
+use clinkz_wot_core::notification::{
+    ConsumerNotificationBinding, NotificationKind, NotificationSchemas,
+};
 use clinkz_wot_td::semantic::ResolvedSemanticDocument;
 
 /// Bounded pure compilation on the actual execution registration. Implementors
@@ -20,7 +22,7 @@ pub struct ConsumerNotificationInput<'a> {
     pub target: &'a AffordanceTarget,
     pub form: u32,
     pub endpoint: &'a str,
-    pub schemas: ConsumerNotificationSchemas,
+    pub schemas: &'a NotificationSchemas,
 }
 /// A typed registry can contain many actual registrations of a linked Binding.
 /// Each selected output owns its actual executor and services. Neither protocol
@@ -196,6 +198,17 @@ where
             _ => return Err(unsupported()),
         };
         let facts = document.form(owner, index).ok_or_else(unsupported)?;
+        let preparation = crate::type_schema::notification_preparation(document, target, kind)?;
+        check_limit(
+            limits,
+            K::CleanupWorkItemsPerStepMax,
+            preparation.cleanup * 2 + 4,
+        )?;
+        if !pay(budget, W::PlanningItems, preparation.work)
+            || !pay(budget, W::CleanupItems, preparation.cleanup)
+        {
+            return Err(busy());
+        }
         // Fund the complete variable schema before construction. Its temporary
         // reservation bridges to each selected definition's retained funding;
         // shared Arc clones acquire no additional member/name allocation.
@@ -219,7 +232,19 @@ where
                 ],
             )?
         } else {
-            Vec::new()
+            reserve(
+                bank,
+                &[
+                    (
+                        K::EngineLiveBytesGlobalMax,
+                        preparation.backing_bytes as u64,
+                    ),
+                    (
+                        K::AdmissionTemporaryBytesGlobalMax,
+                        preparation.backing_bytes as u64,
+                    ),
+                ],
+            )?
         };
         let _event_schema_scratch = if kind == NotificationKind::SubscribeAllEvents {
             use clinkz_wot_core::collection::EventCollectionSchema as S;
@@ -243,34 +268,8 @@ where
         } else {
             Vec::new()
         };
-        let schemas = match kind {
-            NotificationKind::SubscribeAllEvents => {
-                ConsumerNotificationSchemas::SubscribeAllEvents(Arc::new(
-                    crate::type_schema::prepare_event_collection_schema(document)?,
-                ))
-            }
-            NotificationKind::ObserveAllProperties => {
-                ConsumerNotificationSchemas::ObserveAllProperties(Arc::new(
-                    crate::type_schema::prepare_readable_property_schema(document)?,
-                ))
-            }
-            NotificationKind::PropertyObservation => {
-                let property = document.property();
-                if !property.observable {
-                    return Ok(None);
-                }
-                ConsumerNotificationSchemas::PropertyValue(crate::type_schema::prepare_type_schema(
-                    property.schema,
-                )?)
-            }
-            NotificationKind::Event => ConsumerNotificationSchemas::Event {
-                subscription: schema(document, owner, "subscription")?,
-                data: schema(document, owner, "data")?,
-                data_response: schema(document, owner, "dataResponse")?,
-                cancellation: schema(document, owner, "cancellation")?,
-            },
-        };
-        // Common policy remains deliberately NoSec/type-only.
+        let schemas = crate::type_schema::prepare_notification_schemas(document, target, kind)?;
+        // Security remains an independently qualified NoSec subset.
         let [security] = facts.effective_security else {
             return Ok(None);
         };
@@ -340,23 +339,7 @@ where
                 .checked_add(
                     1024 + endpoint.len() as u64 + target.name().map_or(0, str::len) as u64,
                 )
-                .and_then(|n| {
-                    n.checked_add(match &schemas {
-                        ConsumerNotificationSchemas::ObserveAllProperties(s) => {
-                            (s.retained_bytes()
-                                + ::core::mem::size_of_val(&**s)
-                                + 2 * ::core::mem::size_of::<usize>())
-                                as u64
-                        }
-                        ConsumerNotificationSchemas::SubscribeAllEvents(s) => {
-                            (s.retained_bytes()
-                                + ::core::mem::size_of_val(&**s)
-                                + 2 * ::core::mem::size_of::<usize>())
-                                as u64
-                        }
-                        _ => 0,
-                    })
-                })
+                .and_then(|n| n.checked_add(schemas.retained_bytes() as u64))
                 .and_then(|n| n.checked_add(data.policy().retained_bytes))
                 .and_then(|n| n.checked_add(r.services.access.retained_bytes()))
                 .ok_or_else(invalid)?;
@@ -372,7 +355,7 @@ where
                 target,
                 form: index,
                 endpoint,
-                schemas: schemas.clone(),
+                schemas: &schemas,
             }) {
                 Ok(Some(p)) => p,
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
@@ -382,32 +365,26 @@ where
             if chosen.is_some() {
                 return Err(ambiguous());
             }
-            chosen = Some(
-                ConsumerNotificationDefinition::try_new(ConsumerNotificationDefinitionInput {
-                    binding: r.binding.clone(),
-                    program,
-                    configuration: r.binding.configuration().clone(),
-                    identity: id,
-                    target: target.clone(),
-                    endpoint: endpoint.into(),
-                    form: index,
-                    schemas: schemas.clone(),
-                    services: r.services.clone(),
-                    funding,
-                    bank: bank.clone(),
-                })
-                .map_err(|e| e.error().error().clone())?,
-            );
+            chosen = Some((r, id, program, funding));
         }
-        Ok(chosen)
+        let Some((r, id, program, funding)) = chosen else {
+            return Ok(None);
+        };
+        Ok(Some(
+            ConsumerNotificationDefinition::try_new(ConsumerNotificationDefinitionInput {
+                binding: r.binding.clone(),
+                program,
+                configuration: r.binding.configuration().clone(),
+                identity: id,
+                target: target.clone(),
+                endpoint: endpoint.into(),
+                form: index,
+                schemas,
+                services: r.services.clone(),
+                funding,
+                bank: bank.clone(),
+            })
+            .map_err(|e| e.error().error().clone())?,
+        ))
     }
-}
-fn schema(
-    doc: &ResolvedSemanticDocument<'_>,
-    owner: clinkz_wot_td::semantic::FormOwner<'_>,
-    role: &str,
-) -> CoreResult<Option<clinkz_wot_core::data_schema::PreparedSchema>> {
-    doc.affordance_schema(owner, role)
-        .map(crate::type_schema::prepare_type_schema)
-        .transpose()
 }

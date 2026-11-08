@@ -23,9 +23,10 @@ Single-affordance TD subset (root observation adds the separate mapping below):
 - Local `mqtt://IP:port` loopback broker, optional trailing slash; no DNS, TLS,
   credentials, URI variables, query, path topic or fragment.
 - Observable Property value schemas (`observable: true`) or Event `data` with
-  the existing complete type-only DataSchema subset, JSON
-  content, at most 4096 encoded bytes; no content coding. JSON syntax, Unicode
-  scalar validity and mathematical integrality are checked by the shared JSON
+  the common bounded structured DataSchema subset: nested object fields and
+  required names, exact i64 integer bounds, Unicode string lengths and
+  unconstrained primitive kinds. JSON content, at most 4096 encoded bytes; no
+  content coding. JSON syntax, Unicode scalar validity and mathematical integrality are checked by the shared JSON
   codec service also used by HTTP. All unsupported assertions refuse.
 - Exact `mqv:filter`, 1–128 ASCII graphic bytes, no wildcard or `$` topic.
   An explicit `mqv:topic` must equal that filter. One observe/subscribe mapping
@@ -154,9 +155,21 @@ The Consumer NoSec security definition admits no extra semantic fields.
 No dummy finite capability, native setup or logical permission is needed to compile.
 
 The owned `ConsumerNotificationDefinition` contains a discriminated
-`ConsumerNotificationSchemas`: the Property's own value schema or all four
+`NotificationSchemas`: the Property's own value schema or all four
 Event schema roles. It also owns the actual native program/configuration,
-family-qualified target, services and original funding. TD, semantic arena and registry can be destroyed before execution.
+family-qualified target, services and original funding. Native compilation
+borrows common role meaning; runtime validation retains the original funded
+definition. Producer definition clones and captured validators share immutable
+role backing, and final TD checking compares borrowed assertions without building
+a replacement constraint tree. TD, semantic arena and registry can be destroyed
+before execution.
+The actual JSON service explicitly supports the common structured leaf subset.
+Its captured callback envelope is 65,536 scratch bytes and 491,648 work credits;
+original definition/native-participation funding survives queued data and unread
+publication settlements. MQTT collection mappings below remain explicitly type-only.
+The [structured tests](tests/structured_notifications.rs) use real Mosquitto and
+an independent adversarial MQTT publisher.
+
 The current MQTT subset requires the Property's supported value schema or
 Event `data`, and rejects subscription and
 cancellation schemas, **any** dataResponse schema, response branches and the
@@ -284,7 +297,7 @@ every individual advertised operation and requires its actual source/behavior.
 
 Preparation explicitly selects `NotificationKind::ObserveAllProperties` and
 `AffordanceTarget::Thing` through `prepare_notification`. The owned schema variant
-is `ConsumerNotificationSchemas::ObserveAllProperties`, with actual map-validation
+is `NotificationSchemas::ObserveAllProperties`, with actual map-validation
 support, rather than scalar Object support. Runtime establishment/delivery use
 root observe permission; mapped stop uses root unobserve permission. This is a
 group grant covering every included member. Every logical observation has its

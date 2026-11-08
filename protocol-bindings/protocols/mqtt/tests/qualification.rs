@@ -328,7 +328,7 @@ fn every_unsupported_advertised_semantic_refuses_before_native_effects() {
         variants.push((role, j));
     }
     for (key, value) in [
-        ("minimum", serde_json::json!(0)),
+        ("multipleOf", serde_json::json!(2)),
         ("enum", serde_json::json!([1, 2])),
         ("oneOf", serde_json::json!([{"type":"integer"}])),
     ] {

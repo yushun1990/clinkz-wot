@@ -130,7 +130,7 @@ fn common_schema_security_response_and_protocol_assertions_refuse_without_native
         variants.push(v);
     }
     let mut v = base.clone();
-    v["events"]["alarm"]["data"]["minimum"] = serde_json::json!(1);
+    v["events"]["alarm"]["data"]["multipleOf"] = serde_json::json!(2);
     variants.push(v);
     let mut v = base.clone();
     v["securityDefinitions"]["n"] = serde_json::json!({"scheme":"basic"});

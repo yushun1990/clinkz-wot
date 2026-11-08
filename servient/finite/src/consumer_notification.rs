@@ -6,18 +6,14 @@ use clinkz_wot_core::{consumer::*, notification::*, *};
 use clinkz_wot_foundation::{ResourceKind as K, WorkBudget, WorkClass as W};
 use core::task::Context;
 
-struct CapturedServices {
-    target: AffordanceTarget,
-    endpoint: alloc::boxed::Box<str>,
-    binding: BindingRegistrationIdentity,
+struct CapturedServices<B: ConsumerNotificationBinding> {
     consumer: ConsumerInstanceRef,
-    services: ConsumerServices,
-    schemas: ConsumerNotificationSchemas,
+    definition: Rc<ConsumerNotificationDefinition<B>>,
     policy: ConsumerDataPolicy,
     access_work: u64,
 }
-struct CapturedAuthorizer(Rc<CapturedServices>);
-impl NotificationAuthorizer for CapturedAuthorizer {
+struct CapturedAuthorizer<B: ConsumerNotificationBinding>(Rc<CapturedServices<B>>);
+impl<B: ConsumerNotificationBinding> NotificationAuthorizer for CapturedAuthorizer<B> {
     fn work(&self) -> u64 {
         self.0.access_work
     }
@@ -28,29 +24,42 @@ impl NotificationAuthorizer for CapturedAuthorizer {
         permission: NotificationPermission,
     ) -> CoreResult<()> {
         let captured = &self.0;
-        if captured.services.access.work() != captured.access_work {
+        let input = captured.definition.input();
+        if input.services.access.work() != captured.access_work {
             return Err(invalid());
         }
         if id.consumer != captured.consumer
             || !captured.consumer.is_current()
-            || target != &captured.target
+            || target != &input.target
         {
             return Err(CoreError::StaleHandle(context()));
         }
-        let kind = captured.schemas.kind();
+        let kind = captured.schemas().kind();
         let operation = match permission {
             NotificationPermission::Cancel => kind.stop_operation(),
             _ => kind.start_operation(),
         };
-        captured.services.access.authorize_instance(
+        input.services.access.authorize_instance(
             &id.consumer,
-            captured.binding,
-            &captured.endpoint,
+            input.identity,
+            &input.endpoint,
             operation,
         )
     }
 }
-impl CapturedServices {
+impl<B: ConsumerNotificationBinding> CapturedServices<B> {
+    fn schemas(&self) -> &NotificationSchemas {
+        &self.definition.input().schemas
+    }
+    fn services(&self) -> &ConsumerServices {
+        &self.definition.input().services
+    }
+    fn check_data(&self) -> CoreResult<()> {
+        if !self.services().data.available() || self.services().data.policy() != self.policy {
+            return Err(invalid());
+        }
+        Ok(())
+    }
     fn validate(
         &self,
         schema: Option<&clinkz_wot_core::data_schema::PreparedSchema>,
@@ -59,12 +68,17 @@ impl CapturedServices {
         match (schema, payload) {
             (None, None) => Ok(()),
             (Some(schema), Some(payload))
-                if self.services.data.available()
-                    && self.services.data.policy() == self.policy
-                    && self.services.data.supports_schema(schema)
+                if self.services().data.available()
+                    && self.services().data.policy() == self.policy
+                    && self.services().data.supports_schema(schema)
                     && payload.body.len() as u64 <= self.policy.body_bytes =>
             {
-                self.services.data.validate(schema, payload)
+                let result = self.services().data.validate(schema, payload);
+                self.check_data()?;
+                if !self.services().data.supports_schema(schema) {
+                    return Err(invalid());
+                }
+                result
             }
             _ => Err(invalid()),
         }
@@ -76,29 +90,29 @@ impl CapturedServices {
         Ok(())
     }
 }
-impl NotificationValidation for CapturedServices {
+impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices<B> {
     fn subscription(&self, input: &SubscriptionInput, budget: &mut WorkBudget) -> CoreResult<()> {
-        if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+        if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             // No universal aggregate control encoding is implied by TD 1.1.
             if input.0.is_some() || s.members().iter().any(|m| m.subscription.is_some()) {
                 return Err(CoreError::UnsupportedOperation(context()));
             }
         }
-        if self.schemas.subscription().is_some() {
+        if self.schemas().subscription().is_some() {
             self.prepay(budget)?;
         }
-        self.validate(self.schemas.subscription(), input.0.as_ref())
+        self.validate(self.schemas().subscription(), input.0.as_ref())
     }
     fn cancellation(&self, input: &CancellationInput, budget: &mut WorkBudget) -> CoreResult<()> {
-        if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+        if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             if input.0.is_some() || s.members().iter().any(|m| m.cancellation.is_some()) {
                 return Err(CoreError::UnsupportedOperation(context()));
             }
         }
-        if self.schemas.cancellation().is_some() {
+        if self.schemas().cancellation().is_some() {
             self.prepay(budget)?;
         }
-        self.validate(self.schemas.cancellation(), input.0.as_ref())
+        self.validate(self.schemas().cancellation(), input.0.as_ref())
     }
     fn response(
         &self,
@@ -106,13 +120,13 @@ impl NotificationValidation for CapturedServices {
         input: &EventDataResponse,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        let schema = if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+        let schema = if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             let AffordanceTarget::Event(name) = target else {
                 return Err(invalid());
             };
             s.member(name).ok_or_else(invalid)?.data_response.as_ref()
         } else {
-            self.schemas.data_response()
+            self.schemas().data_response()
         };
         if schema.is_some() {
             self.prepay(budget)?;
@@ -120,11 +134,11 @@ impl NotificationValidation for CapturedServices {
         self.validate(schema, input.0.as_ref())
     }
     fn prepay_data(&self, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.schemas.data().is_some()
+        if self.schemas().data().is_some()
             || matches!(
-                self.schemas,
-                ConsumerNotificationSchemas::ObserveAllProperties(_)
-                    | ConsumerNotificationSchemas::SubscribeAllEvents(_)
+                self.schemas(),
+                NotificationSchemas::ObserveAllProperties(_)
+                    | NotificationSchemas::SubscribeAllEvents(_)
             )
         {
             self.prepay(budget)?;
@@ -132,45 +146,53 @@ impl NotificationValidation for CapturedServices {
         Ok(())
     }
     fn data(&self, target: &AffordanceTarget, data: Option<&Payload>) -> CoreResult<()> {
-        if let ConsumerNotificationSchemas::SubscribeAllEvents(s) = &self.schemas {
+        if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             let AffordanceTarget::Event(name) = target else {
                 return Err(invalid());
             };
             return self.validate(s.member(name).ok_or_else(invalid)?.data.as_ref(), data);
         }
-        if let ConsumerNotificationSchemas::ObserveAllProperties(schema) = &self.schemas {
+        if let NotificationSchemas::ObserveAllProperties(schema) = self.schemas() {
             let payload = data.ok_or_else(invalid)?;
-            if !self.services.data.available()
-                || self.services.data.policy() != self.policy
-                || !self.services.data.supports_property_map(schema)
+            if !self.services().data.available()
+                || self.services().data.policy() != self.policy
+                || !self.services().data.supports_property_map(schema)
                 || payload.body.len() as u64 > self.policy.body_bytes
             {
                 return Err(invalid());
             }
-            return self.services.data.validate_property_map(schema, payload);
+            let result = self.services().data.validate_property_map(schema, payload);
+            self.check_data()?;
+            if !self.services().data.supports_property_map(schema) {
+                return Err(invalid());
+            }
+            return result;
         }
-        self.validate(self.schemas.data(), data)
+        self.validate(self.schemas().data(), data)
     }
 }
 
 /// One reusable selected leaf or root notification definition with independent cursors.
 /// Several such facets may share one ConsumerInstance and native Binding service.
 pub struct ConsumerNotificationRuntime<B: ConsumerNotificationBinding> {
-    root: RawNotificationServient<B, CapturedAuthorizer>,
-    definition: ConsumerNotificationDefinition<B>,
+    root: RawNotificationServient<B, CapturedAuthorizer<B>>,
+    definition: Rc<ConsumerNotificationDefinition<B>>,
     // Root, native participants, programs and actual services drop first.
     _funding: Vec<clinkz_wot_core::host_accounts::HostCapacityReservation>,
 }
-impl<B: ConsumerNotificationBinding + Clone> ConsumerNotificationRuntime<B>
+impl<B: ConsumerNotificationBinding + Clone + 'static> ConsumerNotificationRuntime<B>
 where
-    B::Program: Clone,
-    B::Configuration: Clone,
+    B::Program: Clone + 'static,
+    B::Configuration: Clone + 'static,
 {
     pub fn try_new(
         consumer: ConsumerInstanceRef,
         definition: ConsumerNotificationDefinition<B>,
         limits: RawNotificationLimits,
     ) -> Result<Self, BindingInputRejection<ConsumerNotificationDefinition<B>>> {
+        // Capture the original definition and funding. Structured role trees
+        // are never copied into a second validator owner.
+        let definition = Rc::new(definition);
         let build = (|| {
             let input = definition.input();
             let id = input.identity;
@@ -204,12 +226,8 @@ where
                 ],
             )?;
             let captured = Rc::new(CapturedServices {
-                target: input.target.clone(),
-                endpoint: input.endpoint.clone(),
-                binding: id,
                 consumer: consumer.clone(),
-                services: input.services.clone(),
-                schemas: input.schemas.clone(),
+                definition: definition.clone(),
                 policy,
                 access_work: input.services.access.work(),
             });
@@ -231,7 +249,8 @@ where
                 _funding: funding,
             }),
             Err(error) => Err(BindingInputRejection::new(
-                definition,
+                Rc::try_unwrap(definition)
+                    .unwrap_or_else(|_| unreachable!("failed root retained definition")),
                 BindingOperationalError::new(error),
             )),
         }

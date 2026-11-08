@@ -23,6 +23,7 @@ impl EventCollectionSchema {
     pub const MAX_NAME_BYTES: usize = 256;
     pub const MAX_TOTAL_NAME_BYTES: usize = 4096;
     pub fn try_new(members: Vec<EventMemberSchema>) -> CoreResult<Self> {
+        let schemas = || members.iter().flat_map(EventMemberSchema::schemas);
         if members.len() > Self::MAX_MEMBERS
             || members.capacity() > Self::MAX_MEMBERS
             || members.iter().map(|m| m.name.len()).sum::<usize>() > Self::MAX_TOTAL_NAME_BYTES
@@ -30,6 +31,9 @@ impl EventCollectionSchema {
                 m.name.len() > Self::MAX_NAME_BYTES
                     || members[..i].iter().any(|old| old.name == m.name)
             })
+            || schemas().map(PreparedSchema::node_count).sum::<usize>() > Self::MAX_SCHEMA_NODES
+            || schemas().map(PreparedSchema::retained_bytes).sum::<usize>()
+                > Self::SCHEMA_BACKING_BOUND
         {
             return Err(invalid_selection());
         }
@@ -44,9 +48,35 @@ impl EventCollectionSchema {
     pub fn retained_bytes(&self) -> usize {
         self.members.capacity() * core::mem::size_of::<EventMemberSchema>()
             + self.members.iter().map(|m| m.name.len()).sum::<usize>()
+            + self
+                .members
+                .iter()
+                .flat_map(EventMemberSchema::schemas)
+                .map(PreparedSchema::retained_bytes)
+                .sum::<usize>()
     }
+    // Preserve the original 32 x four scalar roles while bounding combined
+    // variable constraints, rather than multiplying a full tree per member.
+    pub const MAX_SCHEMA_NODES: usize = Self::MAX_MEMBERS * 4;
+    pub const SCHEMA_BACKING_BOUND: usize = Self::MAX_SCHEMA_NODES
+        * core::mem::size_of::<crate::data_schema::SchemaProperty>()
+        + PreparedSchema::MAX_TOTAL_NAME_BYTES;
     pub const fn backing_bound() -> usize {
-        Self::MAX_MEMBERS * core::mem::size_of::<EventMemberSchema>() + Self::MAX_TOTAL_NAME_BYTES
+        Self::MAX_MEMBERS * core::mem::size_of::<EventMemberSchema>()
+            + Self::MAX_TOTAL_NAME_BYTES
+            + Self::SCHEMA_BACKING_BOUND
+    }
+}
+impl EventMemberSchema {
+    pub fn schemas(&self) -> impl Iterator<Item = &PreparedSchema> {
+        [
+            &self.subscription,
+            &self.data,
+            &self.data_response,
+            &self.cancellation,
+        ]
+        .into_iter()
+        .flatten()
     }
 }
 
@@ -60,8 +90,8 @@ pub struct PropertyMemberSchema {
 /// schemas exclude writeOnly; write schemas exclude readOnly. Finite all-member
 /// operations and complete observation samples require every eligible member
 /// exactly once; selected operations carry a separate per-call set. Excluded
-/// members are never optional unvalidated values. This is the bounded type-only
-/// subset, not a general DataSchema tree or a snapshot/atomicity promise.
+/// members are never optional unvalidated values. Each member retains the common
+/// bounded DataSchema meaning; this supplies no snapshot/atomicity promise.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertyCollectionSchema {
     members: Vec<PropertyMemberSchema>,
@@ -283,4 +313,77 @@ fn invalid_report() -> crate::CoreError {
         crate::ErrorPhase::Validate,
         crate::RetryClass::Never,
     ))
+}
+
+#[cfg(test)]
+mod schema_tests {
+    use super::*;
+    use crate::data_schema::{SchemaProperty, ValueType};
+    use alloc::{format, vec};
+
+    fn events(fields: usize) -> Vec<EventMemberSchema> {
+        (0..EventCollectionSchema::MAX_MEMBERS)
+            .map(|i| EventMemberSchema {
+                name: format!("event{i}").into(),
+                subscription: None,
+                data_response: None,
+                cancellation: None,
+                data: Some(
+                    PreparedSchema::object(
+                        (0..fields)
+                            .map(|i| SchemaProperty {
+                                name: format!("field{i}").into(),
+                                required: true,
+                                schema: PreparedSchema::Type(ValueType::Integer),
+                            })
+                            .collect(),
+                    )
+                    .unwrap(),
+                ),
+            })
+            .collect()
+    }
+    #[test]
+    fn event_table_accounts_for_variable_roles_and_bounds_combined_constraints() {
+        let members = events(2);
+        let bytes = members.capacity() * core::mem::size_of::<EventMemberSchema>()
+            + members
+                .iter()
+                .map(|m| m.name.len() + m.data.as_ref().unwrap().retained_bytes())
+                .sum::<usize>();
+        let schema = EventCollectionSchema::try_new(members).unwrap();
+        assert_eq!(schema.retained_bytes(), bytes);
+        assert!(bytes <= EventCollectionSchema::backing_bound());
+        assert!(EventCollectionSchema::try_new(events(4)).is_err());
+        let role = Some(PreparedSchema::Type(ValueType::Integer));
+        assert!(
+            EventCollectionSchema::try_new(
+                (0..32)
+                    .map(|i| EventMemberSchema {
+                        name: format!("event{i}").into(),
+                        subscription: role.clone(),
+                        data: role.clone(),
+                        data_response: role.clone(),
+                        cancellation: role.clone(),
+                    })
+                    .collect()
+            )
+            .is_ok(),
+            "the original four scalar roles per member still fit"
+        );
+        // All roles participate, including a schema outside the delivery role.
+        let mut member = events(2).remove(0);
+        member.subscription = member.data.clone();
+        member.data_response = member.data.clone();
+        member.cancellation = member.data.clone();
+        let expected = core::mem::size_of::<EventMemberSchema>()
+            + member.name.len()
+            + 4 * member.data.as_ref().unwrap().retained_bytes();
+        assert_eq!(
+            EventCollectionSchema::try_new(vec![member])
+                .unwrap()
+                .retained_bytes(),
+            expected
+        );
+    }
 }

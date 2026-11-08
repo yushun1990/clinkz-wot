@@ -115,7 +115,7 @@ Actual scalar validators explicitly qualify the complete borrowed schema;
 Collection/status facets independently qualify their complete named schemas;
 they do not require an unused bare-scalar validation facet. A marker, successful
 JSON parse or matching outer kind alone cannot qualify structured constraints.
-The real HTTP finite Read/Write, ReadAllProperties and continuing Action
+The real HTTP finite Read/Write, ReadAllProperties, continuing Action and MQTT leaf notification
 integrations exercise this subset, source retirement, invalid input before
 behavior and normal/late result validation. Finite content supports the checked
 cross-instance reuse described above. Continuing Actions retain one immutable
@@ -356,6 +356,17 @@ the item/byte queue is full. Explicit owner cleanup works after every cursor is
 lost; terminal acknowledgement releases the logical reservation. Native physical
 retirement and remote cancellation/response outcomes remain separate.
 
+All Notification data roles use the common structured constraint interpretation
+and evaluator. A Property's readable value, Event subscription/data/dataResponse/
+cancellation, readable Property-map members and named Event roles remain distinct
+operands. The validator borrows its original funded definition through a shared
+Host owner; variable field/name trees are not copied into a second validator.
+Event tables bound combined constraints to 128 nodes and 128 field entries plus
+4096 constraint-name bytes, in addition to existing member/name bounds. Actual
+codecs, map representations, native controls, security and reciprocal response
+opportunities require independent qualification. Structured scalar support
+supplies none of these additional capabilities.
+
 The composed `ConsumerNotificationRuntime` consumes the selected source-free
 Property, Property collection, Event or Event collection definition and captures actual services around that same raw
 lifecycle.
@@ -548,7 +559,7 @@ prepared program and publication-data pairing are checked before effects. A
 Thing target is not a standing alias for every root notification operation.
 
 The implemented data subset is a complete named readable Property map per sample.
-`ConsumerNotificationSchemas::ObserveAllProperties` retains the original member
+`NotificationSchemas::ObserveAllProperties` retains the original member
 schemas in shared owned backing; scalar `data()` is absent for this distinct
 role. A captured data service must explicitly support/validate Property maps.
 Each included value has its exact TD Property name and supported DataSchema;
@@ -589,7 +600,7 @@ submitted dataResponse against that specific member's original role. Unknown
 names, wrong-family targets and wrong-member schemas refuse before queue admission
 or response acceptance; the original candidate/reply owner remains through cleanup.
 
-`ConsumerNotificationSchemas::SubscribeAllEvents` shares a bounded table of exact
+`NotificationSchemas::SubscribeAllEvents` shares a bounded table of exact
 Event names and separate subscription/data/dataResponse/cancellation schemas.
 Absent data differs from a JSON null schema. The common schema envelope permits
 32 members, 256 bytes per name and 4096 total name bytes; a concrete Binding or

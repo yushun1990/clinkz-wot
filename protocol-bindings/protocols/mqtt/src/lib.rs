@@ -73,52 +73,41 @@ pub struct MqttNotificationDefinition {
     topic: Arc<str>,
     form: u32,
     operation: Operation,
-    schema: MqttDataSchema,
+    schemas: Arc<clinkz_wot_core::notification::NotificationSchemas>,
 }
 
-/// Concrete mappings retain one value, a complete Property map or original
-/// named Event roles. Topic parsing and native routing stay inside MQTT.
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(not(feature = "prepare"), allow(dead_code))]
-enum MqttDataSchema {
-    Value(PreparedSchema),
-    Properties(Arc<clinkz_wot_core::collection::PropertyCollectionSchema>),
-    Events(Arc<clinkz_wot_core::collection::EventCollectionSchema>),
+fn schema_backing(s: &clinkz_wot_core::notification::NotificationSchemas) -> usize {
+    s.retained_bytes() + std::mem::size_of_val(s) + 2 * std::mem::size_of::<usize>()
 }
-impl MqttDataSchema {
-    fn retained_bytes(&self) -> usize {
-        match self {
-            Self::Value(_) => 0,
-            Self::Properties(s) => {
-                s.retained_bytes() + std::mem::size_of_val(&**s) + 2 * std::mem::size_of::<usize>()
-            }
-            Self::Events(s) => {
-                s.retained_bytes() + std::mem::size_of_val(&**s) + 2 * std::mem::size_of::<usize>()
-            }
+
+/// Validate with the original role-specific meaning. Native attribution and
+/// the collection representation remain separate from the common evaluator.
+fn validate_data(
+    schemas: &clinkz_wot_core::notification::NotificationSchemas,
+    data: &clinkz_wot_core::publication::PublicationData,
+) -> clinkz_wot_core::CoreResult<()> {
+    use clinkz_wot_core::{
+        notification::NotificationSchemas as S, publication::PublicationData as D,
+    };
+    let payload = data.payload();
+    match (schemas, data) {
+        (S::PropertyValue(s), D::PropertyValue(_)) => {
+            clinkz_wot_codec_json::validate_payload(s, payload)
         }
-    }
-    fn validate(
-        &self,
-        data: &clinkz_wot_core::publication::PublicationData,
-    ) -> clinkz_wot_core::CoreResult<()> {
-        let payload = data.payload();
-        match self {
-            Self::Value(s) => clinkz_wot_codec_json::validate_payload(s, payload),
-            Self::Properties(s) => clinkz_wot_codec_json::validate_property_map(s, payload),
-            Self::Events(s) => {
-                let clinkz_wot_core::publication::PublicationData::EventOccurrence {
-                    event, ..
-                } = data
-                else {
-                    return Err(unsupported());
-                };
-                let schema = s
-                    .member(event)
-                    .and_then(|m| m.data.as_ref())
-                    .ok_or_else(unsupported)?;
-                clinkz_wot_codec_json::validate_payload(&schema, payload)
-            }
+        (S::Event { data: Some(s), .. }, D::EventData(_)) => {
+            clinkz_wot_codec_json::validate_payload(s, payload)
         }
+        (S::ObserveAllProperties(s), D::PropertyValues(_)) => {
+            clinkz_wot_codec_json::validate_property_map(s, payload)
+        }
+        (S::SubscribeAllEvents(s), D::EventOccurrence { event, .. }) => {
+            let schema = s
+                .member(event)
+                .and_then(|m| m.data.as_ref())
+                .ok_or_else(unsupported)?;
+            clinkz_wot_codec_json::validate_payload(schema, payload)
+        }
+        _ => Err(unsupported()),
     }
 }
 
@@ -145,7 +134,7 @@ impl PartialEq for MqttNotificationDefinition {
             && self.topic == b.topic
             && self.form == b.form
             && self.operation == b.operation
-            && self.schema == b.schema
+            && self.schemas == b.schemas
     }
 }
 impl Eq for MqttNotificationDefinition {}
