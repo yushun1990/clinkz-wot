@@ -103,3 +103,16 @@ per-call capabilities without concrete scheme/transport cases. Access-service
 qualification/revisions and paid finite verification extend EXEC-SECURITY-001;
 TD remains the shared owner of defaulting and Form override. Scope and executable
 negative evidence are in [the security assessment](../evidence/td-security-https.md).
+
+
+## Security composition correction
+
+The existing EXEC-SECURITY-001 / PREP-SELECT/COVER/REUSE-001 scope now replaces
+singleton requirements with bounded effective composition, exact Consumer branch
+selection and complete Producer security qualification. HTTP finite Read/Write
+executes independently paired Basic/API-key services, conjunctions and distinguishable
+alternatives. Domain specifications own meaning and the Binding owns placement,
+identity composition and operation limits. [Scoped evidence and superseded
+assumptions](../evidence/security-composition.md) identify the supported subset,
+revocation/ownership obligations and remaining work. No package/milestone,
+production-security or additional Embedded acceptance is claimed.

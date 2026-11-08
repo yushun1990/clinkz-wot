@@ -273,8 +273,8 @@ pub enum SecurityDetails<'a> {
     NoSec,
     Auto,
     Combo {
-        one_of: &'a [String],
-        all_of: &'a [String],
+        one_of: Option<&'a [String]>,
+        all_of: Option<&'a [String]>,
     },
     Basic {
         name: Option<&'a str>,
@@ -630,8 +630,8 @@ impl<'a> ResolvedSemanticDocument<'a> {
                 SecurityScheme::NoSec(_) => SecurityDetails::NoSec,
                 SecurityScheme::Auto(_) => SecurityDetails::Auto,
                 SecurityScheme::Combo(s) => SecurityDetails::Combo {
-                    one_of: &s.one_of,
-                    all_of: &s.all_of,
+                    one_of: s.one_of.as_deref(),
+                    all_of: s.all_of.as_deref(),
                 },
                 SecurityScheme::Basic(s) => SecurityDetails::Basic {
                     name: s.name.as_deref(),

@@ -1,31 +1,64 @@
-The qualified finite Property Read/Write path additionally supports TD `basic` in the
-Authorization header over verified TLS 1.3. Use
-`try_https_basic_consumer_registration` with `HttpClientTls` and an
-instance-bound `HttpBasicClientAccess`, and `HttpFiniteProducer::try_https_basic`
-with `HttpServerSecurity` / an actual `HttpBasicVerifier`. Attach that same server
-service to `HttpFiniteConfig::with_security` before native installation.
-Credentials stay in runtime services and original reply opportunities. Rotation
-invalidates existing Consumer bindings; rebind the same definition with the
-replacement service state. Verification establishes Principal; the application
-handler authorizes it separately. Mutable verification and application policy
-must expose passive, non-reused invalidation revisions through
-`HttpBasicVerifier::revision` and `RawFiniteHandler::authorization_revision`.
-The Engine rechecks them after the last callback before behavior entry or
-successful response delivery. Zero is suitable for immutable policy.
-Use `RawProducerServient::revocation(key)` for one-way original-instance
-revocation inside callbacks. It needs no registry borrow and retains its
-original capacity until the last handle is dropped; it cannot revoke a successor.
+The qualified finite HTTPS Property Read/Write path supports these security
+conjunctions and distinguishable alternatives between them:
 
-This is a Host, IP-literal, loopback Producer, structured JSON Property Read/Write increment.
-Other authenticated operations/schemes/compositions, credential placements,
-TLS 1.2/mTLS, DNS, redirects, certificate CRL/OCSP and constrained TLS are refused
-or unimplemented. The historical paths described below remain explicit NoSec /
-cleartext capabilities. See [security assessment, guarantees, executable evidence
-and exact limits](../../../docs/evidence/td-security-https.md).
-The [secure Write tests](tests/security_write.rs) execute both Engine roles and
-independent TLS clients/servers, including actual state changes, structured input
-refusal, wrong credentials, trust/authorization failures, callback revocation,
-lost responses, reentrant Consumer cancellation and retained final cleanup.
+| Complete branch | Native evidence | Required actual services |
+| --- | --- | --- |
+| NoSec | No credential header | TLS trust and application permission |
+| Basic | Authorization: Basic | Basic credentials and Basic verifier |
+| API key | X-Api-Key | API key and independent API-key verifier |
+| Basic AND API key | Both headers | Both credential/verifier pairs |
+
+Use `try_https_consumer_registration`, `HttpConsumerConfig::for_https_ip`,
+`HttpClientTls` and instance-bound `HttpClientAccess`. `try_composed` configures
+independent Basic/API-key slots; `try_new` is the Basic-only convenience, including
+an initially missing/revoked credential. Producer `HttpFiniteProducer::try_https`
+pairs `HttpServerSecurity::try_composed` with independent optional verifiers.
+API-key-only and HTTPS NoSec require no dummy Basic service. Attach the same
+server registration to `HttpFiniteConfig::with_security` before installation.
+TLS 1.3 chain/expiry/IP-SAN verification precedes credential projection; TLS trust
+is independent of authentication and application permission. NoSec still requires
+application permission. API keys are opaque printable ASCII of 1–256 bytes.
+Basic retains its bounded ASCII RFC 7617 subset.
+
+TD lists and Combo allOf require every component. Consumer selection chooses the
+first completely supported branch in declaration order, qualifying actual services
+and native placement together. Producer preparation/final checking supports every
+advertised alternative. Nested composition is allowed within shared processing
+limits. Duplicate native placements in a conjunction and alternatives with the
+same evidence set refuse Producer qualification; different named keys competing
+for X-Api-Key are not independently selectable verifier domains in this subset.
+Static Authorization/X-Api-Key headers, including case variants, cannot supply or
+override credentials. Other placement names/locations, proxies and requested TD
+scopes remain unsupported; they never disappear or default to NoSec.
+
+Evidence presence chooses exactly one retained native branch. Missing, extraneous,
+malformed or failed credentials never fall back to another branch. For a
+conjunction, both verifiers must independently return the same Principal, including
+identical claims in the same order. Different identities/claims refuse; no identity
+inference or privilege union occurs. The application handler authorizes the verified
+Principal separately. All verifier revisions are captured across the complete
+sequence, so callback-time changes invalidate dispatch/delivery even when the last
+verifier returns unchanged identity. Mutable services must publish non-reused
+passive revisions; immutable services may use zero. Native refusal responses can
+be delivered without authorizing application data.
+
+Credentials remain in per-instance runtime services and original replies. Grants
+bind the exact conjunction, audience URL, operation, registration and incarnation.
+`replace_credentials` / `replace_api_key` invalidate existing bindings and unread
+results; rebind the unchanged selected definition to adopt new state. Original
+result/reply and resource leases remain until final disposal, including cancelled,
+failed and late interactions. Raw credential/capability formatting is redacted and
+owned credential buffers are cleared locally; this does not promise erasure of
+all Hyper/TLS/kernel copies. `RawProducerServient::revocation(key)` retains its
+original capacity and can revoke only that incarnation.
+
+This is Host/manual, IP-literal, loopback Producer, structured JSON Read/Write
+support. Other authenticated operation families, OAuth2/Digest/Bearer/PSK,
+challenge/refresh flows, other placements, proxies, TLS 1.2/mTLS, DNS, redirects,
+certificate CRL/OCSP and constrained TLS remain unimplemented or explicitly
+unsupported. Historical paths below retain their own scope. See the
+[composition assessment and executable evidence](../../../docs/evidence/security-composition.md)
+and [initial Basic/TLS evidence](../../../docs/evidence/td-security-https.md).
 
 # Host HTTP Properties, Actions and Finite Collections
 
@@ -530,7 +563,7 @@ at most 16 headers/8192 header bytes and 4096 read/write bytes per native poll.
 PUT requires exactly one nonzero Content-Length (<=4096) and exactly one
 `Content-Type: application/json`; chunked input, content coding, trailers,
 Expect, upgrades and pipelining are refused. Cleartext NoSec rejects credential
-headers; the HTTPS Basic profile accepts its one bounded Authorization header.
+headers; the HTTPS composed profile accepts only its selected bounded credential headers.
 Native parsing
 collects the entire bounded input before offering a candidate. The shared Engine
 validator then checks its prepared Property schema before effects.

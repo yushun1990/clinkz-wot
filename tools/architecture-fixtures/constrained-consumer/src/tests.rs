@@ -518,10 +518,7 @@ fn capacity_pairing_required_meaning_and_permission_refuse_without_native_effect
     )
     .unwrap();
     assert!(ReadDefinition::try_new(unsupported, &b, &PROGRAM, 7, &codec).is_err());
-    let secured = SecurityRequirement {
-        scheme: "basic",
-        parameters: &[],
-    };
+    let secured = SecurityRequirement::scheme("basic", &[]);
     let unsupported = ValueExecution::try_new(
         clinkz_wot_core::AffordanceSite::Property("p"),
         Operation::ReadProperty,

@@ -568,6 +568,9 @@ impl ConsumerExecutionContent {
         schemas: ConsumerFiniteSchemas,
         security: crate::security::SecurityRequirement,
     ) -> CoreResult<Self> {
+        if !security.is_conjunction() {
+            return Err(invalid());
+        }
         if !matches!(
             (&affordance, operation),
             (
@@ -625,6 +628,9 @@ impl ConsumerExecutionContent {
             security,
         })
     }
+    pub fn drop_work(&self) -> u64 {
+        self.schemas.drop_work() + self.security.drop_work()
+    }
     pub fn security(&self) -> &crate::security::SecurityRequirement {
         &self.security
     }
@@ -668,6 +674,7 @@ impl PreparedConsumerContent {
     ) -> Result<Arc<Self>, BindingInputRejection<ConsumerExecutionContent>> {
         let bytes = core::mem::size_of::<Self>() as u64
             + content.schemas.retained_bytes() as u64
+            + content.security.retained_bytes() as u64
             + content.affordance.name().map_or(0, str::len) as u64
             + 128; // Arc and reservation-vector backing
         let funding = match reserve(bank, &[(ResourceKind::EngineLiveBytesGlobalMax, bytes)]) {

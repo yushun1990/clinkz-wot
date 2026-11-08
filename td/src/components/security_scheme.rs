@@ -318,20 +318,18 @@ pub struct ComboSecurityScheme {
     /// Array of two or more strings identifying other named security
     /// scheme definitions, any one of which, when satisfied, will
     /// allow access.
-    pub one_of: Vec<String>,
+    pub one_of: Option<Vec<String>>,
 
     /// Array of two or more strings identifying other named security
     /// scheme definitions, all of which must be satisfied for access.
-    pub all_of: Vec<String>,
+    pub all_of: Option<Vec<String>>,
 }
 
 impl<'de> Deserialize<'de> for ComboSecurityScheme {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let mut map = crate::flat::deserialize_map(deserializer)?;
-        let one_of =
-            crate::flat::take::<Vec<String>, D::Error>(&mut map, "oneOf")?.unwrap_or_default();
-        let all_of =
-            crate::flat::take::<Vec<String>, D::Error>(&mut map, "allOf")?.unwrap_or_default();
+        let one_of = crate::flat::take::<Vec<String>, D::Error>(&mut map, "oneOf")?;
+        let all_of = crate::flat::take::<Vec<String>, D::Error>(&mut map, "allOf")?;
         let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
         Ok(ComboSecurityScheme {
             _context: context,
@@ -346,11 +344,11 @@ impl Serialize for ComboSecurityScheme {
         use serde::ser::SerializeMap;
         let mut map = serializer.serialize_map(None)?;
         self._context.serialize_into(&mut map)?;
-        if !self.one_of.is_empty() {
-            map.serialize_entry("oneOf", &self.one_of)?;
+        if let Some(value) = &self.one_of {
+            map.serialize_entry("oneOf", value)?;
         }
-        if !self.all_of.is_empty() {
-            map.serialize_entry("allOf", &self.all_of)?;
+        if let Some(value) = &self.all_of {
+            map.serialize_entry("allOf", value)?;
         }
         map.end()
     }
@@ -374,8 +372,8 @@ impl ComboSecuritySchemeBuilder {
         Self {
             scheme: ComboSecurityScheme {
                 _context: SecuritySchemeContext::new("combo"),
-                one_of: Vec::new(),
-                all_of: Vec::new(),
+                one_of: None,
+                all_of: None,
             },
             _builder_errors: Vec::new(),
         }
@@ -389,6 +387,7 @@ impl ComboSecuritySchemeBuilder {
     {
         self.scheme
             .one_of
+            .get_or_insert_with(Vec::new)
             .extend(schemes.into_iter().map(|s| s.into()));
         self
     }
@@ -401,6 +400,7 @@ impl ComboSecuritySchemeBuilder {
     {
         self.scheme
             .all_of
+            .get_or_insert_with(Vec::new)
             .extend(schemes.into_iter().map(|s| s.into()));
         self
     }
@@ -1414,8 +1414,8 @@ impl SecurityScheme {
     {
         ComboSecurityScheme {
             _context: SecuritySchemeContext::new("combo"),
-            one_of: schemes.into_iter().map(Into::into).collect(),
-            all_of: Vec::new(),
+            one_of: Some(schemes.into_iter().map(Into::into).collect()),
+            all_of: None,
         }
         .into()
     }
@@ -1428,8 +1428,8 @@ impl SecurityScheme {
     {
         ComboSecurityScheme {
             _context: SecuritySchemeContext::new("combo"),
-            one_of: Vec::new(),
-            all_of: schemes.into_iter().map(Into::into).collect(),
+            one_of: None,
+            all_of: Some(schemes.into_iter().map(Into::into).collect()),
         }
         .into()
     }
@@ -1522,7 +1522,7 @@ impl SecurityScheme {
 
     fn one_of_references(&self) -> Cow<'_, [String]> {
         match self {
-            Self::Combo(scheme) => Cow::Borrowed(&scheme.one_of),
+            Self::Combo(scheme) => Cow::Borrowed(scheme.one_of.as_deref().unwrap_or(&[])),
             _ => Cow::Owned(string_array_field(
                 self.context()._extra_fields.get("oneOf"),
             )),
@@ -1531,7 +1531,7 @@ impl SecurityScheme {
 
     fn all_of_references(&self) -> Cow<'_, [String]> {
         match self {
-            Self::Combo(scheme) => Cow::Borrowed(&scheme.all_of),
+            Self::Combo(scheme) => Cow::Borrowed(scheme.all_of.as_deref().unwrap_or(&[])),
             _ => Cow::Owned(string_array_field(
                 self.context()._extra_fields.get("allOf"),
             )),

@@ -448,239 +448,291 @@ impl ConsumerRegistry {
                                     if !pay(budget, W::PlanningItems, 256) {
                                         return Err(busy());
                                     }
-                                    let content = match common_content(
-                                        document,
-                                        &site,
-                                        index,
-                                        operation,
-                                        limits,
-                                        retained_cleanup_work,
-                                        &bank,
-                                        reuse,
-                                        &mut content_constructions,
+                                    if !pay(
                                         budget,
+                                        W::PlanningItems,
+                                        crate::security::PREPARATION_WORK,
+                                    ) || !pay(
+                                        budget,
+                                        W::CleanupItems,
+                                        crate::security::CLEANUP_WORK,
                                     ) {
-                                        Ok(content) => Some(content),
+                                        return Err(busy());
+                                    }
+                                    let _security_temporary = reserve(
+                                        &bank,
+                                        &[
+                                            (
+                                                K::EngineLiveBytesGlobalMax,
+                                                crate::security::TEMPORARY_BYTES,
+                                            ),
+                                            (
+                                                K::AdmissionTemporaryBytesGlobalMax,
+                                                crate::security::TEMPORARY_BYTES,
+                                            ),
+                                        ],
+                                    )?;
+                                    let expression = match crate::security::prepare_security(
+                                        document,
+                                        site.owner(),
+                                        index,
+                                    ) {
+                                        Ok(expression) => Some(expression),
                                         Err(CoreError::UnsupportedOperation(_)) => None,
                                         Err(error) => return Err(error),
                                     };
-                                    if let Some(content) = content {
-                                        let schemas = content.schemas();
-                                        reason = ConsumerUnsupported::NoCompleteProvider;
-                                        for registration in &self.registrations {
-                                            let id = registration.execution.identity();
-                                            if selector
-                                                .binding
-                                                .is_some_and(|b| b != id.binding_id())
-                                            {
-                                                continue;
-                                            }
-                                            if !pay(budget, W::ProviderProbes, 1) {
-                                                return Err(busy());
-                                            }
-                                            let data = &registration.data;
-                                            if !registration
-                                                .access
-                                                .supports_security(content.security())
-                                                || !registration
-                                                    .execution
-                                                    .supports_operation(operation)
-                                                || data.content_type() != facts.content_type
-                                                || !data.available()
-                                                || !schemas.supports(data.service())
-                                            {
-                                                continue;
-                                            }
-                                            let m = registration.metadata;
-                                            qualify_contract(m, limits)?;
-                                            if !pay(
-                                                budget,
-                                                W::BindingPolls,
-                                                m.contract.inspection_work + 2,
-                                            ) {
-                                                return Err(busy());
-                                            }
-                                            let _inspect = reserve(
-                                                &bank,
-                                                &[
-                                                    (
-                                                        K::EngineLiveBytesGlobalMax,
-                                                        m.contract.inspection_temporary_bytes,
-                                                    ),
-                                                    (
-                                                        K::AdmissionTemporaryBytesGlobalMax,
-                                                        m.contract.inspection_temporary_bytes,
-                                                    ),
-                                                ],
-                                            )?;
-                                            if registration.execution.consumer_configuration()
-                                                != Some(m.configuration)
-                                            {
-                                                return Err(invalid());
-                                            }
-                                            if !pay(
-                                                budget,
-                                                W::ProviderProbes,
-                                                registration.access.work(),
-                                            ) {
-                                                return Err(busy());
-                                            }
-                                            if registration
-                                                .access
-                                                .authorize(id, target, operation)
-                                                .is_err()
-                                            {
-                                                continue;
-                                            }
-                                            let candidate = BindingCandidate::new(
-                                                id.binding_id(),
-                                                id.binding_generation(),
-                                                id.configuration(),
-                                                id.artifact_compatibility(),
-                                                id.diagnostic_ordinal(),
-                                                0,
-                                            );
-                                            let input = BindingCompilerInput::operation_input(
-                                                PlanId::new(
-                                                    SlotIndex::new(ordinal),
-                                                    Generation::INITIAL,
-                                                ),
-                                                candidate,
-                                                BindingArtifactRole::ConsumerCall,
-                                                ResolvedBindingInput {
-                                                    operation,
-                                                    owner: site.owner(),
-                                                    property: site_name(&site),
-                                                    form_index: index,
-                                                    target,
-                                                    content_type: Some(facts.content_type),
-                                                    subprotocol: facts.subprotocol,
-                                                    document,
-                                                },
-                                            );
-                                            let bounds = match registration.compiler.bounds(&input)
-                                            {
-                                                Ok(b) => b,
-                                                Err(CoreError::UnsupportedOperation(_)) => {
+                                    for security in expression
+                                        .map(|e| e.alternatives())
+                                        .transpose()?
+                                        .unwrap_or_default()
+                                    {
+                                        let content = match common_content(
+                                            security,
+                                            document,
+                                            &site,
+                                            index,
+                                            operation,
+                                            limits,
+                                            retained_cleanup_work,
+                                            &bank,
+                                            reuse,
+                                            &mut content_constructions,
+                                            budget,
+                                        ) {
+                                            Ok(content) => Some(content),
+                                            Err(CoreError::UnsupportedOperation(_)) => None,
+                                            Err(error) => return Err(error),
+                                        };
+                                        if let Some(content) = content {
+                                            let schemas = content.schemas();
+                                            reason = ConsumerUnsupported::NoCompleteProvider;
+                                            for registration in &self.registrations {
+                                                let id = registration.execution.identity();
+                                                if selector
+                                                    .binding
+                                                    .is_some_and(|b| b != id.binding_id())
+                                                {
                                                     continue;
                                                 }
-                                                Err(e) => return Err(e),
-                                            };
-                                            // Bound complete rollback of all retained definitions,
-                                            // including one provisional candidate, before acquisition.
-                                            check_limit(
-                                                limits,
-                                                K::CleanupWorkItemsPerStepMax,
-                                                retained_cleanup_work
-                                                    .checked_add(schemas.drop_work()) // provisional common owner
-                                                    .and_then(|n| {
-                                                        n.checked_add(m.contract.abort_work)
-                                                    })
+                                                if !pay(budget, W::ProviderProbes, 1) {
+                                                    return Err(busy());
+                                                }
+                                                let data = &registration.data;
+                                                if !registration
+                                                    .access
+                                                    .supports_security(content.security())
+                                                    || !registration
+                                                        .execution
+                                                        .supports_operation(operation)
+                                                    || data.content_type() != facts.content_type
+                                                    || !data.available()
+                                                    || !schemas.supports(data.service())
+                                                {
+                                                    continue;
+                                                }
+                                                let m = registration.metadata;
+                                                qualify_contract(m, limits)?;
+                                                if !pay(
+                                                    budget,
+                                                    W::BindingPolls,
+                                                    m.contract.inspection_work + 2,
+                                                ) {
+                                                    return Err(busy());
+                                                }
+                                                let _inspect = reserve(
+                                                    &bank,
+                                                    &[
+                                                        (
+                                                            K::EngineLiveBytesGlobalMax,
+                                                            m.contract.inspection_temporary_bytes,
+                                                        ),
+                                                        (
+                                                            K::AdmissionTemporaryBytesGlobalMax,
+                                                            m.contract.inspection_temporary_bytes,
+                                                        ),
+                                                    ],
+                                                )?;
+                                                if registration.execution.consumer_configuration()
+                                                    != Some(m.configuration)
+                                                {
+                                                    return Err(invalid());
+                                                }
+                                                if !pay(
+                                                    budget,
+                                                    W::ProviderProbes,
+                                                    registration.access.work(),
+                                                ) {
+                                                    return Err(busy());
+                                                }
+                                                if registration
+                                                    .access
+                                                    .authorize(id, target, operation)
+                                                    .is_err()
+                                                {
+                                                    continue;
+                                                }
+                                                let candidate = BindingCandidate::new(
+                                                    id.binding_id(),
+                                                    id.binding_generation(),
+                                                    id.configuration(),
+                                                    id.artifact_compatibility(),
+                                                    id.diagnostic_ordinal(),
+                                                    0,
+                                                );
+                                                let input = BindingCompilerInput::operation_input(
+                                                    PlanId::new(
+                                                        SlotIndex::new(ordinal),
+                                                        Generation::INITIAL,
+                                                    ),
+                                                    candidate,
+                                                    BindingArtifactRole::ConsumerCall,
+                                                    ResolvedBindingInput {
+                                                        operation,
+                                                        owner: site.owner(),
+                                                        property: site_name(&site),
+                                                        form_index: index,
+                                                        target,
+                                                        content_type: Some(facts.content_type),
+                                                        subprotocol: facts.subprotocol,
+                                                        document,
+                                                        selected_security: Some(content.security()),
+                                                    },
+                                                );
+                                                let bounds =
+                                                    match registration.compiler.bounds(&input) {
+                                                        Ok(b) => b,
+                                                        Err(CoreError::UnsupportedOperation(_)) => {
+                                                            continue;
+                                                        }
+                                                        Err(e) => return Err(e),
+                                                    };
+                                                // Bound complete rollback of all retained definitions,
+                                                // including one provisional candidate, before acquisition.
+                                                check_limit(
+                                                    limits,
+                                                    K::CleanupWorkItemsPerStepMax,
+                                                    retained_cleanup_work
+                                                        .checked_add(content.drop_work()) // provisional common owner
+                                                        .and_then(|n| {
+                                                            n.checked_add(m.contract.abort_work)
+                                                        })
+                                                        .and_then(|n| {
+                                                            n.checked_add(
+                                                                m.contract.artifact_drop_work
+                                                                    + content.drop_work()
+                                                                    + 4,
+                                                            )
+                                                        })
+                                                        .ok_or_else(invalid)?,
+                                                )?;
+                                                let artifact_budget = (
+                                                    u64::from(bounds.artifact().retained_items()),
+                                                    bounds.artifact().retained_bytes(),
+                                                );
+                                                check_limit(
+                                                    limits,
+                                                    K::BindingArtifactsPerThingMax,
+                                                    retained_artifact_items
+                                                        .checked_add(artifact_budget.0)
+                                                        .ok_or_else(invalid)?,
+                                                )?;
+                                                check_limit(
+                                                    limits,
+                                                    K::BindingArtifactBytesPerThingMax,
+                                                    retained_artifact_bytes
+                                                        .checked_add(artifact_budget.1)
+                                                        .ok_or_else(invalid)?,
+                                                )?;
+                                                let mut job = ConsumerCompilation::new(
+                                                    &registration.compiler,
+                                                    input,
+                                                    bounds,
+                                                    m,
+                                                    bank.clone(),
+                                                    limits,
+                                                    budget,
+                                                )?;
+                                                drive(&mut job);
+                                                let mut compiled = match job.finish() {
+                                                    Ok(a) => a,
+                                                    Err(CoreError::UnsupportedOperation(_)) => {
+                                                        continue;
+                                                    }
+                                                    Err(e) => return Err(e),
+                                                };
+                                                if chosen.is_some() {
+                                                    return Err(ambiguous());
+                                                }
+                                                let layout =
+                                                    ::core::mem::size_of::<ConsumerDefinition>()
+                                                        as u64;
+                                                let retained_services = layout
+                                                    .checked_add(target.len() as u64)
+                                                    .and_then(|n| n.checked_add(256))
                                                     .and_then(|n| {
                                                         n.checked_add(
-                                                            m.contract.artifact_drop_work
-                                                                + schemas.drop_work()
-                                                                + 4,
+                                                            facts.content_type.len() as u64
                                                         )
                                                     })
-                                                    .ok_or_else(invalid)?,
-                                            )?;
-                                            let artifact_budget = (
-                                                u64::from(bounds.artifact().retained_items()),
-                                                bounds.artifact().retained_bytes(),
-                                            );
-                                            check_limit(
-                                                limits,
-                                                K::BindingArtifactsPerThingMax,
-                                                retained_artifact_items
-                                                    .checked_add(artifact_budget.0)
-                                                    .ok_or_else(invalid)?,
-                                            )?;
-                                            check_limit(
-                                                limits,
-                                                K::BindingArtifactBytesPerThingMax,
-                                                retained_artifact_bytes
-                                                    .checked_add(artifact_budget.1)
-                                                    .ok_or_else(invalid)?,
-                                            )?;
-                                            let mut job = ConsumerCompilation::new(
-                                                &registration.compiler,
-                                                input,
-                                                bounds,
-                                                m,
-                                                bank.clone(),
-                                                limits,
-                                                budget,
-                                            )?;
-                                            drive(&mut job);
-                                            let mut compiled = match job.finish() {
-                                                Ok(a) => a,
-                                                Err(CoreError::UnsupportedOperation(_)) => {
-                                                    continue;
-                                                }
-                                                Err(e) => return Err(e),
-                                            };
-                                            if chosen.is_some() {
-                                                return Err(ambiguous());
-                                            }
-                                            let layout =
-                                                ::core::mem::size_of::<ConsumerDefinition>() as u64;
-                                            let retained_services = layout
-                                                .checked_add(target.len() as u64)
-                                                .and_then(|n| n.checked_add(256))
-                                                .and_then(|n| {
-                                                    n.checked_add(facts.content_type.len() as u64)
-                                                })
-                                                .ok_or_else(invalid)?;
-                                            let mut service_funding = reserve(
-                                                &bank,
-                                                &[(K::EngineLiveBytesGlobalMax, retained_services)],
-                                            )?;
-                                            compiled.funding.append(&mut service_funding);
-                                            retained_artifact_items += artifact_budget.0;
-                                            retained_artifact_bytes += artifact_budget.1;
-                                            chosen_budget = (
-                                                artifact_budget.0,
-                                                artifact_budget.1,
-                                                m.contract.artifact_drop_work
-                                                    + schemas.drop_work()
-                                                    + 2,
-                                            );
-                                            retained_cleanup_work = retained_cleanup_work
-                                                .checked_add(
+                                                    .ok_or_else(invalid)?;
+                                                let mut service_funding = reserve(
+                                                    &bank,
+                                                    &[(
+                                                        K::EngineLiveBytesGlobalMax,
+                                                        retained_services,
+                                                    )],
+                                                )?;
+                                                compiled.funding.append(&mut service_funding);
+                                                retained_artifact_items += artifact_budget.0;
+                                                retained_artifact_bytes += artifact_budget.1;
+                                                chosen_budget = (
+                                                    artifact_budget.0,
+                                                    artifact_budget.1,
                                                     m.contract.artifact_drop_work
-                                                        + schemas.drop_work()
+                                                        + content.drop_work()
                                                         + 2,
-                                                )
-                                                .ok_or_else(invalid)?;
-                                            let definition = Arc::new(
-                                                ConsumerDefinition::try_new(
-                                                    ConsumerDefinitionInput {
-                                                        content: content.clone(),
-                                                        form: index,
-                                                        target: target.into(),
-                                                        artifact: compiled.artifact,
-                                                        execution: registration.execution.clone(),
-                                                        configuration: m.configuration,
-                                                        data: registration.data.clone(),
-                                                        content_type: facts.content_type.into(),
-                                                        execution_funding: registration
-                                                            .execution_funding
-                                                            .clone(),
-                                                        funding: compiled.funding,
-                                                    },
-                                                )
-                                                .map_err(|e| e.error().error().clone())?,
-                                            );
-                                            chosen = Some(
-                                                definition
-                                                    .bind(
-                                                        registration.access.clone(),
-                                                        bank.clone(),
-                                                        budget,
+                                                );
+                                                retained_cleanup_work = retained_cleanup_work
+                                                    .checked_add(
+                                                        m.contract.artifact_drop_work
+                                                            + content.drop_work()
+                                                            + 2,
+                                                    )
+                                                    .ok_or_else(invalid)?;
+                                                let definition = Arc::new(
+                                                    ConsumerDefinition::try_new(
+                                                        ConsumerDefinitionInput {
+                                                            content: content.clone(),
+                                                            form: index,
+                                                            target: target.into(),
+                                                            artifact: compiled.artifact,
+                                                            execution: registration
+                                                                .execution
+                                                                .clone(),
+                                                            configuration: m.configuration,
+                                                            data: registration.data.clone(),
+                                                            content_type: facts.content_type.into(),
+                                                            execution_funding: registration
+                                                                .execution_funding
+                                                                .clone(),
+                                                            funding: compiled.funding,
+                                                        },
                                                     )
                                                     .map_err(|e| e.error().error().clone())?,
-                                            );
+                                                );
+                                                chosen = Some(
+                                                    definition
+                                                        .bind(
+                                                            registration.access.clone(),
+                                                            bank.clone(),
+                                                            budget,
+                                                        )
+                                                        .map_err(|e| e.error().error().clone())?,
+                                                );
+                                            }
+                                        }
+                                        if chosen.is_some() {
+                                            break;
                                         }
                                     }
                                 }
@@ -1030,6 +1082,7 @@ impl Drop for ConsumerCompilation<'_> {
 }
 #[allow(clippy::too_many_arguments)]
 fn common_content(
+    security: clinkz_wot_core::security::SecurityRequirement,
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
     site: &FormSite,
     index: u32,
@@ -1042,7 +1095,9 @@ fn common_content(
     budget: &mut WorkBudget,
 ) -> CoreResult<Arc<PreparedConsumerContent>> {
     qualify_common_form(doc, site, index)?;
-    let security = crate::security::prepare_security(doc, site.owner(), index)?;
+    if !security.is_conjunction() {
+        return Err(unsupported());
+    }
     if reuse.is_some_and(|c| c.security() != &security) {
         return Err(unsupported());
     }
@@ -1052,7 +1107,7 @@ fn common_content(
             limits,
             K::CleanupWorkItemsPerStepMax,
             retained_cleanup_work
-                .checked_add(content.schemas().drop_work())
+                .checked_add(content.drop_work())
                 .ok_or_else(invalid)?,
         )?;
         if !pay(
@@ -1061,7 +1116,7 @@ fn common_content(
             content.schemas().retained_bytes() as u64
                 * clinkz_wot_core::data_schema::PreparedSchema::MAX_PROPERTIES as u64
                 * 2
-                + content.schemas().drop_work()
+                + content.drop_work()
                 + 64,
         ) {
             return Err(busy());
@@ -1129,10 +1184,13 @@ fn common_content(
     check_limit(
         limits,
         K::CleanupWorkItemsPerStepMax,
-        retained_cleanup_work + preparation.cleanup * 2 + 4,
+        retained_cleanup_work + preparation.cleanup * 2 + security.drop_work() + 4,
     )?;
-    if !pay(budget, W::CleanupItems, preparation.cleanup)
-        || !pay(budget, W::PlanningItems, preparation.work)
+    if !pay(
+        budget,
+        W::CleanupItems,
+        preparation.cleanup + security.drop_work(),
+    ) || !pay(budget, W::PlanningItems, preparation.work)
     {
         return Err(busy());
     }
@@ -1163,8 +1221,7 @@ fn qualify_common_form(
     index: u32,
 ) -> CoreResult<()> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
-    if facts.scopes.is_some()
-        || facts.content_coding.is_some()
+    if facts.content_coding.is_some()
         || facts.additional_responses
         || facts
             .response_content_type

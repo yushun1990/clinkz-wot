@@ -40,7 +40,7 @@ impl HttpFiniteProducer {
 
     /// Live verification/key service is paired with this startup registration;
     /// definitions retain only immutable scheme meaning and native operands.
-    pub fn try_https_basic(
+    pub fn try_https(
         listen: HttpProducerConfig,
         id: BindingId,
         generation: BindingGeneration,
@@ -85,9 +85,11 @@ impl HttpFiniteProducer {
         if self.listen.secure && self.security.as_ref().is_none_or(|s| !s.is_ready()) {
             return Err(crate::producer::producer_unsupported());
         }
-        self.listen
+        let mut program = self
+            .listen
             .compile_mapping(
                 clinkz_wot_planning::ResolvedBindingInput {
+                    selected_security: None,
                     document: input.document,
                     target: input.target,
                     property,
@@ -100,14 +102,18 @@ impl HttpFiniteProducer {
                 budget,
                 expected,
             )?
-            .map(|mut program| {
-                program.security_registration =
-                    self.security.as_ref().map(|s| s.registration.clone());
-                Some(program)
-            })
             .ok_or_else(|| {
                 CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
-            })
+            })?;
+        if self
+            .security
+            .as_ref()
+            .is_some_and(|service| !service.supports(program.authentication))
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
+        program.security_registration = self.security.as_ref().map(|s| s.registration.clone());
+        Ok(Some(program))
     }
 }
 
@@ -204,7 +210,7 @@ impl ProducerCapability for HttpFiniteProducer {
         // Cover the bounded URI/program and collection member/name backing used
         // by a sequential pure support/final-check callback, including its Arc.
         // No replacement definition survives and no native setup occurs.
-        Some(32_768)
+        Some(clinkz_wot_planning::security::TEMPORARY_BYTES as usize + 32_768)
     }
     fn check_final(
         &self,

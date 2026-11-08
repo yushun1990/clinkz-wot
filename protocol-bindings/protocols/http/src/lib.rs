@@ -36,8 +36,8 @@ pub use producer::{
     producer_execution,
 };
 pub use security::{
-    HttpBasicClientAccess, HttpBasicCredentials, HttpBasicVerifier, HttpClientTls,
-    HttpServerSecurity,
+    HttpApiKey, HttpApiKeyVerifier, HttpBasicCredentials, HttpBasicVerifier, HttpClientAccess,
+    HttpClientTls, HttpServerSecurity,
 };
 #[cfg(feature = "prepare")]
 mod producer_compiler;
@@ -72,7 +72,7 @@ const PRIVATE_POLICY: &[u8] = concat!(
     "forbidden-trailer=content-type,content-length,transfer-encoding,content-encoding,trailer,upgrade,connection,host,te;",
     "noTEadvertisement;single-chunked;noTEandCL;singleCL;",
     "call-owned-driver;noSpawn;local-drop-before-settlement;noNetworkWait;",
-    "SDK-disposal-may-allocate;noPool;noRetry;optional-TLS13-basic-PropertyReadWrite;noDNS;",
+    "SDK-disposal-may-allocate;noPool;noRetry;optional-TLS13-security-composition-PropertyReadWrite;noDNS;",
     "connect-io=DeploymentFailure;",
     "action-consumer-POST202-accepted-id;GET200-running-completed-failed;DELETE200-cancelling-terminal;",
     "action-id=hex16-u32;control-selected-template-id;Location-never-followed;",
@@ -105,16 +105,16 @@ impl HttpConsumerConfig {
             secure: false,
         })
     }
-    /// HTTPS/IP, Basic header, finite Property Read only. Trust roots are a
+    /// HTTPS/IP, independently qualified security, finite Property Read/Write. Trust roots are a
     /// separate live Binding dependency and are never native program content.
-    pub fn for_https_basic_ip() -> CoreResult<Self> {
+    pub fn for_https_ip() -> CoreResult<Self> {
         Ok(Self {
             configuration: ConsumerBindingConfiguration::for_semantic_host(
                 64,
                 BindingConfigurationDigest::new(
                     sha2_const_stable::Sha256::new()
                         .update(PRIVATE_POLICY)
-                        .update(b"TLS13-basic-IP-v1")
+                        .update(b"TLS13-composed-IP-v2")
                         .finalize(),
                 ),
                 COMPATIBILITY,
@@ -286,13 +286,16 @@ impl binding::ClientBinding for Client {
             ));
         };
         if self.config.secure != (target.0.uri.scheme_str() == Some("https"))
-            || self.config.secure != target.1.basic
-            || (self.config.secure
-                && (self.tls.is_none()
-                    || request
-                        .security()
-                        .and_then(|s| s.downcast_ref::<security::BasicGrant>())
-                        .is_none_or(|g| !g.for_binding(&request))))
+            || self.config.secure != target.1.secure
+            || (self.config.secure && self.tls.is_none())
+            || match target.1.authentication.selected() {
+                Some(0) => request.security().is_some(),
+                Some(branch) => request
+                    .security()
+                    .and_then(|s| s.downcast_ref::<security::HttpGrant>())
+                    .is_none_or(|g| !g.for_binding(&request) || g.branch != branch),
+                None => true,
+            }
             || (!self.config.secure && request.security().is_some())
         {
             return Err(reject(
@@ -414,7 +417,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
                     .as_ref()
                     .is_some_and(|r| r.security().is_some())
                 {
-                    std::mem::size_of::<security::BasicGrant>() + 2 * std::mem::size_of::<usize>()
+                    std::mem::size_of::<security::HttpGrant>() + 2 * std::mem::size_of::<usize>()
                 } else {
                     0
                 }) as u64,
@@ -436,7 +439,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
             .as_ref()
             .unwrap()
             .security()
-            .and_then(|s| s.downcast_ref::<security::BasicGrant>())
+            .and_then(|s| s.downcast_ref::<security::HttpGrant>())
         {
             let target = self
                 .target
@@ -676,18 +679,18 @@ pub fn try_consumer_registration(
         services: config.consumer_services(),
     })
 }
-/// Pair actual TLS trust, Basic credential service and JSON validation. Pure:
+/// Pair actual TLS trust, composed credential service and JSON validation. Pure:
 /// no certificate handshake, credential use or socket acquisition occurs here.
 #[cfg(feature = "prepare")]
-pub fn try_https_basic_consumer_registration(
+pub fn try_https_consumer_registration(
     tls: HttpClientTls,
-    access: Arc<HttpBasicClientAccess>,
+    access: Arc<HttpClientAccess>,
     binding_id: BindingId,
     generation: BindingGeneration,
     ordinal: u32,
 ) -> CoreResult<clinkz_wot_planning::open_consumer::ConsumerRegistrationInput> {
     use clinkz_wot_planning::*;
-    let config = HttpConsumerConfig::for_https_basic_ip()?;
+    let config = HttpConsumerConfig::for_https_ip()?;
     let compiler = HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(config))
         .map_err(|e| e.error().error().clone())?;
     let runtime = consumer_execution(config, binding_id, generation, ordinal, Some(tls))?;

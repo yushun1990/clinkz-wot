@@ -975,7 +975,11 @@ mod fields {
     fn security_child(v: &SecurityScheme, i: usize) -> Option<Node<'_>> {
         use Node as N;
         Some(match v {
-            SecurityScheme::Combo(v) => N::Strings(if i == 0 { &v.one_of } else { &v.all_of }),
+            SecurityScheme::Combo(v) => N::Strings(if i == 0 {
+                v.one_of.as_deref().unwrap_or(&[])
+            } else {
+                v.all_of.as_deref().unwrap_or(&[])
+            }),
             SecurityScheme::Basic(v) => match i {
                 0 => return v.name.as_deref().map(N::Text),
                 1 => location(&v.location),
@@ -1203,6 +1207,7 @@ struct Definition<'a> {
     authorization: bool,
     token: bool,
     counts: [usize; 2],
+    groups_present: [bool; 2],
     empty: [Option<usize>; 2],
     index: usize,
     member: usize,
@@ -1224,6 +1229,7 @@ impl<'a> Definition<'a> {
             authorization: false,
             token: false,
             counts: [0; 2],
+            groups_present: [false; 2],
             empty: [None; 2],
             index: 0,
             member: 0,
@@ -2225,8 +2231,14 @@ impl<'td> ValidatedThingCursor<'td> {
                 } else if let Some((key, value)) = f.extra {
                     if equal_fixed(key, SECURITY_KEYS[f.match_index]) {
                         match f.match_index {
-                            0 => f.one = Names::value(value),
-                            1 => f.all = Names::value(value),
+                            0 => {
+                                f.one = Names::value(value);
+                                f.groups_present[0] = true;
+                            }
+                            1 => {
+                                f.all = Names::value(value);
+                                f.groups_present[1] = true;
+                            }
                             2 => f.name = value.as_str(),
                             3 => f.flow = value.as_str().unwrap_or(""),
                             4 => f.authorization = value.as_str().is_some_and(|v| !v.is_empty()),
@@ -2252,8 +2264,9 @@ impl<'td> ValidatedThingCursor<'td> {
                         // the public scheme discriminator.
                         match f.node {
                             SecurityScheme::Combo(v) => {
-                                f.one = Names::Strings(&v.one_of);
-                                f.all = Names::Strings(&v.all_of);
+                                f.one = Names::Strings(v.one_of.as_deref().unwrap_or(&[]));
+                                f.all = Names::Strings(v.all_of.as_deref().unwrap_or(&[]));
+                                f.groups_present = [v.one_of.is_some(), v.all_of.is_some()];
                             }
                             SecurityScheme::APIKey(v) => f.name = v.name.as_deref(),
                             SecurityScheme::OAuth2(v) => {
@@ -2293,11 +2306,14 @@ impl<'td> ValidatedThingCursor<'td> {
             3 => {
                 match f.scheme.unwrap() {
                     b::Scheme::Combo => {
-                        b::combo_present(f.counts[0], f.counts[1])
+                        b::combo_present(f.groups_present[0], f.groups_present[1])
                             .map_err(|r| reject(b::Field::Scheme, r))?;
                         // Each group's cardinality precedes its empty-member
                         // rejection; reference checks follow both groups.
                         for i in 0..2 {
+                            if !f.groups_present[i] {
+                                continue;
+                            }
                             b::combo_group(f.counts[i], f.empty[i]).map_err(|(member, r)| {
                                 invalid(
                                     b::Site {

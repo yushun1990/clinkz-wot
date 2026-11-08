@@ -114,19 +114,171 @@ pub fn check_scopes(required: &[String], present: &[String]) -> CoreResult<()> {
     }
 }
 
-/// Immutable, source-independent scheme meaning. Parameters are semantic
-/// operands, never credential values. Static operands keep this small supported
-/// preparation adapter bounded; this is not a universal security expression IR.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SecurityRequirement {
-    pub scheme: &'static str,
-    pub parameters: &'static [(&'static str, &'static str)],
+/// Immutable, source-independent WoT security meaning. This value owns only
+/// semantic operands, never credentials, policy, transport trust or authority.
+/// It needs neither reference counting nor pointer atomics. A selected Consumer
+/// requirement is one complete conjunction; Producer qualification visits every
+/// alternative. `Unavailable` preserves a branch that this preparation adapter
+/// cannot interpret; it is never equivalent to anonymous access.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SecurityRequirement {
+    NoSec,
+    Scheme {
+        scheme: String,
+        parameters: Vec<(String, String)>,
+    },
+    AllOf(Vec<Self>),
+    OneOf(Vec<Self>),
+    Unavailable {
+        scheme: String,
+    },
 }
 impl SecurityRequirement {
-    pub const NOSEC: Self = Self {
-        scheme: "nosec",
-        parameters: &[],
-    };
+    pub const NOSEC: Self = Self::NoSec;
+    pub const MAX_NODES: usize = 64;
+    pub const MAX_DEPTH: usize = 8;
+    pub const MAX_ALTERNATIVES: usize = 16;
+    pub const MAX_COMPONENTS: usize = 4;
+
+    pub fn scheme(scheme: &str, parameters: &[(&str, &str)]) -> Self {
+        Self::Scheme {
+            scheme: scheme.into(),
+            parameters: parameters
+                .iter()
+                .map(|(k, v)| ((*k).into(), (*v).into()))
+                .collect(),
+        }
+    }
+
+    /// A closed executable candidate has no remaining choice or unavailable
+    /// interpretation. This checks shape and bounds, not scheme support.
+    pub fn is_conjunction(&self) -> bool {
+        fn visit(
+            r: &SecurityRequirement,
+            depth: usize,
+            nodes: &mut usize,
+            components: &mut usize,
+        ) -> bool {
+            *nodes += 1;
+            if depth > SecurityRequirement::MAX_DEPTH || *nodes > SecurityRequirement::MAX_NODES {
+                return false;
+            }
+            match r {
+                SecurityRequirement::NoSec => true,
+                SecurityRequirement::Scheme { .. } => {
+                    *components += 1;
+                    *components <= SecurityRequirement::MAX_COMPONENTS
+                }
+                SecurityRequirement::AllOf(v) => {
+                    !v.is_empty() && v.iter().all(|r| visit(r, depth + 1, nodes, components))
+                }
+                _ => false,
+            }
+        }
+        visit(self, 0, &mut 0, &mut 0)
+    }
+
+    /// Distribute conjunction over alternatives without weakening or truncating
+    /// the expression. Limits refuse the whole expression, including unavailable
+    /// branches. NoSec is the conjunction identity, not an empty-expression
+    /// default. Declaration order supplies deterministic Consumer preference.
+    pub fn alternatives(&self) -> CoreResult<Vec<Self>> {
+        fn expand<'a>(
+            r: &'a SecurityRequirement,
+            depth: usize,
+            nodes: &mut usize,
+        ) -> CoreResult<Vec<Vec<&'a SecurityRequirement>>> {
+            *nodes += 1;
+            if depth > SecurityRequirement::MAX_DEPTH || *nodes > SecurityRequirement::MAX_NODES {
+                return Err(unsupported());
+            }
+            match r {
+                SecurityRequirement::AllOf(children) | SecurityRequirement::OneOf(children) => {
+                    if children.is_empty() {
+                        return Err(unsupported());
+                    }
+                    let conjunction = matches!(r, SecurityRequirement::AllOf(_));
+                    let mut result = if conjunction {
+                        alloc::vec![Vec::new()]
+                    } else {
+                        Vec::new()
+                    };
+                    for child in children {
+                        let next = expand(child, depth + 1, nodes)?;
+                        if conjunction {
+                            if result.len().saturating_mul(next.len())
+                                > SecurityRequirement::MAX_ALTERNATIVES
+                            {
+                                return Err(unsupported());
+                            }
+                            let mut product = Vec::new();
+                            for left in &result {
+                                for right in &next {
+                                    if left.len() + right.len()
+                                        > SecurityRequirement::MAX_COMPONENTS
+                                    {
+                                        return Err(unsupported());
+                                    }
+                                    let mut branch = left.clone();
+                                    branch.extend(right);
+                                    product.push(branch);
+                                }
+                            }
+                            result = product;
+                        } else {
+                            if result.len() + next.len() > SecurityRequirement::MAX_ALTERNATIVES {
+                                return Err(unsupported());
+                            }
+                            result.extend(next);
+                        }
+                    }
+                    Ok(result)
+                }
+                SecurityRequirement::NoSec => Ok(alloc::vec![Vec::new()]),
+                _ => Ok(alloc::vec![alloc::vec![r]]),
+            }
+        }
+        expand(self, 0, &mut 0)?
+            .into_iter()
+            .map(|branch| {
+                Ok(match branch.len() {
+                    0 => Self::NoSec,
+                    1 => branch[0].clone(),
+                    _ => Self::AllOf(branch.into_iter().cloned().collect()),
+                })
+            })
+            .collect()
+    }
+
+    pub fn retained_bytes(&self) -> usize {
+        match self {
+            Self::Scheme { scheme, parameters } => {
+                scheme.capacity()
+                    + parameters.capacity() * core::mem::size_of::<(String, String)>()
+                    + parameters
+                        .iter()
+                        .map(|(k, v)| k.capacity() + v.capacity())
+                        .sum::<usize>()
+            }
+            Self::Unavailable { scheme } => scheme.capacity(),
+            Self::AllOf(v) | Self::OneOf(v) => {
+                v.capacity() * core::mem::size_of::<Self>()
+                    + v.iter().map(Self::retained_bytes).sum::<usize>()
+            }
+            Self::NoSec => 0,
+        }
+    }
+    pub fn drop_work(&self) -> u64 {
+        match self {
+            Self::AllOf(v) | Self::OneOf(v) => 1 + v.iter().map(Self::drop_work).sum::<u64>(),
+            Self::Scheme { parameters, .. } => 2 + parameters.len() as u64 * 2,
+            _ => 1,
+        }
+    }
+}
+
+fn unsupported() -> CoreError {
+    CoreError::UnsupportedOperation(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
 }
 
 /// Per-call capability issued by an actual security service. Only its concrete

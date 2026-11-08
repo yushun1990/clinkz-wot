@@ -185,16 +185,39 @@ owner. Session sharing respects trust/tenant/credential domains. NoSec does not
 bypass application policy. Extending a scheme MUST NOT require a protocol enum
 in Core or silently broaden a prepared security branch.
 
-The finite implementation carries `SecurityRequirement` as immutable
-scheme/parameter operands and `OutboundSecurity` as an opaque per-call Binding
-capability. Core does not interpret concrete scheme names, HTTP headers, TLS or
-passwords. Actual access services explicitly qualify requirements, issue bounded
-capabilities under their declared work and expose a passive live dependency
-revision. Revocation/rotation never mutates prepared meaning or refreshes old
-work. Authentication evidence stays with the original native reply; only a
-verified Principal enters application input. Authentication carriers and opaque
-capabilities redact formatting. The selected executable subset and limits are
-owned by [the HTTP Binding](../../protocol-bindings/protocols/http/README.md).
+`SecurityRequirement` is immutable source-independent composition: NoSec, scheme
+operands, allOf, oneOf and explicitly unavailable leaves. Its owned representation
+uses no reference counting or pointer atomics; `ValueExecution` continues to lend
+it independently of storage and driving. Parameters contain public semantic
+operands only. An unavailable leaf marks a preparation interpretation limit; it
+is not an executable descriptor or an anonymous branch. TD retains the original
+extension meaning. Bounded expansion refuses the whole expression on cycles or
+limits, and never truncates alternatives. NoSec contributes no identity in a
+conjunction. A complete selected Consumer requirement has no unresolved choice.
+
+Core neither implements particular schemes nor formats native credentials.
+Independent access and Binding services must qualify the same complete selected
+conjunction, its placements and the actual operation. A Consumer may choose one
+supported alternative. A Producer must qualify every advertised alternative and
+every component, including their ability to execute together; supporting one
+scheme or branch cannot certify the others. Native ambiguity/collision is a
+Binding qualification failure. Verification failure never authorizes weakening
+the selected branch or falling through to anonymous access. Composition does not
+specify a universal principal merge: concrete supported services must establish
+an explicit safe identity/claim contract before application authorization.
+
+`OutboundSecurity` remains a redacted, opaque per-call Host Binding capability,
+issued only after fresh permission. It retains the exact selected conjunction,
+instance/incarnation, audience, operation, registration and live dependency
+revision. It grants no authority to a successor or another destination. Credentials,
+verified principals, application policy and transport trust remain separate live
+owners. Rotation and revocation do not mutate prepared meaning or refresh old
+work. Scheme support does not certify an operation, codec, transport trust or
+credential placement. Authentication evidence stays with the original reply;
+only a bounded verified Principal enters behavior input. Actual services pay
+complete work, including all required verifiers, and preserve original funding
+through failure, cancellation, late results and final disposal. Concrete scope
+and identity composition limits belong to the Binding's declared subset.
 
 Finite application authorization and credential verification remain separate
 services. Each exposes a passive invalidation revision for mutable policy;

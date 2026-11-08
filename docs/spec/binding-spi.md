@@ -498,3 +498,19 @@ refusals require no permission to deliver application data. The default zero-wor
 adapter preserves existing trusted native principal semantics; it establishes no
 new authentication guarantee. Wrappers claiming the authenticated facet must
 forward its verification/configuration/work/revision contract.
+
+
+The finite security collaboration also applies to composed requirements. The
+native program retains every advertised branch on Producer paths, or the exact
+selected Consumer conjunction. A Binding must independently qualify credential
+placements and simultaneous execution, including conflicts with static Form
+instructions and indistinguishable alternatives. Native evidence selects one
+complete qualified branch and remains with that original reply; it cannot trigger
+weaker fallback on authentication failure. Every required verifier participates
+in the declared complete work/readiness contract. Before each subsequent verifier
+callback, recheck the original declared work/readiness and dependency revisions;
+a prior callback cannot authorize another verifier's increased work. Snapshot all dependency revisions
+before verification and recheck the whole sequence after the last callback,
+including when one verifier invalidates another. Identity equality cannot replace
+this check. Core's EXEC-SECURITY-001 owns the shared composition/authority contract;
+concrete Binding documentation owns supported mechanisms and identity composition.

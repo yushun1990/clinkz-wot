@@ -297,3 +297,16 @@ lease semantics require independent architectural challenge. HTTPS/security,
 production shared matching, asynchronous handlers, broader TD operations and
 release/deployment qualification remain outside this checkpoint. Preserve all
 six completion obligations and the existing admission status.
+
+
+## Security composition correction
+
+The existing EXEC-SECURITY-001 / PREP-SELECT/COVER/REUSE-001 scope now replaces
+singleton requirements with bounded effective composition, exact Consumer branch
+selection and complete Producer security qualification. HTTP finite Read/Write
+executes independently paired Basic/API-key services, conjunctions and distinguishable
+alternatives. Domain specifications own meaning and the Binding owns placement,
+identity composition and operation limits. [Scoped evidence and superseded
+assumptions](../evidence/security-composition.md) identify the supported subset,
+revocation/ownership obligations and remaining work. No package/milestone,
+production-security or additional Embedded acceptance is claimed.

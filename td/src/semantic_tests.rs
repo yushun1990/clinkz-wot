@@ -331,8 +331,9 @@ fn selected_combo_keeps_all_referenced_typed_and_extension_security_meaning() {
     use crate::semantic::SecurityDetails;
     let mut td = source();
     td["security"] = json!(["combo"]);
-    td["securityDefinitions"]["combo"] =
-        json!({"scheme":"combo","allOf":["none"],"oneOf":["extended","basic"]});
+    td["securityDefinitions"]["combo"] = json!({"scheme":"combo","allOf":["none","alternatives"]});
+    td["securityDefinitions"]["alternatives"] =
+        json!({"scheme":"combo","oneOf":["extended","basic"]});
     td["securityDefinitions"]["extended"] = json!({"scheme":"vendor", "urn:vendor:key":{"n":1}});
     td["securityDefinitions"]["basic"] =
         json!({"scheme":"basic", "name":"Authorization","in":"header"});
@@ -344,7 +345,7 @@ fn selected_combo_keeps_all_referenced_typed_and_extension_security_meaning() {
     let doc = ResolvedSemanticDocument::resolve(&thing, "p", 0).unwrap();
     let combo = doc.security("combo").unwrap();
     assert!(
-        matches!(combo.details, SecurityDetails::Combo { all_of, one_of } if all_of == ["none"] && one_of == ["extended", "basic"])
+        matches!(combo.details, SecurityDetails::Combo { all_of, one_of } if all_of.unwrap() == ["none", "alternatives"] && one_of.is_none())
     );
     assert!(matches!(
         doc.security("basic").unwrap().details,

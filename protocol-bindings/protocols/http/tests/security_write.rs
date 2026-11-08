@@ -241,7 +241,7 @@ fn authentication_application_policy_and_destination_trust_refuse_before_behavio
                 credentials()
             };
             let access = Arc::new(
-                HttpBasicClientAccess::try_new(
+                HttpClientAccess::try_new(
                     instance.reference(),
                     target(&server.td),
                     Arc::new(Access(Arc::new(AtomicBool::new(false)))),
@@ -333,7 +333,7 @@ fn forbidden_destination_refuses_preparation_and_current_policy_returns_original
             let accounts = bank();
             let denied = Arc::new(AtomicBool::new(false));
             let access = Arc::new(
-                HttpBasicClientAccess::try_new(
+                HttpClientAccess::try_new(
                     instance.reference(),
                     if wrong_destination {
                         "https://127.0.0.1:1/on"
@@ -616,7 +616,7 @@ fn reentrant_policy_cancellation_fences_native_start_and_preserves_completed_unr
             let instance = Rc::new(consumer_instance());
             let accounts = bank();
             let access = Arc::new(
-                HttpBasicClientAccess::try_new(
+                HttpClientAccess::try_new(
                     instance.reference(),
                     target(&server.td),
                     Arc::new(CallbackPolicy),
@@ -796,7 +796,7 @@ fn basic_support_still_qualifies_every_operation_form_schema_and_actual_server_s
     let keys = Keys::for_name("127.0.0.1");
     let addr = address();
     let td = write_td(addr);
-    let provider = HttpFiniteProducer::try_https_basic(
+    let provider = HttpFiniteProducer::try_https(
         HttpProducerConfig::for_https_loopback(addr).unwrap(),
         BindingId::new(197),
         BindingGeneration::INITIAL,
@@ -937,7 +937,7 @@ fn write_content_reuse_keeps_credentials_policy_and_authority_with_each_instance
             Arc::new(AtomicBool::new(false)),
         );
         let access_b = Arc::new(
-            HttpBasicClientAccess::try_new(
+            HttpClientAccess::try_new(
                 owner_b.reference(),
                 target(&b.td),
                 Arc::new(Access(Arc::new(AtomicBool::new(false)))),

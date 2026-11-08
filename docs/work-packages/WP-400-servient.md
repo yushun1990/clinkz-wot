@@ -642,3 +642,16 @@ reply opportunities, first causes, independent stop and cleanup remain in the
 same runtime. [Structured Notification evidence](../evidence/structured-dataschema.md#notification-execution)
 covers real MQTT leaf execution and external structured controls/responses;
 cross-instance reusable definition binding remains separate work.
+
+
+## Security composition correction
+
+The existing EXEC-SECURITY-001 / PREP-SELECT/COVER/REUSE-001 scope now replaces
+singleton requirements with bounded effective composition, exact Consumer branch
+selection and complete Producer security qualification. HTTP finite Read/Write
+executes independently paired Basic/API-key services, conjunctions and distinguishable
+alternatives. Domain specifications own meaning and the Binding owns placement,
+identity composition and operation limits. [Scoped evidence and superseded
+assumptions](../evidence/security-composition.md) identify the supported subset,
+revocation/ownership obligations and remaining work. No package/milestone,
+production-security or additional Embedded acceptance is claimed.

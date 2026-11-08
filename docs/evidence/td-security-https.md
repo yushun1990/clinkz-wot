@@ -1,3 +1,8 @@
+The singleton/composition refusal limits in this initial increment are superseded
+by [the composition correction](security-composition.md). Its Basic/TLS execution,
+authority and ownership evidence remains scoped below; current API names and
+supported combinations are owned by the HTTP Binding documentation.
+
 # Executable TD Security and Host HTTPS
 
 ## Assessment and selected boundary

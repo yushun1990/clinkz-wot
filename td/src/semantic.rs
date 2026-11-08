@@ -742,7 +742,12 @@ impl<'a> Resolver<'a> {
             vocabulary,
         )?;
         if let crate::security_scheme::SecurityScheme::Combo(combo) = definition {
-            for member in combo.all_of.iter().chain(&combo.one_of) {
+            for member in combo
+                .all_of
+                .iter()
+                .flatten()
+                .chain(combo.one_of.iter().flatten())
+            {
                 // A selected Combo exposes every required and alternative
                 // definition. Unselected extension definitions are not reached.
                 let (key, _) = thing

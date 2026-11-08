@@ -19,7 +19,7 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
         let startup_a = bank();
         let startup_b = bank();
         let data = ConsumerServiceOwner::retain_data(
-            HttpConsumerConfig::for_https_basic_ip()
+            HttpConsumerConfig::for_https_ip()
                 .unwrap()
                 .consumer_services()
                 .data,
@@ -32,7 +32,7 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
         let policy_a = Arc::new(ReviewPolicy::default());
         let policy_b = Arc::new(ReviewPolicy::default());
         let access_a = Arc::new(
-            HttpBasicClientAccess::try_new(
+            HttpClientAccess::try_new(
                 owner_a.reference(),
                 a.td["properties"]["on"]["forms"][0]["href"]
                     .as_str()
@@ -43,7 +43,7 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
             .unwrap(),
         );
         let access_b = Arc::new(
-            HttpBasicClientAccess::try_new(
+            HttpClientAccess::try_new(
                 owner_b.reference(),
                 b.td["properties"]["on"]["forms"][0]["href"]
                     .as_str()
@@ -57,11 +57,11 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
         );
         let prepare = |td: &Value,
                        owner: &ConsumerInstance,
-                       access: Arc<HttpBasicClientAccess>,
+                       access: Arc<HttpClientAccess>,
                        startup: &Arc<HostResourceAccounts>,
                        accounts: &Arc<HostResourceAccounts>,
                        reuse: Option<&Arc<PreparedConsumerContent>>| {
-            let input = try_https_basic_consumer_registration(
+            let input = try_https_consumer_registration(
                 keys.client(),
                 access,
                 BindingId::new(198),
@@ -242,7 +242,7 @@ fn actual_support_refuses_complete_unsupported_expressions_and_incompatible_reus
         .unwrap()
         .parse()
         .unwrap();
-    let provider = HttpFiniteProducer::try_https_basic(
+    let provider = HttpFiniteProducer::try_https(
         HttpProducerConfig::for_https_loopback(address).unwrap(),
         BindingId::new(197),
         BindingGeneration::INITIAL,
@@ -289,7 +289,6 @@ fn actual_support_refuses_complete_unsupported_expressions_and_incompatible_reus
     );
     let mut changes = Vec::new();
     for scheme in [
-        "nosec",
         "digest",
         "apikey",
         "bearer",
@@ -299,15 +298,6 @@ fn actual_support_refuses_complete_unsupported_expressions_and_incompatible_reus
     ] {
         let mut changed = td.clone();
         changed["securityDefinitions"]["auth"] = json!({"scheme":scheme});
-        changes.push(changed);
-    }
-    for expression in [
-        json!({"scheme":"combo","oneOf":["none","b"]}),
-        json!({"scheme":"combo","allOf":["none","b"]}),
-    ] {
-        let mut changed = td.clone();
-        changed["securityDefinitions"] =
-            json!({"auth":expression,"none":{"scheme":"nosec"},"b":{"scheme":"basic"}});
         changes.push(changed);
     }
     for location in ["query", "body", "cookie", "uri"] {
@@ -950,7 +940,7 @@ fn basic_credential_issuance_prepays_its_own_complete_callback_work() {
         let accounts = bank();
         let policy = Arc::new(ReviewPolicy::default());
         let access = Arc::new(
-            HttpBasicClientAccess::try_new(
+            HttpClientAccess::try_new(
                 instance.reference(),
                 server.td["properties"]["on"]["forms"][0]["href"]
                     .as_str()
@@ -1033,7 +1023,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let accounts = bank();
         let policy = Arc::new(ReviewPolicy::default());
         let access = Arc::new(
-            HttpBasicClientAccess::try_new(
+            HttpClientAccess::try_new(
                 instance.reference(),
                 server.td["properties"]["on"]["forms"][0]["href"]
                     .as_str()
@@ -1044,7 +1034,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
             .unwrap(),
         );
         let validations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let mut registration = try_https_basic_consumer_registration(
+        let mut registration = try_https_consumer_registration(
             keys.client(),
             access.clone(),
             BindingId::new(198),
@@ -1134,7 +1124,7 @@ fn wrapped_policy_changes_inside_permission_and_issuance_cannot_grant_original_w
     let accounts = bank();
     let policy = Arc::new(ReviewPolicy::default());
     let access = Arc::new(
-        HttpBasicClientAccess::try_new(
+        HttpClientAccess::try_new(
             instance.reference(),
             td["properties"]["on"]["forms"][0]["href"].as_str().unwrap(),
             policy.clone(),

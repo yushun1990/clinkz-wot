@@ -2,8 +2,7 @@
 //! See docs/evidence/secure-discovery-consumer.md for invocation and limitations.
 //! This example is also exercised by tests/secure_workflow.rs against real peers.
 use clinkz_wot_binding_http::{
-    HttpBasicClientAccess, HttpBasicCredentials, HttpClientTls,
-    try_https_basic_consumer_registration,
+    HttpBasicCredentials, HttpClientAccess, HttpClientTls, try_https_consumer_registration,
 };
 use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, *};
 use clinkz_wot_discovery::http::*;
@@ -76,7 +75,7 @@ impl ConsumerAccessService for Permission {
         target: &str,
         op: Operation,
     ) -> CoreResult<()> {
-        // HttpBasicClientAccess also checks exact original-instance identity.
+        // HttpClientAccess also checks exact original-instance identity.
         if !instance.is_current() {
             return Err(CoreError::Cancelled(ErrorContext::new(
                 ErrorPhase::Validate,
@@ -228,7 +227,7 @@ fn main() {
         let accounts = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
         let policy = Arc::new(Permission::new(args[6].clone()));
         let access = Arc::new(
-            HttpBasicClientAccess::try_new(
+            HttpClientAccess::try_new(
                 instance.reference(),
                 &args[6],
                 policy,
@@ -240,7 +239,7 @@ fn main() {
             .unwrap(),
         );
         drop((thing_user, thing_password));
-        let registration = try_https_basic_consumer_registration(
+        let registration = try_https_consumer_registration(
             HttpClientTls::from_roots(vec![std::fs::read(&args[8]).unwrap().into()]).unwrap(),
             access,
             BINDING,
