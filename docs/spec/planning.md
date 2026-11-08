@@ -497,6 +497,9 @@ or bounded expansion failure refuse the whole expression before selection.
 Structural dependencies and full standard expansion counts remain checked even
 inside a proxy-bearing or extension-bearing unavailable Combo; opacity cannot
 hide a cycle or reduce its processing cost to an anonymous branch.
+Public typed inputs must pair each built-in discriminator with its matching TD
+variant; `Extension` carrying a built-in name refuses before selection rather
+than concealing its standard semantics as unavailable extension data.
 The current projection admits at most 64 visited nodes, depth 8, 16 complete
 alternatives and 4 non-NoSec components per conjunction; its 1024-unit text/operand
 envelope also charges reference/scheme names and 32 units per parameter. These

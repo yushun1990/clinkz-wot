@@ -782,3 +782,137 @@ fn unavailable_containers_preserve_full_expansion_bounds_and_remain_unqualified(
         }
     }
 }
+
+#[test]
+fn typed_extension_combo_cannot_hide_a_cycle() {
+    use clinkz_wot_td::security_scheme::{SecurityScheme, SecuritySchemeContext};
+    let keys = Keys::for_name("127.0.0.1");
+    let mut td = description_for(address(), json!(["root"]));
+    td["securityDefinitions"]["root"] = json!({"scheme":"combo","oneOf":["none","loop"]});
+    td["securityDefinitions"]["loop"] = json!({"scheme":"combo","allOf":["none","loop"]});
+    let wire_source: Thing = serde_json::from_value(td.clone()).unwrap();
+    let mut source = wire_source.clone();
+    let context: SecuritySchemeContext =
+        serde_json::from_value(td["securityDefinitions"]["loop"].clone()).unwrap();
+    source
+        .security_definitions
+        .insert("loop".into(), SecurityScheme::Extension(context));
+    let owner = consumer_instance();
+    let accounts = bank();
+    let registration = try_https_consumer_registration(
+        keys.client(),
+        client_access(&owner, &td, false, false),
+        BindingId::new(198),
+        BindingGeneration::INITIAL,
+        0,
+    )
+    .unwrap();
+    let registry = ConsumerRegistry::try_new(vec![registration], &accounts)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let prepare = |source: &Thing| {
+        registry.prepare(
+            source,
+            GatewayDefaultV1::LIMITS,
+            accounts.clone(),
+            ConsumerSelector::default(),
+            &mut work(),
+            |job| {
+                while !job.is_finished() {
+                    job.step(&mut work(), false);
+                }
+            },
+        )
+    };
+    assert!(
+        prepare(&wire_source).is_err(),
+        "the ordinary typed Combo rejects this cycle"
+    );
+    // Do not serialize source: a round trip repairs the mismatched variant.
+    let result = prepare(&source);
+    assert!(
+        result.is_err(),
+        "Extension(combo) must not conceal a cycle behind the NoSec alternative"
+    );
+    drop(result);
+    drop(registry);
+    clean(&accounts);
+}
+
+#[test]
+fn extension_variants_reserve_built_in_discriminators() {
+    use clinkz_wot_td::security_scheme::{SecurityScheme, SecuritySchemeContext};
+    for description in [
+        json!({"scheme":"nosec"}),
+        json!({"scheme":"auto"}),
+        json!({"scheme":"combo","oneOf":["none","none"]}),
+        json!({"scheme":"basic"}),
+        json!({"scheme":"digest"}),
+        json!({"scheme":"apikey","name":"X-Api-Key"}),
+        json!({"scheme":"bearer"}),
+        json!({"scheme":"psk"}),
+        json!({"scheme":"oauth2","flow":"client","token":"https://127.0.0.1/token"}),
+        json!({"scheme":"vendor:auth"}),
+    ] {
+        let keys = Keys::for_name("127.0.0.1");
+        let mut td = description_for(address(), json!(["root"]));
+        td["securityDefinitions"]["root"] = json!({"scheme":"combo","oneOf":["none","candidate"]});
+        td["securityDefinitions"]["candidate"] = description.clone();
+        let wire_source: Thing = serde_json::from_value(td.clone()).unwrap();
+        let mut source = wire_source.clone();
+        let context: SecuritySchemeContext = serde_json::from_value(description.clone()).unwrap();
+        source
+            .security_definitions
+            .insert("candidate".into(), SecurityScheme::Extension(context));
+        let owner = consumer_instance();
+        let accounts = bank();
+        let registration = try_https_consumer_registration(
+            keys.client(),
+            client_access(&owner, &td, false, false),
+            BindingId::new(198),
+            BindingGeneration::INITIAL,
+            0,
+        )
+        .unwrap();
+        let registry = ConsumerRegistry::try_new(vec![registration], &accounts)
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let prepare = |source: &Thing| {
+            registry.prepare(
+                source,
+                GatewayDefaultV1::LIMITS,
+                accounts.clone(),
+                ConsumerSelector::default(),
+                &mut work(),
+                |job| {
+                    while !job.is_finished() {
+                        job.step(&mut work(), false);
+                    }
+                },
+            )
+        };
+        // Every wire-shaped control is valid, and may select its real NoSec branch.
+        let control = prepare(&wire_source).unwrap();
+        let (definitions, funding) = control.into_execution();
+        assert_eq!(definitions.len(), 1);
+        assert_eq!(
+            definitions[0].definition().content().security(),
+            &security::SecurityRequirement::NOSEC
+        );
+        drop((definitions, funding));
+        let result = prepare(&source);
+        let vendor = description["scheme"] == "vendor:auth";
+        assert_eq!(
+            result.is_ok(),
+            vendor,
+            "typed Extension discriminator: {description}"
+        );
+        if vendor {
+            assert!(
+                prepare_producer(&td, server_security(&keys, None, None)).is_err(),
+                "a genuine unavailable extension still cannot certify a Producer"
+            );
+        }
+        drop(result);
+        drop(registry);
+        clean(&accounts);
+    }
+}

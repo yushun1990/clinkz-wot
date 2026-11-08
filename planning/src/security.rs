@@ -77,7 +77,13 @@ pub fn prepare_security(
             SecurityDetails::Bearer { .. } => "bearer",
             SecurityDetails::Psk { .. } => "psk",
             SecurityDetails::OAuth2 { .. } => "oauth2",
-            SecurityDetails::Extension => facts.scheme,
+            SecurityDetails::Extension => match facts.scheme {
+                // Serde uses typed variants for these names, but public Rust
+                // values can bypass that dispatch and conceal Combo members.
+                "nosec" | "auto" | "combo" | "basic" | "digest" | "apikey" | "bearer" | "psk"
+                | "oauth2" => return Err(unsupported()),
+                _ => facts.scheme,
+            },
         };
         if facts.scheme != discriminator {
             return Err(unsupported());

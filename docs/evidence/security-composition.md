@@ -53,6 +53,10 @@ owners. It exercises:
   refusal through public preparation; mutated typed scheme discriminators cannot
   turn advertised authentication into NoSec. Conjunction Write includes both a
   complete successful exchange and revoked delivery after completed effects.
+  Public typed `Extension` values carrying built-in names are also rejected,
+  including a cyclic Combo that Serde would normalize into the proper variant.
+  Ordinary typed controls and genuine unavailable vendor alternatives retain
+  their supported Consumer-selection and complete Producer-refusal behavior.
 - Independent acceptance counterexamples: an earlier verifier increasing the next
   verifier's work must refuse before that callback; proxy/extension Combo metadata
   cannot hide cycles or excessive expansion. Both reproductions failed before
