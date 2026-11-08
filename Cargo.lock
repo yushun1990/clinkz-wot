@@ -234,6 +234,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-constrained-consumer-fixture"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-servient-finite",
+]
+
+[[package]]
 name = "clinkz-wot-consumer-property-read-binding-fixture"
 version = "0.0.0"
 dependencies = [

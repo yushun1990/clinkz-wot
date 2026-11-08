@@ -33,6 +33,7 @@ cargo check --locked -p clinkz-wot-planning --no-default-features --features asy
 cargo check --locked --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async --target "$TARGET"
 cargo check --locked -p clinkz-wot-servient --no-default-features --features async --target "$TARGET"
 
-echo "--- TD preparation and Core vocabulary without pointer atomics ---"
+echo "--- TD tooling and modern finite execution without pointer atomics ---"
 rustup target add thumbv6m-none-eabi
 cargo check --locked -p clinkz-wot-td --no-default-features --features validated-thing --target thumbv6m-none-eabi
+cargo check --locked -p clinkz-wot-constrained-consumer-fixture --target thumbv6m-none-eabi

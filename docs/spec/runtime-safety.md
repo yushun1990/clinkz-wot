@@ -308,6 +308,50 @@ cases where applicable and their own storage/wake/release evidence. No portable
 compile, matching mock trace or std flag qualifies hardware, SDK, allocator or
 real-time performance. Missing implemented profiles remain gaps, not exclusions.
 
+### Caller-owned finite Read
+
+`borrowed_consumer::ReadRuntime` demonstrates the modern finite kernel with one
+caller-owned slot, no std, reference counts, pointer atomics or synchronization.
+Its `LocalConsumerRef` loan proves issuer lifetime/identity without revocation
+power; the `LocalConsumerInstance` owner's monotonic Cell
+revokes authority, and checked non-reused sequences distinguish obligations across
+slot/facet reuse. Equal numeric Thing slots do not grant authority. Exclusive
+`&mut` progress owns native work; permission and codec callbacks can still revoke
+external authority, which is checked again before acceptance/handoff.
+
+`ReadDefinition` borrows source-free value meaning, an actual Binding/program,
+the actual bounded validator, and owns its configuration snapshot. Current access
+policy is bound separately. Passive mapping, complete support, validator bounds,
+availability and policy revision are checked around linked permission callbacks.
+Neither NoSec nor a schema marker grants permission. The representation currently
+refuses all other security requirements rather than bypassing their obligations.
+
+Caller-provided definition/service/scratch storage remains with its original
+owner through safe loans. Before native construction, the caller supplies a
+Foundation `ResourceReservation` for complete Engine work/output/backing, including
+retirement; owner identity, resource kind and capacity must match. The reservation
+moves with the accepted native work and unread settlement. Refusal returns it
+unchanged. `into_funding` disposes native work and output before returning the
+same complete lease for reuse; Drop refunds it after local disposal. This is no
+universal account/storage abstraction or claim about private native SDK memory.
+
+The shared kernel preserves the first cause independently of native errors,
+cleanup failures and normal/late output. Read's native facet permits local cleanup
+acknowledgement or a retained racing result; it grants no external cleanup transfer
+destination or remote cancellation guarantee. Pending/failed cleanup retains its
+original native owner and paid progress remains possible after revocation. Drop
+must dispose local resources finitely without network waits and cannot claim an
+acknowledged drain. Losing a copyable token does not drive background cleanup;
+the slot owner can close/step or perform local disposal.
+
+The [downstream fixture](../evidence/constrained-finite-execution.md) exercises
+these rules with real datagrams and inline output, plus no-atomic compilation.
+Host finite execution shares the kernel but retains its original Rc registry,
+reentrant controls, Host account bank and boxed native calls. Continuing Actions,
+notifications, Producer publication, TD preparation, general caller-provided
+structured-schema storage, concrete Embedded drivers and automatic scheduling
+are outside this constrained execution claim.
+
 QueryAllActions retains its finite query's original Consumer authority, root
 mapping, named output schemas, actual services and normal/late native payload
 through settlement disposal. Cancellation of this query closes its native

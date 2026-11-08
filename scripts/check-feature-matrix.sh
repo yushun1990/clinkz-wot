@@ -63,6 +63,8 @@ check "servient async"          -p clinkz-wot-servient --no-default-features --f
 echo "=== source-free Producer execution ==="
 check "finite default"          -p clinkz-wot-servient-finite
 check "finite no-features"      -p clinkz-wot-servient-finite --no-default-features
+check "finite caller-owned"     -p clinkz-wot-constrained-consumer-fixture
+check "finite prepared loan"    -p clinkz-wot-constrained-consumer-fixture --features host-meaning
 
 echo "=== Property Read architecture fixtures ==="
 check "aggregate binding default"      -p clinkz-wot-property-read-binding-fixture

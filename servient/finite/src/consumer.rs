@@ -1,6 +1,7 @@
 //! Manually driven finite Consumer calls. This module depends only on Core and
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
+use clinkz_wot_core::execution::{FiniteCallDriver, FiniteCallState, NativeProgress};
 use clinkz_wot_core::thing::AffordanceSite;
 use clinkz_wot_core::{consumer::*, host_accounts::*, *};
 use clinkz_wot_foundation::{
@@ -305,7 +306,7 @@ impl Slot {
         match self {
             Self::Vacant => None,
             Self::Reserved { control, .. } => control.as_ref(),
-            Self::Ready(call) => Some(&call.control),
+            Self::Ready(call) => Some(&call.work.control),
         }
     }
 }
@@ -405,12 +406,12 @@ impl State {
             let mut registry = self.registry.borrow_mut();
             let slot = &mut registry.slots[index];
             match slot {
-                Slot::Ready(call) if sequence.is_none_or(|s| s == call.sequence) => {
+                Slot::Ready(call) if sequence.is_none_or(|s| s == call.work.sequence) => {
                     let Slot::Ready(call) = core::mem::replace(slot, Slot::Vacant) else {
                         unreachable!()
                     };
-                    let sequence = call.sequence;
-                    let control = call.control.clone();
+                    let sequence = call.work.sequence;
+                    let control = call.work.control.clone();
                     *slot = Slot::Reserved {
                         sequence,
                         control: Some(control.clone()),
@@ -494,6 +495,10 @@ impl Drop for SlotLease<'_> {
     }
 }
 struct Call {
+    progress: FiniteCallState,
+    work: CallWork,
+}
+struct CallWork {
     consumer: ConsumerInstanceRef,
     control: Rc<CallControl>,
     effect: ConsumerEffect,
@@ -502,13 +507,8 @@ struct Call {
     outcome: Option<BindingCallSettlement<CoreResult<InteractionOutput>>>,
     rejected_output: Option<InteractionOutput>,
     definition: Arc<Definition>,
-    first_cause: Option<CoreError>,
     cleanup_error: Option<CoreError>,
     refused_transfer: Option<CleanupTransferRequest>,
-    cancelling: bool,
-    cancel_started: bool,
-    terminal: bool,
-    output_validated: bool,
     selection: Option<collection::PropertySelection>,
     deadline: Deadline,
     _funding: Vec<HostCapacityReservation>,
@@ -965,28 +965,26 @@ impl ConsumerRuntime {
         let slot = reserved.index;
         let sequence = reserved.sequence;
         let mut call = Call {
-            consumer: state.consumer.clone(),
-            control: control.clone(),
-            effect: ConsumerEffect::NotAttempted,
-            sequence,
-            definition,
-            raw: Some(raw),
-            outcome: None,
-            rejected_output: None,
-            first_cause: None,
-            cleanup_error: None,
-            refused_transfer: None,
-            cancelling: false,
-            cancel_started: false,
-            terminal: false,
-            output_validated: false,
-            selection,
-            deadline,
-            _funding: funding,
+            progress: FiniteCallState::default(),
+            work: CallWork {
+                consumer: state.consumer.clone(),
+                control: control.clone(),
+                effect: ConsumerEffect::NotAttempted,
+                sequence,
+                definition,
+                raw: Some(raw),
+                outcome: None,
+                rejected_output: None,
+                cleanup_error: None,
+                refused_transfer: None,
+                selection,
+                deadline,
+                _funding: funding,
+            },
         };
         // Native construction is local, but can revoke/close through a linked
         // callback. Retain that complete work for cancellation before any poll.
-        call.fence(state);
+        call.work.fence(state);
         reserved.call = Some(call);
         drop(reserved);
         Ok(ConsumerCall {
@@ -1023,7 +1021,7 @@ impl ConsumerRuntime {
             {
                 let call = lease.call.as_mut().unwrap();
                 let _ = call.step(&self.state, cx, budget);
-                if call.control.abandoned.get() && call.terminal {
+                if call.work.control.abandoned.get() && call.progress.is_terminal() {
                     // Vacate the slot before disposing linked native owners.
                     drop(lease.take());
                 }
@@ -1163,8 +1161,14 @@ impl ConsumerSettlement {
         collection::PropertySelection,
     )> {
         match (
-            self.call.definition.input.definition.content().schemas(),
-            self.call.selection,
+            self.call
+                .work
+                .definition
+                .input
+                .definition
+                .content()
+                .schemas(),
+            self.call.work.selection,
         ) {
             (
                 ConsumerFiniteSchemas::WriteAllProperties(schema)
@@ -1175,17 +1179,17 @@ impl ConsumerSettlement {
         }
     }
     pub fn effect(&self) -> ConsumerEffect {
-        self.call.effect
+        self.call.work.effect
     }
     pub fn consumer(&self) -> &ConsumerInstanceRef {
-        &self.call.consumer
+        &self.call.work.consumer
     }
     pub fn operation(&self) -> Operation {
-        self.call.definition.input.definition.operation()
+        self.call.work.definition.input.definition.operation()
     }
     /// Lends the original coordinate without exposing its shared name owner.
     pub fn affordance(&self) -> AffordanceSite<'_> {
-        match self.call.definition.input.definition.affordance() {
+        match self.call.work.definition.input.definition.affordance() {
             AffordanceTarget::Thing => AffordanceSite::Thing,
             AffordanceTarget::Property(name) => AffordanceSite::Property(name),
             AffordanceTarget::Action(name) => AffordanceSite::Action(name),
@@ -1193,24 +1197,25 @@ impl ConsumerSettlement {
         }
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
-        self.call.first_cause.as_ref()
+        self.call.progress.first_cause()
     }
     /// Lends original native output rejected by captured result validation.
     pub fn rejected_output(&self) -> Option<InteractionOutputView<'_>> {
         self.call
+            .work
             .rejected_output
             .as_ref()
             .map(InteractionOutput::view)
     }
     pub fn refused_transfer(&self) -> Option<&CleanupTransferRequest> {
-        self.call.refused_transfer.as_ref()
+        self.call.work.refused_transfer.as_ref()
     }
     pub fn cleanup_error(&self) -> Option<&CoreError> {
-        self.call.cleanup_error.as_ref()
+        self.call.work.cleanup_error.as_ref()
     }
     /// Lends the complete original outcome without exposing payload owners.
     pub fn native_outcome(&self) -> ConsumerNativeOutcome<'_> {
-        match self.call.outcome.as_ref().unwrap() {
+        match self.call.work.outcome.as_ref().unwrap() {
             BindingCallSettlement::Returned(result) => {
                 ConsumerNativeOutcome::Returned(result.as_ref().map(InteractionOutput::view))
             }
@@ -1226,7 +1231,7 @@ impl ConsumerSettlement {
     /// Authoritative application outcome. A retained late native success does
     /// not override cancellation, revocation, policy or validation failure.
     pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
-        if let Some(error) = &self.call.first_cause {
+        if let Some(error) = self.call.progress.first_cause() {
             return Err(error.clone());
         }
         match self.native_outcome() {
@@ -1241,224 +1246,183 @@ impl ConsumerSettlement {
         }
     }
     pub fn binding(&self) -> BindingRegistrationIdentity {
-        self.call.definition.binding()
+        self.call.work.definition.binding()
     }
 }
 impl Call {
-    fn cancel(&mut self, error: CoreError) {
-        self.control.record(error);
-        self.first_cause = self.control.cause();
-        if !self.terminal {
-            self.cancelling = true;
-        }
+    fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<()> {
+        self.progress.step(
+            &mut HostCallDriver {
+                work: &mut self.work,
+                state,
+            },
+            cx,
+            budget,
+        )
     }
-    fn fence(&mut self, state: &State) {
+}
+impl CallWork {
+    fn fence(&mut self, state: &State) -> Option<CoreError> {
         match self
             .deadline
             .checked_is_elapsed_at(self.control.last_time.get())
         {
             Some(false) => {}
-            Some(true) => self.cancel(CoreError::TimedOut(context())),
-            None => self.cancel(clock_error()),
+            Some(true) => self.control.record(CoreError::TimedOut(context())),
+            None => self.control.record(clock_error()),
         }
         if !state.current() {
             self.control.record(stale());
         }
-        if let Some(cause) = self.control.cause() {
-            self.cancel(cause);
-        }
+        self.control.cause()
     }
-    /// Ready requires a terminal outcome and paid current-policy checks in this
-    /// step. A previously terminal, unread result alone cannot authorize delivery.
-    fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<()> {
-        self.fence(state);
-        if !pay(budget, W::ProviderProbes, self.definition.access_work()) {
-            return Poll::Pending;
-        }
-        if let Err(e) = self
+}
+struct HostCallDriver<'a> {
+    work: &'a mut CallWork,
+    state: &'a State,
+}
+impl FiniteCallDriver for HostCallDriver<'_> {
+    fn fence(&mut self) -> Option<CoreError> {
+        self.work.fence(self.state)
+    }
+    fn record(&mut self, error: CoreError) {
+        self.work.control.record(error);
+    }
+    fn access_work(&self) -> u64 {
+        self.work.definition.access_work()
+    }
+    fn check_current(&mut self) -> CoreResult<()> {
+        self.work
             .definition
-            .check_current(&self.consumer, self.selection)
-        {
-            self.cancel(e);
-        }
-        self.fence(state);
-        // A completed validation survives a yield for the final policy check.
-        // The check above is fresh in this step; no codec/native callback can
-        // change policy between it and this retained-result handoff.
-        if self.terminal || self.output_validated {
-            self.terminal = true;
-            return Poll::Ready(());
-        }
-        if self.outcome.is_none() {
-            // Raw callbacks receive only isolated native credit after Engine
-            // bookkeeping prepayment; no zero-credit callback is invoked.
-            if !pay(budget, W::HandlerSteps, 1) {
-                return Poll::Pending;
-            }
-            if self.cancelling {
-                if !pay(budget, W::CleanupItems, 1) {
-                    return Poll::Pending;
-                }
-                let mut native = native_budget(budget);
-                if native.is_exhausted() {
-                    return Poll::Pending;
-                }
-                self.effect = ConsumerEffect::Unknown;
-                let raw = self.raw.as_mut().unwrap();
-                let outcome = if self.cancel_started {
-                    match raw.as_pin_mut().poll_cancel(cx, &mut native) {
-                        Poll::Pending => None,
-                        Poll::Ready(Ok(value)) => Some(value),
-                        Poll::Ready(Err(error)) => {
-                            self.cleanup_error.get_or_insert(error);
-                            None
-                        }
+            .check_current(&self.work.consumer, self.work.selection)
+    }
+    fn poll_native(
+        &mut self,
+        cx: &mut Context<'_>,
+        cancel: Option<(&CoreError, bool)>,
+        budget: &mut WorkBudget,
+    ) -> NativeProgress {
+        let work = &mut self.work;
+        work.effect = ConsumerEffect::Unknown;
+        let raw = work.raw.as_mut().unwrap();
+        let mut progress = NativeProgress::Pending;
+        work.outcome = if let Some((cause, started)) = cancel {
+            if started {
+                match raw.as_pin_mut().poll_cancel(cx, budget) {
+                    Poll::Pending => None,
+                    Poll::Ready(Ok(value)) => Some(value),
+                    Poll::Ready(Err(error)) => {
+                        work.cleanup_error.get_or_insert(error);
+                        None
                     }
-                } else {
-                    let cleanup = CleanupPhaseContext::bind(
-                        CleanupReservation::new(
-                            CleanupSlotId::new(SlotIndex::new(0), Generation::INITIAL),
-                            self.definition.resources().admitted(),
-                            0,
-                            WorkBudget::new().with_remaining(W::CleanupItems, 1),
-                        ),
-                        CleanupOperation::CancelRequest,
-                        self.first_cause.as_ref().unwrap().clone(),
-                        Deadline::NONE,
-                    );
-                    match raw.as_pin_mut().start_cancel(cx, cleanup, &mut native) {
-                        Ok(StartStatus::Pending) => {
-                            self.cancel_started = true;
-                            None
-                        }
-                        Ok(StartStatus::Ready(value)) => Some(value),
-                        Err(error) => {
-                            self.cleanup_error.get_or_insert(error);
-                            None
-                        }
-                    }
-                };
-                refund_native(budget, native);
-                self.outcome = outcome;
+                }
             } else {
-                let mut native = native_budget(budget);
-                if native.is_exhausted() {
-                    return Poll::Pending;
-                }
-                self.effect = ConsumerEffect::Unknown;
-                if let Poll::Ready(result) = self
-                    .raw
-                    .as_mut()
-                    .unwrap()
-                    .as_pin_mut()
-                    .poll_result(cx, &mut native)
-                {
-                    if let Err(error) = &result {
-                        self.cancel(error.clone());
+                let cleanup = CleanupPhaseContext::bind(
+                    CleanupReservation::new(
+                        CleanupSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+                        work.definition.resources().admitted(),
+                        0,
+                        WorkBudget::new().with_remaining(W::CleanupItems, 1),
+                    ),
+                    CleanupOperation::CancelRequest,
+                    cause.clone(),
+                    Deadline::NONE,
+                );
+                match raw.as_pin_mut().start_cancel(cx, cleanup, budget) {
+                    Ok(StartStatus::Pending) => {
+                        progress = NativeProgress::Cancelling;
+                        None
                     }
-                    self.outcome = Some(BindingCallSettlement::Returned(result));
+                    Ok(StartStatus::Ready(value)) => Some(value),
+                    Err(error) => {
+                        work.cleanup_error.get_or_insert(error);
+                        None
+                    }
                 }
-                refund_native(budget, native);
             }
-        }
-        self.fence(state);
+        } else {
+            match raw.as_pin_mut().poll_result(cx, budget) {
+                Poll::Pending => None,
+                Poll::Ready(result) => {
+                    if let Err(error) = &result {
+                        work.control.record(error.clone());
+                    }
+                    Some(BindingCallSettlement::Returned(result))
+                }
+            }
+        };
         if matches!(
-            self.outcome,
+            work.outcome,
             Some(BindingCallSettlement::Cancelled {
                 disposition: BindingCancellationDisposition::TransferRequired(_),
                 ..
             })
         ) {
-            // This owner granted no named external transfer destination. Retain
-            // the complete original work and drive manual cleanup; a fabricated
-            // request is not a terminal disposition or an acknowledgement.
+            // No external destination was granted. Keep original work and drive
+            // its cleanup; a request alone acknowledges no ownership transfer.
             if let Some(BindingCallSettlement::Cancelled {
                 disposition: BindingCancellationDisposition::TransferRequired(request),
                 ..
-            }) = self.outcome.take()
+            }) = work.outcome.take()
             {
-                self.refused_transfer = Some(request);
+                work.refused_transfer = Some(request);
             }
-            self.cleanup_error
+            work.cleanup_error
                 .get_or_insert(CoreError::InternalInvariant(ErrorContext::new(
                     ErrorPhase::Cleanup,
                     RetryClass::Never,
                 )));
-            self.cancel_started = true;
-            return Poll::Pending;
+            return NativeProgress::Cancelling;
         }
-        if let Some(outcome) = self.outcome.as_mut() {
-            if let BindingCallSettlement::Returned(Ok(output)) = outcome {
-                // Authorization/service loss fences application success while
-                // preserving the original result in the settlement owner.
-                match self.definition.validate(output, self.selection, budget) {
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Ok(())) => {
-                        self.output_validated = true;
-                        if matches!(
-                            self.definition.input.definition.operation(),
-                            Operation::WriteProperty
-                                | Operation::WriteAllProperties
-                                | Operation::WriteMultipleProperties
-                        ) {
-                            self.effect = if output
-                                .metadata()
-                                .property_write_report()
-                                .is_some_and(|r| !r.is_complete())
-                            {
-                                ConsumerEffect::Reported
-                            } else {
-                                ConsumerEffect::Completed
-                            };
-                        }
-                    }
-                    Poll::Ready(Err(error)) => {
-                        self.control.record(error.clone());
-                        self.first_cause = self.control.cause();
-                        if let BindingCallSettlement::Returned(Ok(original)) =
-                            core::mem::replace(outcome, BindingCallSettlement::Returned(Err(error)))
-                        {
-                            self.rejected_output = Some(original);
-                        }
-                    }
-                }
-            }
-            if !state.current() {
-                self.control.record(stale());
-            }
-            self.first_cause = self.control.cause();
-            // The native and codec callbacks may change application policy.
-            // Short current-check credit retains the complete original result.
-            if self.first_cause.is_none()
-                && matches!(outcome, BindingCallSettlement::Returned(Ok(_)))
-            {
-                if !pay(budget, W::ProviderProbes, self.definition.access_work()) {
-                    return Poll::Pending;
-                }
-                if let Err(error) = self
-                    .definition
-                    .check_current(&self.consumer, self.selection)
-                {
-                    self.cancel(error);
-                }
-            }
-            self.fence(state);
-            self.terminal = true;
-            return Poll::Ready(());
+        if work.outcome.is_some() {
+            NativeProgress::Settled
+        } else {
+            progress
         }
-        Poll::Pending
     }
-}
-fn native_budget(b: &mut WorkBudget) -> WorkBudget {
-    let n = b.remaining(W::BindingPolls).min(1);
-    b.consume(W::BindingPolls, n).unwrap();
-    WorkBudget::new().with_remaining(W::BindingPolls, n)
-}
-fn refund_native(b: &mut WorkBudget, native: WorkBudget) {
-    b.set_remaining(
-        W::BindingPolls,
-        b.remaining(W::BindingPolls) + native.remaining(W::BindingPolls),
-    );
+    fn has_success(&self) -> bool {
+        matches!(
+            self.work.outcome,
+            Some(BindingCallSettlement::Returned(Ok(_)))
+        )
+    }
+    fn validate_output(&mut self, budget: &mut WorkBudget) -> Poll<CoreResult<()>> {
+        let work = &mut self.work;
+        let outcome = work.outcome.as_mut().unwrap();
+        let BindingCallSettlement::Returned(Ok(output)) = outcome else {
+            unreachable!()
+        };
+        match work.definition.validate(output, work.selection, budget) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => {
+                if matches!(
+                    work.definition.input.definition.operation(),
+                    Operation::WriteProperty
+                        | Operation::WriteAllProperties
+                        | Operation::WriteMultipleProperties
+                ) {
+                    work.effect = if output
+                        .metadata()
+                        .property_write_report()
+                        .is_some_and(|r| !r.is_complete())
+                    {
+                        ConsumerEffect::Reported
+                    } else {
+                        ConsumerEffect::Completed
+                    };
+                }
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(error)) => {
+                if let BindingCallSettlement::Returned(Ok(original)) =
+                    core::mem::replace(outcome, BindingCallSettlement::Returned(Err(error.clone())))
+                {
+                    work.rejected_output = Some(original);
+                }
+                Poll::Ready(Err(error))
+            }
+        }
+    }
 }
 fn stale() -> CoreError {
     CoreError::StaleHandle(context())

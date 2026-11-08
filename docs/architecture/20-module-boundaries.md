@@ -138,6 +138,15 @@ availability on a no-atomic target proves tooling compilation only. Identity/sha
 result seals are not full DataSchema validation. The boundary model itself grants
 no implementation, complete-family or production qualification claim.
 
+The modern [finite execution boundary](../spec/interaction-core.md#finite-execution-and-ownership-representations)
+now separates shared value/result/progress contracts from Host ownership. Core
+exposes borrowed meaning and output plus a common finite transition kernel;
+Servient's caller-owned Read slot and its existing Host Consumer use that kernel.
+The narrow [executable proof](../evidence/constrained-finite-execution.md) includes
+actual test-Binding datagrams and no-atomic compilation. Its native facet depends
+only on Core/Foundation, and the runtime retains no TD/Planning dependency. This
+establishes a bounded alternative representation, not all-family Embedded support.
+
 The withdrawn event broker/subscription queues, old TD-at-call-time facade,
 Zenoh/pico implementations and admission prototypes remain in Git. Their deletion
 withdrew availability, not the enduring product goals. Historical evidence and

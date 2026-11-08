@@ -1,3 +1,4 @@
+#[cfg(target_has_atomic = "ptr")]
 use alloc::{borrow::Cow, string::String, sync::Arc, vec::Vec};
 
 /// An encoded interaction payload plus protocol-neutral media metadata.
@@ -6,6 +7,7 @@ use alloc::{borrow::Cow, string::String, sync::Arc, vec::Vec};
 /// is a single refcount bump while retained results share their backing. Access the bytes
 /// via `body.as_ref()` / `&body[..]` (the `as_slice` method is unstable on
 /// `Arc<[u8]>`).
+#[cfg(target_has_atomic = "ptr")]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Payload {
     /// Encoded payload bytes (shared by reference).
@@ -16,6 +18,7 @@ pub struct Payload {
     pub content_coding: Option<String>,
 }
 
+#[cfg(target_has_atomic = "ptr")]
 impl Payload {
     /// Borrows bytes and media metadata without lending their allocation owners.
     pub fn view(&self) -> PayloadView<'_> {
@@ -64,6 +67,7 @@ pub struct CodecInput<'a> {
 }
 
 /// Protocol-neutral payload codec contract.
+#[cfg(target_has_atomic = "ptr")]
 pub trait PayloadCodec {
     /// Returns the media type handled by this codec.
     fn content_type(&self) -> Cow<'_, str>;

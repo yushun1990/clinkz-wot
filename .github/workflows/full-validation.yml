@@ -49,6 +49,14 @@ jobs:
         if: inputs.level != 'authority'
         run: cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml
 
+      - name: Execute modern caller-owned Read and check no-atomic target
+        if: inputs.level != 'authority'
+        run: |
+          cargo test --locked -p clinkz-wot-constrained-consumer-fixture
+          cargo test --locked -p clinkz-wot-constrained-consumer-fixture --features host-meaning
+          cargo test --locked -p clinkz-wot-servient-finite --no-default-features --doc
+          cargo check --locked -p clinkz-wot-constrained-consumer-fixture --target thumbv6m-none-eabi
+
       - name: Exercise qualified Producer and Consumer Events with a real MQTT broker
         if: inputs.level != 'authority'
         run: |

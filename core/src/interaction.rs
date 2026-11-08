@@ -8,11 +8,13 @@
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 use core::time::Duration;
+#[cfg(target_has_atomic = "ptr")]
 use core::{alloc::Layout, mem::size_of};
 
 use clinkz_wot_foundation::ResourceLimits;
 
 use crate::identity::{ActionInvocationRef, BindingGeneration, BindingId, PlanId};
+#[cfg(target_has_atomic = "ptr")]
 use crate::{Payload, Principal};
 
 /// Media type identifier (e.g. `application/json`, `application/cbor`).
@@ -119,6 +121,7 @@ impl AcceptHint {
 ///
 /// The former `security_metadata` field is removed: security material belongs
 /// to the binding/transport layer, not the handler input.
+#[cfg(target_has_atomic = "ptr")]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InteractionInput {
     /// Optional encoded payload for write, action, subscription, or cancellation flows.
@@ -135,6 +138,7 @@ pub struct InteractionInput {
     pub accept: Option<AcceptHint>,
 }
 
+#[cfg(target_has_atomic = "ptr")]
 impl InteractionInput {
     /// Creates an empty interaction input.
     pub fn empty() -> Self {
@@ -416,6 +420,7 @@ impl InteractionOutputMetadata {
 }
 
 /// Output returned by an interaction handler or consumed Thing call.
+#[cfg(target_has_atomic = "ptr")]
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct InteractionOutput {
@@ -424,6 +429,7 @@ pub struct InteractionOutput {
     metadata: InteractionOutputMetadata,
 }
 
+#[cfg(target_has_atomic = "ptr")]
 impl InteractionOutput {
     /// Lends slices and metadata without exposing cloneable payload owners.
     pub fn view(&self) -> InteractionOutputView<'_> {
@@ -525,6 +531,20 @@ pub struct InteractionOutputView<'a> {
 }
 
 impl<'a> InteractionOutputView<'a> {
+    /// A borrowed description of untrusted output. Construction grants no
+    /// identity, shape or DataSchema validation claim.
+    pub const fn new(
+        data: Option<crate::PayloadView<'a>>,
+        status: InteractionStatus,
+        metadata: &'a InteractionOutputMetadata,
+    ) -> Self {
+        Self {
+            data,
+            status,
+            metadata,
+        }
+    }
+
     /// Lends the original response bytes and media metadata, when present.
     pub const fn data(self) -> Option<crate::PayloadView<'a>> {
         self.data
@@ -545,6 +565,7 @@ impl<'a> InteractionOutputView<'a> {
 /// inline value, exact Arc slice allocation (including its two counters) and
 /// both String capacities. Binding-private ingress and application work are
 /// accounted at their own owners, not by this representation helper.
+#[cfg(target_has_atomic = "ptr")]
 pub fn interaction_output_backing(output: &InteractionOutput) -> Option<usize> {
     let Some(payload) = output.data() else {
         return Some(size_of::<InteractionOutput>());

@@ -4,10 +4,9 @@
 //!
 //! Protocol-neutral vocabulary and execution contracts.
 //!
-//! Operation vocabulary is available without pointer atomics. The current
-//! execution representations require pointer atomics; their APIs are absent on
-//! targets without that capability. TD tooling can use the vocabulary without
-//! inheriting an Arc requirement. This is not a no-atomic execution claim.
+//! Semantic values, borrowed output and the finite execution kernel are available
+//! without std or pointer atomics. Host owners and historical execution carriers
+//! retain their platform requirements; see `execution` for the shared boundary.
 #![no_std]
 
 #[cfg(any(feature = "std", test))]
@@ -21,33 +20,28 @@ pub mod action;
 pub mod artifact;
 #[cfg(target_has_atomic = "ptr")]
 pub mod binding;
-#[cfg(target_has_atomic = "ptr")]
 pub mod collection;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod consumer;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod consumer_action;
 pub mod data_schema;
-#[cfg(target_has_atomic = "ptr")]
 pub mod deadline;
-#[cfg(target_has_atomic = "ptr")]
 pub mod error;
+pub mod execution;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod finite;
 #[cfg(target_has_atomic = "ptr")]
 pub mod handler;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod host_accounts;
-#[cfg(target_has_atomic = "ptr")]
 pub mod identity;
-#[cfg(target_has_atomic = "ptr")]
 pub mod interaction;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod notification;
 pub mod operation;
 #[cfg(target_has_atomic = "ptr")]
 pub mod outbound;
-#[cfg(target_has_atomic = "ptr")]
 pub mod payload;
 #[cfg(target_has_atomic = "ptr")]
 pub mod plan;
@@ -57,13 +51,10 @@ pub mod producer;
 pub mod publication;
 #[cfg(target_has_atomic = "ptr")]
 mod response;
-#[cfg(target_has_atomic = "ptr")]
 pub mod security;
-#[cfg(target_has_atomic = "ptr")]
 pub mod status;
 #[cfg(target_has_atomic = "ptr")]
 pub mod sync;
-#[cfg(target_has_atomic = "ptr")]
 pub mod thing;
 
 #[cfg(target_has_atomic = "ptr")]
@@ -103,9 +94,7 @@ pub use binding::{
     HostConsumerBindingRegistrationInput, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
     HostShutdownRouteGuard, RouteAbortInput, RouteServerBinding, RouteShutdownInput,
 };
-#[cfg(target_has_atomic = "ptr")]
 pub use deadline::Deadline;
-#[cfg(target_has_atomic = "ptr")]
 pub use error::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, ResourceFailureDomain, RetryClass,
     SecurityFailureReason, SelectionFailureReason,
@@ -115,33 +104,31 @@ pub use handler::{
     CancellationView, HandlerContext, HandlerFootprint, HandlerStep, ReadPropertyHandler,
     StaticHandlerRegistration,
 };
-#[cfg(target_has_atomic = "ptr")]
 pub use identity::{
     ActionInvocationRef, ActiveRouteId, AffordanceSlotId, BindingConfigurationDigest,
     BindingGeneration, BindingId, BindingSlotId, CleanupSlotId, CorrelationId, HandlerSlotId,
     PlanId, PlanSetGeneration, PlanSlotId, PreparedRouteId, PreparedRouteKey, SubscriptionId,
     SubscriptionSlotId, ThingId, ThingSlotId,
 };
-#[cfg(target_has_atomic = "ptr")]
 pub use interaction::{
-    AcceptHint, BindingResponseMetadata, InteractionInput, InteractionOptions, InteractionOutput,
-    InteractionOutputMetadata, InteractionOutputView, InteractionStatus, MediaType,
-    ResponsePayloadRole, ResponseSelection, interaction_output_backing,
+    AcceptHint, BindingResponseMetadata, InteractionOptions, InteractionOutputMetadata,
+    InteractionOutputView, InteractionStatus, MediaType, ResponsePayloadRole, ResponseSelection,
 };
+#[cfg(target_has_atomic = "ptr")]
+pub use interaction::{InteractionInput, InteractionOutput, interaction_output_backing};
 pub use operation::Operation;
 #[cfg(target_has_atomic = "ptr")]
 pub use outbound::OutboundRequest;
+pub use payload::{CodecInput, PayloadView};
 #[cfg(target_has_atomic = "ptr")]
-pub use payload::{CodecInput, Payload, PayloadCodec, PayloadView};
+pub use payload::{Payload, PayloadCodec};
 #[cfg(target_has_atomic = "ptr")]
 pub use plan::{BindingCandidate, LogicalInteractionPlan};
 #[cfg(target_has_atomic = "ptr")]
 pub use response::consumer_result_backing;
 #[cfg(target_has_atomic = "ptr")]
 pub use response::validate_untrusted_binding_output;
-#[cfg(target_has_atomic = "ptr")]
 pub use security::{AuthMaterial, Principal, PrincipalId, check_scopes};
-#[cfg(target_has_atomic = "ptr")]
 pub use status::{
     CleanupHandle, CleanupOperation, CleanupOutcome, CleanupRecord, PendingWork, PendingWorkClass,
     ProcessEvent, ProcessTerminal, StartStatus, StepStatus,
@@ -149,4 +136,5 @@ pub use status::{
 #[cfg(target_has_atomic = "ptr")]
 pub use sync::WotLock;
 #[cfg(target_has_atomic = "ptr")]
-pub use thing::{AffordanceKind, AffordanceTarget};
+pub use thing::AffordanceTarget;
+pub use thing::{AffordanceKind, AffordanceSite};

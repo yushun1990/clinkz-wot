@@ -27,6 +27,7 @@ use core::{cell::Cell, mem::size_of, task::Poll};
 const MAX_INVOCATIONS: usize = 128;
 
 #[cfg(test)]
+#[path = "action/validation_work_tests.rs"]
 mod validation_work_tests;
 
 /// A registered application behavior, not a per-Binding instance. The query

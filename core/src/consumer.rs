@@ -540,10 +540,9 @@ pub enum ConsumerEffect {
 }
 
 /// Immutable semantic execution content. It contains no endpoint, executor,
-/// service, policy, authority or account. The Host owner below chooses Arc;
-/// this adds no shared-pointer field to semantic content. Existing finite Core
-/// coordinate/schema types and feature gates remain; portable execution is not
-/// established by this Host owner.
+/// service, policy, authority or account. Its existing coordinate/schema storage
+/// remains Host-oriented. `value_execution` lends the shared meaning without
+/// imposing that storage on another execution representation.
 pub struct ConsumerExecutionContent {
     affordance: AffordanceTarget,
     operation: Operation,
@@ -585,19 +584,9 @@ impl ConsumerExecutionContent {
                 )
         ) || !matches!(
             (&schemas, operation),
-            (
-                ConsumerFiniteSchemas::Value(ValueSchemas {
-                    input: None,
-                    output: Some(_)
-                }),
-                Operation::ReadProperty
-            ) | (
-                ConsumerFiniteSchemas::Value(ValueSchemas {
-                    input: Some(_),
-                    output: None
-                }),
-                Operation::WriteProperty
-            ) | (ConsumerFiniteSchemas::Value(_), Operation::InvokeAction)
+            (ConsumerFiniteSchemas::Value(_), Operation::ReadProperty)
+                | (ConsumerFiniteSchemas::Value(_), Operation::WriteProperty)
+                | (ConsumerFiniteSchemas::Value(_), Operation::InvokeAction)
                 | (
                     ConsumerFiniteSchemas::QueryAllActions(_),
                     Operation::QueryAllActions
@@ -621,6 +610,14 @@ impl ConsumerExecutionContent {
         ) {
             return Err(invalid());
         }
+        if let ConsumerFiniteSchemas::Value(values) = &schemas {
+            let site = match &affordance {
+                AffordanceTarget::Property(n) => AffordanceSite::Property(n),
+                AffordanceTarget::Action(n) => AffordanceSite::Action(n),
+                _ => return Err(invalid()),
+            };
+            crate::execution::ValueExecution::try_new(site, operation, values, &security)?;
+        }
         Ok(Self {
             affordance,
             operation,
@@ -639,6 +636,19 @@ impl ConsumerExecutionContent {
     }
     pub fn schemas(&self) -> &ConsumerFiniteSchemas {
         &self.schemas
+    }
+    /// Loan shared value meaning without exposing the Host content owner.
+    /// Collection operations retain their separate member contracts.
+    pub fn value_execution(&self) -> Option<crate::execution::ValueExecution<'_>> {
+        let ConsumerFiniteSchemas::Value(values) = &self.schemas else {
+            return None;
+        };
+        let site = match &self.affordance {
+            AffordanceTarget::Property(n) => AffordanceSite::Property(n),
+            AffordanceTarget::Action(n) => AffordanceSite::Action(n),
+            _ => return None,
+        };
+        crate::execution::ValueExecution::try_new(site, self.operation, values, &self.security).ok()
     }
 }
 

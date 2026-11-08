@@ -1,0 +1,17 @@
+[package]
+name = "clinkz-wot-constrained-consumer-fixture"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[features]
+# Separately exercise a loan from the existing modern Host prepared owner.
+host-meaning = ["clinkz-wot-core/std"]
+
+[dependencies]
+clinkz-wot-core = { path = "../../../core", default-features = false }
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+clinkz-wot-servient-finite = { path = "../../../servient/finite", default-features = false }
+
+[lints.clippy]
+result_large_err = "allow"

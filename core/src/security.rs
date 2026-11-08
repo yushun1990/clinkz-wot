@@ -131,8 +131,10 @@ impl SecurityRequirement {
 
 /// Per-call capability issued by an actual security service. Only its concrete
 /// Binding interprets it; Core neither formats nor inspects the live material.
+#[cfg(target_has_atomic = "ptr")]
 #[derive(Clone)]
 pub struct OutboundSecurity(alloc::sync::Arc<dyn core::any::Any + Send + Sync>);
+#[cfg(target_has_atomic = "ptr")]
 impl OutboundSecurity {
     pub fn new<T: core::any::Any + Send + Sync>(value: T) -> Self {
         Self(alloc::sync::Arc::new(value))
@@ -141,16 +143,19 @@ impl OutboundSecurity {
         self.0.downcast_ref()
     }
 }
+#[cfg(target_has_atomic = "ptr")]
 impl core::fmt::Debug for OutboundSecurity {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("OutboundSecurity([redacted])")
     }
 }
+#[cfg(target_has_atomic = "ptr")]
 impl PartialEq for OutboundSecurity {
     fn eq(&self, other: &Self) -> bool {
         alloc::sync::Arc::ptr_eq(&self.0, &other.0)
     }
 }
+#[cfg(target_has_atomic = "ptr")]
 impl Eq for OutboundSecurity {}
 impl core::fmt::Debug for AuthMaterial {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
