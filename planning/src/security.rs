@@ -161,7 +161,9 @@ pub fn prepare_security(
                 location: place,
             } => {
                 add("in", location(place))?;
-                add("name", name.unwrap_or("Authorization"))?;
+                if let Some(name) = name {
+                    add("name", name)?;
+                }
             }
             SecurityDetails::ApiKey {
                 name,
@@ -178,7 +180,9 @@ pub fn prepare_security(
                 qop,
             } => {
                 add("in", location(place))?;
-                add("name", name.unwrap_or("Authorization"))?;
+                if let Some(name) = name {
+                    add("name", name)?;
+                }
                 add(
                     "qop",
                     match qop {
@@ -195,7 +199,9 @@ pub fn prepare_security(
                 format,
             } => {
                 add("in", location(place))?;
-                add("name", name.unwrap_or("Authorization"))?;
+                if let Some(name) = name {
+                    add("name", name)?;
+                }
                 if let Some(v) = authorization {
                     add("authorization", v)?;
                 }

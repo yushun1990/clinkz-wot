@@ -490,7 +490,8 @@ bounded increment.
 `security::prepare_security` projects complete effective security from shared TD
 facts, including Form replacement of Thing requirements, conjunctive lists and
 nested Combo alternatives. Standard scheme operands, proxy and requested scopes
-remain part of meaning. Unsupported interpretation (such as extension assertions)
+remain part of meaning. Absent optional credential names stay absent; only a
+concrete Binding supplies protocol-specific placement defaults. Unsupported interpretation (such as extension assertions)
 becomes an explicitly unavailable leaf, never NoSec. Cycles, malformed combinations
 or bounded expansion failure refuse the whole expression before selection.
 Structural dependencies and full standard expansion counts remain checked even

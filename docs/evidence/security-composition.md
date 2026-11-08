@@ -38,6 +38,8 @@ owners. It exercises:
 
 - Effective conjunctive lists, Combo allOf/oneOf, nesting and Form replacement;
   API-key-only execution with no Basic verifier; independent service/native pairing.
+  An omitted credential name remains absent in shared meaning while actual HTTP
+  placement supplies Authorization, avoiding an HTTP default in generic preparation.
 - Consumer choice of a supported branch alongside unsupported alternatives, with
   full Producer refusal for the same advertised expression; missing components,
   duplicate placements, indistinguishable alternatives and static header conflicts.

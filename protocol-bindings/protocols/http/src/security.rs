@@ -29,7 +29,9 @@ impl HttpSecurity {
                 }
                 Ok(())
             }
-            SecurityRequirement::Scheme { scheme, parameters } if parameters.len() == 2 => {
+            SecurityRequirement::Scheme { scheme, parameters }
+                if (1..=2).contains(&parameters.len()) =>
+            {
                 let param = |key: &str| {
                     parameters
                         .iter()
@@ -37,8 +39,9 @@ impl HttpSecurity {
                         .map(|(_, v)| v.as_str())
                 };
                 let bit = match (scheme.as_str(), param("in"), param("name")) {
+                    ("basic", Some("header"), None) if parameters.len() == 1 => 1,
                     ("basic", Some("header"), Some(n))
-                        if n.eq_ignore_ascii_case("Authorization") =>
+                        if parameters.len() == 2 && n.eq_ignore_ascii_case("Authorization") =>
                     {
                         1
                     }

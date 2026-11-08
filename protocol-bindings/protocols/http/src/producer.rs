@@ -8,7 +8,6 @@ use super::*;
 pub struct HttpProducerConfig {
     pub(super) address: SocketAddr,
     pub(super) secure: bool,
-    pub(super) authentication: crate::security::HttpSecurity,
 }
 impl HttpProducerConfig {
     pub fn for_loopback(address: SocketAddr) -> CoreResult<Self> {
@@ -21,7 +20,6 @@ impl HttpProducerConfig {
         Ok(Self {
             address,
             secure: false,
-            authentication: crate::security::HttpSecurity::default(),
         })
     }
     pub fn for_https_loopback(address: SocketAddr) -> CoreResult<Self> {

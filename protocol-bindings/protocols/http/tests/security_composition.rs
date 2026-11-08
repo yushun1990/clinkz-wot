@@ -163,6 +163,10 @@ fn complete_conjunctions_alternatives_and_form_override_execute_with_actual_serv
             let access = client_access(&owner, &server.td, uses_basic, uses_key);
             let (client, content) =
                 secure_client(&server.td, &keys, &owner, access, &accounts, None);
+            if case == 2 {
+                assert_eq!(content.security(), &security::SecurityRequirement::scheme("basic", &[("in", "header")]),
+                    "shared meaning must preserve an absent credential name; HTTP owns its header default");
+            }
             server.td = Value::Null;
             let mut call = read_secure(&client);
             let result = server.exchange(&mut call).await;
