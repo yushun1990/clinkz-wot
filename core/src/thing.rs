@@ -1,10 +1,12 @@
 //! Source-free affordance addressing.
+#[cfg(target_has_atomic = "ptr")]
 use alloc::sync::Arc;
 /// Location of an affordance within a Thing Description.
 ///
 /// Affordance names are stored as [`Arc<str>`] rather than
 /// [`alloc::string::String`] so cloning an `AffordanceTarget` is a single atomic
 /// refcount bump. This matters on the inbound and consumed-interaction hot paths.
+#[cfg(target_has_atomic = "ptr")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AffordanceTarget {
     /// A form declared at Thing level.
@@ -27,6 +29,7 @@ pub enum AffordanceSite<'a> {
     Event(&'a str),
 }
 
+#[cfg(target_has_atomic = "ptr")]
 impl AffordanceTarget {
     /// Returns the affordance name when this target points at a property,
     /// action, or event, or `None` for the Thing-level target.

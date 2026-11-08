@@ -27,6 +27,38 @@ mapping and data dependencies. Binding policy/accounts and attaching a current
 logical authority remain independent steps. Calls and settlements retain these
 original owners; no sibling or successor content/instance can substitute for them.
 
+### Finite execution and ownership representations
+
+`execution::ValueExecution` is a borrowed view of immutable finite value meaning:
+coordinate, operation, input/output roles and security operands. Its constructor
+owns the common value-role checks used by `ConsumerExecutionContent`; the Host
+content can lend this exact view without cloning constraints. A loan establishes
+neither TD selection, service support, native compatibility nor current authority.
+Property and continuing/collection semantics remain distinct.
+
+`execution::validate_finite_output` checks original selected Binding/generation/
+plan identity and finite primary application-result shape through
+`InteractionOutputView`. Both Host sealing and caller-owned execution use it.
+Payload/output views and metadata require no reference counting. A representation
+must separately bound retained backing and validate actual media/DataSchema.
+
+`execution::FiniteCallState` owns common finite progress: paid current permission,
+one isolated native progress/cancellation quantum, accepted cancellation state,
+retained native settlement, validation credit/yield, first cause and fresh final
+handoff. A terminal unread result still requires a fresh paid current check.
+`FiniteCallDriver` supplies bounded representation-specific edges and retains the
+complete native/output owners. It cannot report settlement for an unacknowledged
+cleanup transfer. Host and borrowed Read use this same transition implementation;
+the driver is not an executor, scheduler or universal interaction runtime.
+
+Core's `execution::read` facet supplies one source-free caller-owned Read contract.
+It uses the same `ValueSchemas`, `PreparedSchema` evaluator, operation and result
+checks; it requires actual native and validator support and refuses unsupported
+meaning. Its present scope is NoSec Property Read. That narrow representation
+does not replace the Host Consumer APIs or constrain other execution families to
+Read's controls. See [runtime ownership](runtime-safety.md#caller-owned-finite-read)
+and [executable scope](../evidence/constrained-finite-execution.md).
+
 `EXEC-HANDLER-001`: Servient MUST select and capture actual registered behavior
 for the accepted target/operation; Bindings MUST NOT call application handlers.
 Requests contain dynamic data and context contains dispatch identity, not mutable

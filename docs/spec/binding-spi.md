@@ -6,6 +6,18 @@ transport API. Finite Consumer conversations, notifications, Producer exposure
 and Discovery have different controls. A Binding can implement several facets
 through one private driver without dummy symmetric roles.
 
+The caller-owned finite Read facet is defined in Core's `execution::read`, so a
+native provider has no Servient dependency. `ReadBinding` qualifies its actual
+program/configuration, selected value meaning and media, then creates one owned
+`ReadNativeCall`. Its `ReadOutput` lends the shared Core output view from any
+supported backing. These contracts have no Send/Sync, std, Arc, Pin/Box or executor
+requirement. This particular native facet admits local cancellation settlement
+or a retained racing value; it grants no external cleanup-transfer destination.
+Implementations needing other controls must qualify a suitable facet rather than
+discard native ownership evidence. Host call/registration machinery remains a
+separate supported representation. Actual schemas, permission and result checks
+remain mandatory in either representation.
+
 `SPI-COMPOSE-001`: Applications MUST be able to Cargo-link and startup-register
 complete conforming third-party capability implementations without a built-in
 compiler/protocol whitelist or workspace membership. A registration captures

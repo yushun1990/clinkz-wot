@@ -82,9 +82,19 @@ independent Consumers, while fully qualified Producers validate input before
 behavior and declared output before delivery. Dynamic storage/destruction and
 actual validator qualification remain funded. Whole-TD normalization reuse,
 native retargeting, richer schema assertions, non-JSON interoperability,
-continuing-family reuse and a portable Engine runtime remain unproven. Detailed
+continuing-family reuse and broader portable Engine capabilities remain unproven. Detailed
 executable scope is in [structured schema evidence](../evidence/structured-dataschema.md).
 No package, architecture gate or milestone acceptance is claimed.
+
+## Representation-independent finite boundary
+
+The [finite execution contract](../spec/interaction-core.md#finite-execution-and-ownership-representations)
+extracts shared value-role checks, result identity/shape validation and actual
+finite transitions from Host ownership. Portable errors, identity, deadline,
+metadata and borrowed views no longer inherit unrelated Arc module gates. The
+caller-owned native Read facet remains in Core, below Servient. Executable scope
+and limits are in [the evidence](../evidence/constrained-finite-execution.md);
+historical PlanSet/static acceptance is not reused for this modern claim.
 
 ## Finite security contracts
 

@@ -5,7 +5,7 @@ use crate::Operation;
 use crate::{
     BindingArtifactRef, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
     ErrorPhase, InteractionOutput, InteractionStatus, OutboundRequest, PlanId, ResponsePayloadRole,
-    ResponseSelection, RetryClass,
+    RetryClass,
 };
 
 /// Validates untrusted binding output against one live selected request.
@@ -149,57 +149,14 @@ fn validate_finite_binding_output(
     operation: Operation,
     output: InteractionOutput,
 ) -> CoreResult<InteractionOutput> {
-    let metadata = output.metadata();
-    let valid_binding_response = metadata.binding_response().is_some_and(|response| {
-        response.binding_id() == expected_binding_id
-            && response.binding_generation() == expected_binding_generation
-            && response.plan_id() == expected_plan_id
-            && response.selection() == ResponseSelection::Primary
-    });
-
-    if valid_binding_response
-        && matches!(
-            operation,
-            Operation::ReadProperty
-                | Operation::WriteProperty
-                | Operation::InvokeAction
-                | Operation::QueryAllActions
-                | Operation::ReadAllProperties
-                | Operation::ReadMultipleProperties
-                | Operation::WriteAllProperties
-                | Operation::WriteMultipleProperties
-        )
-        && (!matches!(
-            operation,
-            Operation::ReadProperty
-                | Operation::QueryAllActions
-                | Operation::ReadAllProperties
-                | Operation::ReadMultipleProperties
-        ) || output.data().is_some())
-        && (!matches!(
-            operation,
-            Operation::WriteProperty
-                | Operation::WriteAllProperties
-                | Operation::WriteMultipleProperties
-        ) || output.data().is_none())
-        && output.status() == InteractionStatus::Ok
-        && metadata.payload_role() == ResponsePayloadRole::Application
-        && metadata.action_invocation().is_none()
-        && (metadata.property_write_report().is_none()
-            || matches!(
-                operation,
-                Operation::WriteAllProperties | Operation::WriteMultipleProperties
-            ))
-    {
-        return Ok(output);
-    }
-
-    Err(CoreError::Validation(
-        ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
-            .with_operation(operation)
-            .with_plan(expected_plan_id)
-            .with_binding(expected_binding_id, expected_binding_generation),
-    ))
+    crate::execution::validate_finite_output(
+        expected_binding_id,
+        expected_binding_generation,
+        expected_plan_id,
+        operation,
+        output.view(),
+    )?;
+    Ok(output)
 }
 
 #[cfg(test)]

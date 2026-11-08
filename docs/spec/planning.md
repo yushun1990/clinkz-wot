@@ -5,6 +5,16 @@ TD owns common interpretation. Native execution belongs to Bindings, and live
 logical authority/publication belongs to Servient. These are semantic contracts,
 not an invented universal compiler/program representation.
 
+The modern TD selection/compiler integration currently uses Host registrations
+and funded definition owners. Those are implementation choices, not required
+representations of prepared meaning. Core's borrowed `ValueExecution` can lend
+the exact finite value content from that output to a different execution owner;
+the lender retains its original storage and funding. A caller can also supply
+the same checked source-independent meaning without invoking Planning at runtime.
+Neither construction path bypasses actual native/codec/security qualification
+or current instance permission. The constrained Read demonstration does not port
+TD-driven preparation or establish a second schema/operation interpretation.
+
 `PREP-ISOLATION-001`: Preparation MUST be bounded, side-effect-free local work
 over TD-resolved facts and captured actual registrations/configuration. It MUST
 NOT acquire sockets, sessions, tasks, credentials, handler calls or execution

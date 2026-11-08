@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0117-constrained-finite-execution-boundary.md][0117 Finite execution without mandatory Host ownership]]
+
 - [[file:0116-structured-notification-data.md][0116 Structured Notification data meaning]]
 - [[file:0115-continuing-action-data-meaning.md][0115 Shared data meaning and structured continuing Actions]]
 

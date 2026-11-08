@@ -25,6 +25,18 @@ are outside this architecture migration.
 
 ## Raw finite shared-instance slice
 
+The additional [caller-owned finite Read](../spec/runtime-safety.md#caller-owned-finite-read)
+uses the modern common finite kernel with borrowed prepared meaning/services,
+lifetime-bound local authority and caller-funded active work/results. Its
+[downstream datagram fixture](../evidence/constrained-finite-execution.md) checks
+bounded progress, first cause, stale references, late/invalid output and final
+physical release without making the Host registry representation mandatory.
+Existing Host finite execution uses that same transition kernel. Only NoSec
+Property Read is implemented for the constrained representation; other families,
+TD preparation, real Embedded transports and automatic driving remain open.
+This is a single architecture-risk correction, not a new portability programme
+or a prerequisite to common Security composition and execution-semantics work.
+
 The execution-only Host slice in `servient/finite` separates the bounded logical
 registry from typed native runtimes. Registry count/name limits belong to
 `RawProducerRegistryLimits`; per-runtime input/result opportunities belong to
