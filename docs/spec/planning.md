@@ -194,8 +194,11 @@ unspecified synchronicity use the separate Action facet below. Thing-root
 ReadAllProperties, ReadMultipleProperties, WriteAllProperties, WriteMultipleProperties and QueryAllActions use the finite facet; other
 collection operations use their distinct notification facets or remain unsupported.
 Action input/output use distinct prepared schemas; absent roles permit no
-application data unless response metadata explicitly describes a present opaque
-result. One actual captured data service must execute every selected request and
+application data. Repeating the Form's default response media preserves that
+absence. A response-specific schema establishes a present value; different
+media alone cannot establish a schema-less opaque result, and current common
+preparation declines that combination for an Action without output. One actual
+captured data service must execute every selected request and
 response representation and constraint. Different media are allowed when that
 complete pairing is qualified; they do not require a new codec abstraction.
 

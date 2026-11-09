@@ -91,6 +91,8 @@ struct Application {
     fails: Cell<bool>,
     drops: Cell<usize>,
     fixed_selection_response: Cell<bool>,
+    selected_status: Cell<InteractionStatus>,
+    selected_response: Cell<ResponseSelection>,
     selections: RefCell<Vec<Vec<String>>>,
     authorizations: Cell<usize>,
     write_fault: Cell<u8>,
@@ -151,9 +153,17 @@ impl RawFiniteHandler for Behavior {
                                 (n, value)
                             })
                             .collect();
-                        return Ok(InteractionOutput::with_data(payload(
-                            &serde_json::to_vec(&selected).unwrap(),
-                        )));
+                        return Ok(
+                            InteractionOutput::with_data(payload(
+                                &serde_json::to_vec(&selected).unwrap(),
+                            ))
+                            .with_status(self.0.selected_status.get())
+                            .try_with_metadata(
+                                InteractionOutputMetadata::default()
+                                    .with_response_selection(self.0.selected_response.get()),
+                            )
+                            .unwrap(),
+                        );
                     }
                 }
                 Ok(InteractionOutput::with_data(payload(

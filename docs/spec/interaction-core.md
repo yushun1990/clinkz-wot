@@ -106,10 +106,13 @@ identifies the original TD entry, not a native status code or a new interaction.
 Each alternative has its own media and declared success meaning, and either
 inherits the operation's ordinary output role or carries a replacement
 `PreparedSchema`. `ResponseData::Value(Any)` requires a present unconstrained
-value; it is not an empty result. Media may itself describe an opaque value:
-an Action's explicit response media without an output schema is such a present
-role, rather than proof of an empty Action completion. Actual media support is
-still separately qualified. No response schema changes the request/input role.
+value; it is not an empty result. Repeating a Form's default response media
+does not change an Action's absent output role. TD permits media-defined opaque
+results without an output schema, but media metadata alone does not qualify
+their data role or executable support. Common preparation currently declines
+different response media for an Action without output or a replacement schema;
+no opaque media execution is claimed. No response schema changes the
+request/input role.
 
 A primary response has ordinary application success meaning. Additional success
 uses the TD boolean, defaulting to false. `InteractionStatus::ApplicationError`

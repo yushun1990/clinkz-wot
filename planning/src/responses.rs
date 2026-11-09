@@ -50,7 +50,12 @@ pub fn prepare(
             .unwrap_or(facts.content_type)
             .into(),
         success: true,
-        data: primary_data(doc, owner, form)?,
+        data: inherited_data(
+            doc,
+            owner,
+            facts.content_type,
+            facts.response_content_type.unwrap_or(facts.content_type),
+        )?,
     };
     let mut additional = Vec::new();
     for (i, response) in doc
@@ -65,7 +70,7 @@ pub fn prepare(
             content_type: response.content_type.into(),
             success: response.success,
             data: match response.schema {
-                None => primary_data(doc, owner, form)?,
+                None => inherited_data(doc, owner, facts.content_type, response.content_type)?,
                 Some(name) => ResponseData::Value(crate::type_schema::prepare_schema(
                     doc.schema_definition(name).map_err(|_| refused())?,
                 )?),
@@ -87,7 +92,13 @@ pub fn matches(
         .ok_or_else(refused)?;
     if p.content_type.as_ref() != facts.response_content_type.unwrap_or(facts.content_type)
         || !p.success
-        || p.data != primary_data(doc, owner, form)?
+        || p.data
+            != inherited_data(
+                doc,
+                owner,
+                facts.content_type,
+                facts.response_content_type.unwrap_or(facts.content_type),
+            )?
     {
         return Ok(false);
     }
@@ -100,7 +111,11 @@ pub fn matches(
             return Ok(false);
         }
         match (r.schema, &expected.data) {
-            (None, data) if *data == primary_data(doc, owner, form)? => (),
+            (None, data)
+                if *data == inherited_data(doc, owner, facts.content_type, r.content_type)? =>
+            {
+                ()
+            }
             (Some(n), ResponseData::Value(s))
                 if crate::type_schema::matches_schema(
                     doc.schema_definition(n).map_err(|_| refused())?,
@@ -114,25 +129,23 @@ pub fn matches(
     }
     Ok(actual.next().is_none())
 }
-// An Action may use media to describe a present opaque result without an
-// output schema (TD 1.1 takePhoto). This is not the empty output role. Actual
-// codecs/native mappings still have to support that media before selection.
-fn primary_data(
+// Repeating the Form's default media does not turn an absent Action output
+// into a required value. TD also permits media-defined results without a
+// schema (e.g. takePhoto), but different media alone cannot qualify their data
+// role here. Decline that case until a concrete profile can establish it.
+fn inherited_data(
     doc: &ResolvedSemanticDocument<'_>,
     owner: FormOwner<'_>,
-    form: u32,
+    form_media: &str,
+    response_media: &str,
 ) -> CoreResult<ResponseData> {
-    let facts = doc.form(owner, form).ok_or_else(refused)?;
-    Ok(
-        if matches!(owner, FormOwner::Action(_))
-            && facts.response_content_type.is_some()
-            && doc.affordance_schema(owner, "output").is_none()
-        {
-            ResponseData::Value(clinkz_wot_core::data_schema::PreparedSchema::Any)
-        } else {
-            ResponseData::Operation
-        },
-    )
+    if matches!(owner, FormOwner::Action(_))
+        && doc.affordance_schema(owner, "output").is_none()
+        && response_media != form_media
+    {
+        return Err(refused());
+    }
+    Ok(ResponseData::Operation)
 }
 fn refused() -> CoreError {
     CoreError::UnsupportedOperation(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))

@@ -230,57 +230,107 @@ fn action_roles_refuse_missing_invalid_oversize_unpaid_input_and_unsupported_con
 
 #[test]
 fn action_absent_data_roles_allow_empty_success_but_reject_unexpected_output() {
-    for reply in [b"".as_slice(), b"11"] {
+    for explicit_form_media in [false, true] {
+        for explicit_response_media in [false, true] {
+            for reply in [b"".as_slice(), b"11"] {
+                let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+                let p = Arc::new(Probe::default());
+                let (peer, target) = udp();
+                let mut value = serde_json::to_value(mixed(&target)).unwrap();
+                value["actions"]["a"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("input");
+                value["actions"]["a"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("output");
+                if explicit_form_media {
+                    value["actions"]["a"]["forms"][0]["contentType"] = json!("application/json");
+                }
+                if explicit_response_media {
+                    value["actions"]["a"]["forms"][0]["response"] =
+                        json!({"contentType":"application/json"});
+                }
+                let td = serde_json::from_value(value).unwrap();
+                let registrations = registry(vec![registration(1, p.clone())]);
+                let owner = instance();
+                let rt = finite(
+                    &owner,
+                    prepare(&registrations, &td, bank.clone()),
+                    bank.clone(),
+                );
+                let mut call = rt
+                    .invoke_action("a", None, Deadline::NONE, now(), &mut work())
+                    .unwrap_or_else(|_| panic!());
+                let mut cx = Context::from_waker(Waker::noop());
+                let no_codec = || {
+                    let mut budget = work();
+                    budget.set_remaining(WorkClass::CodecInputBytes, 0);
+                    budget
+                };
+                assert!(call.poll(&mut cx, now(), &mut no_codec()).is_pending());
+                let mut bytes = [0; 256];
+                let (n, from) = peer.recv_from(&mut bytes).unwrap();
+                assert_eq!(&bytes[..n], b"INVOKE /temperature\n");
+                peer.send_to(reply, from).unwrap();
+                let mut result = None;
+                for _ in 0..100 {
+                    if let Poll::Ready(settlement) = call.poll(&mut cx, now(), &mut no_codec()) {
+                        result = Some(settlement);
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                let result = result.expect("absent output role must settle without codec credit");
+                assert_eq!(result.result().is_ok(), reply.is_empty());
+                assert_eq!(p.validates.load(Ordering::Relaxed), 0);
+                if !reply.is_empty() {
+                    assert!(result.rejected_output().is_some());
+                }
+                drop(result);
+                drop(call);
+                drop(rt);
+                clean(&bank);
+            }
+        }
+    }
+}
+
+#[test]
+fn action_without_output_declines_unqualified_different_response_media_before_native_start() {
+    for response in [
+        json!({"response":{"contentType":"image/jpeg"}}),
+        json!({"additionalResponses":[{"contentType":"image/jpeg","success":true}]}),
+    ] {
         let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
         let p = Arc::new(Probe::default());
-        let (peer, target) = udp();
+        let (_peer, target) = udp();
         let mut value = serde_json::to_value(mixed(&target)).unwrap();
         value["actions"]["a"]
             .as_object_mut()
             .unwrap()
-            .remove("input");
-        value["actions"]["a"]
+            .remove("output");
+        value["actions"]["a"]["forms"][0]
             .as_object_mut()
             .unwrap()
-            .remove("output");
+            .extend(response.as_object().unwrap().clone());
         let td = serde_json::from_value(value).unwrap();
         let registrations = registry(vec![registration(1, p.clone())]);
+        let prepared = prepare(&registrations, &td, bank.clone());
+        let action = prepared
+            .support()
+            .iter()
+            .find(|s| s.operation == Operation::InvokeAction)
+            .unwrap();
+        assert!(!action.selected);
         let owner = instance();
-        let rt = finite(
-            &owner,
-            prepare(&registrations, &td, bank.clone()),
-            bank.clone(),
+        let rt = finite(&owner, prepared, bank.clone());
+        assert!(
+            rt.invoke_action("a", integer("7"), Deadline::NONE, now(), &mut work())
+                .is_err()
         );
-        let mut call = rt
-            .invoke_action("a", None, Deadline::NONE, now(), &mut work())
-            .unwrap_or_else(|_| panic!());
-        let mut cx = Context::from_waker(Waker::noop());
-        let no_codec = || {
-            let mut budget = work();
-            budget.set_remaining(WorkClass::CodecInputBytes, 0);
-            budget
-        };
-        assert!(call.poll(&mut cx, now(), &mut no_codec()).is_pending());
-        let mut bytes = [0; 256];
-        let (n, from) = peer.recv_from(&mut bytes).unwrap();
-        assert_eq!(&bytes[..n], b"INVOKE /temperature\n");
-        peer.send_to(reply, from).unwrap();
-        let mut result = None;
-        for _ in 0..100 {
-            if let Poll::Ready(settlement) = call.poll(&mut cx, now(), &mut no_codec()) {
-                result = Some(settlement);
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        let result = result.expect("absent output role must settle without codec credit");
-        assert_eq!(result.result().is_ok(), reply.is_empty());
-        assert_eq!(p.validates.load(Ordering::Relaxed), 0);
-        if !reply.is_empty() {
-            assert!(result.rejected_output().is_some());
-        }
-        drop(result);
-        drop(call);
+        assert_eq!(p.native.load(Ordering::Relaxed), 0);
         drop(rt);
         clean(&bank);
     }

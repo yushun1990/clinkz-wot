@@ -595,6 +595,14 @@ impl FiniteValidator for HttpFiniteBinding {
         let program = self.program_for(candidate)?;
         match program.operation {
             Operation::ReadMultipleProperties => {
+                // This facet still admits only the ordinary primary result.
+                // A valid selected map cannot certify its status or branch.
+                if !raw_finite_property_shape(program.operation, output) {
+                    return Err(CoreError::Validation(ErrorContext::new(
+                        ErrorPhase::Validate,
+                        RetryClass::Never,
+                    )));
+                }
                 let schema = program
                     .property_map
                     .as_ref()

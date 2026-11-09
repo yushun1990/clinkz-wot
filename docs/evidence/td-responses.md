@@ -49,6 +49,13 @@ original Producer application result, uncertain effect and undelivered reply
 through funded retirement. Existing primary lifecycle, invalid input, timeout,
 replacement, Security composition and resource tests remain regression evidence.
 
+Collection reads remain primary-only. A real selected-read exchange with a
+valid selected Property map rejects both an undeclared application-error status
+and an additional branch as a Producer validation failure, before native reply
+encoding. Independent datagram Action exchanges preserve empty output when the
+Form/response JSON media is defaulted or explicitly repeated; unexpected data
+still fails validation with its rejected output retained and no codec credit.
+
 The shared contract, response projection and checks are alloc/no_std and do not
 require pointer atomics. `ValueExecution` lends complete response meaning from
 Host content. The existing caller-owned Read explicitly declines additional
@@ -88,6 +95,11 @@ body or media-based branch matching. JSON and one explicit UTF-8 media parameter
 are the only added representations; no non-JSON/image interoperability, broad
 schema/charset support, automatic retry or remote cancellation certainty is
 claimed. Named response constraints retain the existing structured subset.
+An Action without an output schema inherits its absent data role when response
+media repeats the Form default. Different media without a replacement schema
+is declined during common preparation rather than guessed to require opaque
+data. Schema-less media-defined Action results remain unsupported; this does
+not implement the TD `takePhoto` example.
 
 Historical Property Read, collection, Security and portable evidence is
 reaffirmed as regression evidence within its original scope; it does not certify
