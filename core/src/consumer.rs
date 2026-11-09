@@ -901,7 +901,7 @@ impl ConsumerDefinition {
         Ok(())
     }
     /// Source-free instance dependency binding. No TD/compiler lookup or native
-    /// retargeting is possible here. Logical authority is attached by the runtime.
+    /// retargeting is possible here. Logical authority is attached by the execution association.
     /// Refusal returns both original owners, including a caller's last reference.
     #[allow(clippy::type_complexity)] // Refusal preserves both move-owned inputs.
     pub fn bind(
@@ -969,7 +969,8 @@ impl ConsumerDefinition {
 
 /// Instance-local policy and funding over qualified reusable content/mapping.
 /// Reusing the content never shares permission or moves physical backing to this
-/// bank. Runtime records and every call/result continue to charge this bank.
+/// bank. Association records charge this bank; admitted work may use a distinct
+/// capacity bank while retaining an outstanding-call quota at this instance bank.
 pub struct ConsumerBinding {
     input: ConsumerBindingInput,
     access_work: u64,

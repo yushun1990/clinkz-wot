@@ -531,7 +531,7 @@ fn registry_client(
     td: &Value,
     accounts: &Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
-) -> ConsumerRuntime {
+) -> (ConsumerAssociation, ConsumerCalls) {
     let (bindings, funding) = registry
         .prepare(
             &serde_json::from_value(td.clone()).unwrap(),
@@ -547,8 +547,19 @@ fn registry_client(
         )
         .unwrap()
         .into_execution();
-    ConsumerRuntime::try_new(owner.reference(), bindings, funding, accounts.clone(), 1)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()))
+    ConsumerAssociation::try_new(
+        owner.reference(),
+        bindings,
+        funding,
+        accounts.clone(),
+    )
+    .map(|association| {
+        (
+            association,
+            ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+        )
+    })
+    .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 
 #[test]
@@ -849,21 +860,31 @@ fn aliased_service_funding_survives_registry_and_instances_until_final_http_resu
         let (bindings_b, funding_b) = prepare(&description(server_b.addr), 99, &accounts_b);
         let owner_a = consumer_instance();
         let owner_b = consumer_instance();
-        let client_a = ConsumerRuntime::try_new(
+        let client_a = ConsumerAssociation::try_new(
             owner_a.reference(),
             bindings_a,
             funding_a,
             accounts_a.clone(),
-            1,
         )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(accounts_a.clone(), 1).unwrap(),
+            )
+        })
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        let client_b = ConsumerRuntime::try_new(
+        let client_b = ConsumerAssociation::try_new(
             owner_b.reference(),
             bindings_b,
             funding_b,
             accounts_b.clone(),
-            1,
         )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(accounts_b.clone(), 1).unwrap(),
+            )
+        })
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let registered_services = live(&services_bank);
         drop(registry);

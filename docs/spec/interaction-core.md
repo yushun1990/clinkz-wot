@@ -26,6 +26,10 @@ permission nor a service-support certificate. A definition retains its actual
 mapping and data dependencies. Binding policy/accounts and attaching a current
 logical authority remain independent steps. Calls and settlements retain these
 original owners; no sibling or successor content/instance can substitute for them.
+Persistent association identity does not imply an execution slot or capacity
+owner. The Host finite association/work split and its original operand retention
+are defined in [Runtime Safety](runtime-safety.md); the common finite transition
+kernel remains independent of that storage representation.
 
 ### URI-variable execution
 

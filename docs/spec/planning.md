@@ -266,7 +266,10 @@ this does not establish general normalized-TD reuse or native retargeting.
 
 `ConsumerDefinition::bind` attaches a retained actual access policy and independent
 instance bank without recompilation or source callbacks. `ConsumerBinding` is the
-runtime handoff; Servient attaches its independently current `ConsumerInstanceRef`.
+association handoff; Servient attaches its independently current
+`ConsumerInstanceRef` without allocating call slots. Work capacity and its account
+are chosen separately at finite admission, as specified by
+[Runtime Safety](runtime-safety.md) and [Foundation](foundation.md).
 Bindings may share content or an unchanged qualified mapping while preserving
 separate permission, records, call/result/cleanup accounts and native limits.
 Changed captured service bounds cannot be refreshed by binding another instance.

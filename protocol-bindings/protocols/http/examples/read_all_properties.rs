@@ -3,7 +3,7 @@ use clinkz_wot_binding_http::{HttpConsumerConfig, try_consumer_registration};
 use clinkz_wot_core::{host_accounts::HostResourceAccounts, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::{ConsumerRegistry, ConsumerSelector};
-use clinkz_wot_servient_finite::consumer::ConsumerRuntime;
+use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls};
 use std::{
     sync::Arc,
     task::{Context, Poll, Waker},
@@ -51,9 +51,10 @@ fn main() {
             clinkz_wot_foundation::SlotIndex::new(0),
             clinkz_wot_foundation::Generation::INITIAL,
         ));
-    let runtime =
-        ConsumerRuntime::try_new(consumer.reference(), definitions, funding, bank.clone(), 1)
+    let association =
+        ConsumerAssociation::try_new(consumer.reference(), definitions, funding, bank.clone())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
     let clock = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(600), clock.elapsed().as_millis() as u64);
     let io = tokio::runtime::Builder::new_current_thread()
@@ -62,8 +63,8 @@ fn main() {
         .build()
         .unwrap();
     io.block_on(async {
-        let mut call = runtime
-            .read_all_properties(Deadline::NONE, now(), &mut work())
+        let mut call = association
+            .read_all_properties(&calls, Deadline::NONE, now(), &mut work())
             .unwrap();
         let result = loop {
             if let Poll::Ready(result) =
@@ -78,7 +79,7 @@ fn main() {
             Err(error) => eprintln!("{error:?}"),
         }
     });
-    drop(runtime);
+    drop((association, calls));
     assert!(
         ResourceKind::ALL
             .iter()

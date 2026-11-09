@@ -460,7 +460,7 @@ fn client(
     denied: Arc<AtomicBool>,
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
-) -> ConsumerRuntime {
+) -> (ConsumerAssociation, ConsumerCalls) {
     client_with_selector(td, denied, accounts, owner, ConsumerSelector::default())
 }
 fn client_with_selector(
@@ -469,7 +469,7 @@ fn client_with_selector(
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
     selector: ConsumerSelector,
-) -> ConsumerRuntime {
+) -> (ConsumerAssociation, ConsumerCalls) {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(98),
@@ -498,12 +498,21 @@ fn client_with_selector(
     let (definitions, funding) = prepared.into_execution();
     drop(td);
     drop(registry);
-    ConsumerRuntime::try_new(owner.reference(), definitions, funding, accounts, 2)
+    ConsumerAssociation::try_new(owner.reference(), definitions, funding, accounts.clone())
+        .map(|association| (association, ConsumerCalls::try_new(accounts, 2).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
-fn start_write(client: &ConsumerRuntime, bytes: &[u8]) -> ConsumerCall {
+fn start_write(client: &(ConsumerAssociation, ConsumerCalls), bytes: &[u8]) -> ConsumerCall {
     client
-        .write_property("level", payload(bytes), Deadline::NONE, now(0), &mut work())
+        .0
+        .write_property(
+            &client.1,
+            "level",
+            payload(bytes),
+            Deadline::NONE,
+            now(0),
+            &mut work(),
+        )
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 
@@ -533,7 +542,7 @@ fn default_and_explicit_read_write_definitions_coexist_on_one_property_and_liste
                 assert_eq!(remote.delivery, FiniteDelivery::Delivered);
                 assert!(remote.result.unwrap().data().is_none());
                 drop(result); drop(write);
-                let mut read = client.read_property("level", Deadline::NONE, now(0), &mut work()).unwrap();
+                let mut read = client.0.read_property(&client.1, "level", Deadline::NONE, now(0), &mut work()).unwrap();
                 let (result, remote) = server.exchange(&mut read).await;
                 assert_eq!(result.operation(), Operation::ReadProperty);
                 assert_eq!(result.result().unwrap().data().unwrap().body.as_ref(),value);
@@ -565,7 +574,15 @@ fn invalid_unpaid_and_denied_consumer_input_returns_original_before_io() {
         ] {
             let original = value.clone();
             let error = client
-                .write_property("level", value, Deadline::NONE, now(0), &mut work())
+                .0
+                .write_property(
+                    &client.1,
+                    "level",
+                    value,
+                    Deadline::NONE,
+                    now(0),
+                    &mut work(),
+                )
                 .err()
                 .unwrap();
             assert_eq!(
@@ -583,13 +600,29 @@ fn invalid_unpaid_and_denied_consumer_input_returns_original_before_io() {
         short.set_remaining(WorkClass::CodecInputBytes, 0);
         assert!(
             client
-                .write_property("level", payload(b"7"), Deadline::NONE, now(0), &mut short)
+                .0
+                .write_property(
+                    &client.1,
+                    "level",
+                    payload(b"7"),
+                    Deadline::NONE,
+                    now(0),
+                    &mut short
+                )
                 .is_err()
         );
         denied.store(true, Ordering::Relaxed);
         assert!(
             client
-                .write_property("level", payload(b"7"), Deadline::NONE, now(0), &mut work())
+                .0
+                .write_property(
+                    &client.1,
+                    "level",
+                    payload(b"7"),
+                    Deadline::NONE,
+                    now(0),
+                    &mut work()
+                )
                 .is_err()
         );
         for _ in 0..10 {
@@ -734,7 +767,8 @@ fn read_only_write_only_and_explicit_operation_applicability_gate_consumer_calls
             if write_only {
                 assert!(
                     client
-                        .read_property("level", Deadline::NONE, now(0), &mut work())
+                        .0
+                        .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
                         .is_err()
                 );
                 let mut call = start_write(&client, b"8");
@@ -744,11 +778,20 @@ fn read_only_write_only_and_explicit_operation_applicability_gate_consumer_calls
             } else {
                 assert!(
                     client
-                        .write_property("level", payload(b"8"), Deadline::NONE, now(0), &mut work())
+                        .0
+                        .write_property(
+                            &client.1,
+                            "level",
+                            payload(b"8"),
+                            Deadline::NONE,
+                            now(0),
+                            &mut work()
+                        )
                         .is_err()
                 );
                 let mut call = client
-                    .read_property("level", Deadline::NONE, now(0), &mut work())
+                    .0
+                    .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
                     .unwrap();
                 let (local, remote) = server.exchange(&mut call).await;
                 assert!(local.result().is_ok());
@@ -784,7 +827,15 @@ fn read_only_write_only_and_explicit_operation_applicability_gate_consumer_calls
             let client = client(td, Arc::new(AtomicBool::new(false)), bank.clone(), &owner);
             assert!(
                 client
-                    .write_property("level", payload(b"8"), Deadline::NONE, now(0), &mut work())
+                    .0
+                    .write_property(
+                        &client.1,
+                        "level",
+                        payload(b"8"),
+                        Deadline::NONE,
+                        now(0),
+                        &mut work()
+                    )
                     .is_err(),
                 "case {case}"
             );
@@ -828,7 +879,7 @@ fn consumer_requires_the_prepared_native_write_completion_and_never_replays_unce
             };
             assert_eq!(result.result().is_ok(),reply==b"HTTP/1.1 204 No Content\r\n\r\n","{:?}",String::from_utf8_lossy(reply));
             assert_eq!(result.effect(), if reply==b"HTTP/1.1 204 No Content\r\n\r\n" { ConsumerEffect::Completed } else { ConsumerEffect::Unknown });
-            for _ in 0..10 { client.step(&mut cx(),now(0),&mut work()); }
+            for _ in 0..10 { client.1.step(&mut cx(),now(0),&mut work()); }
         });
         let listener=peer.join().unwrap(); listener.set_nonblocking(true).unwrap();
         assert!(matches!(listener.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock),"uncertain write must not replay");
@@ -951,17 +1002,25 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
             });
             let accounts = bank();
             let owner = consumer_instance();
-            let mut client = Some(client(
+            let (association, dedicated_calls) = client(
                 description(addr),
                 Arc::new(AtomicBool::new(false)),
                 accounts.clone(),
                 &owner,
+            );
+            drop(dedicated_calls);
+            let work_accounts = bank();
+            let mut client = Some((
+                association,
+                ConsumerCalls::try_new(work_accounts.clone(), 2).unwrap(),
             ));
             let mut call = Some(
                 client
                     .as_ref()
                     .unwrap()
+                    .0
                     .write_property(
+                        &client.as_ref().unwrap().1,
                         "level",
                         payload(b"7"),
                         Deadline::at(now(10)),
@@ -990,8 +1049,10 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
                 );
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
-            let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
-            assert!(accounts.account(ResourceKind::CleanupBytesMax).used() > 0);
+            // Work funding is independent of association/preparation records:
+            // retiring those records cannot change this admitted call's bank.
+            let retained = ResourceKind::ALL.map(|k| work_accounts.account(k).used());
+            assert!(work_accounts.account(ResourceKind::CleanupBytesMax).used() > 0);
             match fault {
                 "cancel" => call.as_ref().unwrap().cancel(),
                 "revoke" => owner.revoke(),
@@ -1009,11 +1070,12 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
                 client
                     .as_ref()
                     .unwrap()
+                    .1
                     .step(&mut cx(), instant, &mut WorkBudget::new());
             }
             assert_eq!(
                 retained,
-                ResourceKind::ALL.map(|k| accounts.account(k).used())
+                ResourceKind::ALL.map(|k| work_accounts.account(k).used())
             );
             assert!(
                 peer_closed.try_recv().is_err(),
@@ -1042,15 +1104,16 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
                         == (fault == "timeout")
                 );
                 assert!(
-                    accounts.account(ResourceKind::CleanupBytesMax).used() > 0,
+                    work_accounts.account(ResourceKind::CleanupBytesMax).used() > 0,
                     "unread settlement retains its original funding"
                 );
                 drop(result);
             } else {
-                while !client.as_ref().unwrap().is_idle() {
+                while !client.as_ref().unwrap().1.is_idle() {
                     client
                         .as_ref()
                         .unwrap()
+                        .1
                         .step(&mut cx(), instant, &mut work());
                     assert!(start.elapsed() < Duration::from_secs(5));
                 }
@@ -1058,6 +1121,7 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
             drop(call);
             drop(client);
             clean(&accounts);
+            clean(&work_accounts);
             let listener = peer.join().unwrap();
             listener.set_nonblocking(true).unwrap();
             assert!(
@@ -1081,7 +1145,9 @@ fn consumer_cancellation_replacement_timeout_and_policy_loss_preserve_original_r
             let access = Arc::new(AtomicBool::new(false));
             let client = client(td, access.clone(), bank.clone(), &owner);
             let mut call = client
+                .0
                 .write_property(
+                    &client.1,
                     "level",
                     payload(b"33"),
                     Deadline::at(now(10)),
@@ -1466,7 +1532,9 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
         let mut pending = start_write(&client, b"57");
         let original = payload(b"58");
         let returned = client
+            .0
             .write_property(
+                &client.1,
                 "level",
                 original.clone(),
                 Deadline::NONE,

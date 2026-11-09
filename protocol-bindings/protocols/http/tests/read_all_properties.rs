@@ -42,11 +42,13 @@ fn engine_read_all_uses_one_root_request_and_keeps_individual_operations_distinc
         // Retained results keep mapping/schema/funding independently of native
         // occupancy. An accepted Property exchange still excludes another root.
         let mut single = client
-            .read_property("level", Deadline::NONE, now(0), &mut work())
+            .0
+            .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
             .unwrap();
         assert!(
             client
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         drop(result);
@@ -232,11 +234,19 @@ fn consumer_root_selection_requires_actual_form_binding_services_and_complete_sc
             );
             let owner = consumer_instance();
             let (d, f) = p.into_execution();
-            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
-                .unwrap_or_else(|_| panic!());
+            let client =
+                ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                    .map(|association| {
+                        (
+                            association,
+                            ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+                        )
+                    })
+                    .unwrap_or_else(|_| panic!());
             assert!(
                 client
-                    .read_all_properties(Deadline::NONE, now(0), &mut work())
+                    .0
+                    .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
                     .is_err()
             );
             drop(client);
@@ -697,8 +707,15 @@ fn captured_collection_service_is_required_and_freshly_checked_after_validation(
         .unwrap();
         let owner = consumer_instance();
         let (d, f) = prepared.into_execution();
-        let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
-            .unwrap_or_else(|_| panic!());
+        let client =
+            ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                .map(|association| {
+                    (
+                        association,
+                        ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+                    )
+                })
+                .unwrap_or_else(|_| panic!());
         let mut call = start_read(&client);
         let (local, remote) = server.exchange(&mut call).await;
         assert!(!available.load(Ordering::Relaxed));
@@ -711,7 +728,8 @@ fn captured_collection_service_is_required_and_freshly_checked_after_validation(
         assert_eq!(server.app.roots.get(), 1);
         assert!(
             client
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         drop(local);
@@ -756,7 +774,8 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
         let before = ResourceKind::ALL.map(|k| accounts.account(k).used());
         assert!(
             client
-                .read_all_properties(Deadline::NONE, now(0), &mut WorkBudget::new())
+                .0
+                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut WorkBudget::new())
                 .is_err()
         );
         assert_eq!(
@@ -769,7 +788,8 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
             .unwrap();
         assert!(
             client
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         drop(saturated);

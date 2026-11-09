@@ -154,7 +154,9 @@ commands stay tied to their original revisions.
 
 
 The same source-free execution crate also contains the independent finite
-`consumer::ConsumerRuntime`. Planning owns open registration/selection and paid
+`consumer::ConsumerAssociation` and explicit `consumer::ConsumerCalls` work
+owner. Persistent mappings/authority and finite capacity have independent
+cardinalities; neither owner supplies protocol selection or a universal runtime. Planning owns open registration/selection and paid
 owned compilation; Core owns immutable completed Consumer definitions and service
 contracts. Execution consumes those definitions without an upward TD/Planning
 edge. The shared opaque Host bank now lives in Core; existing Servient account

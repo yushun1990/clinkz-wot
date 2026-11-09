@@ -115,7 +115,7 @@ fn bind(
     owner: &ConsumerInstance,
     accounts: &Arc<HostResourceAccounts>,
     denied: Arc<AtomicBool>,
-) -> ConsumerRuntime {
+) -> (ConsumerAssociation, ConsumerCalls) {
     let policy = ConsumerServiceOwner::retain_access(
         Arc::new(InstancePolicy {
             expected: owner.reference(),
@@ -127,13 +127,18 @@ fn bind(
     let binding = definition
         .bind(policy, accounts.clone(), &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    ConsumerRuntime::try_new(
+    ConsumerAssociation::try_new(
         owner.reference(),
         vec![binding],
         vec![],
         accounts.clone(),
-        1,
     )
+    .map(|association| {
+        (
+            association,
+            ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+        )
+    })
     .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn members(content: &PreparedConsumerContent) -> &collection::PropertyCollectionSchema {
@@ -221,7 +226,8 @@ fn independent_endpoints_share_preparation_but_keep_policy_authority_and_origina
         deny_a.store(true, Ordering::Relaxed);
         assert!(
             client_a
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&client_a.1, Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         assert_eq!(server_a.controls.requests.get(), 0);
@@ -326,35 +332,53 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
         .clone()
         .bind(policy.clone(), account_b.clone(), &mut work())
         .unwrap_or_else(|_| panic!());
-    let refused = ConsumerRuntime::try_new(
+    let refused = ConsumerAssociation::try_new(
         owner.reference(),
         vec![binding],
         vec![],
         account_a.clone(),
-        1,
     )
+    .map(|association| {
+        (
+            association,
+            ConsumerCalls::try_new(account_a.clone(), 1).unwrap(),
+        )
+    })
     .err()
     .expect("foreign instance bank is still refused");
     let (bindings, funding) = refused.into_input();
     let old_identity = owner.reference();
     drop(owner);
-    let stale = ConsumerRuntime::try_new(old_identity, bindings, funding, account_b.clone(), 1)
-        .err()
-        .expect("stale original authority cannot be installed");
+    let stale =
+        ConsumerAssociation::try_new(old_identity, bindings, funding, account_b.clone())
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(account_b.clone(), 1).unwrap(),
+                )
+            })
+            .err()
+            .expect("stale original authority cannot be installed");
     let (bindings, funding) = stale.into_input();
     let replacement = consumer_instance();
-    let runtime = ConsumerRuntime::try_new(
+    let runtime = ConsumerAssociation::try_new(
         replacement.reference(),
         bindings,
         funding,
         account_b.clone(),
-        1,
     )
+    .map(|association| {
+        (
+            association,
+            ConsumerCalls::try_new(account_b.clone(), 1).unwrap(),
+        )
+    })
     .unwrap_or_else(|_| panic!());
     // An equal numeric slot cannot assume the old policy's identity.
     assert!(
         runtime
-            .read_all_properties(Deadline::NONE, now(0), &mut work())
+            .0
+            .read_all_properties(&runtime.1, Deadline::NONE, now(0), &mut work())
             .is_err()
     );
     drop(runtime);
@@ -571,7 +595,8 @@ fn source_free_binding_and_warm_admission_cannot_refresh_changed_service_bounds(
         mode.store(state, Ordering::Relaxed);
         assert!(
             client
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         let policy = ConsumerServiceOwner::retain_access(

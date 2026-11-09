@@ -20,7 +20,7 @@ its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
 preparation's destination check alone is insufficient. This implementation remains
 Host/manual and does not establish constrained or automatic-progress support.
-Finite runtime construction consumes `ConsumerBinding` records and still refuses
+Finite association construction consumes `ConsumerBinding` records and still refuses
 an instance bank different from those records' bank. Shared content, qualified
 mapping and retained services may have different original banks; those backing
 charges stay with their actual owners. A binding has no source/compiler callback
@@ -28,6 +28,35 @@ or executor/configuration override. Fresh permission uses the attached original
 instance, and native concurrency is still enforced by the actual registration.
 Dropping the preparation root, closing a sibling or dropping an instance cannot
 reclaim shared content still needed by another mapping or normal/late settlement.
+
+`ConsumerAssociation` retains checked mappings, policy, an independent instance
+reference and its explicit instance account. It MUST remain usable without
+vacant call storage. `ConsumerCalls` is an explicitly supplied, bounded Host work
+owner, independent of those associations. One owner may serve many associations;
+an association may use several owners. Neither creates or substitutes a native
+executor, reinterprets TDs, or grants another instance's permission. A dedicated
+or on-demand work owner is also valid; no shared pool or scheduler is required.
+
+Admission reserves an original work slot before linked callbacks. Its call
+retains the passive original association authority, the selected funded binding,
+resolved destination, lexical variable snapshot, input/selection, deadlines and
+original resource reservations. It does not retain unselected bindings after the
+association root disappears. Native retirement cannot erase those operands or
+move them into a successor. Settlement lends input and result slices and the
+original destination/variables; no cloneable original payload owner escapes.
+[Foundation](foundation.md) owns capacity-domain and quota accounting.
+
+Association close/Drop passively fences its work across all capacity owners;
+manual progress observes it before effects or successful handoff. A later cancel
+cannot overwrite that earlier fence, and an already recorded first cause survives.
+Closing/dropping a work owner fences only work admitted there, not the associations
+or their other work. Explicit work-owner close records every original cause
+before waking waiters; Drop calls no waker. Call handles can drive original
+cleanup after either root disappears. Lost handles remain reachable from their
+work owner; final owner disposal uses the qualified finite local-abort contract,
+without claiming remote cancellation or network drain. Returned settlements keep
+their own backing through final disposal, independent of root and slot reuse.
+
 Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
 rules. Its bounded schema/name backing and destruction stay funded through final
@@ -244,9 +273,9 @@ restore or remove an original call slot. Admission/progress callbacks and linked
 destructors run after that borrow ends. A checked-out or admitting slot remains
 occupied; reentrant progress cannot poll it again or overwrite it through nested
 admission. Passive per-call control retains the first cause and abandonment even
-while native work is outside the registry. Explicit cancellation and facet close
-wake registered progress outside registry/control borrows; Drop records intent
-without calling a waker. Close fences the whole finite facet before notifying
+while native work is outside the registry. Explicit cancellation and work-owner close
+wake registered progress outside registry/control borrows; association close and
+Drop are passive. Work-owner close fences all its admitted calls before notifying
 any waiter. Callback-time close/cancellation is observed before another native
 effect or successful handoff, including construction and validated unread output.
 Removing a terminal call is its handoff linearization point. Native/codec late

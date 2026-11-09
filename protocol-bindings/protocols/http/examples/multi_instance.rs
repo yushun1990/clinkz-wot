@@ -326,7 +326,7 @@ impl ConsumerAccessService for Policy {
 }
 struct Instance {
     owner: Option<ConsumerInstance>,
-    runtime: Option<ConsumerRuntime>,
+    runtime: Option<(ConsumerAssociation, ConsumerCalls)>,
     denied: Arc<AtomicBool>,
 }
 #[derive(Default)]
@@ -397,13 +397,18 @@ impl Instance {
         cost.binding.add(before, start.elapsed().as_nanos());
         let before = meter::read();
         let start = Instant::now();
-        let runtime = ConsumerRuntime::try_new(
+        let runtime = ConsumerAssociation::try_new(
             owner.reference(),
             vec![binding],
             vec![],
             account.clone(),
-            slots,
         )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(account.clone(), slots).unwrap(),
+            )
+        })
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
         cost.runtime.add(before, start.elapsed().as_nanos());
         Self {
@@ -413,10 +418,8 @@ impl Instance {
         }
     }
     fn start(&self, budget: &mut WorkBudget) -> CoreResult<ConsumerCall> {
-        self.runtime
-            .as_ref()
-            .unwrap()
-            .read_all_properties(Deadline::NONE, now(), budget)
+        let (association, calls) = self.runtime.as_ref().unwrap();
+        association.read_all_properties(calls, Deadline::NONE, now(), budget)
     }
 }
 fn hard_limits(definition: &Arc<ConsumerDefinition>) {
@@ -437,13 +440,18 @@ fn hard_limits(definition: &Arc<ConsumerDefinition>) {
             Arc::new(AtomicBool::new(false)),
             &mut work(),
         );
-        let result = ConsumerRuntime::try_new(
+        let result = ConsumerAssociation::try_new(
             owner.reference(),
             vec![binding],
             vec![],
             account.clone(),
-            slots,
-        );
+        )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(account.clone(), slots).unwrap(),
+            )
+        });
         assert_eq!(result.is_ok(), slots == 32);
         if let Err(ref rejection) = result {
             assert_eq!(rejection.input().0.len(), 1);

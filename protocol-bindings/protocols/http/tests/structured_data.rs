@@ -71,7 +71,7 @@ fn bind_mappings(
     owner: &ConsumerInstance,
     bank: &Arc<HostResourceAccounts>,
     denied: Arc<AtomicBool>,
-) -> ConsumerRuntime {
+) -> (ConsumerAssociation, ConsumerCalls) {
     let access = ConsumerServiceOwner::retain_access(Arc::new(Access(denied)), bank)
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let bindings = definitions
@@ -81,7 +81,13 @@ fn bind_mappings(
                 .unwrap_or_else(|e| panic!("{:?}", e.error()))
         })
         .collect();
-    ConsumerRuntime::try_new(owner.reference(), bindings, vec![], bank.clone(), 1)
+    ConsumerAssociation::try_new(owner.reference(), bindings, vec![], bank.clone())
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(bank.clone(), 1).unwrap(),
+            )
+        })
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn live(bank: &HostResourceAccounts) -> u64 {
@@ -149,7 +155,15 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
         let invalid = payload(br#"{"config":{"level":100,"label":"ok"}}"#);
         let original = invalid.body.clone();
         let rejected = client_a
-            .write_property("on", invalid, Deadline::NONE, now(0), &mut work())
+            .0
+            .write_property(
+                &client_a.1,
+                "on",
+                invalid,
+                Deadline::NONE,
+                now(0),
+                &mut work(),
+            )
             .err()
             .unwrap()
             .into_input();
@@ -159,7 +173,9 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
         assert_eq!(a.app.writes.get(), 0);
         assert_eq!(a.controls.requests.get(), 0);
         let mut write = client_a
+            .0
             .write_property(
+                &client_a.1,
                 "on",
                 payload(&valid(42)),
                 Deadline::NONE,
@@ -180,11 +196,13 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
         denied_a.store(true, Ordering::Relaxed);
         assert!(
             client_a
-                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&client_a.1, "on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         let mut read_b = client_b
-            .read_property("on", Deadline::NONE, now(0), &mut work())
+            .0
+            .read_property(&client_b.1, "on", Deadline::NONE, now(0), &mut work())
             .unwrap();
         let (result_b, producer_b) = b.exchange(&mut read_b).await;
         assert_eq!(result_b.result().unwrap().data().unwrap().body, valid(20));
@@ -193,7 +211,8 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
         drop(read_b);
         denied_a.store(false, Ordering::Relaxed);
         let mut read_a = client_a
-            .read_property("on", Deadline::NONE, now(0), &mut work())
+            .0
+            .read_property(&client_a.1, "on", Deadline::NONE, now(0), &mut work())
             .unwrap();
         let (result_a, producer_a) = a.exchange(&mut read_a).await;
         assert_eq!(result_a.result().unwrap().data().unwrap().body, valid(42));
@@ -276,7 +295,8 @@ fn producer_validates_declared_nested_output_before_delivery() {
             Arc::new(AtomicBool::new(false)),
         );
         let mut call = client
-            .read_property("on", Deadline::NONE, now(0), &mut work())
+            .0
+            .read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
             .unwrap();
         let (result, produced) = server.exchange(&mut call).await;
         assert_eq!(server.app.reads.get(), 1);
@@ -489,8 +509,7 @@ fn consumer_rejects_invalid_wire_values_and_preserves_late_constraint_evidence()
                 Arc::new(AtomicBool::new(false)),
             );
             drop(td);
-            let mut call = client
-                .read_property("on", Deadline::NONE, now(0), &mut work())
+            let mut call = client.0.read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
                 .unwrap();
             let start = Instant::now();
             while !sent.load(Ordering::Acquire) {

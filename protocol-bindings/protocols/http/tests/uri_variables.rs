@@ -211,7 +211,7 @@ fn bind_dynamic(
     accounts: &Arc<HostResourceAccounts>,
     allowed: Vec<String>,
     denied: Arc<AtomicBool>,
-) -> ConsumerRuntime {
+) -> (ConsumerAssociation, ConsumerCalls) {
     let access = ConsumerServiceOwner::retain_access(
         Arc::new(DestinationPolicy {
             instance: owner.reference(),
@@ -225,13 +225,18 @@ fn bind_dynamic(
     let binding = definition
         .bind(access, accounts.clone(), &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    ConsumerRuntime::try_new(
+    ConsumerAssociation::try_new(
         owner.reference(),
         vec![binding],
         vec![],
         accounts.clone(),
-        2,
     )
+    .map(|association| {
+        (
+            association,
+            ConsumerCalls::try_new(accounts.clone(), 2).unwrap(),
+        )
+    })
     .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 async fn finish(call: &mut ConsumerCall) -> ConsumerSettlement {
@@ -280,7 +285,9 @@ fn boolean_query_continuation_executes_and_relative_templates_refuse() {
         drop(td);
         assert!(
             client
+                .0
                 .read_property_with_variables(
+                    &client.1,
                     "level",
                     &[("item", "x"), ("q", "1")],
                     Deadline::NONE,
@@ -290,7 +297,9 @@ fn boolean_query_continuation_executes_and_relative_templates_refuse() {
                 .is_err()
         );
         let mut call = client
+            .0
             .read_property_with_variables(
+                &client.1,
                 "level",
                 &[("item", "x"), ("q", "true")],
                 Deadline::NONE,
@@ -336,7 +345,15 @@ fn root_query_templates_execute_with_fixed_and_dynamic_ports() {
                 values.push(("port", port.as_str()));
             }
             let mut call = client
-                .read_property_with_variables("level", &values, Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property_with_variables(
+                    &client.1,
+                    "level",
+                    &values,
+                    Deadline::NONE,
+                    now(0),
+                    &mut work(),
+                )
                 .unwrap();
             let result = finish(&mut call).await;
             assert!(
@@ -389,7 +406,9 @@ fn one_definition_changes_native_destinations_and_encodes_values_with_independen
         for (runtime, peer) in [(&first, &a), (&first, &b), (&second, &b)] {
             let port = peer.address.port().to_string();
             let mut call = runtime
+                .0
                 .read_property_with_variables(
+                    &runtime.1,
                     "level",
                     &[("port", &port), ("item", "north/a%2F?"), ("q", "雪 &/?%#")],
                     Deadline::NONE,
@@ -409,7 +428,9 @@ fn one_definition_changes_native_destinations_and_encodes_values_with_independen
         let port = b.address.port().to_string();
         assert!(
             first
+                .0
                 .read_property_with_variables(
+                    &first.1,
                     "level",
                     &[("port", &port), ("item", "x"), ("q", "q")],
                     Deadline::NONE,
@@ -419,7 +440,9 @@ fn one_definition_changes_native_destinations_and_encodes_values_with_independen
                 .is_err()
         );
         let mut surviving = second
+            .0
             .read_property_with_variables(
+                &second.1,
                 "level",
                 &[("port", &port), ("item", "north/a%2F?"), ("q", "雪 &/?%#")],
                 Deadline::NONE,
@@ -490,7 +513,9 @@ fn malformed_missing_unsupported_and_denied_values_have_no_io_and_return_write_i
     ] {
         let input = payload(b"7");
         let rejected = client
+            .0
             .write_property_with_variables(
+                &client.1,
                 "level",
                 input,
                 &values,
@@ -647,7 +672,9 @@ fn actual_http_compatibility_and_expansion_capacity_refuse_before_network() {
     );
     for port in ["0", "65536", "bad"] {
         let error = client
+            .0
             .read_property_with_variables(
+                &client.1,
                 "level",
                 &[("port", port), ("item", "x"), ("q", "q")],
                 Deadline::NONE,
@@ -662,7 +689,9 @@ fn actual_http_compatibility_and_expansion_capacity_refuse_before_network() {
     let unicode = "😀".repeat(32); // 128 source bytes, 384 encoded bytes.
     assert!(
         client
+            .0
             .read_property_with_variables(
+                &client.1,
                 "level",
                 &[("port", &port), ("item", "x"), ("q", &unicode)],
                 Deadline::NONE,
@@ -701,12 +730,24 @@ fn https_dynamic_resolution_uses_actual_audience_and_rejects_substituted_native_
         let (bindings, funding) = prepared.into_execution();
         assert_eq!(bindings.len(), 1);
         let definition = bindings[0].definition().clone();
-        let client =
-            ConsumerRuntime::try_new(owner.reference(), bindings, funding, accounts.clone(), 1)
-                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let client = ConsumerAssociation::try_new(
+            owner.reference(),
+            bindings,
+            funding,
+            accounts.clone(),
+        )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+            )
+        })
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
         drop(td);
         let mut call = client
+            .0
             .read_property_with_variables(
+                &client.1,
                 "on",
                 &[("resource", "on")],
                 Deadline::NONE,
@@ -720,7 +761,9 @@ fn https_dynamic_resolution_uses_actual_audience_and_rejects_substituted_native_
         let before = v.calls.load(Ordering::Acquire);
         assert!(matches!(
             client
+                .0
                 .read_property_with_variables(
+                    &client.1,
                     "on",
                     &[("resource", "off")],
                     Deadline::NONE,
@@ -780,7 +823,9 @@ fn a_late_native_value_retains_original_destination_and_funding_after_permission
         );
         let port = peer.address.port().to_string();
         let mut call = client
+            .0
             .read_property_with_variables(
+                &client.1,
                 "level",
                 &[("port", &port), ("item", "x"), ("q", "q")],
                 Deadline::NONE,
@@ -829,7 +874,9 @@ fn dynamic_write_executes_once_and_revoked_pending_work_keeps_original_cleanup()
         let port = peer.address.port().to_string();
         let values = [("port", port.as_str()), ("item", "lamp"), ("q", "on")];
         let mut call = client
+            .0
             .write_property_with_variables(
+                &client.1,
                 "level",
                 payload(b"7"),
                 &values,
@@ -844,7 +891,9 @@ fn dynamic_write_executes_once_and_revoked_pending_work_keeps_original_cleanup()
         drop((result, call));
         peer.paused.store(true, Ordering::Release);
         let mut call = client
+            .0
             .write_property_with_variables(
+                &client.1,
                 "level",
                 payload(b"8"),
                 &values,
@@ -882,3 +931,6 @@ fn dynamic_write_executes_once_and_revoked_pending_work_keeps_original_cleanup()
         clean(&accounts);
     });
 }
+
+#[path = "support/independent_capacity.rs"]
+mod independent_capacity;

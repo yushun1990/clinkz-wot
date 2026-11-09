@@ -96,7 +96,8 @@ fn td_responses_execute_primary_additional_success_and_application_failure_in_bo
                     start_write(&client, b"7")
                 } else {
                     client
-                        .read_property("level", Deadline::NONE, now(0), &mut work())
+                        .0
+                        .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
                         .unwrap()
                 };
                 let (local, remote) = server.exchange(&mut call).await;
@@ -224,7 +225,8 @@ fn additional_response_without_schema_inherits_operation_output_and_own_form_med
             &instance,
         );
         let mut call = client
-            .read_property("level", Deadline::NONE, now(0), &mut work())
+            .0
+            .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
             .unwrap();
         let (local, remote) = server.exchange(&mut call).await;
         assert_eq!(
@@ -260,7 +262,8 @@ fn unused_request_media_and_primary_response_media_are_independent() {
             &instance,
         );
         let mut call = client
-            .read_property("level", Deadline::NONE, now(0), &mut work())
+            .0
+            .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
             .unwrap();
         let (local, remote) = server.exchange(&mut call).await;
         assert_eq!(
@@ -399,7 +402,7 @@ fn consumer_checks_wire_selected_response_schema_and_rejects_undeclared_native_o
             });
             let accounts = bank(); let instance = consumer_instance();
             let client = client(response_description(addr, false), Arc::new(AtomicBool::new(false)), accounts.clone(), &instance);
-            let mut call = client.read_property("level", Deadline::NONE, now(0), &mut work()).unwrap();
+            let mut call = client.0.read_property(&client.1, "level", Deadline::NONE, now(0), &mut work()).unwrap();
             let start = Instant::now();
             let result = loop {
                 if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) { break s; }
@@ -439,7 +442,8 @@ fn http_native_status_class_does_not_override_explicit_td_response_success() {
         for mode in [4, 5] {
             server.app.output.set(mode);
             let mut call = client
-                .read_property("level", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
                 .unwrap();
             let (local, remote) = server.exchange(&mut call).await;
             assert_eq!(
@@ -744,7 +748,7 @@ fn producer_validates_the_original_native_form_instead_of_a_sibling_response_sch
         let accounts = bank(); let instance = consumer_instance();
         let client = client_with_selector(td, Arc::new(AtomicBool::new(false)), accounts.clone(), &instance,
             ConsumerSelector {form:Some(1), ..Default::default()});
-        let mut call = client.read_property("level", Deadline::NONE, now(0), &mut work()).unwrap();
+        let mut call = client.0.read_property(&client.1, "level", Deadline::NONE, now(0), &mut work()).unwrap();
         let (local, remote) = server.exchange(&mut call).await;
         assert!(local.result().is_err());
         assert!(matches!(remote.result, Err(CoreError::Validation(_))),
@@ -778,7 +782,8 @@ fn one_behavior_borrows_each_original_forms_response_contract_for_scoped_branch_
                 },
             );
             let mut call = client
-                .read_property("level", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
                 .unwrap();
             let (local, remote) = server.exchange(&mut call).await;
             let output = local.result().unwrap();

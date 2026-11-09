@@ -200,7 +200,8 @@ fn engine_query_keeps_concurrent_instances_independent_without_leaf_queries() {
         let next_call = query(&client);
         assert!(
             client
-                .query_all_actions(Deadline::NONE, now(), &mut work())
+                .0
+                .query_all_actions(&client.1, Deadline::NONE, now(), &mut work())
                 .is_err()
         );
         drop(result);
@@ -501,7 +502,9 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
             assert_eq!(result.operation(), Operation::QueryAllActions);
             assert_eq!(server.app.invoked.get(), 1);
             assert_eq!(server.app.cancelled.get(), 0);
-            let next = client.query_all_actions(Deadline::NONE, now(), &mut work());
+            let next = client
+                .0
+                .query_all_actions(&client.1, Deadline::NONE, now(), &mut work());
             assert_eq!(
                 next.is_ok(),
                 matches!(mode, "cancel" | "short-credit"),
@@ -529,7 +532,8 @@ fn pre_effect_consumer_cancellation_and_policy_refusal_create_no_root_or_member_
         policy.denied.store(true, Ordering::Relaxed);
         assert!(
             client
-                .query_all_actions(Deadline::NONE, now(), &mut work())
+                .0
+                .query_all_actions(&client.1, Deadline::NONE, now(), &mut work())
                 .is_err()
         );
         policy.denied.store(false, Ordering::Relaxed);

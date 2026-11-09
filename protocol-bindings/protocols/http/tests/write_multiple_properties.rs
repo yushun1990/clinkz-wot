@@ -8,7 +8,7 @@ const VALUES: &[u8] = br#"{"on":false,"secret":"updated"}"#;
 fn write_description(addr: SocketAddr) -> Value {
     collection_description(addr, WRITE)
 }
-fn start_write(client: &ConsumerRuntime) -> ConsumerCall {
+fn start_write(client: &(ConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     start_collection_at(client, WRITE, Deadline::NONE).unwrap()
 }
 fn invalid_inputs() -> Vec<Vec<u8>> {
@@ -67,7 +67,8 @@ fn one_retained_td_writes_different_subsets_without_touching_omitted_members() {
         ] {
             let input = payload(input);
             let mut call = client
-                .write_multiple_properties(input, Deadline::NONE, now(0), &mut work())
+                .0
+                .write_multiple_properties(&client.1, input, Deadline::NONE, now(0), &mut work())
                 .unwrap_or_else(|_| panic!());
             let (local, remote) = server.exchange(&mut call).await;
             assert!(local.result().unwrap().data().is_none());
@@ -96,7 +97,14 @@ fn one_retained_td_writes_different_subsets_without_touching_omitted_members() {
         assert_eq!((server.app.reads.get(), server.app.writes.get()), (0, 0));
         assert!(
             client
-                .write_all_properties(payload(VALUES), Deadline::NONE, now(0), &mut work())
+                .0
+                .write_all_properties(
+                    &client.1,
+                    payload(VALUES),
+                    Deadline::NONE,
+                    now(0),
+                    &mut work()
+                )
                 .is_err(),
             "root operations do not acquire one another"
         );
@@ -133,7 +141,8 @@ fn invalid_input_and_short_work_or_capacity_return_original_before_native_effect
     ]) {
         let original = input.clone();
         let error = client
-            .write_multiple_properties(input, Deadline::NONE, now(0), &mut work())
+            .0
+            .write_multiple_properties(&client.1, input, Deadline::NONE, now(0), &mut work())
             .err()
             .unwrap();
         assert!(Arc::ptr_eq(&original.body, &error.into_input().body));
@@ -151,7 +160,9 @@ fn invalid_input_and_short_work_or_capacity_return_original_before_native_effect
         let input = payload(VALUES);
         let original = input.clone();
         let error = client
+            .0
             .write_multiple_properties(
+                &client.1,
                 input,
                 Deadline::NONE,
                 now(0),
@@ -167,7 +178,9 @@ fn invalid_input_and_short_work_or_capacity_return_original_before_native_effect
     }
     io().block_on(async {
         let first = client
+            .0
             .write_multiple_properties(
+                &client.1,
                 payload(br#"{"on":false}"#),
                 Deadline::NONE,
                 now(0),
@@ -177,7 +190,8 @@ fn invalid_input_and_short_work_or_capacity_return_original_before_native_effect
         let input = payload(VALUES);
         let original = input.clone();
         let error = client
-            .write_multiple_properties(input, Deadline::NONE, now(0), &mut work())
+            .0
+            .write_multiple_properties(&client.1, input, Deadline::NONE, now(0), &mut work())
             .err()
             .unwrap();
         assert!(
@@ -257,18 +271,34 @@ fn consumer_and_producer_member_permission_refuse_the_entire_group_before_effect
         )
         .unwrap();
         let (d, f) = p.into_execution();
-        let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 2)
-            .unwrap_or_else(|_| panic!());
+        let client =
+            ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                .map(|association| {
+                    (
+                        association,
+                        ConsumerCalls::try_new(accounts.clone(), 2).unwrap(),
+                    )
+                })
+                .unwrap_or_else(|_| panic!());
         let mut server = Fixture::new(td);
         assert!(
             client
-                .write_multiple_properties(payload(VALUES), Deadline::NONE, now(0), &mut work())
+                .0
+                .write_multiple_properties(
+                    &client.1,
+                    payload(VALUES),
+                    Deadline::NONE,
+                    now(0),
+                    &mut work()
+                )
                 .is_err()
         );
         assert_eq!(server.controls.requests.get(), 0);
         assert!(server.app.applied.borrow().is_null());
         let mut allowed = client
+            .0
             .write_multiple_properties(
+                &client.1,
                 payload(br#"{"on":false}"#),
                 Deadline::NONE,
                 now(0),

@@ -161,7 +161,7 @@ states = ["Reserved", "Running", "ResultRetained", "Cancelling", "Settled", "Cle
 initial = "Reserved"
 terminal = ["Released"]
 required_events = []
-invariant = "Local terminal and release differ; original identity/program/principal/reply survives. Remote effect uncertainty and physical owner status remain separate. Finite and continuing Action Consumer admission/progress retains occupied original slots while linked callbacks run outside registry borrows; passive first-cause/cancel/abandonment controls survive checkout; final removal linearizes handoff. Finite Consumer normal/rejected/native output views lend slices without exposing original allocation owners; retained settlement owners keep original response/native/definition funding until final disposal."
+invariant = "Local terminal and release differ; original identity/program/principal/reply survives. Remote effect uncertainty and physical owner status remain separate. Persistent finite associations require no vacant slot; explicit work owners supply admission capacity independently and retain original instance/work quota debits through settlement disposal. Finite and continuing Action Consumer admission/progress retains occupied original slots while linked callbacks run outside registry borrows; passive first-cause/cancel/abandonment controls survive checkout; final removal linearizes handoff. Finite Consumer normal/rejected/native output views lend slices without exposing original allocation owners; retained settlement owners keep original response/native/definition funding until final disposal."
 
 [[machine.transition]]
 from = "Reserved"

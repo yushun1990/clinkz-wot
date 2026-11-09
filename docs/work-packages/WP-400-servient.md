@@ -293,10 +293,33 @@ controls; no finite-call substitution or package/gate acceptance is implied.
 The source-free `servient-finite::consumer` owner consumes Core instance bindings and
 pins their exact actual execution/configuration and services. It accepts no
 call-time executor, codec, validator, security or configuration override. Managed
-call admission refuses a foreign parent bank and funds native lifetime, complete
-result backing, callback temporary and cleanup before invocation. The immutable
-startup registry layout remains caller-provisioned Host construction; actual
-retained services/registration backing have explicit original funding.
+association construction refuses bindings from a foreign instance bank. Finite
+admission accepts separately funded capacity, while retaining the original
+native/services and complete result/cleanup obligations.
+
+`ConsumerAssociation` and `ConsumerCalls` replace the bundled `ConsumerRuntime`
+constructor directly. Associations retain no vacant Call Slots; an explicitly
+chosen work owner can serve many instances, and each association can use several
+owners. The existing `FiniteCallState`, reserved-slot checkout, independent
+controls, late-result validation and finite native disposal remain. Original
+binding wrapper backing now survives selected settlement retention independently
+of the association's unselected mappings. Exact scopes and account ownership are
+specified in [Runtime Safety](../spec/runtime-safety.md) and
+[Foundation](../spec/foundation.md).
+
+The real HTTP [independent-capacity regressions](../../protocol-bindings/protocols/http/tests/support/independent_capacity.rs)
+run with `cargo test --locked -p clinkz-wot-binding-http --test uri_variables`.
+They exercise eight independent associations over one exact qualified mapping
+and one slot, two permitted destinations, independent work/instance quota refusal,
+retained input/variables, fixed-target refusal, reentry, late results across root
+loss/replacement and abandoned real-socket disposal. Existing HTTP callback,
+structured-data, reuse and downstream finite/Action/notification regressions
+remain applicable after direct caller migration.
+
+This is bounded Host/manual finite capability, not continuing Action, notification
+or Producer association/capacity implementation. HTTP's one-exchange-per-native-
+registration restriction remains. F1/F2/F3 are unchanged outside the affected
+finite path; no gate, package, milestone or profile acceptance is inferred.
 
 The [reusable execution fixture](../../protocol-bindings/protocols/http/tests/reusable_execution.rs)
 executes independent HTTP Consumers from one semantic preparation, specialized
@@ -312,8 +335,8 @@ or portable execution.
 The [multi-instance characterization](../evidence/consumer-multi-instance-scaling.md)
 extends this finite Host path to increasing populations and active fractions,
 with independent policy/accounts, explicit native lanes, distinct targets,
-allocator/reservation separation and final retirement evidence. It retains the
-current runtime layout as provisional and records its dense account/slot costs
+allocator/reservation separation and final retirement evidence. It records the
+prior bundled runtime layout and its dense account/slot costs
 and preparation limits; no package or profile qualification is implied.
 
 Calls and abandoned-handle cleanup retain their original native owner and first

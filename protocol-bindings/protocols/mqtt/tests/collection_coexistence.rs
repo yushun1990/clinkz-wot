@@ -403,13 +403,18 @@ mod live {
                     .any(|s| s.operation == Operation::SubscribeAllEvents && s.selected)
             );
             let (definitions, funding) = prepared.into_execution();
-            let finite = ConsumerRuntime::try_new(
+            let finite = ConsumerAssociation::try_new(
                 consumer_owner.reference(),
                 definitions,
                 funding,
                 consumer_bank.clone(),
-                1,
             )
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(consumer_bank.clone(), 1).unwrap(),
+                )
+            })
             .unwrap_or_else(|_| panic!());
             let mut events = ConsumerNotificationRuntime::try_new(
                 consumer_owner.reference(),
@@ -519,7 +524,8 @@ mod live {
             // Stopping the Event interaction did not revoke this Consumer or
             // the Producer's independently retained Action inventory.
             let mut query = finite
-                .query_all_actions(Deadline::NONE, now(), &mut budget())
+                .0
+                .query_all_actions(&finite.1, Deadline::NONE, now(), &mut budget())
                 .unwrap();
             let result = loop {
                 if let Poll::Ready(result) = query.poll(&mut cx(), now(), &mut budget()) {

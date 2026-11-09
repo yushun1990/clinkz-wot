@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0121-independent-consumer-capacity.md][0121 Persistent Consumer associations and finite capacity]]
+
 - [[file:0120-uri-variable-execution.md][0120 URI-variable execution and actual destination authority]]
 
 - [[file:0119-td-response-execution.md][0119 TD-described finite response execution]]

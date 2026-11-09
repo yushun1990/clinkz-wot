@@ -113,9 +113,19 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
                 data.service()
             ));
             let content = bindings[0].definition().content().clone();
-            let client =
-                ConsumerRuntime::try_new(owner.reference(), bindings, funding, accounts.clone(), 1)
-                    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let client = ConsumerAssociation::try_new(
+                owner.reference(),
+                bindings,
+                funding,
+                accounts.clone(),
+            )
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+                )
+            })
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
             (client, content)
         };
         let (client_a, content) =
@@ -163,7 +173,8 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
         owner_a.revoke();
         assert!(
             client_a
-                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&client_a.1, "on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         drop((call_b, result_b));
@@ -179,7 +190,8 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
         assert!(result_next_b.result().is_ok());
         assert!(
             client_b
-                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&client_b.1, "on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         assert_eq!(access_a.security_revision(), revision_a);
@@ -381,7 +393,8 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
             secure_client(&server.td, &keys, &owner, missing.clone(), &accounts, None);
         assert!(
             client
-                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
@@ -401,7 +414,7 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         let start = Instant::now();
         loop {
             server.step();
-            client.step(&mut cx(), now(0), &mut work());
+            client.1.step(&mut cx(), now(0), &mut work());
             if server.server().take_settlement().is_some() {
                 break;
             }
@@ -433,7 +446,8 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         );
         assert!(
             wrong
-                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&wrong.1, "on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         drop(wrong);
@@ -959,7 +973,8 @@ fn basic_credential_issuance_prepays_its_own_complete_callback_work() {
             let mut budget = work().with_remaining(WorkClass::ProviderProbes, credit);
             assert!(
                 client
-                    .read_property("on", Deadline::NONE, now(0), &mut budget)
+                    .0
+                    .read_property(&client.1, "on", Deadline::NONE, now(0), &mut budget)
                     .is_err(),
                 "one permission payment cannot also fund credential issuance"
             );
@@ -979,7 +994,8 @@ fn basic_credential_issuance_prepays_its_own_complete_callback_work() {
         policy.calls.store(0, Ordering::Relaxed);
         let mut budget = work().with_remaining(WorkClass::ProviderProbes, 2 * callback_work);
         let mut call = client
-            .read_property("on", Deadline::NONE, now(0), &mut budget)
+            .0
+            .read_property(&client.1, "on", Deadline::NONE, now(0), &mut budget)
             .unwrap();
         assert_eq!(budget.remaining(WorkClass::ProviderProbes), 0);
         assert_eq!(policy.calls.load(Ordering::Relaxed), 4);
@@ -1056,14 +1072,24 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let (bindings, funding) = prepared.into_execution();
         let definition = bindings[0].definition().clone();
         let content = definition.content().clone();
-        let client =
-            ConsumerRuntime::try_new(instance.reference(), bindings, funding, accounts.clone(), 1)
-                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let client = ConsumerAssociation::try_new(
+            instance.reference(),
+            bindings,
+            funding,
+            accounts.clone(),
+        )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+            )
+        })
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let mut call = read_secure(&client);
         let start = Instant::now();
         while validations.load(Ordering::Acquire) == 0 {
             server.step();
-            client.step(&mut cx(), now(0), &mut work());
+            client.1.step(&mut cx(), now(0), &mut work());
             assert!(start.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -1085,7 +1111,8 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         policy.calls.store(0, Ordering::Relaxed);
         assert!(
             client
-                .read_property("on", Deadline::NONE, now(0), &mut work())
+                .0
+                .read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         assert_eq!(
@@ -1099,13 +1126,18 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let binding = definition
             .bind(owner, accounts.clone(), &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        let client = ConsumerRuntime::try_new(
+        let client = ConsumerAssociation::try_new(
             instance.reference(),
             vec![binding],
             vec![],
             accounts.clone(),
-            1,
         )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+            )
+        })
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let mut call = read_secure(&client);
         let result = server.exchange(&mut call).await;

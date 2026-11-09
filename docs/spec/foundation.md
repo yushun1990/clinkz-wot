@@ -19,13 +19,38 @@ contiguous allocation backing or transitive SDK maxima.
 The Host finite Consumer represents these owners separately: common prepared
 content retains its first backing reservations; actual data/access services and
 native registration backing retain their original startup bank; each specialized
-mapping retains its own compilation leases; each binding/runtime/call funds its
-own reference, policy association, records, result and cleanup capacity. Reusing
+mapping retains its own compilation leases; each binding/association/call owner
+funds its own reference, policy association, records, result and cleanup capacity. Reusing
 content or a qualified mapping never copies, refunds or transfers those physical
 leases. Retirement follows the last actual mapping/call/settlement reference.
 Heap allocation measurements and reservation counters describe different facts;
 temporary allowances and overlapping reservations are reported separately from
 requested retained allocator bytes.
+
+Persistent logical associations MUST NOT require prepaid idle call capacity.
+In the Host finite representation, association records and selected binding
+wrappers retain their explicit instance bank; `ConsumerCalls` funds its slot
+storage from a separately chosen work bank. Each admitted call acquires its
+native lifetime, operand/result backing, callback scratch and cleanup capacity
+from that work bank before effects. Sharing content, a mapping or work storage
+does not share authorization or promise native availability.
+
+`PendingHandlerCallsGlobalMax` constrains outstanding obligations in each chosen
+work domain, including retained settlements. When the association uses a distinct
+instance bank, admission also acquires one outstanding-obligation quota debit
+there. Both survive through final call/settlement disposal; a common bank is
+charged once. The instance debit is a logical quota, not a second physical RAM
+owner. A shared instance bank supplies a shared allowance, not per-Thing hard
+isolation. Separate work banks compose only the limits actually shared between
+them; no process-wide aggregate quota is inferred. Other per-instance byte or
+rate isolation is not provided by this outstanding-call debit.
+
+Slot removal transfers the complete funded call to its settlement and may reuse
+storage without refunding retained operands/results/cleanup. Physical input
+bodies may be shared by native and Engine snapshots under the original call
+reservation; copied metadata and variable records have separate allowances.
+Capacity-owner loss cannot migrate these reservations to the association or a
+successor bank. Captured native limits remain additional independent constraints.
 
 Independently composed Host finite Consumer registries/Servients share service
 backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the

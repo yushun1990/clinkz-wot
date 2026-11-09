@@ -17,7 +17,10 @@ retirement is not logical revocation; it cannot revoke a sibling's acceptance.
 Consumer use selects a prepared candidate, checks policy/data/capacity and owns
 the entire conversation/result/cleanup obligation before effects. Deferred pure
 preparation belongs to a separate admitted coordinator. Completed construction
-never creates current authority by itself.
+never creates current authority by itself. Persistent finite associations retain
+checked mappings without idle call storage; explicit finite work owners supply
+admission/progress capacity independently. The exact scopes and retention rules
+are owned by [Runtime Safety](../spec/runtime-safety.md).
 
 Producer setup validates the private draft and actual behavior/providers, reserves
 setup/ingress/finalization/cleanup, and may acquire closed native participation.

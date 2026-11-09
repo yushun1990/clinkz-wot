@@ -265,7 +265,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for LocalCall {
     }
 }
 struct Harness {
-    rt: Rc<ConsumerRuntime>,
+    rt: Rc<(ConsumerAssociation, ConsumerCalls)>,
     owner: ConsumerInstance,
     bank: Arc<HostResourceAccounts>,
     probe: Arc<Probe>,
@@ -329,8 +329,19 @@ fn harness(calls: usize, address: Option<std::net::SocketAddr>) -> Harness {
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL));
     let (definitions, funding) = prepared.into_execution();
     let rt = Rc::new(
-        ConsumerRuntime::try_new(owner.reference(), definitions, funding, bank.clone(), calls)
-            .unwrap_or_else(|e| panic!("{:?}", e.error())),
+        ConsumerAssociation::try_new(
+            owner.reference(),
+            definitions,
+            funding,
+            bank.clone(),
+        )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(bank.clone(), calls).unwrap(),
+            )
+        })
+        .unwrap_or_else(|e| panic!("{:?}", e.error())),
     );
     Harness {
         rt,
@@ -339,8 +350,8 @@ fn harness(calls: usize, address: Option<std::net::SocketAddr>) -> Harness {
         probe,
     }
 }
-fn read(rt: &ConsumerRuntime) -> CoreResult<ConsumerCall> {
-    rt.read_property("level", Deadline::NONE, now(), &mut work())
+fn read(rt: &(ConsumerAssociation, ConsumerCalls)) -> CoreResult<ConsumerCall> {
+    rt.0.read_property(&rt.1, "level", Deadline::NONE, now(), &mut work())
 }
 fn settle(call: &mut ConsumerCall) -> ConsumerSettlement {
     for _ in 0..32 {
@@ -366,13 +377,14 @@ fn authorization_can_close_and_refuse_the_original_write_before_native_construct
     let before = usage(&h.bank);
     let rt = h.rt.clone();
     hook(Edge::Access, move || {
-        assert!(!rt.is_idle());
-        rt.begin_close();
+        assert!(!rt.1.is_idle());
+        rt.1.begin_close();
     });
     let input = Payload::new(b"8".as_slice(), "application/json");
     let original = input.body.clone();
     let rejected =
-        h.rt.write_property("level", input, Deadline::NONE, now(), &mut work())
+        h.rt.0
+            .write_property(&h.rt.1, "level", input, Deadline::NONE, now(), &mut work())
             .err()
             .unwrap();
     assert!(matches!(
@@ -382,7 +394,7 @@ fn authorization_can_close_and_refuse_the_original_write_before_native_construct
     let (input, _) = rejected.into_parts();
     assert!(Arc::ptr_eq(&original, &input.body));
     assert_eq!(h.probe.starts.load(Ordering::Relaxed), 0);
-    assert!(h.rt.is_idle());
+    assert!(h.rt.1.is_idle());
     assert_eq!(before, usage(&h.bank));
     dispose(h);
 }
@@ -395,8 +407,8 @@ fn nested_admission_sees_reserved_capacity_and_cannot_overwrite_the_outer_call()
         let nested = Rc::new(RefCell::new(None));
         let capture = nested.clone();
         hook(Edge::Access, move || {
-            assert!(!rt.is_idle());
-            rt.step(&mut cx(), now(), &mut work());
+            assert!(!rt.1.is_idle());
+            rt.1.step(&mut cx(), now(), &mut work());
             match read(&rt) {
                 Ok(call) => {
                     assert_eq!(capacity, 2);
@@ -417,7 +429,7 @@ fn nested_admission_sees_reserved_capacity_and_cannot_overwrite_the_outer_call()
             drop(settle(&mut call));
             drop(call);
         }
-        assert!(h.rt.is_idle());
+        assert!(h.rt.1.is_idle());
         assert_eq!(h.probe.starts.load(Ordering::Relaxed), capacity);
         dispose(h);
     }
@@ -429,8 +441,8 @@ fn advancing_nested_sweep_does_not_regress_a_siblings_call_time() {
     let mut first = read(&h.rt).unwrap();
     let mut sibling = read(&h.rt).unwrap();
     let rt = h.rt.clone();
-    hook(Edge::Poll, move || rt.step(&mut cx(), at(2), &mut work()));
-    h.rt.step(&mut cx(), at(1), &mut work());
+    hook(Edge::Poll, move || rt.1.step(&mut cx(), at(2), &mut work()));
+    h.rt.1.step(&mut cx(), at(1), &mut work());
     for call in [&mut first, &mut sibling] {
         let Poll::Ready(s) = call.poll(&mut cx(), at(3), &mut work()) else {
             panic!("not ready")
@@ -452,11 +464,11 @@ fn advancing_nested_admission_keeps_its_own_time_when_the_outer_sweep_resumes() 
     let rt = h.rt.clone();
     hook(Edge::Poll, move || {
         *capture.borrow_mut() = Some(
-            rt.read_property("level", Deadline::NONE, at(2), &mut work())
+            rt.0.read_property(&rt.1, "level", Deadline::NONE, at(2), &mut work())
                 .unwrap(),
         );
     });
-    h.rt.step(&mut cx(), at(1), &mut work());
+    h.rt.1.step(&mut cx(), at(1), &mut work());
     let mut new = new.borrow_mut().take().unwrap();
     for call in [&mut first, &mut new] {
         let Poll::Ready(s) = call.poll(&mut cx(), at(3), &mut work()) else {
@@ -476,9 +488,9 @@ fn genuine_caller_clock_regressions_and_domain_changes_still_fence_success() {
         for bad in [at(1), MonotonicInstant::new(ClockId::new(107), 3)] {
             let h = harness(1, None);
             let mut call = read(&h.rt).unwrap();
-            h.rt.step(&mut cx(), at(2), &mut work());
+            h.rt.1.step(&mut cx(), at(2), &mut work());
             if !direct {
-                h.rt.step(&mut cx(), bad, &mut work());
+                h.rt.1.step(&mut cx(), bad, &mut work());
             }
             let Poll::Ready(s) =
                 call.poll(&mut cx(), if direct { bad } else { at(3) }, &mut work())
@@ -502,10 +514,11 @@ fn nested_time_advancement_expires_checked_out_work_before_effects_or_handoff() 
     for edge in [Edge::Access, Edge::Poll, Edge::Validate] {
         let h = harness(1, None);
         let mut call =
-            h.rt.read_property("level", Deadline::at(at(2)), at(1), &mut work())
+            h.rt.0
+                .read_property(&h.rt.1, "level", Deadline::at(at(2)), at(1), &mut work())
                 .unwrap();
         let rt = h.rt.clone();
-        hook(edge, move || rt.step(&mut cx(), at(2), &mut work()));
+        hook(edge, move || rt.1.step(&mut cx(), at(2), &mut work()));
         let Poll::Ready(s) = call.poll(&mut cx(), at(1), &mut work()) else {
             panic!("not ready")
         };
@@ -534,7 +547,7 @@ fn nested_time_advancement_expires_checked_out_work_before_effects_or_handoff() 
 fn native_construction_can_close_but_the_new_work_only_enters_cancellation() {
     let h = harness(1, None);
     let rt = h.rt.clone();
-    hook(Edge::Start, move || rt.begin_close());
+    hook(Edge::Start, move || rt.1.begin_close());
     let mut call = read(&h.rt).unwrap();
     let s = settle(&mut call);
     assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
@@ -552,8 +565,8 @@ fn cancellation_callback_can_close_without_replacing_the_first_cause() {
     call.cancel();
     let rt = h.rt.clone();
     hook(Edge::Cancel, move || {
-        rt.begin_close();
-        rt.step(&mut cx(), now(), &mut work());
+        rt.1.begin_close();
+        rt.1.step(&mut cx(), now(), &mut work());
     });
     let s = settle(&mut call);
     assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
@@ -571,7 +584,7 @@ fn checked_out_native_work_can_be_cancelled_and_its_late_result_stays_funded() {
     hook(Edge::Poll, move || {
         capture.borrow().as_ref().unwrap().cancel()
     });
-    h.rt.step(&mut cx(), now(), &mut work());
+    h.rt.1.step(&mut cx(), now(), &mut work());
     let mut call = handle.borrow_mut().take().unwrap();
     let s = settle(&mut call);
     assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
@@ -597,7 +610,7 @@ fn retained_old_handle_keeps_its_control_funded_and_cannot_cancel_a_reused_slot(
     let baseline = usage(&h.bank);
     let mut old = read(&h.rt).unwrap();
     drop(settle(&mut old));
-    assert!(h.rt.is_idle());
+    assert!(h.rt.1.is_idle());
     assert_eq!(
         h.bank.account(ResourceKind::CleanupBytesMax).used(),
         baseline[ResourceKind::CleanupBytesMax.index()]
@@ -629,7 +642,7 @@ fn reentrant_progress_can_cancel_a_sibling_without_polling_the_checked_out_call_
     hook(Edge::Poll, move || {
         assert!(matches!(read(&rt), Err(CoreError::Backpressure(_))));
         capture.borrow().as_ref().unwrap().cancel();
-        rt.step(&mut cx(), now(), &mut work());
+        rt.1.step(&mut cx(), now(), &mut work());
     });
     let s = settle(&mut first);
     assert!(s.result().is_ok());
@@ -652,10 +665,10 @@ fn validation_and_unread_handoff_recheck_close_after_callbacks() {
         let h = harness(1, None);
         let mut call = read(&h.rt).unwrap();
         if edge == Edge::Access {
-            h.rt.step(&mut cx(), now(), &mut work());
+            h.rt.1.step(&mut cx(), now(), &mut work());
         }
         let rt = h.rt.clone();
-        hook(edge, move || rt.begin_close());
+        hook(edge, move || rt.1.begin_close());
         let s = settle(&mut call);
         assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
         assert!(
@@ -678,11 +691,11 @@ fn abandonment_and_native_destruction_can_reenter_after_the_original_slot_is_vac
     hook(Edge::Poll, move || {
         drop(capture.borrow_mut().take());
         hook(Edge::Dispose, move || {
-            assert!(rt.is_idle());
+            assert!(rt.1.is_idle());
             *next.borrow_mut() = Some(read(&rt).unwrap());
         });
     });
-    h.rt.step(&mut cx(), now(), &mut work());
+    h.rt.1.step(&mut cx(), now(), &mut work());
     assert!(old.borrow().is_none());
     let mut next = replacement.borrow_mut().take().unwrap();
     assert!(settle(&mut next).result().is_ok());
@@ -698,18 +711,18 @@ fn unwinding_restores_the_call_and_failed_admission_releases_its_reserved_slot()
     let h = harness(1, None);
     hook(Edge::Access, || panic!("admission callback"));
     assert!(catch_unwind(AssertUnwindSafe(|| read(&h.rt))).is_err());
-    assert!(h.rt.is_idle());
+    assert!(h.rt.1.is_idle());
     let mut call = read(&h.rt).unwrap();
     hook(Edge::Poll, || panic!("native callback"));
     assert!(
-        catch_unwind(AssertUnwindSafe(|| h.rt.step(
+        catch_unwind(AssertUnwindSafe(|| h.rt.1.step(
             &mut cx(),
             now(),
             &mut work()
         )))
         .is_err()
     );
-    assert!(!h.rt.is_idle());
+    assert!(!h.rt.1.is_idle());
     call.cancel();
     assert!(matches!(
         settle(&mut call).result(),
@@ -750,7 +763,7 @@ fn nested_poll_registers_interest_and_wakes_after_the_call_is_restored() {
                 .is_pending()
         );
     });
-    h.rt.step(&mut cx(), now(), &mut work());
+    h.rt.1.step(&mut cx(), now(), &mut work());
     assert_eq!(counter.0.load(Ordering::Relaxed), 1);
     let mut call = handle.borrow_mut().take().unwrap();
     assert!(settle(&mut call).result().is_ok());
@@ -769,10 +782,10 @@ fn nested_runtime_driver_keeps_interest_when_the_outer_quantum_cannot_poll_nativ
     let rt = h.rt.clone();
     hook(Edge::Access, move || {
         let waker = Waker::from(capture);
-        rt.step(&mut Context::from_waker(&waker), now(), &mut work());
+        rt.1.step(&mut Context::from_waker(&waker), now(), &mut work());
     });
     let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 1_000_000);
-    h.rt.step(&mut cx(), now(), &mut budget);
+    h.rt.1.step(&mut cx(), now(), &mut budget);
     call.cancel();
     assert!(
         counter.0.load(Ordering::Relaxed) > 0,
@@ -797,11 +810,12 @@ fn consumed_inline_cancel_wake_is_rearmed_after_pending_native_work_is_restored(
     let nested_waker = waker.clone();
     hook(Edge::Poll, move || {
         hook(Edge::Wake, move || {
-            rt.step(&mut Context::from_waker(&nested_waker), now(), &mut work())
+            rt.1.step(&mut Context::from_waker(&nested_waker), now(), &mut work())
         });
         capture.borrow().as_ref().unwrap().cancel();
     });
-    h.rt.step(&mut Context::from_waker(&waker), now(), &mut work());
+    h.rt.1
+        .step(&mut Context::from_waker(&waker), now(), &mut work());
     assert!(
         counter.0.load(Ordering::Relaxed) >= 2,
         "busy-slot restoration lost the inline cancellation wake"
@@ -809,7 +823,8 @@ fn consumed_inline_cancel_wake_is_rearmed_after_pending_native_work_is_restored(
     assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
     // The restoration wake supplies the next driver turn; no native I/O or
     // unrelated event is needed to enter cancellation and retire the owner.
-    h.rt.step(&mut Context::from_waker(&waker), now(), &mut work());
+    h.rt.1
+        .step(&mut Context::from_waker(&waker), now(), &mut work());
     assert_eq!(h.probe.cancels.load(Ordering::Relaxed), 1);
     let mut call = handle.borrow_mut().take().unwrap();
     let s = settle(&mut call);
@@ -837,7 +852,7 @@ fn replacing_a_waker_may_close_without_borrow_conflicts_or_successful_handoff() 
     );
     drop(waker);
     let rt = h.rt.clone();
-    hook(Edge::WakerDrop, move || rt.begin_close());
+    hook(Edge::WakerDrop, move || rt.1.begin_close());
     let s = settle(&mut call);
     assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
     assert_eq!(h.probe.polls.load(Ordering::Relaxed), 0);
@@ -853,14 +868,15 @@ fn manual_progress_registers_control_wakes_and_close_records_sibling_causes_befo
     let second = Rc::new(RefCell::new(Some(read(&h.rt).unwrap())));
     let counter = Arc::new(WakeProbe(AtomicUsize::new(0)));
     let waker = Waker::from(counter.clone());
-    h.rt.step(&mut Context::from_waker(&waker), now(), &mut work());
+    h.rt.1
+        .step(&mut Context::from_waker(&waker), now(), &mut work());
     let sibling = second.clone();
     let rt = h.rt.clone();
     hook(Edge::Wake, move || {
-        assert!(!rt.is_idle());
+        assert!(!rt.1.is_idle());
         sibling.borrow().as_ref().unwrap().cancel();
     });
-    h.rt.begin_close();
+    h.rt.1.begin_close();
     assert!(counter.0.load(Ordering::Relaxed) >= 1);
     let a = settle(&mut first);
     let mut next = second.borrow_mut().take().unwrap();
@@ -924,15 +940,15 @@ fn real_http_retains_one_original_result_when_validation_reenters_close_or_cance
             let rt = h.rt.clone();
             hook(Edge::Validate, move || {
                 if close {
-                    rt.begin_close();
+                    rt.1.begin_close();
                 } else {
                     capture.borrow().as_ref().unwrap().cancel();
                 }
-                rt.step(&mut cx(), now(), &mut work());
+                rt.1.step(&mut cx(), now(), &mut work());
             });
             let start = Instant::now();
             loop {
-                h.rt.step(&mut cx(), now(), &mut work());
+                h.rt.1.step(&mut cx(), now(), &mut work());
                 // The handle remains outside progress, allowing a callback to
                 // cancel that same checked-out call through the public API.
                 if HOOK.with(|h| h.borrow().is_none()) {
@@ -990,7 +1006,8 @@ fn short_credential_issuance_credit_recovers_original_input_before_capability_or
     // payment can be reused to enter the new credential-service callback.
     let mut short = work().with_remaining(WorkClass::ProviderProbes, 2 * callback_work);
     let refused =
-        h.rt.write_property("level", input, Deadline::NONE, now(), &mut short)
+        h.rt.0
+            .write_property(&h.rt.1, "level", input, Deadline::NONE, now(), &mut short)
             .err()
             .expect("issuance needs separate credit");
     assert!(matches!(
@@ -1001,10 +1018,11 @@ fn short_credential_issuance_credit_recovers_original_input_before_capability_or
     assert!(Arc::ptr_eq(&original, &input.body));
     assert!(!issued.get());
     assert_eq!(h.probe.starts.load(Ordering::Relaxed), 0);
-    assert!(h.rt.is_idle());
+    assert!(h.rt.1.is_idle());
     assert_eq!(before, usage(&h.bank));
     let mut retry =
-        h.rt.write_property("level", input, Deadline::NONE, now(), &mut work())
+        h.rt.0
+            .write_property(&h.rt.1, "level", input, Deadline::NONE, now(), &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert!(issued.get());
     assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
