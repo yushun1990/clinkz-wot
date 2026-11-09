@@ -89,8 +89,9 @@ driver before releasing occupancy. Retained terminal results keep their original
 services, definitions and funding independently; destroying an old result cannot
 release a successor's occupancy. Each read owns a fresh connection and its driver.
 The selected immutable artifact supplies the exact path/query and Host authority.
-Nonempty URI variables and unsupported targets return the original request before
-raw acceptance. No TD rescan, DNS, TLS, pool, redirect, retry, decompression,
+The restricted Read path declines URI variables; the modern finite Property
+facet supports the bounded dynamic profile below. Unsupported targets return the
+original request before raw acceptance. No TD rescan, DNS, pool, redirect, retry, decompression,
 upgrade, background task or detached driver is involved.
 
 The Consumer tranche is complete within its independently accepted scope; its
@@ -252,7 +253,9 @@ nested/composed schemas and named response-schema dependencies alongside resolve
 extensions. A non-HTTP compiler fixture consumes these facts and executes distinct
 owned native instructions after the TD is dropped; it is not a real alternate
 transport or general conformance proof. HTTP keeps its existing execution limits,
-including no URI-template/coding/additional-response execution. Common fact access
+including no URI-template/coding/additional-response execution in the restricted
+Read representation. The modern finite Property capabilities are scoped above
+and below. Common fact access
 does not imply support for those capabilities.
 This concrete HTTP compiler uses inline artifacts and one atomic compile callback;
 the open Consumer SPI also supports owned resumable compilers, exercised by the
@@ -1217,3 +1220,32 @@ multi-owner aggregation, history completeness, atomic snapshots, general
 DataSchema/security, TLS, constrained/automatic progress, replay and production
 qualification remain unsupported. Query cancellation disposes its socket and
 never sends an Action cancel or reinvokes application behavior.
+
+## URI-variable Consumer Property interactions
+
+Modern finite Consumer Property Read/Write supports the shared bounded
+[URI-variable profile](../../../docs/evidence/uri-variables.md). Thing variables
+and affordance overrides have one shared schema interpretation. Calls use
+`read_property_with_variables` / `write_property_with_variables` with unescaped
+scalar lexical values; e.g. a prepared
+`http://127.0.0.1:{port}/devices/{name}{?detail}` mapping can contact different
+ports and paths without constructing new definitions or retaining the TD.
+
+HTTP qualifies a fixed scheme and IP host, simple path/port and form-style
+query/continuation expressions. Query templates may immediately follow the
+authority; the Binding supplies the required root slash in HTTP origin-form
+serialization under [RFC 9112 §3.2.1](https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.1).
+Native resolution reparses the actual expanded
+target before instance authorization or credentials, and native start verifies
+that exact destination. There is no redirect, retry, DNS, host/scheme expansion
+or implicit origin-wide audience. Exact `HttpClientAccess` audiences remain live
+services independent of the definition; an out-of-audience target refuses before
+credentials or I/O. The default destination bound remains 64 bytes;
+`HttpConsumerConfig::with_target_capacity` permits an explicit 1–256-byte bound
+for modern finite execution. Artifact/configuration identities version the change.
+
+The concrete types/expressions, refusals, real HTTP/HTTPS evidence and remaining
+limits are owned by the linked profile. In particular relative templates against
+`base`, dynamic Producer matching and other operation families remain unsupported.
+Producer preparation/final qualification rejects dynamic declarations/templates;
+Consumer support never licenses advertising an unqualified mapping.

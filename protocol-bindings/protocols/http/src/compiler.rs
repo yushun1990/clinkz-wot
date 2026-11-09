@@ -43,7 +43,16 @@ impl HostSemanticCompiler for HttpCompiler {
         {
             return Err(unsupported());
         }
-        let target = Target::parse_for(input.target, self.0.secure).map_err(|_| unsupported())?;
+        let target =
+            crate::address::qualify(input.target, self.0.secure).map_err(|_| unsupported())?;
+        if input.target.contains('{')
+            && !matches!(
+                input.operation,
+                Operation::ReadProperty | Operation::WriteProperty
+            )
+        {
+            return Err(unsupported());
+        }
         let requirement = clinkz_wot_planning::security::compilation_security(&input)?;
         let authentication = crate::security::HttpSecurity::from_requirement(&requirement)
             .map_err(|_| unsupported())?;
@@ -128,7 +137,7 @@ impl HostSemanticCompiler for HttpCompiler {
             secure: self.0.secure,
             authentication,
             method: if write { "PUT" } else { "GET" },
-            target_len: input.target.len() as u8,
+            target_len: input.target.len() as u16,
             ..HttpArtifact::default()
         };
         output.target[..input.target.len()].copy_from_slice(input.target.as_bytes());

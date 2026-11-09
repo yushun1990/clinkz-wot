@@ -236,9 +236,11 @@ reported Consumer alternatives, rather than becoming Producer qualification.
 Every selected mapping still passes common Form/security/media/URI checks, actual
 provider selection, complete data-service support, native compilation and capacity
 checks. `ConsumerDefinition` retains the shared content, exact native mapping,
-actual executor/configuration and data service with captured bounds. An HTTP
-target/path/header change requires actual native preparation; content reuse grants
-no native artifact compatibility. Native compilation remains owned/incremental,
+actual executor/configuration and data service with captured bounds. A change to
+native literals, headers or template instructions requires actual native
+preparation; changing values within a qualified dynamic mapping is interaction
+work and requires no replacement definition. Content reuse grants no native
+artifact compatibility. Native compilation remains owned/incremental,
 and no TD, parser, semantic arena or compiler survives the completed definition.
 
 `type_schema::prepare_schema` captures the bounded structured subset defined in
@@ -298,6 +300,33 @@ the existing trusted Host allocation policy; fallible native compiler-slot and
 owned-cursor allocations are exercised independently. This is not an allocator
 interceptor or a claim of recoverable process-wide OOM.
 
+## URI-variable preparation
+
+PREP-SELECT/COVER/REUSE-001 apply to the complete effective variable meaning of
+each selected interaction. Common preparation uses TD's effective-scope view,
+qualifies every retained declaration/schema assertion, checks RFC expression
+support and declaration coverage, and owns source-independent names, schemas
+and reference requirements. Native compilation qualifies expression placement
+and actual configuration compatibility. It does not reinterpret DataSchemas.
+Reuse compares effective schemas and reference requirements without constructing
+another shared content owner; different native literals/addresses may share this
+meaning under separately qualified mappings.
+
+An unresolved template is not a concrete destination or credential audience.
+Definition/instance preparation checks actual services and native eligibility;
+it defers actual-destination permission to paid pure native resolution and fresh
+instance authorization for each interaction. This grants no permission to make
+I/O during preparation/resolution. Static mappings retain their preparation
+destination check. Unsupported selected assertions or missing native resolution
+support refuse the candidate, with no fallback during accepted execution.
+
+Producer qualification remains complete for the entire final description.
+Dynamic publication requires fully supported native matching/captures, variable
+validation, collision handling and all advertised operations before Serving.
+A Consumer expansion utility cannot establish that claim. The current HTTP
+Producer continues to refuse URI-variable declarations/templates, including
+unused retained declarations. It never drops them to obtain qualification.
+
 ## Continuing Consumer Action preparation
 
 `ConsumerActionRegistry::prepare_action` admits one Action through the common
@@ -322,7 +351,8 @@ owned pair serves invoke/query/cancel selection; subsequent semantic loans compa
 borrowed assertions without rebuilding it. Each actual selected service still
 qualifies the complete retained schemas. No native compiler needs to interpret
 them again to obtain the same common meaning.
-Native vocabulary, URI variables and response conventions stay in the Binding.
+Native vocabulary, variable address placement/matching and response conventions
+stay in the Binding; variable scope and DataSchema interpretation are shared.
 The association owns every selected mapping, both Action data roles, actual
 services and original funding after all TD/compiler owners disappear.
 `ConsumerPreparationBounds` replaces the notification-specific bounds name for

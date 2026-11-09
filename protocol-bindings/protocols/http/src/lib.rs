@@ -29,6 +29,7 @@ mod identity_tests;
 mod producer;
 use clinkz_wot_codec_json as producer_validation;
 pub use finite_producer::{HttpFiniteBinding, HttpFiniteConfig, HttpFiniteReply};
+mod address;
 mod program;
 mod responses;
 mod security;
@@ -56,17 +57,17 @@ const MEDIA: u64 = 32;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v17\0",
+    "clinkz-http-ip-v18\0",
     "TD-responses33;unique-terminal-native-status;explicit-success;branch-schema;JSON-or-JSON-UTF8-response;media32;",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
-    "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
+    "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target256;",
     "Thing-root-readmultiple-explicit-POST200;TD-default-name-array4096;original-selection-bitmap;empty-selection;exact-selected-map;no-query-convention;",
     "Thing-root-writeall-PUT204-empty-through-EOF;exact-writable-input-map;no-readOnly;group-completion-not-atomic;noReplay;",
     "Thing-root-writemultiple-PUT204;validated-selected-writable-map;empty-selection-native;no-member-report-or-atomicity;",
     "Thing-root-queryall-explicit-GET200;draft-status-arrays;unique-absolute-href256;records128;per-Action-output;no-local-control-authority;",
     "Thing-root-readall-GET200;exact-readable-Property-map;type-only-members;no-missing-extra-duplicate-writeOnly;members32-names256-total4096;validation-work=body40+media2;",
-    "noUserinfo;noFragment;noTemplate;noUriVariables;cleartext-permission;",
+    "noUserinfo;noFragment;RFC6570-simple-query-continuation;vars8-names32-values128;fixed-scheme-IP-host;dynamic-port-path-query;root-query-origin-form-slash;target256;actual-target-permission-and-exact-credential-audience;cleartext-permission;",
     "fresh;concurrency1-until-exchange-retirement;retained-result-independent;header32/8192inclusive;body4096;",
     "trailer32/8192exclusive-duplicates-count;hyper-cumulative-extensions<16384;",
     "wire32768;read4096;paid-callback4096;hyperbuf8192-adaptive;writevFalse;",
@@ -168,7 +169,7 @@ impl Target {
         Self::parse_for(text, false)
     }
     fn parse_for(text: &str, secure: bool) -> CoreResult<Self> {
-        if text.len() > 64
+        if text.len() > 256
             || text
                 .bytes()
                 .any(|c| c <= 32 || c >= 127 || b"#{}\\".contains(&c))
@@ -259,6 +260,29 @@ impl binding::ClientBinding for Client {
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         COMPATIBILITY
     }
+    fn supports_uri_variables(&self) -> bool {
+        true
+    }
+    fn resolve_target(
+        &self,
+        target: &str,
+        variables: &[(&str, &str)],
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> CoreResult<Box<str>> {
+        let program = artifact
+            .artifact()
+            .try_payload::<HttpArtifact>(COMPATIBILITY)
+            .ok_or_else(|| error(601, "incompatible HTTP artifact"))?;
+        if program.target() != target || program.secure != self.config.secure {
+            return Err(error(601, "incompatible HTTP mapping"));
+        }
+        address::resolve(
+            target,
+            variables,
+            self.config.secure,
+            self.config.configuration.target_capacity(),
+        )
+    }
     fn invoke(
         &self,
         request: OutboundRequest,
@@ -267,7 +291,7 @@ impl binding::ClientBinding for Client {
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
     > {
-        if !request.uri_variables().is_empty() {
+        if request.uri_variables().len() > uri_variables::MAX_VARIABLES {
             return Err(reject(
                 request,
                 self.config,
@@ -275,10 +299,36 @@ impl binding::ClientBinding for Client {
                 true,
             ));
         }
+        let mut variables = [("", ""); uri_variables::MAX_VARIABLES];
+        for (out, (name, value)) in variables.iter_mut().zip(request.uri_variables()) {
+            *out = (name.as_str(), value.as_str());
+        }
         let target = artifact
             .artifact()
             .try_payload::<HttpArtifact>(COMPATIBILITY)
-            .and_then(|a| Some((Target::parse_for(a.target(), self.config.secure).ok()?, *a)));
+            .and_then(|a| {
+                let expanded = address::resolve(
+                    a.target(),
+                    &variables[..request.uri_variables().len()],
+                    self.config.secure,
+                    self.config.configuration.target_capacity(),
+                )
+                .ok()?;
+                if request
+                    .destination()
+                    .is_some_and(|d| d != expanded.as_ref())
+                    || (!request.uri_variables().is_empty() && request.destination().is_none())
+                {
+                    return None;
+                }
+                let mut program = *a;
+                program.target[..expanded.len()].copy_from_slice(expanded.as_bytes());
+                program.target_len = expanded.len() as u16;
+                Some((
+                    Target::parse_for(&expanded, self.config.secure).ok()?,
+                    program,
+                ))
+            });
         let Some(target) = target else {
             return Err(reject(
                 request,
@@ -295,7 +345,11 @@ impl binding::ClientBinding for Client {
                 Some(branch) => request
                     .security()
                     .and_then(|s| s.downcast_ref::<security::HttpGrant>())
-                    .is_none_or(|g| !g.for_binding(&request) || g.branch != branch),
+                    .is_none_or(|g| {
+                        !g.for_binding(&request)
+                            || g.branch != branch
+                            || g.check(target.1.target()).is_err()
+                    }),
                 None => true,
             }
             || (!self.config.secure && request.security().is_some())
@@ -714,6 +768,22 @@ pub fn try_https_consumer_registration(
     })
 }
 impl HttpConsumerConfig {
+    /// Explicit native destination bound. The existing restricted inline Read
+    /// representation supports 64 bytes; modern finite execution can use up to
+    /// 256 without changing the shared meaning or recompiling per target.
+    pub fn with_target_capacity(mut self, capacity: usize) -> CoreResult<Self> {
+        if !(1..=256).contains(&capacity) {
+            return Err(error(601, "unsupported HTTP target capacity"));
+        }
+        self.configuration = ConsumerBindingConfiguration::for_semantic_host(
+            capacity,
+            self.configuration.private_policy(),
+            COMPATIBILITY,
+            BODY,
+            MEDIA,
+        )?;
+        Ok(self)
+    }
     pub fn consumer_services(self) -> clinkz_wot_core::consumer::ConsumerServices {
         clinkz_wot_core::consumer::ConsumerServices {
             data: Arc::new(HttpConsumerData),

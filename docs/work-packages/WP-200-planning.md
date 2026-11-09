@@ -416,6 +416,14 @@ assumptions](../evidence/security-composition.md) identify the supported subset,
 revocation/ownership obligations and remaining work. No package/milestone,
 production-security or additional Embedded acceptance is claimed.
 
+## URI-variable preparation
+
+Complete effective declaration/schema qualification, reference requirements,
+source-independent content reuse and actual native eligibility are admitted for
+the [bounded Property increment](../evidence/uri-variables.md). Static and dynamic
+destination permission have distinct timing; final Producer qualification remains
+complete. Dependencies and package/gate/milestone status do not change.
+
 ## TD-described finite responses
 
 Selected Consumer and complete final Producer response qualification, exact reuse comparison and funded preparation are demonstrated in [response evidence](../evidence/td-responses.md).

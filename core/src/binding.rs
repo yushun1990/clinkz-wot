@@ -3823,6 +3823,41 @@ pub trait ClientBinding: Send + Sync {
     /// Returns the compatibility identity consumed at registration and call acceptance.
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
 
+    /// Passive eligibility only; the compiler must qualify the actual mapping.
+    fn supports_uri_variables(&self) -> bool {
+        false
+    }
+
+    /// Pure bounded resolution, before authorization/credential issuance. The
+    /// result is a protocol-opaque policy operand, not dispatch authority.
+    /// Complete scratch fits the registration's transient declaration; returned
+    /// backing fits configuration.target_capacity(). No I/O, source TD, service
+    /// lookup or native resource acquisition is allowed. Runtime prepays one
+    /// BindingPolls credit. Native invoke must use/verify this exact destination.
+    fn resolve_target(
+        &self,
+        target: &str,
+        variables: &[(&str, &str)],
+        _artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> CoreResult<Box<str>> {
+        if !variables.is_empty()
+            || self
+                .consumer_configuration()
+                .is_none_or(|c| target.len() > c.target_capacity())
+        {
+            return Err(CoreError::UnsupportedOperation(ErrorContext::new(
+                ErrorPhase::Admission,
+                RetryClass::Never,
+            )));
+        }
+        let mut owned = alloc::string::String::new();
+        owned.try_reserve_exact(target.len()).map_err(|_| {
+            CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
+        })?;
+        owned.push_str(target);
+        Ok(owned.into_boxed_str())
+    }
+
     /// Creates one owned finite call from the exact selected artifact. This
     /// callback constructs only local work; effects begin in the returned call.
     fn invoke(
@@ -4497,6 +4532,19 @@ pub struct HostConsumerBindingRegistration {
 }
 #[cfg(feature = "std")]
 impl HostConsumerBindingRegistration {
+    pub fn supports_uri_variables(&self) -> bool {
+        self.input.client.supports_uri_variables()
+    }
+    pub fn resolve_target(
+        &self,
+        target: &str,
+        variables: &[(&str, &str)],
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> CoreResult<Box<str>> {
+        self.input
+            .client
+            .resolve_target(target, variables, artifact)
+    }
     /// Coarse eligibility of the actual captured executor. The selected
     /// compiler and data/security services still assess complete support.
     pub fn supports_operation(&self, operation: Operation) -> bool {

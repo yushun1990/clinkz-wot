@@ -563,6 +563,7 @@ pub struct ConsumerExecutionContent {
     schemas: ConsumerFiniteSchemas,
     security: crate::security::SecurityRequirement,
     responses: Option<crate::execution::responses::FiniteResponses>,
+    uri_variables: crate::uri_variables::PreparedUriVariables,
 }
 impl ConsumerExecutionContent {
     pub fn try_new(
@@ -642,6 +643,7 @@ impl ConsumerExecutionContent {
             schemas,
             security,
             responses: None,
+            uri_variables: Default::default(),
         })
     }
     pub fn with_responses(
@@ -650,6 +652,16 @@ impl ConsumerExecutionContent {
     ) -> Self {
         self.responses = Some(responses);
         self
+    }
+    pub fn with_uri_variables(
+        mut self,
+        variables: crate::uri_variables::PreparedUriVariables,
+    ) -> Self {
+        self.uri_variables = variables;
+        self
+    }
+    pub fn uri_variables(&self) -> &crate::uri_variables::PreparedUriVariables {
+        &self.uri_variables
     }
     pub fn responses(&self) -> Option<&crate::execution::responses::FiniteResponses> {
         self.responses.as_ref()
@@ -689,6 +701,7 @@ impl ConsumerExecutionContent {
         self.schemas.drop_work()
             + self.security.drop_work()
             + self.responses.as_ref().map_or(0, |r| r.drop_work())
+            + self.uri_variables.drop_work()
     }
     pub fn security(&self) -> &crate::security::SecurityRequirement {
         &self.security
@@ -714,7 +727,11 @@ impl ConsumerExecutionContent {
             _ => return None,
         };
         crate::execution::ValueExecution::try_new(site, self.operation, values, &self.security)
-            .map(|meaning| meaning.with_responses(self.responses.as_ref()))
+            .map(|meaning| {
+                meaning
+                    .with_responses(self.responses.as_ref())
+                    .with_uri_variables(&self.uri_variables)
+            })
             .ok()
     }
 }
@@ -737,6 +754,7 @@ impl PreparedConsumerContent {
             + content.schemas.retained_bytes() as u64
             + content.security.retained_bytes() as u64
             + content.responses.as_ref().map_or(0, |r| r.retained_bytes()) as u64
+            + content.uri_variables.retained_bytes() as u64
             + content.affordance.name().map_or(0, str::len) as u64
             + 128; // Arc and reservation-vector backing
         let funding = match reserve(bank, &[(ResourceKind::EngineLiveBytesGlobalMax, bytes)]) {
@@ -803,6 +821,8 @@ impl ConsumerDefinition {
             || !input
                 .execution
                 .supports_operation(input.content.operation())
+            || (input.content.uri_variables().is_dynamic()
+                && !input.execution.supports_uri_variables())
             || !input.data.available()
             || policy.retained_bytes != input.data.backing_bytes()
             || !input
@@ -873,6 +893,8 @@ impl ConsumerDefinition {
                 .content()
                 .supports_data(self.data(), &self.input.content_type)
             || !self.execution().supports_operation(self.operation())
+            || (self.content().uri_variables().is_dynamic()
+                && !self.execution().supports_uri_variables())
         {
             return Err(invalid());
         }
@@ -907,7 +929,9 @@ impl ConsumerDefinition {
             if !access.supports_security(self.content().security()) {
                 return Err(invalid());
             }
-            access.authorize(self.binding(), self.target(), self.operation())?;
+            if !self.content().uri_variables().is_dynamic() {
+                access.authorize(self.binding(), self.target(), self.operation())?;
+            }
             self.check_dependencies()?;
             if access.security_revision() != security_revision
                 || access.work() != access_work

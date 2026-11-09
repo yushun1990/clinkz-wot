@@ -315,6 +315,9 @@ impl HttpProducerConfig {
         if multiple && !method {
             return Err(producer_unsupported());
         }
+        if input.target.len() > 64 {
+            return Err(producer_unsupported());
+        }
         let target =
             Target::parse_for(input.target, self.secure).map_err(|_| producer_unsupported())?;
         if target.address != self.address {

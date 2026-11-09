@@ -73,6 +73,30 @@ jobs and backing until bounded retirement or acknowledged whole-owner transfer,
 and report remote effect uncertainty. It does not imply a shutdown request or
 authorize implicit replay of semantic effects.
 
+## Dynamic native destinations
+
+SPI-NATIVE/DELIVERY-001 distinguish shared URI-variable/DataSchema meaning from
+native address expansion, matching and physical ownership. A Binding may use the
+shared bounded RFC utility, but qualifies supported address positions, performs
+native parsing and checks its actual configuration after expansion. An IP, HTTP
+authority, MQTT topic or connection is not a universal Engine target model.
+RFC template expansion supplies no universal inverse matcher for Producer ingress.
+
+The Host finite `ClientBinding::supports_uri_variables` is passive eligibility;
+its compiler must qualify the actual mapping. `resolve_target` is pure and
+bounded under the admitted native scratch/start declarations and one paid
+BindingPolls credit. The runtime reserves the configured destination capacity
+before entry. Resolution acquires no I/O, credentials or logical authority and
+returns an opaque destination operand for fresh policy and credential checks.
+Default implementations decline variables and support only their static operand.
+Native invoke must verify/use the identical resolved destination before effects;
+it cannot redirect, retarget or silently ignore operands after authorization.
+Binding-specific incompatible values refuse without retry or implicit lowering.
+
+This seam does not mandate a new artifact for each target, connection sharing,
+one connection per Thing, a global target cache or a universal target program.
+Logical close and original work/resource retention retain SPI-RETIRE-001 meaning.
+
 ## Publication and security collaboration
 
 Producer publication follows [PREP-COVER-001](planning.md) and SAFE-PUBLISH-001.

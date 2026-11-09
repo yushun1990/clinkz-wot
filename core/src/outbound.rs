@@ -7,8 +7,10 @@ use alloc::{boxed::Box, collections::BTreeMap, string::String};
 /// This request is name-free: it carries no `ThingId`, `ThingSlotId`, or
 /// `AffordanceTarget`. It holds only the selected artifact reference plus
 /// operation, optional application input, call-varying URI variables and deadline
-/// intent; it contains no TD, Form,
-/// options, provider lookup, candidate list, or fallback authority. An optional
+/// intent; it contains no TD, Form, options, provider lookup, candidate list, or
+/// fallback authority. A resolved protocol-opaque destination may accompany the
+/// variables for exact policy/native agreement; Core never interprets its syntax.
+/// An optional
 /// opaque per-call security capability comes from the accepted instance service;
 /// only the selected Binding interprets it. Prepared artifacts hold no live
 /// credential material.
@@ -34,6 +36,7 @@ pub struct OutboundRequest {
     operation: Operation,
     input: Option<Box<Payload>>,
     uri_variables: BTreeMap<String, String>,
+    destination: Option<Box<str>>,
     deadline: Option<Deadline>,
     security: Option<crate::security::OutboundSecurity>,
     responses: crate::execution::responses::FiniteResponseShape,
@@ -157,6 +160,7 @@ impl OutboundRequest {
             operation,
             input,
             uri_variables,
+            destination: None,
             deadline,
             security: None,
             responses: crate::execution::responses::FiniteResponseShape::primary(operation),
@@ -171,6 +175,16 @@ impl OutboundRequest {
     }
     pub fn security(&self) -> Option<&crate::security::OutboundSecurity> {
         self.security.as_ref()
+    }
+    /// Exact native resolution authorized for this call. This opaque operand
+    /// contains no routing logic or logical identity. Native start verifies it
+    /// against its own artifact and variable operands before any I/O.
+    pub fn with_destination(mut self, destination: Box<str>) -> Self {
+        self.destination = Some(destination);
+        self
+    }
+    pub fn destination(&self) -> Option<&str> {
+        self.destination.as_deref()
     }
 
     /// Returns the operation frozen by this request constructor.

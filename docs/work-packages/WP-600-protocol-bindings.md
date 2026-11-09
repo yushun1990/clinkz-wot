@@ -386,6 +386,14 @@ sharing and cleanup. MQTT collection mappings remain type-only and unsupported
 Event controls/responses still refuse the complete description; native ACKs grant
 no application response capability.
 
+## Dynamic HTTP Property interactions
+
+HTTP demonstrates the shared variable/execution boundary with changing native
+ports/paths/queries, verified TLS and exact credential audiences. The
+[profile and evidence](../evidence/uri-variables.md) retain refusal of unsupported
+Producer mappings, operation families and portable dynamic I/O. This changes no
+dependency, qualification, package, gate or milestone status.
+
 ## TD-described finite responses
 
 The [HTTP finite response profile](../../protocol-bindings/protocols/http/README.md#td-described-finite-response-alternatives) supplies the bounded real-I/O participant documented in [response evidence](../evidence/td-responses.md).

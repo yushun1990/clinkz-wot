@@ -42,6 +42,7 @@ impl<'a, B: ReadBinding> ReadDefinition<'a, B> {
         validator: &'a dyn ReadValidator,
     ) -> Result<Self, (B::Configuration, CoreError)> {
         if meaning.operation() != Operation::ReadProperty
+            || meaning.uri_variables().is_some_and(|v| v.is_dynamic())
             || *meaning.security() != SecurityRequirement::NOSEC
             || validator.work() == 0
         {
