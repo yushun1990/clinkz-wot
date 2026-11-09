@@ -45,8 +45,10 @@ variables, existing supported scalar constraints, and bounded simple/query
 RFC expressions. HTTP qualifies fixed schemes and IP hosts with optional dynamic
 ports, paths and queries; concrete destinations are reparsed before effects.
 Credential audiences remain exact and independent of instance permission.
-Other native mappings and Producer publication decline dynamic support until
-their entire advertised mapping, extraction and schemas can be qualified.
+Other native mappings retain their own qualified profiles; Producer publication
+must decline any mapping whose entire advertisement, extraction and schemas
+cannot be qualified. Existing native Action continuation-ID mappings do not gain
+general caller-supplied variable support from this increment.
 The caller-owned portable Read facet explicitly refuses dynamic meaning while
 borrowing it without a Host owner; no portable dynamic I/O claim is made.
 

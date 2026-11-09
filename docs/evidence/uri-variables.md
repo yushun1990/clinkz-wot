@@ -52,11 +52,14 @@ IP host and supports changing port/path/query. The default destination bound is
 Audience services remain exact-target services, not implicit origin-wide grants.
 
 Relative templates against `base`, dynamic scheme/host, reserved expansion,
-prefix/explode/composite expressions, dynamic Producer matching, continuing
-Action/notification/collection execution and portable dynamic I/O remain
+prefix/explode/composite expressions, dynamic Property Producer matching,
+general caller-supplied variables for continuing Action/notification/collection
+execution and portable dynamic I/O remain
 unsupported. The portable borrowed view retains variable meaning and its current
 Read representation explicitly refuses dynamic support. A Thing may represent
 many physical/virtual resources; neither this increment nor the shared boundary
 requires one device, connection, cache or native artifact per logical Thing.
 No general RFC/schema conformance, production qualification, package/gate or
 milestone acceptance is claimed.
+Existing qualified native Action continuation-ID mappings retain their separate
+profile and original invocation authority; this increment does not replace them.

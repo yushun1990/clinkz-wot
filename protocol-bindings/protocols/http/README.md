@@ -1246,6 +1246,8 @@ for modern finite execution. Artifact/configuration identities version the chang
 
 The concrete types/expressions, refusals, real HTTP/HTTPS evidence and remaining
 limits are owned by the linked profile. In particular relative templates against
-`base`, dynamic Producer matching and other operation families remain unsupported.
-Producer preparation/final qualification rejects dynamic declarations/templates;
+`base`, dynamic Property Producer matching and general caller-supplied variables
+in other operation families remain unsupported. Existing native Action
+continuation-ID mappings retain their separately qualified profile.
+Finite Property Producer preparation/final qualification rejects dynamic declarations/templates;
 Consumer support never licenses advertising an unqualified mapping.

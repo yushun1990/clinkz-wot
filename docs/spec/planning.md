@@ -324,8 +324,10 @@ Producer qualification remains complete for the entire final description.
 Dynamic publication requires fully supported native matching/captures, variable
 validation, collision handling and all advertised operations before Serving.
 A Consumer expansion utility cannot establish that claim. The current HTTP
-Producer continues to refuse URI-variable declarations/templates, including
+finite Property Producer continues to refuse URI-variable declarations/templates, including
 unused retained declarations. It never drops them to obtain qualification.
+Existing qualified native Action continuation-ID mappings retain their separate
+profile; they do not acquire general caller-supplied variable support here.
 
 ## Continuing Consumer Action preparation
 
