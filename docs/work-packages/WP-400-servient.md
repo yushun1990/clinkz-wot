@@ -656,6 +656,14 @@ assumptions](../evidence/security-composition.md) identify the supported subset,
 revocation/ownership obligations and remaining work. No package/milestone,
 production-security or additional Embedded acceptance is claimed.
 
+## Dynamic Property calls
+
+Finite calls retain actual variable values/destinations and their original
+authority, permission checks, resources and native settlement owners. Refused
+Writes return their input; cancellation and late outcomes preserve independent
+effect certainty. [Real-I/O evidence](../evidence/uri-variables.md) records this
+scope without changing dependencies or package/gate/milestone status.
+
 ## TD-described finite responses
 
 Finite runtime application-failure delivery preserves original authority, first cause, resource owners and separate effect certainty; see [response evidence](../evidence/td-responses.md).

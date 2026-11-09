@@ -489,6 +489,7 @@ impl ConsumerRegistry {
                                         let content = match common_content(
                                             security,
                                             document,
+                                            target,
                                             &site,
                                             index,
                                             operation,
@@ -520,6 +521,10 @@ impl ConsumerRegistry {
                                                 if !registration
                                                     .access
                                                     .supports_security(content.security())
+                                                    || (content.uri_variables().is_dynamic()
+                                                        && !registration
+                                                            .execution
+                                                            .supports_uri_variables())
                                                     || !registration
                                                         .execution
                                                         .supports_operation(operation)
@@ -565,10 +570,11 @@ impl ConsumerRegistry {
                                                 ) {
                                                     return Err(busy());
                                                 }
-                                                if registration
-                                                    .access
-                                                    .authorize(id, target, operation)
-                                                    .is_err()
+                                                if !content.uri_variables().is_dynamic()
+                                                    && registration
+                                                        .access
+                                                        .authorize(id, target, operation)
+                                                        .is_err()
                                                 {
                                                     continue;
                                                 }
@@ -1085,6 +1091,7 @@ impl Drop for ConsumerCompilation<'_> {
 fn common_content(
     security: clinkz_wot_core::security::SecurityRequirement,
     doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+    target: &str,
     site: &FormSite,
     index: u32,
     operation: Operation,
@@ -1096,6 +1103,25 @@ fn common_content(
     budget: &mut WorkBudget,
 ) -> CoreResult<Arc<PreparedConsumerContent>> {
     qualify_common_form(doc, site, index)?;
+    let variable_preparation = crate::uri_variables::preparation(doc, target)?;
+    if !pay(budget, W::PlanningItems, variable_preparation.work)
+        || !pay(budget, W::CleanupItems, variable_preparation.cleanup)
+    {
+        return Err(busy());
+    }
+    let _variable_temporary = reserve(
+        bank,
+        &[
+            (
+                K::EngineLiveBytesGlobalMax,
+                variable_preparation.backing_bytes as u64,
+            ),
+            (
+                K::AdmissionTemporaryBytesGlobalMax,
+                variable_preparation.backing_bytes as u64,
+            ),
+        ],
+    )?;
     if !security.is_conjunction() {
         return Err(unsupported());
     }
@@ -1105,6 +1131,9 @@ fn common_content(
     let (response_work, response_cleanup) =
         crate::responses::preparation(doc, site.owner(), index)?;
     if let Some(content) = reuse {
+        if !crate::uri_variables::matches(doc, target, content.uri_variables())? {
+            return Err(unsupported());
+        }
         // Retained comparisons and final-reference destruction stay bounded.
         check_limit(
             limits,
@@ -1194,7 +1223,11 @@ fn common_content(
     check_limit(
         limits,
         K::CleanupWorkItemsPerStepMax,
-        retained_cleanup_work + preparation.cleanup * 2 + security.drop_work() + 4,
+        retained_cleanup_work
+            + preparation.cleanup * 2
+            + security.drop_work()
+            + variable_preparation.cleanup
+            + 4,
     )?;
     if !pay(
         budget,
@@ -1220,6 +1253,7 @@ fn common_content(
         security,
     )?;
     let content = content.with_responses(crate::responses::prepare(doc, site.owner(), index)?);
+    let content = content.with_uri_variables(crate::uri_variables::prepare(doc, target)?);
     let prepared =
         PreparedConsumerContent::try_new(content, bank).map_err(|e| e.error().error().clone())?;
     *constructions += 1;
@@ -1233,15 +1267,8 @@ fn qualify_common_form(
 ) -> CoreResult<()> {
     let facts = doc.form(site.owner(), index).ok_or_else(unsupported)?;
     if facts.content_coding.is_some()
-        || doc
-            .uri_variables(UriVariableScope::Thing)
-            .is_some_and(|mut vars| vars.next().is_some())
-        || doc
-            .uri_variables(UriVariableScope::Property)
-            .is_some_and(|mut vars| vars.next().is_some())
-        || doc
-            .uri_variables(UriVariableScope::Action)
-            .is_some_and(|mut vars| vars.next().is_some())
+        || (!matches!(site, FormSite::Property(_))
+            && doc.effective_uri_variables().next().is_some())
     {
         return Err(unsupported());
     }
@@ -1413,7 +1440,7 @@ fn site_target(site: &FormSite) -> Option<AffordanceTarget> {
 fn credits(b: &WorkBudget) -> [u64; W::ALL.len()] {
     W::ALL.map(|w| b.remaining(w))
 }
-fn unsupported() -> CoreError {
+pub(crate) fn unsupported() -> CoreError {
     CoreError::UnsupportedOperation(context())
 }
 fn ambiguous() -> CoreError {

@@ -451,9 +451,18 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
         .handshake::<_, Full<Bytes>>(io)
         .await
         .map_err(|_| error(605, "HTTP handshake failed"))?;
+    let path_and_query = target.uri.path_and_query().map_or("/", |v| v.as_str());
+    // RFC 9112 §3.2.1 requires '/' for an empty URI path. http::Uri can
+    // retain '?query' verbatim; that alone is not a valid origin-form target.
+    // This wire representation does not replace the authorized absolute URI.
+    let origin: std::borrow::Cow<'_, str> = if path_and_query.starts_with('?') {
+        std::borrow::Cow::Owned(format!("/{path_and_query}"))
+    } else {
+        std::borrow::Cow::Borrowed(path_and_query)
+    };
     let mut request = hyper::Request::builder()
         .method(instructions.method())
-        .uri(target.uri.path_and_query().map_or("/", |v| v.as_str()))
+        .uri(origin.as_ref())
         .header("host", target.uri.authority().unwrap().as_str())
         .header("connection", "close");
     for (name, value) in credential_headers {

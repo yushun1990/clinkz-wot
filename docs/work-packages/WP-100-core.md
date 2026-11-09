@@ -117,6 +117,14 @@ assumptions](../evidence/security-composition.md) identify the supported subset,
 revocation/ownership obligations and remaining work. No package/milestone,
 production-security or additional Embedded acceptance is claimed.
 
+## URI-variable execution boundary
+
+The shared TD scope/schema meaning and portable borrowed variable view now feed
+bounded finite Consumer execution. Core retains protocol-opaque actual-destination
+operands; native syntax and matching remain Binding responsibilities. The
+[scoped evidence](../evidence/uri-variables.md) records execution, refusals and
+remaining capabilities. No package, gate or milestone status changes.
+
 ## TD-described finite responses
 
 Portable branch meaning, optional native diagnostics and admitted response shape extend EXEC-DATA/OUTCOME-001; scope and regressions are in [response evidence](../evidence/td-responses.md).

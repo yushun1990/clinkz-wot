@@ -516,6 +516,17 @@ fn capacity_pairing_required_meaning_and_permission_refuse_without_native_effect
     };
     let codec = NumberCodec::ready();
     assert!(ReadDefinition::try_new(meaning(), &b, &PROGRAM, 8, &codec).is_err());
+    let variables = clinkz_wot_core::uri_variables::PreparedUriVariables::try_new(std::vec![
+        clinkz_wot_core::uri_variables::UriVariable {
+            name: "zone".into(),
+            schema: PreparedSchema::Type(ValueType::String),
+            referenced: true,
+        },
+    ])
+    .unwrap();
+    let dynamic = meaning().with_uri_variables(&variables);
+    assert!(ReadDefinition::try_new(dynamic, &b, &PROGRAM, 7, &codec).is_err());
+    assert_eq!(stats.polls.get(), 0);
     let values = ValueSchemas {
         input: None,
         output: Some(PreparedSchema::Type(ValueType::Boolean)),

@@ -17,6 +17,8 @@ pub mod producer_composition;
 pub mod producer_execution;
 #[cfg(all(feature = "std", feature = "validated-thing"))]
 pub mod type_schema;
+#[cfg(all(feature = "std", feature = "validated-thing"))]
+mod uri_variables;
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 

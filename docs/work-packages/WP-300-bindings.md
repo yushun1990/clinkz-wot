@@ -10,6 +10,14 @@ execution-only composition does not. Package completion is not a blanket start
 barrier; exact available predecessors and affected authority must support the
 chosen slice under ADR-0013. No new runtime tranche is admitted by this migration.
 
+## Dynamic finite destinations
+
+The Host finite seam permits pure paid native destination resolution before
+actual-destination authorization and verifies the same operand at native start.
+The [HTTP evidence](../evidence/uri-variables.md) scopes supported placement and
+compatibility; existing owners retain native effects and retirement. No universal
+router, connection cardinality, new dependency or acceptance status is introduced.
+
 ## Authority and completion
 
 Applicable requirements: SPI-COMPOSE-001, SPI-NATIVE-001, SPI-INGRESS-001, SPI-DELIVERY-001, SPI-RETIRE-001.

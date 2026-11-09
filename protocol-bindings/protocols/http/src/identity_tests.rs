@@ -326,8 +326,10 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
             let input = HostConsumerBindingPreparationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::try_new_inline_semantic(HttpCompiler(actual))
-                    .unwrap(),
+                HostBindingCompilerRegistration::try_new_inline_semantic(
+                    HttpCompiler::for_restricted_read(actual),
+                )
+                .unwrap(),
                 client,
                 BindingResourceDeclarations::new(
                     BindingLifetimeFootprint::new(3, 1024),
@@ -349,8 +351,10 @@ fn historical_policy_operand_configuration_and_artifact_substitution_reject_befo
             let input = HostConsumerBindingPreparationInput::new(
                 original.identity(),
                 BindingExecutionSupport::host_erased(),
-                HostBindingCompilerRegistration::try_new_inline_semantic(HttpCompiler(foreign))
-                    .unwrap(),
+                HostBindingCompilerRegistration::try_new_inline_semantic(
+                    HttpCompiler::for_restricted_read(foreign),
+                )
+                .unwrap(),
                 Box::new(Client {
                     tls: None,
                     config: actual,

@@ -449,6 +449,25 @@ compares its declared operation count with the covered prepared associations at
 admission and before publication. Unpaired native definitions refuse handoff;
 selected-entry equality alone cannot fund an additional retained schema.
 
+## Resolved Consumer destinations
+
+The finite Host owner validates variable inputs, reserves original operand,
+destination, native/result and cleanup backing, then pays for pure native
+resolution. The returned destination is retained through the original call and
+settlement. Fresh access checks, credential issuance and every later permission
+check use that operand. Service/configuration/currentness checks fence callbacks
+before native effects and successful handoff. Native start independently verifies
+the resolution; a mismatched destination or credential audience refuses before
+I/O. An unresolved template is never a destination permission certificate.
+
+`read_property_with_variables` and `write_property_with_variables` borrow bounded
+lexical inputs during admission and retain funded copies for native acceptance.
+Refusal returns original Write payload ownership. Cancellation, replacement,
+late values and final release use the existing finite state machine and original
+native owners; dynamic targets add no replay, cleanup transfer or remote-effect
+guarantee. Result retention is independent of native connection occupancy.
+Host reserved allocation policy is not a recoverable process-wide OOM guarantee.
+
 ## Structured data validation
 
 The finite Consumer borrows its original PreparedSchema, with actual validator

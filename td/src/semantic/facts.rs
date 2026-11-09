@@ -237,7 +237,7 @@ pub struct EventFacts<'a> {
     pub name: &'a str,
     pub metadata: MetadataFacts<'a>,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum UriVariableScope {
     Thing,
     Property,
@@ -491,6 +491,26 @@ impl<'a> ResolvedSemanticDocument<'a> {
         self.scope(SemanticScope::SchemaDefinition(name))
             .map(SchemaView)
             .ok_or(SemanticAccessError::OutsidePreparedScope)
+    }
+    /// Effective declarations for the selected owner: affordance declarations
+    /// override same-named Thing declarations (TD 1.1 §5.3.1.2).
+    pub fn effective_uri_variables(&self) -> impl Iterator<Item = (&str, SchemaView<'_>)> {
+        let local_scope = match self.selected.as_ref().unwrap().owner {
+            FormOwner::Property(_) => UriVariableScope::Property,
+            FormOwner::Action(_) => UriVariableScope::Action,
+            FormOwner::Event(_) => UriVariableScope::Event,
+            FormOwner::Thing => UriVariableScope::Thing,
+        };
+        self.uri_variables(UriVariableScope::Thing)
+            .into_iter()
+            .flatten()
+            .filter(move |(name, _)| {
+                local_scope != UriVariableScope::Thing
+                    && !self
+                        .uri_variables(local_scope)
+                        .is_some_and(|mut vars| vars.any(|(n, _)| n == *name))
+            })
+            .chain(self.uri_variables(local_scope).into_iter().flatten())
     }
     /// Own-scope URI variables. No implicit merge of Thing and affordance maps.
     pub fn uri_variables(

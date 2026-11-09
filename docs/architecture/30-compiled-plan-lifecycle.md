@@ -14,6 +14,13 @@ unit of execution, publication or physical ownership.
 | Native infrastructure | Binding-owned listeners, sessions, subscriptions, pools, workers and buffers; may serve multiple logical owners |
 | Deployment | Runtime/process/firmware owner, with its own failure and recovery boundary |
 
+URI-variable declarations/schemas and required references likewise belong to
+immutable shared meaning. Actual values and resolved destinations belong to
+admitted work; optional stable instance operands remain independent of logical
+authority. Concrete Bindings qualify native expansion/matching compatibility.
+No Thing/device or Thing/connection cardinality follows from these lifetimes.
+See [variable preparation](../spec/planning.md#uri-variable-preparation).
+
 Prepared security requirements are immutable content; credential services, verified
 principals and opaque per-call capabilities are live dependencies/work. Native key
 and trust owners remain in the Binding. Content sharing never shares permission. A physical content owner and its

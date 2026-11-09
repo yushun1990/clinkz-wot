@@ -23,6 +23,7 @@ pub struct ValueExecution<'a> {
     schemas: &'a ValueSchemas,
     security: &'a SecurityRequirement,
     responses: Option<&'a responses::FiniteResponses>,
+    uri_variables: Option<&'a crate::uri_variables::PreparedUriVariables>,
 }
 impl<'a> ValueExecution<'a> {
     pub fn try_new(
@@ -50,6 +51,7 @@ impl<'a> ValueExecution<'a> {
             schemas,
             security,
             responses: None,
+            uri_variables: None,
         })
     }
     pub fn with_responses(mut self, responses: Option<&'a responses::FiniteResponses>) -> Self {
@@ -58,6 +60,16 @@ impl<'a> ValueExecution<'a> {
     }
     pub fn responses(self) -> Option<&'a responses::FiniteResponses> {
         self.responses
+    }
+    pub fn with_uri_variables(
+        mut self,
+        variables: &'a crate::uri_variables::PreparedUriVariables,
+    ) -> Self {
+        self.uri_variables = Some(variables);
+        self
+    }
+    pub fn uri_variables(self) -> Option<&'a crate::uri_variables::PreparedUriVariables> {
+        self.uri_variables
     }
     pub fn site(self) -> AffordanceSite<'a> {
         self.site

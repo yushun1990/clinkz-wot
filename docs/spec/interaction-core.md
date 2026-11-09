@@ -27,6 +27,48 @@ mapping and data dependencies. Binding policy/accounts and attaching a current
 logical authority remain independent steps. Calls and settlements retain these
 original owners; no sibling or successor content/instance can substitute for them.
 
+### URI-variable execution
+
+Under EXEC-DATA/SECURITY-001, prepared variable names, effective schemas and the
+selected Form's reference set are immutable meaning. Actual scalar values and
+resolved destinations are interaction operands, not Thing/device identity or
+physical connection ownership. Applications may keep stable operands beside a
+logical instance; doing so grants no permission and does not require another
+public lifetime abstraction. Binding-native compatibility determines whether an
+artifact can accept changing values. The Engine must not require a new TD
+interpretation or native definition for every dynamic destination.
+
+`uri_variables::PreparedUriVariables` retains complete effective declarations,
+including unused ones. The bounded executable subset accepts string, canonical
+base-ten i64 integer and true/false boolean lexical values. The shared
+PreparedSchema evaluator checks integer bounds and Unicode string lengths before
+native resolution. Other schema assertions/types refuse preparation. Values are
+unescaped data, not JSON string literals or pre-encoded URI fragments. Every
+referenced name is required; missing, unknown, unused, duplicate or oversized
+arguments refuse. DataSchema defaults remain annotations and supply no value.
+The current bounds are eight declarations, 32 bytes/name and 128 bytes/value.
+
+`UriTemplate` is a pure bounded RFC 6570 utility for simple `{name}`, query
+`{?a,b}` and continuation `{&a,b}` expressions, with ASCII alphanumeric/underscore
+names, ASCII literals and a 256-byte template. It rejects malformed syntax/percent escapes,
+other operators, modifiers and composite values. Expansion encodes UTF-8 octets
+outside the unreserved set, including a supplied percent sign. This subset is
+not a generic string-template language, address parser or router. Concrete
+Bindings qualify placement, destination bounds and native compatibility; no
+HTTP URI syntax enters Core.
+
+Native resolution precedes fresh destination/instance authorization and
+credential issuance. Its exact destination is a protocol-opaque policy operand.
+An `OutboundRequest` may carry that resolved operand; native start must verify
+it agrees with the selected artifact and actual variables. Per-call grants are
+scoped to that destination and original authority. Later permission checks use
+the original resolved destination, never the template or another call's target.
+No failure or cancellation invents absence of remote effects.
+
+`ValueExecution` lends the same variable meaning independently of Host ownership.
+The existing caller-owned Read facet refuses dynamic meaning explicitly; it
+does not acquire a dynamic-addressing capability by borrowing the declaration.
+
 ### Finite execution and ownership representations
 
 `execution::ValueExecution` is a borrowed view of immutable finite value meaning:

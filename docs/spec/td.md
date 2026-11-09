@@ -95,6 +95,19 @@ schemas/security/defaults, not transport interpretation.
 
 ## Executable structured subset
 
+URI-variable declarations follow TD 1.1 §§5.3.1.1–2 and 6.3.9.1:
+Thing declarations are visible to root and affordance Forms; same-named
+affordance declarations take precedence. `effective_uri_variables` lends this
+shared view without copying or combining unrelated affordances. Variable schemas
+are scalar DataSchema meaning, independent of application payload roles.
+RFC 6570 defines URI expressions and expansion, not a universal reverse matcher.
+The prepared executable subset is defined by [Core](interaction-core.md#uri-variable-execution)
+and [Planning](planning.md#uri-variable-preparation); preservation alone does
+not qualify a selected template, declaration or schema assertion for execution.
+Relative URI templates remain preserved rather than resolved against `base` in
+this TD implementation. A capability that cannot qualify that meaning must
+refuse; absolute-template execution does not establish relative-template support.
+
 SchemaView already lends nested properties, required names, exact i64 integer
 bounds and string lengths from the shared resolved semantic arena. Planning uses
 those common facts for the [prepared constraint subset](interaction-core.md),

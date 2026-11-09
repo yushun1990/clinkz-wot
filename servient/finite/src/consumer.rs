@@ -79,6 +79,7 @@ impl Definition {
         &self,
         consumer: &ConsumerInstanceRef,
         selection: Option<collection::PropertySelection>,
+        destination: &str,
     ) -> CoreResult<()> {
         if !consumer.is_current() {
             return Err(stale());
@@ -93,7 +94,7 @@ impl Definition {
             self.input.access.authorize_property_write(
                 consumer,
                 self.binding(),
-                self.input.definition.target(),
+                destination,
                 self.input.definition.operation(),
                 (schema, selected),
             )?;
@@ -101,7 +102,7 @@ impl Definition {
             self.input.access.authorize_instance(
                 consumer,
                 self.binding(),
-                self.input.definition.target(),
+                destination,
                 self.input.definition.operation(),
             )?;
         }
@@ -224,6 +225,8 @@ impl Definition {
         &self,
         consumer: &ConsumerInstanceRef,
         input: Option<Payload>,
+        variables: &[(&str, &str)],
+        destination: &str,
         deadline: Option<Deadline>,
         budget: &mut WorkBudget,
     ) -> Result<
@@ -254,13 +257,16 @@ impl Definition {
             BindingArtifactRef::new(artifact.identity(), SlotIndex::new(0)),
             self.input.definition.operation(),
             input,
-            Default::default(),
+            variables
+                .iter()
+                .map(|(n, v)| ((*n).into(), (*v).into()))
+                .collect(),
             deadline,
         )?;
         let security = match self.input.access.outbound_security(
             consumer,
             self.binding(),
-            self.input.definition.target(),
+            destination,
             self.input.definition.operation(),
             self.input.definition.content().security(),
         ) {
@@ -286,6 +292,7 @@ impl Definition {
             ));
         }
         let request = request
+            .with_destination(destination.into())
             .with_security(security)
             .with_responses(self.input.definition.content().response_shape());
         self.input
@@ -539,9 +546,55 @@ struct CallWork {
     refused_transfer: Option<CleanupTransferRequest>,
     selection: Option<collection::PropertySelection>,
     deadline: Deadline,
+    destination: alloc::boxed::Box<str>,
     _funding: Vec<HostCapacityReservation>,
 }
 impl ConsumerRuntime {
+    /// Execute one prepared Property mapping with unescaped scalar operands.
+    /// The borrowed inputs are validated, copied and funded before native work.
+    pub fn read_property_with_variables(
+        &self,
+        name: &str,
+        variables: &[(&str, &str)],
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        self.start_with_variables(
+            AffordanceSite::Property(name),
+            Operation::ReadProperty,
+            CallInput::Value(None),
+            variables,
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| e.error().error().clone())
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn write_property_with_variables(
+        &self,
+        name: &str,
+        input: Payload,
+        variables: &[(&str, &str)],
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
+        self.start_with_variables(
+            AffordanceSite::Property(name),
+            Operation::WriteProperty,
+            CallInput::Value(Some(input)),
+            variables,
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| {
+            let (input, error) = e.into_parts();
+            BindingInputRejection::new(input.unwrap(), error)
+        })
+    }
     /// Recoverable ownership handoff. Only this captured vector supplies native
     /// executors/services; runtime calls accept no compiler/configuration override.
     pub fn try_new(
@@ -778,6 +831,19 @@ impl ConsumerRuntime {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
+        self.start_with_variables(target, operation, input, &[], deadline, now, budget)
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn start_with_variables(
+        &self,
+        target: AffordanceSite<'_>,
+        operation: Operation,
+        input: CallInput<'_>,
+        variables: &[(&str, &str)],
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
         let (input, members) = match input {
             CallInput::Value(input) => (input, None),
             CallInput::Members(members) => (None, Some(members)),
@@ -826,10 +892,23 @@ impl ConsumerRuntime {
                 Some(true) => return Err(CoreError::TimedOut(context())),
                 None => return Err(invalid()),
             }
-            if !pay(budget, W::ProviderProbes, definition.access_work()) {
+            if variables.len() > uri_variables::MAX_VARIABLES {
+                return Err(invalid());
+            }
+            let variable_meaning = definition.input.definition.content().uri_variables();
+            if !pay(
+                budget,
+                W::PlanningItems,
+                (variables.len()
+                    * (uri_variables::MAX_VALUE_BYTES
+                        + uri_variables::MAX_VARIABLES * uri_variables::MAX_NAME_BYTES)
+                    + variable_meaning.declarations().len()
+                        * (uri_variables::MAX_VARIABLES * uri_variables::MAX_NAME_BYTES + 1))
+                    as u64,
+            ) {
                 return Err(busy());
             }
-            definition.check_current(&state.consumer, None)?;
+            variable_meaning.validate(variables)?;
             let selection = match (definition.input.definition.content().schemas(), members) {
                 (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(names)) => {
                     if names.len() > collection::PropertyCollectionSchema::MAX_MEMBERS {
@@ -867,6 +946,23 @@ impl ConsumerRuntime {
                 .and_then(|n| n.checked_add(input_bytes))
                 .and_then(|n| n.checked_add(media.checked_mul(2)?))
                 .and_then(|n| n.checked_add(core::mem::size_of::<Call>() as u64 + 256))
+                .and_then(|n| {
+                    n.checked_add(
+                        (definition.configuration().target_capacity() as u64).checked_mul(2)?,
+                    )
+                })
+                .and_then(|n| {
+                    n.checked_add(if variables.is_empty() {
+                        0
+                    } else {
+                        // Bounded lexical String backing and conservative Host
+                        // BTreeMap node allowance, retained with the raw request.
+                        (uri_variables::MAX_VARIABLES
+                            * (uri_variables::MAX_NAME_BYTES
+                                + uri_variables::MAX_VALUE_BYTES
+                                + 256)) as u64
+                    })
+                })
                 .ok_or_else(invalid)?;
             let temporary = resource
                 .transient()
@@ -903,6 +999,22 @@ impl ConsumerRuntime {
                     (K::BindingResponseBufferBytesGlobalMax, body),
                 ],
             )?;
+            if !pay(budget, W::BindingPolls, 1) {
+                return Err(busy());
+            }
+            definition.check_dependencies()?;
+            let destination = definition.input.definition.execution().resolve_target(
+                definition.input.definition.target(),
+                variables,
+                definition.input.definition.artifact(),
+            )?;
+            if destination.len() > definition.configuration().target_capacity() {
+                return Err(invalid());
+            }
+            if !pay(budget, W::ProviderProbes, definition.access_work()) {
+                return Err(busy());
+            }
+            definition.check_current(&state.consumer, None, &destination)?;
             // Prepay local-disposal bookkeeping and the one native invocation. The
             // selected ConsumerOwnedHostV2 facet owes finite nonblocking local Drop.
             if budget.remaining(W::BindingPolls) < 1 || budget.remaining(W::CleanupItems) < 1 {
@@ -945,7 +1057,7 @@ impl ConsumerRuntime {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
                     return Err(busy());
                 }
-                definition.check_current(&state.consumer, None)?;
+                definition.check_current(&state.consumer, None, &destination)?;
             }
             let payload = encoded.as_ref().or(input.as_ref());
             let input_selection = match definition.validate_payload(payload, budget) {
@@ -957,7 +1069,11 @@ impl ConsumerRuntime {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
                     return Err(busy());
                 }
-                definition.check_current(&state.consumer, input_selection.or(selection))?;
+                definition.check_current(
+                    &state.consumer,
+                    input_selection.or(selection),
+                    &destination,
+                )?;
             }
             if !state.current() {
                 return Err(stale());
@@ -970,15 +1086,23 @@ impl ConsumerRuntime {
                 Some(true) => return Err(CoreError::TimedOut(context())),
                 None => return Err(invalid()),
             }
-            Ok((definition, funding, input_selection.or(selection), encoded))
+            Ok((
+                definition,
+                funding,
+                input_selection.or(selection),
+                encoded,
+                destination,
+            ))
         })();
-        let (definition, funding, selection, encoded) = match checked {
+        let (definition, funding, selection, encoded, destination) = match checked {
             Ok(checked) => checked,
             Err(e) => return Err(reject(input, e)),
         };
         let raw = match definition.start(
             &self.state.consumer,
             encoded.or(input),
+            variables,
+            &destination,
             deadline.instant().map(|_| deadline),
             budget,
         ) {
@@ -1007,6 +1131,7 @@ impl ConsumerRuntime {
                 refused_transfer: None,
                 selection,
                 deadline,
+                destination,
                 _funding: funding,
             },
         };
@@ -1320,9 +1445,11 @@ impl FiniteCallDriver for HostCallDriver<'_> {
         self.work.definition.access_work()
     }
     fn check_current(&mut self) -> CoreResult<()> {
-        self.work
-            .definition
-            .check_current(&self.work.consumer, self.work.selection)
+        self.work.definition.check_current(
+            &self.work.consumer,
+            self.work.selection,
+            &self.work.destination,
+        )
     }
     fn poll_native(
         &mut self,
