@@ -661,8 +661,10 @@ pub fn try_inline_consumer_registration(
     >,
 > {
     use clinkz_wot_planning::*;
-    let compiler = HostBindingCompilerRegistration::try_new_inline_semantic(HttpCompiler(config))
-        .map_err(|e| e.error().error().clone())?;
+    let compiler = HostBindingCompilerRegistration::try_new_inline_semantic(
+        HttpCompiler::for_restricted_read(config),
+    )
+    .map_err(|e| e.error().error().clone())?;
     let runtime =
         try_consumer_execution(config, binding_id, binding_generation, diagnostic_ordinal)?;
     HostConsumerBindingPreparation::try_pair(runtime, compiler)
@@ -732,8 +734,9 @@ pub fn try_consumer_registration(
     ordinal: u32,
 ) -> CoreResult<clinkz_wot_planning::open_consumer::ConsumerRegistrationInput> {
     use clinkz_wot_planning::*;
-    let compiler = HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(config))
-        .map_err(|e| e.error().error().clone())?;
+    let compiler =
+        HostBindingCompilerRegistration::try_new_semantic(HttpCompiler::for_finite(config))
+            .map_err(|e| e.error().error().clone())?;
     let runtime = try_consumer_execution(config, binding_id, generation, ordinal)?;
     let preparation = HostConsumerBindingPreparation::try_pair(runtime, compiler)
         .map_err(|e| e.error().error().clone())?;
@@ -754,8 +757,9 @@ pub fn try_https_consumer_registration(
 ) -> CoreResult<clinkz_wot_planning::open_consumer::ConsumerRegistrationInput> {
     use clinkz_wot_planning::*;
     let config = HttpConsumerConfig::for_https_ip()?;
-    let compiler = HostBindingCompilerRegistration::try_new_semantic(HttpCompiler(config))
-        .map_err(|e| e.error().error().clone())?;
+    let compiler =
+        HostBindingCompilerRegistration::try_new_semantic(HttpCompiler::for_finite(config))
+            .map_err(|e| e.error().error().clone())?;
     let runtime = consumer_execution(config, binding_id, generation, ordinal, Some(tls))?;
     let preparation = HostConsumerBindingPreparation::try_pair(runtime, compiler)
         .map_err(|e| e.error().error().clone())?;

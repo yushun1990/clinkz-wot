@@ -4,7 +4,24 @@ use clinkz_wot_planning::*;
 use clinkz_wot_td::semantic::{FormOwner, SemanticNode, SemanticScope, SemanticValue};
 const HTTP: &str = "http://www.w3.org/2011/http#";
 #[derive(Debug)]
-pub(super) struct HttpCompiler(pub HttpConsumerConfig);
+pub(super) struct HttpCompiler {
+    config: HttpConsumerConfig,
+    caller_resolves_targets: bool,
+}
+impl HttpCompiler {
+    pub(super) fn for_restricted_read(config: HttpConsumerConfig) -> Self {
+        Self {
+            config,
+            caller_resolves_targets: false,
+        }
+    }
+    pub(super) fn for_finite(config: HttpConsumerConfig) -> Self {
+        Self {
+            config,
+            caller_resolves_targets: true,
+        }
+    }
+}
 impl HostSemanticCompiler for HttpCompiler {
     type Artifact = HttpArtifact;
     // One atomic callback over at most 128 nodes and 1024 header bytes.
@@ -13,10 +30,14 @@ impl HostSemanticCompiler for HttpCompiler {
         COMPATIBILITY
     }
     fn configuration(&self) -> ConsumerBindingConfiguration {
-        self.0.configuration
+        self.config.configuration
     }
     fn schemes(&self) -> &'static [&'static str] {
-        if self.0.secure { &["https"] } else { &["http"] }
+        if self.config.secure {
+            &["https"]
+        } else {
+            &["http"]
+        }
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         use clinkz_wot_td::data_type::Operation;
@@ -43,8 +64,15 @@ impl HostSemanticCompiler for HttpCompiler {
         {
             return Err(unsupported());
         }
-        let target =
-            crate::address::qualify(input.target, self.0.secure).map_err(|_| unsupported())?;
+        // Template eligibility depends on the actual execution owner. The
+        // restricted Read owner has no validated actual-destination admission;
+        // admitting a template there would mask executable literal alternatives.
+        let target = if self.caller_resolves_targets {
+            crate::address::qualify(input.target, self.config.secure)
+        } else {
+            Target::parse_for(input.target, self.config.secure)
+        }
+        .map_err(|_| unsupported())?;
         if input.target.contains('{')
             && !matches!(
                 input.operation,
@@ -60,7 +88,7 @@ impl HostSemanticCompiler for HttpCompiler {
             return Err(unsupported());
         }
 
-        if self.0.secure {
+        if self.config.secure {
             if !matches!(
                 input.operation,
                 Operation::ReadProperty | Operation::WriteProperty
@@ -134,7 +162,7 @@ impl HostSemanticCompiler for HttpCompiler {
         let mut output = HttpArtifact {
             operation: input.operation,
             responses,
-            secure: self.0.secure,
+            secure: self.config.secure,
             authentication,
             method: if write { "PUT" } else { "GET" },
             target_len: input.target.len() as u16,

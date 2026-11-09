@@ -90,7 +90,9 @@ services, definitions and funding independently; destroying an old result cannot
 release a successor's occupancy. Each read owns a fresh connection and its driver.
 The selected immutable artifact supplies the exact path/query and Host authority.
 The restricted Read path declines URI variables; the modern finite Property
-facet supports the bounded dynamic profile below. Unsupported targets return the
+facet supports the bounded dynamic profile below. The restricted registration
+marks templates unsupported during preparation, so default Form selection can
+reach a supported static alternative. Unsupported targets return the
 original request before raw acceptance. No TD rescan, DNS, pool, redirect, retry, decompression,
 upgrade, background task or detached driver is involved.
 

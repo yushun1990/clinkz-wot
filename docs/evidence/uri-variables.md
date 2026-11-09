@@ -40,6 +40,15 @@ schema evaluator. Existing static, response, security, allocation and downstream
 fixtures remain regression evidence within their original scope. Exact commands
 and reviewed revision belong to the PR/CI, not a mirrored repository run log.
 
+The [restricted Read regression](../../protocol-bindings/protocols/http/tests/restricted_form_selection.rs)
+checks the separately registered literal-only compiler profile with Thing- and
+affordance-level declarations. Default selection skips a templated first Form
+and executes the static alternative over HTTP; explicit static selection also
+executes. Explicit template selection, with or without supplied values, refuses
+before an outbound request is constructed. All original accounts release after
+shutdown. Dynamic compilation remains eligible for the modern finite owner that
+implements validation, resolution and actual-destination authorization.
+
 Limits: eight effective declarations, 32 bytes/name, 128 bytes/value and 256
 template bytes. Supported types are strings, canonical base-ten i64 integers and
 booleans; supported constraints are the existing integer boundaries and Unicode
