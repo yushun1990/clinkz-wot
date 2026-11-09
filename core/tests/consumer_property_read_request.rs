@@ -163,7 +163,8 @@ fn public_wrapper_preserves_valid_output_and_opaque_native_status() {
                 .metadata()
                 .binding_response()
                 .expect("validated provenance remains present")
-                .status_code(),
+                .status_code()
+                .unwrap(),
             native_status
         );
     }

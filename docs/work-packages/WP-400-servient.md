@@ -655,3 +655,8 @@ identity composition and operation limits. [Scoped evidence and superseded
 assumptions](../evidence/security-composition.md) identify the supported subset,
 revocation/ownership obligations and remaining work. No package/milestone,
 production-security or additional Embedded acceptance is claimed.
+
+## TD-described finite responses
+
+Finite runtime application-failure delivery preserves original authority, first cause, resource owners and separate effect certainty; see [response evidence](../evidence/td-responses.md).
+No package, gate or milestone acceptance follows from this increment.

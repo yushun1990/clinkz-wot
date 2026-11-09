@@ -117,7 +117,12 @@ fn consumer_late_native_views_retain_original_funding_after_cancellation_or_revo
                 original.as_ptr() as *const u8
             );
             assert_eq!(
-                output.metadata().binding_response().unwrap().status_code(),
+                output
+                    .metadata()
+                    .binding_response()
+                    .unwrap()
+                    .status_code()
+                    .unwrap(),
                 200
             );
             let copied = output.data().unwrap().body.to_vec();
@@ -409,7 +414,7 @@ fn consumer_rejects_malformed_or_misattributed_status_evidence_and_keeps_native_
                 let output = result.rejected_output().unwrap();
                 assert_eq!(output.data().unwrap().body, body.as_bytes());
                 assert_eq!(output.data().unwrap().body.as_ptr(), original.as_ptr() as *const u8);
-                assert_eq!(output.metadata().binding_response().unwrap().status_code(), 200);
+                assert_eq!(output.metadata().binding_response().unwrap().status_code().unwrap(), 200);
                 let result = Rc::new(result);
                 let held = result.clone();
                 drop(call);
@@ -497,7 +502,11 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
             assert_eq!(server.app.invoked.get(), 1);
             assert_eq!(server.app.cancelled.get(), 0);
             let next = client.query_all_actions(Deadline::NONE, now(), &mut work());
-            assert_eq!(next.is_ok(), matches!(mode, "cancel" | "short-credit"), "{mode}");
+            assert_eq!(
+                next.is_ok(),
+                matches!(mode, "cancel" | "short-credit"),
+                "{mode}"
+            );
             drop(next); // accepted unpolled work retires with its original runtime
             drop(result);
             drop(call);

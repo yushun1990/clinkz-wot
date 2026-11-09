@@ -415,3 +415,8 @@ identity composition and operation limits. [Scoped evidence and superseded
 assumptions](../evidence/security-composition.md) identify the supported subset,
 revocation/ownership obligations and remaining work. No package/milestone,
 production-security or additional Embedded acceptance is claimed.
+
+## TD-described finite responses
+
+Selected Consumer and complete final Producer response qualification, exact reuse comparison and funded preparation are demonstrated in [response evidence](../evidence/td-responses.md).
+No package, gate or milestone acceptance follows from this increment.

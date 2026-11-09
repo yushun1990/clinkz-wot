@@ -124,22 +124,33 @@ impl Definition {
         {
             return Poll::Ready(Err(invalid()));
         }
-        let has_output = match self.input.definition.content().schemas() {
-            ConsumerFiniteSchemas::Value(s) => s.output.is_some(),
-            ConsumerFiniteSchemas::WriteAllProperties(_)
-            | ConsumerFiniteSchemas::WriteMultipleProperties(_) => false,
-            ConsumerFiniteSchemas::ReadAllProperties(_)
-            | ConsumerFiniteSchemas::ReadMultipleProperties(_)
-            | ConsumerFiniteSchemas::QueryAllActions(_) => true,
+        let invalid_response = || {
+            CoreError::Validation(
+                ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                    .with_operation(self.input.definition.operation()),
+            )
         };
+        let content = self.input.definition.content();
+        if let Err(error) = content
+            .response_shape()
+            .validate(output.metadata().response_selection(), output.view())
+        {
+            return Poll::Ready(Err(error));
+        }
+        let response = content
+            .responses()
+            .and_then(|r| r.get(output.metadata().response_selection()));
+        let has_output = response
+            .is_some_and(|r| matches!(r.data, execution::responses::ResponseData::Value(_)))
+            || content.schemas().has_output();
         if output.data().is_some() != has_output {
-            return Poll::Ready(Err(invalid()));
+            return Poll::Ready(Err(invalid_response()));
         }
         if let Some(report) = output.metadata().property_write_report() {
             let selected = match (self.input.definition.content().schemas(), selection) {
                 (ConsumerFiniteSchemas::WriteAllProperties(schema), _) => schema.all(),
                 (ConsumerFiniteSchemas::WriteMultipleProperties(_), Some(s)) => s,
-                _ => return Poll::Ready(Err(invalid())),
+                _ => return Poll::Ready(Err(invalid_response())),
             };
             if let Err(error) = report.validate_selection(selected) {
                 return Poll::Ready(Err(error));
@@ -154,16 +165,30 @@ impl Definition {
             .data()
             .is_some_and(|p| p.body.len() as u64 > self.data_policy.body_bytes)
         {
-            return Poll::Ready(Err(invalid()));
+            return Poll::Ready(Err(invalid_response()));
         }
         if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
             return Poll::Pending;
         }
-        Poll::Ready(self.input.definition.content().schemas().validate_output(
-            self.input.definition.data(),
-            selection,
-            output.data(),
-        ))
+        if let Some(p) = output.data() {
+            if response.is_some_and(|r| r.content_type.as_ref() != p.content_type.as_str())
+                || p.content_coding.is_some()
+            {
+                return Poll::Ready(Err(invalid_response()));
+            }
+        }
+        Poll::Ready(match response.map(|r| &r.data) {
+            Some(execution::responses::ResponseData::Value(schema)) => self
+                .input
+                .definition
+                .data()
+                .validate(schema, output.data().unwrap()),
+            _ => content.schemas().validate_output(
+                self.input.definition.data(),
+                selection,
+                output.data(),
+            ),
+        })
     }
     fn validate_payload(
         &self,
@@ -174,7 +199,8 @@ impl Definition {
             match (self.input.definition.content().schemas().input(), payload) {
                 (None, None) => Ok(None),
                 (Some(_), Some(payload))
-                    if payload.body.len() as u64 <= self.data_policy.body_bytes =>
+                    if payload.body.len() as u64 <= self.data_policy.body_bytes
+                        && payload.content_type == self.input.definition.request_media() =>
                 {
                     if !self.input.definition.data().available()
                         || self.input.definition.data().policy() != self.data_policy
@@ -259,7 +285,9 @@ impl Definition {
                 BindingOperationalError::new(error),
             ));
         }
-        let request = request.with_security(security);
+        let request = request
+            .with_security(security)
+            .with_responses(self.input.definition.content().response_shape());
         self.input
             .definition
             .execution()
@@ -1395,12 +1423,15 @@ impl FiniteCallDriver for HostCallDriver<'_> {
         match work.definition.validate(output, work.selection, budget) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => {
-                if matches!(
-                    work.definition.input.definition.operation(),
-                    Operation::WriteProperty
-                        | Operation::WriteAllProperties
-                        | Operation::WriteMultipleProperties
-                ) {
+                if output.status() == InteractionStatus::Ok
+                    && output.metadata().response_selection() == ResponseSelection::Primary
+                    && matches!(
+                        work.definition.input.definition.operation(),
+                        Operation::WriteProperty
+                            | Operation::WriteAllProperties
+                            | Operation::WriteMultipleProperties
+                    )
+                {
                     work.effect = if output
                         .metadata()
                         .property_write_report()

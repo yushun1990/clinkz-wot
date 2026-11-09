@@ -328,7 +328,10 @@ fn every_advertised_alternative_refuses_before_native_setup() {
                 v["properties"]["level"]["forms"][0]["response"] =
                     json!({"htv:statusCodeValue":201})
             }
-            14 => v["properties"]["level"]["forms"][0]["additionalResponses"] = json!([]),
+            14 => {
+                v["properties"]["level"]["forms"][0]["additionalResponses"] =
+                    json!([{"success":false}])
+            }
             15 => v["properties"]["level"]["observable"] = json!(true),
             16 => v["https://vendor.example/required"] = json!(true),
             17 => v["properties"]["level"]["forms"][0]["href"] = json!("http://127.0.0.1:1/wrong"),
@@ -464,7 +467,10 @@ fn joined_handler_policy_revision_fences_callback_time_revocation() {
     // The callback returned its earlier allowed decision; the funded facade
     // must preserve the revision that makes that decision obsolete.
     assert_eq!(application.calls.get(), 0);
-    assert!(wire.is_empty(), "invalidated dispatch must retire its reply");
+    assert!(
+        wire.is_empty(),
+        "invalidated dispatch must retire its reply"
+    );
     let settlement = e.take_settlement().unwrap();
     assert_eq!(settlement.recipient, Some(e.key()));
     assert_eq!(settlement.effect, FiniteEffect::NotInvoked);
@@ -1396,7 +1402,7 @@ fn public_consumer_uses_exact_published_description_and_real_native_peer() {
                 BindingLifetimeFootprint::new(8, 8192),
                 BindingLifetimeFootprint::new(8, 4096),
                 [1, 64, 64, 64],
-                [4096, 16],
+                [4096, 32],
                 [2, 2, 1, 1, 1, 1, 1],
                 [30_000, 1000],
                 65536,

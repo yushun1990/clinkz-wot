@@ -162,6 +162,12 @@ pub struct ResolvedFormFacts<'a> {
     pub additional_responses: bool,
 }
 
+/// Standard additional-response meaning, with TD 1.1 defaults applied.
+pub struct AdditionalResponseFacts<'a> {
+    pub content_type: &'a str,
+    pub success: bool,
+    pub schema: Option<&'a str>,
+}
 /// A resolved node. Child order, nulls and explicit empty values survive.
 #[derive(Clone, Copy)]
 pub struct SemanticNode<'a> {
@@ -271,6 +277,31 @@ impl<'a> ResolvedSemanticDocument<'a> {
             response_content_type: form.response.as_ref().map(|r| r.content_type.as_str()),
             additional_responses: form.additional_responses.is_some(),
         })
+    }
+    pub fn additional_responses(
+        &self,
+        owner: FormOwner<'_>,
+        index: u32,
+    ) -> Option<impl Iterator<Item = AdditionalResponseFacts<'_>>> {
+        if self.selected.as_ref()?.owner != owner {
+            return None;
+        }
+        let form = self
+            .scopes
+            .iter()
+            .find(|s| s.key == form_scope(owner, index))?
+            .form?;
+        Some(
+            form.additional_responses
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(move |r| AdditionalResponseFacts {
+                    content_type: r.content_type.as_deref().unwrap_or(&form.content_type),
+                    success: r.success,
+                    schema: r.schema.as_deref(),
+                }),
+        )
     }
     #[cfg(test)]
     pub(crate) fn resolve(

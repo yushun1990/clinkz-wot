@@ -98,6 +98,9 @@ impl RawFiniteHandler for Behavior {
         match ctx.operation() {
             Operation::ReadProperty => {
                 self.0.reads.set(self.0.reads.get() + 1);
+                if self.0.output.get() >= 4 {
+                    return response_alternatives::response_output(self.0.output.get(), ctx);
+                }
                 Ok(InteractionOutput::with_data(payload(
                     &self.0.value.borrow(),
                 )))
@@ -105,6 +108,9 @@ impl RawFiniteHandler for Behavior {
             Operation::WriteProperty => {
                 self.0.writes.set(self.0.writes.get() + 1);
                 *self.0.value.borrow_mut() = input.data.as_ref().unwrap().body.to_vec();
+                if self.0.output.get() >= 4 {
+                    return response_alternatives::response_output(self.0.output.get(), ctx);
+                }
                 match self.0.output.get() {
                     1 => Err(CoreError::Binding(ErrorContext::new(
                         ErrorPhase::Handler,
@@ -455,6 +461,15 @@ fn client(
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
 ) -> ConsumerRuntime {
+    client_with_selector(td, denied, accounts, owner, ConsumerSelector::default())
+}
+fn client_with_selector(
+    td: Value,
+    denied: Arc<AtomicBool>,
+    accounts: Arc<HostResourceAccounts>,
+    owner: &ConsumerInstance,
+    selector: ConsumerSelector,
+) -> ConsumerRuntime {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(98),
@@ -471,7 +486,7 @@ fn client(
             &td,
             GatewayDefaultV1::LIMITS,
             accounts.clone(),
-            ConsumerSelector::default(),
+            selector,
             &mut work(),
             |job| {
                 while !job.is_finished() {
@@ -512,7 +527,7 @@ fn default_and_explicit_read_write_definitions_coexist_on_one_property_and_liste
                 let (result, remote) = server.exchange(&mut write).await;
                 assert_eq!(result.operation(), Operation::WriteProperty);
                 assert!(result.result().unwrap().data().is_none());
-                assert_eq!(result.result().unwrap().metadata().binding_response().unwrap().status_code(),204);
+                assert_eq!(result.result().unwrap().metadata().binding_response().unwrap().status_code().unwrap(),204);
                 assert_eq!(result.effect(), ConsumerEffect::Completed, "validated completion remains separate from physical-state confirmation");
                 assert_eq!(remote.effect, FiniteEffect::Completed);
                 assert_eq!(remote.delivery, FiniteDelivery::Delivered);
@@ -1512,3 +1527,6 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
         server.close();
     });
 }
+
+#[path = "support/response_alternatives.rs"]
+mod response_alternatives;

@@ -1,10 +1,10 @@
 //! Optional Host HTTP/1.1 Consumer Property Read/Write and Producer Property/Action binding.
 //!
-//! This slice supports cleartext IP literals, compiled JSON reads, status
-//! 200 reads and empty 204 writes. Read responses support fixed/chunked/close
-//! framing and bounded discarded trailers. The Producer offers Property GET/PUT and continuing
-//! Action POST/GET/DELETE through explicit preparation and manually progressed
-//! Servient ownership. See README.md for deployment and qualification limits.
+//! Finite Property responses use qualified TD alternatives with shared schema
+//! validation and Binding-owned native status/media identification. Primary
+//! defaults are JSON 200 reads and empty 204 writes. The Producer also offers
+//! continuing Action POST/GET/DELETE through distinct preparation and manually
+//! progressed Servient ownership. See README.md for exact mapping/profile limits.
 use clinkz_wot_core::*;
 use clinkz_wot_foundation::*;
 use std::{
@@ -30,6 +30,7 @@ mod producer;
 use clinkz_wot_codec_json as producer_validation;
 pub use finite_producer::{HttpFiniteBinding, HttpFiniteConfig, HttpFiniteReply};
 mod program;
+mod responses;
 mod security;
 pub use producer::{
     HttpProducerConfig, HttpProducerExecutor, HttpProducerInstallation, HttpProducerProgram,
@@ -51,11 +52,12 @@ use compiler::HttpCompiler;
 use program::{COMPATIBILITY, HttpArtifact};
 
 const BODY: u64 = 4096;
-const MEDIA: u64 = 16;
+const MEDIA: u64 = 32;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v16\0",
+    "clinkz-http-ip-v17\0",
+    "TD-responses33;unique-terminal-native-status;explicit-success;branch-schema;JSON-or-JSON-UTF8-response;media32;",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
     "GET-read-PUT-write-default;operation-scoped;explicit-read-GET,POST,PUT,PATCH,DELETE;write-PUT;header8/1024;NoSec;read200-json;write204-empty-noCL-noTE-through-peer-EOF;write-head-private-until-EOF;write-head-delivery-shares-callback-credit;json4096-input;noCE;noUpgrade;no1xx;http1.1;IP;target64;",
@@ -220,7 +222,7 @@ struct Client {
     config: HttpConsumerConfig,
     busy: Arc<AtomicBool>,
 }
-type Exchange = Pin<Box<dyn Future<Output = CoreResult<(u16, Vec<u8>)>> + Send>>;
+type Exchange = Pin<Box<dyn Future<Output = CoreResult<crate::responses::HttpResponse>> + Send>>;
 struct Call {
     request: Option<OutboundRequest>,
     tls: Option<HttpClientTls>,
@@ -483,30 +485,37 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
                             .with_binding(request.binding_id(), request.binding_generation()),
                     )
                 });
-                Poll::Ready(result.and_then(|(status, body)| {
-                    let output = if matches!(
-                        request.operation(),
-                        Operation::WriteProperty
-                            | Operation::WriteAllProperties
-                            | Operation::WriteMultipleProperties
-                    ) {
-                        InteractionOutput::empty()
-                    } else {
-                        InteractionOutput::with_data(Payload::new(body, "application/json"))
-                    };
-                    output
-                        .try_with_metadata(
-                            InteractionOutputMetadata::default().with_untrusted_binding_response(
-                                BindingResponseMetadata::primary(
-                                    request.binding_id(),
-                                    request.binding_generation(),
-                                    request.plan_id(),
-                                    status,
-                                ),
-                            ),
-                        )
-                        .ok_or_else(|| error(609, "HTTP metadata rejected"))
-                }))
+                Poll::Ready(result.and_then(
+                    |crate::responses::HttpResponse {
+                         code: status,
+                         selection,
+                         status: semantic_status,
+                         empty,
+                         media,
+                         body,
+                     }| {
+                        let output = if empty {
+                            InteractionOutput::empty()
+                        } else {
+                            InteractionOutput::with_data(Payload::new(body, media))
+                        };
+                        output
+                            .with_status(semantic_status)
+                            .try_with_metadata(
+                                InteractionOutputMetadata::default()
+                                    .with_untrusted_binding_response(
+                                        BindingResponseMetadata::new(
+                                            request.binding_id(),
+                                            request.binding_generation(),
+                                            request.plan_id(),
+                                            selection,
+                                        )
+                                        .with_native_status(status),
+                                    ),
+                            )
+                            .ok_or_else(|| error(609, "HTTP metadata rejected"))
+                    },
+                ))
             }
         }
     }
@@ -720,6 +729,9 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
     fn content_type(&self) -> &str {
         "application/json"
     }
+    fn supports_media(&self, media: &str) -> bool {
+        crate::responses::json_media(media)
+    }
     fn validate(
         &self,
         schema: &clinkz_wot_core::data_schema::PreparedSchema,
@@ -727,7 +739,7 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
     ) -> CoreResult<()> {
         // The JSON service evaluates a payload independently of its finite
         // input/output role. The operation owner checks result metadata/shape.
-        producer_validation::validate_payload(schema, payload)
+        crate::responses::validate_payload(schema, payload)
     }
     fn policy(&self) -> clinkz_wot_core::consumer::ConsumerDataPolicy {
         clinkz_wot_core::consumer::ConsumerDataPolicy {

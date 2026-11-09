@@ -128,6 +128,7 @@ impl HttpFiniteConfig {
 /// is not Clone, and cannot be constructed independently of its HTTP owner.
 pub struct HttpFiniteReply {
     correlation: u64,
+    mapping: usize,
     issuer: Weak<()>,
     credentials: crate::security::HttpEvidence,
     authentication: crate::security::HttpSecurity,
@@ -149,6 +150,7 @@ pub struct HttpFiniteBinding {
     connection: Option<NativeConnection>,
     listener: Option<TcpListener>,
     correlation: u64,
+    accepted_mapping: Option<usize>,
     request_deadline: Deadline,
     failed: Option<CoreError>,
     closed: bool,
@@ -177,6 +179,7 @@ impl HttpFiniteBinding {
             connection: None,
             listener: None,
             correlation: 0,
+            accepted_mapping: None,
             request_deadline: Deadline::NONE,
             failed: None,
             closed: false,
@@ -279,7 +282,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
     }
 
     fn validator(&self) -> Option<&dyn FiniteValidator> {
-        Some(&self.configuration)
+        Some(self)
     }
     fn security_work(&self) -> u64 {
         self.configuration
@@ -408,6 +411,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                 // Unsupported/malformed/disconnected input never escapes as a
                 // semantic candidate. Disposing it leaves the listener usable.
                 drop(self.connection.take());
+                self.accepted_mapping = None;
                 self.request_deadline = Deadline::NONE;
                 Poll::Pending
             }
@@ -415,6 +419,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                 let Some((index, input)) = connection.take_request() else {
                     return Poll::Pending;
                 };
+                self.accepted_mapping = Some(index);
                 let (target, program) = &self.configuration.mappings[index];
                 Poll::Ready(Ok(FiniteIngress {
                     candidates: vec![FiniteCandidate {
@@ -425,6 +430,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                     input,
                     reply: HttpFiniteReply {
                         correlation: self.correlation,
+                        mapping: index,
                         issuer: Arc::downgrade(&self.issuer),
                         credentials: connection.take_credentials(),
                         authentication: program.authentication,
@@ -441,6 +447,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
     ) -> Poll<CoreResult<()>> {
         if reply.ingress.reply.issuer.as_ptr() != Arc::as_ptr(&self.issuer)
             || reply.ingress.reply.correlation != self.correlation
+            || self.accepted_mapping != Some(reply.ingress.reply.mapping)
             || self.closed
         {
             return Poll::Ready(Err(crate::producer::producer_unsupported()));
@@ -478,39 +485,56 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         // Abort is this native facet's retirement policy; no refusal is claimed
         // delivered and a partial write is never reported as NotDelivered.
         drop(self.connection.take());
+        self.accepted_mapping = None;
         drop(self.listener.take());
         Poll::Ready(Ok(delivery))
     }
 }
 
-impl HttpFiniteConfig {
+impl HttpFiniteBinding {
     fn program_for(&self, candidate: &FiniteCandidate) -> CoreResult<&HttpProducerProgram> {
-        if candidate.instance != self.instance {
+        let (target, program) = self
+            .accepted_mapping
+            .and_then(|i| self.configuration.mappings.get(i))
+            .ok_or_else(crate::producer::producer_unsupported)?;
+        if candidate.instance != self.configuration.instance
+            || &candidate.target != target
+            || candidate.operation != program.operation
+        {
             return Err(crate::producer::producer_unsupported());
         }
-        self.mappings
-            .iter()
-            .find(|(target, p)| &candidate.target == target && candidate.operation == p.operation)
-            .map(|(_, program)| program)
-            .ok_or_else(crate::producer::producer_unsupported)
+        Ok(program)
     }
 }
-impl FiniteValidator for HttpFiniteConfig {
+impl FiniteValidator for HttpFiniteBinding {
+    fn response_contract(
+        &self,
+        candidate: &FiniteCandidate,
+    ) -> CoreResult<Option<&clinkz_wot_core::execution::responses::FiniteResponses>> {
+        Ok(Some(&self.program_for(candidate)?.response_contract))
+    }
     fn additional_validation_work(&self) -> u64 {
-        let structured = self.mappings.iter().any(|(_, p)| {
-            !p.value_schema.is_type_only()
+        let structured = self.configuration.mappings.iter().any(|(_, p)| {
+            p.response_contract.iter().any(|r| matches!(&r.data, clinkz_wot_core::execution::responses::ResponseData::Value(s) if !s.is_type_only()))
+                || !p.value_schema.is_type_only()
                 || p.property_map
                     .as_ref()
                     .is_some_and(|s| s.members().iter().any(|m| !m.schema.is_type_only()))
         });
         let extra = if structured { 4096 * 80 } else { 0 };
         if self
+            .configuration
             .mappings
             .iter()
             .any(|(_, p)| p.operation == Operation::ReadMultipleProperties)
         {
             4096 * 120 + extra
-        } else if self.mappings.iter().any(|(_, p)| p.property_map.is_some()) {
+        } else if self
+            .configuration
+            .mappings
+            .iter()
+            .any(|(_, p)| p.property_map.is_some())
+        {
             4096 * 40 + extra
         } else {
             extra
@@ -571,6 +595,14 @@ impl FiniteValidator for HttpFiniteConfig {
         let program = self.program_for(candidate)?;
         match program.operation {
             Operation::ReadMultipleProperties => {
+                // This facet still admits only the ordinary primary result.
+                // A valid selected map cannot certify its status or branch.
+                if !raw_finite_property_shape(program.operation, output) {
+                    return Err(CoreError::Validation(ErrorContext::new(
+                        ErrorPhase::Validate,
+                        RetryClass::Never,
+                    )));
+                }
                 let schema = program
                     .property_map
                     .as_ref()
@@ -590,10 +622,10 @@ impl FiniteValidator for HttpFiniteConfig {
                         .ok_or_else(crate::producer::producer_unsupported)?,
                 )
             }
-            Operation::ReadProperty | Operation::ReadAllProperties => program.validate(output),
-            Operation::WriteProperty
-            | Operation::WriteAllProperties
-            | Operation::WriteMultipleProperties
+            Operation::ReadProperty | Operation::WriteProperty | Operation::ReadAllProperties => {
+                program.validate(output)
+            }
+            Operation::WriteAllProperties | Operation::WriteMultipleProperties
                 if raw_finite_property_shape(program.operation, output)
                     && output.metadata().property_write_report().is_none() =>
             {

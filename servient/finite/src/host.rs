@@ -650,7 +650,11 @@ impl RawProducerServient {
                 &behavior.target,
                 behavior.operation,
                 runtime.identity,
-            )?;
+            )?
+            .with_response_contract(match validator {
+                Some(service) => service.response_contract(&ingress.candidates[0])?,
+                None => None,
+            });
             // Verification, validation and application policy can invalidate
             // publication or captured services. Check after the last callback,
             // immediately before acquiring behavior authority. The original
@@ -685,7 +689,11 @@ impl RawProducerServient {
             if !runtime.output_fits(&output) {
                 return Err(CoreError::Backpressure(context()));
             }
-            if !raw_finite_property_shape(behavior.operation, &output) {
+            if !(if validator.is_some() {
+                clinkz_wot_core::finite::finite_handler_shape(&output)
+            } else {
+                raw_finite_property_shape(behavior.operation, &output)
+            }) {
                 return Err(CoreError::Validation(
                     ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
                         .with_thing(instance.key().slot())
@@ -708,12 +716,14 @@ impl RawProducerServient {
                 }
                 validator.validate_output(&ingress.candidates[0], &ingress.input, &output)?;
             }
-            if matches!(
-                behavior.operation,
-                Operation::WriteProperty
-                    | Operation::WriteAllProperties
-                    | Operation::WriteMultipleProperties
-            ) {
+            if output.status() == clinkz_wot_core::InteractionStatus::Ok
+                && matches!(
+                    behavior.operation,
+                    Operation::WriteProperty
+                        | Operation::WriteAllProperties
+                        | Operation::WriteMultipleProperties
+                )
+            {
                 effect = if output
                     .metadata()
                     .property_write_report()

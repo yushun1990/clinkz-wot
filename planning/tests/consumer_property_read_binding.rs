@@ -2336,7 +2336,11 @@ mod consumer_only {
                 if matches!(kind, OutputKind::Valid | OutputKind::NativeStatus(_)) {
                     let out = result.unwrap();
                     assert_eq!(
-                        out.metadata().binding_response().unwrap().status_code(),
+                        out.metadata()
+                            .binding_response()
+                            .unwrap()
+                            .status_code()
+                            .unwrap(),
                         match kind {
                             OutputKind::NativeStatus(code) => code,
                             _ => 200,

@@ -17,6 +17,13 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// inspection; they acquire no credentials, source documents or native I/O.
 pub trait ConsumerDataService: Send + Sync {
     fn content_type(&self) -> &str;
+    /// Complete executable media support, separately qualified for each used
+    /// scalar request/response role, for every supported schema. Collection and
+    /// status facets retain content_type() as their exact representation.
+    fn supports_media(&self, media: &str) -> bool {
+        self.content_type() == media
+    }
+
     fn validate(&self, schema: &PreparedSchema, payload: &Payload) -> CoreResult<()>;
     fn policy(&self) -> ConsumerDataPolicy;
     /// Actual status representation support. Scalar Object support cannot
@@ -335,6 +342,13 @@ pub enum ConsumerFiniteSchemas {
     WriteMultipleProperties(PropertyCollectionSchema),
 }
 impl ConsumerFiniteSchemas {
+    pub fn has_output(&self) -> bool {
+        match self {
+            Self::Value(s) => s.output.is_some(),
+            Self::WriteAllProperties(_) | Self::WriteMultipleProperties(_) => false,
+            _ => true,
+        }
+    }
     pub fn input(&self) -> Option<&PreparedSchema> {
         match self {
             Self::Value(s) => s.input.as_ref(),
@@ -548,6 +562,7 @@ pub struct ConsumerExecutionContent {
     operation: Operation,
     schemas: ConsumerFiniteSchemas,
     security: crate::security::SecurityRequirement,
+    responses: Option<crate::execution::responses::FiniteResponses>,
 }
 impl ConsumerExecutionContent {
     pub fn try_new(
@@ -626,10 +641,54 @@ impl ConsumerExecutionContent {
             operation,
             schemas,
             security,
+            responses: None,
         })
     }
+    pub fn with_responses(
+        mut self,
+        responses: crate::execution::responses::FiniteResponses,
+    ) -> Self {
+        self.responses = Some(responses);
+        self
+    }
+    pub fn responses(&self) -> Option<&crate::execution::responses::FiniteResponses> {
+        self.responses.as_ref()
+    }
+    pub fn response_shape(&self) -> crate::execution::responses::FiniteResponseShape {
+        self.responses.as_ref().map_or_else(
+            || crate::execution::responses::FiniteResponseShape::primary(self.operation),
+            |r| r.shape(self.schemas.has_output()),
+        )
+    }
+    pub fn supports_data(&self, data: &dyn ConsumerDataService, request_media: &str) -> bool {
+        let scalar = matches!(self.schemas, ConsumerFiniteSchemas::Value(_));
+        let operation_media = |media: &str| {
+            if scalar {
+                data.supports_media(media)
+            } else {
+                data.content_type() == media
+            }
+        };
+        self.schemas.supports(data)
+            && (self.schemas.input().is_none() || operation_media(request_media))
+            && self.responses.as_ref().map_or_else(
+                || !self.schemas.has_output() || operation_media(request_media),
+                |responses| {
+                    responses.iter().all(|r| match &r.data {
+                        crate::execution::responses::ResponseData::Operation => {
+                            !self.schemas.has_output() || operation_media(&r.content_type)
+                        }
+                        crate::execution::responses::ResponseData::Value(s) => {
+                            data.supports_media(&r.content_type) && data.supports_schema(s)
+                        }
+                    })
+                },
+            )
+    }
     pub fn drop_work(&self) -> u64 {
-        self.schemas.drop_work() + self.security.drop_work()
+        self.schemas.drop_work()
+            + self.security.drop_work()
+            + self.responses.as_ref().map_or(0, |r| r.drop_work())
     }
     pub fn security(&self) -> &crate::security::SecurityRequirement {
         &self.security
@@ -654,7 +713,9 @@ impl ConsumerExecutionContent {
             AffordanceTarget::Action(n) => AffordanceSite::Action(n),
             _ => return None,
         };
-        crate::execution::ValueExecution::try_new(site, self.operation, values, &self.security).ok()
+        crate::execution::ValueExecution::try_new(site, self.operation, values, &self.security)
+            .map(|meaning| meaning.with_responses(self.responses.as_ref()))
+            .ok()
     }
 }
 
@@ -675,6 +736,7 @@ impl PreparedConsumerContent {
         let bytes = core::mem::size_of::<Self>() as u64
             + content.schemas.retained_bytes() as u64
             + content.security.retained_bytes() as u64
+            + content.responses.as_ref().map_or(0, |r| r.retained_bytes()) as u64
             + content.affordance.name().map_or(0, str::len) as u64
             + 128; // Arc and reservation-vector backing
         let funding = match reserve(bank, &[(ResourceKind::EngineLiveBytesGlobalMax, bytes)]) {
@@ -743,8 +805,9 @@ impl ConsumerDefinition {
                 .supports_operation(input.content.operation())
             || !input.data.available()
             || policy.retained_bytes != input.data.backing_bytes()
-            || input.data.content_type() != input.content_type.as_ref()
-            || !input.content.schemas().supports(input.data.service())
+            || !input
+                .content
+                .supports_data(input.data.service(), &input.content_type)
             || policy.validation_work == 0
         {
             return Err(BindingInputRejection::new(
@@ -771,6 +834,9 @@ impl ConsumerDefinition {
     }
     pub fn form(&self) -> u32 {
         self.input.form
+    }
+    pub fn request_media(&self) -> &str {
+        &self.input.content_type
     }
     pub fn target(&self) -> &str {
         &self.input.target
@@ -802,9 +868,10 @@ impl ConsumerDefinition {
         if self.execution().consumer_configuration() != Some(self.configuration())
             || self.binding().configuration() != self.configuration().configuration()
             || self.data().policy() != self.data_policy
-            || self.data().content_type() != self.input.content_type.as_ref()
             || !self.data().available()
-            || !self.content().schemas().supports(self.data())
+            || !self
+                .content()
+                .supports_data(self.data(), &self.input.content_type)
             || !self.execution().supports_operation(self.operation())
         {
             return Err(invalid());

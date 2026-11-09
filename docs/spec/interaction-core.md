@@ -30,14 +30,14 @@ original owners; no sibling or successor content/instance can substitute for the
 ### Finite execution and ownership representations
 
 `execution::ValueExecution` is a borrowed view of immutable finite value meaning:
-coordinate, operation, input/output roles and security operands. Its constructor
+coordinate, operation, input/output roles, response alternatives and security operands. Its constructor
 owns the common value-role checks used by `ConsumerExecutionContent`; the Host
 content can lend this exact view without cloning constraints. A loan establishes
 neither TD selection, service support, native compatibility nor current authority.
 Property and continuing/collection semantics remain distinct.
 
 `execution::validate_finite_output` checks original selected Binding/generation/
-plan identity and finite primary application-result shape through
+plan identity and the original admitted finite response shape through
 `InteractionOutputView`. Both Host sealing and caller-owned execution use it.
 Payload/output views and metadata require no reference counting. A representation
 must separately bound retained backing and validate actual media/DataSchema.
@@ -95,8 +95,80 @@ those roles, derived Property collection member schemas or named Action output r
 The current finite path supports Property Read/Write, explicitly synchronous
 Action invocation (including empty data roles), and Thing-root
 ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties and QueryAllActions. Shape/identity seals require terminal
-primary application results and refuse continuing status/invocation references; captured codec/schema
+primary or explicitly admitted additional application results and refuse continuing status/invocation references; captured codec/schema
 checks separately precede input effects and validated result handoff.
+
+### TD-described finite response alternatives
+
+`execution::responses::FiniteResponses` retains one primary and an ordered,
+bounded set of additional alternatives. `ResponseSelection::Additional(i)`
+identifies the original TD entry, not a native status code or a new interaction.
+Each alternative has its own media and declared success meaning, and either
+inherits the operation's ordinary output role or carries a replacement
+`PreparedSchema`. `ResponseData::Value(Any)` requires a present unconstrained
+value; it is not an empty result. Repeating a Form's default response media
+does not change an Action's absent output role. TD permits media-defined opaque
+results without an output schema, but media metadata alone does not qualify
+their data role or executable support. Common preparation currently declines
+different response media for an Action without output or a replacement schema;
+no opaque media execution is claimed. No response schema changes the
+request/input role.
+
+A primary response has ordinary application success meaning. Additional success
+uses the TD boolean, defaulting to false. `InteractionStatus::ApplicationError`
+represents a validated declared failure, including its original payload and
+branch. It remains an `Ok(InteractionOutput)` native/validation result; callers
+must inspect status to distinguish declared success from failure.
+`CoreError` continues to describe execution, transport, authority or validation
+failure. An invalid error payload is a validation failure, not an application
+declared failure. Neither a declared failure nor a transport error establishes
+absence of remote effects. The Producer's finite Write handler still reports complete success only after
+completing its work. Consumer completion needs separately supported native
+completion evidence: this increment preserves Completed for the ordinary primary
+Write mapping and conservatively keeps additional Write responses Unknown,
+including declared successes. Declared success alone is not effect certainty;
+failure after entry/progress likewise remains Unknown.
+
+`FiniteResponseShape` is an allocation-free projection of the admitted branches,
+terminal status and data presence. The original request owner captures it before
+native handoff and seals normal and late identities/branch/status against it.
+Schema-dependent data-presence checks for Actions and additional alternatives run
+with the retained data owner, so a rejected payload remains available in the
+original settlement. Ordinary primary Read/Write keep their existing carrier
+presence checks. Untrusted metadata
+cannot add an alternative or select a branch from another definition. The same
+portable check is available through `validate_finite_response`; the restricted
+`validate_finite_output` adapter admits only the ordinary primary shape.
+Backing bounds, exact media/coding, selected schema and any collection/member
+checks remain separate obligations. The Host definition retains all common
+response meaning with its original schema/content funding. It cannot reuse
+another Form's media, branch order, success or constraints without exact
+compatibility checks. The caller-owned Read representation remains primary-only;
+this correction adds no std, pointer-atomic or Host-owner requirement to shared
+meaning/checks.
+
+A handler borrows the exact accepted native mapping's `FiniteResponses` through
+`HandlerContext::response_contract` and chooses a response using
+`with_response_selection` without inventing Binding identity or wire metadata. An alternative index is meaningful only
+inside that original mapping's contract; two Forms for one target/operation can
+have different schemas and branch order. A matching target/operation alone
+cannot select result meaning. The captured finite validator lends this common
+context without a source-TD callback or new authority. General terminal handler
+shape is permitted only with a captured validator that checks the admitted alternative; raw and
+restricted Property Read paths retain their primary-only shape. Binding-origin
+outputs supply original registration/generation/plan identity. Native numeric
+status is optional bounded provenance (`status_code() -> Option<u16>`), not a
+universal response discriminator, completion proof or WoT success rule. Core
+never compares it to protocol status classes. Full execution still requires a
+concrete Binding that qualifies native identification and representation.
+
+Consumer scalar media support is explicitly queried for every used request and
+response role. A service advertising more media must execute every schema it
+claims to support under each of them. Collection/status facets retain their
+exact `content_type()` representation; scalar support does not widen them.
+The first [response execution increment](../evidence/td-responses.md) is finite
+Property JSON through actual HTTP Consumer/Producer execution. Other family,
+codec and ownership representations must refuse unsupported combinations.
 
 A prepared Write requires the Property value as input and supports empty terminal
 application completion. It cannot reuse a Read definition or result schema.

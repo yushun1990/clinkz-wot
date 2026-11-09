@@ -48,6 +48,10 @@ impl HttpProducerConfig {
         if self.secure
             || input.operation() != Operation::ReadProperty
             || input.document().property().observable
+            // This retained output-only adapter cannot execute handler-selected
+            // alternatives. Full response support uses ProducerCapability below.
+            || input.document().additional_responses(FormOwner::Property(input.property()), input.form_index())
+                .is_none_or(|mut responses| responses.next().is_some())
         {
             return Err(producer_unsupported());
         }
@@ -114,13 +118,10 @@ impl HttpProducerConfig {
                 )
             ))
             || !facts.effective_operations.contains(&input.operation)
-            || facts.content_type != "application/json"
+            || (input.operation != Operation::ReadProperty
+                && facts.content_type != "application/json")
             || facts.subprotocol.is_some()
             || facts.content_coding.is_some()
-            || facts.additional_responses
-            || facts
-                .response_content_type
-                .is_some_and(|m| m != "application/json")
             || document.uri_variables(UriVariableScope::Thing).is_some()
             || document.uri_variables(UriVariableScope::Property).is_some()
         {
@@ -151,6 +152,34 @@ impl HttpProducerConfig {
         {
             return Err(producer_unsupported());
         }
+        let responses = crate::responses::HttpResponses::compile(
+            document,
+            input.owner,
+            input.form_index,
+            input.operation,
+        )?;
+        let (response_work, _) =
+            clinkz_wot_planning::responses::preparation(document, input.owner, input.form_index)?;
+        budget
+            .consume(WorkClass::BindingPolls, response_work)
+            .map_err(|_| producer_unsupported())?;
+        let response_contract = if let Some(original) = expected {
+            if !clinkz_wot_planning::responses::matches(
+                document,
+                input.owner,
+                input.form_index,
+                &original.response_contract,
+            )? {
+                return Err(producer_unsupported());
+            }
+            original.response_contract.clone()
+        } else {
+            Arc::new(clinkz_wot_planning::responses::prepare(
+                document,
+                input.owner,
+                input.form_index,
+            )?)
+        };
         // Shared DataSchema meaning is prepared once. HTTP supplies JSON
         // decoding; accepting extension-free schemas is not validation support.
         let mut schema_work = 0;
@@ -286,30 +315,6 @@ impl HttpProducerConfig {
         if multiple && !method {
             return Err(producer_unsupported());
         }
-        if let Some(response) = document.scope(if collection {
-            SemanticScope::AffordanceResponse {
-                owner: FormOwner::Thing,
-                index: input.form_index,
-            }
-        } else {
-            SemanticScope::Response {
-                property: input.property,
-                index: input.form_index,
-            }
-        }) {
-            let mut status = false;
-            for node in response.children() {
-                if status
-                    || !node
-                        .name()
-                        .is("http://www.w3.org/2011/http#statusCodeValue")
-                    || !matches!(node.value(), SemanticValue::Number(n) if n.as_u64() == Some(if !matches!(input.operation, Operation::WriteProperty | Operation::WriteAllProperties | Operation::WriteMultipleProperties) { 200 } else { 204 }))
-                {
-                    return Err(producer_unsupported());
-                }
-                status = true;
-            }
-        }
         let target =
             Target::parse_for(input.target, self.secure).map_err(|_| producer_unsupported())?;
         if target.address != self.address {
@@ -323,6 +328,8 @@ impl HttpProducerConfig {
         }
         let mut program = HttpProducerProgram {
             operation: input.operation,
+            responses,
+            response_contract,
             secure: self.secure,
             authentication,
             security_registration: None,

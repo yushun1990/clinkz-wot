@@ -330,7 +330,7 @@ fn category(result: CoreResult<InteractionOutput>) -> &'static str {
     match result {
         Ok(o) => {
             assert_eq!(o.data().unwrap().body.as_ref(), b"17");
-            assert_eq!(o.metadata().binding_response().unwrap().status_code(), 599);
+            assert_eq!(o.metadata().binding_response().unwrap().status_code().unwrap(), 599);
             "ok"
         }
         Err(CoreError::Validation(_)) => "validation",

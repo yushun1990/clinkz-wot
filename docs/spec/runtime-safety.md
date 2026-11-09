@@ -483,3 +483,24 @@ a changed allowance produces a
 validation failure without calling an unfunded output validator. Restoring the
 declaration cannot reopen that terminal failure. Close continues on its separate
 cleanup budget without handler/codec credits, even if service metadata changed.
+
+## Declared finite failures
+
+A validated TD-declared application failure remains an original output with
+ApplicationError status and its selected branch/data. It does not replace a
+first cancellation, timeout, policy or authority cause. Normal, unread and late
+outputs retain original definitions, actual services, bounded result backing and
+cleanup funding through disposal. Failed schema checks remain validation errors
+and retain rejected Consumer output under the existing settlement loan.
+Producer failure after behavior entry and Consumer failure after native progress
+remain effect-uncertain; a declared error cannot prove pre-effect refusal or
+rollback. Delivery of that error response is separately observable. The shared
+finite transition kernel and Security verification/revision ordering are unchanged.
+
+The response-context loan is obtained before the final pre-handler currentness,
+service-pair and security-revision checks. It exposes immutable meaning only;
+its callback cannot dispatch, perform I/O or refresh authority. The original
+native work retains its mapping/contract through validation and delivery.
+Clearing native work after physical retirement cannot redirect an accepted or
+late result to a sibling mapping. A borrowed handler context cannot outlive that
+original owner or turn branch inspection into native execution authority.

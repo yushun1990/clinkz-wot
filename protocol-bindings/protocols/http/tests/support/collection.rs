@@ -91,6 +91,8 @@ struct Application {
     fails: Cell<bool>,
     drops: Cell<usize>,
     fixed_selection_response: Cell<bool>,
+    selected_status: Cell<InteractionStatus>,
+    selected_response: Cell<ResponseSelection>,
     selections: RefCell<Vec<Vec<String>>>,
     authorizations: Cell<usize>,
     write_fault: Cell<u8>,
@@ -151,9 +153,17 @@ impl RawFiniteHandler for Behavior {
                                 (n, value)
                             })
                             .collect();
-                        return Ok(InteractionOutput::with_data(payload(
-                            &serde_json::to_vec(&selected).unwrap(),
-                        )));
+                        return Ok(
+                            InteractionOutput::with_data(payload(
+                                &serde_json::to_vec(&selected).unwrap(),
+                            ))
+                            .with_status(self.0.selected_status.get())
+                            .try_with_metadata(
+                                InteractionOutputMetadata::default()
+                                    .with_response_selection(self.0.selected_response.get()),
+                            )
+                            .unwrap(),
+                        );
                     }
                 }
                 Ok(InteractionOutput::with_data(payload(
@@ -1250,8 +1260,9 @@ fn verify_collection_cleanup(operation: Operation) {
             temporary.used - walk.used,
             schema_drop
                 + clinkz_wot_planning::security::CLEANUP_WORK
-                + security::SecurityRequirement::NOSEC.drop_work(),
-            "schema and security owners need independent cleanup credit"
+                + security::SecurityRequirement::NOSEC.drop_work()
+                + 2, // The primary response media/set also needs rollback credit.
+            "schema, security and response owners need independent cleanup credit"
         );
         assert!(compiled.error.is_none());
         assert_eq!(compiled.selected, 1);
@@ -1448,7 +1459,8 @@ fn verify_collection_validator_bound(operation: Operation) {
             .clone();
         let config = HttpFiniteConfig::try_new(listen, program, key, AffordanceTarget::Thing, 1000)
             .unwrap_or_else(|_| panic!());
-        let initial = config.additional_validation_work();
+        let actual = HttpFiniteBinding::new(config.clone(), BindingId::new(97), BindingGeneration::INITIAL);
+        let initial = actual.validator().unwrap().additional_validation_work();
         let next = if increase { initial + 1 } else { initial - 1 };
         let allowance = Rc::new(Cell::new(initial));
         let hold_close = Rc::new(Cell::new(true));
@@ -1472,11 +1484,7 @@ fn verify_collection_validator_bound(operation: Operation) {
         .unwrap_or_else(|_| panic!());
         let mut native = RawFiniteRuntime::try_new(
             ChangingNative {
-                actual: HttpFiniteBinding::new(
-                    config.clone(),
-                    BindingId::new(97),
-                    BindingGeneration::INITIAL,
-                ),
+                actual,
                 allowance: allowance.clone(),
                 validated: validated.clone(),
                 hold_close: hold_close.clone(),

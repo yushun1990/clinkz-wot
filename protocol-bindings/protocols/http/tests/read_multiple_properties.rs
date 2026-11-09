@@ -17,6 +17,50 @@ fn body(result: &ConsumerSettlement) -> Value {
 }
 
 #[test]
+fn producer_rejects_undeclared_selected_read_status_and_branch_before_native_encoding() {
+    io().block_on(async {
+        let addr = address();
+        let td = selected_description(addr);
+        let mut server = Fixture::new(td.clone());
+        let accounts = bank();
+        let owner = consumer_instance();
+        let client = client(
+            td,
+            Arc::new(AtomicBool::new(false)),
+            accounts.clone(),
+            &owner,
+        );
+        for (status, selection) in [
+            (
+                InteractionStatus::ApplicationError,
+                ResponseSelection::Primary,
+            ),
+            (InteractionStatus::Ok, ResponseSelection::Additional(0)),
+            (
+                InteractionStatus::ApplicationError,
+                ResponseSelection::Additional(0),
+            ),
+        ] {
+            server.app.selected_status.set(status);
+            server.app.selected_response.set(selection);
+            let mut call = start_selected(&client, &["on"]);
+            let (local, remote) = server.exchange(&mut call).await;
+            assert!(
+                matches!(remote.result, Err(CoreError::Validation(context))
+                if context.phase() == ErrorPhase::Validate),
+                "valid selected data cannot certify an undeclared response status/branch"
+            );
+            assert_eq!(remote.effect, FiniteEffect::Unknown);
+            assert!(local.result().is_err());
+        }
+        assert_eq!(server.app.roots.get(), 3);
+        drop(client);
+        clean(&accounts);
+        server.close();
+    });
+}
+
+#[test]
 fn same_td_supports_different_per_call_subsets_and_distinct_read_all() {
     io().block_on(async {
         let addr = address();

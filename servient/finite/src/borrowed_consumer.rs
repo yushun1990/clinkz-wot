@@ -65,7 +65,15 @@ impl<'a, B: ReadBinding> ReadDefinition<'a, B> {
         Ok(definition)
     }
     fn check(&self) -> CoreResult<()> {
-        if self.binding.configuration() != &self.configuration
+        if self.meaning.responses().is_some_and(|r| {
+            !r.additional().is_empty()
+                || r.get(clinkz_wot_core::ResponseSelection::Primary)
+                    .is_none_or(|primary| {
+                        primary.content_type.as_ref() != self.media
+                            || primary.data
+                                != clinkz_wot_core::execution::responses::ResponseData::Operation
+                    })
+        }) || self.binding.configuration() != &self.configuration
             || self.binding.mapping(self.program) != self.mapping
             || self.binding.backing_bytes() != self.backing_bytes
             || self.validator.work() != self.validation_work

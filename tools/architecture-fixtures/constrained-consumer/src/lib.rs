@@ -5,7 +5,7 @@
 use clinkz_wot_core::{
     BindingGeneration, BindingId, BindingResponseMetadata, CoreError, CoreResult, Deadline,
     ErrorContext, ErrorPhase, InteractionOutputMetadata, InteractionOutputView, InteractionStatus,
-    Operation, PayloadView, PlanId, ResponsePayloadRole, RetryClass,
+    Operation, PayloadView, PlanId, ResponsePayloadRole, ResponseSelection, RetryClass,
     data_schema::{NumberValue, PreparedSchema, SchemaViolation, ValueAccess, ValueType},
     execution::{ValueExecution, read::*},
 };
@@ -153,7 +153,7 @@ impl<'a, S: TestDatagrams> TestCall<'a, S> {
             plan
         };
         let mut metadata = InteractionOutputMetadata::default().with_untrusted_binding_response(
-            BindingResponseMetadata::primary(binding, generation, plan, 0),
+            BindingResponseMetadata::new(binding, generation, plan, ResponseSelection::Primary),
         );
         if flags == 5 {
             metadata = metadata.with_payload_role(ResponsePayloadRole::OperationStatus);

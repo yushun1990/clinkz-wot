@@ -713,7 +713,12 @@ fn normal_and_both_late_paths_preserve_validation_raw_errors_budget_and_deadline
                 } else if matches!(kind, OutputKind::Valid | OutputKind::NativeStatus(_)) {
                     let output = result.unwrap();
                     assert_eq!(
-                        output.metadata().binding_response().unwrap().status_code(),
+                        output
+                            .metadata()
+                            .binding_response()
+                            .unwrap()
+                            .status_code()
+                            .unwrap(),
                         if matches!(kind, OutputKind::NativeStatus(_)) {
                             599
                         } else {

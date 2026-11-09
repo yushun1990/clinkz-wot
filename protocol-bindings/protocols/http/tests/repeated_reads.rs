@@ -68,7 +68,12 @@ fn hundred_alternating_public_reads_are_source_free_and_use_fresh_connections() 
                 if i % 2 == 0 { b"17" } else { b"29" }
             );
             assert_eq!(
-                output.metadata().binding_response().unwrap().status_code(),
+                output
+                    .metadata()
+                    .binding_response()
+                    .unwrap()
+                    .status_code()
+                    .unwrap(),
                 200
             );
             drop(output);

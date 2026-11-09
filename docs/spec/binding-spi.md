@@ -514,3 +514,39 @@ before verification and recheck the whole sequence after the last callback,
 including when one verifier invalidates another. Identity equality cannot replace
 this check. Core's EXEC-SECURITY-001 owns the shared composition/authority contract;
 concrete Binding documentation owns supported mechanisms and identity composition.
+
+## TD-described finite response identification
+
+A concrete finite Binding qualifies and retains its own unambiguous native
+mapping for every admitted primary/additional response. TD branch identity is
+independent of native status type, numeric range or representation. A Binding
+may classify by content type, native codes, headers or another protocol-native
+mechanism; the Engine defines none of those matching schemes. Native numeric
+status in BindingResponseMetadata is optional diagnostic provenance. It cannot
+supply WoT success or enlarge the original owner's admitted response set.
+
+Native classification returns the original TD branch and terminal disposition;
+the result owner independently checks admitted shape, exact media/coding and the
+selected schema through captured services. Supplying an arbitrary additional
+index or plausible native status is insufficient. A Producer's branch choice
+likewise passes captured validation before native encoding. Raw carriers admit
+only their narrower documented primary shapes. Local delivery failure and an
+application-declared error response remain different outcomes. The actual
+Binding must refuse continuing/accepted native states when it cannot establish
+the claimed finite semantics; an HTTP status number has no meaning in Core.
+
+The [HTTP response profile](../../protocol-bindings/protocols/http/README.md#td-described-finite-response-alternatives)
+provides the first concrete mapping. It does not define a universal response
+manager, codec family, success-code class or replacement for continuing lifetimes.
+
+`FiniteValidator::response_contract` lends the original accepted opportunity's
+common alternatives to HandlerContext; alternative-capable providers/wrappers
+must supply/forward that loan. Its bounded pure work belongs to the captured
+validation allowance. Target/operation equality cannot substitute a sibling
+Form's contract. Actual native attribution/correlation remains Binding-owned:
+HTTP's exclusive exchange retains its matched mapping index through validation
+and reply, and its validator uses that original index for both data roles and
+context lending. The index is checked against the original private reply's
+correlation, rather than exposed as a universal Engine route/Form token.
+Other native concurrency/lifetime strategies must establish equivalent original
+attribution within their own capabilities.

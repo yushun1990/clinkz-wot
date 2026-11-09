@@ -60,7 +60,7 @@ fn primary_binding_response_metadata_round_trips() {
     assert_eq!(metadata.binding_generation(), BindingGeneration::INITIAL);
     assert_eq!(metadata.plan_id(), plan_id());
     assert_eq!(metadata.selection(), ResponseSelection::Primary);
-    assert_eq!(metadata.status_code(), 204);
+    assert_eq!(metadata.status_code().unwrap(), 204);
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn additional_binding_response_metadata_enforces_every_limit_boundary() {
     assert_eq!(accepted.binding_generation(), binding_generation);
     assert_eq!(accepted.plan_id(), plan_id);
     assert_eq!(accepted.selection(), ResponseSelection::Additional(0));
-    assert_eq!(accepted.status_code(), 206);
+    assert_eq!(accepted.status_code().unwrap(), 206);
     assert_eq!(
         BindingResponseMetadata::try_additional(
             binding_id,

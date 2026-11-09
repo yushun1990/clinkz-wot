@@ -110,6 +110,9 @@ impl core::fmt::Debug for RawFiniteSettlement {
 /// collection write handler must report success only after the requested write has
 /// completed; failure after entry cannot establish absence of partial effects.
 pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutput) -> bool {
+    if output.metadata().response_selection() != crate::ResponseSelection::Primary {
+        return false;
+    }
     match operation {
         Operation::ReadProperty
         | Operation::ReadAllProperties
@@ -131,6 +134,18 @@ pub fn raw_finite_property_shape(operation: Operation, output: &InteractionOutpu
         }
         _ => false,
     }
+}
+
+/// General terminal handler shape. Only a captured validator may admit a TD
+/// alternative; this check alone grants no branch/media/schema support.
+pub fn finite_handler_shape(output: &InteractionOutput) -> bool {
+    let metadata = output.metadata();
+    matches!(
+        output.status(),
+        InteractionStatus::Ok | InteractionStatus::ApplicationError
+    ) && metadata.payload_role() == ResponsePayloadRole::Application
+        && metadata.action_invocation().is_none()
+        && metadata.binding_response().is_none()
 }
 
 /// Binding-owned matching, I/O, correlation and physical retirement for finite
@@ -262,6 +277,16 @@ pub trait FiniteValidator {
     /// immediately before output validation. Zero retains that base policy.
     fn additional_validation_work(&self) -> u64 {
         0
+    }
+    /// Common response meaning for this exact original native opportunity.
+    /// Pure bounded lending, with no TD lookup, I/O or dispatch authority.
+    /// Alternative-capable mappings lend their original contract to behavior;
+    /// raw/primary-only services may omit it. Work is included above.
+    fn response_contract(
+        &self,
+        _candidate: &FiniteCandidate,
+    ) -> CoreResult<Option<&crate::execution::responses::FiniteResponses>> {
+        Ok(None)
     }
     fn validate_input(
         &self,

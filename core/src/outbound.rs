@@ -36,9 +36,21 @@ pub struct OutboundRequest {
     uri_variables: BTreeMap<String, String>,
     deadline: Option<Deadline>,
     security: Option<crate::security::OutboundSecurity>,
+    responses: crate::execution::responses::FiniteResponseShape,
 }
 
 impl OutboundRequest {
+    pub fn with_responses(
+        mut self,
+        responses: crate::execution::responses::FiniteResponseShape,
+    ) -> Self {
+        self.responses = responses;
+        self
+    }
+    pub const fn responses(&self) -> crate::execution::responses::FiniteResponseShape {
+        self.responses
+    }
+
     /// Constructs one structurally valid selected name-free Property Read
     /// request.
     ///
@@ -147,6 +159,7 @@ impl OutboundRequest {
             uri_variables,
             deadline,
             security: None,
+            responses: crate::execution::responses::FiniteResponseShape::primary(operation),
         })
     }
 

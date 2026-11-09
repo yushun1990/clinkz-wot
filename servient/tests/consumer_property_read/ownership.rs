@@ -770,7 +770,11 @@ fn owned_static_real_planning_multiple_targets_source_destruction_and_zero_engin
             .unwrap()
             .unwrap();
         assert_eq!(
-            out.metadata().binding_response().unwrap().status_code(),
+            out.metadata()
+                .binding_response()
+                .unwrap()
+                .status_code()
+                .unwrap(),
             599
         );
         assert_eq!(pool.used(), 8);
