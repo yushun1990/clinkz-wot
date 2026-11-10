@@ -440,29 +440,29 @@ fn hard_limits(definition: &Arc<ConsumerDefinition>) {
             Arc::new(AtomicBool::new(false)),
             &mut work(),
         );
-        let result = ConsumerAssociation::try_new(
-            owner.reference(),
-            vec![binding],
-            vec![],
-            account.clone(),
-        )
-        .map(|association| {
-            (
-                association,
-                ConsumerCalls::try_new(account.clone(), slots).unwrap(),
-            )
-        });
-        assert_eq!(result.is_ok(), slots == 32);
-        if let Err(ref rejection) = result {
-            assert_eq!(rejection.input().0.len(), 1);
+        let association =
+            ConsumerAssociation::try_new(owner.reference(), vec![binding], vec![], account.clone())
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let before_capacity = ResourceKind::ALL.map(|k| account.account(k).used());
+        let capacity = ConsumerCalls::try_new(account.clone(), slots);
+        assert_eq!(capacity.is_ok(), slots == 32);
+        if capacity.is_err() {
+            assert_eq!(association.consumer(), owner.reference());
+            assert!(association.consumer().is_current());
+            assert_eq!(
+                ResourceKind::ALL.map(|k| account.account(k).used()),
+                before_capacity,
+            );
         }
-        drop(result);
+        drop(capacity);
+        drop(association);
         drop(owner);
         clean(&account);
     }
     emit(
         json!({"phase": "hard_limits", "registry_32_accepted_33_refused": true,
-        "runtime_slots_32_accepted_0_and_33_refused": true, "refusal_returns_binding": true}),
+        "call_slots_32_accepted_0_and_33_refused": true,
+        "capacity_refusal_preserves_association": true}),
     );
 }
 enum Handle {

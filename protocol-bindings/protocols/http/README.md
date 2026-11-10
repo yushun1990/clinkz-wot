@@ -42,7 +42,7 @@ verifier returns unchanged identity. Mutable services must publish non-reused
 passive revisions; immutable services may use zero. Native refusal responses can
 be delivered without authorizing application data.
 
-Credentials remain in per-instance runtime services and original replies. Grants
+Credentials remain in instance-bound access services and original replies. Grants
 bind the exact conjunction, audience URL, operation, registration and incarnation.
 `replace_credentials` / `replace_api_key` invalidate existing bindings and unread
 results; rebind the unchanged selected definition to adopt new state. Original
@@ -63,13 +63,50 @@ and [initial Basic/TLS evidence](../../../docs/evidence/td-security-https.md).
 # Host HTTP Properties, Actions and Finite Collections
 
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
-open `ConsumerRegistry`/`ConsumerRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
+open `ConsumerRegistry`, `ConsumerAssociation` and `ConsumerCalls`.
+`HttpConsumerConfig::for_cleartext_ip()` explicitly
 permits cleartext IP access; `try_consumer_registration` constructs one complete,
 Consumer-only registration without I/O. Its native compiler implements the
 bounded NoSec / effective `application/json` Property Read/Write mapping from
 TD-resolved semantic input. The [composed Write subset](#composed-property-readwrite)
 uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
 uses `try_inline_consumer_registration` and remains a restricted Read adapter.
+
+Prepare bindings with `ConsumerRegistry`, then attach their original Consumer
+authority through `ConsumerAssociation`. Construct finite capacity separately
+and pass it as the first argument to each association method. For a Property
+Read prepared using `instance_accounts`:
+
+```rust
+use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls};
+
+let (bindings, funding) = prepared.into_execution();
+let association = ConsumerAssociation::try_new(
+    consumer.reference(), bindings, funding, instance_accounts.clone(),
+).unwrap_or_else(|e| panic!("{:?}", e.error()));
+let calls = ConsumerCalls::try_new(work_accounts.clone(), 1).unwrap();
+let mut call = association.read_property(
+    &calls, "level", deadline, now, &mut budget,
+).unwrap();
+```
+
+`instance_accounts` must match the bank attached to those bindings;
+`work_accounts` may be the same bank or a separately provisioned one. An
+association retains checked mappings and policy without vacant call slots.
+Several associations may use one `ConsumerCalls`, and an association may use
+several capacity owners without repeating preparation. Each admitted call keeps
+its original authority, operands, accounts and cleanup. Native availability and
+instance/work quotas can still refuse admission.
+
+Keep the association and chosen work owner alive while admitting and driving
+work. Association close/Drop passively fences its calls across capacity owners;
+work-owner close/Drop fences only calls admitted there. Handles can continue
+original cleanup after root loss, and returned settlements retain their funding.
+Use `calls.step(&mut cx, now, &mut budget)` to progress cleanup after handles
+are abandoned. The
+[runnable Read example](examples/read_property.rs) shows preparation, both
+owners and manual polling; [Runtime Safety](../../../docs/spec/runtime-safety.md)
+defines their full lifetime contracts.
 
 The open finite path uses the bounded [prepared DataSchema subset](../../../docs/evidence/structured-dataschema.md).
 Nested object properties/required names, exact integer inclusive/exclusive bounds
@@ -93,7 +130,7 @@ The restricted Read path declines URI variables; the modern finite Property
 facet supports the bounded dynamic profile below. The restricted registration
 marks templates unsupported during preparation, so default Form selection can
 reach a supported static alternative. Unsupported targets return the
-original request before raw acceptance. No TD rescan, DNS, pool, redirect, retry, decompression,
+original request before raw acceptance. No TD rescan, DNS, native connection pool, redirect, retry, decompression,
 upgrade, background task or detached driver is involved.
 
 The Consumer tranche is complete within its independently accepted scope; its
@@ -601,7 +638,8 @@ from measured OS/SDK or total allocator maxima.
 ## Composed Property Read/Write
 
 The open `ConsumerRegistry` prepares separate `ReadProperty` and `WriteProperty`
-definitions from each effective TD Form operation. `ConsumerRuntime::write_property`
+definitions from each effective TD Form operation.
+`association.write_property(&calls, name, payload, deadline, now, &mut budget)`
 takes the Property value as a `Payload`, validates it with the captured actual
 data service and authorizes the original Consumer/operation before native I/O.
 Its recoverable local rejection returns the original payload. Execution retains
@@ -781,7 +819,10 @@ automatic progress and remote effect certainty remain unsupported.
 
 The `read_property` example now uses open startup registration through
 `planning::open_consumer::ConsumerRegistry` and the source-free
-`servient_finite::consumer::ConsumerRuntime`. `try_consumer_registration` returns
+`clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls}`.
+The association captures the original Consumer and bindings; separately
+constructed capacity is supplied to `association.read_property(&calls, name,
+deadline, now, &mut budget)`. `try_consumer_registration` returns
 the actual compiler/executor/configuration and JSON/type plus cleartext-IP access
 services. Complete type-only schema and NoSec support is checked in preparation;
 codec/type validation runs on normal and late output. Unsupported schema/security
@@ -874,7 +915,8 @@ remote effect certainty.
 
 The open Consumer and completely qualified composed Producer support TD 1.1
 `readallproperties` on an **actual Thing-root Form**. The Consumer API is
-`ConsumerRuntime::read_all_properties(deadline, now, budget)`. The root definition
+`association.read_all_properties(&calls, deadline, now, &mut budget)`.
+The root definition
 retains the selected Form, actual registration/configuration, data/access services
 and an owned schema for every described readable Property. A root mapping can be
 selected independently of individual Property Form support. Producer publication
@@ -951,7 +993,7 @@ complete final TD before writing it and retires its listener/accounts on exit.
 
 ## Thing-root ReadMultipleProperties
 
-`ConsumerRuntime::read_multiple_properties(&["level"], deadline, now, budget)`
+`association.read_multiple_properties(&calls, &["level"], deadline, now, &mut budget)`
 selects members for one actual Thing-root `readmultipleproperties` interaction.
 Preparation retains all eligible readable names/schemas, actual services and the
 selected root Form. It performs no request encoding. Each call checks exact names
@@ -1019,7 +1061,7 @@ security, HTTPS, constrained profiles and production qualification remain open.
 
 ## Thing-root WriteAllProperties
 
-`ConsumerRuntime::write_all_properties(payload, deadline, now, budget)` selects
+`association.write_all_properties(&calls, payload, deadline, now, &mut budget)` selects
 one actual Thing-root `writeallproperties` Form and returns the original payload
 on local refusal. Preparation retains every writable (non-readOnly) member's
 name and supported prepared schema, including writeOnly members. The actual
@@ -1084,7 +1126,7 @@ cargo run -p clinkz-wot-binding-http --example read_all_properties -- /tmp/colle
 
 ## Thing-root WriteMultipleProperties
 
-`ConsumerRuntime::write_multiple_properties(payload, deadline, now, budget)`
+`association.write_multiple_properties(&calls, payload, deadline, now, &mut budget)`
 selects an actual root `writemultipleproperties` Form. The payload is one JSON
 object of selected writable names and their new values, each validated against
 its own original Property schema. Omitted writable members are untouched by this
@@ -1139,7 +1181,8 @@ cargo test --locked --offline -p clinkz-wot-binding-http --test write_multiple_p
 A root `queryallactions` Form with explicit `htv:methodName: "GET"`, JSON,
 endpoint NoSec and a supported primary 200 response selects one native status
 query. TD 1.1 has no HTTP method default for this operation. The Consumer uses
-`ConsumerRuntime::query_all_actions`; it needs no prior invocation handles and
+`association.query_all_actions(&calls, deadline, now, &mut budget)`;
+it needs no prior invocation handles and
 retains its own original query authority/services through normal or late result
 settlement. Root status responses do not grant local Action control authority.
 
@@ -1208,7 +1251,7 @@ same borrowed views, including late native success fenced by cancellation or
 revocation. `ConsumerNativeOutcome` preserves native retry/cleanup evidence
 separately from application failure. Sharing a Consumer settlement keeps the
 original response, native owner and original account reservations alive even
-after call/runtime disposal; final owner disposal releases them. Explicit copies
+after call or root disposal; final owner disposal releases them. Explicit copies
 own distinct backing and do not retain the original response allocation.
 Consumer QueryAllActions preparation qualifies every resolved response assertion,
 including foreign-vocabulary predicates; unsupported envelope instructions refuse
@@ -1228,8 +1271,10 @@ never sends an Action cancel or reinvokes application behavior.
 Modern finite Consumer Property Read/Write supports the shared bounded
 [URI-variable profile](../../../docs/evidence/uri-variables.md). Thing variables
 and affordance overrides have one shared schema interpretation. Calls use
-`read_property_with_variables` / `write_property_with_variables` with unescaped
-scalar lexical values; e.g. a prepared
+`association.read_property_with_variables(&calls, name, variables, deadline,
+now, &mut budget)` or `association.write_property_with_variables(&calls, name,
+payload, variables, deadline, now, &mut budget)` with unescaped scalar lexical
+values; e.g. a prepared
 `http://127.0.0.1:{port}/devices/{name}{?detail}` mapping can contact different
 ports and paths without constructing new definitions or retaining the TD.
 
