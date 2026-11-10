@@ -57,6 +57,19 @@ work owner; final owner disposal uses the qualified finite local-abort contract,
 without claiming remote cancellation or network drain. Returned settlements keep
 their own backing through final disposal, independent of root and slot reuse.
 
+The manual finite API does not implement `Future` or install a background timer.
+Its caller MUST arrange a funded `ConsumerCall::poll` or `ConsumerCalls::step`
+turn after passive association/instance invalidation or handle abandonment, and
+continue providing progress while cleanup is pending. An application tick or
+explicit notification to its existing driver is sufficient; waiting only for
+native I/O wakes is not. A retained handle's explicit `cancel` can notify its
+registered driver, while preserving an earlier revocation cause. Notification
+requests a turn; it neither supplies work credit nor performs cleanup.
+Without further application progress, retained work can remain pending
+indefinitely, still fenced and funded. Bounded local disposal at final owner
+release is distinct from a guarantee that an application eventually drives or
+disposes that owner. No autonomous cleanup or remote acknowledgement follows.
+
 Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
 rules. Its bounded schema/name backing and destruction stay funded through final

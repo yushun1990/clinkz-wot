@@ -466,3 +466,95 @@ fn a_specialized_mapping_does_not_gain_dynamic_destination_authority_from_shared
         }
     });
 }
+
+struct ProgressWake(std::sync::atomic::AtomicUsize);
+impl std::task::Wake for ProgressWake {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+#[test]
+fn quiet_http_peer_needs_application_progress_after_passive_association_loss() {
+    io().block_on(async {
+        for (drop_association, abandon_handle) in [(false, false), (true, false), (false, true)] {
+            let peer = Peer::new();
+            peer.paused.store(true, Ordering::Release);
+            let backing = bank();
+            let definition = definition(&dynamic_td(false), &backing).unwrap();
+            let owner = consumer_instance();
+            let identity = owner.reference();
+            let account = limited_bank(1);
+            let work_bank = limited_bank(1);
+            let mut association = Some(associate(&definition, &owner, &account, &[&peer]));
+            let calls = ConsumerCalls::try_new(work_bank.clone(), 1).unwrap();
+            let mut call = start(association.as_ref().unwrap(), &calls, &peer).unwrap();
+            received(&peer, &mut call).await;
+            let wakes = Arc::new(ProgressWake(std::sync::atomic::AtomicUsize::new(0)));
+            let waker = Waker::from(wakes.clone());
+            let mut driver = Context::from_waker(&waker);
+            assert!(call.poll(&mut driver, now(0), &mut work()).is_pending());
+            let funded = ResourceKind::ALL.map(|k| work_bank.account(k).used());
+            wakes.0.store(0, Ordering::Release);
+            if drop_association {
+                drop(association.take());
+            } else {
+                association.as_ref().unwrap().begin_close();
+            }
+            // Closing this association does not revoke the underlying Consumer
+            // or run a registered driver. The next driver turn is the caller's
+            // obligation even if the native peer never sends another byte.
+            assert!(identity.is_current());
+            assert_eq!(wakes.0.load(Ordering::Acquire), 0);
+            assert!(!calls.is_idle());
+            assert_eq!(peer.closed.load(Ordering::Acquire), 0);
+            assert!(
+                call.poll(&mut driver, now(0), &mut WorkBudget::new())
+                    .is_pending()
+            );
+            assert_eq!(
+                ResourceKind::ALL.map(|k| work_bank.account(k).used()),
+                funded
+            );
+            assert_eq!((outstanding(&account), outstanding(&work_bank)), (1, 1));
+            if abandon_handle {
+                drop(call);
+                calls.step(&mut driver, now(0), &mut WorkBudget::new());
+                assert!(!calls.is_idle());
+                assert_eq!(outstanding(&work_bank), 1);
+                calls.step(&mut driver, now(0), &mut work());
+            } else {
+                // The same cleanup owner can advance a retained handle. Native
+                // response activity is not needed to cancel the HTTP exchange.
+                calls.step(&mut driver, now(0), &mut work());
+                let Poll::Ready(result) = call.poll(&mut driver, now(0), &mut work()) else {
+                    panic!("funded HTTP local cancellation did not settle");
+                };
+                assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));
+                assert_eq!(result.consumer(), &identity);
+                assert!(matches!(
+                    result.native_outcome(),
+                    ConsumerNativeOutcome::Cancelled { .. }
+                ));
+                drop(call);
+                assert_eq!((outstanding(&account), outstanding(&work_bank)), (1, 1));
+                drop(result);
+            }
+            assert!(calls.is_idle());
+            assert_eq!((outstanding(&account), outstanding(&work_bank)), (0, 0));
+            let stop = Instant::now() + Duration::from_secs(5);
+            while peer.closed.load(Ordering::Acquire) == 0 {
+                assert!(
+                    Instant::now() < stop,
+                    "explicit progress retained the silent socket"
+                );
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            assert_eq!(peer.count(), 1);
+            drop((association, calls, definition, owner));
+            for account in [&backing, &account, &work_bank] {
+                clean(account);
+            }
+        }
+    });
+}

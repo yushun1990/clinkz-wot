@@ -326,6 +326,7 @@ impl ConsumerAccessService for Policy {
 }
 struct Instance {
     owner: Option<ConsumerInstance>,
+    // This workload chooses dedicated capacity; associations need not own it.
     runtime: Option<(ConsumerAssociation, ConsumerCalls)>,
     denied: Arc<AtomicBool>,
 }
@@ -757,6 +758,7 @@ async fn run(o: Options) {
         json!({"phase": "configuration", "population": o.population, "active": o.active, "lanes": o.lanes,
         "slots": o.slots, "members": o.members, "rounds": o.rounds, "mode": o.mode,
         "driver": o.driver, "accounts": o.accounts, "delay_us": o.delay_us,
+        "capacity_layout": "dedicated_per_instance",
         "native_mappings": o.mappings(), "physical_peer_processes": 1,
         "account_size": size_of::<HostResourceAccounts>(), "result_owner_size": size_of::<ConsumerSettlement>(), "instance_owner_size": size_of::<Instance>() }),
     );

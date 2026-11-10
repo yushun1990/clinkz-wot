@@ -1,5 +1,14 @@
 # Multi-instance Consumer execution scalability
 
+**Recorded scope:** the assessment and numbers below belong to the pinned
+baseline, measured and targeted-load revisions listed here. They describe the
+then-current bundled runtime with dedicated per-instance call slots, not the
+replacement association/work-owner layout or association-only idle cost. The
+current executable still deliberately provisions dedicated capacity; its
+[workload documentation](../../tools/multi-instance/README.md) states that choice.
+For numeric reproduction, check out the selected recorded revision before
+building. Running the commands on another revision characterizes that revision.
+
 Preserve the current reusable-content, exact-definition and instance-binding
 seams for the tested Host finite path. They support 10,000 independently
 authorized logical instances with stable execution throughput at a fixed native
@@ -121,7 +130,7 @@ For shared definitions, one measured idle instance consists of:
 The bundle makes 14 allocation requests per instance plus one root-vector
 allocation. Runtime construction accounts for seven of those requests. A vacant
 inline slot is **1,792 bytes**; each additional provisioned slot adds that amount.
-These are current layouts for this fixture, not ABI commitments or a requirement
+These are layouts at the measured revision, not ABI commitments or a requirement
 for this number of public types. The example permission service is application
 code; its cost is not an irreducible Engine cost.
 

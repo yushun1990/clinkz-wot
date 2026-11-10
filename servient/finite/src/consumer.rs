@@ -310,6 +310,10 @@ impl Definition {
 
 /// Persistently usable checked mappings, policy and independent instance authority.
 /// This association owns no vacant calls. Supply a `ConsumerCalls` at admission.
+///
+/// Close/Drop invalidates authority passively; it neither wakes a call driver
+/// nor polls native cleanup. The application must schedule original call polls
+/// or work-owner steps after invalidation, even when native I/O stays silent.
 pub struct ConsumerAssociation {
     state: Association,
 }
@@ -334,6 +338,13 @@ impl AssociationAuthority {
 /// Explicit, caller-driven finite execution capacity, independent of associations.
 /// Any association may use several owners; one owner may serve many associations.
 /// Drop fences only work admitted here. It does not revoke any Consumer instance.
+///
+/// The application owns progress scheduling, time observations and work credit.
+/// Native wakes alone are insufficient: arrange a driver turn after passive
+/// authority changes or handle abandonment, and continue driving pending cleanup.
+/// A periodic application tick or an explicit application notification can do
+/// this. Retained work can remain pending indefinitely if the driver stops;
+/// funding and wake registration do not guarantee eventual execution.
 pub struct ConsumerCalls {
     state: Rc<State>,
 }
@@ -640,6 +651,11 @@ impl ConsumerAssociation {
     }
     /// Recoverable ownership handoff. Only this captured vector supplies native
     /// executors/services; runtime calls accept no compiler/configuration override.
+    /// The bank funds association records and must match the bindings' bank.
+    /// Its PendingHandlerCallsGlobalMax account also limits outstanding calls
+    /// across chosen work owners. Quotas follow banks, not instance identities.
+    /// A shared bank supplies a shared quota; other
+    /// admitted-work byte limits are enforced at the supplied work owner's bank.
     pub fn try_new(
         consumer: ConsumerInstanceRef,
         definitions: Vec<ConsumerBinding>,
@@ -1254,8 +1270,11 @@ impl ConsumerAssociation {
             control,
         })
     }
-    /// Passively close this association. Drive its original call owners to
-    /// finish cleanup. Other associations and Consumer facets remain usable.
+    /// Passively close this association, without waking or driving its calls.
+    /// Schedule original call polls or work-owner steps even without another
+    /// native wake; association Drop requires the same caller scheduling.
+    /// Other associations and
+    /// Consumer facets remain usable.
     pub fn begin_close(&self) {
         self.state.authority.active.set(false);
     }
@@ -1270,6 +1289,8 @@ impl Drop for ConsumerAssociation {
 }
 impl ConsumerCalls {
     /// Fund bounded call storage independently of any logical association.
+    /// This bank also funds admitted work and its outstanding-call quota through
+    /// settlement disposal. It need not be the association's record/quota bank.
     pub fn try_new(bank: Arc<HostResourceAccounts>, calls: usize) -> CoreResult<Self> {
         if !(1..=MAX_CALLS).contains(&calls) {
             return Err(invalid());
@@ -1300,6 +1321,9 @@ impl ConsumerCalls {
         self.state.close();
     }
     /// Drive independent cleanup, including after every call handle was lost.
+    /// The application must schedule these turns independently of native wakes
+    /// after passive invalidation/abandonment. Short credit retains the original
+    /// owner; wake registration does not supply another turn or replenish credit.
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
         let (start, count) = {
             let mut registry = self.state.registry.borrow_mut();
@@ -1352,10 +1376,15 @@ pub struct ConsumerCall {
     control: Rc<CallControl>,
 }
 impl ConsumerCall {
+    /// Record cancellation and notify the currently registered driver, if any.
+    /// The notification requests a poll; it performs no native cleanup itself.
     pub fn cancel(&self) {
         self.control.record(CoreError::Cancelled(context()));
         self.control.wake();
     }
+    /// One explicit progress turn, with caller-supplied time and work credit.
+    /// This is not a Future: native wakes do not cover passive authority changes,
+    /// deadlines or replenished credit. The application must schedule those turns.
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,

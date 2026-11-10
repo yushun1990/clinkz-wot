@@ -103,7 +103,12 @@ work. Association close/Drop passively fences its calls across capacity owners;
 work-owner close/Drop fences only calls admitted there. Handles can continue
 original cleanup after root loss, and returned settlements retain their funding.
 Use `calls.step(&mut cx, now, &mut budget)` to progress cleanup after handles
-are abandoned. The
+are abandoned. The application must schedule a funded driver turn after passive
+association/instance loss and keep driving pending cleanup even if the peer
+sends nothing. Use an application tick or explicit driver notification;
+awaiting only native I/O wakes is insufficient. A retained call's `cancel()`
+wakes its registered driver but still needs a funded poll. There is no internal
+timer or automatic eventual cleanup while owners remain retained. The
 [runnable Read example](examples/read_property.rs) shows preparation, both
 owners and manual polling; [Runtime Safety](../../../docs/spec/runtime-safety.md)
 defines their full lifetime contracts.

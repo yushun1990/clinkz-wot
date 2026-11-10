@@ -44,6 +44,8 @@ owner. A shared instance bank supplies a shared allowance, not per-Thing hard
 isolation. Separate work banks compose only the limits actually shared between
 them; no process-wide aggregate quota is inferred. Other per-instance byte or
 rate isolation is not provided by this outstanding-call debit.
+These counters follow the expressly selected banks; they do not discover or
+aggregate every association sharing one `ConsumerInstance` identity.
 
 Slot removal transfers the complete funded call to its settlement and may reuse
 storage without refunding retained operands/results/cleanup. Physical input
