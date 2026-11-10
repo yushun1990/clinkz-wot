@@ -228,7 +228,7 @@ impl Definition {
     }
     fn start(
         &self,
-        consumer: &ConsumerInstanceRef,
+        control: &CallControl,
         input: Option<Payload>,
         variables: &[(&str, &str)],
         destination: &str,
@@ -246,11 +246,9 @@ impl Definition {
                 BindingOperationalError::new(busy()),
             ));
         }
-        let current = if consumer.is_current() {
-            self.check_dependencies()
-        } else {
-            Err(stale())
-        };
+        let current = control
+            .check_admission(deadline)
+            .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
                 input,
@@ -269,7 +267,7 @@ impl Definition {
             deadline,
         )?;
         let security = match self.input.access.outbound_security(
-            consumer,
+            &control.association.consumer,
             self.binding(),
             destination,
             self.input.definition.operation(),
@@ -283,13 +281,12 @@ impl Definition {
                 ));
             }
         };
-        // Issuance may invalidate its own credentials, wrapped policy or the
-        // original instance. Refuse before constructing native work.
-        let current = if consumer.is_current() {
-            self.check_dependencies()
-        } else {
-            Err(stale())
-        };
+        // Issuance can revoke the association/work owner or advance its saved
+        // control time as well as invalidate credentials/services. Refuse while
+        // the complete original request is recoverable, before native acceptance.
+        let current = control
+            .check_admission(deadline)
+            .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
                 request.into_input(),
@@ -452,6 +449,25 @@ impl CallControl {
     }
     fn cause(&self) -> Option<CoreError> {
         self.cause.borrow().clone()
+    }
+    fn check_admission(&self, deadline: Option<Deadline>) -> CoreResult<()> {
+        // Work-owner close records every original control, including a reserved
+        // admission, before notifying callbacks. Preserve that first cause and
+        // nested time observations; the parent alone cannot fence this facet.
+        if let Some(cause) = self.cause() {
+            return Err(cause);
+        }
+        if !self.association.current() {
+            return Err(stale());
+        }
+        match deadline
+            .unwrap_or(Deadline::NONE)
+            .checked_is_elapsed_at(self.last_time.get())
+        {
+            Some(false) => Ok(()),
+            Some(true) => Err(CoreError::TimedOut(context())),
+            None => Err(clock_error()),
+        }
     }
     // Only public API entry observes caller time. A resumed sweep consumes this
     // latest observation instead of replaying its pre-callback timestamp.
@@ -1443,7 +1459,7 @@ impl ConsumerAssociation {
             .map(|(n, v)| ((*n).into(), (*v).into()))
             .collect();
         let raw = match definition.start(
-            &association.authority.consumer,
+            &control,
             encoded.or(input),
             variables,
             &destination,

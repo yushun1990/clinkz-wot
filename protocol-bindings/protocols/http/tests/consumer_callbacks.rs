@@ -537,6 +537,71 @@ fn authorization_can_close_and_refuse_the_original_write_before_native_construct
 }
 
 #[test]
+fn credential_callback_fences_refuse_native_acceptance_and_recover_original_input() {
+    for http in [false, true] {
+        for change in 0..5 {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let h = harness(1, http.then(|| listener.local_addr().unwrap()));
+            let before = usage(&h.bank);
+            let rt = h.rt.clone();
+            hook(Edge::Issue, move || {
+                assert!(!rt.1.is_idle(), "admission must retain its reserved slot");
+                match change {
+                    0 => rt.0.begin_close(),
+                    1 => rt.1.begin_close(),
+                    2 => rt.1.step(&mut cx(), at(2), &mut work()),
+                    3 => rt.1.step(&mut cx(), at(0), &mut work()),
+                    _ => {
+                        rt.1.begin_close();
+                        rt.1.step(&mut cx(), at(0), &mut work());
+                    }
+                }
+            });
+            let input = Payload::new(b"8".as_slice(), "application/json");
+            let original = input.body.clone();
+            let refused =
+                h.rt.0
+                    .write_property(
+                        &h.rt.1,
+                        "level",
+                        input,
+                        Deadline::at(at(2)),
+                        now(),
+                        &mut work(),
+                    )
+                    .err()
+                    .expect("credential callback fenced the original admission");
+            match change {
+                0 | 1 | 4 => assert!(matches!(refused.error().error(), CoreError::StaleHandle(_))),
+                2 => assert!(matches!(refused.error().error(), CoreError::TimedOut(_))),
+                _ => assert!(matches!(
+                    refused.error().error(),
+                    CoreError::InternalInvariant(_)
+                )),
+            }
+            assert!(h.owner.reference().is_current(), "the parent stays current");
+            let (input, _) = refused.into_parts();
+            assert!(Arc::ptr_eq(&original, &input.body));
+            assert_eq!(input.body.as_ref(), b"8");
+            if !http {
+                assert_eq!(h.probe.starts.load(Ordering::Relaxed), 0);
+                assert_eq!(h.probe.polls.load(Ordering::Relaxed), 0);
+                assert_eq!(h.probe.cancels.load(Ordering::Relaxed), 0);
+                assert_eq!(h.probe.drops.load(Ordering::Relaxed), 0);
+            }
+            assert!(
+                matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock)
+            );
+            assert!(h.rt.1.is_idle());
+            assert_eq!(before, usage(&h.bank));
+            drop((input, original));
+            dispose(h);
+        }
+    }
+}
+
+#[test]
 fn nested_admission_sees_reserved_capacity_and_cannot_overwrite_the_outer_call() {
     for capacity in [1, 2] {
         let h = harness(capacity, None);
