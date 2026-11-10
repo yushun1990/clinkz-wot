@@ -12,6 +12,9 @@ clinkz-wot-foundation = { path = "../foundation", default-features = false }
 critical-section = { version = "1", default-features = false }
 sha2-const-stable = "0.1.0"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { version = "0.2.168", optional = true }
+
 [dev-dependencies]
 critical-section = { version = "1", features = ["std"] }
 
@@ -20,6 +23,6 @@ default = ["std"]
 # Host runtime: std `RwLock` backend for `WotLock`, std error impls, std-only
 # dep flags. Deliberately orthogonal to `async` — `std` alone gives the lock
 # backend without pulling the async syntax surface or any executor.
-std = ["clinkz-wot-foundation/std", "critical-section/std"]
+std = ["clinkz-wot-foundation/std", "critical-section/std", "dep:libc"]
 # Compilation-cell identity for the portable execution contracts; no executor.
 async = ["clinkz-wot-foundation/async"]

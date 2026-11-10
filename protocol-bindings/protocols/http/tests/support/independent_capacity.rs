@@ -558,3 +558,7 @@ fn quiet_http_peer_needs_application_progress_after_passive_association_loss() {
         }
     });
 }
+
+#[cfg(target_os = "linux")]
+#[path = "observable_capacity.rs"]
+mod observable;

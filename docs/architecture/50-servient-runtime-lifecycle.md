@@ -44,6 +44,15 @@ or hiding cancellation. [Runtime Safety](../spec/runtime-safety.md)
 owns the callback, handoff, wake and funding guarantees; this is a correction to
 those distinct owners, not a shared scheduler or automatic execution model.
 
+Finite Host control readiness is separately composed from work storage and native
+I/O. Observable sources enroll actual active drivers at admission, including a
+separately chosen cleanup recipient. They retain no call index. Normal authority
+Drop signals those recipients through qualified bounded native posts; manual and
+static models retain their own progress obligations. Actual aggregate control
+loss locally disposes abandoned finite work instead of leaving it stranded behind
+surviving handles. Explicit close keeps incremental cleanup access. Runtime Safety
+defines the notification handoff, failure and final-disposal boundaries.
+
 ## Distinct lifetimes
 
 Action invocation state can outlive its initiating exchange. A root status query

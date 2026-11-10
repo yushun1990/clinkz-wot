@@ -2,6 +2,9 @@
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::execution::{FiniteCallDriver, FiniteCallState, NativeProgress};
+use clinkz_wot_core::host_change::{
+    HostChangeAuthority, HostChangeLease, HostChangeSignal, HostChangeSource,
+};
 use clinkz_wot_core::thing::AffordanceSite;
 use clinkz_wot_core::{consumer::*, host_accounts::*, *};
 use clinkz_wot_foundation::{
@@ -311,9 +314,10 @@ impl Definition {
 /// Persistently usable checked mappings, policy and independent instance authority.
 /// This association owns no vacant calls. Supply a `ConsumerCalls` at admission.
 ///
-/// Close/Drop invalidates authority passively; it neither wakes a call driver
-/// nor polls native cleanup. The application must schedule original call polls
-/// or work-owner steps after invalidation, even when native I/O stays silent.
+/// Close/Drop invalidates authority before notification. Observable construction
+/// enrolls actual active drivers at admission, without owning work or an executor.
+/// Manual construction requires application scheduling after invalidation.
+/// Neither notification nor invalidation polls native cleanup.
 pub struct ConsumerAssociation {
     state: Association,
 }
@@ -327,6 +331,7 @@ struct Association {
 struct AssociationAuthority {
     consumer: ConsumerInstanceRef,
     active: Cell<bool>,
+    changes: Option<HostChangeAuthority>,
     _funding: Vec<HostCapacityReservation>,
 }
 impl AssociationAuthority {
@@ -340,20 +345,35 @@ impl AssociationAuthority {
 /// Drop fences only work admitted here. It does not revoke any Consumer instance.
 ///
 /// The application owns progress scheduling, time observations and work credit.
-/// Native wakes alone are insufficient: arrange a driver turn after passive
-/// authority changes or handle abandonment, and continue driving pending cleanup.
-/// A periodic application tick or an explicit application notification can do
-/// this. Retained work can remain pending indefinitely if the driver stops;
-/// funding and wake registration do not guarantee eventual execution.
-/// Retain this work owner while abandoned calls need incremental cleanup. After
-/// its Drop, surviving handles drive only their own calls; abandoned siblings
-/// await final shared-state disposal, even if a surviving handle has settled.
+/// Driven construction supplies an actual cleanup recipient; observable sources
+/// enroll it before effects. Manual construction instead requires the caller to
+/// schedule turns after invalidation/abandonment, even with silent native I/O.
+/// Notifications supply no credit or eventual-execution guarantee.
+/// Explicit close retains aggregate cleanup access. Actual facade loss locally
+/// disposes abandoned original work outside registry borrows; retained handles
+/// keep their own reachable cleanup and returned settlements keep their backing.
 pub struct ConsumerCalls {
     state: Rc<State>,
+    call_driver: Option<HostChangeSignal>,
+    owns_control: bool,
+}
+/// Borrowed admission through an existing store with a separately chosen call
+/// driver. It owns no slots and does not close or acquire aggregate control.
+pub struct ConsumerAdmission<'a> {
+    view: ConsumerCalls,
+    _owner: core::marker::PhantomData<&'a ConsumerCalls>,
+}
+impl core::ops::Deref for ConsumerAdmission<'_> {
+    type Target = ConsumerCalls;
+    fn deref(&self) -> &ConsumerCalls {
+        &self.view
+    }
 }
 struct State {
     bank: Arc<HostResourceAccounts>,
     active: Cell<bool>,
+    controller_present: Cell<bool>,
+    cleanup_driver: Option<HostChangeSignal>,
     registry: RefCell<Registry>,
     // Last to drop, after calls and their native/result backing.
     _funding: Vec<HostCapacityReservation>,
@@ -393,6 +413,8 @@ struct CallControl {
     abandoned: Cell<bool>,
     waker: RefCell<Option<core::task::Waker>>,
     recheck: Cell<bool>,
+    driver: Option<HostChangeSignal>,
+    notices: RefCell<Option<CallNotices>>,
     _funding: HostCapacityReservation,
 }
 impl CallControl {
@@ -400,6 +422,7 @@ impl CallControl {
         bank: &Arc<HostResourceAccounts>,
         association: Rc<AssociationAuthority>,
         now: MonotonicInstant,
+        driver: Option<HostChangeSignal>,
     ) -> CoreResult<Rc<Self>> {
         let bytes = (core::mem::size_of::<Self>() + 2 * core::mem::size_of::<usize>()) as u64;
         let funding = bank
@@ -412,6 +435,8 @@ impl CallControl {
             abandoned: Cell::new(false),
             waker: RefCell::new(None),
             recheck: Cell::new(false),
+            driver,
+            notices: RefCell::new(None),
             _funding: funding,
         }))
     }
@@ -446,6 +471,66 @@ impl CallControl {
         if let Some(waker) = waker {
             waker.wake();
         }
+    }
+    fn signal(&self) {
+        if let Some(driver) = &self.driver {
+            let _ = driver.request_turn();
+        }
+    }
+    fn finish_notices(&self) {
+        let notices = self.notices.borrow_mut().take();
+        drop(notices);
+    }
+    fn abandon_notices(&self) {
+        let polling = self
+            .notices
+            .borrow_mut()
+            .as_mut()
+            .and_then(|n| n.polling.take());
+        drop(polling);
+    }
+}
+
+struct CallNotices {
+    // Both sources for the aggregate cleanup role are prepaid even when a
+    // different task polls the handle. Abandonment needs no new subscription.
+    _cleanup: [HostChangeLease; 2],
+    polling: Option<[HostChangeLease; 2]>,
+}
+impl CallNotices {
+    fn acquire(
+        association: &AssociationAuthority,
+        cleanup: &HostChangeSignal,
+        polling: &HostChangeSignal,
+        bank: &Arc<HostResourceAccounts>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Self> {
+        let instance = association
+            .consumer
+            .change_source()
+            .ok_or_else(unsupported)?;
+        let facet = association
+            .changes
+            .as_ref()
+            .ok_or_else(unsupported)?
+            .reference();
+        let pair = |driver: &HostChangeSignal, budget: &mut WorkBudget| -> CoreResult<_> {
+            Ok([
+                instance.subscribe(driver, bank, budget)?,
+                facet.subscribe(driver, bank, budget)?,
+            ])
+        };
+        let cleanup_pair = pair(cleanup, budget)?;
+        // The signal issuer, not an fd or executor label, identifies a recipient.
+        let polling_pair = if cleanup.same_recipient(polling) {
+            None
+        } else {
+            Some(pair(polling, budget)?)
+        };
+        Ok(Self {
+            _cleanup: cleanup_pair,
+            polling: polling_pair,
+        })
     }
 }
 
@@ -541,6 +626,7 @@ impl State {
     }
     fn close(&self) {
         self.revoke();
+        self.signal_drivers();
         let count = self.registry.borrow().slots.len();
         for index in 0..count {
             let control = self.registry.borrow().slots[index].control().cloned();
@@ -548,6 +634,65 @@ impl State {
                 control.wake();
             }
         }
+    }
+    fn signal_drivers(&self) {
+        if let Some(driver) = &self.cleanup_driver {
+            let _ = driver.request_turn();
+        }
+        let count = self.registry.borrow().slots.len();
+        for index in 0..count {
+            let control = self.registry.borrow().slots[index].control().cloned();
+            if let Some(control) = control {
+                control.signal();
+            }
+        }
+    }
+    fn abort_slot(&self, index: usize, sequence: Option<u64>) {
+        if self.controller_present.get() {
+            return;
+        }
+        let removed = {
+            let mut registry = self.registry.borrow_mut();
+            match &registry.slots[index] {
+                Slot::Ready(call)
+                    if call.work.control.abandoned.get()
+                        && sequence.is_none_or(|s| s == call.work.sequence) =>
+                {
+                    Some(core::mem::replace(&mut registry.slots[index], Slot::Vacant))
+                }
+                _ => None,
+            }
+        };
+        // Complete original owner, including its native work and accounts.
+        // A reentrant destructor sees an already vacant slot and closed store.
+        drop(removed);
+    }
+    fn abort_abandoned(&self) {
+        let mut sweep = AbortSweep {
+            state: self,
+            next: 0,
+            count: self.registry.borrow().slots.len(),
+        };
+        sweep.run();
+    }
+}
+struct AbortSweep<'a> {
+    state: &'a State,
+    next: usize,
+    count: usize,
+}
+impl AbortSweep<'_> {
+    fn run(&mut self) {
+        while self.next < self.count {
+            let index = self.next;
+            self.next += 1;
+            self.state.abort_slot(index, None);
+        }
+    }
+}
+impl Drop for AbortSweep<'_> {
+    fn drop(&mut self) {
+        self.run();
     }
 }
 impl SlotLease<'_> {
@@ -564,6 +709,12 @@ impl SlotLease<'_> {
 }
 impl Drop for SlotLease<'_> {
     fn drop(&mut self) {
+        let abort = !self.state.controller_present.get()
+            && self
+                .call
+                .as_ref()
+                .is_some_and(|call| call.work.control.abandoned.get());
+        let aborted = if abort { self.call.take() } else { None };
         let replacement = self.call.take().map_or(Slot::Vacant, Slot::Ready);
         let old = {
             let mut registry = self.state.registry.borrow_mut();
@@ -578,11 +729,20 @@ impl Drop for SlotLease<'_> {
         {
             control.wake();
         }
+        drop(aborted);
     }
 }
 struct Call {
     progress: FiniteCallState,
     work: CallWork,
+}
+impl Drop for Call {
+    fn drop(&mut self) {
+        // Irrevocable local disposal owns the complete object synchronously;
+        // no future driver permission/delivery is owed. Native/result backing
+        // still drops before the original work reservations below.
+        self.work.control.finish_notices();
+    }
 }
 struct CallWork {
     consumer: ConsumerInstanceRef,
@@ -666,6 +826,35 @@ impl ConsumerAssociation {
         bank: Arc<HostResourceAccounts>,
     ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
     {
+        Self::construct(consumer, definitions, funding, bank, None)
+    }
+    /// A dynamically enrolled Host source, with no execution slots or driver
+    /// membership fixed at construction. The instance must also be observable.
+    pub fn try_new_observable(
+        consumer: ConsumerInstanceRef,
+        definitions: Vec<ConsumerBinding>,
+        funding: Vec<HostCapacityReservation>,
+        bank: Arc<HostResourceAccounts>,
+        max_drivers: usize,
+    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
+    {
+        if consumer.change_source().is_none() {
+            return Err(reject((definitions, funding), unsupported()));
+        }
+        let changes = match HostChangeAuthority::try_new(&bank, max_drivers) {
+            Ok(changes) => changes,
+            Err(error) => return Err(reject((definitions, funding), error)),
+        };
+        Self::construct(consumer, definitions, funding, bank, Some(changes))
+    }
+    fn construct(
+        consumer: ConsumerInstanceRef,
+        definitions: Vec<ConsumerBinding>,
+        funding: Vec<HostCapacityReservation>,
+        bank: Arc<HostResourceAccounts>,
+        changes: Option<HostChangeAuthority>,
+    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
+    {
         let error = if !consumer.is_current()
             || definitions.is_empty()
             || definitions.len() > 128
@@ -731,6 +920,7 @@ impl ConsumerAssociation {
                 authority: Rc::new(AssociationAuthority {
                     consumer,
                     active: Cell::new(true),
+                    changes,
                     _funding: authority_funding,
                 }),
                 definitions: entries,
@@ -953,7 +1143,12 @@ impl ConsumerAssociation {
             Ok(reserved) => reserved,
             Err(error) => return Err(reject(input, error)),
         };
-        let control = match CallControl::new(&state.bank, association.authority.clone(), now) {
+        let control = match CallControl::new(
+            &state.bank,
+            association.authority.clone(),
+            now,
+            calls.call_driver.clone(),
+        ) {
             Ok(control) => control,
             Err(error) => return Err(reject(input, error)),
         };
@@ -1217,6 +1412,31 @@ impl ConsumerAssociation {
             Ok(checked) => checked,
             Err(e) => return Err(reject(input, e)),
         };
+        if let Some(driver) = &calls.call_driver {
+            let cleanup = match &state.cleanup_driver {
+                Some(cleanup) => cleanup,
+                None => return Err(reject(input, unsupported())),
+            };
+            let notices = match CallNotices::acquire(
+                &association.authority,
+                cleanup,
+                driver,
+                &state.bank,
+                budget,
+            ) {
+                Ok(notices) => notices,
+                Err(error) => return Err(reject(input, error)),
+            };
+            *control.notices.borrow_mut() = Some(notices);
+            if !association.authority.current() || !state.current() {
+                control.finish_notices();
+                return Err(reject(input, stale()));
+            }
+            if !driver.is_available() || !cleanup.is_available() {
+                control.finish_notices();
+                return Err(reject(input, CoreError::Lifecycle(context())));
+            }
+        }
         let retained_input = encoded.as_ref().or(input.as_ref()).cloned();
         let retained_variables = variables
             .iter()
@@ -1273,21 +1493,30 @@ impl ConsumerAssociation {
             control,
         })
     }
-    /// Passively close this association, without waking or driving its calls.
-    /// Schedule original call polls or work-owner steps even without another
-    /// native wake; association Drop requires the same caller scheduling.
-    /// Other associations and
-    /// Consumer facets remain usable.
+    /// Fence this association before requesting its enrolled drivers' turns.
+    /// Observable Drop follows the same qualified notification path. Manual
+    /// construction needs application scheduling even without another I/O wake.
+    /// Notification performs no cleanup. Other associations/facets remain usable.
     pub fn begin_close(&self) {
         self.state.authority.active.set(false);
+        if let Some(changes) = &self.state.authority.changes {
+            changes.invalidate();
+        }
     }
     pub fn consumer(&self) -> ConsumerInstanceRef {
         self.state.authority.consumer.clone()
     }
+    pub fn change_source(&self) -> Option<HostChangeSource> {
+        self.state
+            .authority
+            .changes
+            .as_ref()
+            .map(HostChangeAuthority::reference)
+    }
 }
 impl Drop for ConsumerAssociation {
     fn drop(&mut self) {
-        self.state.authority.active.set(false);
+        self.begin_close();
     }
 }
 impl ConsumerCalls {
@@ -1295,6 +1524,25 @@ impl ConsumerCalls {
     /// This bank also funds admitted work and its outstanding-call quota through
     /// settlement disposal. It need not be the association's record/quota bank.
     pub fn try_new(bank: Arc<HostResourceAccounts>, calls: usize) -> CoreResult<Self> {
+        Self::construct(bank, calls, None)
+    }
+    /// Attach an actual aggregate-cleanup recipient. Calls default to this
+    /// driver; `using_driver` can choose a different polling recipient per call.
+    pub fn try_new_driven(
+        bank: Arc<HostResourceAccounts>,
+        calls: usize,
+        driver: HostChangeSignal,
+    ) -> CoreResult<Self> {
+        if !driver.is_available() {
+            return Err(CoreError::Lifecycle(context()));
+        }
+        Self::construct(bank, calls, Some(driver))
+    }
+    fn construct(
+        bank: Arc<HostResourceAccounts>,
+        calls: usize,
+        driver: Option<HostChangeSignal>,
+    ) -> CoreResult<Self> {
         if !(1..=MAX_CALLS).contains(&calls) {
             return Err(invalid());
         }
@@ -1309,6 +1557,8 @@ impl ConsumerCalls {
             state: Rc::new(State {
                 bank,
                 active: Cell::new(true),
+                controller_present: Cell::new(true),
+                cleanup_driver: driver.clone(),
                 registry: RefCell::new(Registry {
                     slots,
                     sequence: 0,
@@ -1316,7 +1566,22 @@ impl ConsumerCalls {
                 }),
                 _funding: funding,
             }),
+            call_driver: driver,
+            owns_control: true,
         })
+    }
+    /// Choose a polling recipient without changing storage or rebuilding an
+    /// association. Admission requires observable sources and a driven store;
+    /// it reserves both this recipient and the store's original cleanup role.
+    pub fn using_driver<'a>(&'a self, driver: &HostChangeSignal) -> ConsumerAdmission<'a> {
+        ConsumerAdmission {
+            view: Self {
+                state: self.state.clone(),
+                call_driver: Some(driver.clone()),
+                owns_control: false,
+            },
+            _owner: core::marker::PhantomData,
+        }
     }
     /// Fence all work admitted here before waking any waiter. This closes only
     /// this capacity owner, without closing the associations that used it.
@@ -1324,9 +1589,9 @@ impl ConsumerCalls {
         self.state.close();
     }
     /// Drive independent cleanup, including after every call handle was lost.
-    /// The application must schedule these turns independently of native wakes
-    /// after passive invalidation/abandonment. Short credit retains the original
-    /// owner; wake registration does not supply another turn or replenish credit.
+    /// The driven profile requests turns on its cleanup recipient. Manual owners
+    /// need application scheduling independently of native wakes. Short credit
+    /// retains the original owner and the caller's runnable/credit obligation.
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
         let (start, count) = {
             let mut registry = self.state.registry.borrow_mut();
@@ -1347,7 +1612,18 @@ impl ConsumerCalls {
                 .checkout((start + offset) % count, None, cx.waker())
             {
                 let call = lease.call.as_mut().unwrap();
+                let was_terminal = call.progress.is_terminal();
                 let _ = call.step(&self.state, cx, budget);
+                if !was_terminal
+                    && call.progress.is_terminal()
+                    && !call.work.control.abandoned.get()
+                {
+                    // Aggregate progress can take over native wake interest.
+                    // Preserve the original result driver's terminal turn even
+                    // when it differs from the cleanup driver. This native hint
+                    // invokes no callback while the original slot is checked out.
+                    call.work.control.signal();
+                }
                 if call.work.control.abandoned.get() && call.progress.is_terminal() {
                     // Vacate the slot before disposing linked native owners.
                     drop(lease.take());
@@ -1366,7 +1642,13 @@ impl ConsumerCalls {
 }
 impl Drop for ConsumerCalls {
     fn drop(&mut self) {
+        if !self.owns_control {
+            return;
+        }
+        self.state.controller_present.set(false);
         self.state.revoke();
+        self.state.signal_drivers();
+        self.state.abort_abandoned();
     }
 }
 
@@ -1383,6 +1665,7 @@ impl ConsumerCall {
     /// The notification requests a poll; it performs no native cleanup itself.
     pub fn cancel(&self) {
         self.control.record(CoreError::Cancelled(context()));
+        self.control.signal();
         self.control.wake();
     }
     /// One explicit progress turn, with caller-supplied time and work credit.
@@ -1410,13 +1693,20 @@ impl ConsumerCall {
         {
             return Poll::Pending;
         }
-        Poll::Ready(ConsumerSettlement { call: lease.take() })
+        let call = lease.take();
+        call.work.control.finish_notices();
+        Poll::Ready(ConsumerSettlement { call })
     }
 }
 impl Drop for ConsumerCall {
     fn drop(&mut self) {
         self.control.abandoned.set(true);
         self.control.record(CoreError::Cancelled(context()));
+        self.control.abandon_notices();
+        if let Some(driver) = &self.state.cleanup_driver {
+            let _ = driver.request_turn();
+        }
+        self.state.abort_slot(self.slot, Some(self.sequence));
     }
 }
 /// Complete original normal/late result and retained cleanup/native owner.

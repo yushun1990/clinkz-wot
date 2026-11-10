@@ -18,8 +18,10 @@ currentness after permission, codec and native callbacks before successful local
 handoff. Closing/dropping one facet or stopping one call/subscription revokes only
 its own acceptance; sibling facets retain their authority and native leases.
 Execution authorization receives the original instance and selected operation;
-preparation's destination check alone is insufficient. This implementation remains
-Host/manual and does not establish constrained or automatic-progress support.
+preparation's destination check alone is insufficient. The finite Host owner has
+manual and qualified event-driven control profiles; continuing Action and
+notification owners retain their existing manual obligations. Neither establishes
+constrained support or autonomous execution.
 Finite association construction consumes `ConsumerBinding` records and still refuses
 an instance bank different from those records' bank. Shared content, qualified
 mapping and retained services may have different original banks; those backing
@@ -46,34 +48,74 @@ move them into a successor. Settlement lends input and result slices and the
 original destination/variables; no cloneable original payload owner escapes.
 [Foundation](foundation.md) owns capacity-domain and quota accounting.
 
-Association close/Drop passively fences its work across all capacity owners;
-manual progress observes it before effects or successful handoff. A later cancel
-cannot overwrite that earlier fence, and an already recorded first cause survives.
-Closing/dropping a work owner fences only work admitted there, not the associations
-or their other work. Explicit work-owner close records every original cause
-before waking waiters; Drop calls no waker. Call handles can drive original
-cleanup after either root disappears. Lost handles remain reachable from their
-work owner; final owner disposal uses the qualified finite local-abort contract,
-without claiming remote cancellation or network drain. Returned settlements keep
-their own backing through final disposal, independent of root and slot reuse.
+Association and instance explicit revocation or normal authority Drop fence
+original work before effects or successful handoff, independently of notification
+delivery. A later cancel cannot overwrite that earlier fence; a recorded first
+cause survives. Closing/dropping a work owner fences only its admitted work, not
+associations or work in other owners. Explicit close records every original cause
+before waking waiters; Drop announces revocation without invoking `Waker::wake`.
+Qualified local disposal still destroys original native/service/Waker backing.
+Retained call handles can drive their own original cleanup after either root
+disappears.
+
+The event-driven Host finite profile uses observable instance/association sources
+and an explicitly chosen `HostChangeSignal` recipient. Admission MUST acquire
+dependencies on both original sources for the call driver and aggregate cleanup
+driver before credential issuance or native construction. These roles may use
+the same recipient. A source coalesces records by actual recipient identity,
+not by call, logical instance count, executor thread or native connection. A new
+independent driver may enroll during later admission through the same association
+and mappings, subject to source-wide live/retiring record and work/account limits.
+No fixed notification domain, shared pool or topology is required.
+
+On effective invalidation, a source owns a bounded batch of native posts to its
+active recipients. If private metadata is busy, its existing bounded guard owns
+that duty; last dependency release also assigns unlink/reaping to that guard.
+No callback, allocation, wait or linked destruction occurs under the gate. Posts
+and final retirement occur after unlocking. Immediate invalidation does not
+imply that every endpoint is readable by Drop return: a suspended guard can delay
+delivery until it resumes, without requiring another native event or rescan.
+
+The currently qualified native indication is one nonblocking Linux `eventfd`
+write per affected recipient, with stable owned endpoint leases. Saturation
+(`EAGAIN`) is already readable/coalesced. Other errors latch unhealthy status and
+are failed posts, **not delivered notification**; no unbounded retry or hidden
+fallback is claimed. Other platforms refuse driver provisioning and retain the
+manual API. Admission refuses a detectably withdrawn/unhealthy endpoint.
+Delivery requires a healthy backend, completion of the bounded metadata owner,
+and a live driver servicing its readiness. Endpoint withdrawal MUST preserve a
+reachable work controller or explicitly close/dispose/handoff its obligations;
+dropping a receiver alone does not execute work-owner loss.
+
+The driver acknowledges/drains notice state **before** surveying original work,
+registers readiness and rechecks before parking. Its callback-free indication
+carries no permission, result, call ownership or work credit. After a zero-credit
+or partial turn, the application MUST retain runnable responsibility or arrange
+another turn when supplying credit. A healthy, serviced event-driven driver does
+not need periodic polling to observe authority release from a silent peer.
+Unexpected backend failure can leave it parked; no error flag alone repairs that.
 
 The manual finite API does not implement `Future` or install a background timer.
-Its caller MUST arrange a funded `ConsumerCall::poll` or `ConsumerCalls::step`
-turn after passive association/instance invalidation or handle abandonment, and
-continue providing progress while cleanup is pending. An application tick or
-explicit notification to its existing driver is sufficient; waiting only for
-native I/O wakes is not. A retained handle's explicit `cancel` can notify its
-registered driver, while preserving an earlier revocation cause. Notification
-requests a turn; it neither supplies work credit nor performs cleanup.
-Without further application progress, retained work can remain pending
-indefinitely, still fenced and funded. Bounded local disposal at final owner
-release is distinct from a guarantee that an application eventually drives or
-disposes that owner. No autonomous cleanup or remote acknowledgement follows.
-Retain the public work owner while abandoned calls need incremental cleanup.
-After its Drop, a surviving handle can progress only its own slot; abandoned
-siblings remain funded in the shared state until final state disposal. Even an
-already settled handle can retain that state. This is not a transfer to a new
-cleanup supervisor or a promise that a surviving handle can drain its siblings.
+Manual instance/association construction instead requires application-scheduled
+funded `ConsumerCall::poll` or `ConsumerCalls::step` turns after invalidation or
+abandonment, independent of native I/O wakes. Explicit call cancel wakes its
+registered waiter. Neither profile guarantees execution when its driver stops
+or credit is withheld, or implies remote acknowledgement.
+
+While the public work controller lives, abandoned work remains reachable through
+its incremental `step`, with a prepaid cleanup-recipient dependency in the driven
+profile. Explicit close retains that control capability. **Actual loss** of the
+aggregate control facade instead vacates abandoned ready slots and disposes each
+complete original call under the admitted finite local-abort contract, outside
+borrows. A checked-out call stays owned by its lease; restoration locally disposes
+it if both controller and handle are gone. Later handle abandonment after facade
+loss makes the same transition. Surviving handles and transferred settlements
+keep their own identity, first cause, normal/late result and accounts. An unrelated
+surviving handle cannot be the sole reason an abandoned sibling waits forever.
+Local disposal claims no remote cancellation, rollback or network drain.
+Native/result destruction precedes original work-reservation release. Supported
+unwind retains the remaining sweep/lease duty; arbitrary panicking or blocking
+providers are not made conformant by their metadata declarations.
 
 Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
@@ -292,12 +334,30 @@ destructors run after that borrow ends. A checked-out or admitting slot remains
 occupied; reentrant progress cannot poll it again or overwrite it through nested
 admission. Passive per-call control retains the first cause and abandonment even
 while native work is outside the registry. Explicit cancellation and work-owner close
-wake registered progress outside registry/control borrows; association close and
-Drop are passive. Work-owner close fences all its admitted calls before notifying
+wake registered progress outside registry/control borrows; observable authority
+release also posts qualified native indications without calling Wakers. Work-owner close fences all its admitted calls before notifying
 any waiter. Callback-time close/cancellation is observed before another native
 effect or successful handoff, including construction and validated unread output.
 Removing a terminal call is its handoff linearization point. Native/codec late
 evidence remains with that original call regardless of the local first cause.
+
+Host source registration linearizes at the gated insertion/dependency increment,
+followed by original currentness rechecks before effects. Invalidation linearizes
+at the original authority flag, then monotonically closes its source. The source
+gate's dirty/closed handshake cannot unlock across an unowned close or final
+release request. Notification takes/detaches a pinned batch before unlock;
+posting is separate from accepting that duty. Dependency unregistration is its
+count decrement; structural unlink follows under the gate, and final retirement
+waits for every lease/dispatch pin. Retiring records retain original funding and
+consume source capacity. Late hints refer to the retained issuer, never an fd or
+slot recycled into another recipient. Acknowledge's acquire handshake precedes
+the work survey; concurrent later posts remain readable or produce a harmless
+additional turn. Call handoff ends dependencies only after complete funded
+settlement transfer; unread terminal work still has a reachable control owner.
+When aggregate progress first makes a retained live call terminal, it requests
+a turn on that call's original recipient: native-I/O wake interest may have moved
+to the aggregate driver. Repeated progress on unread terminal work does not keep
+posting that transition. The result remains owned until its checked handoff.
 
 Runtime driver entry records its time observation on every original live or
 admitting call before invoking callbacks; direct call polling records its own

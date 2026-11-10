@@ -4,6 +4,7 @@ use crate::collection::{PropertyCollectionSchema, PropertySelection};
 use crate::data_schema::PreparedSchema;
 pub use crate::data_schema::ValueSchemas;
 use crate::host_accounts::{HostCapacityReservation, HostResourceAccounts};
+use crate::host_change::{HostChangeAuthority, HostChangeSource};
 use crate::notification::NotificationSchemas;
 use crate::*;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
@@ -263,26 +264,57 @@ impl<S: ?Sized> core::ops::Deref for ConsumerServiceOwner<S> {
 
 /// One local logical Consumer authority, independent of any capability, TD or
 /// physical connection. Startup construction is caller-funded Host work.
-/// Drop/revoke is immediate and allocation/callback free; there is no reactivation.
+/// Drop/revoke invalidates immediately. The observable Host constructor also
+/// posts bounded native change indications without invoking Rust Wakers. A
+/// pending source guard can delay delivery; no execution or drain is implied.
 ///
 /// ```compile_fail
 /// fn duplicate(instance: clinkz_wot_core::consumer::ConsumerInstance) {
 ///     let _second_owner = instance.clone();
 /// }
 /// ```
-pub struct ConsumerInstance(ConsumerInstanceRef);
+pub struct ConsumerInstance {
+    reference: ConsumerInstanceRef,
+    changes: Option<HostChangeAuthority>,
+}
 impl ConsumerInstance {
+    /// Manual driving; no event-driven authority notification is promised.
     pub fn new(slot: ThingSlotId) -> Self {
-        Self(ConsumerInstanceRef {
-            slot,
-            current: Arc::new(AtomicBool::new(true)),
+        Self {
+            reference: ConsumerInstanceRef {
+                slot,
+                current: Arc::new(AtomicBool::new(true)),
+                changes: None,
+            },
+            changes: None,
+        }
+    }
+    /// Fund a source-wide, dynamically enrolled Host notification capability.
+    /// No drivers, call slots, executor domain or native mappings are attached.
+    pub fn try_new_observable(
+        slot: ThingSlotId,
+        bank: &Arc<HostResourceAccounts>,
+        max_drivers: usize,
+    ) -> CoreResult<Self> {
+        let changes = HostChangeAuthority::try_new(bank, max_drivers)?;
+        Ok(Self {
+            reference: ConsumerInstanceRef {
+                slot,
+                current: Arc::new(AtomicBool::new(true)),
+                changes: Some(changes.reference()),
+            },
+            changes: Some(changes),
         })
     }
     pub fn reference(&self) -> ConsumerInstanceRef {
-        self.0.clone()
+        self.reference.clone()
     }
     pub fn revoke(&self) {
-        self.0.current.store(false, Ordering::Release);
+        // Permission loss precedes and does not depend on notification delivery.
+        self.reference.current.store(false, Ordering::Release);
+        if let Some(changes) = &self.changes {
+            changes.invalidate();
+        }
     }
 }
 impl Drop for ConsumerInstance {
@@ -296,6 +328,7 @@ impl Drop for ConsumerInstance {
 pub struct ConsumerInstanceRef {
     slot: ThingSlotId,
     current: Arc<AtomicBool>,
+    changes: Option<HostChangeSource>,
 }
 impl ConsumerInstanceRef {
     pub fn slot(&self) -> ThingSlotId {
@@ -303,6 +336,10 @@ impl ConsumerInstanceRef {
     }
     pub fn is_current(&self) -> bool {
         self.current.load(Ordering::Acquire)
+    }
+    /// Passive notification/subscription capability, never revocation authority.
+    pub fn change_source(&self) -> Option<&HostChangeSource> {
+        self.changes.as_ref()
     }
 }
 impl PartialEq for ConsumerInstanceRef {

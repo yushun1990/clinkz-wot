@@ -316,8 +316,21 @@ loss/replacement and abandoned real-socket disposal. Existing HTTP callback,
 structured-data, reuse and downstream finite/Action/notification regressions
 remain applicable after direct caller migration.
 
-This is bounded Host/manual finite capability, not continuing Action, notification
-or Producer association/capacity implementation. HTTP's one-exchange-per-native-
+The [event-driven HTTP regressions](../../protocol-bindings/protocols/http/tests/support/observable_capacity.rs)
+extend that same test command with silent-peer revocation through association
+removal/replacement and instance revoke/Drop, independent later D2 enrollment,
+separate polling/cleanup recipients and aggregate-to-result notification,
+metadata refusal/rollback, zero-credit then funded cleanup, and abandoned A with
+active or already settled B in both facade/handle loss orders.
+Core's Host-change tests exercise coalescing, registration/final-release/close
+races, quota/funding retirement, late recipients and backend-failure reporting.
+The HTTP callback fixture also exercises facade loss during native checkout and
+reentrant sibling abandonment/disposal. These preserve original identity,
+native/late result and account ownership; notification does not execute cleanup.
+
+This is bounded Host finite capability with manual and qualified event-driven
+control, not continuing Action, notification or Producer association/capacity
+implementation. HTTP's one-exchange-per-native-
 registration restriction remains. F1/F2/F3 are unchanged outside the affected
 finite path; no gate, package, milestone or profile acceptance is inferred.
 

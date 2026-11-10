@@ -98,20 +98,48 @@ several capacity owners without repeating preparation. Each admitted call keeps
 its original authority, operands, accounts and cleanup. Native availability and
 instance/work quotas can still refuse admission.
 
-Keep the association and chosen work owner alive while admitting and driving
-work. Association close/Drop passively fences its calls across capacity owners;
-work-owner close/Drop fences only calls admitted there. Handles can continue
-original cleanup after root loss, and returned settlements retain their funding.
-Use `calls.step(&mut cx, now, &mut budget)` to progress cleanup after handles
-are abandoned. The application must schedule a funded driver turn after passive
-association/instance loss and keep driving pending cleanup even if the peer
-sends nothing. Use an application tick or explicit driver notification;
-awaiting only native I/O wakes is insufficient. A retained call's `cancel()`
-wakes its registered driver but still needs a funded poll. There is no internal
-timer or automatic eventual cleanup while owners remain retained. The
-[runnable Read example](examples/read_property.rs) shows preparation, both
-owners and manual polling; [Runtime Safety](../../../docs/spec/runtime-safety.md)
-defines their full lifetime contracts.
+For event-driven Host control on Linux, provision a `core::host_change::HostChangeDriver`
+at the application driver, construct the original instance with
+`ConsumerInstance::try_new_observable(slot, &accounts, max_drivers)`, and use
+`ConsumerAssociation::try_new_observable(..., max_drivers)` plus
+`ConsumerCalls::try_new_driven(work_accounts, slots, driver.signal())`.
+Each source limits its actual live/retiring driver records independently of
+call slots. The same association can later use D2 without rebuilding authority
+or mappings. Distinct work owners may use independent drivers; a borrowed
+`calls.using_driver(&other_signal)` instead chooses a different polling driver
+over the same storage, retaining its original prepaid cleanup recipient.
+No native descriptor, execution slot or fixed driver membership is prepaid per
+logical instance. Other OS targets refuse driver provisioning; the manual API
+remains available.
+
+Register the driver's fd in the application's readiness mechanism (for example
+Tokio `AsyncFd`). Acknowledge change readiness **before** surveying original
+work, register/recheck before parking, and poll native I/O and control readiness
+together. Source close and ordinary authority Drop request a bounded native
+indication; they never poll cleanup or invoke Rust Wakers. Delivery can await an
+already executing source metadata guard. It assumes a healthy backend and live,
+serviced driver; unexpected signalling errors are latched failures, not delivery.
+A receipt supplies no execution credit: retain runnable responsibility after
+partial/zero-credit progress and schedule a funded turn when credit is available.
+The [real HTTP event-driven regressions](tests/support/observable_capacity.rs)
+demonstrate quiet-peer revocation without periodic Engine polling, later D2
+enrollment, separate polling/cleanup roles, aggregate-to-result notification
+and notification-capacity refusal. Aggregate progress requests a turn on a
+distinct original result recipient when its call first becomes terminal.
+
+Work-owner close fences only calls admitted there and preserves incremental
+`calls.step` access, including abandoned handles. Actual facade Drop uses qualified
+bounded local disposal for abandoned work even if an unrelated handle retains
+the shared state. Retained handles can finish their own cleanup after root loss;
+returned settlements preserve their original funding and results. Local disposal
+does not acknowledge remote cancellation or drain.
+
+The manual constructors shown above require application-scheduled funded
+`ConsumerCall::poll` or `ConsumerCalls::step` turns after invalidation/abandonment,
+even when the peer sends nothing. The [runnable Read example](examples/read_property.rs)
+uses that valid profile. Neither profile supplies a background timer or guarantees
+eventual cleanup if the application stops driving/withholds credit.
+[Runtime Safety](../../../docs/spec/runtime-safety.md) defines the full contracts.
 
 The open finite path uses the bounded [prepared DataSchema subset](../../../docs/evidence/structured-dataschema.md).
 Nested object properties/required names, exact integer inclusive/exclusive bounds

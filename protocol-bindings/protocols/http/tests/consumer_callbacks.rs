@@ -329,19 +329,14 @@ fn harness(calls: usize, address: Option<std::net::SocketAddr>) -> Harness {
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL));
     let (definitions, funding) = prepared.into_execution();
     let rt = Rc::new(
-        ConsumerAssociation::try_new(
-            owner.reference(),
-            definitions,
-            funding,
-            bank.clone(),
-        )
-        .map(|association| {
-            (
-                association,
-                ConsumerCalls::try_new(bank.clone(), calls).unwrap(),
-            )
-        })
-        .unwrap_or_else(|e| panic!("{:?}", e.error())),
+        ConsumerAssociation::try_new(owner.reference(), definitions, funding, bank.clone())
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(bank.clone(), calls).unwrap(),
+                )
+            })
+            .unwrap_or_else(|e| panic!("{:?}", e.error())),
     );
     Harness {
         rt,
@@ -369,6 +364,148 @@ fn dispose(h: Harness) {
     drop(owner);
     clean(&bank);
     HOOK.with(|h| assert!(h.borrow().is_none(), "hook was not exercised"));
+}
+
+#[test]
+fn losing_the_work_owner_during_native_poll_disposes_abandoned_siblings_and_restores_the_live_call()
+{
+    let Harness {
+        rt,
+        owner,
+        bank,
+        probe,
+    } = harness(2, None);
+    let (association, calls) = Rc::try_unwrap(rt).ok().unwrap();
+    let association = Rc::new(association);
+    probe.pending.store(true, Ordering::Release);
+    let abandoned = association
+        .read_property(&calls, "level", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    let mut survivor = association
+        .read_property(&calls, "level", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    drop(abandoned);
+    let controller = Rc::new(RefCell::new(Some(calls)));
+    let (losing, closing, native, original) = (
+        controller.clone(),
+        association.clone(),
+        probe.clone(),
+        bank.clone(),
+    );
+    hook(Edge::Poll, move || {
+        hook(Edge::Dispose, move || {
+            // The abandoned slot is already vacant; the survivor remains
+            // checked out and retains its separately reachable passive control.
+            closing.begin_close();
+            assert_eq!(native.drops.load(Ordering::Acquire), 1);
+            assert_eq!(
+                original
+                    .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                    .used(),
+                2
+            );
+        });
+        drop(losing.borrow_mut().take());
+    });
+    assert!(survivor.poll(&mut cx(), now(), &mut work()).is_pending());
+    assert!(controller.borrow().is_none());
+    assert_eq!(probe.drops.load(Ordering::Acquire), 1);
+    assert_eq!(
+        bank.account(ResourceKind::PendingHandlerCallsGlobalMax)
+            .used(),
+        1
+    );
+    survivor.cancel(); // cannot replace the earlier loss of original authority
+    let result = settle(&mut survivor);
+    assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));
+    assert_eq!(result.consumer(), &owner.reference());
+    assert_eq!(probe.cancels.load(Ordering::Acquire), 1);
+    drop((result, survivor, association, controller, owner));
+    assert_eq!(probe.drops.load(Ordering::Acquire), 2);
+    clean(&bank);
+}
+
+#[test]
+fn local_disposal_can_reentrantly_abandon_another_original_slot_after_control_loss() {
+    let Harness {
+        rt,
+        owner,
+        bank,
+        probe,
+    } = harness(2, None);
+    let (association, calls) = Rc::try_unwrap(rt).ok().unwrap();
+    let a = association
+        .read_property(&calls, "level", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    let b = Rc::new(RefCell::new(Some(
+        association
+            .read_property(&calls, "level", Deadline::NONE, now(), &mut work())
+            .unwrap(),
+    )));
+    drop(a);
+    let (other, original) = (b.clone(), bank.clone());
+    hook(Edge::Dispose, move || {
+        assert_eq!(
+            original
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                .used(),
+            2
+        );
+        drop(other.borrow_mut().take());
+        assert_eq!(
+            original
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                .used(),
+            1
+        );
+    });
+    drop(calls);
+    assert!(b.borrow().is_none());
+    assert_eq!(probe.drops.load(Ordering::Acquire), 2);
+    assert_eq!(
+        bank.account(ResourceKind::PendingHandlerCallsGlobalMax)
+            .used(),
+        0
+    );
+    drop((b, association, owner));
+    clean(&bank);
+}
+
+#[test]
+fn disposal_unwind_keeps_the_remaining_abandoned_sweep_despite_an_unrelated_retained_handle() {
+    let Harness {
+        rt,
+        owner,
+        bank,
+        probe,
+    } = harness(3, None);
+    let (association, calls) = Rc::try_unwrap(rt).ok().unwrap();
+    let mut retained = association
+        .read_property(&calls, "level", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    let result = settle(&mut retained);
+    let a = association
+        .read_property(&calls, "level", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    let b = association
+        .read_property(&calls, "level", Deadline::NONE, now(), &mut work())
+        .unwrap();
+    drop((a, b));
+    hook(Edge::Dispose, || panic!("single linked disposal panic"));
+    let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(calls)));
+    assert!(failed.is_err());
+    assert_eq!(probe.drops.load(Ordering::Acquire), 2);
+    assert_eq!(
+        bank.account(ResourceKind::PendingHandlerCallsGlobalMax)
+            .used(),
+        1
+    );
+    assert_eq!(result.result().unwrap().data().unwrap().body, b"7");
+    // The retained handle still holds State: its final Drop must not be needed
+    // to dispose either abandoned sibling after the supported unwind exit.
+    drop((result, retained, association, owner));
+    assert_eq!(probe.drops.load(Ordering::Acquire), 3);
+    clean(&bank);
 }
 
 #[test]

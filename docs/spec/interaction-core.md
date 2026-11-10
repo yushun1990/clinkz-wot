@@ -31,6 +31,14 @@ owner. The Host finite association/work split and its original operand retention
 are defined in [Runtime Safety](runtime-safety.md); the common finite transition
 kernel remains independent of that storage representation.
 
+An optional Host change source on the original instance is observation capability,
+not another authority or native owner. The std-only `host_change` carrier supports
+explicitly enrolled drivers without imposing OS primitives on the common finite
+kernel or borrowed/static execution. Observable association/admission composition
+and the qualified backend/driver obligations are owned by Runtime Safety. Merely
+sharing an observable instance does not enroll continuing Action or notification
+owners; those families keep their current manual progress contracts.
+
 ### URI-variable execution
 
 Under EXEC-DATA/SECURITY-001, prepared variable names, effective schemas and the

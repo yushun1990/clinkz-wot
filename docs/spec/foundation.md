@@ -54,6 +54,21 @@ reservation; copied metadata and variable records have separate allowances.
 Capacity-owner loss cannot migrate these reservations to the association or a
 successor bank. Captured native limits remain additional independent constraints.
 
+Host finite change observation has separate capacity. Each observable source
+funds its own header and explicitly limits 0–64 live/retiring recipient records;
+it prepays neither a native descriptor nor call storage per instance. Each
+application-provisioned driver funds one stable endpoint carrier. Actual active
+source/driver records and metadata buffers acquire original work-bank backing
+before effects, and admission prepays bounded lookup, fan-out, unlink and final
+retirement work. Repeated dependencies retain the existing record's original
+funding, including when a later call uses another bank. Candidates, dispatch
+pins and retired records consume the same source quota until final release;
+removing discoverability alone cannot refund them. Empty source buffers retire;
+active buffer capacity remains bounded by the source limit. Native fd/kernel
+limits are deployment containment, not additional Engine byte backing. Record
+or work-credit exhaustion refuses admission and rolls back partial leases.
+Posting a change neither funds cancellation nor acknowledges cleanup transfer.
+
 Independently composed Host finite Consumer registries/Servients share service
 backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the
 composition root. Imports retain the original reservations; they neither move
