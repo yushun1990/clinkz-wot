@@ -345,6 +345,9 @@ impl AssociationAuthority {
 /// A periodic application tick or an explicit application notification can do
 /// this. Retained work can remain pending indefinitely if the driver stops;
 /// funding and wake registration do not guarantee eventual execution.
+/// Retain this work owner while abandoned calls need incremental cleanup. After
+/// its Drop, surviving handles drive only their own calls; abandoned siblings
+/// await final shared-state disposal, even if a surviving handle has settled.
 pub struct ConsumerCalls {
     state: Rc<State>,
 }

@@ -69,6 +69,11 @@ Without further application progress, retained work can remain pending
 indefinitely, still fenced and funded. Bounded local disposal at final owner
 release is distinct from a guarantee that an application eventually drives or
 disposes that owner. No autonomous cleanup or remote acknowledgement follows.
+Retain the public work owner while abandoned calls need incremental cleanup.
+After its Drop, a surviving handle can progress only its own slot; abandoned
+siblings remain funded in the shared state until final state disposal. Even an
+already settled handle can retain that state. This is not a transfer to a new
+cleanup supervisor or a promise that a surviving handle can drain its siblings.
 
 Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
