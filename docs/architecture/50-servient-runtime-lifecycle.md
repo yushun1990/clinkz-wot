@@ -44,14 +44,16 @@ or hiding cancellation. [Runtime Safety](../spec/runtime-safety.md)
 owns the callback, handoff, wake and funding guarantees; this is a correction to
 those distinct owners, not a shared scheduler or automatic execution model.
 
-Finite Host control readiness is separately composed from work storage and native
-I/O. Observable sources enroll actual active drivers at admission, including a
-separately chosen cleanup recipient. They retain no call index. Normal authority
-Drop signals those recipients through qualified bounded native posts; manual and
-static models retain their own progress obligations. Actual aggregate control
-loss locally disposes abandoned finite work instead of leaving it stranded behind
-surviving handles. Explicit close keeps incremental cleanup access. Runtime Safety
-defines the notification handoff, failure and final-disposal boundaries.
+The finite `ConsumerOwner` consumes unique instance and association authorities;
+application handles/views are non-revoking. Explicit removal, replacement and
+shutdown fence original permission before releasing mappings outside borrows.
+Execution capacity remains independently supplied. Native I/O wakes alone do not
+schedule lifecycle cleanup: the application supplies lifecycle-command, cyclic
+or actual timer turns, fresh clock observations and work credit. A logical
+deadline is no scheduled timer. Actual aggregate control loss locally disposes
+abandoned finite work rather than stranding it behind surviving handles;
+explicit close keeps incremental cleanup access. Runtime Safety owns these
+registered/standalone, progress and qualified final-disposal contracts.
 
 ## Distinct lifetimes
 

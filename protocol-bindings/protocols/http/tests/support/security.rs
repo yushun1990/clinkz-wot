@@ -454,7 +454,7 @@ fn secure_client(
     access: Arc<HttpClientAccess>,
     accounts: &Arc<HostResourceAccounts>,
     reuse: Option<&Arc<PreparedConsumerContent>>,
-) -> ((ConsumerAssociation, ConsumerCalls), Arc<PreparedConsumerContent>) {
+) -> ((StandaloneConsumerAssociation, ConsumerCalls), Arc<PreparedConsumerContent>) {
     let prepared = secure_prepare(td, keys, access, accounts, reuse).unwrap();
     if reuse.is_some() {
         assert_eq!(prepared.content_constructions(), 0);
@@ -462,11 +462,11 @@ fn secure_client(
     let (bindings, funding) = prepared.into_execution();
     let content = bindings[0].definition().content().clone();
     let runtime =
-        ConsumerAssociation::try_new(owner.reference(), bindings, funding, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap()))
+        StandaloneConsumerAssociation::try_new(owner.reference(), bindings, funding, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap()))
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
     (runtime, content)
 }
-fn read_secure(client: &(ConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
+fn read_secure(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     client.0.read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
         .unwrap()
 }

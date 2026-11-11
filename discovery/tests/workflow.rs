@@ -5,7 +5,7 @@ use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, *};
 use clinkz_wot_discovery::http::*;
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::{ConsumerRegistry, ConsumerSelector};
-use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls};
+use clinkz_wot_servient_finite::consumer::{ConsumerCalls, StandaloneConsumerAssociation};
 use serde_json::json;
 use std::{
     sync::{
@@ -74,7 +74,7 @@ fn prepare(
     instance: &ConsumerInstance,
     allowed: Arc<AtomicBool>,
     bank: &Arc<HostResourceAccounts>,
-) -> CoreResult<(ConsumerAssociation, ConsumerCalls)> {
+) -> CoreResult<(StandaloneConsumerAssociation, ConsumerCalls)> {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(770),
@@ -103,19 +103,14 @@ fn prepare(
     )?;
     let (definitions, funding) = prepared.into_execution();
     drop(registry);
-    ConsumerAssociation::try_new(
-        instance.reference(),
-        definitions,
-        funding,
-        bank.clone(),
-    )
-    .map(|association| {
-        (
-            association,
-            ConsumerCalls::try_new(bank.clone(), 1).unwrap(),
-        )
-    })
-    .map_err(|e| e.error().error().clone())
+    StandaloneConsumerAssociation::try_new(instance.reference(), definitions, funding, bank.clone())
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(bank.clone(), 1).unwrap(),
+            )
+        })
+        .map_err(|e| e.error().error().clone())
 }
 fn now() -> MonotonicInstant {
     MonotonicInstant::new(ClockId::new(770), 0)

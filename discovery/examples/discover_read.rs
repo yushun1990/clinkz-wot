@@ -10,7 +10,7 @@ use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, *};
 use clinkz_wot_discovery::http::*;
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::{ConsumerRegistry, ConsumerSelector};
-use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls};
+use clinkz_wot_servient_finite::consumer::{ConsumerCalls, StandaloneConsumerAssociation};
 use std::{
     sync::Arc,
     task::{Context, Poll, Waker},
@@ -144,7 +144,7 @@ fn main() {
         drop(selected);
         drop(registry);
         drop(session);
-        let runtime = ConsumerAssociation::try_new(
+        let runtime = StandaloneConsumerAssociation::try_new(
             instance.reference(),
             definitions,
             funding,

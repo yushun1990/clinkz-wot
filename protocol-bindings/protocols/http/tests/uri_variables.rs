@@ -211,7 +211,7 @@ fn bind_dynamic(
     accounts: &Arc<HostResourceAccounts>,
     allowed: Vec<String>,
     denied: Arc<AtomicBool>,
-) -> (ConsumerAssociation, ConsumerCalls) {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let access = ConsumerServiceOwner::retain_access(
         Arc::new(DestinationPolicy {
             instance: owner.reference(),
@@ -225,7 +225,7 @@ fn bind_dynamic(
     let binding = definition
         .bind(access, accounts.clone(), &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    ConsumerAssociation::try_new(
+    StandaloneConsumerAssociation::try_new(
         owner.reference(),
         vec![binding],
         vec![],
@@ -730,7 +730,7 @@ fn https_dynamic_resolution_uses_actual_audience_and_rejects_substituted_native_
         let (bindings, funding) = prepared.into_execution();
         assert_eq!(bindings.len(), 1);
         let definition = bindings[0].definition().clone();
-        let client = ConsumerAssociation::try_new(
+        let client = StandaloneConsumerAssociation::try_new(
             owner.reference(),
             bindings,
             funding,

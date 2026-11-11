@@ -18,9 +18,9 @@ fn finite(
     owner: &ConsumerInstance,
     prepared: PreparedConsumer,
     bank: Arc<HostResourceAccounts>,
-) -> (ConsumerAssociation, ConsumerCalls) {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let (defs, funding) = prepared.into_execution();
-    ConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
+    StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
         .map(|association| (association, ConsumerCalls::try_new(bank, 2).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }

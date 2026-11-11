@@ -14,7 +14,7 @@ use clinkz_wot_discovery::{DiscoveryError, http::*};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::ConsumerRegistrationInput;
 use clinkz_wot_servient_finite::consumer::{
-    ConsumerAssociation, ConsumerCall, ConsumerCalls, ConsumerNativeOutcome,
+    ConsumerCall, ConsumerCalls, ConsumerNativeOutcome, StandaloneConsumerAssociation,
 };
 use serde_json::{Value, json};
 use std::{
@@ -174,7 +174,7 @@ impl App {
         thing: &DiscoveredThing,
         form: u32,
         instance: &ConsumerInstance,
-    ) -> CoreResult<(ConsumerAssociation, ConsumerCalls)> {
+    ) -> CoreResult<(StandaloneConsumerAssociation, ConsumerCalls)> {
         prepare_read(
             thing,
             "level",
@@ -219,7 +219,7 @@ impl ConsumerDataService for ObservedData {
         Ok(())
     }
 }
-fn read(runtime: &(ConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
+fn read(runtime: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     runtime
         .0
         .read_property(
@@ -231,7 +231,7 @@ fn read(runtime: &(ConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
         )
         .unwrap()
 }
-async fn until_request(runtime: &(ConsumerAssociation, ConsumerCalls), peer: &Peer) {
+async fn until_request(runtime: &(StandaloneConsumerAssociation, ConsumerCalls), peer: &Peer) {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             runtime

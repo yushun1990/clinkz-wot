@@ -35,8 +35,6 @@ pub mod finite;
 pub mod handler;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod host_accounts;
-#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
-pub mod host_change;
 pub mod identity;
 pub mod interaction;
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]

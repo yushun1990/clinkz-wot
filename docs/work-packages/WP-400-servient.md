@@ -316,20 +316,23 @@ loss/replacement and abandoned real-socket disposal. Existing HTTP callback,
 structured-data, reuse and downstream finite/Action/notification regressions
 remain applicable after direct caller migration.
 
-The [event-driven HTTP regressions](../../protocol-bindings/protocols/http/tests/support/observable_capacity.rs)
-extend that same test command with silent-peer revocation through association
-removal/replacement and instance revoke/Drop, independent later D2 enrollment,
-separate polling/cleanup recipients and aggregate-to-result notification,
-metadata refusal/rollback, zero-credit then funded cleanup, and abandoned A with
-active or already settled B in both facade/handle loss orders.
-Core's Host-change tests exercise coalescing, registration/final-release/close
-races, quota/funding retirement, late recipients and backend-failure reporting.
-The HTTP callback fixture also exercises facade loss during native checkout and
-reentrant sibling abandonment/disposal. These preserve original identity,
-native/late result and account ownership; notification does not execute cleanup.
+The [managed HTTP regressions](../../protocol-bindings/protocols/http/tests/support/managed_capacity.rs)
+extend that command with non-revoking handle loss, explicit facet/instance
+removal and replacement, owner shutdown, silent-peer retention with zero credit
+then funded cleanup, and abandoned A with active or settled B in both loss orders.
+`ConsumerOwner` consumes unique instance/standalone association authority and
+returns non-revoking handles/views. Registration metadata and call capacity have
+separate limits and funding. Original identity/tombstone funding survives stale
+handles; selected native/mapping/result ownership survives accepted work.
+The [callback fixture](../../protocol-bindings/protocols/http/tests/consumer_callbacks.rs)
+also exercises explicit managed removal during credential issuance, original
+input recovery, shutdown-before-reentrant-service-destruction, and facade loss
+during native checkout. No source/driver registry, eventfd or automatic
+authority-change notification is retained. The application supplies lifecycle
+progress, clock observations and actual timer wakeups where required.
 
-This is bounded Host finite capability with manual and qualified event-driven
-control, not continuing Action, notification or Producer association/capacity
+This is bounded Host finite capability with caller-driven execution,
+not continuing Action, notification or Producer association/capacity
 implementation. HTTP's one-exchange-per-native-
 registration restriction remains. F1/F2/F3 are unchanged outside the affected
 finite path; no gate, package, milestone or profile acceptance is inferred.

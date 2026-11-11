@@ -113,7 +113,7 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
                 data.service()
             ));
             let content = bindings[0].definition().content().clone();
-            let client = ConsumerAssociation::try_new(
+            let client = StandaloneConsumerAssociation::try_new(
                 owner.reference(),
                 bindings,
                 funding,
@@ -1072,7 +1072,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let (bindings, funding) = prepared.into_execution();
         let definition = bindings[0].definition().clone();
         let content = definition.content().clone();
-        let client = ConsumerAssociation::try_new(
+        let client = StandaloneConsumerAssociation::try_new(
             instance.reference(),
             bindings,
             funding,
@@ -1126,7 +1126,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let binding = definition
             .bind(owner, accounts.clone(), &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        let client = ConsumerAssociation::try_new(
+        let client = StandaloneConsumerAssociation::try_new(
             instance.reference(),
             vec![binding],
             vec![],

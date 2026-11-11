@@ -179,10 +179,10 @@ fn prepare_consumer(td:&Value,bank:Arc<HostResourceAccounts>,policy:Arc<Consumer
         while !j.is_finished(){j.step(&mut work(),false);}
     })
 }
-fn consumer(td:&Value,bank:Arc<HostResourceAccounts>,instance:&ConsumerInstance,policy:Arc<ConsumerPolicy>)->(ConsumerAssociation, ConsumerCalls){
+fn consumer(td:&Value,bank:Arc<HostResourceAccounts>,instance:&ConsumerInstance,policy:Arc<ConsumerPolicy>)->(StandaloneConsumerAssociation, ConsumerCalls){
     let p=prepare_consumer(td,bank.clone(),policy).unwrap();
     assert!(p.support().iter().any(|s|s.operation==Operation::QueryAllActions&&s.selected));
-    let(d,f)=p.into_execution();ConsumerAssociation::try_new(instance.reference(), d, f, bank.clone()).map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap())).ok().unwrap()
+    let(d,f)=p.into_execution();StandaloneConsumerAssociation::try_new(instance.reference(), d, f, bank.clone()).map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap())).ok().unwrap()
 }
-fn query(client:&(ConsumerAssociation, ConsumerCalls))->ConsumerCall{client.0.query_all_actions(&client.1, Deadline::NONE,now(),&mut work()).unwrap()}
+fn query(client:&(StandaloneConsumerAssociation, ConsumerCalls))->ConsumerCall{client.0.query_all_actions(&client.1, Deadline::NONE,now(),&mut work()).unwrap()}
 fn values(result:&ConsumerSettlement)->Value{serde_json::from_slice(result.result().unwrap().data().unwrap().body).unwrap()}

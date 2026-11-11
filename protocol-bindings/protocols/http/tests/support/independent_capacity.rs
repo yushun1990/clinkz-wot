@@ -17,10 +17,18 @@ fn associate(
     owner: &ConsumerInstance,
     accounts: &Arc<HostResourceAccounts>,
     peers: &[&Peer],
-) -> ConsumerAssociation {
+) -> StandaloneConsumerAssociation {
+    associate_ref(definition, owner.reference(), accounts, peers)
+}
+fn associate_ref(
+    definition: &Arc<ConsumerDefinition>,
+    consumer: ConsumerInstanceRef,
+    accounts: &Arc<HostResourceAccounts>,
+    peers: &[&Peer],
+) -> StandaloneConsumerAssociation {
     let access = ConsumerServiceOwner::retain_access(
         Arc::new(DestinationPolicy {
-            instance: owner.reference(),
+            instance: consumer.clone(),
             allowed: peers
                 .iter()
                 .map(|p| format!("http://{}/v/x?q=q", p.address))
@@ -36,11 +44,11 @@ fn associate(
         .bind(access, accounts.clone(), &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert!(Arc::ptr_eq(binding.definition(), definition));
-    ConsumerAssociation::try_new(owner.reference(), vec![binding], vec![], accounts.clone())
+    StandaloneConsumerAssociation::try_new(consumer, vec![binding], vec![], accounts.clone())
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn start(
-    association: &ConsumerAssociation,
+    association: &clinkz_wot_servient_finite::consumer::ConsumerAssociation,
     calls: &ConsumerCalls,
     peer: &Peer,
 ) -> CoreResult<ConsumerCall> {
@@ -293,7 +301,7 @@ fn shared_admission_reentry_reserves_capacity_and_closes_only_the_original_assoc
             .bind(access, account.clone(), &mut work())
             .unwrap_or_else(|_| panic!());
         let association = Rc::new(
-            ConsumerAssociation::try_new(
+            StandaloneConsumerAssociation::try_new(
                 original.reference(),
                 vec![binding],
                 vec![],
@@ -559,6 +567,5 @@ fn quiet_http_peer_needs_application_progress_after_passive_association_loss() {
     });
 }
 
-#[cfg(target_os = "linux")]
-#[path = "observable_capacity.rs"]
-mod observable;
+#[path = "managed_capacity.rs"]
+mod managed;

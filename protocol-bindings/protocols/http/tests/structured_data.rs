@@ -71,7 +71,7 @@ fn bind_mappings(
     owner: &ConsumerInstance,
     bank: &Arc<HostResourceAccounts>,
     denied: Arc<AtomicBool>,
-) -> (ConsumerAssociation, ConsumerCalls) {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let access = ConsumerServiceOwner::retain_access(Arc::new(Access(denied)), bank)
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let bindings = definitions
@@ -81,7 +81,7 @@ fn bind_mappings(
                 .unwrap_or_else(|e| panic!("{:?}", e.error()))
         })
         .collect();
-    ConsumerAssociation::try_new(owner.reference(), bindings, vec![], bank.clone())
+    StandaloneConsumerAssociation::try_new(owner.reference(), bindings, vec![], bank.clone())
         .map(|association| {
             (
                 association,

@@ -54,20 +54,20 @@ reservation; copied metadata and variable records have separate allowances.
 Capacity-owner loss cannot migrate these reservations to the association or a
 successor bank. Captured native limits remain additional independent constraints.
 
-Host finite change observation has separate capacity. Each observable source
-funds its own header and explicitly limits 0–64 live/retiring recipient records;
-it prepays neither a native descriptor nor call storage per instance. Each
-application-provisioned driver funds one stable endpoint carrier. Actual active
-source/driver records and metadata buffers acquire original work-bank backing
-before effects, and admission prepays bounded lookup, fan-out, unlink and final
-retirement work. Repeated dependencies retain the existing record's original
-funding, including when a later call uses another bank. Candidates, dispatch
-pins and retired records consume the same source quota until final release;
-removing discoverability alone cannot refund them. Empty source buffers retire;
-active buffer capacity remains bounded by the source limit. Native fd/kernel
-limits are deployment containment, not additional Engine byte backing. Record
-or work-credit exhaustion refuses admission and rolls back partial leases.
-Posting a change neither funds cancellation nor acknowledges cleanup transfer.
+The managed finite Consumer owner funds bounded instance-registry backing at
+startup and actual association-vector growth before installation. These limits
+bound registration metadata, not concurrent calls. Each adopted instance identity
+and each passive association header retain original funding through their last
+handle/control reference; removing permission does not refund retained tombstones.
+Unselected mapping backing retires outside borrows at association close. Registry
+vector capacity remains funded until its enclosing instance/owner retires;
+selected definitions and original call/result reservations survive their work.
+Lookup and actual vector moves consume operation credit; adoption prepays bounded
+registered-entry retirement. Low-level standalone construction remains caller-funded
+startup work. No per-driver relationship, native indication or observer-work
+allowance is charged. Owner metadata accounts do not add a pending-call quota;
+those quotas remain at the original association/work banks. Separate facet banks
+are not an implicit per-instance or process-wide aggregate.
 
 Independently composed Host finite Consumer registries/Servients share service
 backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the

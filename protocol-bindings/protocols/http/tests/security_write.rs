@@ -27,7 +27,7 @@ fn producer(keys: &Keys, verifier: Arc<Verifier>) -> SecureFixture {
         &[Operation::ReadProperty, Operation::WriteProperty],
     )
 }
-fn write(client: &(ConsumerAssociation, ConsumerCalls), value: &[u8]) -> ConsumerCall {
+fn write(client: &(StandaloneConsumerAssociation, ConsumerCalls), value: &[u8]) -> ConsumerCall {
     client
         .0
         .write_property(
@@ -49,7 +49,7 @@ fn consumer(
     instance: &ConsumerInstance,
     accounts: &Arc<HostResourceAccounts>,
 ) -> (
-    (ConsumerAssociation, ConsumerCalls),
+    (StandaloneConsumerAssociation, ConsumerCalls),
     Arc<PreparedConsumerContent>,
 ) {
     secure_client(

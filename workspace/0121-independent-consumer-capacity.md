@@ -9,7 +9,7 @@ prepared readiness requires no vacant Call Slot, and an unread result still
 requires its original backing after the execution slot is reused.
 
 The selected boundary replaces the bundled `ConsumerRuntime` constructor with
-`ConsumerAssociation` and explicitly supplied `ConsumerCalls`. The finite slot
+passive `ConsumerAssociation` views and explicitly supplied `ConsumerCalls`. The finite slot
 registry survives as a work owner because its reserved-slot checkout, passive
 controls, unwind restoration and orphan cleanup already implement useful finite
 mechanisms. It no longer owns one instance or its definition inventory. The
@@ -46,35 +46,36 @@ WP-400 links the real HTTP capability regressions. Historical scaling measuremen
 remain historical, not evidence for the replacement layout. No new governance
 layer, architecture gate, milestone transition or acceptance claim is added.
 
-## Completing Host lifecycle control
+## Managed lifecycle and explicit progress
 
-The passive split exposed two independent gaps: revoking an association could
-leave a live I/O-driven controller asleep, and losing aggregate control could
-leave an abandoned call retained solely by another call's shared backing.
-The selected correction retains independent associations/capacity and finite
-checkout, with active source/recipient relationships and qualified local abort.
+The independent split exposed two separate questions: what owns registration
+liveness, and what preserves cleanup when a work-controller facade disappears.
+The selected lifecycle keeps registered instance/facet authority in the actual
+logical Servient owner. Application handles are non-revoking; explicit APIs
+remove/replace registrations. A standalone move-only owner remains useful for
+raw composition and is consumed, not cloned, on managed adoption.
 
-Relationships coalesce by original source and actual progress recipient, with
-explicit source-wide limits. They contain qualified Host signals, not calls or
-Rust Wakers. A call reserves both association/instance dependencies and any
-distinct polling/aggregate-cleanup recipients before effects. Fixed driver
-domains, per-call observer inventories and a global supervisor are unnecessary.
-The borrowed/manual representation retains its own driving contract.
+Automatic authority-to-driver notification was evaluated against explicit
+lifecycle-command scheduling and cyclic/timed progress. The silent-peer evidence
+proves that I/O-only scheduling misses passive changes; it does not establish a
+universal requirement to discover/wake independent drivers from ordinary Drop.
+The native indication registry, eventfd backend and concurrent maintenance/accounting
+are withdrawn from this finite increment. Retaining them behind an unused feature
+would preserve both unnecessary complexity and known defects. A future automatic
+runtime capability needs its own concrete requirement and qualified evidence.
 
-| Transition | Linearization and retained ownership |
-| --- | --- |
-| Instance/association invalidation | Original currentness becomes false before notification; repeated invalidation cannot reactivate or redirect old work. |
-| Dependency acquisition | A source-gated relationship insertion/count increment, followed by original currentness checks before effects; refusal retires acquired dependencies and returns input. |
-| Notification ownership | Closing takes the source gate or commits work to its existing guard. The guard pins/detaches the finite batch before releasing the gate. Posting occurs outside the gate; a suspended guard can delay delivery. |
-| Dependency release | Its count decrement; structural unlink under the gate and final record/endpoint/funding retirement after all notification and lease references disappear. Retiring records still consume the source quota. |
-| Driver acknowledgement | Drain native readiness and acquire published notice state before surveying original work; later notices remain observable. A receipt is not funded cleanup. |
-| Call handoff | Fresh original finite checks and complete funded slot-to-settlement transfer; notification dependencies cease, result backing remains charged. |
-| Aggregate controller loss | Distinct from explicit close. Vacate abandoned original slots before qualified local destruction; a checked-out call remains in its lease until restoration. |
+Explicit lifecycle changes fence original permission before releasing mappings,
+while accepted calls and settlements keep original context/accounts. Unselected
+mappings retire outside borrows; retained handles keep only funded tombstones.
+The application schedules original work after lifecycle changes and abandonment,
+with actual timer wakes where needed; logical deadlines install no timer.
+This preserves independent work-store cardinality without an Engine scheduler.
 
-Source mutation is private, non-suspending, allocation/callback-free and bounded
-by the configured record limit. An atomic busy/dirty/closed gate hands close and
-last-release duties to an existing guard without waiting. No request flag alone
-is a notification owner. Native backend failure that establishes no readiness
-can leave a driver asleep and cannot be reported as delivered notification.
-The Host backend and new disposal/reentry timings require executable evidence;
-neither a metadata tag nor HTTP alone certifies third-party destructors.
+The cleanup-reachability correction remains independent and necessary: losing the
+work-controller facade vacates and locally disposes abandoned original calls;
+checked-out work retains its lease/restoration duty. An unrelated surviving handle
+cannot strand abandoned work. Finite local abort is a complete provider conformance
+obligation, not a guarantee inferred from HTTP or a metadata tag.
+
+Detailed contracts belong to Runtime Safety, Foundation and Core; this topic
+records the decision rationale and alternative dispositions, not current task/CI state.

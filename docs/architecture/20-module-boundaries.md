@@ -153,10 +153,14 @@ withdrew availability, not the enduring product goals. Historical evidence and
 commands stay tied to their original revisions.
 
 
-The same source-free execution crate also contains the independent finite
-`consumer::ConsumerAssociation` and explicit `consumer::ConsumerCalls` work
-owner. Persistent mappings/authority and finite capacity have independent
-cardinalities; neither owner supplies protocol selection or a universal runtime. Planning owns open registration/selection and paid
+The same source-free execution crate contains the finite `ConsumerOwner` lifecycle
+boundary, non-revoking `ConsumerAssociation` views and independent `ConsumerCalls`
+work storage. Registered instances/facets have one actual logical owner; dropping
+an application handle never removes them. Standalone ownership remains a separate
+low-level representation whose unique authority is consumed on adoption. Persistent
+registration and finite capacity have independent cardinalities; neither implies
+protocol selection, an executor or an authority-change notification service.
+Planning owns open registration/selection and paid
 owned compilation; Core owns immutable completed Consumer definitions and service
 contracts. Execution consumes those definitions without an upward TD/Planning
 edge. The shared opaque Host bank now lives in Core; existing Servient account

@@ -403,7 +403,7 @@ mod live {
                     .any(|s| s.operation == Operation::SubscribeAllEvents && s.selected)
             );
             let (definitions, funding) = prepared.into_execution();
-            let finite = ConsumerAssociation::try_new(
+            let finite = StandaloneConsumerAssociation::try_new(
                 consumer_owner.reference(),
                 definitions,
                 funding,

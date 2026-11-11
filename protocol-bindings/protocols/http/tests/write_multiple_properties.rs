@@ -8,7 +8,7 @@ const VALUES: &[u8] = br#"{"on":false,"secret":"updated"}"#;
 fn write_description(addr: SocketAddr) -> Value {
     collection_description(addr, WRITE)
 }
-fn start_write(client: &(ConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
+fn start_write(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     start_collection_at(client, WRITE, Deadline::NONE).unwrap()
 }
 fn invalid_inputs() -> Vec<Vec<u8>> {
@@ -272,7 +272,7 @@ fn consumer_and_producer_member_permission_refuse_the_entire_group_before_effect
         .unwrap();
         let (d, f) = p.into_execution();
         let client =
-            ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+            StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
                 .map(|association| {
                     (
                         association,

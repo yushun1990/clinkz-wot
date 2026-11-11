@@ -7,7 +7,10 @@ fn selected_description(addr: SocketAddr) -> Value {
     td["forms"] = json!([{"op":"readmultipleproperties", "href":format!("http://{addr}/properties"), "htv:methodName":"POST"}]);
     td
 }
-fn start_selected(client: &(ConsumerAssociation, ConsumerCalls), names: &[&str]) -> ConsumerCall {
+fn start_selected(
+    client: &(StandaloneConsumerAssociation, ConsumerCalls),
+    names: &[&str],
+) -> ConsumerCall {
     client
         .0
         .read_multiple_properties(&client.1, names, Deadline::NONE, now(0), &mut work())
@@ -89,7 +92,7 @@ fn same_td_supports_different_per_call_subsets_and_distinct_read_all() {
         assert_eq!(root.affordance(), &AffordanceTarget::Thing);
         assert_eq!(root.form(), 1);
         assert_eq!(root.binding().binding_id(), BindingId::new(98));
-        let client = ConsumerAssociation::try_new(
+        let client = StandaloneConsumerAssociation::try_new(
             owner.reference(),
             definitions,
             funding,
@@ -673,7 +676,7 @@ fn selected_service_is_actual_static_preparation_never_encodes_and_callback_loss
             }
             let (d, f) = prepared.into_execution();
             let client =
-                ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
                     .map(|association| {
                         (
                             association,
@@ -897,7 +900,7 @@ fn authorization_service_loss_fences_each_admission_boundary() {
             .unwrap();
             let (d, f) = prepared.into_execution();
             let client =
-                ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
                     .map(|association| {
                         (
                             association,
@@ -1079,7 +1082,7 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                 )
                 .unwrap();
                 let (d, f) = prepared.into_execution();
-                let client = ConsumerAssociation::try_new(
+                let client = StandaloneConsumerAssociation::try_new(
                     owner.reference(),
                     d,
                     f,
@@ -1218,7 +1221,7 @@ fn review_preparation_qualifies_generic_array_input_independently_of_selection_f
             );
             let (d, f) = prepared.into_execution();
             let client =
-                ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
                     .map(|association| {
                         (
                             association,

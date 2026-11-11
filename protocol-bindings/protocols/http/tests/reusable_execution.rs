@@ -115,7 +115,7 @@ fn bind(
     owner: &ConsumerInstance,
     accounts: &Arc<HostResourceAccounts>,
     denied: Arc<AtomicBool>,
-) -> (ConsumerAssociation, ConsumerCalls) {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let policy = ConsumerServiceOwner::retain_access(
         Arc::new(InstancePolicy {
             expected: owner.reference(),
@@ -127,7 +127,7 @@ fn bind(
     let binding = definition
         .bind(policy, accounts.clone(), &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    ConsumerAssociation::try_new(
+    StandaloneConsumerAssociation::try_new(
         owner.reference(),
         vec![binding],
         vec![],
@@ -332,7 +332,7 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
         .clone()
         .bind(policy.clone(), account_b.clone(), &mut work())
         .unwrap_or_else(|_| panic!());
-    let refused = ConsumerAssociation::try_new(
+    let refused = StandaloneConsumerAssociation::try_new(
         owner.reference(),
         vec![binding],
         vec![],
@@ -350,7 +350,7 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
     let old_identity = owner.reference();
     drop(owner);
     let stale =
-        ConsumerAssociation::try_new(old_identity, bindings, funding, account_b.clone())
+        StandaloneConsumerAssociation::try_new(old_identity, bindings, funding, account_b.clone())
             .map(|association| {
                 (
                     association,
@@ -361,7 +361,7 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
             .expect("stale original authority cannot be installed");
     let (bindings, funding) = stale.into_input();
     let replacement = consumer_instance();
-    let runtime = ConsumerAssociation::try_new(
+    let runtime = StandaloneConsumerAssociation::try_new(
         replacement.reference(),
         bindings,
         funding,

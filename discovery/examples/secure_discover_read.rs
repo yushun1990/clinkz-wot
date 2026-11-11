@@ -11,7 +11,7 @@ use clinkz_wot_planning::open_consumer::{
     ConsumerRegistrationInput, ConsumerRegistry, ConsumerSelector,
 };
 use clinkz_wot_servient_finite::consumer::{
-    ConsumerAssociation, ConsumerCall, ConsumerCalls, ConsumerSettlement,
+    ConsumerCall, ConsumerCalls, ConsumerSettlement, StandaloneConsumerAssociation,
 };
 use std::{
     sync::{
@@ -104,7 +104,7 @@ pub(crate) fn prepare_read(
     registration: ConsumerRegistrationInput,
     instance: &ConsumerInstance,
     accounts: &Arc<HostResourceAccounts>,
-) -> CoreResult<(ConsumerAssociation, ConsumerCalls)> {
+) -> CoreResult<(StandaloneConsumerAssociation, ConsumerCalls)> {
     let registry = ConsumerRegistry::try_new(vec![registration], accounts)
         .map_err(|e| e.error().error().clone())?;
     let prepared = registry.prepare(
@@ -140,7 +140,7 @@ pub(crate) fn prepare_read(
             ))
         })?;
     drop(registry);
-    ConsumerAssociation::try_new(
+    StandaloneConsumerAssociation::try_new(
         instance.reference(),
         vec![selected],
         funding,

@@ -235,7 +235,7 @@ fn consumer_root_selection_requires_actual_form_binding_services_and_complete_sc
             let owner = consumer_instance();
             let (d, f) = p.into_execution();
             let client =
-                ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
                     .map(|association| {
                         (
                             association,
@@ -708,7 +708,7 @@ fn captured_collection_service_is_required_and_freshly_checked_after_validation(
         let owner = consumer_instance();
         let (d, f) = prepared.into_execution();
         let client =
-            ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+            StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
                 .map(|association| {
                     (
                         association,

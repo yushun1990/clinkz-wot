@@ -3,7 +3,7 @@ use clinkz_wot_binding_http::{HttpConsumerConfig, try_consumer_registration};
 use clinkz_wot_core::{host_accounts::HostResourceAccounts, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::{ConsumerRegistry, ConsumerSelector};
-use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls};
+use clinkz_wot_servient_finite::consumer::{ConsumerCalls, StandaloneConsumerAssociation};
 use std::{
     sync::Arc,
     task::{Context, Poll, Waker},
@@ -51,9 +51,13 @@ fn main() {
             clinkz_wot_foundation::SlotIndex::new(0),
             clinkz_wot_foundation::Generation::INITIAL,
         ));
-    let association =
-        ConsumerAssociation::try_new(consumer.reference(), definitions, funding, bank.clone())
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let association = StandaloneConsumerAssociation::try_new(
+        consumer.reference(),
+        definitions,
+        funding,
+        bank.clone(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
     let clock = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(600), clock.elapsed().as_millis() as u64);

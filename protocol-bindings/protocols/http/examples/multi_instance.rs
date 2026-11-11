@@ -327,7 +327,7 @@ impl ConsumerAccessService for Policy {
 struct Instance {
     owner: Option<ConsumerInstance>,
     // This workload chooses dedicated capacity; associations need not own it.
-    runtime: Option<(ConsumerAssociation, ConsumerCalls)>,
+    runtime: Option<(StandaloneConsumerAssociation, ConsumerCalls)>,
     denied: Arc<AtomicBool>,
 }
 #[derive(Default)]
@@ -398,7 +398,7 @@ impl Instance {
         cost.binding.add(before, start.elapsed().as_nanos());
         let before = meter::read();
         let start = Instant::now();
-        let runtime = ConsumerAssociation::try_new(
+        let runtime = StandaloneConsumerAssociation::try_new(
             owner.reference(),
             vec![binding],
             vec![],
@@ -441,9 +441,13 @@ fn hard_limits(definition: &Arc<ConsumerDefinition>) {
             Arc::new(AtomicBool::new(false)),
             &mut work(),
         );
-        let association =
-            ConsumerAssociation::try_new(owner.reference(), vec![binding], vec![], account.clone())
-                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let association = StandaloneConsumerAssociation::try_new(
+            owner.reference(),
+            vec![binding],
+            vec![],
+            account.clone(),
+        )
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let before_capacity = ResourceKind::ALL.map(|k| account.account(k).used());
         let capacity = ConsumerCalls::try_new(account.clone(), slots);
         assert_eq!(capacity.is_ok(), slots == 32);

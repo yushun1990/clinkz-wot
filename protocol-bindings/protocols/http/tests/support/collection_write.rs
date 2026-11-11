@@ -38,7 +38,7 @@ fn shared_failure_before_during_and_after_application_never_implies_rollback_or_
 ) {
     let write_description = |addr| collection_description(addr, operation);
     let start_write =
-        |client: &(ConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
+        |client: &(StandaloneConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
     io().block_on(async {
         for fault in 1..=5 {
             let addr = address();
@@ -89,7 +89,7 @@ fn shared_ambiguous_or_partial_native_completion_never_confirms_or_replays_the_g
 ) {
     let write_description = |addr| collection_description(addr, operation);
     let start_write =
-        |client: &(ConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
+        |client: &(StandaloneConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
     for reply in [
         b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".as_slice(),
         b"HTTP/1.1 202 Accepted\r\n\r\n",
@@ -355,7 +355,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
 ) {
     let write_description = |addr| collection_description(addr, operation);
     let start_write =
-        |client: &(ConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
+        |client: &(StandaloneConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
     use std::sync::atomic::AtomicUsize;
     struct CountAccess(Access, Arc<AtomicUsize>);
     impl ConsumerAccessService for CountAccess {
@@ -397,7 +397,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             reg.services.access = Arc::new(CountAccess(Access(denied.clone()), checks.clone()));
             let p = prepare_consumer(&td, accounts.clone(), vec![reg], ConsumerSelector::default()).unwrap();
             let (d, f) = p.into_execution();
-            let client = ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap())).unwrap_or_else(|_| panic!());
+            let client = StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap())).unwrap_or_else(|_| panic!());
             let mut call = start_write(&client);
             let start = Instant::now();
             // Withhold handoff. Two authorization callbacks in one step witness

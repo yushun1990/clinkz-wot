@@ -70,11 +70,11 @@ fn instance() -> ConsumerInstance {
     ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL))
 }
 struct Runtime {
-    inner: (ConsumerAssociation, ConsumerCalls),
+    inner: (StandaloneConsumerAssociation, ConsumerCalls),
     _instance: ConsumerInstance,
 }
 impl core::ops::Deref for Runtime {
-    type Target = (ConsumerAssociation, ConsumerCalls);
+    type Target = (StandaloneConsumerAssociation, ConsumerCalls);
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
@@ -82,7 +82,7 @@ impl core::ops::Deref for Runtime {
 fn runtime(prepared: PreparedConsumer, bank: Arc<HostResourceAccounts>) -> Runtime {
     let (defs, funding) = prepared.into_execution();
     let owner = instance();
-    let inner = ConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
+    let inner = StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
         .map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     Runtime {
@@ -640,7 +640,7 @@ fn later_failure_reclaims_earlier_owned_output_and_runtime_rejects_a_foreign_ban
     let foreign = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let owner = instance();
     let rejected =
-        ConsumerAssociation::try_new(owner.reference(), defs, funding, foreign.clone())
+        StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, foreign.clone())
             .map(|association| {
                 (
                     association,
@@ -651,7 +651,7 @@ fn later_failure_reclaims_earlier_owned_output_and_runtime_rejects_a_foreign_ban
             .unwrap();
     clean(&foreign);
     let (defs, funding) = rejected.into_input();
-    let rt = ConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
+    let rt = StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
         .map(|association| {
             (
                 association,
@@ -1047,7 +1047,7 @@ fn review_cleanup_progress_is_fair_with_one_native_credit() {
     funding_a.append(&mut funding_b);
     let owner = instance();
     let rt =
-        ConsumerAssociation::try_new(owner.reference(), defs_a, funding_a, bank.clone())
+        StandaloneConsumerAssociation::try_new(owner.reference(), defs_a, funding_a, bank.clone())
             .map(|association| {
                 (
                     association,
@@ -1313,7 +1313,7 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
         definitions.append(&mut second_definitions);
         funding.append(&mut second_funding);
         let owner = instance();
-        let rt = ConsumerAssociation::try_new(
+        let rt = StandaloneConsumerAssociation::try_new(
             owner.reference(),
             definitions,
             funding,

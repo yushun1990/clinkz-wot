@@ -69,7 +69,6 @@ version = "0.1.0"
 dependencies = [
  "clinkz-wot-foundation",
  "critical-section",
- "libc",
  "sha2-const-stable",
 ]
 

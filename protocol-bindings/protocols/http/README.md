@@ -72,73 +72,63 @@ TD-resolved semantic input. The [composed Write subset](#composed-property-readw
 uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
 uses `try_inline_consumer_registration` and remains a restricted Read adapter.
 
-Prepare bindings with `ConsumerRegistry`, then attach their original Consumer
-authority through `ConsumerAssociation`. Construct finite capacity separately
-and pass it as the first argument to each association method. For a Property
-Read prepared using `instance_accounts`:
+Prepare bindings with `ConsumerRegistry`, then register their original authority
+and association with a finite `ConsumerOwner`. It controls registered lifecycle;
+application instance handles and `ConsumerAssociation` views are non-revoking.
+Construct execution capacity separately and supply it to each operation:
 
 ```rust
-use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls};
+use clinkz_wot_servient_finite::consumer::{
+    ConsumerOwner, StandaloneConsumerAssociation, ConsumerCalls,
+};
 
 let (bindings, funding) = prepared.into_execution();
-let association = ConsumerAssociation::try_new(
+let standalone = StandaloneConsumerAssociation::try_new(
     consumer.reference(), bindings, funding, instance_accounts.clone(),
 ).unwrap_or_else(|e| panic!("{:?}", e.error()));
+let owner = ConsumerOwner::try_new(registry_accounts.clone(), 16, 32).unwrap();
+let instance = owner.register_instance(consumer, &mut budget)
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+let association = owner.register_association(&instance, standalone, &mut budget)
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
 let calls = ConsumerCalls::try_new(work_accounts.clone(), 1).unwrap();
 let mut call = association.read_property(
     &calls, "level", deadline, now, &mut budget,
 ).unwrap();
+// Explicitly fence this original instance; this does not report native drain.
+owner.remove_instance(&instance, &mut budget).unwrap();
+// Schedule funded call.poll / calls.step turns to observe the fence and clean up.
 ```
 
-`instance_accounts` must match the bank attached to those bindings;
-`work_accounts` may be the same bank or a separately provisioned one. An
-association retains checked mappings and policy without vacant call slots.
-Several associations may use one `ConsumerCalls`, and an association may use
-several capacity owners without repeating preparation. Each admitted call keeps
-its original authority, operands, accounts and cleanup. Native availability and
-instance/work quotas can still refuse admission.
+`instance_accounts` must match the bindings' bank. Work and registry metadata
+accounts may be separately provisioned. One owner can hold many registered
+instances/facets, while many associations share one `ConsumerCalls` or use several
+independent work owners. Native concurrency and original quotas still apply.
+`remove_association` closes only one facet; parent removal/owner shutdown fences
+all its registered facets. `replace_instance` requires the same numeric slot and
+checked next generation. Old identity/facet handles cannot resolve a successor.
+Dropping any returned handle leaves registration intact; `begin_close` or actual
+owner Drop fences all its registrations. Standalone association close/Drop remains
+a low-level passive ownership option; adoption consumes that revoking owner.
 
-For event-driven Host control on Linux, provision a `core::host_change::HostChangeDriver`
-at the application driver, construct the original instance with
-`ConsumerInstance::try_new_observable(slot, &accounts, max_drivers)`, and use
-`ConsumerAssociation::try_new_observable(..., max_drivers)` plus
-`ConsumerCalls::try_new_driven(work_accounts, slots, driver.signal())`.
-Each source limits its actual live/retiring driver records independently of
-call slots. The same association can later use D2 without rebuilding authority
-or mappings. Distinct work owners may use independent drivers; a borrowed
-`calls.using_driver(&other_signal)` instead chooses a different polling driver
-over the same storage, retaining its original prepaid cleanup recipient.
-No native descriptor, execution slot or fixed driver membership is prepaid per
-logical instance. Other OS targets refuse driver provisioning; the manual API
-remains available.
+The application owns scheduling, fresh logical-clock observations and work credit.
+Removal does not notify a parked driver. Native I/O wakes alone cannot cover a
+silent peer, passive removal, abandoned handle or newly supplied credit. Arrange
+lifecycle-command, cyclic or actual timer turns and retain runnable responsibility
+after zero/partial credit. A logical `Deadline` does not install a timer or imply
+automatic timeout. If aggregate progress polls using another task's context, also
+arrange result-consumer turns; there is no automatic authority/result notification
+registry. The [Read example](examples/read_property.rs) uses explicit periodic
+progress, and [managed real-HTTP cases](tests/support/managed_capacity.rs) exercise
+removal without another peer response.
 
-Register the driver's fd in the application's readiness mechanism (for example
-Tokio `AsyncFd`). Acknowledge change readiness **before** surveying original
-work, register/recheck before parking, and poll native I/O and control readiness
-together. Source close and ordinary authority Drop request a bounded native
-indication; they never poll cleanup or invoke Rust Wakers. Delivery can await an
-already executing source metadata guard. It assumes a healthy backend and live,
-serviced driver; unexpected signalling errors are latched failures, not delivery.
-A receipt supplies no execution credit: retain runnable responsibility after
-partial/zero-credit progress and schedule a funded turn when credit is available.
-The [real HTTP event-driven regressions](tests/support/observable_capacity.rs)
-demonstrate quiet-peer revocation without periodic Engine polling, later D2
-enrollment, separate polling/cleanup roles, aggregate-to-result notification
-and notification-capacity refusal. Aggregate progress requests a turn on a
-distinct original result recipient when its call first becomes terminal.
-
-Work-owner close fences only calls admitted there and preserves incremental
-`calls.step` access, including abandoned handles. Actual facade Drop uses qualified
-bounded local disposal for abandoned work even if an unrelated handle retains
-the shared state. Retained handles can finish their own cleanup after root loss;
-returned settlements preserve their original funding and results. Local disposal
-does not acknowledge remote cancellation or drain.
-
-The manual constructors shown above require application-scheduled funded
-`ConsumerCall::poll` or `ConsumerCalls::step` turns after invalidation/abandonment,
-even when the peer sends nothing. The [runnable Read example](examples/read_property.rs)
-uses that valid profile. Neither profile supplies a background timer or guarantees
-eventual cleanup if the application stops driving/withholds credit.
+Work-owner explicit close preserves `calls.step` cleanup access. Actual facade
+Drop vacates and locally disposes abandoned calls, even while unrelated handles
+retain shared state. Retained handles can finish their own cleanup; settlements
+retain original results/accounts. This requires complete finite nonblocking local
+abort from the selected Binding/services and claims no remote cancellation ACK,
+rollback or completed network drain. General asynchronous cleanup transfer is not
+implemented by this finite owner. No automatic eventfd/observer backend is linked.
 [Runtime Safety](../../../docs/spec/runtime-safety.md) defines the full contracts.
 
 The open finite path uses the bounded [prepared DataSchema subset](../../../docs/evidence/structured-dataschema.md).

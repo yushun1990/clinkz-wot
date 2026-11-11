@@ -8,7 +8,7 @@ const VALUES: &[u8] = br#"{"on":false,"secret":"updated"}"#;
 fn write_description(addr: SocketAddr) -> Value {
     collection_description(addr, WRITE)
 }
-fn start_write(client: &(ConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
+fn start_write(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     start_collection_at(client, WRITE, Deadline::NONE).unwrap()
 }
 
@@ -42,7 +42,7 @@ fn complete_writable_map_uses_actual_root_form_services_and_one_native_put() {
             assert_eq!(root.affordance(), &AffordanceTarget::Thing);
             assert_eq!(root.form(), 0);
             assert_eq!(root.binding().binding_id(), BindingId::new(98));
-            let client = ConsumerAssociation::try_new(
+            let client = StandaloneConsumerAssociation::try_new(
                 owner.reference(),
                 definitions,
                 funding,
@@ -436,7 +436,7 @@ fn captured_map_service_validates_the_whole_input_and_service_loss_fences_native
             let (d, f) = prepared.into_execution();
             assert_eq!(d.len(), 1);
             let client =
-                ConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
                     .map(|association| {
                         (
                             association,

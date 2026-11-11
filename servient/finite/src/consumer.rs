@@ -2,9 +2,6 @@
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::execution::{FiniteCallDriver, FiniteCallState, NativeProgress};
-use clinkz_wot_core::host_change::{
-    HostChangeAuthority, HostChangeLease, HostChangeSignal, HostChangeSource,
-};
 use clinkz_wot_core::thing::AffordanceSite;
 use clinkz_wot_core::{consumer::*, host_accounts::*, *};
 use clinkz_wot_foundation::{
@@ -308,27 +305,39 @@ impl Definition {
     }
 }
 
-/// Persistently usable checked mappings, policy and independent instance authority.
-/// This association owns no vacant calls. Supply a `ConsumerCalls` at admission.
+/// A non-revoking view of checked mappings and original instance authority.
+/// Cloning or dropping this view never closes its association. Its actual owner
+/// is a `ConsumerOwner` registration or a `StandaloneConsumerAssociation`.
+/// Supply independent `ConsumerCalls` at each admission.
 ///
-/// Close/Drop invalidates authority before notification. Observable construction
-/// enrolls actual active drivers at admission, without owning work or an executor.
-/// Manual construction requires application scheduling after invalidation.
-/// Neither notification nor invalidation polls native cleanup.
+/// A view has no lifecycle API:
+/// ```compile_fail
+/// use clinkz_wot_servient_finite::consumer::ConsumerAssociation;
+/// fn revoke(view: &ConsumerAssociation) { view.begin_close(); }
+/// ```
+/// Nor can it be converted back into a revoking owner:
+/// ```compile_fail
+/// use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, StandaloneConsumerAssociation};
+/// fn recover(view: ConsumerAssociation) -> StandaloneConsumerAssociation { view }
+/// ```
+#[derive(Clone)]
 pub struct ConsumerAssociation {
-    state: Association,
+    state: Rc<Association>,
 }
 struct Association {
     authority: Rc<AssociationAuthority>,
+    mappings: RefCell<Option<AssociationMappings>>,
+    _funding: HostCapacityReservation,
+}
+struct AssociationMappings {
     definitions: Vec<Arc<Definition>>,
     bank: Arc<HostResourceAccounts>,
     _funding: Vec<HostCapacityReservation>,
 }
-// Retaining this passive authority never retains unselected mappings/services.
+// Retained by calls without retaining unselected mappings or the facade.
 struct AssociationAuthority {
     consumer: ConsumerInstanceRef,
     active: Cell<bool>,
-    changes: Option<HostChangeAuthority>,
     _funding: Vec<HostCapacityReservation>,
 }
 impl AssociationAuthority {
@@ -337,40 +346,35 @@ impl AssociationAuthority {
     }
 }
 
-/// Explicit, caller-driven finite execution capacity, independent of associations.
-/// Any association may use several owners; one owner may serve many associations.
-/// Drop fences only work admitted here. It does not revoke any Consumer instance.
-///
-/// The application owns progress scheduling, time observations and work credit.
-/// Driven construction supplies an actual cleanup recipient; observable sources
-/// enroll it before effects. Manual construction instead requires the caller to
-/// schedule turns after invalidation/abandonment, even with silent native I/O.
-/// Notifications supply no credit or eventual-execution guarantee.
-/// Explicit close retains aggregate cleanup access. Actual facade loss locally
-/// disposes abandoned original work outside registry borrows; retained handles
-/// keep their own reachable cleanup and returned settlements keep their backing.
+/// Move-only standalone association authority for low-level composition.
+/// `handle()` returns a non-revoking view. Registration consumes this owner;
+/// neither a managed view nor a reference can recover its revocation power.
+/// Close/Drop passively fences, then releases unselected mappings. Applications
+/// must schedule funded call/work-owner progress even with silent native I/O.
+pub struct StandaloneConsumerAssociation {
+    association: ConsumerAssociation,
+}
+impl core::ops::Deref for StandaloneConsumerAssociation {
+    type Target = ConsumerAssociation;
+    fn deref(&self) -> &ConsumerAssociation {
+        &self.association
+    }
+}
+
+/// Explicit, caller-driven finite capacity, independent of logical registrations.
+/// One owner may serve many associations; each association may use several owners.
+/// The application supplies scheduling, fresh clock observations and work credit.
+/// Logical deadlines do not install timers, and native wakes alone do not cover
+/// passive removal or handle abandonment. Explicit close retains cleanup access.
+/// Actual facade loss locally disposes abandoned work outside registry borrows;
+/// surviving handles retain their own progress and original settlements.
 pub struct ConsumerCalls {
     state: Rc<State>,
-    call_driver: Option<HostChangeSignal>,
-    owns_control: bool,
-}
-/// Borrowed admission through an existing store with a separately chosen call
-/// driver. It owns no slots and does not close or acquire aggregate control.
-pub struct ConsumerAdmission<'a> {
-    view: ConsumerCalls,
-    _owner: core::marker::PhantomData<&'a ConsumerCalls>,
-}
-impl core::ops::Deref for ConsumerAdmission<'_> {
-    type Target = ConsumerCalls;
-    fn deref(&self) -> &ConsumerCalls {
-        &self.view
-    }
 }
 struct State {
     bank: Arc<HostResourceAccounts>,
     active: Cell<bool>,
     controller_present: Cell<bool>,
-    cleanup_driver: Option<HostChangeSignal>,
     registry: RefCell<Registry>,
     // Last to drop, after calls and their native/result backing.
     _funding: Vec<HostCapacityReservation>,
@@ -410,8 +414,6 @@ struct CallControl {
     abandoned: Cell<bool>,
     waker: RefCell<Option<core::task::Waker>>,
     recheck: Cell<bool>,
-    driver: Option<HostChangeSignal>,
-    notices: RefCell<Option<CallNotices>>,
     _funding: HostCapacityReservation,
 }
 impl CallControl {
@@ -419,7 +421,6 @@ impl CallControl {
         bank: &Arc<HostResourceAccounts>,
         association: Rc<AssociationAuthority>,
         now: MonotonicInstant,
-        driver: Option<HostChangeSignal>,
     ) -> CoreResult<Rc<Self>> {
         let bytes = (core::mem::size_of::<Self>() + 2 * core::mem::size_of::<usize>()) as u64;
         let funding = bank
@@ -432,8 +433,6 @@ impl CallControl {
             abandoned: Cell::new(false),
             waker: RefCell::new(None),
             recheck: Cell::new(false),
-            driver,
-            notices: RefCell::new(None),
             _funding: funding,
         }))
     }
@@ -487,66 +486,6 @@ impl CallControl {
         if let Some(waker) = waker {
             waker.wake();
         }
-    }
-    fn signal(&self) {
-        if let Some(driver) = &self.driver {
-            let _ = driver.request_turn();
-        }
-    }
-    fn finish_notices(&self) {
-        let notices = self.notices.borrow_mut().take();
-        drop(notices);
-    }
-    fn abandon_notices(&self) {
-        let polling = self
-            .notices
-            .borrow_mut()
-            .as_mut()
-            .and_then(|n| n.polling.take());
-        drop(polling);
-    }
-}
-
-struct CallNotices {
-    // Both sources for the aggregate cleanup role are prepaid even when a
-    // different task polls the handle. Abandonment needs no new subscription.
-    _cleanup: [HostChangeLease; 2],
-    polling: Option<[HostChangeLease; 2]>,
-}
-impl CallNotices {
-    fn acquire(
-        association: &AssociationAuthority,
-        cleanup: &HostChangeSignal,
-        polling: &HostChangeSignal,
-        bank: &Arc<HostResourceAccounts>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<Self> {
-        let instance = association
-            .consumer
-            .change_source()
-            .ok_or_else(unsupported)?;
-        let facet = association
-            .changes
-            .as_ref()
-            .ok_or_else(unsupported)?
-            .reference();
-        let pair = |driver: &HostChangeSignal, budget: &mut WorkBudget| -> CoreResult<_> {
-            Ok([
-                instance.subscribe(driver, bank, budget)?,
-                facet.subscribe(driver, bank, budget)?,
-            ])
-        };
-        let cleanup_pair = pair(cleanup, budget)?;
-        // The signal issuer, not an fd or executor label, identifies a recipient.
-        let polling_pair = if cleanup.same_recipient(polling) {
-            None
-        } else {
-            Some(pair(polling, budget)?)
-        };
-        Ok(Self {
-            _cleanup: cleanup_pair,
-            polling: polling_pair,
-        })
     }
 }
 
@@ -642,24 +581,11 @@ impl State {
     }
     fn close(&self) {
         self.revoke();
-        self.signal_drivers();
         let count = self.registry.borrow().slots.len();
         for index in 0..count {
             let control = self.registry.borrow().slots[index].control().cloned();
             if let Some(control) = control {
                 control.wake();
-            }
-        }
-    }
-    fn signal_drivers(&self) {
-        if let Some(driver) = &self.cleanup_driver {
-            let _ = driver.request_turn();
-        }
-        let count = self.registry.borrow().slots.len();
-        for index in 0..count {
-            let control = self.registry.borrow().slots[index].control().cloned();
-            if let Some(control) = control {
-                control.signal();
             }
         }
     }
@@ -752,14 +678,6 @@ struct Call {
     progress: FiniteCallState,
     work: CallWork,
 }
-impl Drop for Call {
-    fn drop(&mut self) {
-        // Irrevocable local disposal owns the complete object synchronously;
-        // no future driver permission/delivery is owed. Native/result backing
-        // still drops before the original work reservations below.
-        self.work.control.finish_notices();
-    }
-}
 struct CallWork {
     consumer: ConsumerInstanceRef,
     control: Rc<CallControl>,
@@ -826,123 +744,6 @@ impl ConsumerAssociation {
         .map_err(|e| {
             let (input, error) = e.into_parts();
             BindingInputRejection::new(input.unwrap(), error)
-        })
-    }
-    /// Recoverable ownership handoff. Only this captured vector supplies native
-    /// executors/services; runtime calls accept no compiler/configuration override.
-    /// The bank funds association records and must match the bindings' bank.
-    /// Its PendingHandlerCallsGlobalMax account also limits outstanding calls
-    /// across chosen work owners. Quotas follow banks, not instance identities.
-    /// A shared bank supplies a shared quota; other
-    /// admitted-work byte limits are enforced at the supplied work owner's bank.
-    pub fn try_new(
-        consumer: ConsumerInstanceRef,
-        definitions: Vec<ConsumerBinding>,
-        funding: Vec<HostCapacityReservation>,
-        bank: Arc<HostResourceAccounts>,
-    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
-    {
-        Self::construct(consumer, definitions, funding, bank, None)
-    }
-    /// A dynamically enrolled Host source, with no execution slots or driver
-    /// membership fixed at construction. The instance must also be observable.
-    pub fn try_new_observable(
-        consumer: ConsumerInstanceRef,
-        definitions: Vec<ConsumerBinding>,
-        funding: Vec<HostCapacityReservation>,
-        bank: Arc<HostResourceAccounts>,
-        max_drivers: usize,
-    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
-    {
-        if consumer.change_source().is_none() {
-            return Err(reject((definitions, funding), unsupported()));
-        }
-        let changes = match HostChangeAuthority::try_new(&bank, max_drivers) {
-            Ok(changes) => changes,
-            Err(error) => return Err(reject((definitions, funding), error)),
-        };
-        Self::construct(consumer, definitions, funding, bank, Some(changes))
-    }
-    fn construct(
-        consumer: ConsumerInstanceRef,
-        definitions: Vec<ConsumerBinding>,
-        funding: Vec<HostCapacityReservation>,
-        bank: Arc<HostResourceAccounts>,
-        changes: Option<HostChangeAuthority>,
-    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
-    {
-        let error = if !consumer.is_current()
-            || definitions.is_empty()
-            || definitions.len() > 128
-            || definitions.iter().any(|d| !Arc::ptr_eq(d.bank(), &bank))
-            || definitions.iter().enumerate().any(|(i, d)| {
-                definitions[..i].iter().any(|old| {
-                    old.affordance() == d.affordance() && old.operation() == d.operation()
-                })
-            }) {
-            Some(invalid())
-        } else {
-            None
-        };
-        if let Some(error) = error {
-            return Err(reject((definitions, funding), error));
-        }
-        let bytes = (core::mem::size_of::<Association>()
-            + definitions.len() * core::mem::size_of::<Arc<Definition>>())
-            as u64;
-        let extra = match reserve(&bank, &[(K::EngineLiveBytesGlobalMax, bytes)]) {
-            Ok(extra) => extra,
-            Err(e) => return Err(reject((definitions, funding), e)),
-        };
-        let authority_funding = match reserve(
-            &bank,
-            &[(
-                K::EngineLiveBytesGlobalMax,
-                (core::mem::size_of::<AssociationAuthority>() + 2 * core::mem::size_of::<usize>())
-                    as u64,
-            )],
-        ) {
-            Ok(funding) => funding,
-            Err(e) => return Err(reject((definitions, funding), e)),
-        };
-        let mut records = Vec::new();
-        let mut entries = Vec::new();
-        if records.try_reserve_exact(definitions.len()).is_err()
-            || entries.try_reserve_exact(definitions.len()).is_err()
-        {
-            return Err(reject((definitions, funding), busy()));
-        }
-        for _ in &definitions {
-            match bank.reserve(
-                K::EngineLiveBytesGlobalMax,
-                (core::mem::size_of::<Definition>() + 32) as u64,
-            ) {
-                Some(record) => records.push(record),
-                None => return Err(reject((definitions, funding), busy())),
-            }
-        }
-        entries.extend(
-            definitions
-                .into_iter()
-                .zip(records)
-                .map(|(definition, record)| {
-                    Arc::new(Definition::from_prepared(definition, record))
-                }),
-        );
-        let mut funding = funding;
-        funding.extend(extra);
-        Ok(Self {
-            state: Association {
-                authority: Rc::new(AssociationAuthority {
-                    consumer,
-                    active: Cell::new(true),
-                    changes,
-                    _funding: authority_funding,
-                }),
-                definitions: entries,
-                bank,
-                _funding: funding,
-            },
         })
     }
     pub fn read_property(
@@ -1159,12 +960,7 @@ impl ConsumerAssociation {
             Ok(reserved) => reserved,
             Err(error) => return Err(reject(input, error)),
         };
-        let control = match CallControl::new(
-            &state.bank,
-            association.authority.clone(),
-            now,
-            calls.call_driver.clone(),
-        ) {
+        let control = match CallControl::new(&state.bank, association.authority.clone(), now) {
             Ok(control) => control,
             Err(error) => return Err(reject(input, error)),
         };
@@ -1182,19 +978,26 @@ impl ConsumerAssociation {
             if name_len > 256 {
                 return Err(invalid());
             }
-            if !pay(
-                budget,
-                W::PlanningItems,
-                (association.definitions.len() * (name_len + 1)) as u64,
-            ) {
-                return Err(busy());
-            }
-            let definition = association
-                .definitions
-                .iter()
-                .find(|d| d.matches(target, operation))
-                .ok_or_else(unsupported)?
-                .clone();
+            // Snapshot only the selected definition and bank. No registry or
+            // association borrow crosses permission/codec/native callbacks.
+            let (definition, association_bank) = {
+                let mappings = association.mappings.borrow();
+                let mappings = mappings.as_ref().ok_or_else(stale)?;
+                if !pay(
+                    budget,
+                    W::PlanningItems,
+                    (mappings.definitions.len() * (name_len + 1)) as u64,
+                ) {
+                    return Err(busy());
+                }
+                let definition = mappings
+                    .definitions
+                    .iter()
+                    .find(|d| d.matches(target, operation))
+                    .ok_or_else(unsupported)?
+                    .clone();
+                (definition, mappings.bank.clone())
+            };
             match deadline.checked_is_elapsed_at(now) {
                 Some(false) => {}
                 Some(true) => return Err(CoreError::TimedOut(context())),
@@ -1322,10 +1125,10 @@ impl ConsumerAssociation {
             // A separate instance domain constrains outstanding obligations,
             // including unread results. This is a quota debit, not another RAM
             // reservation. An identical bank is charged only once.
-            if !Arc::ptr_eq(&association.bank, &state.bank) {
+            if !Arc::ptr_eq(&association_bank, &state.bank) {
                 funding.try_reserve_exact(1).map_err(|_| busy())?;
                 funding.extend(reserve(
-                    &association.bank,
+                    &association_bank,
                     &[(K::PendingHandlerCallsGlobalMax, 1)],
                 )?);
             }
@@ -1428,31 +1231,6 @@ impl ConsumerAssociation {
             Ok(checked) => checked,
             Err(e) => return Err(reject(input, e)),
         };
-        if let Some(driver) = &calls.call_driver {
-            let cleanup = match &state.cleanup_driver {
-                Some(cleanup) => cleanup,
-                None => return Err(reject(input, unsupported())),
-            };
-            let notices = match CallNotices::acquire(
-                &association.authority,
-                cleanup,
-                driver,
-                &state.bank,
-                budget,
-            ) {
-                Ok(notices) => notices,
-                Err(error) => return Err(reject(input, error)),
-            };
-            *control.notices.borrow_mut() = Some(notices);
-            if !association.authority.current() || !state.current() {
-                control.finish_notices();
-                return Err(reject(input, stale()));
-            }
-            if !driver.is_available() || !cleanup.is_available() {
-                control.finish_notices();
-                return Err(reject(input, CoreError::Lifecycle(context())));
-            }
-        }
         let retained_input = encoded.as_ref().or(input.as_ref()).cloned();
         let retained_variables = variables
             .iter()
@@ -1509,56 +1287,139 @@ impl ConsumerAssociation {
             control,
         })
     }
-    /// Fence this association before requesting its enrolled drivers' turns.
-    /// Observable Drop follows the same qualified notification path. Manual
-    /// construction needs application scheduling even without another I/O wake.
-    /// Notification performs no cleanup. Other associations/facets remain usable.
-    pub fn begin_close(&self) {
-        self.state.authority.active.set(false);
-        if let Some(changes) = &self.state.authority.changes {
-            changes.invalidate();
-        }
-    }
+    /// Original identity only; this reference cannot revoke the instance.
     pub fn consumer(&self) -> ConsumerInstanceRef {
         self.state.authority.consumer.clone()
     }
-    pub fn change_source(&self) -> Option<HostChangeSource> {
-        self.state
-            .authority
-            .changes
-            .as_ref()
-            .map(HostChangeAuthority::reference)
+    pub fn is_current(&self) -> bool {
+        self.state.authority.current()
+    }
+    fn fence(&self) {
+        self.state.authority.active.set(false);
+    }
+    fn close(&self) {
+        self.fence();
+        // End the borrow before linked service/artifact destructors can reenter.
+        let mappings = self.state.mappings.borrow_mut().take();
+        drop(mappings);
     }
 }
-impl Drop for ConsumerAssociation {
+impl StandaloneConsumerAssociation {
+    /// Recoverable, source-free construction. The original bank funds this
+    /// mapping set and limits its outstanding calls across independent stores.
+    pub fn try_new(
+        consumer: ConsumerInstanceRef,
+        definitions: Vec<ConsumerBinding>,
+        funding: Vec<HostCapacityReservation>,
+        bank: Arc<HostResourceAccounts>,
+    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
+    {
+        let error = if !consumer.is_current()
+            || definitions.is_empty()
+            || definitions.len() > 128
+            || definitions.iter().any(|d| !Arc::ptr_eq(d.bank(), &bank))
+            || definitions.iter().enumerate().any(|(i, d)| {
+                definitions[..i].iter().any(|old| {
+                    old.affordance() == d.affordance() && old.operation() == d.operation()
+                })
+            }) {
+            Some(invalid())
+        } else {
+            None
+        };
+        if let Some(error) = error {
+            return Err(reject((definitions, funding), error));
+        }
+        let header_funding = match bank.reserve(
+            K::EngineLiveBytesGlobalMax,
+            (core::mem::size_of::<Association>() + 2 * core::mem::size_of::<usize>()) as u64,
+        ) {
+            Some(funding) => funding,
+            None => return Err(reject((definitions, funding), busy())),
+        };
+        let bytes = (definitions.len() * core::mem::size_of::<Arc<Definition>>()) as u64;
+        let extra = match reserve(&bank, &[(K::EngineLiveBytesGlobalMax, bytes)]) {
+            Ok(extra) => extra,
+            Err(e) => return Err(reject((definitions, funding), e)),
+        };
+        let authority_funding = match reserve(
+            &bank,
+            &[(
+                K::EngineLiveBytesGlobalMax,
+                (core::mem::size_of::<AssociationAuthority>() + 2 * core::mem::size_of::<usize>())
+                    as u64,
+            )],
+        ) {
+            Ok(funding) => funding,
+            Err(e) => return Err(reject((definitions, funding), e)),
+        };
+        let mut records = Vec::new();
+        let mut entries = Vec::new();
+        if records.try_reserve_exact(definitions.len()).is_err()
+            || entries.try_reserve_exact(definitions.len()).is_err()
+        {
+            return Err(reject((definitions, funding), busy()));
+        }
+        for _ in &definitions {
+            match bank.reserve(
+                K::EngineLiveBytesGlobalMax,
+                (core::mem::size_of::<Definition>() + 32) as u64,
+            ) {
+                Some(record) => records.push(record),
+                None => return Err(reject((definitions, funding), busy())),
+            }
+        }
+        entries.extend(
+            definitions
+                .into_iter()
+                .zip(records)
+                .map(|(definition, record)| {
+                    Arc::new(Definition::from_prepared(definition, record))
+                }),
+        );
+        let mut funding = funding;
+        funding.extend(extra);
+        Ok(Self {
+            association: ConsumerAssociation {
+                state: Rc::new(Association {
+                    authority: Rc::new(AssociationAuthority {
+                        consumer,
+                        active: Cell::new(true),
+                        _funding: authority_funding,
+                    }),
+                    mappings: RefCell::new(Some(AssociationMappings {
+                        definitions: entries,
+                        bank,
+                        _funding: funding,
+                    })),
+                    _funding: header_funding,
+                }),
+            },
+        })
+    }
+    pub fn handle(&self) -> ConsumerAssociation {
+        self.association.clone()
+    }
+    /// Immediate passive fencing, not native drain or a scheduled cleanup turn.
+    pub fn begin_close(&self) {
+        self.association.close();
+    }
+}
+impl Drop for StandaloneConsumerAssociation {
     fn drop(&mut self) {
         self.begin_close();
     }
 }
+
+#[path = "consumer_managed.rs"]
+mod managed;
+pub use managed::{ConsumerInstanceHandle, ConsumerOwner};
+
 impl ConsumerCalls {
     /// Fund bounded call storage independently of any logical association.
     /// This bank also funds admitted work and its outstanding-call quota through
     /// settlement disposal. It need not be the association's record/quota bank.
     pub fn try_new(bank: Arc<HostResourceAccounts>, calls: usize) -> CoreResult<Self> {
-        Self::construct(bank, calls, None)
-    }
-    /// Attach an actual aggregate-cleanup recipient. Calls default to this
-    /// driver; `using_driver` can choose a different polling recipient per call.
-    pub fn try_new_driven(
-        bank: Arc<HostResourceAccounts>,
-        calls: usize,
-        driver: HostChangeSignal,
-    ) -> CoreResult<Self> {
-        if !driver.is_available() {
-            return Err(CoreError::Lifecycle(context()));
-        }
-        Self::construct(bank, calls, Some(driver))
-    }
-    fn construct(
-        bank: Arc<HostResourceAccounts>,
-        calls: usize,
-        driver: Option<HostChangeSignal>,
-    ) -> CoreResult<Self> {
         if !(1..=MAX_CALLS).contains(&calls) {
             return Err(invalid());
         }
@@ -1574,7 +1435,6 @@ impl ConsumerCalls {
                 bank,
                 active: Cell::new(true),
                 controller_present: Cell::new(true),
-                cleanup_driver: driver.clone(),
                 registry: RefCell::new(Registry {
                     slots,
                     sequence: 0,
@@ -1582,31 +1442,15 @@ impl ConsumerCalls {
                 }),
                 _funding: funding,
             }),
-            call_driver: driver,
-            owns_control: true,
         })
     }
-    /// Choose a polling recipient without changing storage or rebuilding an
-    /// association. Admission requires observable sources and a driven store;
-    /// it reserves both this recipient and the store's original cleanup role.
-    pub fn using_driver<'a>(&'a self, driver: &HostChangeSignal) -> ConsumerAdmission<'a> {
-        ConsumerAdmission {
-            view: Self {
-                state: self.state.clone(),
-                call_driver: Some(driver.clone()),
-                owns_control: false,
-            },
-            _owner: core::marker::PhantomData,
-        }
-    }
-    /// Fence all work admitted here before waking any waiter. This closes only
-    /// this capacity owner, without closing the associations that used it.
+    /// Fence this capacity owner's admitted work and wake its registered waiters.
+    /// Associations and other work owners remain independent.
     pub fn begin_close(&self) {
         self.state.close();
     }
     /// Drive independent cleanup, including after every call handle was lost.
-    /// The driven profile requests turns on its cleanup recipient. Manual owners
-    /// need application scheduling independently of native wakes. Short credit
+    /// Application scheduling is required independently of native wakes. Short credit
     /// retains the original owner and the caller's runnable/credit obligation.
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
         let (start, count) = {
@@ -1628,18 +1472,7 @@ impl ConsumerCalls {
                 .checkout((start + offset) % count, None, cx.waker())
             {
                 let call = lease.call.as_mut().unwrap();
-                let was_terminal = call.progress.is_terminal();
                 let _ = call.step(&self.state, cx, budget);
-                if !was_terminal
-                    && call.progress.is_terminal()
-                    && !call.work.control.abandoned.get()
-                {
-                    // Aggregate progress can take over native wake interest.
-                    // Preserve the original result driver's terminal turn even
-                    // when it differs from the cleanup driver. This native hint
-                    // invokes no callback while the original slot is checked out.
-                    call.work.control.signal();
-                }
                 if call.work.control.abandoned.get() && call.progress.is_terminal() {
                     // Vacate the slot before disposing linked native owners.
                     drop(lease.take());
@@ -1658,12 +1491,8 @@ impl ConsumerCalls {
 }
 impl Drop for ConsumerCalls {
     fn drop(&mut self) {
-        if !self.owns_control {
-            return;
-        }
         self.state.controller_present.set(false);
         self.state.revoke();
-        self.state.signal_drivers();
         self.state.abort_abandoned();
     }
 }
@@ -1681,7 +1510,6 @@ impl ConsumerCall {
     /// The notification requests a poll; it performs no native cleanup itself.
     pub fn cancel(&self) {
         self.control.record(CoreError::Cancelled(context()));
-        self.control.signal();
         self.control.wake();
     }
     /// One explicit progress turn, with caller-supplied time and work credit.
@@ -1710,7 +1538,6 @@ impl ConsumerCall {
             return Poll::Pending;
         }
         let call = lease.take();
-        call.work.control.finish_notices();
         Poll::Ready(ConsumerSettlement { call })
     }
 }
@@ -1718,10 +1545,6 @@ impl Drop for ConsumerCall {
     fn drop(&mut self) {
         self.control.abandoned.set(true);
         self.control.record(CoreError::Cancelled(context()));
-        self.control.abandon_notices();
-        if let Some(driver) = &self.state.cleanup_driver {
-            let _ = driver.request_turn();
-        }
         self.state.abort_slot(self.slot, Some(self.sequence));
     }
 }

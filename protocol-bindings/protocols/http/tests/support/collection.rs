@@ -625,7 +625,7 @@ fn client(
     denied: Arc<AtomicBool>,
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
-) -> (ConsumerAssociation, ConsumerCalls) {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(98),
@@ -658,7 +658,7 @@ fn client(
     assert_eq!(root.name(), None);
     assert_eq!(root.binding().binding_id(), BindingId::new(98));
     drop(td);
-    ConsumerAssociation::try_new(owner.reference(), definitions, funding, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts, 2).unwrap()))
+    StandaloneConsumerAssociation::try_new(owner.reference(), definitions, funding, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts, 2).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn prepare_consumer(
@@ -684,7 +684,7 @@ fn prepare_consumer(
     )
 }
 
-fn start_read(client: &(ConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
+fn start_read(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     client.0.read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
         .unwrap()
 }
@@ -714,7 +714,7 @@ fn collection_description(addr: SocketAddr, operation: Operation) -> Value {
     td
 }
 fn start_collection_at(
-    client: &(ConsumerAssociation, ConsumerCalls),
+    client: &(StandaloneConsumerAssociation, ConsumerCalls),
     operation: Operation,
     deadline: Deadline,
 ) -> CoreResult<ConsumerCall> {

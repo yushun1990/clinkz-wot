@@ -460,7 +460,7 @@ fn client(
     denied: Arc<AtomicBool>,
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
-) -> (ConsumerAssociation, ConsumerCalls) {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     client_with_selector(td, denied, accounts, owner, ConsumerSelector::default())
 }
 fn client_with_selector(
@@ -469,7 +469,7 @@ fn client_with_selector(
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
     selector: ConsumerSelector,
-) -> (ConsumerAssociation, ConsumerCalls) {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(98),
@@ -498,11 +498,19 @@ fn client_with_selector(
     let (definitions, funding) = prepared.into_execution();
     drop(td);
     drop(registry);
-    ConsumerAssociation::try_new(owner.reference(), definitions, funding, accounts.clone())
-        .map(|association| (association, ConsumerCalls::try_new(accounts, 2).unwrap()))
-        .unwrap_or_else(|e| panic!("{:?}", e.error()))
+    StandaloneConsumerAssociation::try_new(
+        owner.reference(),
+        definitions,
+        funding,
+        accounts.clone(),
+    )
+    .map(|association| (association, ConsumerCalls::try_new(accounts, 2).unwrap()))
+    .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
-fn start_write(client: &(ConsumerAssociation, ConsumerCalls), bytes: &[u8]) -> ConsumerCall {
+fn start_write(
+    client: &(StandaloneConsumerAssociation, ConsumerCalls),
+    bytes: &[u8],
+) -> ConsumerCall {
     client
         .0
         .write_property(

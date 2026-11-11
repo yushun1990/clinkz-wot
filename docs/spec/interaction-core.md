@@ -31,13 +31,14 @@ owner. The Host finite association/work split and its original operand retention
 are defined in [Runtime Safety](runtime-safety.md); the common finite transition
 kernel remains independent of that storage representation.
 
-An optional Host change source on the original instance is observation capability,
-not another authority or native owner. The std-only `host_change` carrier supports
-explicitly enrolled drivers without imposing OS primitives on the common finite
-kernel or borrowed/static execution. Observable association/admission composition
-and the qualified backend/driver obligations are owned by Runtime Safety. Merely
-sharing an observable instance does not enroll continuing Action or notification
-owners; those families keep their current manual progress contracts.
+Managed finite registration consumes the unique `ConsumerInstance` into the
+actual Servient owner. Application handles retain original identity/currentness
+without revocation power. Registration, association/facet adoption, removal and
+replacement are defined in [Runtime Safety](runtime-safety.md). The low-level
+standalone owner remains usable for composition; a passive reference cannot
+recover it or bypass a managed registration. Core authority invalidation remains
+allocation/callback-free, with no OS notifier or automatic scheduling contract.
+Logical deadlines remain independent of an application's actual timers.
 
 ### URI-variable execution
 

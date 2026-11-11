@@ -30,9 +30,10 @@ neither resource paths nor registration counts count devices. The workload uses
 Thing-root ReadAllProperties over 1–32 integer members. It checks every returned
 body against its selected target.
 
-This workload deliberately constructs a dedicated `ConsumerCalls` alongside
-each `ConsumerAssociation`, retaining `population * slots` call slots even when
-few instances are active. That is one supported deployment configuration, not
+This low-level standalone workload deliberately constructs a dedicated
+`ConsumerCalls` alongside each `StandaloneConsumerAssociation`, retaining
+`population * slots` call slots even when few instances are active. That is one
+supported deployment configuration, not
 the general Engine ownership model or a requirement for persistent associations.
 `--mode shared` shares qualified mappings; `--accounts shared` shares quota
 accounts. Neither option shares the call-slot storage in this executable.
