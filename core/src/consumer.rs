@@ -271,18 +271,41 @@ impl<S: ?Sized> core::ops::Deref for ConsumerServiceOwner<S> {
 /// }
 /// ```
 pub struct ConsumerInstance(ConsumerInstanceRef);
+struct InstanceAuthority {
+    current: AtomicBool,
+    _funding: Option<HostCapacityReservation>,
+}
 impl ConsumerInstance {
     pub fn new(slot: ThingSlotId) -> Self {
         Self(ConsumerInstanceRef {
             slot,
-            current: Arc::new(AtomicBool::new(true)),
+            authority: Arc::new(InstanceAuthority {
+                current: AtomicBool::new(true),
+                _funding: None,
+            }),
         })
+    }
+    /// Account-backed construction for owners that create authority internally.
+    /// Original backing remains charged through the final passive reference,
+    /// including accepted work after logical removal. `new` remains caller-funded.
+    pub fn try_new_funded(slot: ThingSlotId, bank: &Arc<HostResourceAccounts>) -> CoreResult<Self> {
+        let bytes = core::mem::size_of::<InstanceAuthority>() + 2 * core::mem::size_of::<usize>();
+        let funding = bank
+            .reserve(ResourceKind::EngineLiveBytesGlobalMax, bytes as u64)
+            .ok_or_else(busy)?;
+        Ok(Self(ConsumerInstanceRef {
+            slot,
+            authority: Arc::new(InstanceAuthority {
+                current: AtomicBool::new(true),
+                _funding: Some(funding),
+            }),
+        }))
     }
     pub fn reference(&self) -> ConsumerInstanceRef {
         self.0.clone()
     }
     pub fn revoke(&self) {
-        self.0.current.store(false, Ordering::Release);
+        self.0.authority.current.store(false, Ordering::Release);
     }
 }
 impl Drop for ConsumerInstance {
@@ -295,19 +318,19 @@ impl Drop for ConsumerInstance {
 #[derive(Clone)]
 pub struct ConsumerInstanceRef {
     slot: ThingSlotId,
-    current: Arc<AtomicBool>,
+    authority: Arc<InstanceAuthority>,
 }
 impl ConsumerInstanceRef {
     pub fn slot(&self) -> ThingSlotId {
         self.slot
     }
     pub fn is_current(&self) -> bool {
-        self.current.load(Ordering::Acquire)
+        self.authority.current.load(Ordering::Acquire)
     }
 }
 impl PartialEq for ConsumerInstanceRef {
     fn eq(&self, other: &Self) -> bool {
-        self.slot == other.slot && Arc::ptr_eq(&self.current, &other.current)
+        self.slot == other.slot && Arc::ptr_eq(&self.authority, &other.authority)
     }
 }
 impl Eq for ConsumerInstanceRef {}

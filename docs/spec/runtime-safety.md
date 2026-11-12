@@ -20,6 +20,39 @@ and MUST NOT expose either consumed revoking owner. A view issued before
 adoption remains non-revoking afterwards. Explicit owner APIs control removal,
 replacement and shutdown; registration does not create execution capacity.
 
+The finite owner's public management path addresses Things by their TD `id`
+within that owner, and configurations by an explicit name within that Thing.
+`servient::consumer::register_thing` rejects a missing TD ID; anonymous TDs remain
+valid for preparation and low-level standalone composition. The source-free
+`ConsumerOwner::register_thing` accepts the already-qualified URI string, with
+exact UTF-8 equality and a 2048-byte local bound. Duplicate live IDs refuse rather
+than replacing or merging. These are local registration rules, not global TD
+uniqueness or URI normalization rules. Identity registration installs no mappings
+or readiness promise; explicitly install prepared configurations before use.
+
+`instance` and `association` recover current non-revoking snapshots after all
+returned views are lost. ID-based Read and targeted removal need no retained
+management handles or external handle table. `remove_thing` targets the current
+registration at lookup; it cannot infer an external delayed command's intended
+revision. Original-snapshot remove/replace APIs supply that conditional behavior.
+Public ID lookup grants no permission: admission still checks the selected actual
+authority, operation, policy and capacity. Accepted work never repeats ID lookup.
+The holder of the logical owner has management capability; an application exposing
+it to untrusted clients must authenticate commands and govern configuration
+selection. A configuration name is a selector, not a credential or caller identity.
+
+`set_configuration` explicitly installs/replaces one named association under the
+same original parent. Configuration names are nonempty, at most 256 bytes, and
+are exact local selectors, not additional Thing identities. Refusal returns the
+unadopted original association without changing installed policy. Selection has
+no implicit default, permission union or fallback to a sibling configuration.
+Update fences the old association; accepted work retains its original mapping,
+configuration policy, operands and accounts. A stale configuration prepared for
+a removed parent cannot be installed into a new registration with the same ID.
+`remove_configuration` affects only the selected current association. Existing
+finite operations can use transient `association` lookup; this does not migrate
+continuing Action or notification lifetimes into this finite owner.
+
 One authority is retained across independently composed facets. The continuing
 Action and composed/raw notification paths can retain the same passive original
 `ConsumerInstanceRef`; managed finite registration does not migrate their own

@@ -40,6 +40,13 @@ recover it or bypass a managed registration. Core authority invalidation remains
 allocation/callback-free, with no OS notifier or automatic scheduling contract.
 Logical deadlines remain independent of an application's actual timers.
 
+The managed finite owner may resolve a TD ID and explicit configuration to the
+current original authority before admission. Public addressing does not replace
+EXEC-ID-001's lifetime proof or authorize execution. The ID is owner-scoped;
+accepted work keeps the resolved original identity across configuration changes,
+removal and same-ID recreation. Snapshot-conditioned management and commands
+targeting the current ID registration have deliberately different semantics.
+
 ### URI-variable execution
 
 Under EXEC-DATA/SECURITY-001, prepared variable names, effective schemas and the

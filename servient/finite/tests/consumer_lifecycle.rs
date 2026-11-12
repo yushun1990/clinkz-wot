@@ -110,3 +110,93 @@ fn replacement_requires_checked_next_generation_and_cannot_wrap() {
     drop((error, owner, id, maximum));
     clean(&bank);
 }
+
+#[test]
+fn id_lookup_recovers_management_and_distinguishes_current_from_conditional_removal() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let a = ConsumerOwner::try_new(bank.clone(), 2, 0).unwrap();
+    let b = ConsumerOwner::try_new(bank.clone(), 1, 0).unwrap();
+    for invalid in ["", &"x".repeat(2049)] {
+        assert!(matches!(
+            a.register_thing(invalid, &mut work()),
+            Err(CoreError::Validation(_))
+        ));
+    }
+    let before = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    assert!(matches!(
+        a.register_thing("urn:pump", &mut WorkBudget::new()),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        before
+    );
+    drop(a.register_thing("urn:pump", &mut work()).unwrap());
+    drop(b.register_thing("urn:pump", &mut work()).unwrap());
+    let current = a.instance("urn:pump", &mut work()).unwrap();
+    assert_eq!(current.thing_id(), Some("urn:pump"));
+    assert_ne!(
+        current.consumer(),
+        b.instance("urn:pump", &mut work()).unwrap().consumer()
+    );
+    let before = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    assert!(matches!(
+        a.register_thing("urn:pump", &mut work()),
+        Err(CoreError::Validation(_))
+    ));
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        before
+    );
+    assert!(matches!(
+        a.remove_thing("urn:missing", &mut work()),
+        Err(CoreError::NotFound(_))
+    ));
+    assert!(matches!(
+        a.remove_thing("urn:pump", &mut WorkBudget::new()),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert!(current.is_current());
+    let next = root(
+        current.consumer().slot().slot().get(),
+        Generation::INITIAL.checked_next().unwrap(),
+    );
+    let replaced = a
+        .replace_instance(&current, next, &mut work())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert!(!current.is_current());
+    assert_eq!(
+        a.instance("urn:pump", &mut work()).unwrap().consumer(),
+        replaced.consumer()
+    );
+    a.remove_thing("urn:pump", &mut work()).unwrap();
+    assert!(!replaced.is_current());
+    drop(a.register_thing("urn:pump", &mut work()).unwrap());
+    assert!(matches!(
+        a.remove_instance(&replaced, &mut work()),
+        Err(CoreError::StaleHandle(_))
+    ));
+    // ID removal deliberately targets the current registration, unlike removal
+    // conditioned on the stale snapshot. No generation guesses command intent.
+    a.remove_thing("urn:pump", &mut work()).unwrap();
+    assert!(b.instance("urn:pump", &mut work()).unwrap().is_current());
+    drop((a, b, current, replaced));
+    clean(&bank);
+}
+
+#[test]
+fn internally_funded_authority_outlives_registration_while_a_passive_reference_exists() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let owner = ConsumerOwner::try_new(bank.clone(), 1, 0).unwrap();
+    let handle = owner.register_thing("urn:pump", &mut work()).unwrap();
+    let reference = handle.consumer();
+    owner.remove_thing("urn:pump", &mut work()).unwrap();
+    drop((handle, owner));
+    assert!(!reference.is_current());
+    assert_ne!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    drop(reference);
+    clean(&bank);
+}

@@ -69,6 +69,17 @@ allowance is charged. Owner metadata accounts do not add a pending-call quota;
 those quotas remain at the original association/work banks. Separate facet banks
 are not an implicit per-instance or process-wide aggregate.
 
+ID-addressed finite registration also funds its retained ID/configuration names
+and internally constructed Core authority. `ConsumerInstance::try_new_funded`
+keeps that authority's original reservation through the final passive reference,
+including work after registration removal; low-level `new` remains caller-funded
+startup construction. Name storage retires with its last snapshot/registration
+reference. ID/configuration lookup prepays actual entry count times bounded query
+bytes, rather than configured maximum occupancy. Copying names and retiring their
+records is prepaid before acquisition. Named configuration updates reuse the
+parent authority and replace only the selected association; no additional idle
+call quota, observer allowance or second registry is introduced.
+
 Independently composed Host finite Consumer registries/Servients share service
 backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the
 composition root. Imports retain the original reservations; they neither move

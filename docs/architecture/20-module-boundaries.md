@@ -160,6 +160,10 @@ an application handle never removes them. Standalone ownership remains a separat
 low-level representation whose unique authority is consumed on adoption. Persistent
 registration and finite capacity have independent cardinalities; neither implies
 protocol selection, an executor or an authority-change notification service.
+That owner also resolves public TD IDs and named access configurations, so losing
+application views does not lose targeted management. `servient::consumer` adds
+only TD-aware ID ingress, rejecting an absent ID without retaining a TD or adding
+another registry. The finite execution crate still depends only on Core/Foundation.
 Planning owns open registration/selection and paid
 owned compilation; Core owns immutable completed Consumer definitions and service
 contracts. Execution consumes those definitions without an upward TD/Planning

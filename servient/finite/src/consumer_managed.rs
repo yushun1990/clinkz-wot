@@ -1,5 +1,14 @@
 //! Managed finite Consumer registration. No execution storage or native driver.
 use super::*;
+use alloc::boxed::Box;
+
+const MAX_THING_ID_BYTES: usize = 2048;
+const MAX_CONFIGURATION_NAME_BYTES: usize = 256;
+
+struct RegisteredName {
+    value: Box<str>,
+    _funding: HostCapacityReservation,
+}
 
 /// A non-revoking identity for one original managed instance.
 /// Cloning/dropping a handle does not remove it. Numeric slots alone are not
@@ -14,6 +23,7 @@ pub struct ConsumerInstanceHandle {
 }
 struct InstanceIdentity {
     consumer: ConsumerInstanceRef,
+    thing_id: Option<Rc<RegisteredName>>,
     _funding: HostCapacityReservation,
 }
 impl ConsumerInstanceHandle {
@@ -22,6 +32,10 @@ impl ConsumerInstanceHandle {
     }
     pub fn is_current(&self) -> bool {
         self.identity.consumer.is_current()
+    }
+    /// Original public ID, when this instance was registered by ID.
+    pub fn thing_id(&self) -> Option<&str> {
+        self.identity.thing_id.as_ref().map(|n| n.value.as_ref())
     }
 }
 impl core::fmt::Debug for ConsumerInstanceHandle {
@@ -34,9 +48,11 @@ impl core::fmt::Debug for ConsumerInstanceHandle {
 
 /// Lifecycle owner for registered finite Consumer instances and associations.
 ///
-/// Registration consumes move-only authority. Returned instance handles and
-/// `ConsumerAssociation` views cannot revoke it. Capacities below bound registry
-/// metadata, not calls: supply any compatible `ConsumerCalls` independently.
+/// ID registration constructs original authority; low-level adoption consumes
+/// move-only authority. Returned instance handles and `ConsumerAssociation` views
+/// cannot revoke it. ID/configuration lookup recovers management after view loss.
+/// Capacities bound registry metadata, not calls: supply any compatible
+/// `ConsumerCalls` independently.
 ///
 /// Successful removal/close fences immediately, then releases unselected mappings
 /// outside borrows. Budgeted operations can refuse before mutation. Success
@@ -61,12 +77,201 @@ struct RegisteredInstance {
     // Revokes before association/service destruction, including on unwind.
     owner: ConsumerInstance,
     identity: Rc<InstanceIdentity>,
-    associations: Vec<StandaloneConsumerAssociation>,
+    associations: Vec<RegisteredAssociation>,
     // Last: actual vector backing retires before its original reservation.
     _backing: Option<HostCapacityReservation>,
 }
+struct RegisteredAssociation {
+    owner: StandaloneConsumerAssociation,
+    configuration: Option<Rc<RegisteredName>>,
+}
 
 impl ConsumerOwner {
+    /// Register a public Thing ID in this owner's scope, with no call capacity
+    /// or configured mappings yet. Use the TD's already-qualified URI verbatim.
+    /// Empty/over-2048-byte IDs and duplicate live IDs refuse; no ID is generated
+    /// for an anonymous TD. Equality is exact UTF-8 equality, without URI aliases.
+    /// Dropping the returned snapshot is safe: `instance` can recover it by ID.
+    pub fn register_thing(
+        &self,
+        thing_id: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerInstanceHandle> {
+        let slot = {
+            let registry = self.registry.borrow();
+            if self.find_thing(&registry, thing_id, budget)?.is_some() {
+                return Err(invalid());
+            }
+            if !pay(
+                budget,
+                W::QueueOperations,
+                registry.instances.len() as u64 + 1,
+            ) {
+                return Err(busy());
+            }
+            // One bounded scan. Original issuer identity also distinguishes
+            // a later registration after all numeric coordinates are reused.
+            registry
+                .instances
+                .iter()
+                .map(|e| e.identity.consumer.slot().slot().get())
+                .max()
+                .map_or(Some(0), |n| n.checked_add(1))
+                .ok_or_else(invalid)?
+        };
+        let name = self.name(thing_id, MAX_THING_ID_BYTES, budget)?;
+        self.adopt_instance(
+            ConsumerInstance::try_new_funded(
+                ThingSlotId::new(SlotIndex::new(slot), Generation::INITIAL),
+                &self.bank,
+            )?,
+            Some(name),
+            budget,
+        )
+        .map_err(|e| e.error().error().clone())
+    }
+
+    /// Resolve the current registration, not a delayed command's intended old
+    /// revision. Use snapshot-based remove/replace APIs for that condition.
+    /// A public ID is addressing information, never an authorization capability.
+    pub fn instance(
+        &self,
+        thing_id: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerInstanceHandle> {
+        let registry = self.registry.borrow();
+        let index = self
+            .find_thing(&registry, thing_id, budget)?
+            .ok_or_else(|| CoreError::NotFound(context()))?;
+        Ok(ConsumerInstanceHandle {
+            identity: registry.instances[index].identity.clone(),
+        })
+    }
+
+    /// Install or replace one explicitly named access/mapping configuration.
+    /// The standalone input must belong to the resolved original instance;
+    /// refusal returns it without closing any existing configuration. Other
+    /// configurations and accepted work retain their original policy/accounts.
+    /// There is no implicit default, merge or fallback to another configuration.
+    pub fn set_configuration(
+        &self,
+        thing_id: &str,
+        configuration: &str,
+        association: StandaloneConsumerAssociation,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerAssociation, BindingInputRejection<StandaloneConsumerAssociation>> {
+        let checked = (|| {
+            let registry = self.registry.borrow();
+            let index = self
+                .find_thing(&registry, thing_id, budget)?
+                .ok_or_else(|| CoreError::NotFound(context()))?;
+            let entry = &registry.instances[index];
+            let current = self
+                .find_configuration(entry, configuration, budget)?
+                .map(|i| entry.associations[i].owner.handle());
+            Ok((
+                ConsumerInstanceHandle {
+                    identity: entry.identity.clone(),
+                },
+                current,
+            ))
+        })();
+        let (instance, current) = match checked {
+            Ok(checked) => checked,
+            Err(error) => return Err(reject(association, error)),
+        };
+        if let Some(current) = current {
+            return self.replace_association(&current, association, budget);
+        }
+        let name = match self.name(configuration, MAX_CONFIGURATION_NAME_BYTES, budget) {
+            Ok(name) => name,
+            Err(error) => return Err(reject(association, error)),
+        };
+        self.adopt_association(&instance, association, Some(name), budget)
+    }
+
+    /// Recover a non-revoking snapshot of exactly this configuration. All
+    /// existing finite operations are available on the transient returned view.
+    /// Dropping every view does not make this lookup or targeted removal fail.
+    pub fn association(
+        &self,
+        thing_id: &str,
+        configuration: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerAssociation> {
+        let registry = self.registry.borrow();
+        let instance = self
+            .find_thing(&registry, thing_id, budget)?
+            .ok_or_else(|| CoreError::NotFound(context()))?;
+        let entry = &registry.instances[instance];
+        let index = self
+            .find_configuration(entry, configuration, budget)?
+            .ok_or_else(|| CoreError::NotFound(context()))?;
+        Ok(entry.associations[index].owner.handle())
+    }
+
+    /// Remove the configuration current at this ID/name lookup. To require an
+    /// expected original configuration, use `remove_association` with its view.
+    pub fn remove_configuration(
+        &self,
+        thing_id: &str,
+        configuration: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        let association = self.association(thing_id, configuration, budget)?;
+        self.remove_association(&association, budget)
+    }
+
+    /// Remove the Thing current at this ID lookup, including all configurations.
+    /// Unknown IDs return NotFound. Removal is a fence, not native drain. A later
+    /// registration may reuse the public ID; original work never resolves it again.
+    pub fn remove_thing(&self, thing_id: &str, budget: &mut WorkBudget) -> CoreResult<()> {
+        let instance = self.instance(thing_id, budget)?;
+        self.remove_instance(&instance, budget)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn read_property(
+        &self,
+        thing_id: &str,
+        configuration: &str,
+        calls: &ConsumerCalls,
+        property: &str,
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        self.read_property_with_variables(
+            thing_id,
+            configuration,
+            calls,
+            property,
+            &[],
+            deadline,
+            now,
+            budget,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn read_property_with_variables(
+        &self,
+        thing_id: &str,
+        configuration: &str,
+        calls: &ConsumerCalls,
+        property: &str,
+        variables: &[(&str, &str)],
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        // Snapshot and end the registry borrow before policy/credential/native
+        // callbacks. If it is removed in a callback, admission must refuse;
+        // it cannot retry lookup and accidentally use a successor.
+        self.association(thing_id, configuration, budget)?
+            .read_property_with_variables(calls, property, variables, deadline, now, budget)
+    }
+
     /// Caller-funded startup. Zero association capacity permits identity-only
     /// registrations. No vacant call slots, executor or notification port exists.
     pub fn try_new(
@@ -108,6 +313,15 @@ impl ConsumerOwner {
         instance: ConsumerInstance,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerInstanceHandle, BindingInputRejection<ConsumerInstance>> {
+        self.adopt_instance(instance, None, budget)
+    }
+
+    fn adopt_instance(
+        &self,
+        instance: ConsumerInstance,
+        thing_id: Option<Rc<RegisteredName>>,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerInstanceHandle, BindingInputRejection<ConsumerInstance>> {
         let consumer = instance.reference();
         let checked = (|| {
             if !self.active.get() || !consumer.is_current() {
@@ -136,7 +350,7 @@ impl ConsumerOwner {
         if let Err(error) = checked {
             return Err(reject(instance, error));
         }
-        let identity = match self.identity(consumer, budget) {
+        let identity = match self.identity(consumer, thing_id, budget) {
             Ok(identity) => identity,
             Err(error) => return Err(reject(instance, error)),
         };
@@ -158,6 +372,16 @@ impl ConsumerOwner {
         &self,
         instance: &ConsumerInstanceHandle,
         association: StandaloneConsumerAssociation,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerAssociation, BindingInputRejection<StandaloneConsumerAssociation>> {
+        self.adopt_association(instance, association, None, budget)
+    }
+
+    fn adopt_association(
+        &self,
+        instance: &ConsumerInstanceHandle,
+        association: StandaloneConsumerAssociation,
+        configuration: Option<Rc<RegisteredName>>,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerAssociation, BindingInputRejection<StandaloneConsumerAssociation>> {
         let checked = (|| {
@@ -204,11 +428,10 @@ impl ConsumerOwner {
         // between validation and installation; installation only moves owners.
         let mut replacement = Vec::new();
         let replacement_backing = if let Some(capacity) = wanted {
-            let bytes =
-                match capacity.checked_mul(core::mem::size_of::<StandaloneConsumerAssociation>()) {
-                    Some(bytes) => bytes as u64,
-                    None => return Err(reject(association, invalid())),
-                };
+            let bytes = match capacity.checked_mul(core::mem::size_of::<RegisteredAssociation>()) {
+                Some(bytes) => bytes as u64,
+                None => return Err(reject(association, invalid())),
+            };
             let backing = match self.bank.reserve(K::EngineLiveBytesGlobalMax, bytes) {
                 Some(backing) => backing,
                 None => return Err(reject(association, busy())),
@@ -235,7 +458,10 @@ impl ConsumerOwner {
             } else {
                 None
             };
-            entry.associations.push(association);
+            entry.associations.push(RegisteredAssociation {
+                owner: association,
+                configuration,
+            });
             registry.associations += 1;
             (old, old_backing)
         };
@@ -290,7 +516,7 @@ impl ConsumerOwner {
             let mut registry = self.registry.borrow_mut();
             expected.fence();
             core::mem::replace(
-                &mut registry.instances[instance].associations[index],
+                &mut registry.instances[instance].associations[index].owner,
                 replacement,
             )
         };
@@ -342,7 +568,11 @@ impl ConsumerOwner {
             Ok(index) => index,
             Err(error) => return Err(reject(replacement, error)),
         };
-        let identity = match self.identity(consumer, budget) {
+        let thing_id = self.registry.borrow().instances[index]
+            .identity
+            .thing_id
+            .clone();
+        let identity = match self.identity(consumer, thing_id, budget) {
             Ok(identity) => identity,
             Err(error) => return Err(reject(replacement, error)),
         };
@@ -407,6 +637,81 @@ impl ConsumerOwner {
             .position(|e| Rc::ptr_eq(&e.identity, &handle.identity))
             .ok_or_else(stale)
     }
+    fn find_thing(
+        &self,
+        registry: &ManagedRegistry,
+        thing_id: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<usize>> {
+        if !self.active.get() {
+            return Err(stale());
+        }
+        Self::name_work(
+            thing_id,
+            MAX_THING_ID_BYTES,
+            registry.instances.len(),
+            budget,
+        )?;
+        Ok(registry.instances.iter().position(|e| {
+            e.identity
+                .thing_id
+                .as_ref()
+                .is_some_and(|n| n.value.as_ref() == thing_id)
+        }))
+    }
+    fn find_configuration(
+        &self,
+        instance: &RegisteredInstance,
+        configuration: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<usize>> {
+        Self::name_work(
+            configuration,
+            MAX_CONFIGURATION_NAME_BYTES,
+            instance.associations.len(),
+            budget,
+        )?;
+        Ok(instance.associations.iter().position(|a| {
+            a.configuration
+                .as_ref()
+                .is_some_and(|n| n.value.as_ref() == configuration)
+        }))
+    }
+    fn name_work(value: &str, max: usize, count: usize, budget: &mut WorkBudget) -> CoreResult<()> {
+        if value.is_empty() || value.len() > max {
+            return Err(invalid());
+        }
+        let work = (count as u64)
+            .checked_mul(value.len() as u64 + 1)
+            .and_then(|n| n.checked_add(1))
+            .ok_or_else(invalid)?;
+        if !pay(budget, W::QueueOperations, work) {
+            return Err(busy());
+        }
+        Ok(())
+    }
+    fn name(
+        &self,
+        value: &str,
+        max: usize,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Rc<RegisteredName>> {
+        Self::name_work(value, max, 1, budget)?;
+        if !pay(budget, W::CleanupItems, 1) {
+            return Err(busy());
+        }
+        let bytes = core::mem::size_of::<RegisteredName>()
+            + 2 * core::mem::size_of::<usize>()
+            + value.len();
+        let funding = self
+            .bank
+            .reserve(K::EngineLiveBytesGlobalMax, bytes as u64)
+            .ok_or_else(busy)?;
+        Ok(Rc::new(RegisteredName {
+            value: Box::from(value),
+            _funding: funding,
+        }))
+    }
     fn find_association(
         &self,
         registry: &ManagedRegistry,
@@ -434,13 +739,14 @@ impl ConsumerOwner {
         }
         let index = associations
             .iter()
-            .position(|a| Rc::ptr_eq(&a.association.state, &handle.state))
+            .position(|a| Rc::ptr_eq(&a.owner.association.state, &handle.state))
             .ok_or_else(stale)?;
         Ok((instance, index))
     }
     fn identity(
         &self,
         consumer: ConsumerInstanceRef,
+        thing_id: Option<Rc<RegisteredName>>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Rc<InstanceIdentity>> {
         if !pay(budget, W::CleanupItems, 1) {
@@ -456,6 +762,7 @@ impl ConsumerOwner {
             .ok_or_else(busy)?;
         Ok(Rc::new(InstanceIdentity {
             consumer,
+            thing_id,
             _funding: funding,
         }))
     }

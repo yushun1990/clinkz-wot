@@ -281,6 +281,24 @@ fn harness(calls: usize, address: Option<std::net::SocketAddr>) -> Harness {
 }
 fn harness_slot(calls: usize, address: Option<std::net::SocketAddr>, slot: u32) -> Harness {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(slot), Generation::INITIAL));
+    let (rt, probe) = association_harness(calls, address, bank.clone(), owner.reference());
+    Harness {
+        rt,
+        owner,
+        bank,
+        probe,
+    }
+}
+fn association_harness(
+    calls: usize,
+    address: Option<std::net::SocketAddr>,
+    bank: Arc<HostResourceAccounts>,
+    consumer: ConsumerInstanceRef,
+) -> (
+    Rc<(StandaloneConsumerAssociation, ConsumerCalls)>,
+    Arc<Probe>,
+) {
     let probe = Arc::new(Probe::default());
     let mut input = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
@@ -335,29 +353,18 @@ fn harness_slot(calls: usize, address: Option<std::net::SocketAddr>, slot: u32) 
         .unwrap();
     drop(thing);
     drop(registry);
-    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(slot), Generation::INITIAL));
     let (definitions, funding) = prepared.into_execution();
     let rt = Rc::new(
-        StandaloneConsumerAssociation::try_new(
-            owner.reference(),
-            definitions,
-            funding,
-            bank.clone(),
-        )
-        .map(|association| {
-            (
-                association,
-                ConsumerCalls::try_new(bank.clone(), calls).unwrap(),
-            )
-        })
-        .unwrap_or_else(|e| panic!("{:?}", e.error())),
+        StandaloneConsumerAssociation::try_new(consumer, definitions, funding, bank.clone())
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(bank.clone(), calls).unwrap(),
+                )
+            })
+            .unwrap_or_else(|e| panic!("{:?}", e.error())),
     );
-    Harness {
-        rt,
-        owner,
-        bank,
-        probe,
-    }
+    (rt, probe)
 }
 fn read(rt: &(StandaloneConsumerAssociation, ConsumerCalls)) -> CoreResult<ConsumerCall> {
     rt.0.read_property(&rt.1, "level", Deadline::NONE, now(), &mut work())
@@ -1366,4 +1373,54 @@ fn managed_shutdown_fences_all_parents_before_reentrant_service_destruction() {
     clean(&bank);
     clean(&other_bank);
     HOOK.with(|h| assert!(h.borrow().is_none()));
+}
+
+#[test]
+fn id_resolved_admission_never_retries_a_replacement_created_during_credentials() {
+    for http in [false, true] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let owner = Rc::new(ConsumerOwner::try_new(bank.clone(), 1, 1).unwrap());
+        let id = "urn:pump";
+        let original = owner.register_thing(id, &mut work()).unwrap().consumer();
+        let (rt, probe) = association_harness(
+            1,
+            http.then(|| listener.local_addr().unwrap()),
+            bank.clone(),
+            original.clone(),
+        );
+        let (standalone, calls) = Rc::try_unwrap(rt).ok().unwrap();
+        drop(
+            owner
+                .set_configuration(id, "default", standalone, &mut work())
+                .unwrap_or_else(|e| panic!("{:?}", e.error())),
+        );
+        let control = owner.clone();
+        hook(Edge::Issue, move || {
+            control.remove_thing(id, &mut work()).unwrap();
+            drop(control.register_thing(id, &mut work()).unwrap());
+        });
+        let input = Payload::new(b"8".as_slice(), "application/json");
+        let allocation = input.body.clone();
+        let refused = owner
+            .association(id, "default", &mut work())
+            .unwrap()
+            .write_property(&calls, "level", input, Deadline::NONE, now(), &mut work())
+            .err()
+            .unwrap();
+        assert!(matches!(refused.error().error(), CoreError::StaleHandle(_)));
+        let (input, _) = refused.into_parts();
+        assert!(Arc::ptr_eq(&allocation, &input.body));
+        assert!(!original.is_current());
+        let current = owner.instance(id, &mut work()).unwrap();
+        assert!(current.is_current());
+        assert_ne!(current.consumer(), original);
+        assert_eq!(probe.starts.load(Ordering::Relaxed), 0);
+        assert!(calls.is_idle());
+        assert!(matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
+        drop((input, allocation, current, original, owner, calls));
+        clean(&bank);
+        HOOK.with(|h| assert!(h.borrow().is_none()));
+    }
 }

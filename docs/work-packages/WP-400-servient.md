@@ -331,6 +331,17 @@ during native checkout. No source/driver registry, eventfd or automatic
 authority-change notification is retained. The application supplies lifecycle
 progress, clock observations and actual timer wakeups where required.
 
+The same managed HTTP fixture covers TD-ID-addressed registration/read/removal
+after every Thing view is dropped, independent named configurations under one
+identity, configuration update with retained original context, and same-ID
+recreation while old work/results remain live. Source-aware ID ingress lives in
+`servient::consumer`; the source-free owner performs lookup and management in
+its actual registry. Anonymous TD parsing/preparation remains valid; this named
+ingress requires an ID. Duplicate live IDs refuse, missing configurations never
+fall back, and snapshot-conditioned management stays distinct from a command
+targeting the current ID. [Management tests](../../servient/finite/tests/consumer_lifecycle.rs)
+cover recovery, duplicate scopes, refusal and final authority backing.
+
 This is bounded Host finite capability with caller-driven execution,
 not continuing Action, notification or Producer association/capacity
 implementation. HTTP's one-exchange-per-native-

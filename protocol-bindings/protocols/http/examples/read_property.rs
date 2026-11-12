@@ -46,27 +46,26 @@ fn main() {
         )
         .unwrap();
     let (definitions, funding) = prepared.into_execution();
-    drop(thing);
     drop(registry);
-    let consumer =
-        clinkz_wot_core::consumer::ConsumerInstance::new(clinkz_wot_core::ThingSlotId::new(
-            clinkz_wot_foundation::SlotIndex::new(0),
-            clinkz_wot_foundation::Generation::INITIAL,
-        ));
+    let owner = ConsumerOwner::try_new(bank.clone(), 1, 1).unwrap();
+    let registered = clinkz_wot_servient::consumer::register_thing(&owner, &thing, &mut work())
+        .expect("ID-addressed registration requires a unique TD id");
+    let thing_id = registered.thing_id().unwrap().to_owned();
+    drop((registered, thing));
+    // This move-only startup input is transferred into the managed owner. It
+    // is not an application-owned registered lifetime or a retained handle table.
     let standalone = StandaloneConsumerAssociation::try_new(
-        consumer.reference(),
+        owner.instance(&thing_id, &mut work()).unwrap().consumer(),
         definitions,
         funding,
         bank.clone(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let owner = ConsumerOwner::try_new(bank.clone(), 1, 1).unwrap();
-    let instance = owner
-        .register_instance(consumer, &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let association = owner
-        .register_association(&instance, standalone, &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    drop(
+        owner
+            .set_configuration(&thing_id, "default", standalone, &mut work())
+            .unwrap_or_else(|e| panic!("{:?}", e.error())),
+    );
     let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
     let clock = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(600), clock.elapsed().as_millis() as u64);
@@ -76,8 +75,16 @@ fn main() {
         .build()
         .unwrap();
     io.block_on(async {
-        let mut call = association
-            .read_property(&calls, &args[2], Deadline::NONE, now(), &mut work())
+        let mut call = owner
+            .read_property(
+                &thing_id,
+                "default",
+                &calls,
+                &args[2],
+                Deadline::NONE,
+                now(),
+                &mut work(),
+            )
             .unwrap();
         let result = loop {
             if let Poll::Ready(result) =
@@ -92,8 +99,8 @@ fn main() {
             Err(error) => eprintln!("{error:?}"),
         }
     });
-    owner.remove_instance(&instance, &mut work()).unwrap();
-    drop((association, instance, owner, calls));
+    owner.remove_thing(&thing_id, &mut work()).unwrap();
+    drop((owner, calls));
     assert!(
         ResourceKind::ALL
             .iter()

@@ -413,3 +413,266 @@ fn owner_drop_fences_views_while_original_calls_still_have_their_own_progress() 
         }
     });
 }
+
+fn configure(
+    owner: &ConsumerOwner,
+    id: &str,
+    configuration: &str,
+    definition: &Arc<ConsumerDefinition>,
+    account: &Arc<HostResourceAccounts>,
+    peers: &[&Peer],
+) -> ConsumerAssociation {
+    let original = owner.instance(id, &mut work()).unwrap().consumer();
+    let raw = associate_ref(definition, original, account, peers);
+    owner
+        .set_configuration(id, configuration, raw, &mut work())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()))
+}
+fn read_by_id(
+    owner: &ConsumerOwner,
+    id: &str,
+    configuration: &str,
+    calls: &ConsumerCalls,
+    peer: &Peer,
+) -> CoreResult<ConsumerCall> {
+    let port = peer.address.port().to_string();
+    owner.read_property_with_variables(
+        id,
+        configuration,
+        calls,
+        "level",
+        &[("port", &port), ("item", "x"), ("q", "q")],
+        Deadline::NONE,
+        now(0),
+        &mut work(),
+    )
+}
+
+#[test]
+fn td_id_alone_recovers_read_and_targeted_removal_after_every_thing_view_is_dropped() {
+    io().block_on(async {
+        let peer = Peer::new();
+        let backing = bank();
+        let mut source = dynamic_td(false);
+        source["id"] = json!("urn:pump:primary");
+        let definition = definition(&source, &backing).unwrap();
+        let source: Thing = serde_json::from_value(source).unwrap();
+        let id = source.id.as_ref().unwrap().as_str().to_owned();
+        let owner = ConsumerOwner::try_new(backing.clone(), 1, 1).unwrap();
+        drop(clinkz_wot_servient::consumer::register_thing(&owner, &source, &mut work()).unwrap());
+        let account = limited_bank(1);
+        drop(configure(
+            &owner,
+            &id,
+            "readonly",
+            &definition,
+            &account,
+            &[&peer],
+        ));
+        drop(source);
+        // No Thing snapshot, association view, internal slot or external handle
+        // table is kept. The library's own owner resolves every operation.
+        let capacity = limited_bank(1);
+        let calls = ConsumerCalls::try_new(capacity.clone(), 1).unwrap();
+        assert!(matches!(
+            read_by_id(&owner, &id, "misspelled", &calls, &peer),
+            Err(CoreError::NotFound(_))
+        ));
+        assert_eq!(peer.count(), 0, "no configuration fallback");
+        let mut call = read_by_id(&owner, &id, "readonly", &calls, &peer).unwrap();
+        assert_eq!(
+            finish(&mut call)
+                .await
+                .result()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"7"
+        );
+        drop(call);
+        owner.remove_thing(&id, &mut work()).unwrap();
+        assert!(matches!(
+            read_by_id(&owner, &id, "readonly", &calls, &peer),
+            Err(CoreError::NotFound(_))
+        ));
+        drop((owner, calls, definition));
+        for account in [&backing, &account, &capacity] {
+            clean(account);
+        }
+    });
+}
+
+#[test]
+fn same_thing_configurations_keep_permissions_and_accepted_context_across_update() {
+    io().block_on(async {
+        let (a, b) = (Peer::new(), Peer::new());
+        let backing = bank();
+        let shared = definition(&dynamic_td(false), &backing).unwrap();
+        let updated = definition(&dynamic_td(false), &backing).unwrap();
+        let owner = ConsumerOwner::try_new(backing.clone(), 1, 2).unwrap();
+        let id = "urn:pump";
+        let original = owner.register_thing(id, &mut work()).unwrap().consumer();
+        let (readonly_bank, admin_bank, updated_bank, capacity) = (
+            limited_bank(1),
+            limited_bank(1),
+            limited_bank(1),
+            limited_bank(2),
+        );
+        let readonly = configure(&owner, id, "readonly", &shared, &readonly_bank, &[&a]);
+        let admin = configure(&owner, id, "admin", &shared, &admin_bank, &[&b]);
+        assert_eq!(readonly.consumer(), admin.consumer());
+        let calls = ConsumerCalls::try_new(capacity.clone(), 2).unwrap();
+        assert!(matches!(
+            read_by_id(&owner, id, "readonly", &calls, &b),
+            Err(CoreError::Security { .. })
+        ));
+        assert!(matches!(
+            read_by_id(&owner, id, "admin", &calls, &a),
+            Err(CoreError::Security { .. })
+        ));
+        assert_eq!((a.count(), b.count()), (0, 0));
+        b.paused.store(true, Ordering::Release);
+        let mut old = read_by_id(&owner, id, "admin", &calls, &b).unwrap();
+        received(&b, &mut old).await;
+        // Replacement fits at full association capacity and changes only this
+        // selected configuration. Already accepted work retains b and its bank.
+        drop(configure(
+            &owner,
+            id,
+            "admin",
+            &updated,
+            &updated_bank,
+            &[&a],
+        ));
+        assert!(!admin.is_current() && readonly.is_current() && original.is_current());
+        assert_eq!(
+            owner.instance(id, &mut work()).unwrap().consumer(),
+            original
+        );
+        assert!(matches!(
+            start(&admin, &calls, &b),
+            Err(CoreError::StaleHandle(_))
+        ));
+        let result = finish(&mut old).await;
+        assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));
+        assert_eq!(result.consumer(), &original);
+        assert_eq!(
+            result.destination(),
+            format!("http://{}/v/x?q=q", b.address)
+        );
+        closed(&b).await;
+        assert_eq!(
+            (outstanding(&admin_bank), outstanding(&updated_bank)),
+            (1, 0)
+        );
+        drop((result, old));
+        let mut current = read_by_id(&owner, id, "admin", &calls, &a).unwrap();
+        assert!(finish(&mut current).await.result().is_ok());
+        drop(current);
+        owner
+            .remove_configuration(id, "admin", &mut work())
+            .unwrap();
+        assert!(matches!(
+            owner.association(id, "admin", &mut work()),
+            Err(CoreError::NotFound(_))
+        ));
+        assert!(readonly.is_current());
+        let mut call = read_by_id(&owner, id, "readonly", &calls, &a).unwrap();
+        assert!(finish(&mut call).await.result().is_ok());
+        drop((
+            call, readonly, admin, original, owner, calls, shared, updated,
+        ));
+        for account in [
+            &backing,
+            &readonly_bank,
+            &admin_bank,
+            &updated_bank,
+            &capacity,
+        ] {
+            clean(account);
+        }
+    });
+}
+
+#[test]
+fn same_id_recreation_does_not_retarget_old_calls_views_or_configuration_inputs() {
+    io().block_on(async {
+        let (a, b) = (Peer::new(), Peer::new());
+        a.paused.store(true, Ordering::Release);
+        let backing = bank();
+        let first_definition = definition(&dynamic_td(false), &backing).unwrap();
+        let next_definition = definition(&dynamic_td(false), &backing).unwrap();
+        let owner = ConsumerOwner::try_new(backing.clone(), 1, 1).unwrap();
+        let id = "urn:pump";
+        let first = owner.register_thing(id, &mut work()).unwrap();
+        let (first_bank, next_bank, capacity) = (limited_bank(1), limited_bank(1), limited_bank(2));
+        let stale = configure(&owner, id, "default", &first_definition, &first_bank, &[&a]);
+        let prepared_for_old = associate_ref(&next_definition, first.consumer(), &next_bank, &[&b]);
+        let calls = ConsumerCalls::try_new(capacity.clone(), 2).unwrap();
+        let mut old = read_by_id(&owner, id, "default", &calls, &a).unwrap();
+        received(&a, &mut old).await;
+        owner.remove_thing(id, &mut work()).unwrap();
+        let next = owner.register_thing(id, &mut work()).unwrap();
+        assert_ne!(next.consumer(), first.consumer());
+        assert!(matches!(
+            owner.remove_instance(&first, &mut work()),
+            Err(CoreError::StaleHandle(_))
+        ));
+        let refused = owner
+            .set_configuration(id, "default", prepared_for_old, &mut work())
+            .err()
+            .unwrap();
+        assert!(matches!(refused.error().error(), CoreError::Validation(_)));
+        drop(refused);
+        drop(configure(
+            &owner,
+            id,
+            "default",
+            &next_definition,
+            &next_bank,
+            &[&b],
+        ));
+        assert!(matches!(
+            start(&stale, &calls, &b),
+            Err(CoreError::StaleHandle(_))
+        ));
+        let mut new = read_by_id(&owner, id, "default", &calls, &b).unwrap();
+        let retained = finish(&mut new).await;
+        assert!(retained.result().is_ok());
+        let retired = finish(&mut old).await;
+        assert!(matches!(retired.result(), Err(CoreError::StaleHandle(_))));
+        assert_eq!(retired.consumer(), &first.consumer());
+        closed(&a).await;
+        drop((retired, old));
+        assert_eq!(
+            (
+                outstanding(&first_bank),
+                outstanding(&next_bank),
+                outstanding(&capacity)
+            ),
+            (0, 1, 1)
+        );
+        assert!(next.is_current());
+        assert_eq!(retained.consumer(), &next.consumer());
+        owner.remove_thing(id, &mut work()).unwrap();
+        assert!(
+            retained.result().is_ok(),
+            "returned results retain original evidence"
+        );
+        drop((
+            retained,
+            new,
+            stale,
+            first,
+            next,
+            owner,
+            calls,
+            first_definition,
+            next_definition,
+        ));
+        for account in [&backing, &first_bank, &next_bank, &capacity] {
+            clean(account);
+        }
+    });
+}

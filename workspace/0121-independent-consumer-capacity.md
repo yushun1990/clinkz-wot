@@ -79,3 +79,22 @@ obligation, not a guarantee inferred from HTTP or a metadata tag.
 
 Detailed contracts belong to Runtime Safety, Foundation and Core; this topic
 records the decision rationale and alternative dispositions, not current task/CI state.
+
+## Public addressing and management recovery
+
+Keeping registrations after handle loss exposed a concrete missing capability:
+the owner had no public way to reacquire targeted access. Merely requiring an
+external handle table would preserve that API gap. The selected finite owner now
+resolves TD IDs in its own registry and configurations by explicit local name.
+Ordinary operations/removal need no persistent snapshots. Snapshots remain useful
+for original-revision-conditioned management; internal generations cannot infer
+the intent of a delayed unqualified ID command.
+
+Different access policies do not inherently create different public Things.
+Named associations under the same authority preserve configuration selection
+without union/fallback; update fences that association while original accepted
+work keeps its context. The TD-aware facade rejects absent IDs only for this
+named registration path. General anonymous TD support and low-level composition
+remain valid. A universal multi-family Engine facade, inferred configuration
+selection and automatic scheduling add no capability needed for this correction.
+Runtime Safety owns the exact scope, duplicate, update and lookup contracts.

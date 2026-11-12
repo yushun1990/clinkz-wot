@@ -72,31 +72,35 @@ TD-resolved semantic input. The [composed Write subset](#composed-property-readw
 uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
 uses `try_inline_consumer_registration` and remains a restricted Read adapter.
 
-Prepare bindings with `ConsumerRegistry`, then register their original authority
-and association with a finite `ConsumerOwner`. It controls registered lifecycle;
-application instance handles and `ConsumerAssociation` views are non-revoking.
-Construct execution capacity separately and supply it to each operation:
+Prepare bindings with `ConsumerRegistry`, then use the finite `ConsumerOwner`'s
+ID-addressed path for registered lifecycle and operations. The TD's `id` is the
+public key within that owner. Application views are non-revoking and need not be
+retained for later lookup/removal. Supply execution capacity independently:
 
 ```rust
 use clinkz_wot_servient_finite::consumer::{
     ConsumerOwner, StandaloneConsumerAssociation, ConsumerCalls,
 };
+use clinkz_wot_servient::consumer::register_thing;
 
-let (bindings, funding) = prepared.into_execution();
-let standalone = StandaloneConsumerAssociation::try_new(
-    consumer.reference(), bindings, funding, instance_accounts.clone(),
-).unwrap_or_else(|e| panic!("{:?}", e.error()));
 let owner = ConsumerOwner::try_new(registry_accounts.clone(), 16, 32).unwrap();
-let instance = owner.register_instance(consumer, &mut budget)
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-let association = owner.register_association(&instance, standalone, &mut budget)
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+// Named ingress requires a TD id; it does not change anonymous TD validity.
+let instance = register_thing(&owner, &td, &mut budget).unwrap();
+let thing_id = instance.thing_id().unwrap().to_owned();
+let (bindings, funding) = prepared.into_execution();
+// Startup transfer of prepared mappings, not an externally owned registration.
+let standalone = StandaloneConsumerAssociation::try_new(
+    instance.consumer(), bindings, funding, instance_accounts.clone(),
+).unwrap_or_else(|e| panic!("{:?}", e.error()));
+drop(owner.set_configuration(&thing_id, "readonly", standalone, &mut budget)
+    .unwrap_or_else(|e| panic!("{:?}", e.error())));
+drop((instance, td)); // later operations need only the public ID/configuration
 let calls = ConsumerCalls::try_new(work_accounts.clone(), 1).unwrap();
-let mut call = association.read_property(
-    &calls, "level", deadline, now, &mut budget,
+let mut call = owner.read_property(
+    &thing_id, "readonly", &calls, "level", deadline, now, &mut budget,
 ).unwrap();
 // Explicitly fence this original instance; this does not report native drain.
-owner.remove_instance(&instance, &mut budget).unwrap();
+owner.remove_thing(&thing_id, &mut budget).unwrap();
 // Schedule funded call.poll / calls.step turns to observe the fence and clean up.
 ```
 
@@ -104,12 +108,37 @@ owner.remove_instance(&instance, &mut budget).unwrap();
 accounts may be separately provisioned. One owner can hold many registered
 instances/facets, while many associations share one `ConsumerCalls` or use several
 independent work owners. Native concurrency and original quotas still apply.
-`remove_association` closes only one facet; parent removal/owner shutdown fences
-all its registered facets. `replace_instance` requires the same numeric slot and
-checked next generation. Old identity/facet handles cannot resolve a successor.
+Identity registration alone installs no mappings/readiness: configure it explicitly.
+The source-free `register_thing(id, budget)` is also available for already-qualified
+IDs. IDs use exact string equality, are limited locally to 2048 bytes and must be
+unique among that owner's live named registrations. Duplicate registration refuses;
+no ID is invented when the TD omits one. TD parsing/preparation itself still permits
+anonymous Things. These are Engine ingress rules, not W3C global uniqueness rules.
+
+`instance(id, budget)` and `association(id, configuration, budget)` recover current
+snapshots. The latter supports every existing finite operation without retaining
+a view between calls. Explicit nonempty configuration names (at most 256 bytes)
+select separate checked mappings/policies under one Thing identity. Missing names
+return `NotFound`; there is no implicit default, union or permission fallback.
+`set_configuration` installs/replaces one named association; its input must belong
+to the current original parent. Update fences the old association and retains its
+accepted work's original context. `remove_configuration` affects only that name;
+`remove_thing` and owner shutdown fence all registered configurations.
+
+ID commands address the registration current at lookup, and still require fresh
+authorization. They cannot infer the intent of delayed external commands. Optional
+original snapshots support conditional `remove_instance` / `replace_instance` and
+`remove_association` / `replace_association`; old snapshots never resolve a successor.
+Instance replacement requires the same numeric slot and checked next generation.
 Dropping any returned handle leaves registration intact; `begin_close` or actual
-owner Drop fences all its registrations. Standalone association close/Drop remains
-a low-level passive ownership option; adoption consumes that revoking owner.
+owner Drop fences all registrations.
+
+`ConsumerInstance::new` / `StandaloneConsumerAssociation` and the unnamed adoption
+APIs remain low-level composition paths. Standalone close/Drop passively fences
+its scope. Adoption consumes that unique revoking owner. The other standalone
+examples and dedicated-capacity measurement are intentionally at this lower level;
+the [Read example](examples/read_property.rs) uses the managed ID-addressed path.
+This finite API does not add continuing Action/Event lifecycle integration.
 
 The application owns scheduling, fresh logical-clock observations and work credit.
 Removal does not notify a parked driver. Native I/O wakes alone cannot cover a

@@ -47,6 +47,10 @@ those distinct owners, not a shared scheduler or automatic execution model.
 The finite `ConsumerOwner` consumes unique instance and association authorities;
 application handles/views are non-revoking. Explicit removal, replacement and
 shutdown fence original permission before releasing mappings outside borrows.
+Its own public ID/configuration lookup recovers management and operation access
+after every view is lost; ID-based commands target the current registration,
+while original snapshots support conditional management. Named access profiles
+share one Thing identity and retain independent policy/mapping selections.
 Execution capacity remains independently supplied. Native I/O wakes alone do not
 schedule lifecycle cleanup: the application supplies lifecycle-command, cyclic
 or actual timer turns, fresh clock observations and work credit. A logical
