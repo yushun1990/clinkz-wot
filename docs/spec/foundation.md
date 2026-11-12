@@ -54,10 +54,12 @@ reservation; copied metadata and variable records have separate allowances.
 Capacity-owner loss cannot migrate these reservations to the association or a
 successor bank. Captured native limits remain additional independent constraints.
 
-The managed finite Consumer owner funds bounded instance-registry backing at
-startup and actual association-vector growth before installation. These limits
-bound registration metadata, not concurrent calls. Each adopted instance identity
-and each passive association header retain original funding through their last
+The managed finite Consumer owner's configured limits acquire no population-sized
+startup backing. Its sorted instance records, numeric-slot index and association
+records grow from actual registrations, with byte reservations for each typed
+buffer capacity before allocation. These limits bound registration metadata, not
+concurrent calls. Each adopted instance identity and each passive association
+header retain original funding through their last
 handle/control reference; removing permission does not refund retained tombstones.
 Unselected mapping backing retires outside borrows at association close. Registry
 vector capacity remains funded until its enclosing instance/owner retires;
@@ -74,11 +76,25 @@ and internally constructed Core authority. `ConsumerInstance::try_new_funded`
 keeps that authority's original reservation through the final passive reference,
 including work after registration removal; low-level `new` remains caller-funded
 startup construction. Name storage retires with its last snapshot/registration
-reference. ID/configuration lookup prepays actual entry count times bounded query
-bytes, rather than configured maximum occupancy. Copying names and retiring their
-records is prepaid before acquisition. Named configuration updates reuse the
+reference. ID/configuration lookup prepays at most the binary-search comparison
+count (`floor(log2(n)) + 1` for nonempty tables) times bounded query bytes, plus
+constant bookkeeping. Empty lookup costs constant work. It charges neither the
+configured population maximum nor a full scan of actual population. Copying names
+and retiring their records is prepaid before acquisition. Named configuration updates reuse the
 parent authority and replace only the selected association; no additional idle
 call quota, observer allowance or second registry is introduced.
+
+Sorted-table insertion/removal has an explicit linear metadata movement cost.
+The caller pays the actual suffix lengths shifted in the primary and slot tables
+(or the selected instance's association table), plus each live record moved during
+growth, before any mutation/fence. Same-key replacement performs no population
+shift. Staged growth funds old and new buffers simultaneously; installation only
+moves owners under the registry borrow. Empty old buffers and their reservations
+retire afterwards. Refusal restores original input owners without changing either
+index. Retained capacity follows actual high-water growth, stays charged through
+its enclosing owner, and is released on shutdown; it is not automatically shrunk
+on each deletion. This profile trades linear management updates for compact,
+deterministic logarithmic lookup without unaccounted map nodes or hash probes.
 
 Independently composed Host finite Consumer registries/Servients share service
 backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the

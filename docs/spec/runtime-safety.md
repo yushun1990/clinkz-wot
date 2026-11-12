@@ -367,6 +367,26 @@ The same rule applies to low-level standalone close; passive view loss changes
 no logical permission. The common finite kernel has no observer registry or
 native authority-change notification machinery.
 
+The managed registry's primary records are sorted by public ID, followed by
+unnamed low-level entries sorted by numeric slot. Named associations are sorted
+by configuration, followed by unnamed associations. ID/configuration lookup uses
+binary search and snapshots the original authority before ending its borrow.
+It does not scan other registered Things for ordinary operation admission.
+Long common prefixes are included in the paid comparison-byte bound; there is
+no hash-collision assumption. A separate sorted slot index retains the same
+passive identities, not another authority or public identity hierarchy.
+
+Slot allocation binary-searches the first hole: unique sorted nonnegative slots
+satisfy `slot[i] >= i`, with equality exactly before the first missing coordinate.
+An arbitrary caller slot such as `u32::MAX` cannot exclude a free lower slot.
+Reused numeric coordinates still have fresh original issuers. Removing a parent
+detaches both indexes before linked destruction; replacement updates both to the
+same new identity while preserving the original key/slot and checked generation.
+Sorted insertion/erase preserves lookup order and is prepaid as specified by
+Foundation. Allocation and retired-buffer destruction occur outside borrows;
+no callback sees a partially committed index. Accepted work never retains a row
+number into these moving tables.
+
 Runtime driver entry records its time observation on every original live or
 admitting call before invoking callbacks; direct call polling records its own
 entry observation. Resumed progress uses each call's latest accepted observation,

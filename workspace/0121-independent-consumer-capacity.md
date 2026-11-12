@@ -98,3 +98,27 @@ named registration path. General anonymous TD support and low-level composition
 remain valid. A universal multi-family Engine facade, inferred configuration
 selection and automatic scheduling add no capability needed for this correction.
 Runtime Safety owns the exact scope, duplicate, update and lookup contracts.
+
+## Indexed addressing and independent slot allocation
+
+The initial ID lookup charged and scanned every registered instance, and eager
+configured-maximum storage defeated sparse startup. Automatic `max(slot) + 1`
+also refused after a caller registered `u32::MAX` despite available capacity.
+These are concrete API/resource defects, not reasons to restore handle-only access.
+
+The selected correction uses the primary records themselves as a sorted ID
+table, plus a sorted local index of the same passive identities by slot. Named
+configurations are sorted within each instance. Binary lookup has deterministic
+comparison bounds even for adversarial common-prefix IDs. First-hole search on
+the slot index decouples allocation from arbitrary caller coordinates; no new
+public Thing identity is introduced. Both indexes are committed before linked
+destructors can reenter, and actual contiguous capacity stays funded.
+
+Hash tables offer average constant lookup but require collision/probe and backing
+qualification. Balanced trees improve management-update complexity but add node
+storage/allocation accounting. Sorted contiguous records are the smaller sound
+choice for this finite path: logarithmic admission lookup, no row-number aliases,
+explicitly paid linear insertion/removal, and lazy accounted growth. This does
+not qualify high-rate mutation over very large populations; a later concrete
+requirement could justify another index with its own work/memory proof. Current
+lookup is corrected here rather than deferred to measurement or larger budgets.

@@ -676,3 +676,76 @@ fn same_id_recreation_does_not_retarget_old_calls_views_or_configuration_inputs(
         }
     });
 }
+
+#[test]
+fn real_http_id_and_configuration_admission_uses_small_credit_at_different_populations() {
+    io().block_on(async {
+        for population in [64, 4096] {
+            let peer = Peer::new();
+            let backing = bank();
+            let definition = definition(&dynamic_td(false), &backing).unwrap();
+            let owner = ConsumerOwner::try_new(backing.clone(), 1_000_000, 64).unwrap();
+            let key = |i| format!("urn:factory:meter:{i:08}");
+            for i in (0..population).rev() {
+                drop(owner.register_thing(&key(i), &mut work()).unwrap());
+            }
+            let id = key(population / 2);
+            let account = limited_bank(1);
+            for i in (0..32).rev() {
+                drop(configure(
+                    &owner,
+                    &id,
+                    &format!("access-{i:03}"),
+                    &definition,
+                    &account,
+                    &[&peer],
+                ));
+            }
+            owner
+                .remove_configuration(&id, "access-016", &mut work())
+                .unwrap();
+            assert!(matches!(
+                owner.association(&id, "access-016", &mut work()),
+                Err(CoreError::NotFound(_))
+            ));
+            let capacity = limited_bank(1);
+            let calls = ConsumerCalls::try_new(capacity.clone(), 1).unwrap();
+            for configuration in ["access-000", "access-015", "access-031"] {
+                // The same fixed credit serves both populations. It is far
+                // below the previous full-population reservation, with no
+                // adjustment to policy/native/cleanup work or configured limits.
+                let mut credit = work().with_remaining(WorkClass::QueueOperations, 1024);
+                let port = peer.address.port().to_string();
+                let mut call = owner
+                    .read_property_with_variables(
+                        &id,
+                        configuration,
+                        &calls,
+                        "level",
+                        &[("port", &port), ("item", "x"), ("q", "q")],
+                        Deadline::NONE,
+                        now(0),
+                        &mut credit,
+                    )
+                    .unwrap();
+                assert!(credit.remaining(WorkClass::QueueOperations) > 0);
+                assert_eq!(
+                    finish(&mut call)
+                        .await
+                        .result()
+                        .unwrap()
+                        .data()
+                        .unwrap()
+                        .body,
+                    b"7"
+                );
+                drop(call);
+            }
+            assert_eq!(peer.count(), 3);
+            drop((calls, owner, definition));
+            for account in [&backing, &account, &capacity] {
+                clean(account);
+            }
+        }
+    });
+}

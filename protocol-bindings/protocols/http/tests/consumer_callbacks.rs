@@ -1424,3 +1424,61 @@ fn id_resolved_admission_never_retries_a_replacement_created_during_credentials(
         HOOK.with(|h| assert!(h.borrow().is_none()));
     }
 }
+
+#[test]
+fn indexed_replacement_is_committed_before_destructor_reentry_reorders_both_tables() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let owner = Rc::new(ConsumerOwner::try_new(bank.clone(), 4, 2).unwrap());
+    for id in ["urn:z", "urn:a", "urn:m"] {
+        drop(owner.register_thing(id, &mut work()).unwrap());
+    }
+    let original = owner.instance("urn:m", &mut work()).unwrap().consumer();
+    let mut calls = Vec::new();
+    let mut views = Vec::new();
+    for name in ["omega", "alpha"] {
+        let (rt, _) = association_harness(1, None, bank.clone(), original.clone());
+        let (raw, store) = Rc::try_unwrap(rt).ok().unwrap();
+        views.push(
+            owner
+                .set_configuration("urn:m", name, raw, &mut work())
+                .unwrap_or_else(|e| panic!("{:?}", e.error())),
+        );
+        calls.push(store);
+    }
+    let (rt, _) = association_harness(1, None, bank.clone(), original.clone());
+    let (replacement, store) = Rc::try_unwrap(rt).ok().unwrap();
+    calls.push(store);
+    let control = owner.clone();
+    let old = views[1].clone();
+    hook(Edge::ServiceDrop, move || {
+        assert!(!old.is_current());
+        assert!(
+            control
+                .association("urn:m", "alpha", &mut work())
+                .unwrap()
+                .is_current()
+        );
+        control.remove_thing("urn:m", &mut work()).unwrap();
+        drop(control.register_thing("urn:m", &mut work()).unwrap());
+        drop(control.register_thing("urn:b", &mut work()).unwrap());
+    });
+    let replacement = owner
+        .set_configuration("urn:m", "alpha", replacement, &mut work())
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert!(!original.is_current() && !replacement.is_current());
+    assert!(views.iter().all(|v| !v.is_current()));
+    assert_ne!(
+        owner.instance("urn:m", &mut work()).unwrap().consumer(),
+        original
+    );
+    for id in ["urn:a", "urn:b", "urn:m", "urn:z"] {
+        assert!(owner.instance(id, &mut work()).unwrap().is_current());
+    }
+    assert!(matches!(
+        owner.association("urn:m", "alpha", &mut work()),
+        Err(CoreError::NotFound(_))
+    ));
+    drop((replacement, views, original, calls, owner));
+    clean(&bank);
+    HOOK.with(|h| assert!(h.borrow().is_none()));
+}

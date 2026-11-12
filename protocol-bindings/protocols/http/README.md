@@ -133,6 +133,15 @@ Instance replacement requires the same numeric slot and checked next generation.
 Dropping any returned handle leaves registration intact; `begin_close` or actual
 owner Drop fences all registrations.
 
+ID and configuration lookup is logarithmic in actual table occupancy, with bounded
+string-comparison work; it does not scan the population before a read. Configured
+limits allocate no population-sized storage at owner startup. Contiguous table
+backing grows under the owner bank as registrations arrive. Inserting/removing
+registrations can shift linear metadata and requires the corresponding caller
+work credit; same-key replacement leaves index order intact. Retained high-water
+capacity remains funded until owner shutdown. Internal slot selection finds a
+free coordinate independently of arbitrary caller-provided slot numbers.
+
 `ConsumerInstance::new` / `StandaloneConsumerAssociation` and the unnamed adoption
 APIs remain low-level composition paths. Standalone close/Drop passively fences
 its scope. Adoption consumes that unique revoking owner. The other standalone

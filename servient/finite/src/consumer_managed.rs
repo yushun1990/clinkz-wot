@@ -10,6 +10,121 @@ struct RegisteredName {
     _funding: HostCapacityReservation,
 }
 
+// Private contiguous storage, funded at actual capacity. Growth is staged
+// outside registry borrows, including simultaneous old/new backing. Installing
+// growth only moves records; the empty old allocation is dropped after unlock.
+struct Records<T> {
+    entries: Vec<T>,
+    _funding: Option<HostCapacityReservation>,
+}
+impl<T> Default for Records<T> {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            _funding: None,
+        }
+    }
+}
+impl<T> core::ops::Deref for Records<T> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        &self.entries
+    }
+}
+impl<T> core::ops::DerefMut for Records<T> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        &mut self.entries
+    }
+}
+impl<T> Records<T> {
+    fn prepare_growth(
+        bank: &Arc<HostResourceAccounts>,
+        len: usize,
+        capacity: usize,
+        limit: usize,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<Self>> {
+        if len < capacity {
+            return Ok(None);
+        }
+        if len >= limit {
+            return Err(busy());
+        }
+        let wanted = capacity.max(1).saturating_mul(2).min(limit);
+        let bytes = wanted
+            .checked_mul(core::mem::size_of::<T>())
+            .and_then(|n| u64::try_from(n).ok())
+            .ok_or_else(invalid)?;
+        if !pay(budget, W::QueueOperations, len as u64) {
+            return Err(busy());
+        }
+        let funding = bank
+            .reserve(K::EngineLiveBytesGlobalMax, bytes)
+            .ok_or_else(busy)?;
+        let mut entries = Vec::new();
+        entries.try_reserve_exact(wanted).map_err(|_| busy())?;
+        Ok(Some(Self {
+            entries,
+            _funding: Some(funding),
+        }))
+    }
+    fn install_growth(&mut self, growth: Option<Self>) -> Option<Self> {
+        growth.map(|mut next| {
+            debug_assert!(next.entries.capacity() > self.len());
+            next.entries.append(&mut self.entries);
+            core::mem::replace(self, next)
+        })
+    }
+    fn insert(&mut self, index: usize, value: T) {
+        // A registry commit must never implicitly grow an allocation.
+        assert!(self.len() < self.entries.capacity());
+        self.entries.insert(index, value);
+    }
+}
+
+// Our binary search has at most floor(log2(n)) + 1 comparisons. Pay the
+// complete bound before inspection; width includes the bounded key comparison.
+fn search_work(budget: &mut WorkBudget, len: usize, width: usize) -> CoreResult<()> {
+    let probes = usize::BITS - len.leading_zeros();
+    let work = (probes as u64)
+        .checked_mul(width as u64)
+        .and_then(|n| n.checked_add(1))
+        .ok_or_else(invalid)?;
+    if !pay(budget, W::QueueOperations, work) {
+        return Err(busy());
+    }
+    Ok(())
+}
+fn search<T>(
+    entries: &[T],
+    width: usize,
+    budget: &mut WorkBudget,
+    mut compare: impl FnMut(&T) -> Ordering,
+) -> CoreResult<Result<usize, usize>> {
+    search_work(budget, entries.len(), width)?;
+    let (mut low, mut high) = (0, entries.len());
+    while low < high {
+        let mid = low + (high - low) / 2;
+        match compare(&entries[mid]) {
+            Ordering::Less => low = mid + 1,
+            Ordering::Greater => high = mid,
+            Ordering::Equal => return Ok(Ok(mid)),
+        }
+    }
+    Ok(Err(low))
+}
+fn pay_moves(budget: &mut WorkBudget, a: usize, b: usize) -> CoreResult<()> {
+    let work = a
+        .checked_add(b)
+        .and_then(|n| n.checked_add(2))
+        .and_then(|n| u64::try_from(n).ok())
+        .ok_or_else(invalid)?;
+    if !pay(budget, W::QueueOperations, work) {
+        return Err(busy());
+    }
+    Ok(())
+}
+
 /// A non-revoking identity for one original managed instance.
 /// Cloning/dropping a handle does not remove it. Numeric slots alone are not
 /// identity: membership also checks this registration's retained issuer.
@@ -67,19 +182,23 @@ pub struct ConsumerOwner {
     max_associations: usize,
     active: Cell<bool>,
     registry: RefCell<ManagedRegistry>,
-    backing: RefCell<Option<HostCapacityReservation>>,
 }
+#[derive(Default)]
 struct ManagedRegistry {
-    instances: Vec<RegisteredInstance>,
+    // Named entries in lexical ID order, followed by unnamed entries in slot
+    // order. Records themselves form the ID index: no row-number aliases.
+    instances: Records<RegisteredInstance>,
+    // The same passive identities in numeric slot order. This is only a local
+    // index, not another authority or public Thing identity.
+    slots: Records<Rc<InstanceIdentity>>,
     associations: usize,
 }
 struct RegisteredInstance {
     // Revokes before association/service destruction, including on unwind.
     owner: ConsumerInstance,
     identity: Rc<InstanceIdentity>,
-    associations: Vec<RegisteredAssociation>,
-    // Last: actual vector backing retires before its original reservation.
-    _backing: Option<HostCapacityReservation>,
+    // Named configurations in lexical order, followed by unnamed associations.
+    associations: Records<RegisteredAssociation>,
 }
 struct RegisteredAssociation {
     owner: StandaloneConsumerAssociation,
@@ -92,6 +211,8 @@ impl ConsumerOwner {
     /// Empty/over-2048-byte IDs and duplicate live IDs refuse; no ID is generated
     /// for an anonymous TD. Equality is exact UTF-8 equality, without URI aliases.
     /// Dropping the returned snapshot is safe: `instance` can recover it by ID.
+    /// Lookup/free-slot selection is logarithmic; insertion prepays actual table
+    /// shifts and any lazy growth. Arbitrary caller-chosen high slots are valid.
     pub fn register_thing(
         &self,
         thing_id: &str,
@@ -102,22 +223,10 @@ impl ConsumerOwner {
             if self.find_thing(&registry, thing_id, budget)?.is_some() {
                 return Err(invalid());
             }
-            if !pay(
-                budget,
-                W::QueueOperations,
-                registry.instances.len() as u64 + 1,
-            ) {
+            if registry.instances.len() == self.max_instances {
                 return Err(busy());
             }
-            // One bounded scan. Original issuer identity also distinguishes
-            // a later registration after all numeric coordinates are reused.
-            registry
-                .instances
-                .iter()
-                .map(|e| e.identity.consumer.slot().slot().get())
-                .max()
-                .map_or(Some(0), |n| n.checked_add(1))
-                .ok_or_else(invalid)?
+            self.free_slot(&registry, budget)?
         };
         let name = self.name(thing_id, MAX_THING_ID_BYTES, budget)?;
         self.adopt_instance(
@@ -168,7 +277,7 @@ impl ConsumerOwner {
             let entry = &registry.instances[index];
             let current = self
                 .find_configuration(entry, configuration, budget)?
-                .map(|i| entry.associations[i].owner.handle());
+                .map(|i| (index, i, entry.associations[i].owner.handle()));
             Ok((
                 ConsumerInstanceHandle {
                     identity: entry.identity.clone(),
@@ -180,8 +289,8 @@ impl ConsumerOwner {
             Ok(checked) => checked,
             Err(error) => return Err(reject(association, error)),
         };
-        if let Some(current) = current {
-            return self.replace_association(&current, association, budget);
+        if let Some((instance, index, current)) = current {
+            return self.replace_association_at((instance, index), &current, association, budget);
         }
         let name = match self.name(configuration, MAX_CONFIGURATION_NAME_BYTES, budget) {
             Ok(name) => name,
@@ -272,7 +381,8 @@ impl ConsumerOwner {
             .read_property_with_variables(calls, property, variables, deadline, now, budget)
     }
 
-    /// Caller-funded startup. Zero association capacity permits identity-only
+    /// Establish limits without population-sized allocation. Index backing grows
+    /// from actual registrations. Zero association capacity permits identity-only
     /// registrations. No vacant call slots, executor or notification port exists.
     pub fn try_new(
         bank: Arc<HostResourceAccounts>,
@@ -282,27 +392,12 @@ impl ConsumerOwner {
         if max_instances == 0 {
             return Err(invalid());
         }
-        let bytes = max_instances
-            .checked_mul(core::mem::size_of::<RegisteredInstance>())
-            .and_then(|n| u64::try_from(n).ok())
-            .ok_or_else(invalid)?;
-        let backing = bank
-            .reserve(K::EngineLiveBytesGlobalMax, bytes)
-            .ok_or_else(busy)?;
-        let mut instances = Vec::new();
-        instances
-            .try_reserve_exact(max_instances)
-            .map_err(|_| busy())?;
         Ok(Self {
             bank,
             max_instances,
             max_associations,
             active: Cell::new(true),
-            registry: RefCell::new(ManagedRegistry {
-                instances,
-                associations: 0,
-            }),
-            backing: RefCell::new(Some(backing)),
+            registry: RefCell::new(ManagedRegistry::default()),
         })
     }
 
@@ -328,41 +423,74 @@ impl ConsumerOwner {
                 return Err(stale());
             }
             let registry = self.registry.borrow();
-            if !pay(
-                budget,
-                W::QueueOperations,
-                registry.instances.len() as u64 + 1,
-            ) {
-                return Err(busy());
-            }
             if registry.instances.len() == self.max_instances {
                 return Err(busy());
             }
-            if registry
-                .instances
-                .iter()
-                .any(|e| e.identity.consumer.slot().slot() == consumer.slot().slot())
-            {
-                return Err(invalid());
-            }
-            Ok(())
+            let slot = self
+                .slot_position(&registry, consumer.slot().slot(), budget)?
+                .err()
+                .ok_or_else(invalid)?;
+            let index = self
+                .instance_position(
+                    &registry,
+                    thing_id.as_ref().map(|n| n.value.as_ref()),
+                    consumer.slot().slot(),
+                    budget,
+                )?
+                .err()
+                .ok_or_else(invalid)?;
+            pay_moves(
+                budget,
+                registry.instances.len() - index,
+                registry.slots.len() - slot,
+            )?;
+            Ok((
+                index,
+                slot,
+                registry.instances.entries.capacity(),
+                registry.slots.entries.capacity(),
+                registry.instances.len(),
+            ))
         })();
-        if let Err(error) = checked {
-            return Err(reject(instance, error));
-        }
+        let (index, slot, capacity, slot_capacity, len) = match checked {
+            Ok(checked) => checked,
+            Err(error) => return Err(reject(instance, error)),
+        };
+        let growth =
+            match Records::prepare_growth(&self.bank, len, capacity, self.max_instances, budget) {
+                Ok(growth) => growth,
+                Err(error) => return Err(reject(instance, error)),
+            };
+        let slot_growth = match Records::prepare_growth(
+            &self.bank,
+            len,
+            slot_capacity,
+            self.max_instances,
+            budget,
+        ) {
+            Ok(growth) => growth,
+            Err(error) => return Err(reject(instance, error)),
+        };
         let identity = match self.identity(consumer, thing_id, budget) {
             Ok(identity) => identity,
             Err(error) => return Err(reject(instance, error)),
         };
-        self.registry
-            .borrow_mut()
-            .instances
-            .push(RegisteredInstance {
-                owner: instance,
-                identity: identity.clone(),
-                associations: Vec::new(),
-                _backing: None,
-            });
+        let retired = {
+            let mut registry = self.registry.borrow_mut();
+            let old = registry.instances.install_growth(growth);
+            let old_slots = registry.slots.install_growth(slot_growth);
+            registry.instances.insert(
+                index,
+                RegisteredInstance {
+                    owner: instance,
+                    identity: identity.clone(),
+                    associations: Records::default(),
+                },
+            );
+            registry.slots.insert(slot, identity.clone());
+            (old, old_slots)
+        };
+        drop(retired);
         Ok(ConsumerInstanceHandle { identity })
     }
 
@@ -394,79 +522,50 @@ impl ConsumerOwner {
                 return Err(busy());
             }
             let entry = &registry.instances[index];
-            let wanted = if entry.associations.len() == entry.associations.capacity() {
-                Some(
-                    entry
-                        .associations
-                        .capacity()
-                        .max(1)
-                        .checked_mul(2)
-                        .ok_or_else(invalid)?
-                        .min(self.max_associations),
-                )
+            let at = if let Some(name) = &configuration {
+                self.configuration_position(entry, &name.value, budget)?
+                    .err()
+                    .ok_or_else(invalid)?
             } else {
-                None
-            };
-            let moves = if wanted.is_some() {
                 entry.associations.len()
-            } else {
-                0
             };
-            if !pay(budget, W::QueueOperations, moves as u64 + 1) {
-                return Err(busy());
-            }
-            Ok((index, wanted))
+            pay_moves(budget, entry.associations.len() - at, 0)?;
+            Ok((
+                index,
+                at,
+                entry.associations.len(),
+                entry.associations.entries.capacity(),
+            ))
         })();
-        let (index, wanted) = match checked {
+        let (index, at, len, capacity) = match checked {
             Ok(checked) => checked,
             Err(error) => return Err(reject(association, error)),
         };
         if !self.prepay_association(&association, budget) {
             return Err(reject(association, busy()));
         }
-        // Allocate/fund growth outside registry borrows. No linked code runs
-        // between validation and installation; installation only moves owners.
-        let mut replacement = Vec::new();
-        let replacement_backing = if let Some(capacity) = wanted {
-            let bytes = match capacity.checked_mul(core::mem::size_of::<RegisteredAssociation>()) {
-                Some(bytes) => bytes as u64,
-                None => return Err(reject(association, invalid())),
+        let growth =
+            match Records::prepare_growth(&self.bank, len, capacity, self.max_associations, budget)
+            {
+                Ok(growth) => growth,
+                Err(error) => return Err(reject(association, error)),
             };
-            let backing = match self.bank.reserve(K::EngineLiveBytesGlobalMax, bytes) {
-                Some(backing) => backing,
-                None => return Err(reject(association, busy())),
-            };
-            if replacement.try_reserve_exact(capacity).is_err() {
-                return Err(reject(association, busy()));
-            }
-            Some(backing)
-        } else {
-            None
-        };
         let handle = association.handle();
-        let (old, old_backing) = {
+        let old = {
             let mut registry = self.registry.borrow_mut();
             let entry = &mut registry.instances[index];
-            let old = if wanted.is_some() {
-                replacement.append(&mut entry.associations);
-                core::mem::replace(&mut entry.associations, replacement)
-            } else {
-                replacement
-            };
-            let old_backing = if wanted.is_some() {
-                core::mem::replace(&mut entry._backing, replacement_backing)
-            } else {
-                None
-            };
-            entry.associations.push(RegisteredAssociation {
-                owner: association,
-                configuration,
-            });
+            let old = entry.associations.install_growth(growth);
+            entry.associations.insert(
+                at,
+                RegisteredAssociation {
+                    owner: association,
+                    configuration,
+                },
+            );
             registry.associations += 1;
-            (old, old_backing)
+            old
         };
         drop(old);
-        drop(old_backing);
         Ok(handle)
     }
 
@@ -480,9 +579,17 @@ impl ConsumerOwner {
         let removed = {
             let mut registry = self.registry.borrow_mut();
             let (instance, index) = self.find_association(&registry, association, budget)?;
+            pay_moves(
+                budget,
+                registry.instances[instance].associations.len() - index - 1,
+                0,
+            )?;
             association.fence();
             registry.associations -= 1;
-            registry.instances[instance].associations.swap_remove(index)
+            registry.instances[instance]
+                .associations
+                .entries
+                .remove(index)
         };
         drop(removed);
         Ok(())
@@ -498,16 +605,25 @@ impl ConsumerOwner {
     ) -> Result<ConsumerAssociation, BindingInputRejection<StandaloneConsumerAssociation>> {
         let checked = (|| {
             let registry = self.registry.borrow();
-            let indices = self.find_association(&registry, expected, budget)?;
-            if !replacement.is_current() || replacement.consumer() != expected.consumer() {
-                return Err(invalid());
-            }
-            Ok(indices)
+            self.find_association(&registry, expected, budget)
         })();
-        let (instance, index) = match checked {
+        let indices = match checked {
             Ok(indices) => indices,
             Err(error) => return Err(reject(replacement, error)),
         };
+        self.replace_association_at(indices, expected, replacement, budget)
+    }
+
+    fn replace_association_at(
+        &self,
+        (instance, index): (usize, usize),
+        expected: &ConsumerAssociation,
+        replacement: StandaloneConsumerAssociation,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerAssociation, BindingInputRejection<StandaloneConsumerAssociation>> {
+        if !replacement.is_current() || replacement.consumer() != expected.consumer() {
+            return Err(reject(replacement, invalid()));
+        }
         if !self.prepay_association(&replacement, budget) {
             return Err(reject(replacement, busy()));
         }
@@ -534,9 +650,19 @@ impl ConsumerOwner {
         let removed = {
             let mut registry = self.registry.borrow_mut();
             let index = self.find(&registry, instance, budget)?;
+            let slot = self
+                .slot_position(&registry, instance.identity.consumer.slot().slot(), budget)?
+                .map_err(|_| stale())?;
+            pay_moves(
+                budget,
+                registry.instances.len() - index - 1,
+                registry.slots.len() - slot - 1,
+            )?;
             registry.instances[index].owner.revoke();
             registry.associations -= registry.instances[index].associations.len();
-            registry.instances.swap_remove(index)
+            let removed = registry.instances.entries.remove(index);
+            let old_index = registry.slots.entries.remove(slot);
+            (removed, old_index)
         };
         drop(removed);
         Ok(())
@@ -562,10 +688,14 @@ impl ConsumerOwner {
             {
                 return Err(invalid());
             }
-            Ok(index)
+            let slot = self
+                .slot_position(&registry, before.slot(), budget)?
+                .map_err(|_| stale())?;
+            pay_moves(budget, 0, 0)?;
+            Ok((index, slot))
         })();
-        let index = match checked {
-            Ok(index) => index,
+        let (index, slot) = match checked {
+            Ok(indices) => indices,
             Err(error) => return Err(reject(replacement, error)),
         };
         let thing_id = self.registry.borrow().instances[index]
@@ -580,15 +710,16 @@ impl ConsumerOwner {
             let mut registry = self.registry.borrow_mut();
             registry.instances[index].owner.revoke();
             registry.associations -= registry.instances[index].associations.len();
-            core::mem::replace(
+            let removed = core::mem::replace(
                 &mut registry.instances[index],
                 RegisteredInstance {
                     owner: replacement,
                     identity: identity.clone(),
-                    associations: Vec::new(),
-                    _backing: None,
+                    associations: Records::default(),
                 },
-            )
+            );
+            let old_index = core::mem::replace(&mut registry.slots[slot], identity.clone());
+            (removed, old_index)
         };
         drop(removed);
         Ok(ConsumerInstanceHandle { identity })
@@ -598,18 +729,15 @@ impl ConsumerOwner {
     /// original work owners still require caller-driven native cleanup.
     pub fn begin_close(&self) {
         self.active.set(false);
-        let backing = self.backing.borrow_mut().take();
         let removed = {
             let mut registry = self.registry.borrow_mut();
             // Fence every parent before any linked destructor can reenter.
-            for entry in &registry.instances {
+            for entry in registry.instances.iter() {
                 entry.owner.revoke();
             }
-            registry.associations = 0;
-            core::mem::take(&mut registry.instances)
+            core::mem::take(&mut *registry)
         };
         drop(removed);
-        drop(backing);
     }
     pub fn is_closed(&self) -> bool {
         !self.active.get()
@@ -624,18 +752,18 @@ impl ConsumerOwner {
         if !self.active.get() || !handle.is_current() {
             return Err(stale());
         }
-        if !pay(
-            budget,
-            W::QueueOperations,
-            registry.instances.len() as u64 + 1,
-        ) {
-            return Err(busy());
+        let index = self
+            .instance_position(
+                registry,
+                handle.thing_id(),
+                handle.identity.consumer.slot().slot(),
+                budget,
+            )?
+            .map_err(|_| stale())?;
+        if !Rc::ptr_eq(&registry.instances[index].identity, &handle.identity) {
+            return Err(stale());
         }
-        registry
-            .instances
-            .iter()
-            .position(|e| Rc::ptr_eq(&e.identity, &handle.identity))
-            .ok_or_else(stale)
+        Ok(index)
     }
     fn find_thing(
         &self,
@@ -646,18 +774,74 @@ impl ConsumerOwner {
         if !self.active.get() {
             return Err(stale());
         }
-        Self::name_work(
-            thing_id,
-            MAX_THING_ID_BYTES,
-            registry.instances.len(),
+        Self::check_name(thing_id, MAX_THING_ID_BYTES)?;
+        Ok(self
+            .instance_position(registry, Some(thing_id), SlotIndex::new(0), budget)?
+            .ok())
+    }
+    fn instance_position(
+        &self,
+        registry: &ManagedRegistry,
+        name: Option<&str>,
+        slot: SlotIndex,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Result<usize, usize>> {
+        search(
+            &registry.instances,
+            name.map_or(1, |n| n.len() + 1),
             budget,
-        )?;
-        Ok(registry.instances.iter().position(|e| {
-            e.identity
-                .thing_id
-                .as_ref()
-                .is_some_and(|n| n.value.as_ref() == thing_id)
-        }))
+            |entry| match (&entry.identity.thing_id, name) {
+                (Some(a), Some(b)) => a.value.as_ref().cmp(b),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => entry.identity.consumer.slot().slot().cmp(&slot),
+            },
+        )
+    }
+    fn slot_position(
+        &self,
+        registry: &ManagedRegistry,
+        slot: SlotIndex,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Result<usize, usize>> {
+        search(&registry.slots, 1, budget, |e| {
+            e.consumer.slot().slot().cmp(&slot)
+        })
+    }
+    fn free_slot(&self, registry: &ManagedRegistry, budget: &mut WorkBudget) -> CoreResult<u32> {
+        search_work(budget, registry.slots.len(), 1)?;
+        // Unique nonnegative sorted slots satisfy slot[i] >= i. Equality holds
+        // precisely before the first hole. Binary search that monotone predicate;
+        // arbitrary high caller slots cannot prevent reuse of a lower free one.
+        let (mut low, mut high) = (0, registry.slots.len());
+        while low < high {
+            let mid = low + (high - low) / 2;
+            if u64::from(registry.slots[mid].consumer.slot().slot().get()) == mid as u64 {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+        u32::try_from(low).map_err(|_| invalid())
+    }
+    fn configuration_position(
+        &self,
+        instance: &RegisteredInstance,
+        configuration: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Result<usize, usize>> {
+        Self::check_name(configuration, MAX_CONFIGURATION_NAME_BYTES)?;
+        search(
+            &instance.associations,
+            configuration.len() + 1,
+            budget,
+            |entry| {
+                entry
+                    .configuration
+                    .as_ref()
+                    .map_or(Ordering::Greater, |n| n.value.as_ref().cmp(configuration))
+            },
+        )
     }
     fn find_configuration(
         &self,
@@ -665,28 +849,13 @@ impl ConsumerOwner {
         configuration: &str,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<usize>> {
-        Self::name_work(
-            configuration,
-            MAX_CONFIGURATION_NAME_BYTES,
-            instance.associations.len(),
-            budget,
-        )?;
-        Ok(instance.associations.iter().position(|a| {
-            a.configuration
-                .as_ref()
-                .is_some_and(|n| n.value.as_ref() == configuration)
-        }))
+        Ok(self
+            .configuration_position(instance, configuration, budget)?
+            .ok())
     }
-    fn name_work(value: &str, max: usize, count: usize, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn check_name(value: &str, max: usize) -> CoreResult<()> {
         if value.is_empty() || value.len() > max {
             return Err(invalid());
-        }
-        let work = (count as u64)
-            .checked_mul(value.len() as u64 + 1)
-            .and_then(|n| n.checked_add(1))
-            .ok_or_else(invalid)?;
-        if !pay(budget, W::QueueOperations, work) {
-            return Err(busy());
         }
         Ok(())
     }
@@ -696,8 +865,10 @@ impl ConsumerOwner {
         max: usize,
         budget: &mut WorkBudget,
     ) -> CoreResult<Rc<RegisteredName>> {
-        Self::name_work(value, max, 1, budget)?;
-        if !pay(budget, W::CleanupItems, 1) {
+        Self::check_name(value, max)?;
+        if !pay(budget, W::QueueOperations, value.len() as u64 + 1)
+            || !pay(budget, W::CleanupItems, 1)
+        {
             return Err(busy());
         }
         let bytes = core::mem::size_of::<RegisteredName>()
@@ -721,18 +892,21 @@ impl ConsumerOwner {
         if !self.active.get() || !handle.is_current() {
             return Err(stale());
         }
-        if !pay(
-            budget,
-            W::QueueOperations,
-            registry.instances.len() as u64 + 1,
-        ) {
-            return Err(busy());
+        let consumer = handle.consumer();
+        let slot = self
+            .slot_position(registry, consumer.slot().slot(), budget)?
+            .map_err(|_| stale())?;
+        let identity = &registry.slots[slot];
+        if identity.consumer != consumer {
+            return Err(stale());
         }
-        let instance = registry
-            .instances
-            .iter()
-            .position(|e| e.identity.consumer == handle.consumer())
-            .ok_or_else(stale)?;
+        let instance = self.find(
+            registry,
+            &ConsumerInstanceHandle {
+                identity: identity.clone(),
+            },
+            budget,
+        )?;
         let associations = &registry.instances[instance].associations;
         if !pay(budget, W::QueueOperations, associations.len() as u64 + 1) {
             return Err(busy());

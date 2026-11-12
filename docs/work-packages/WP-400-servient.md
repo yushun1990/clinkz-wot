@@ -342,6 +342,16 @@ fall back, and snapshot-conditioned management stays distinct from a command
 targeting the current ID. [Management tests](../../servient/finite/tests/consumer_lifecycle.rs)
 cover recovery, duplicate scopes, refusal and final authority backing.
 
+Those tests also cover a million-entry configured limit without eager allocation,
+4096 long-prefix IDs through out-of-order insertion/removal/recreation, free-slot
+reuse alongside `u32::MAX`, and rollback after partially funded index growth.
+The managed HTTP fixture admits calls at 64 and 4096 actual instances with the
+same 1024 QueueOperations credit, selects sorted configurations after middle
+removal, and reclaims original accounts. Callback evidence replaces a
+configuration whose service destructor removes/recreates the parent and shifts
+the indexes. These establish indexed lookup and coherent ownership transitions,
+not a production throughput or high-rate management-update qualification.
+
 This is bounded Host finite capability with caller-driven execution,
 not continuing Action, notification or Producer association/capacity
 implementation. HTTP's one-exchange-per-native-
