@@ -157,7 +157,8 @@ The same source-free execution crate contains the finite `ConsumerOwner` lifecyc
 boundary, non-revoking `ConsumerAssociation` views and independent `ConsumerCalls`
 work storage. Registered instances/facets have one actual logical owner; dropping
 an application handle never removes them. Standalone ownership remains a separate
-low-level representation whose unique authority is consumed on adoption. Persistent
+low-level representation; named configuration adoption consumes its unique
+association authority, while managed instance authority is created by its owner. Persistent
 registration and finite capacity have independent cardinalities; neither implies
 protocol selection, an executor or an authority-change notification service.
 That owner also resolves public TD IDs and named access configurations, so losing

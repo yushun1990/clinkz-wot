@@ -6,11 +6,8 @@ use clinkz_wot_servient_finite::consumer::{
 
 fn instance(owner: &ConsumerOwner, slot: u32) -> ConsumerInstanceHandle {
     owner
-        .register_instance(
-            ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(slot), Generation::INITIAL)),
-            &mut work(),
-        )
-        .unwrap_or_else(|e| panic!("{:?}", e.error()))
+        .register_thing(&format!("urn:managed:{slot}"), &mut work())
+        .unwrap()
 }
 fn association(
     owner: &ConsumerOwner,
@@ -21,7 +18,7 @@ fn association(
 ) -> ConsumerAssociation {
     let standalone = associate_ref(definition, instance.consumer(), account, peers);
     owner
-        .register_association(instance, standalone, &mut work())
+        .set_configuration(instance.thing_id(), "default", standalone, &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 async fn closed(peer: &Peer) {
@@ -52,21 +49,31 @@ fn association_refusal_preserves_the_original_owner_and_removal_releases_capacit
             .account(ResourceKind::EngineLiveBytesGlobalMax)
             .used();
         let refused = owner
-            .register_association(&second, original, &mut work())
+            .set_configuration(second.thing_id(), "default", original, &mut work())
             .err()
             .expect("a sibling cannot adopt the wrong original parent");
         assert!(matches!(refused.error().error(), CoreError::Validation(_)));
         let (original, _) = refused.into_parts();
         assert!(view.is_current());
         let refused = owner
-            .register_association(&first, original, &mut WorkBudget::new())
+            .set_configuration(
+                first.thing_id(),
+                "default",
+                original,
+                &mut WorkBudget::new(),
+            )
             .err()
             .expect("lookup needs work credit");
         let (original, _) = refused.into_parts();
         let mut no_retirement_credit =
-            WorkBudget::new().with_remaining(WorkClass::QueueOperations, 100);
+            WorkBudget::new().with_remaining(WorkClass::QueueOperations, 10000);
         let refused = owner
-            .register_association(&first, original, &mut no_retirement_credit)
+            .set_configuration(
+                first.thing_id(),
+                "default",
+                original,
+                &mut no_retirement_credit,
+            )
             .err()
             .expect("adoption must prepay retirement");
         let (original, _) = refused.into_parts();
@@ -78,12 +85,12 @@ fn association_refusal_preserves_the_original_owner_and_removal_releases_capacit
             before
         );
         let registered = owner
-            .register_association(&first, original, &mut work())
+            .set_configuration(first.thing_id(), "default", original, &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let candidate = associate_ref(&definition, second.consumer(), &account, &[&peer]);
         let candidate_view = candidate.handle();
         let refused = owner
-            .register_association(&second, candidate, &mut work())
+            .set_configuration(second.thing_id(), "default", candidate, &mut work())
             .err()
             .expect("the configured association limit is global to this owner");
         assert!(matches!(
@@ -93,17 +100,19 @@ fn association_refusal_preserves_the_original_owner_and_removal_releases_capacit
         let (candidate, _) = refused.into_parts();
         assert!(registered.is_current() && candidate_view.is_current());
         assert!(matches!(
-            owner.remove_association(&registered, &mut WorkBudget::new()),
+            owner.remove_configuration(first.thing_id(), "default", &mut WorkBudget::new()),
             Err(CoreError::Backpressure(_))
         ));
         assert!(registered.is_current(), "refused removal has no effect");
-        owner.remove_association(&registered, &mut work()).unwrap();
+        owner
+            .remove_configuration(first.thing_id(), "default", &mut work())
+            .unwrap();
         assert!(!view.is_current() && first.is_current());
         let current = owner
-            .register_association(&second, candidate, &mut work())
+            .set_configuration(second.thing_id(), "default", candidate, &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         assert!(matches!(
-            owner.remove_association(&view, &mut work()),
+            owner.remove_configuration_if_current(second.thing_id(), "default", &view, &mut work()),
             Err(CoreError::StaleHandle(_))
         ));
         let capacity = limited_bank(1);
@@ -144,7 +153,7 @@ fn managed_handle_drop_keeps_eight_registrations_usable_with_one_shared_call_slo
             // Even a view issued before adoption cannot retain revocation power.
             let view = standalone.handle();
             let returned = owner
-                .register_association(&id, standalone, &mut work())
+                .set_configuration(id.thing_id(), "default", standalone, &mut work())
                 .unwrap_or_else(|e| panic!("{:?}", e.error()));
             identities.push(id.consumer());
             drop(returned);
@@ -206,31 +215,34 @@ fn explicit_facet_and_instance_replacement_preserve_siblings_and_reject_stale_ha
         let old = instance(&owner, 0);
         let account = limited_bank(2);
         let first = association(&owner, &old, &definition, &account, &[&a, &b]);
-        let sibling = association(&owner, &old, &definition, &account, &[&a, &b]);
+        let sibling = configure(
+            &owner,
+            old.thing_id(),
+            "sibling",
+            &definition,
+            &account,
+            &[&a, &b],
+        );
         let replacement = associate_ref(&definition, old.consumer(), &account, &[&a, &b]);
         let current = owner
-            .replace_association(&first, replacement, &mut work())
+            .replace_configuration(old.thing_id(), "default", &first, replacement, &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         assert!(!first.is_current());
         assert!(sibling.is_current() && current.is_current() && old.is_current());
         assert!(matches!(
-            owner.remove_association(&first, &mut work()),
+            owner.remove_configuration_if_current(old.thing_id(), "default", &first, &mut work()),
             Err(CoreError::StaleHandle(_))
         ));
-        owner.remove_association(&sibling, &mut work()).unwrap();
+        owner
+            .remove_configuration(old.thing_id(), "sibling", &mut work())
+            .unwrap();
         assert!(current.is_current() && old.is_current());
         let work_bank = limited_bank(2);
         let calls = ConsumerCalls::try_new(work_bank.clone(), 1).unwrap();
         a.paused.store(true, Ordering::Release);
         let mut call = start(&current, &calls, &a).unwrap();
         received(&a, &mut call).await;
-        let next = ConsumerInstance::new(ThingSlotId::new(
-            SlotIndex::new(0),
-            Generation::INITIAL.checked_next().unwrap(),
-        ));
-        let new = owner
-            .replace_instance(&old, next, &mut work())
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let new = owner.replace_instance(&old, &mut work()).unwrap();
         assert!(!old.is_current() && !current.is_current());
         assert!(new.is_current());
         assert_eq!(new.consumer().slot().generation().get(), 2);
@@ -746,6 +758,75 @@ fn real_http_id_and_configuration_admission_uses_small_credit_at_different_popul
             for account in [&backing, &account, &capacity] {
                 clean(account);
             }
+        }
+    });
+}
+
+#[test]
+fn real_http_mixed_removal_recreation_and_configuration_update_preserves_original_work() {
+    io().block_on(async {
+        let (a, b) = (Peer::new(), Peer::new());
+        a.paused.store(true, Ordering::Release);
+        let backing = bank();
+        let da = definition(&dynamic_td(false), &backing).unwrap();
+        let db = definition(&dynamic_td(false), &backing).unwrap();
+        let owner = ConsumerOwner::try_new(backing.clone(), 1_000_000, 2).unwrap();
+        for i in 0..2048 {
+            drop(
+                owner
+                    .register_thing(&format!("urn:mixed:{i:05}"), &mut work())
+                    .unwrap(),
+            );
+        }
+        let id = "urn:mixed:01024";
+        let lifecycle = || work().with_remaining(WorkClass::QueueOperations, 4096);
+        let account = limited_bank(2);
+        let capacity = limited_bank(2);
+        let calls = ConsumerCalls::try_new(capacity.clone(), 2).unwrap();
+        for _ in 0..12 {
+            let original = owner.instance(id, &mut lifecycle()).unwrap();
+            let old_view = configure(&owner, id, "default", &da, &account, &[&a]);
+            let closed_before = a.closed.load(Ordering::Acquire);
+            let received_before = a.count();
+            let mut old = read_by_id(&owner, id, "default", &calls, &a).unwrap();
+            let stop = Instant::now() + Duration::from_secs(5);
+            while a.count() == received_before {
+                assert!(old.poll(&mut cx(), now(0), &mut work()).is_pending());
+                assert!(Instant::now() < stop, "no new HTTP request");
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            owner.remove_thing(id, &mut lifecycle()).unwrap();
+            let current = owner.register_thing(id, &mut lifecycle()).unwrap();
+            assert!(!original.is_current() && !old_view.is_current());
+            assert_ne!(original.consumer(), current.consumer());
+            drop(configure(&owner, id, "default", &db, &account, &[&b]));
+            let mut new = read_by_id(&owner, id, "default", &calls, &b).unwrap();
+            let retained = finish(&mut new).await;
+            assert!(retained.result().is_ok());
+            let retired = finish(&mut old).await;
+            assert_eq!(retired.consumer(), &original.consumer());
+            assert!(matches!(retired.result(), Err(CoreError::StaleHandle(_))));
+            let stop = Instant::now() + Duration::from_secs(5);
+            while a.closed.load(Ordering::Acquire) == closed_before {
+                assert!(Instant::now() < stop);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            drop((retired, old));
+            assert_eq!((outstanding(&account), outstanding(&capacity)), (1, 1));
+            // Reconfigure and remove the new facet while its already-returned
+            // result stays owned. Its evidence/quota cannot move to that facet.
+            drop(configure(&owner, id, "default", &da, &account, &[&a]));
+            owner
+                .remove_configuration(id, "default", &mut lifecycle())
+                .unwrap();
+            assert!(retained.result().is_ok());
+            drop((new, retained, original, current, old_view));
+            assert!(calls.is_idle());
+        }
+        assert_eq!((a.count(), b.count()), (12, 12));
+        drop((owner, calls, da, db));
+        for account in [&backing, &account, &capacity] {
+            clean(account);
         }
     });
 }

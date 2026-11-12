@@ -19,95 +19,69 @@ fn clean(bank: &HostResourceAccounts) {
     }
 }
 #[test]
-fn managed_refusal_returns_the_same_authority_and_wrong_owner_cannot_remove_it() {
+fn managed_registration_refusal_and_wrong_owner_snapshot_preserve_current_authority() {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let a = ConsumerOwner::try_new(bank.clone(), 1, 0).unwrap();
     let b = ConsumerOwner::try_new(bank.clone(), 1, 0).unwrap();
-    let id = a
-        .register_instance(root(0, Generation::INITIAL), &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let other = b
-        .register_instance(root(0, Generation::INITIAL), &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let id = a.register_thing("urn:pump", &mut work()).unwrap();
+    let other = b.register_thing("urn:pump", &mut work()).unwrap();
     assert_ne!(id.consumer(), other.consumer());
     assert!(matches!(
         a.remove_instance(&other, &mut work()),
         Err(CoreError::StaleHandle(_))
     ));
-    assert!(id.is_current() && other.is_current());
     let before = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
-    let original = root(1, Generation::INITIAL);
-    let reference = original.reference();
-    let error = a
-        .register_instance(original, &mut WorkBudget::new())
-        .err()
-        .unwrap();
-    let (returned, _) = error.into_parts();
-    assert_eq!(reference, returned.reference());
-    assert!(reference.is_current());
+    assert!(matches!(
+        a.register_thing("urn:other", &mut WorkBudget::new()),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert!(matches!(
+        a.register_thing("urn:other", &mut work()),
+        Err(CoreError::Backpressure(_))
+    ));
     assert_eq!(
         bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
         before
     );
-    let error = a.register_instance(returned, &mut work()).err().unwrap();
-    assert!(matches!(error.error().error(), CoreError::Backpressure(_)));
-    drop(error);
-    assert!(!reference.is_current());
-    a.remove_instance(&id, &mut work()).unwrap();
-    assert!(!id.is_current());
-    assert!(other.is_current());
-    // A fresh issuer cannot be reached by an old handle even if the caller
-    // deliberately reuses the same numeric coordinate after full removal.
-    let fresh = a
-        .register_instance(root(0, Generation::INITIAL), &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    assert!(id.is_current() && other.is_current());
+    a.remove_thing("urn:pump", &mut work()).unwrap();
+    let fresh = a.register_thing("urn:pump", &mut work()).unwrap();
     assert_ne!(fresh.consumer(), id.consumer());
     assert!(matches!(
         a.remove_instance(&id, &mut work()),
         Err(CoreError::StaleHandle(_))
     ));
-    assert!(fresh.is_current());
-    drop((a, b));
-    assert!(!fresh.is_current() && !other.is_current());
-    drop((fresh, id, other, reference));
+    drop((a, b, id, other, fresh));
     clean(&bank);
 }
+
 #[test]
-fn replacement_requires_checked_next_generation_and_cannot_wrap() {
+fn owner_generates_replacements_and_refusal_cannot_invalidate_the_original() {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let owner = ConsumerOwner::try_new(bank.clone(), 1, 0).unwrap();
-    let id = owner
-        .register_instance(root(0, Generation::INITIAL), &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let id = owner.register_thing("urn:pump", &mut work()).unwrap();
     let before = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
-    for invalid in [
-        root(0, Generation::INITIAL),
-        root(1, Generation::INITIAL.checked_next().unwrap()),
-    ] {
-        let original = invalid.reference();
-        let error = owner
-            .replace_instance(&id, invalid, &mut work())
-            .err()
-            .unwrap();
-        let (returned, _) = error.into_parts();
-        assert_eq!(returned.reference(), original);
-        assert!(original.is_current() && id.is_current());
-        assert_eq!(
-            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
-            before
-        );
-    }
-    owner.remove_instance(&id, &mut work()).unwrap();
-    let maximum = owner
-        .register_instance(root(0, Generation::new(u32::MAX).unwrap()), &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let error = owner
-        .replace_instance(&maximum, root(0, Generation::INITIAL), &mut work())
-        .err()
-        .unwrap();
-    assert!(matches!(error.error().error(), CoreError::Validation(_)));
-    assert!(maximum.is_current());
-    drop((error, owner, id, maximum));
+    assert!(matches!(
+        owner.replace_instance(&id, &mut WorkBudget::new()),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert!(id.is_current());
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        before
+    );
+    let next = owner.replace_thing("urn:pump", &mut work()).unwrap();
+    assert!(!id.is_current() && next.is_current());
+    assert_eq!(next.consumer().slot().slot(), id.consumer().slot().slot());
+    assert_eq!(
+        next.consumer().slot().generation(),
+        id.consumer().slot().generation().checked_next().unwrap()
+    );
+    assert!(matches!(
+        owner.replace_instance(&id, &mut work()),
+        Err(CoreError::StaleHandle(_))
+    ));
+    drop((id, next, owner));
     clean(&bank);
 }
 
@@ -134,7 +108,7 @@ fn id_lookup_recovers_management_and_distinguishes_current_from_conditional_remo
     drop(a.register_thing("urn:pump", &mut work()).unwrap());
     drop(b.register_thing("urn:pump", &mut work()).unwrap());
     let current = a.instance("urn:pump", &mut work()).unwrap();
-    assert_eq!(current.thing_id(), Some("urn:pump"));
+    assert_eq!(current.thing_id(), "urn:pump");
     assert_ne!(
         current.consumer(),
         b.instance("urn:pump", &mut work()).unwrap().consumer()
@@ -157,13 +131,7 @@ fn id_lookup_recovers_management_and_distinguishes_current_from_conditional_remo
         Err(CoreError::Backpressure(_))
     ));
     assert!(current.is_current());
-    let next = root(
-        current.consumer().slot().slot().get(),
-        Generation::INITIAL.checked_next().unwrap(),
-    );
-    let replaced = a
-        .replace_instance(&current, next, &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let replaced = a.replace_instance(&current, &mut work()).unwrap();
     assert!(!current.is_current());
     assert_eq!(
         a.instance("urn:pump", &mut work()).unwrap().consumer(),
@@ -202,29 +170,36 @@ fn internally_funded_authority_outlives_registration_while_a_passive_reference_e
 }
 
 #[test]
-fn automatic_slots_reuse_free_coordinates_even_with_a_live_maximum_raw_slot() {
+fn internal_slot_tickets_recycle_without_reviving_stale_work_or_requiring_caller_coordinates() {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
-    let owner = ConsumerOwner::try_new(bank.clone(), 3, 0).unwrap();
-    let high = owner
-        .register_instance(root(u32::MAX, Generation::INITIAL), &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let first = owner.register_thing("urn:meter:1", &mut work()).unwrap();
-    assert_eq!(first.consumer().slot().slot().get(), 0);
-    let second = owner.register_thing("urn:meter:2", &mut work()).unwrap();
-    assert_eq!(second.consumer().slot().slot().get(), 1);
-    owner.remove_thing("urn:meter:1", &mut work()).unwrap();
-    let replacement = owner.register_thing("urn:meter:1", &mut work()).unwrap();
+    let owner = ConsumerOwner::try_new(bank.clone(), 2, 0).unwrap();
+    let first = owner.register_thing("urn:one", &mut work()).unwrap();
+    let other = owner.register_thing("urn:two", &mut work()).unwrap();
+    owner.remove_thing("urn:one", &mut work()).unwrap();
+    let replacement = owner.register_thing("urn:new", &mut work()).unwrap();
     assert_eq!(
         replacement.consumer().slot().slot(),
         first.consumer().slot().slot()
     );
+    assert_eq!(
+        replacement.consumer().slot().generation(),
+        first.consumer().slot().generation().checked_next().unwrap()
+    );
     assert_ne!(replacement.consumer(), first.consumer());
+    assert!(!first.is_current() && other.is_current());
     assert!(matches!(
         owner.remove_instance(&first, &mut work()),
         Err(CoreError::StaleHandle(_))
     ));
-    assert!(high.is_current() && replacement.is_current());
-    drop((owner, high, first, second, replacement));
+    // Explicit coordinates still work for a standalone representation, independently
+    // of the managed owner's private allocator and authority.
+    let standalone = root(u32::MAX, Generation::INITIAL);
+    let passive = standalone.reference();
+    assert!(passive.is_current());
+    drop(standalone);
+    assert!(!passive.is_current());
+    assert!(replacement.is_current());
+    drop((owner, first, other, replacement, passive));
     clean(&bank);
 }
 
@@ -261,7 +236,7 @@ fn long_common_prefix_ids_stay_indexed_through_out_of_order_insert_remove_and_re
     for i in [0, 1, COUNT / 2, COUNT - 2, COUNT - 1] {
         let mut small = WorkBudget::new().with_remaining(WorkClass::QueueOperations, 1024);
         let handle = owner.instance(&key(i), &mut small).unwrap();
-        assert_eq!(handle.thing_id(), Some(key(i).as_str()));
+        assert_eq!(handle.thing_id(), key(i).as_str());
         assert!(small.remaining(WorkClass::QueueOperations) > 0);
     }
     let stale = owner.instance(&key(17), &mut work()).unwrap();
@@ -293,52 +268,136 @@ fn long_common_prefix_ids_stay_indexed_through_out_of_order_insert_remove_and_re
 }
 
 #[test]
-fn staged_index_growth_refusal_restores_both_indexes_and_original_input_funding() {
+fn failed_node_admission_refunds_partial_acquisition_and_does_not_consume_a_free_ticket() {
     let kind = ResourceKind::EngineLiveBytesGlobalMax;
-    let mut saw_partial_growth_refusal = false;
-    // Sweep real remaining byte limits instead of depending on private layouts.
-    // Some refusals happen after one index has acquired its replacement buffer.
-    for extra in (0..=2048).step_by(8) {
+    let mut saw_partial = false;
+    for extra in (0..=1024).step_by(8) {
         let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
-        let owner = ConsumerOwner::try_new(bank.clone(), 8, 0).unwrap();
-        let a = owner
-            .register_instance(root(0, Generation::INITIAL), &mut work())
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        let b = owner
-            .register_instance(root(u32::MAX, Generation::INITIAL), &mut work())
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let owner = ConsumerOwner::try_new(bank.clone(), 2, 0).unwrap();
+        let old = owner.register_thing("urn:old", &mut work()).unwrap();
+        let other = owner.register_thing("urn:other", &mut work()).unwrap();
+        owner.remove_thing("urn:old", &mut work()).unwrap();
         let account = bank.account(kind);
         let hold = bank
             .reserve(kind, account.limit() - account.used() - extra)
             .unwrap();
         let before = bank.account(kind).used();
-        let original = root(1, Generation::INITIAL);
-        let reference = original.reference();
-        match owner.register_instance(original, &mut work()) {
-            Ok(handle) => {
-                assert_eq!(handle.consumer(), reference);
-                assert!(handle.is_current());
+        let new = match owner.register_thing("urn:new", &mut work()) {
+            Ok(h) => {
+                drop(hold);
+                h
             }
-            Err(rejected) => {
-                assert!(matches!(
-                    rejected.error().error(),
-                    CoreError::Backpressure(_)
-                ));
-                let (returned, _) = rejected.into_parts();
-                assert_eq!(returned.reference(), reference);
-                assert!(reference.is_current() && a.is_current() && b.is_current());
+            Err(e) => {
+                assert!(matches!(e, CoreError::Backpressure(_)));
+                assert!(other.is_current());
                 assert_eq!(bank.account(kind).used(), before);
-                saw_partial_growth_refusal |= bank.account(kind).peak() > before;
-                drop(returned);
+                saw_partial |= bank.account(kind).peak() > before;
+                drop(hold);
+                owner.register_thing("urn:new", &mut work()).unwrap()
             }
-        }
-        owner.remove_instance(&a, &mut work()).unwrap();
-        owner.remove_instance(&b, &mut work()).unwrap();
-        drop((reference, a, b, owner, hold));
+        };
+        assert_eq!(new.consumer().slot().slot(), old.consumer().slot().slot());
+        assert_eq!(
+            new.consumer().slot().generation(),
+            old.consumer().slot().generation().checked_next().unwrap()
+        );
+        drop((new, old, other, owner));
         clean(&bank);
     }
-    assert!(
-        saw_partial_growth_refusal,
-        "exercise rollback after a staged allocation"
-    );
+    assert!(saw_partial);
+}
+
+#[test]
+fn mixed_public_lifecycle_has_the_same_fixed_credit_at_small_and_large_populations() {
+    use std::collections::BTreeMap;
+    for population in [64, 4096] {
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let owner = ConsumerOwner::try_new(bank.clone(), 1_000_000, 0).unwrap();
+        let key = |i| format!("urn:mixed:{i:05}");
+        let lifecycle = || work().with_remaining(WorkClass::QueueOperations, 4096);
+        let mut model = BTreeMap::new();
+        let mut retired = Vec::new();
+        for i in 0..population {
+            let id = key(i);
+            model.insert(
+                id.clone(),
+                owner.register_thing(&id, &mut lifecycle()).unwrap(),
+            );
+        }
+        let mut seed = 13u64;
+        for turn in 0..6000 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let id = key((seed >> 32) as usize % (population * 2));
+            match seed & 3 {
+                0 => {
+                    if model.contains_key(&id) {
+                        assert!(matches!(
+                            owner.register_thing(&id, &mut lifecycle()),
+                            Err(CoreError::Validation(_))
+                        ));
+                    } else {
+                        model.insert(
+                            id.clone(),
+                            owner.register_thing(&id, &mut lifecycle()).unwrap(),
+                        );
+                    }
+                }
+                1 => {
+                    if let Some(old) = model.remove(&id) {
+                        owner.remove_thing(&id, &mut lifecycle()).unwrap();
+                        assert!(!old.is_current());
+                        // Recreate immediately as well as leaving holes during
+                        // other turns. Old snapshots may never target the new root.
+                        if turn % 3 == 0 {
+                            let new = owner.register_thing(&id, &mut lifecycle()).unwrap();
+                            assert_ne!(old.consumer(), new.consumer());
+                            model.insert(id.clone(), new);
+                        }
+                        if retired.len() == 32 {
+                            retired.remove(0);
+                        }
+                        retired.push(old);
+                    } else {
+                        assert!(matches!(
+                            owner.remove_thing(&id, &mut lifecycle()),
+                            Err(CoreError::NotFound(_))
+                        ));
+                    }
+                }
+                2 => {
+                    let mut credit =
+                        WorkBudget::new().with_remaining(WorkClass::QueueOperations, 1024);
+                    match (model.get(&id), owner.instance(&id, &mut credit)) {
+                        (Some(expected), Ok(actual)) => {
+                            assert_eq!(expected.consumer(), actual.consumer())
+                        }
+                        (None, Err(CoreError::NotFound(_))) => {}
+                        _ => panic!("model disagrees with lookup"),
+                    }
+                }
+                _ => {
+                    if let Some(old) = model.get(&id) {
+                        assert!(matches!(
+                            owner.remove_thing(&id, &mut WorkBudget::new()),
+                            Err(CoreError::Backpressure(_))
+                        ));
+                        assert!(old.is_current());
+                        let new = owner.replace_instance(old, &mut lifecycle()).unwrap();
+                        assert!(!old.is_current());
+                        model.insert(id, new);
+                    }
+                }
+            }
+        }
+        for old in &retired {
+            assert!(matches!(
+                owner.remove_instance(old, &mut lifecycle()),
+                Err(CoreError::StaleHandle(_))
+            ));
+        }
+        owner.begin_close();
+        assert!(model.values().all(|h| !h.is_current()));
+        drop((retired, model, owner));
+        clean(&bank);
+    }
 }

@@ -44,7 +44,7 @@ or hiding cancellation. [Runtime Safety](../spec/runtime-safety.md)
 owns the callback, handoff, wake and funding guarantees; this is a correction to
 those distinct owners, not a shared scheduler or automatic execution model.
 
-The finite `ConsumerOwner` consumes unique instance and association authorities;
+The finite `ConsumerOwner` creates instance authority and consumes named association authority;
 application handles/views are non-revoking. Explicit removal, replacement and
 shutdown fence original permission before releasing mappings outside borrows.
 Its own public ID/configuration lookup recovers management and operation access

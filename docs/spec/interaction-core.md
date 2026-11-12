@@ -31,8 +31,9 @@ owner. The Host finite association/work split and its original operand retention
 are defined in [Runtime Safety](runtime-safety.md); the common finite transition
 kernel remains independent of that storage representation.
 
-Managed finite registration consumes the unique `ConsumerInstance` into the
-actual Servient owner. Application handles retain original identity/currentness
+Managed finite registration constructs the unique `ConsumerInstance` in the
+actual Servient owner. Internal slot assignment/reuse is not an ordinary public
+Thing address or caller obligation. Application handles retain original identity/currentness
 without revocation power. Registration, association/facet adoption, removal and
 replacement are defined in [Runtime Safety](runtime-safety.md). The low-level
 standalone owner remains usable for composition; a passive reference cannot

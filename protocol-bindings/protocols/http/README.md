@@ -86,7 +86,7 @@ use clinkz_wot_servient::consumer::register_thing;
 let owner = ConsumerOwner::try_new(registry_accounts.clone(), 16, 32).unwrap();
 // Named ingress requires a TD id; it does not change anonymous TD validity.
 let instance = register_thing(&owner, &td, &mut budget).unwrap();
-let thing_id = instance.thing_id().unwrap().to_owned();
+let thing_id = instance.thing_id().to_owned();
 let (bindings, funding) = prepared.into_execution();
 // Startup transfer of prepared mappings, not an externally owned registration.
 let standalone = StandaloneConsumerAssociation::try_new(
@@ -127,27 +127,35 @@ accepted work's original context. `remove_configuration` affects only that name;
 
 ID commands address the registration current at lookup, and still require fresh
 authorization. They cannot infer the intent of delayed external commands. Optional
-original snapshots support conditional `remove_instance` / `replace_instance` and
-`remove_association` / `replace_association`; old snapshots never resolve a successor.
-Instance replacement requires the same numeric slot and checked next generation.
+original snapshots support conditional `remove_instance` / `replace_instance`,
+`replace_configuration` and `remove_configuration_if_current`; old snapshots never
+resolve a successor. `replace_thing(id, budget)` generates the replacement and
+advances its internal generation without asking the caller for slot coordinates.
 Dropping any returned handle leaves registration intact; `begin_close` or actual
 owner Drop fences all registrations.
 
-ID and configuration lookup is logarithmic in actual table occupancy, with bounded
-string-comparison work; it does not scan the population before a read. Configured
-limits allocate no population-sized storage at owner startup. Contiguous table
-backing grows under the owner bank as registrations arrive. Inserting/removing
-registrations can shift linear metadata and requires the corresponding caller
-work credit; same-key replacement leaves index order intact. Retained high-water
-capacity remains funded until owner shutdown. Internal slot selection finds a
-free coordinate independently of arbitrary caller-provided slot numbers.
+Thing/configuration storage is a private AVL map. Lookup, insertion and structural
+removal follow logarithmic paths, with bounded string comparisons and rotations.
+One fixed-size node is funded before allocation for each new entry; no global
+record shifting, rehash, arena growth or startup population allocation occurs.
+Removal also disposes that Thing's own configurations/services under their prepaid
+allowances. Whole-owner shutdown necessarily visits every parent before disposal.
 
-`ConsumerInstance::new` / `StandaloneConsumerAssociation` and the unnamed adoption
-APIs remain low-level composition paths. Standalone close/Drop passively fences
-its scope. Adoption consumes that unique revoking owner. The other standalone
-examples and dedicated-capacity measurement are intentionally at this lower level;
-the [Read example](examples/read_property.rs) uses the managed ID-addressed path.
-This finite API does not add continuing Action/Event lifecycle integration.
+Slots are assigned only by the managed owner. A private funded free list recycles
+slot tickets in constant time; failed registration consumes no ticket and does not
+advance the allocation counter. Old work keeps its immutable original generation
+and issuer. Ticket backing follows actual high-water use until owner disposal.
+
+`ConsumerInstance::new` / `StandaloneConsumerAssociation` remain valid standalone
+composition paths, including caller-assigned coordinates for static resource
+domains. Managed raw-authority and unnamed registration APIs are removed.
+Composition under managed lifecycle starts by registering the TD ID and sharing
+its passive `instance(id, budget)?.consumer()` with policy/Binding/family facets.
+`set_configuration` consumes the standalone association input, not a second parent
+revoker. An already-live standalone instance is not silently promoted to managed
+ownership. The other standalone examples and dedicated-capacity measurement stay
+at that lower level; the [Read example](examples/read_property.rs) uses managed
+ID-addressed lifecycle. This does not add continuing Action/Event lifecycle stores.
 
 The application owns scheduling, fresh logical-clock observations and work credit.
 Removal does not notify a parked driver. Native I/O wakes alone cannot cover a

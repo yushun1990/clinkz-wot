@@ -54,47 +54,45 @@ reservation; copied metadata and variable records have separate allowances.
 Capacity-owner loss cannot migrate these reservations to the association or a
 successor bank. Captured native limits remain additional independent constraints.
 
-The managed finite Consumer owner's configured limits acquire no population-sized
-startup backing. Its sorted instance records, numeric-slot index and association
-records grow from actual registrations, with byte reservations for each typed
-buffer capacity before allocation. These limits bound registration metadata, not
-concurrent calls. Each adopted instance identity and each passive association
-header retain original funding through their last
-handle/control reference; removing permission does not refund retained tombstones.
-Unselected mapping backing retires outside borrows at association close. Registry
-vector capacity remains funded until its enclosing instance/owner retires;
-selected definitions and original call/result reservations survive their work.
-Lookup and actual vector moves consume operation credit; adoption prepays bounded
-registered-entry retirement. Low-level standalone construction remains caller-funded
-startup work. No per-driver relationship, native indication or observer-work
-allowance is charged. Owner metadata accounts do not add a pending-call quota;
-those quotas remain at the original association/work banks. Separate facet banks
-are not an implicit per-instance or process-wide aggregate.
+The managed finite Consumer owner allocates no population-sized startup backing.
+Each AVL node reserves `size_of::<Node<V>>()` at the owner bank before Box
+allocation; this includes its inline value, child links, height and reservation.
+ID/configuration strings and identity headers have their separate original
+reservations. There are no node-array capacity shifts or opaque map allocations.
+Removing a node detaches its children before returning it for destruction outside
+registry borrows. Original node backing lasts through payload disposal. Retained
+passive snapshots keep their own funded tombstones, not other registry nodes.
+Selected definitions and original call/result reservations survive independently.
 
-ID-addressed finite registration also funds its retained ID/configuration names
-and internally constructed Core authority. `ConsumerInstance::try_new_funded`
-keeps that authority's original reservation through the final passive reference,
-including work after registration removal; low-level `new` remains caller-funded
-startup construction. Name storage retires with its last snapshot/registration
-reference. ID/configuration lookup prepays at most the binary-search comparison
-count (`floor(log2(n)) + 1` for nonempty tables) times bounded query bytes, plus
-constant bookkeeping. Empty lookup costs constant work. It charges neither the
-configured population maximum nor a full scan of actual population. Copying names
-and retiring their records is prepaid before acquisition. Named configuration updates reuse the
-parent authority and replace only the selected association; no additional idle
-call quota, observer allowance or second registry is introduced.
+For stored tree height h and query byte length L, lookup prepays
+`h*(L+1)+1` QueueOperations. Structural mutation prepays
+`2*(h+1)*(L+65)`: at most two height-bounded spines (search and successor
+extraction), each frame's key comparison and a 64-operation envelope for link
+rewiring, cached-height maintenance and at most two rotations. Actual AVL height
+is logarithmic in node count; no configured maximum or population-wide movement
+allowance is charged. Each actual lookup/commit pass is prepaid before effects.
+Per-entry cleanup and qualified mapping/service disposal are prepaid on adoption.
+This is a deterministic per-operation bound, not amortized resizing work.
 
-Sorted-table insertion/removal has an explicit linear metadata movement cost.
-The caller pays the actual suffix lengths shifted in the primary and slot tables
-(or the selected instance's association table), plus each live record moved during
-growth, before any mutation/fence. Same-key replacement performs no population
-shift. Staged growth funds old and new buffers simultaneously; installation only
-moves owners under the registry borrow. Empty old buffers and their reservations
-retire afterwards. Refusal restores original input owners without changing either
-index. Retained capacity follows actual high-water growth, stays charged through
-its enclosing owner, and is released on shutdown; it is not automatically shrunk
-on each deletion. This profile trades linear management updates for compact,
-deterministic logarithmic lookup without unaccounted map nodes or hash probes.
+Owner-assigned slot tickets cost one fixed, funded Box per allocated coordinate.
+An active instance or the free list exclusively owns that ticket. Reuse and release
+are constant-time moves without allocation; free backing follows actual high-water
+use and remains charged until reuse or owner disposal. A staged new ticket is not
+consumed and the allocation counter is not advanced if registration fails. Checked
+generation exhaustion retires a ticket outside borrows. A removed instance's
+original Core authority remains independently funded through its final passive
+reference via `ConsumerInstance::try_new_funded`; recycling a ticket cannot refund
+or mutate accepted work. Low-level standalone `new` remains caller-funded startup
+construction, separate from managed allocation.
+
+Removing a Thing also disposes its own configuration subtree under those entries'
+original prepaid allowances; shutdown disposes the owner's whole population and
+iteratively drains its ticket free list. Those scope-sized final disposals are
+not hidden global work in an ordinary single-ID registry mutation. Owner metadata
+accounts add no idle call slots or pending-call quota. Original association/work
+banks retain those quotas through settlement disposal, and separate banks do not
+imply an automatic per-Thing/process aggregate. No authority-change observer or
+native indication allowance is introduced.
 
 Independently composed Host finite Consumer registries/Servients share service
 backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the

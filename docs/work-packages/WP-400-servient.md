@@ -320,7 +320,7 @@ The [managed HTTP regressions](../../protocol-bindings/protocols/http/tests/supp
 extend that command with non-revoking handle loss, explicit facet/instance
 removal and replacement, owner shutdown, silent-peer retention with zero credit
 then funded cleanup, and abandoned A with active or settled B in both loss orders.
-`ConsumerOwner` consumes unique instance/standalone association authority and
+`ConsumerOwner` creates unique instance authority and consumes named standalone association authority, then
 returns non-revoking handles/views. Registration metadata and call capacity have
 separate limits and funding. Original identity/tombstone funding survives stale
 handles; selected native/mapping/result ownership survives accepted work.
@@ -342,15 +342,20 @@ fall back, and snapshot-conditioned management stays distinct from a command
 targeting the current ID. [Management tests](../../servient/finite/tests/consumer_lifecycle.rs)
 cover recovery, duplicate scopes, refusal and final authority backing.
 
-Those tests also cover a million-entry configured limit without eager allocation,
-4096 long-prefix IDs through out-of-order insertion/removal/recreation, free-slot
-reuse alongside `u32::MAX`, and rollback after partially funded index growth.
-The managed HTTP fixture admits calls at 64 and 4096 actual instances with the
-same 1024 QueueOperations credit, selects sorted configurations after middle
-removal, and reclaims original accounts. Callback evidence replaces a
-configuration whose service destructor removes/recreates the parent and shifts
-the indexes. These establish indexed lookup and coherent ownership transitions,
-not a production throughput or high-rate management-update qualification.
+The registry uses individually funded AVL nodes and private reusable slot
+tickets; no operation shifts a population-sized array. Tests cover a million-entry
+configured limit without eager allocation, 4096 long-prefix IDs, and 6000 mixed
+public lifecycle workload steps at each of 64 and 4096 initial instances with the same
+4096 QueueOperations allowance. A separate map model checks original identities,
+refusal, removal/recreation and replacement. Private tree tests inspect ordering,
+balance, stored heights and counts throughout 20,000 mixed mutations.
+
+The managed HTTP fixture retains its 1024-credit admission cases and adds repeated
+removal/recreation and configuration changes among 2048 Things while original
+calls/results retain identity, sockets, quotas and cleanup. Refusal sweeps verify
+partial node-acquisition refunds and preservation of a reusable ticket. Reentrant
+service destruction and independent work-owner cleanup remain exercised. These
+are focused correctness/complexity claims, not production latency qualification.
 
 This is bounded Host finite capability with caller-driven execution,
 not continuing Action, notification or Producer association/capacity

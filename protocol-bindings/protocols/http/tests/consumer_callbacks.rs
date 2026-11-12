@@ -1272,26 +1272,32 @@ fn managed_credential_callbacks_remove_or_shutdown_before_native_acceptance() {
         for change in 0..3 {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
-            let Harness {
-                rt,
-                owner,
-                bank,
-                probe,
-            } = harness(1, http.then(|| listener.local_addr().unwrap()));
-            let (standalone, calls) = Rc::try_unwrap(rt).ok().unwrap();
+            let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
             let managed = Rc::new(ConsumerOwner::try_new(bank.clone(), 1, 1).unwrap());
             let instance = managed
-                .register_instance(owner, &mut work())
-                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+                .register_thing("urn:callbacks", &mut work())
+                .unwrap();
+            let (rt, probe) = association_harness(
+                1,
+                http.then(|| listener.local_addr().unwrap()),
+                bank.clone(),
+                instance.consumer(),
+            );
+            let (standalone, calls) = Rc::try_unwrap(rt).ok().unwrap();
             let association = managed
-                .register_association(&instance, standalone, &mut work())
+                .set_configuration(instance.thing_id(), "default", standalone, &mut work())
                 .unwrap_or_else(|e| panic!("{:?}", e.error()));
             let control = managed.clone();
             let original_instance = instance.clone();
             let original_association = association.clone();
             hook(Edge::Issue, move || match change {
                 0 => control
-                    .remove_association(&original_association, &mut work())
+                    .remove_configuration_if_current(
+                        original_instance.thing_id(),
+                        "default",
+                        &original_association,
+                        &mut work(),
+                    )
                     .unwrap(),
                 1 => control
                     .remove_instance(&original_instance, &mut work())
@@ -1330,24 +1336,20 @@ fn managed_credential_callbacks_remove_or_shutdown_before_native_acceptance() {
 
 #[test]
 fn managed_shutdown_fences_all_parents_before_reentrant_service_destruction() {
-    let a = harness(1, None);
-    let b = harness_slot(1, None, 1);
-    let bank = a.bank.clone();
-    let other_bank = b.bank.clone();
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let other_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let managed = Rc::new(ConsumerOwner::try_new(bank.clone(), 2, 2).unwrap());
-    let (sa, ca) = Rc::try_unwrap(a.rt).ok().unwrap();
-    let (sb, cb) = Rc::try_unwrap(b.rt).ok().unwrap();
-    let ia = managed
-        .register_instance(a.owner, &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let ia = managed.register_thing("urn:a", &mut work()).unwrap();
+    let ib = managed.register_thing("urn:b", &mut work()).unwrap();
+    let (a, _) = association_harness(1, None, bank.clone(), ia.consumer());
+    let (b, _) = association_harness(1, None, other_bank.clone(), ib.consumer());
+    let (sa, ca) = Rc::try_unwrap(a).ok().unwrap();
+    let (sb, cb) = Rc::try_unwrap(b).ok().unwrap();
     let va = managed
-        .register_association(&ia, sa, &mut work())
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let ib = managed
-        .register_instance(b.owner, &mut work())
+        .set_configuration(ia.thing_id(), "default", sa, &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let vb = managed
-        .register_association(&ib, sb, &mut work())
+        .set_configuration(ib.thing_id(), "default", sb, &mut work())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let control = managed.clone();
     let first = va.clone();
@@ -1356,16 +1358,11 @@ fn managed_shutdown_fences_all_parents_before_reentrant_service_destruction() {
         assert!(control.is_closed());
         assert!(!first.is_current());
         assert!(!sibling_scope.is_current());
-        let replacement =
-            ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2), Generation::INITIAL));
         let rejected = control
-            .register_instance(replacement, &mut work())
+            .register_thing("urn:replacement", &mut work())
             .err()
             .expect("closed owner");
-        assert!(matches!(
-            rejected.error().error(),
-            CoreError::StaleHandle(_)
-        ));
+        assert!(matches!(rejected, CoreError::StaleHandle(_)));
     });
     managed.begin_close();
     assert!(!ib.is_current());

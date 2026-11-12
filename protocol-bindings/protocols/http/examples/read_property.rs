@@ -50,7 +50,7 @@ fn main() {
     let owner = ConsumerOwner::try_new(bank.clone(), 1, 1).unwrap();
     let registered = clinkz_wot_servient::consumer::register_thing(&owner, &thing, &mut work())
         .expect("ID-addressed registration requires a unique TD id");
-    let thing_id = registered.thing_id().unwrap().to_owned();
+    let thing_id = registered.thing_id().to_owned();
     drop((registered, thing));
     // This move-only startup input is transferred into the managed owner. It
     // is not an application-owned registered lifetime or a retained handle table.
