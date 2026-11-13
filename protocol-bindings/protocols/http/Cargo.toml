@@ -12,7 +12,6 @@ clinkz-wot-planning = { path = "../../../planning", optional = true, default-fea
 clinkz-wot-core = { path = "../../../core" }
 clinkz-wot-codec-json = { path = "../../../codecs/json" }
 clinkz-wot-foundation = { path = "../../../foundation" }
-clinkz-wot-servient-finite = { path = "../../../servient/finite" }
 hyper = { version = "=1.12.0", default-features = false, features = ["client", "server", "http1"] }
 hyper-util = { version = "=0.1.20", default-features = false, features = ["tokio"] }
 http-body-util = { version = "=0.1.3", default-features = false }
@@ -30,6 +29,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std", "raw_value"] }
 
 [dev-dependencies]
+clinkz-wot-servient-finite = { path = "../../../servient/finite" }
 rcgen = { version = "=0.14.10", default-features = false, features = ["ring"] }
 clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }

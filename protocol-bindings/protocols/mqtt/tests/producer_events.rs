@@ -31,6 +31,9 @@ struct RevokingPublication {
 }
 impl ProducerNotificationBinding for RevokingBinding<'_> {
     type Publication = RevokingPublication;
+    fn producer_instance(&self) -> ProducerInstanceKey {
+        self.native.producer_instance()
+    }
     fn notification_route(
         &self,
         target: &AffordanceTarget,
@@ -109,13 +112,17 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
                         .clone()
                 })
                 .collect();
-            let mut native = service.participation(&owner, key, definitions).unwrap();
+            let mut native = service
+                .participation(&owner.participation_token(), key, definitions)
+                .unwrap();
             let mut publication = owner
                 .prepare_publication(instance, None)
                 .unwrap_or_else(|_| panic!("staging"));
             let end = Instant::now() + Duration::from_secs(3);
-            while !native.ready_for(&owner, key) {
-                let _ = native.step(&mut owner, &mut cx(), &mut budget()).unwrap();
+            while !native.ready_for(&owner.participation_token(), key) {
+                let _ = owner
+                    .step_notifications(&mut native, &mut cx(), &mut budget())
+                    .unwrap();
                 assert!(Instant::now() < end);
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
@@ -171,7 +178,9 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
             assert!(owner.description(key).is_none());
             drop(binding);
             native.begin_retire();
-            let _ = native.step(&mut owner, &mut cx(), &mut budget()).unwrap();
+            let _ = owner
+                .step_notifications(&mut native, &mut cx(), &mut budget())
+                .unwrap();
             let mut publication = Rc::try_unwrap(publication).ok().unwrap();
             owner.retire_composed(&mut publication, &[&native]).unwrap();
             assert!(!service.connected());
@@ -199,7 +208,9 @@ fn captured_actual_security_and_validation_are_used_for_every_emission() {
         let end = Instant::now() + Duration::from_secs(3);
         loop {
             let p = exposure.participant_mut::<ServicesParticipant>(0).unwrap();
-            let _ = p.native.step(&mut owner, &mut cx(), &mut budget()).unwrap();
+            let _ = owner
+                .step_notifications(&mut p.native, &mut cx(), &mut budget())
+                .unwrap();
             if exposure.publish(&mut owner, &mut budget()).is_ok() {
                 break;
             }
@@ -261,8 +272,8 @@ fn captured_actual_security_and_validation_are_used_for_every_emission() {
         exposure.begin_close();
         let p = exposure.participant_mut::<ServicesParticipant>(0).unwrap();
         assert!(
-            p.native
-                .step(&mut owner, &mut cx(), &mut budget())
+            owner
+                .step_notifications(&mut p.native, &mut cx(), &mut budget())
                 .unwrap()
                 .is_ready()
         );
@@ -294,8 +305,10 @@ fn service_substitution_after_staging_refuses_final_publication() {
         let end = Instant::now() + Duration::from_secs(3);
         loop {
             let p = exposure.participant_mut::<ServicesParticipant>(0).unwrap();
-            let _ = p.native.step(&mut owner, &mut cx(), &mut budget()).unwrap();
-            if p.native.ready_for(&owner, key) {
+            let _ = owner
+                .step_notifications(&mut p.native, &mut cx(), &mut budget())
+                .unwrap();
+            if p.native.ready_for(&owner.participation_token(), key) {
                 break;
             }
             assert!(Instant::now() < end);
@@ -309,8 +322,8 @@ fn service_substitution_after_staging_refuses_final_publication() {
         assert_eq!(service.locally_published(), 0);
         let p = exposure.participant_mut::<ServicesParticipant>(0).unwrap();
         assert!(
-            p.native
-                .step(&mut owner, &mut cx(), &mut budget())
+            owner
+                .step_notifications(&mut p.native, &mut cx(), &mut budget())
                 .unwrap()
                 .is_ready()
         );
@@ -419,7 +432,7 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
             })
             .collect();
         let participant = service
-            .participation(&owner, instance.key(), definitions)
+            .participation(&owner.participation_token(), instance.key(), definitions)
             .unwrap();
         let mut exposure = stage(
             &owner,
@@ -767,8 +780,8 @@ fn shared_connection_outlives_one_thing_and_releases_after_final_use() {
         peer.event("b/alarm", b"9");
         b.begin_close();
         assert!(
-            native(&mut b)
-                .step(&mut owner, &mut cx(), &mut budget())
+            owner
+                .step_notifications(native(&mut b), &mut cx(), &mut budget())
                 .unwrap()
                 .is_pending()
         );
@@ -780,11 +793,10 @@ fn shared_connection_outlives_one_thing_and_releases_after_final_use() {
         assert!(!service.connected());
         assert_empty(&accounts);
         let end = Instant::now() + Duration::from_secs(1);
-        while !broker
-            .logs()
-            .lines()
-            .any(|l| l.contains("Client cz") && l.contains("closed its connection"))
-        {
+        while !broker.logs().lines().any(|l| {
+            l.contains("Client cz")
+                && (l.contains("closed its connection") || l.contains("disconnected"))
+        }) {
             assert!(
                 Instant::now() < end,
                 "broker did not observe actual socket release: {}",
@@ -839,11 +851,11 @@ fn partial_write_cancellation_is_uncertain_and_fences_shared_native_service() {
         assert!(!service.connected());
         assert!(service.first_failure().is_some());
         assert_eq!(service.locally_published(), 0);
-        let _ = native(&mut a)
-            .step(&mut owner, &mut cx(), &mut budget())
+        let _ = owner
+            .step_notifications(native(&mut a), &mut cx(), &mut budget())
             .unwrap();
-        let _ = native(&mut b)
-            .step(&mut owner, &mut cx(), &mut budget())
+        let _ = owner
+            .step_notifications(native(&mut b), &mut cx(), &mut budget())
             .unwrap();
         assert!(owner.description(a.key()).is_none());
         assert!(owner.description(b.key()).is_none());
@@ -928,8 +940,8 @@ fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
         broker.stop();
         let end = Instant::now() + Duration::from_secs(2);
         while native(&mut exposure).first_failure().is_none() {
-            let _ = native(&mut exposure)
-                .step(&mut owner, &mut cx(), &mut budget())
+            let _ = owner
+                .step_notifications(native(&mut exposure), &mut cx(), &mut budget())
                 .unwrap();
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -943,6 +955,52 @@ fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
         assert!(!service.connected());
         close(&mut owner, &mut exposure);
         assert_eq!(native(&mut exposure).first_failure(), Some(&first));
+        drop(exposure);
+        assert_empty(&accounts);
+    });
+}
+
+#[test]
+fn native_failure_is_evidence_until_servient_reconciles_its_own_publication() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let provider = registration(broker.address, 8192);
+        let mut service = MqttNotificationService::new(&provider).unwrap();
+        let accounts = bank();
+        let mut owner = owner();
+        let mut exposure = stage(
+            &owner,
+            input(
+                &owner,
+                authority(1),
+                &provider,
+                &service,
+                &td(broker.address, "authority/alarm").to_string(),
+                None,
+            ),
+            &accounts,
+        );
+        publish(&mut owner, &mut exposure).await;
+        let key = exposure.key();
+        service.shutdown();
+        // Native progress closes its failed lease without receiving a logical
+        // owner. It has no capability to revoke the published Thing.
+        let _ = native(&mut exposure)
+            .step(&mut cx(), &mut budget())
+            .unwrap();
+        assert!(native(&mut exposure).first_failure().is_some());
+        assert!(owner.description(key).is_some());
+        assert!(
+            support::owner()
+                .reconcile_participation(key, native(&mut exposure))
+                .is_err()
+        );
+        assert!(owner.description(key).is_some());
+        owner
+            .reconcile_participation(key, native(&mut exposure))
+            .unwrap();
+        assert!(owner.description(key).is_none());
+        close(&mut owner, &mut exposure);
         drop(exposure);
         assert_empty(&accounts);
     });

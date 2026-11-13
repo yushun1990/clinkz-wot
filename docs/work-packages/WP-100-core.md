@@ -129,3 +129,9 @@ remaining capabilities. No package, gate or milestone status changes.
 
 Portable branch meaning, optional native diagnostics and admitted response shape extend EXEC-DATA/OUTCOME-001; scope and regressions are in [response evidence](../evidence/td-responses.md).
 No package, gate or milestone acceptance follows from this increment.
+
+The Producer native/semantic correction uses Core's passive publication identity,
+participation and Action candidate/borrowed-reply contracts, defined in
+[Binding SPI](../spec/binding-spi.md#producer-action-candidates-and-native-participation).
+These contracts expose no application dispatch or logical revocation capability
+to Bindings. Logical execution remains WP-400's responsibility.

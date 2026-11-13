@@ -1,19 +1,21 @@
 //! Manually driven HTTP/1.1 Producer Action participation. A listener is one
 //! possible native lease, not a logical Thing or a general Engine resource.
 use crate::{producer::producer_unsupported, producer_validation};
+use clinkz_wot_core::publication::{
+    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
+};
 use clinkz_wot_core::{
-    AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
-    ErrorPhase, InteractionInput, InteractionOutput, Operation, Payload, RetryClass,
-    action::{ActionMappingKey, ActionRoute, ActionValidator, RawActionRequest},
+    ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
+    ErrorContext, ErrorPhase, InteractionInput, InteractionOutput, Operation, Payload, RetryClass,
+    action::{
+        ActionMappingKey, ActionRoute, ActionValidator, ProducerActionBinding,
+        ProducerActionCandidate, ProducerActionReply, RawActionState, RawActionView,
+    },
     data_schema::ValueSchemas,
     producer::ProducerInstanceKey,
     thing::AffordanceSite,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
-use clinkz_wot_servient_finite::{
-    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId, RawActionHandle,
-    RawActionSettlement, RawActionState, RawProducerServient,
-};
 use std::{
     any::Any,
     cell::Cell,
@@ -115,9 +117,8 @@ fn refused(error: &CoreError) -> (u16, &'static str) {
 
 struct Record {
     id: u32,
-    handle: RawActionHandle,
+    reference: ActionInvocationRef,
     definition: usize,
-    finished: Option<Instant>,
 }
 static NEXT_EPOCH: AtomicU64 = AtomicU64::new(0);
 static PROCESS_SALT: OnceLock<u64> = OnceLock::new();
@@ -130,6 +131,7 @@ struct Exchange {
     invoked: Option<u32>,
     request_error: Option<CoreError>,
     identity: Option<HttpActionExchangeIdentity>,
+    definition: Option<usize>,
 }
 
 /// A completed exchange's local write is separate from application effect and
@@ -168,7 +170,7 @@ pub struct HttpActionRuntime {
     validators: Vec<(Arc<str>, Rc<dyn ActionValidator>)>,
     max_records: usize,
     records: Vec<Record>,
-    next_work: usize,
+    aggregate_records: Vec<(u32, String, String)>,
     listener: Option<TcpListener>,
     exchange: Option<Exchange>,
     delivery: Option<HttpActionDelivery>,
@@ -182,7 +184,7 @@ impl HttpActionRuntime {
     /// Pure construction. The definition set may be selected from a general
     /// PreparedThing; no TD/source loan or native socket is retained here.
     pub fn try_new(
-        owner: &RawProducerServient,
+        owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
         definitions: Vec<HttpActionDefinition>,
         max_records: usize,
@@ -283,12 +285,12 @@ impl HttpActionRuntime {
         Ok(Self {
             key,
             nonce: salt ^ ordinal,
-            token: owner.participation_token(),
+            token: owner.clone(),
             validators,
             definitions,
             max_records,
             records,
-            next_work: 0,
+            aggregate_records: Vec::with_capacity(max_records),
             listener: None,
             exchange: None,
             delivery: None,
@@ -366,90 +368,201 @@ impl HttpActionRuntime {
             });
         }
     }
-    pub fn handle(&self, id: u32) -> Option<RawActionHandle> {
-        self.records
-            .iter()
-            .find(|r| r.id == id)
-            .map(|r| r.handle.clone())
-    }
-    /// Progress one independent application continuation, even when no HTTP
-    /// exchange is active. Completion remains observable over query until the
-    /// caller explicitly acknowledges it; an unread result pins the original
-    /// Action and capacity. The round-robin cursor cannot starve a second job.
-    pub fn progress_actions(
-        &mut self,
-        owner: &mut RawProducerServient,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<Poll<Option<u32>>> {
-        if !self.token.belongs_to(owner) {
-            return Err(producer_unsupported());
-        }
-        if self.records.is_empty() {
-            return Ok(Poll::Ready(None));
-        }
-        let index = self.next_work % self.records.len();
-        self.next_work = (index + 1) % self.records.len();
-        let record = &mut self.records[index];
-        let progress = owner.step_raw_action(&record.handle, budget)?;
-        if progress.is_ready() {
-            record.finished.get_or_insert_with(Instant::now);
-        }
-        Ok(progress.map(|()| Some(record.id)))
-    }
-
-    /// Bounded terminal-result retention policy. A status resource disappears
-    /// only after the application continuation is terminal. Callers may choose
-    /// a longer window or explicitly acknowledge by id instead.
-    pub fn reap_completed(
-        &mut self,
-        owner: &mut RawProducerServient,
-        age: Duration,
-    ) -> CoreResult<Option<RawActionSettlement>> {
-        let Some(id) = self
-            .records
-            .iter()
-            .find(|r| r.finished.is_some_and(|t| t.elapsed() >= age))
-            .map(|r| r.id)
-        else {
-            return Ok(None);
-        };
-        self.acknowledge(owner, id)
-    }
     fn wire_id(&self, id: u32) -> String {
         format!("{:016x}-{id}", self.nonce)
     }
-    /// Acknowledgement is explicit: unread results and application work pin the
-    /// original logical instance even after closing the HTTP listener.
-    pub fn acknowledge(
+}
+impl ProducerActionBinding for HttpActionRuntime {
+    fn instance(&self) -> ProducerInstanceKey {
+        self.key
+    }
+    fn invocation_capacity(&self) -> bool {
+        self.records.len() < self.max_records
+    }
+    fn invocation(&self, id: u32) -> Option<ActionInvocationRef> {
+        self.records
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.reference)
+    }
+    fn forget_invocation(&mut self, reference: ActionInvocationRef) {
+        self.records.retain(|r| r.reference != reference);
+    }
+    fn action_inventory(&self) -> impl ExactSizeIterator<Item = ActionInvocationRef> {
+        self.records.iter().rev().map(|record| record.reference)
+    }
+    /// One bounded native I/O step, yielding a candidate or local completion.
+    /// No callback receives logical dispatch or continuation authority.
+    fn poll_action(
         &mut self,
-        owner: &mut RawProducerServient,
-        id: u32,
-    ) -> CoreResult<Option<RawActionSettlement>> {
-        let i = self
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<Option<ProducerActionCandidate>>> {
+        match self.native_step(budget) {
+            Ok(progress) => progress.map(Ok),
+            Err(error) => Poll::Ready(Err(error)),
+        }
+    }
+    fn begin_action_collection(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
+        budget
+            .consume(WorkClass::BindingPolls, 65_536)
+            .map_err(|_| {
+                CoreError::Backpressure(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))
+            })?;
+        self.aggregate_records.clear();
+        Ok(())
+    }
+    fn push_action_status(
+        &mut self,
+        name: &str,
+        reference: ActionInvocationRef,
+        view: RawActionView<'_>,
+    ) -> CoreResult<()> {
+        let record = self
             .records
             .iter()
-            .position(|r| r.id == id)
+            .find(|r| r.reference == reference)
             .ok_or_else(invalid)?;
-        let settlement = owner.take_raw_action_settlement(&self.records[i].handle)?;
-        if settlement.is_some() {
-            self.records.remove(i);
+        let invoke = &self.definitions[record.definition];
+        let query = self
+            .definitions
+            .iter()
+            .find(|d| d.action == invoke.action && d.operation == Operation::QueryAction)
+            .ok_or_else(invalid)?;
+        let href = format!(
+            "http://{}{}?id={}",
+            query.address,
+            query.path,
+            self.wire_id(record.id)
+        );
+        let (state, output) = match view.state {
+            RawActionState::Running => ("running", None),
+            RawActionState::Complete(Ok(output)) => ("completed", output.data()),
+            RawActionState::Complete(Err(_)) => ("failed", None),
+        };
+        let mut value = format!(
+            "{{\"status\":\"{state}\",\"href\":{}}}",
+            serde_json::to_string(&href).map_err(|_| invalid())?
+        );
+        if let Some(output) = output {
+            value.pop();
+            value.push_str(",\"output\":");
+            value.push_str(std::str::from_utf8(output.body).map_err(|_| invalid())?);
+            value.push('}');
         }
-        Ok(settlement)
+        if self.aggregate_records.len() >= self.max_records
+            || self
+                .aggregate_records
+                .iter()
+                .map(|(_, name, value)| name.len() + value.len() + 4)
+                .sum::<usize>()
+                + name.len()
+                + value.len()
+                + 4
+                > 4096
+        {
+            return Err(CoreError::Backpressure(ErrorContext::new(
+                ErrorPhase::Binding,
+                RetryClass::Never,
+            )));
+        }
+        self.aggregate_records.push((record.id, name.into(), value));
+        Ok(())
     }
-
-    /// One bounded native I/O/dispatch step. No background task or native
-    /// callback gains a handler; caller drives the same Servient for all facets.
-    pub fn step(
+    fn answer_action(
         &mut self,
-        owner: &mut RawProducerServient,
+        candidate: &ProducerActionCandidate,
+        reply: Result<ProducerActionReply<'_>, &CoreError>,
+    ) -> CoreResult<()> {
+        let index = self
+            .exchange
+            .as_ref()
+            .and_then(|e| e.definition)
+            .ok_or_else(invalid)?;
+        let definition = &self.definitions[index];
+        if candidate.instance != self.key
+            || candidate.route != definition.route()
+            || candidate.operation != definition.operation
+        {
+            return Err(invalid());
+        }
+        let mut location = None;
+        let mut id = None;
+        let (status, result) = match reply {
+            Err(error) => {
+                self.exchange.as_mut().unwrap().request_error = Some(error.clone());
+                let (status, body) = refused(error);
+                (status, body.into())
+            }
+            Ok(ProducerActionReply::Accepted(reference)) => {
+                let number = reference.slot().get();
+                self.records.push(Record {
+                    id: number,
+                    reference,
+                    definition: index,
+                });
+                id = Some(number);
+                let token = self.wire_id(number);
+                if let Some(query) = self.definitions.iter().find(|d| {
+                    d.action == definition.action && d.operation == Operation::QueryAction
+                }) {
+                    location = Some(format!("http://{}{}?id={token}", query.address, query.path));
+                }
+                (
+                    202,
+                    format!("{{\"id\":\"{token}\",\"status\":\"accepted\"}}"),
+                )
+            }
+            Ok(ProducerActionReply::Status(view)) => (
+                200,
+                match view.state {
+                    RawActionState::Running => String::from("{\"status\":\"running\"}"),
+                    RawActionState::Complete(Ok(output)) => {
+                        if let Some(data) = output.data() {
+                            format!(
+                                "{{\"status\":\"completed\",\"output\":{}}}",
+                                std::str::from_utf8(data.body).unwrap_or("null")
+                            )
+                        } else {
+                            String::from("{\"status\":\"completed\"}")
+                        }
+                    }
+                    RawActionState::Complete(Err(_)) => String::from("{\"status\":\"failed\"}"),
+                },
+            ),
+            Ok(ProducerActionReply::CancellationRequested(requested)) => (
+                200,
+                if requested {
+                    "{\"status\":\"cancelling\"}"
+                } else {
+                    "{\"status\":\"terminal\"}"
+                }
+                .into(),
+            ),
+            Ok(ProducerActionReply::Collection) => match self.aggregate(definition) {
+                Ok(body) => (200, body),
+                Err(error) => {
+                    let (status, body) = refused(&error);
+                    self.exchange.as_mut().unwrap().request_error = Some(error);
+                    (status, body.into())
+                }
+            },
+        };
+        self.set_response(status, result, location, id);
+        self.aggregate_records.clear();
+        Ok(())
+    }
+}
+impl HttpActionRuntime {
+    fn native_step(
+        &mut self,
         budget: &mut WorkBudget,
-    ) -> CoreResult<Poll<()>> {
-        if self.closed || !self.token.belongs_to(owner) {
+    ) -> CoreResult<Poll<Option<ProducerActionCandidate>>> {
+        if self.closed {
             return Err(producer_unsupported());
         }
         // Revocation fences new connections and semantic ingress, not a socket
         // already accepted by this native owner or its pending response write.
-        if !self.gate.get() && self.exchange.is_none() {
+        if (!self.gate.get() || !self.token.is_alive()) && self.exchange.is_none() {
             return Ok(Poll::Pending);
         }
         budget.consume(WorkClass::BindingPolls, 1).map_err(|_| {
@@ -476,6 +589,7 @@ impl HttpActionRuntime {
                         invoked: None,
                         request_error: None,
                         identity: None,
+                        definition: None,
                     });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(Poll::Pending),
@@ -499,7 +613,14 @@ impl HttpActionRuntime {
                 request_error: exchange.request_error,
                 exchange: exchange.identity,
             });
-            return Ok(Poll::Ready(()));
+            return Ok(Poll::Ready(None));
+        }
+        if self
+            .exchange
+            .as_ref()
+            .is_some_and(|e| e.definition.is_some() && e.response.is_empty())
+        {
+            return Ok(Poll::Pending);
         }
         if self.exchange.as_ref().unwrap().response.is_empty() {
             let exchange = self.exchange.as_mut().unwrap();
@@ -507,19 +628,19 @@ impl HttpActionRuntime {
             match exchange.stream.read(&mut buf) {
                 Ok(0) => {
                     self.exchange = None;
-                    return Ok(Poll::Ready(()));
+                    return Ok(Poll::Ready(None));
                 }
                 Ok(n) if exchange.received.len() + n <= 8192 + 4096 => {
                     exchange.received.extend_from_slice(&buf[..n])
                 }
                 Ok(_) => {
                     self.exchange = None;
-                    return Ok(Poll::Ready(()));
+                    return Ok(Poll::Ready(None));
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(Poll::Pending),
                 Err(_) => {
                     self.exchange = None;
-                    return Ok(Poll::Ready(()));
+                    return Ok(Poll::Ready(None));
                 }
             }
             let mut headers = [httparse::EMPTY_HEADER; 16];
@@ -531,7 +652,7 @@ impl HttpActionRuntime {
                 Ok(httparse::Status::Complete(end)) if end <= 8192 => end,
                 _ => {
                     self.exchange = None;
-                    return Ok(Poll::Ready(()));
+                    return Ok(Poll::Ready(None));
                 }
             };
             let mut length = None;
@@ -568,7 +689,7 @@ impl HttpActionRuntime {
             valid &= host == 1 && media <= 1;
             if !valid {
                 self.exchange = None;
-                return Ok(Poll::Ready(()));
+                return Ok(Poll::Ready(None));
             }
             let Some(definition) = self
                 .definitions
@@ -591,7 +712,7 @@ impl HttpActionRuntime {
                 .cloned()
             else {
                 self.exchange = None;
-                return Ok(Poll::Ready(()));
+                return Ok(Poll::Ready(None));
             };
             let no_input = definition.operation != Operation::InvokeAction;
             let body_len = if no_input { 0 } else { length.unwrap_or(0) };
@@ -600,7 +721,7 @@ impl HttpActionRuntime {
                 || exchange.received.len() > end + body_len
             {
                 self.exchange = None;
-                return Ok(Poll::Ready(()));
+                return Ok(Poll::Ready(None));
             }
             if exchange.received.len() < end + body_len {
                 return Ok(Poll::Pending);
@@ -609,14 +730,82 @@ impl HttpActionRuntime {
             let body = exchange.received[end..].to_vec();
             // A complete request arriving on a previously accepted connection
             // after revocation is not an accepted Action/control operation.
-            if !self.gate.get() {
+            if !self.gate.get() || !self.token.is_alive() {
                 self.exchange = None;
-                return Ok(Poll::Ready(()));
+                return Ok(Poll::Ready(None));
             }
-            self.answer(owner, budget, &definition, &path, body)?;
-            // Keep the reply opportunity as a separate native obligation so
-            // a gate closing after semantic admission cannot suppress delivery.
-            return Ok(Poll::Pending);
+            let index = self
+                .definitions
+                .iter()
+                .position(|d| d == &definition)
+                .unwrap();
+            self.exchange.as_mut().unwrap().definition = Some(index);
+            let target = if definition.operation == Operation::QueryAllActions {
+                AffordanceTarget::Thing
+            } else {
+                AffordanceTarget::Action(Arc::clone(&definition.action))
+            };
+            self.exchange.as_mut().unwrap().identity = Some(HttpActionExchangeIdentity {
+                instance: self.key,
+                target: target.clone(),
+                operation: definition.operation,
+                route: definition.route(),
+            });
+            let invocation = if definition.control {
+                let reference = path
+                    .strip_prefix(&format!("{}?id=", definition.path))
+                    .and_then(|token| token.split_once('-'))
+                    .filter(|(epoch, n)| {
+                        epoch.len() == 16
+                            && epoch.bytes().all(|c| c.is_ascii_hexdigit())
+                            && !n.is_empty()
+                            && n.bytes().all(|c| c.is_ascii_digit())
+                    })
+                    .and_then(|(epoch, n)| {
+                        Some((u64::from_str_radix(epoch, 16).ok()?, n.parse::<u32>().ok()?))
+                    });
+                let Some((epoch, number)) = reference else {
+                    self.set_response(400, "{\"status\":\"invalid\"}".into(), None, None);
+                    return Ok(Poll::Pending);
+                };
+                let Some(record) = self.records.iter().find(|r| {
+                    epoch == self.nonce
+                        && r.id == number
+                        && self.definitions[r.definition].action == definition.action
+                }) else {
+                    self.set_response(404, "{\"status\":\"missing\"}".into(), None, None);
+                    return Ok(Poll::Pending);
+                };
+                Some(record.reference)
+            } else {
+                None
+            };
+            return Ok(Poll::Ready(Some(ProducerActionCandidate {
+                instance: self.key,
+                target,
+                operation: definition.operation,
+                route: definition.route(),
+                query: self
+                    .definitions
+                    .iter()
+                    .find(|d| {
+                        d.action == definition.action && d.operation == Operation::QueryAction
+                    })
+                    .map(HttpActionDefinition::route),
+                cancel: self
+                    .definitions
+                    .iter()
+                    .find(|d| {
+                        d.action == definition.action && d.operation == Operation::CancelAction
+                    })
+                    .map(HttpActionDefinition::route),
+                invocation,
+                input: if body.is_empty() {
+                    InteractionInput::empty()
+                } else {
+                    InteractionInput::with_data(Payload::new(body, "application/json"))
+                },
+            })));
         }
         let exchange = self.exchange.as_mut().unwrap();
         match exchange
@@ -636,7 +825,7 @@ impl HttpActionRuntime {
                         exchange: exchange.identity.take(),
                     });
                     self.exchange = None;
-                    Ok(Poll::Ready(()))
+                    Ok(Poll::Ready(None))
                 } else {
                     Ok(Poll::Pending)
                 }
@@ -652,87 +841,16 @@ impl HttpActionRuntime {
                     exchange: exchange.identity.take(),
                 });
                 self.exchange = None;
-                Ok(Poll::Ready(()))
+                Ok(Poll::Ready(None))
             }
         }
     }
-    fn aggregate(
-        &self,
-        owner: &RawProducerServient,
-        definition: &HttpActionDefinition,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<String> {
-        // One paid, bounded native aggregation. Core visits original owners;
-        // it never follows the hrefs or invokes the leaf-query operation.
-        budget
-            .consume(WorkClass::BindingPolls, 65_536)
-            .map_err(|_| {
-                CoreError::Backpressure(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))
-            })?;
+    fn aggregate(&self, definition: &HttpActionDefinition) -> CoreResult<String> {
         let schema = definition
             .collection
             .as_ref()
             .ok_or_else(producer_unsupported)?;
-        let mut records = Vec::<(String, String)>::with_capacity(self.max_records);
-        owner.query_raw_actions(
-            self.key,
-            definition.route(),
-            self.records.iter().rev().map(|r| &r.handle),
-            &InteractionInput::empty(),
-            budget,
-            |name, handle, view| {
-                let record = self
-                    .records
-                    .iter()
-                    .find(|r| r.handle.reference() == handle.reference())
-                    .ok_or_else(invalid)?;
-                let invoke = &self.definitions[record.definition];
-                let query = self
-                    .definitions
-                    .iter()
-                    .find(|d| d.action == invoke.action && d.operation == Operation::QueryAction)
-                    .ok_or_else(invalid)?;
-                let href = format!(
-                    "http://{}{}?id={}",
-                    query.address,
-                    query.path,
-                    self.wire_id(record.id)
-                );
-                let (state, output) = match view.state {
-                    RawActionState::Running => ("running", None),
-                    RawActionState::Complete(Ok(output)) => ("completed", output.data()),
-                    RawActionState::Complete(Err(_)) => ("failed", None),
-                };
-                let mut value = format!(
-                    "{{\"status\":\"{state}\",\"href\":{}}}",
-                    serde_json::to_string(&href).map_err(|_| invalid())?
-                );
-                if let Some(output) = output {
-                    value.pop();
-                    value.push_str(",\"output\":");
-                    value.push_str(std::str::from_utf8(output.body).map_err(|_| invalid())?);
-                    value.push('}');
-                }
-                // Bound retained serialization before appending; a large group
-                // fails as a whole, with no truncation or incomplete success.
-                if records
-                    .iter()
-                    .map(|(name, value)| name.len() + value.len() + 4)
-                    .sum::<usize>()
-                    + name.len()
-                    + value.len()
-                    + 4
-                    > 4096
-                {
-                    return Err(CoreError::Backpressure(ErrorContext::new(
-                        ErrorPhase::Binding,
-                        RetryClass::Never,
-                    )));
-                }
-                records.push((name.into(), value));
-                Ok(())
-            },
-        )?;
+        let records = &self.aggregate_records;
         let mut result = String::from("{");
         for (i, member) in schema.members().iter().enumerate() {
             if i != 0 {
@@ -741,10 +859,15 @@ impl HttpActionRuntime {
             result.push_str(&serde_json::to_string(member.name.as_ref()).map_err(|_| invalid())?);
             result.push_str(":[");
             let mut first = true;
-            for (_, value) in records
-                .iter()
-                .filter(|(name, _)| name == member.name.as_ref())
-            {
+            for record in self.records.iter().rev().filter(|record| {
+                self.definitions[record.definition].action.as_ref() == member.name.as_ref()
+            }) {
+                let Some((_, _, value)) = records
+                    .iter()
+                    .find(|(id, name, _)| *id == record.id && name == member.name.as_ref())
+                else {
+                    continue;
+                };
                 if !first {
                     result.push(',');
                 }
@@ -761,206 +884,27 @@ impl HttpActionRuntime {
         Ok(result)
     }
 
-    fn answer(
+    fn set_response(
         &mut self,
-        owner: &mut RawProducerServient,
-        budget: &mut WorkBudget,
-        definition: &HttpActionDefinition,
-        path: &str,
-        body: Vec<u8>,
-    ) -> CoreResult<()> {
-        self.exchange.as_mut().unwrap().identity = Some(HttpActionExchangeIdentity {
-            instance: self.key,
-            operation: definition.operation,
-            route: definition.route(),
-            target: if definition.operation == Operation::QueryAllActions {
-                AffordanceTarget::Thing
-            } else {
-                AffordanceTarget::Action(Arc::clone(&definition.action))
-            },
-        });
-        let status: u16;
-        let result: String;
-        let mut location = None;
-        let input = if body.is_empty() {
-            InteractionInput::empty()
-        } else {
-            InteractionInput::with_data(Payload::new(body, "application/json"))
-        };
-        let mut id = None;
-        if definition.operation == Operation::QueryAllActions {
-            let aggregate = self.aggregate(owner, definition, budget);
-            match aggregate {
-                Ok(value) => {
-                    status = 200;
-                    result = value;
-                }
-                Err(error) => {
-                    let (code, response) = refused(&error);
-                    status = code;
-                    result = response.into();
-                    self.exchange.as_mut().unwrap().request_error = Some(error);
-                }
-            }
-        } else if definition.operation == Operation::InvokeAction {
-            if self.records.len() < self.max_records {
-                let request = RawActionRequest {
-                    instance: self.key,
-                    target: &AffordanceTarget::Action(Arc::clone(&definition.action)),
-                    invoke: definition.route(),
-                    query: self
-                        .definitions
-                        .iter()
-                        .find(|d| {
-                            d.action == definition.action && d.operation == Operation::QueryAction
-                        })
-                        .map(HttpActionDefinition::route),
-                    cancel: self
-                        .definitions
-                        .iter()
-                        .find(|d| {
-                            d.action == definition.action && d.operation == Operation::CancelAction
-                        })
-                        .map(HttpActionDefinition::route),
-                    input: &input,
-                };
-                match owner.invoke_raw_action(request, budget) {
-                    Ok(handle) => {
-                        let number = handle.reference().slot().get();
-                        self.records.push(Record {
-                            id: number,
-                            handle,
-                            definition: self
-                                .definitions
-                                .iter()
-                                .position(|d| d == definition)
-                                .unwrap(),
-                            finished: None,
-                        });
-                        id = Some(number);
-                        status = 202;
-                        let token = self.wire_id(number);
-                        result = format!("{{\"id\":\"{token}\",\"status\":\"accepted\"}}");
-                        if let Some(query) = self.definitions.iter().find(|d| {
-                            d.action == definition.action && d.operation == Operation::QueryAction
-                        }) {
-                            location =
-                                Some(format!("http://{}{}?id={token}", query.address, query.path));
-                        }
-                    }
-                    Err(error) => {
-                        let (code, response) = refused(&error);
-                        status = code;
-                        result = response.into();
-                        self.exchange.as_mut().unwrap().request_error = Some(error);
-                    }
-                }
-            } else {
-                let error = CoreError::Backpressure(ErrorContext::new(
-                    ErrorPhase::Admission,
-                    RetryClass::Never,
-                ));
-                let (code, response) = refused(&error);
-                status = code;
-                result = response.into();
-                self.exchange.as_mut().unwrap().request_error = Some(error);
-            }
-        } else if let Some((epoch, number)) = path
-            .strip_prefix(&format!("{}?id=", definition.path))
-            .and_then(|token| token.split_once('-'))
-            .and_then(|(epoch, n)| {
-                if epoch.len() != 16
-                    || !epoch.bytes().all(|c| c.is_ascii_hexdigit())
-                    || n.is_empty()
-                    || !n.bytes().all(|c| c.is_ascii_digit())
-                {
-                    return None;
-                }
-                Some((u64::from_str_radix(epoch, 16).ok()?, n.parse::<u32>().ok()?))
-            })
-        {
-            if epoch == self.nonce
-                && let Some(handle) = self
-                    .records
-                    .iter()
-                    .find(|r| {
-                        r.id == number && self.definitions[r.definition].action == definition.action
-                    })
-                    .map(|r| r.handle.clone())
-            {
-                let input = InteractionInput::empty();
-                let control = if definition.operation == Operation::QueryAction {
-                    owner
-                        .query_raw_action(
-                            &handle,
-                            definition.instance_binding,
-                            definition.route().mapping,
-                            &input,
-                            budget,
-                        )
-                        .map(|view| match view.state {
-                            RawActionState::Running => String::from("{\"status\":\"running\"}"),
-                            RawActionState::Complete(Ok(output)) => {
-                                if let Some(data) = output.data() {
-                                    format!(
-                                        "{{\"status\":\"completed\",\"output\":{}}}",
-                                        std::str::from_utf8(data.body).unwrap_or("null")
-                                    )
-                                } else {
-                                    String::from("{\"status\":\"completed\"}")
-                                }
-                            }
-                            RawActionState::Complete(Err(_)) => {
-                                String::from("{\"status\":\"failed\"}")
-                            }
-                        })
-                } else {
-                    owner
-                        .cancel_raw_action(
-                            &handle,
-                            definition.instance_binding,
-                            definition.route().mapping,
-                            &input,
-                            budget,
-                        )
-                        .map(|requested| {
-                            if requested {
-                                "{\"status\":\"cancelling\"}"
-                            } else {
-                                "{\"status\":\"terminal\"}"
-                            }
-                            .into()
-                        })
-                };
-                match control {
-                    Ok(value) => {
-                        status = 200;
-                        result = value;
-                    }
-                    Err(error) => {
-                        let (code, response) = refused(&error);
-                        status = code;
-                        result = response.into();
-                        self.exchange.as_mut().unwrap().request_error = Some(error);
-                    }
-                }
-            } else {
-                status = 404;
-                result = "{\"status\":\"missing\"}".into();
-            }
-        } else {
-            status = 400;
-            result = "{\"status\":\"invalid\"}".into();
-        }
+        status: u16,
+        result: String,
+        location: Option<String>,
+        id: Option<u32>,
+    ) {
         let exchange = self.exchange.as_mut().unwrap();
         exchange.invoked = id;
         exchange.response = format!("HTTP/1.1 {status} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n{}\r\n{result}",
             match status { 200 => "OK", 202 => "Accepted", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 410 => "Gone", 503 => "Service Unavailable", _ => "Internal Server Error" },
             result.len(), location.map_or(String::new(), |url| format!("Location: {url}\r\n"))).into_bytes();
-        Ok(())
     }
 }
 impl ClosedProducerParticipation for HttpActionRuntime {
+    fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
+        self.key == key && self.token.same_owner(owner)
+    }
+    fn native_failure(&self) -> Option<&CoreError> {
+        self.first_cause.as_ref()
+    }
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.participation
     }
@@ -969,11 +913,11 @@ impl ClosedProducerParticipation for HttpActionRuntime {
     }
     fn admission_backing_bytes(
         &self,
-        owner: &RawProducerServient,
+        owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
         if self.key != key
-            || !self.token.belongs_to(owner)
+            || !self.token.same_owner(owner)
             || self.listener.is_some()
             || self.retained_owner.is_some()
             || self.closed
@@ -995,7 +939,10 @@ impl ClosedProducerParticipation for HttpActionRuntime {
         )?;
         size_of::<Self>()
             .checked_add(definitions)?
-            .checked_add(self.max_records.checked_mul(size_of::<Record>())?)?
+            .checked_add(
+                self.max_records
+                    .checked_mul(size_of::<Record>() + size_of::<(u32, String, String)>())?,
+            )?
             .checked_add(
                 self.validators.capacity() * size_of::<(Arc<str>, Rc<dyn ActionValidator>)>(),
             )?
@@ -1008,9 +955,9 @@ impl ClosedProducerParticipation for HttpActionRuntime {
     fn begin_retire(&mut self) {
         self.begin_close();
     }
-    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool {
+    fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.key == key
-            && self.token.belongs_to(owner)
+            && self.token.same_owner(owner)
             && !self.closed
             && self.first_cause.is_none()
             && !self.gate.get()

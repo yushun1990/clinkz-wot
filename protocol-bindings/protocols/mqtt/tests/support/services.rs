@@ -10,6 +10,15 @@ pub struct ServicesParticipant {
     route: NotificationRoute,
 }
 impl ClosedProducerParticipation for ServicesParticipant {
+    fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
+        self.native.associated_with(owner, key)
+    }
+    fn native_failure(&self) -> Option<&CoreError> {
+        self.native.native_failure()
+    }
+    fn notification_publication_slots(&self) -> usize {
+        self.native.notification_publication_slots()
+    }
     fn qualified_operation_count(&self) -> Option<usize> {
         self.native.qualified_operation_count()
     }
@@ -21,7 +30,7 @@ impl ClosedProducerParticipation for ServicesParticipant {
     }
     fn admission_backing_bytes(
         &self,
-        owner: &RawProducerServient,
+        owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
         self.native
@@ -31,7 +40,7 @@ impl ClosedProducerParticipation for ServicesParticipant {
     fn begin_retire(&mut self) {
         self.native.begin_retire();
     }
-    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool {
+    fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.native.ready_for(owner, key)
     }
     fn covers(
@@ -127,7 +136,7 @@ pub fn intercept_with_instance(
         })
         .collect();
     let runtime = service
-        .participation(owner, instance.key(), definitions)
+        .participation(&owner.participation_token(), instance.key(), definitions)
         .unwrap();
     let op = prepared
         .operations()

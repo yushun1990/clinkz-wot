@@ -72,11 +72,10 @@ fn producer_property_validation_policy_and_family_refusals_return_original_value
         e.publish(&mut o, &mut budget()).unwrap_err();
         let end = Instant::now() + Duration::from_secs(3);
         loop {
-            let _ = e
+            let _ = o.step_notifications(&mut e
                 .participant_mut::<services::ServicesParticipant>(0)
                 .unwrap()
-                .native
-                .step(&mut o, &mut cx(), &mut budget())
+                .native, &mut cx(), &mut budget())
                 .unwrap();
             if e.publish(&mut o, &mut budget()).is_ok() {
                 break;
@@ -160,11 +159,10 @@ fn producer_property_validation_policy_and_family_refusals_return_original_value
         peer.event("validate/temperature", b"23");
         work.acknowledge().ok().unwrap();
         e.begin_close();
-        let _ = e
+        let _ = o.step_notifications(&mut e
             .participant_mut::<services::ServicesParticipant>(0)
             .unwrap()
-            .native
-            .step(&mut o, &mut cx(), &mut budget())
+            .native, &mut cx(), &mut budget())
             .unwrap();
         e.retire(&mut o, &mut budget()).unwrap();
         drop(e);
@@ -250,8 +248,7 @@ fn property_publication_cancel_deadline_replacement_and_unread_settlement_keep_o
         peer.event("replace/temperature", b"4");
         next.begin_close();
         assert!(
-            native(&mut next)
-                .step(&mut o, &mut cx(), &mut budget())
+            o.step_notifications(native(&mut next), &mut cx(), &mut budget())
                 .unwrap()
                 .is_pending()
         );
@@ -317,8 +314,7 @@ fn partially_written_property_value_is_uncertain_and_fences_native_siblings() {
         assert_eq!(report.native.effect, PublicationEffect::Uncertain);
         assert!(matches!(report.cause, Some(CoreError::Cancelled(_))));
         assert_eq!(report.target, target());
-        let _ = native(&mut z)
-            .step(&mut o, &mut cx(), &mut budget())
+        let _ = o.step_notifications(native(&mut z), &mut cx(), &mut budget())
             .unwrap();
         assert!(o.description(z.key()).is_none());
         assert!(s.first_failure().is_some());

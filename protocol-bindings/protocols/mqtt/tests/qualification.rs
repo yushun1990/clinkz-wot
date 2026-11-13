@@ -238,7 +238,7 @@ fn same_numeric_slot_in_another_servient_is_not_topic_replacement_authority() {
         .collect();
     assert!(
         service
-            .participation(&second, foreign.key(), definitions)
+            .participation(&second.participation_token(), foreign.key(), definitions)
             .is_err()
     );
     // Explicit service sharing for a distinct source is still supported.
@@ -283,14 +283,12 @@ fn cancellation_before_native_setup_closes_qualification_and_releases_all_fundin
     exposure.begin_close();
     assert!(exposure.publish(&mut owner, &mut budget()).is_err());
     assert!(
-        native(&mut exposure)
-            .step(&mut owner, &mut cx(), &mut WorkBudget::new())
+        owner.step_notifications(native(&mut exposure), &mut cx(), &mut WorkBudget::new())
             .unwrap()
             .is_pending()
     );
     assert!(
-        native(&mut exposure)
-            .step(&mut owner, &mut cx(), &mut budget())
+        owner.step_notifications(native(&mut exposure), &mut cx(), &mut budget())
             .unwrap()
             .is_ready()
     );
@@ -403,7 +401,7 @@ fn default_operations_aliases_and_actual_registration_are_prepared_without_io() 
         .collect();
     assert!(
         foreign_service
-            .participation(&owner(), i.key(), definitions)
+            .participation(&owner().participation_token(), i.key(), definitions)
             .is_err(),
         "equal tags cannot pair different registrations"
     );

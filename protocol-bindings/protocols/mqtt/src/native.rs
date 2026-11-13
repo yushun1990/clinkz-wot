@@ -1,14 +1,13 @@
 use super::*;
 use clinkz_wot_core::consumer::ConsumerDataService;
+use clinkz_wot_core::publication::{
+    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
+};
 use clinkz_wot_core::{
     BindingInputRejection, BindingOperationalError, CoreResult, producer::ProducerInstanceKey,
     publication::*, thing::AffordanceSite,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
-use clinkz_wot_servient_finite::{
-    ClosedProducerParticipation, ProducerNotificationPublication, ProducerOwnerToken,
-    ProducerParticipationId, RawProducerServient,
-};
 use std::{
     any::Any,
     cell::{Cell, RefCell},
@@ -264,7 +263,7 @@ impl MqttNotificationService {
 
     pub fn participation(
         &self,
-        owner: &RawProducerServient,
+        owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
         definitions: Vec<MqttNotificationDefinition>,
     ) -> CoreResult<MqttNotificationRuntime> {
@@ -328,7 +327,7 @@ impl MqttNotificationService {
             if l.closing.get() {
                 return false;
             }
-            if l.token.belongs_to(owner) && l.key.slot().slot() == key.slot().slot() {
+            if l.token.same_owner(owner) && l.key.slot().slot() == key.slot().slot() {
                 return false;
             }
             l.mappings
@@ -340,7 +339,7 @@ impl MqttNotificationService {
         let gate = Rc::new(Cell::new(false));
         let lease = Rc::new(Lease {
             session: Rc::clone(&self.session),
-            token: owner.participation_token(),
+            token: owner.clone(),
             key,
             mappings,
             definitions,
@@ -351,7 +350,7 @@ impl MqttNotificationService {
         session.leases.push(Rc::downgrade(&lease));
         Ok(MqttNotificationRuntime {
             lease: Some(lease),
-            token: owner.participation_token(),
+            token: owner.clone(),
             key,
             gate,
             id: ProducerParticipationId::new(),
@@ -423,17 +422,9 @@ pub struct MqttNotificationRuntime {
     first_cause: Option<CoreError>,
 }
 impl MqttNotificationRuntime {
-    /// Drive native preparation/health and local lease retirement. This checks
-    /// the actual logical issuer; native failure fences this Thing's authority.
-    pub fn step(
-        &mut self,
-        owner: &mut RawProducerServient,
-        cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<Poll<()>> {
-        if !self.token.belongs_to(owner) {
-            return Err(unsupported());
-        }
+    /// Drive native preparation/health and local lease retirement. Native failure
+    /// is evidence for Servient; this method cannot revoke logical authority.
+    pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> CoreResult<Poll<()>> {
         let Some(lease) = &self.lease else {
             return Ok(Poll::Ready(()));
         };
@@ -454,9 +445,6 @@ impl MqttNotificationRuntime {
             if self.first_cause.is_none() {
                 self.first_cause = Some(cause);
             }
-            owner.revoke(self.key);
-            self.begin_retire();
-        } else if self.gate.get() && owner.description(self.key).is_none() {
             self.begin_retire();
         }
         Ok(result)
@@ -490,6 +478,15 @@ impl MqttNotificationRuntime {
     }
 }
 impl ClosedProducerParticipation for MqttNotificationRuntime {
+    fn notification_publication_slots(&self) -> usize {
+        1
+    }
+    fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
+        self.key == key && self.token.same_owner(owner)
+    }
+    fn native_failure(&self) -> Option<&CoreError> {
+        self.first_cause.as_ref()
+    }
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.id
     }
@@ -501,13 +498,13 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
     }
     fn admission_backing_bytes(
         &self,
-        owner: &RawProducerServient,
+        owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
         let l = self.lease.as_ref()?;
         if self.started
             || self.closed
-            || !self.token.belongs_to(owner)
+            || !self.token.same_owner(owner)
             || key != self.key
             || l.funding.borrow().is_some()
         {
@@ -515,7 +512,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         }
         let mut bytes = size_of::<Self>()
             + size_of::<Lease>()
-            + size_of::<ProducerNotificationPublication<MqttPublication>>()
+            + size_of::<Option<MqttPublication>>() + core::mem::align_of::<Option<MqttPublication>>()
             + DATA_BACKING
             // A provisioned callback envelope, including decoded JSON keys and
             // strings, retained with this original managed participation.
@@ -549,8 +546,8 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             l.closing.set(true);
         }
     }
-    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool {
-        self.token.belongs_to(owner)
+    fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
+        self.token.same_owner(owner)
             && self.key == key
             && self.started
             && !self.closed
@@ -621,6 +618,20 @@ impl Drop for MqttNotificationRuntime {
 }
 impl ProducerNotificationBinding for MqttNotificationRuntime {
     type Publication = MqttPublication;
+    fn producer_instance(&self) -> ProducerInstanceKey {
+        self.key
+    }
+    fn poll_participation(
+        &mut self,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<()>> {
+        match self.step(cx, budget) {
+            Ok(Poll::Pending) => Poll::Pending,
+            Ok(Poll::Ready(())) => Poll::Ready(Ok(())),
+            Err(error) => Poll::Ready(Err(error)),
+        }
+    }
     fn notification_route(
         &self,
         target: &AffordanceTarget,

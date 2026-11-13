@@ -363,10 +363,10 @@ fn native_schema_views_share_the_original_prepared_backing_and_refuse_equal_fore
             })
             .collect();
         let native = service
-            .participation(&owner, instance.key(), definitions)
+            .participation(&owner.participation_token(), instance.key(), definitions)
             .unwrap();
         let native_bytes = native
-            .admission_backing_bytes(&owner, instance.key())
+            .admission_backing_bytes(&owner.participation_token(), instance.key())
             .unwrap();
         let operation = &prepared.operations()[0];
         assert!(native.covers(
@@ -534,7 +534,7 @@ fn additional_native_definitions_cannot_borrow_selected_schema_funding() {
             .clone()
     }));
     let native = service
-        .participation(&owner, instance.key(), definitions)
+        .participation(&owner.participation_token(), instance.key(), definitions)
         .unwrap();
     assert_eq!(
         native.qualified_operation_count(),

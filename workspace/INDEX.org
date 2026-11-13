@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0122-producer-native-semantic-authority.md][0122 Producer native and semantic authority (Review 10 F1)]]
+
 - [[file:0121-independent-consumer-capacity.md][0121 Persistent Consumer associations and finite capacity]]
 
 - [[file:0120-uri-variable-execution.md][0120 URI-variable execution and actual destination authority]]

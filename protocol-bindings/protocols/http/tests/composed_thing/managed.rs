@@ -1130,7 +1130,7 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
     }
     fn admission_backing_bytes(
         &self,
-        owner: &RawProducerServient,
+        owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
         self.0.admission_backing_bytes(owner, key)
@@ -1138,7 +1138,7 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
     fn begin_retire(&mut self) {
         self.0.begin_retire()
     }
-    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool {
+    fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.0.ready_for(owner, key)
     }
     fn covers(

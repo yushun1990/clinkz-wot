@@ -858,7 +858,7 @@ under the original allowance; native controls and local close retain their
 independent ownership and work budgets.
 `progress_actions` fairly polls retained work after the
 initiating reply; completion stays queryable until explicit `acknowledge` or
-application-selected terminal retention expiry (`reap_completed`, five seconds
+application-selected terminal retention expiry (`owner.reap_actions(native, age)`, five seconds
 in the example). Pending work is never expired as a completed result.
 `begin_close` revokes ingress and releases native sockets but cannot release
 unread work. `HttpActionDelivery` reports local write progress/failure in
@@ -1274,6 +1274,16 @@ are valid. Optional timestamps/problem details and alternative envelopes are
 outside this subset and are refused, not discarded. A successful query may
 contain failed invocations and does not establish an effect or cancellation.
 
+`HttpActionRuntime` owns native I/O and correlation. Construct it with
+`&owner.participation_token()` and drive semantic ingress with
+`owner.step_actions(native, &mut budget)`. Native `poll_action` alone produces a
+candidate without calling authorization or behavior. Use
+`owner.progress_actions(native, &mut budget)`,
+`owner.acknowledge_action(native, id)` and
+`owner.reap_actions(native, age)` for independent logical work/retention. The
+Binding has no Servient dependency or logical Action handles. Direct native
+failure observation requires explicit reconciliation at the logical owner.
+
 `HttpActionRuntime` supports several Actions and one root mapping on one
 listener. Its entire described Action set and every invoke/query/cancel Form must
 qualify against the same actual correlation owner, including schema and service
@@ -1289,7 +1299,7 @@ array by reverse local admission order and preserves the original epoch/id and
 Action control path. It does not progress invocation work while reading status.
 Current application continuations are `running`; no queued `pending` state is
 invented. Completed/failed records remain until explicit acknowledgement or the
-configured terminal reaper; running work cannot be pruned. A cancel request can
+Servient terminal-retention policy; running work cannot be pruned. A cancel request can
 still be running or complete later. Old tokens cannot target replacement leases
 or another Action. A root reply has its own retained recipient/target/route and
 local delivery evidence, independent of individual invocation results.

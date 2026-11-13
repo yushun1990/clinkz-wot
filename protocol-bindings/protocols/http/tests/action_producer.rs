@@ -30,6 +30,183 @@ fn send(
 ) -> String {
     send_report(owner, exposure, address, method, path, body, &mut budget()).0
 }
+
+#[test]
+fn native_http_candidate_has_no_application_dispatch_or_revocation_authority() {
+    let address = addr();
+    let mut owner = owner();
+    let counts = Rc::new(Counters::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let mut exposure = create(
+        &owner,
+        key(Generation::INITIAL),
+        address,
+        None,
+        Rc::clone(&counts),
+        None,
+        Arc::clone(&bank),
+    );
+    let key = exposure.key();
+    exposure
+        .participant_mut::<HttpActionRuntime>(0)
+        .unwrap()
+        .install_closed()
+        .unwrap();
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+    let mut peer = TcpStream::connect(address).unwrap();
+    peer.write_all(format!("POST /run HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12").as_bytes()).unwrap();
+    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+    let end = Instant::now() + Duration::from_secs(5);
+    let candidate = loop {
+        // This native API cannot receive the Servient, handler or a dispatch facade.
+        if let Poll::Ready(result) = native.poll_action(&mut budget())
+            && let Some(candidate) = result.unwrap()
+        {
+            break candidate;
+        }
+        assert!(Instant::now() < end);
+    };
+    assert_eq!(candidate.instance, key);
+    assert_eq!(candidate.operation, Operation::InvokeAction);
+    assert_eq!(candidate.target, AffordanceTarget::Action(Arc::from("run")));
+    assert_eq!(candidate.input.data.as_ref().unwrap().body.as_ref(), b"12");
+    assert_eq!(counts.authorized.get(), 0);
+    assert_eq!(counts.invoked.get(), 0);
+    assert_eq!(native.records(), 0);
+    // Abandoning this candidate retires its original native opportunity. No
+    // application obligation exists, and physical close cannot revoke the Thing.
+    native.begin_close();
+    let delivery = native.take_delivery().unwrap();
+    assert_eq!(delivery.exchange.unwrap().instance, key);
+    assert!(!delivery.locally_written);
+    assert_eq!(delivery.invocation, None);
+    assert!(owner.description(key).is_some());
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(candidate);
+    drop(exposure);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    TcpListener::bind(address).unwrap();
+}
+
+#[test]
+fn failed_uncommitted_participant_preserves_publication_and_original_action() {
+    for published_before_failure in [false, true] {
+        let address = addr();
+        let mut owner = owner();
+        let counts = Rc::new(Counters::default());
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let mut live = create(
+            &owner,
+            key(Generation::INITIAL),
+            address,
+            None,
+            Rc::clone(&counts),
+            None,
+            Arc::clone(&bank),
+        );
+        let key = live.key();
+        live.participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .install_closed()
+            .unwrap();
+        let mut accepted = None;
+        if published_before_failure {
+            live.publish(&mut owner, &mut budget()).unwrap();
+            accepted = Some(send(&mut owner, &mut live, address, "POST", "/run", "12"));
+        }
+
+        // Equivalent definitions and passive issuer/key association do not
+        // make this new native owner a committed participant of the Thing.
+        let text = td(address, None);
+        let provider = HttpActionProducer::new(
+            HttpProducerConfig::for_loopback(address).unwrap(),
+            BindingId::new(61),
+            BindingGeneration::INITIAL,
+        );
+        let prepared = prepare_thing(
+            &text,
+            key,
+            GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&provider],
+            |_, _| true,
+        )
+        .unwrap();
+        let definitions = prepared
+            .operations()
+            .iter()
+            .map(|op| op.definition::<HttpActionDefinition>().unwrap().clone())
+            .collect();
+        let mut extra =
+            HttpActionRuntime::try_new(&owner.participation_token(), key, definitions, 4).unwrap();
+        assert!(extra.associated_with(&owner.participation_token(), key));
+        assert!(
+            !extra.participation_id().same_owner(
+                live.participant_mut::<HttpActionRuntime>(0)
+                    .unwrap()
+                    .participation_id(),
+            )
+        );
+        // The live closed/serving listener owns the address in both cases.
+        assert!(extra.install_closed().is_err());
+        let failure = extra.native_failure().unwrap().clone();
+        for _ in 0..2 {
+            owner.reconcile_participation(key, &mut extra).unwrap();
+            assert!(extra.retired());
+            assert_eq!(extra.native_failure(), Some(&failure));
+        }
+        if !published_before_failure {
+            assert!(owner.description(key).is_none());
+            // Prepublication failure cleanup cannot cancel a healthy staged
+            // publication or prevent its original native set from committing.
+            live.publish(&mut owner, &mut budget()).unwrap();
+        }
+        assert_eq!(owner.description(key), Some(text.as_ref()));
+        let accepted =
+            accepted.unwrap_or_else(|| send(&mut owner, &mut live, address, "POST", "/run", "12"));
+        assert!(accepted.starts_with("HTTP/1.1 202"));
+        let value: serde_json::Value =
+            serde_json::from_str(accepted.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let wire_id = value["id"].as_str().unwrap();
+        let id = wire_id.split_once('-').unwrap().1.parse().unwrap();
+        assert!(
+            send(
+                &mut owner,
+                &mut live,
+                address,
+                "GET",
+                &format!("/status?id={wire_id}"),
+                "",
+            )
+            .contains("\"running\"")
+        );
+        counts.complete.set(true);
+        let native = live.participant_mut::<HttpActionRuntime>(0).unwrap();
+        assert_eq!(
+            owner.progress_actions(native, &mut budget()).unwrap(),
+            Poll::Ready(Some(id)),
+        );
+        let result = owner.acknowledge_action(native, id).unwrap().unwrap();
+        assert!(!result.cancel_requested);
+        assert_eq!(counts.cancelled.get(), 0);
+        assert_eq!(counts.invoked.get(), 1);
+        assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
+        live.begin_close();
+        live.retire(&mut owner, &mut budget()).unwrap();
+        drop(live);
+        assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+        drop(result);
+        assert_eq!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+            0
+        );
+        TcpListener::bind(address).unwrap();
+    }
+}
+
 fn send_report(
     owner: &mut RawProducerServient,
     exposure: &mut ComposedProducerExposure,
@@ -55,7 +232,7 @@ fn send_report(
     let mut bytes = Vec::new();
     loop {
         let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-        let _ = native.step(owner, credits).unwrap();
+        let _ = owner.step_actions(native, credits).unwrap();
         if let Some(delivery) = native.take_delivery() {
             loop {
                 let mut buf = [0; 512];
@@ -154,16 +331,16 @@ fn qualified_http_action_and_property_share_one_authority_with_independent_conti
     // its socket without stealing the next complete peer's correlation.
     let mut partial = TcpStream::connect(action).unwrap();
     partial.write_all(b"POST /run HTTP/1.1\r\nHost:").unwrap();
-    let _ = exposure
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .step(&mut owner, &mut budget());
+    let _ = owner.step_actions(
+        exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+        &mut budget(),
+    );
     drop(partial);
     for _ in 0..8 {
-        let _ = exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .step(&mut owner, &mut budget());
+        let _ = owner.step_actions(
+            exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+            &mut budget(),
+        );
     }
     assert_eq!(counts.invoked.get(), 0);
     let rejected = send(&mut owner, &mut exposure, action, "POST", "/run", "\"bad\"");
@@ -201,10 +378,11 @@ fn qualified_http_action_and_property_share_one_authority_with_independent_conti
         )
         .contains("\"cancelling\"")
     );
-    let handle = exposure
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .handle(id)
+    let handle = owner
+        .action_handle(
+            exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+            id,
+        )
         .unwrap();
     assert_eq!(
         owner.step_raw_action(&handle, &mut budget()).unwrap(),
@@ -231,10 +409,11 @@ fn qualified_http_action_and_property_share_one_authority_with_independent_conti
     );
     exposure.begin_close();
     assert!(exposure.retire(&mut owner, &mut budget()).is_err());
-    let result = exposure
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .acknowledge(&mut owner, id)
+    let result = owner
+        .acknowledge_action(
+            exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+            id,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(result.instance, logical_key);
@@ -305,10 +484,11 @@ fn callback_time_revocation_fences_qualified_http_action_acceptance_and_controls
             if operation == Operation::QueryAction {
                 counts.complete.set(true);
                 assert_eq!(
-                    exposure
-                        .participant_mut::<HttpActionRuntime>(0)
-                        .unwrap()
-                        .progress_actions(&mut owner, &mut budget())
+                    owner
+                        .progress_actions(
+                            exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+                            &mut budget()
+                        )
                         .unwrap(),
                     Poll::Ready(Some(id))
                 );
@@ -347,12 +527,12 @@ fn callback_time_revocation_fences_qualified_http_action_acceptance_and_controls
         assert_eq!(native.records(), usize::from(prior_id.is_some()));
         if let Some(id) = prior_id {
             counts.complete.set(true);
-            let handle = native.handle(id).unwrap();
+            let handle = owner.action_handle(native, id).unwrap();
             assert_eq!(
                 owner.step_raw_action(&handle, &mut budget()).unwrap(),
                 Poll::Ready(())
             );
-            let result = native.acknowledge(&mut owner, id).unwrap().unwrap();
+            let result = owner.acknowledge_action(native, id).unwrap().unwrap();
             assert_eq!(result.instance, key);
             assert_eq!(result.reference, handle.reference());
             assert_eq!(result.effect, ActionEffect::PossiblyApplied);
@@ -575,12 +755,12 @@ fn action_wire_refusals_distinguish_policy_capacity_and_stale_authority() {
     counts.complete.set(true);
     for id in ids {
         let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-        let handle = native.handle(id).unwrap();
+        let handle = owner.action_handle(native, id).unwrap();
         assert_eq!(
             owner.step_raw_action(&handle, &mut budget()).unwrap(),
             Poll::Ready(())
         );
-        native.acknowledge(&mut owner, id).unwrap().unwrap();
+        owner.acknowledge_action(native, id).unwrap().unwrap();
     }
     let (response, report) = send_report(
         &mut owner,
@@ -875,7 +1055,7 @@ fn revoked_action_gate_drains_owned_partial_tcp_without_dispatch() {
     peer.write_all(b"POST /run HTTP/1.1\r\nHost:").unwrap();
     let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
     assert_eq!(
-        native.step(&mut owner, &mut budget()).unwrap(),
+        owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Pending
     );
     let gate = Rc::clone(native.ingress_gate());
@@ -883,10 +1063,11 @@ fn revoked_action_gate_drains_owned_partial_tcp_without_dispatch() {
     peer.shutdown(std::net::Shutdown::Write).unwrap();
     let end = Instant::now() + Duration::from_secs(5);
     loop {
-        if exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .step(&mut owner, &mut budget())
+        if owner
+            .step_actions(
+                exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+                &mut budget(),
+            )
             .unwrap()
             .is_ready()
         {
@@ -910,10 +1091,11 @@ fn revoked_action_gate_drains_owned_partial_tcp_without_dispatch() {
     let mut next = TcpStream::connect(address).unwrap();
     next.write_all(format!("POST /run HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12").as_bytes()).unwrap();
     assert_eq!(
-        exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .step(&mut owner, &mut budget())
+        owner
+            .step_actions(
+                exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+                &mut budget()
+            )
             .unwrap(),
         Poll::Pending
     );
@@ -958,14 +1140,14 @@ fn revoked_action_gate_finishes_owned_reply_and_action() {
     ).unwrap();
     let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
     assert_eq!(
-        native.step(&mut owner, &mut budget()).unwrap(),
+        owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Pending
     );
     assert_eq!(counts.invoked.get(), 1); // semantic admission, reply still owned
     let gate = Rc::clone(native.ingress_gate());
     gate.set(false);
     assert_eq!(
-        native.step(&mut owner, &mut budget()).unwrap(),
+        owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Ready(())
     );
     assert!(native.take_delivery().unwrap().locally_written);
@@ -979,10 +1161,10 @@ fn revoked_action_gate_finishes_owned_reply_and_action() {
     let id = native.action_ids().next().unwrap();
     counts.complete.set(true);
     assert_eq!(
-        native.progress_actions(&mut owner, &mut budget()).unwrap(),
+        owner.progress_actions(native, &mut budget()).unwrap(),
         Poll::Ready(Some(id))
     );
-    assert!(native.acknowledge(&mut owner, id).unwrap().is_some());
+    assert!(owner.acknowledge_action(native, id).unwrap().is_some());
     exposure.begin_close();
     exposure.retire(&mut owner, &mut budget()).unwrap();
     drop(exposure);
@@ -1015,7 +1197,7 @@ fn revoked_action_gate_refuses_completed_input_from_owned_connection() {
     peer.write_all(b"POST /run HTTP/1.1\r\nHost:").unwrap();
     let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
     assert_eq!(
-        native.step(&mut owner, &mut budget()).unwrap(),
+        owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Pending
     );
     Rc::clone(native.ingress_gate()).set(false);
@@ -1026,7 +1208,11 @@ fn revoked_action_gate_refuses_completed_input_from_owned_connection() {
     .unwrap();
     let end = Instant::now() + Duration::from_secs(5);
     loop {
-        if native.step(&mut owner, &mut budget()).unwrap().is_ready() {
+        if owner
+            .step_actions(native, &mut budget())
+            .unwrap()
+            .is_ready()
+        {
             break;
         }
         assert!(
@@ -1129,7 +1315,7 @@ fn unsupported_action_meaning_is_refused_before_any_native_setup() {
         .map(|o| o.definition::<HttpActionDefinition>().unwrap().clone())
         .collect();
     partial.pop();
-    assert!(HttpActionRuntime::try_new(&owner(), key, partial, 4).is_err());
+    assert!(HttpActionRuntime::try_new(&owner().participation_token(), key, partial, 4).is_err());
     TcpListener::bind(address).unwrap();
 }
 
@@ -1242,10 +1428,8 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
             .unwrap()
             .to_owned();
     let id: u32 = old_wire.split_once('-').unwrap().1.parse().unwrap();
-    let old_handle = first
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .handle(id)
+    let old_handle = owner
+        .action_handle(first.participant_mut::<HttpActionRuntime>(0).unwrap(), id)
         .unwrap();
     assert!(first.retire(&mut owner, &mut budget()).is_err());
 
@@ -1315,10 +1499,8 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
         Poll::Ready(())
     );
     assert!(first.retire(&mut owner, &mut budget()).is_err());
-    let settlement = first
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .acknowledge(&mut owner, id)
+    let settlement = owner
+        .acknowledge_action(first.participant_mut::<HttpActionRuntime>(0).unwrap(), id)
         .unwrap()
         .unwrap();
     assert_eq!(settlement.instance, old_key);
@@ -1340,10 +1522,11 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
             > 0
     );
     let new_id: u32 = new_wire.split_once('-').unwrap().1.parse().unwrap();
-    let new_handle = second
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .handle(new_id)
+    let new_handle = owner
+        .action_handle(
+            second.participant_mut::<HttpActionRuntime>(0).unwrap(),
+            new_id,
+        )
         .unwrap();
     newer.complete.set(true);
     assert_eq!(
@@ -1351,10 +1534,11 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
         Poll::Ready(())
     );
     second.begin_close();
-    second
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .acknowledge(&mut owner, new_id)
+    owner
+        .acknowledge_action(
+            second.participant_mut::<HttpActionRuntime>(0).unwrap(),
+            new_id,
+        )
         .unwrap();
     second.retire(&mut owner, &mut budget()).unwrap();
     drop(second);
@@ -1432,18 +1616,20 @@ fn terminal_retention_expiry_never_discards_running_action() {
             .unwrap()
             .to_owned();
     assert_eq!(
-        exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .progress_actions(&mut owner, &mut budget())
+        owner
+            .progress_actions(
+                exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+                &mut budget()
+            )
             .unwrap(),
         Poll::Pending
     );
     assert!(
-        exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .reap_completed(&mut owner, Duration::ZERO)
+        owner
+            .reap_actions(
+                exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+                Duration::ZERO
+            )
             .unwrap()
             .is_none()
     );
@@ -1460,17 +1646,18 @@ fn terminal_retention_expiry_never_discards_running_action() {
     );
     counts.complete.set(true);
     assert!(matches!(
-        exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .progress_actions(&mut owner, &mut budget()),
+        owner.progress_actions(
+            exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+            &mut budget()
+        ),
         Ok(Poll::Ready(Some(_)))
     ));
     assert!(
-        exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .reap_completed(&mut owner, Duration::ZERO)
+        owner
+            .reap_actions(
+                exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+                Duration::ZERO
+            )
             .unwrap()
             .is_some()
     );
@@ -1525,10 +1712,11 @@ fn lost_native_and_exposure_guards_keep_validator_and_original_work_until_acknow
             .unwrap()
             .to_owned();
     let id: u32 = wire.split_once('-').unwrap().1.parse().unwrap();
-    let handle = exposure
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .handle(id)
+    let handle = owner
+        .action_handle(
+            exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+            id,
+        )
         .unwrap();
     drop(exposure);
     assert_eq!(owner.description(key), None);

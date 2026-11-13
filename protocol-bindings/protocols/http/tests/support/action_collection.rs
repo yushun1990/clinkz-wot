@@ -95,7 +95,7 @@ fn exposure(owner:&RawProducerServient,auth:ProducerInstanceAuthority,td:&Value,
     let instance=logical(auth,td,app,true);
     let (prepared,providers)=prepare(td,&instance,addr).unwrap();
     let definitions=prepared.operations().iter().map(|o|o.definition::<HttpActionDefinition>().unwrap().clone()).collect();
-    let participant=HttpActionRuntime::try_new(owner,instance.key(),definitions,8).unwrap();
+    let participant=HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), definitions, 8).unwrap();
     ComposedProducerExposure::try_new(owner,ComposedProducerInput { instance,prepared,providers,
         participants:vec![Box::new(participant)],expected,handler_backing_bytes:256 },
         Arc::new(GatewayDefaultV1::LIMITS.clone()),bank,&mut work()).ok().unwrap()
@@ -116,7 +116,7 @@ impl Server {
         let end=Instant::now()+Duration::from_secs(5); let mut bytes=Vec::new();
         let delivery=loop {
             let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-            let _ = native.step(&mut self.owner,&mut work()).unwrap();
+            let _ = self.owner.step_actions(native, &mut work()).unwrap();
             if let Some(d)=native.take_delivery(){break d;}
             assert!(Instant::now()<end);
         };
@@ -125,12 +125,12 @@ impl Server {
         (status,serde_json::from_str(text.split_once("\r\n\r\n").unwrap().1).unwrap(),delivery)
     }
     fn invoke(&mut self,name:&str,value:u32)->String { let (s,v,d)=self.send("POST",&format!("/{name}"),&value.to_string());assert_eq!(s,202);assert!(d.locally_written);v["id"].as_str().unwrap().into() }
-    fn progress(&mut self) { let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();for _ in 0..8 { let _ = native.progress_actions(&mut self.owner,&mut work()).unwrap(); } }
+    fn progress(&mut self) { let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();for _ in 0..8 { let _ = self.owner.progress_actions(native, &mut work()).unwrap(); } }
     async fn exchange(&mut self,call:&mut ConsumerCall)->(ConsumerSettlement,HttpActionDelivery) {
         let end=Instant::now()+Duration::from_secs(5);let mut delivered=None;
         loop {
             if let Poll::Ready(result)=call.poll(&mut cx(),now(),&mut work()) { return(result,delivered.unwrap()); }
-            let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();let _ = native.step(&mut self.owner,&mut work()).unwrap();
+            let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();let _ = self.owner.step_actions(native, &mut work()).unwrap();
             if let Some(d)=native.take_delivery(){assert!(delivered.replace(d).is_none());}
             assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -140,9 +140,9 @@ impl Server {
         self.exposure.begin_close();assert!(self.exposure.retire(&mut self.owner,&mut work()).is_err()||self.native().records()==0);
         let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
         let ids:Vec<_>=native.action_ids().collect();
-        for id in ids { let h=native.handle(id).unwrap();self.owner.close_raw_action(&h).unwrap();
+        for id in ids { let h=self.owner.action_handle(native, id).unwrap();self.owner.close_raw_action(&h).unwrap();
             for _ in 0..8 { if self.owner.step_raw_action(&h,&mut work()).unwrap().is_ready(){break;} }
-            drop(native.acknowledge(&mut self.owner,id).unwrap().unwrap()); }
+            drop(self.owner.acknowledge_action(native, id).unwrap().unwrap()); }
         native.take_delivery();self.exposure.retire(&mut self.owner,&mut work()).unwrap();
         drop(self.exposure);drop(self.owner);TcpListener::bind(self.addr).unwrap();self.bank
     }

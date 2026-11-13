@@ -5,8 +5,9 @@ use alloc::boxed::Box;
 use core::task::Poll;
 
 use crate::{
-    AffordanceTarget, BindingGeneration, BindingId, CoreResult, HandlerContext, InteractionInput,
-    InteractionOutput, Operation, producer::ProducerInstanceKey,
+    ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
+    HandlerContext, InteractionInput, InteractionOutput, InteractionOutputView, Operation,
+    producer::ProducerInstanceKey,
 };
 
 /// Binding-supplied, opaque identity for the selected Action mapping within a
@@ -158,4 +159,101 @@ pub fn raw_action_output_shape(output: &InteractionOutput) -> bool {
         && output.metadata().action_invocation().is_none()
         && output.metadata().binding_response().is_none()
         && output.metadata().property_write_report().is_none()
+}
+
+/// Querying a completed invocation lends the same slices as its settlement.
+/// It cannot provide an earlier escape of the original shared allocation.
+///
+/// ```compile_fail,E0308
+/// use clinkz_wot_core::action::RawActionState;
+/// use std::sync::Arc;
+/// fn detach(state: RawActionState<'_>) -> Option<Arc<[u8]>> {
+///     match state {
+///         RawActionState::Complete(Ok(output)) => Some(Arc::clone(&output.data().unwrap().body)),
+///         _ => None,
+///     }
+/// }
+/// ```
+pub enum RawActionState<'a> {
+    Running,
+    Complete(Result<InteractionOutputView<'a>, &'a CoreError>),
+}
+
+/// Borrowed observation. Completion is retained until acknowledged; a cancel
+/// request is not a completion or proof of remote cancellation.
+pub struct RawActionView<'a> {
+    pub state: RawActionState<'a>,
+    pub cancel_requested: bool,
+    pub cancel_failure: Option<&'a CoreError>,
+}
+
+/// One fully matched native candidate. The Binding retains the original reply
+/// opportunity; this value confers no dispatch or continuation authority.
+pub struct ProducerActionCandidate {
+    pub instance: ProducerInstanceKey,
+    pub target: AffordanceTarget,
+    pub operation: Operation,
+    pub route: ActionRoute,
+    pub query: Option<ActionRoute>,
+    pub cancel: Option<ActionRoute>,
+    pub invocation: Option<ActionInvocationRef>,
+    pub input: InteractionInput,
+}
+
+/// Borrowed semantic observation supplied by Servient to the original native
+/// encoder. Encoding does not acknowledge or transfer the result owner.
+pub enum ProducerActionReply<'a> {
+    Accepted(ActionInvocationRef),
+    Status(RawActionView<'a>),
+    CancellationRequested(bool),
+    Collection,
+}
+
+/// Continuing Producer Action I/O, separate from finite exchanges. No method
+/// receives an application handler, logical owner or dispatch callback. Methods
+/// that encode a reply must do no I/O: only a later paid native poll sends it.
+pub trait ProducerActionBinding: crate::publication::ClosedProducerParticipation {
+    fn instance(&self) -> ProducerInstanceKey;
+    fn poll_action(
+        &mut self,
+        budget: &mut clinkz_wot_foundation::WorkBudget,
+    ) -> Poll<CoreResult<Option<ProducerActionCandidate>>>;
+    fn invocation_capacity(&self) -> bool;
+    /// Pure bounded lookup in this participant's original native inventory.
+    fn invocation(&self, id: u32) -> Option<ActionInvocationRef>;
+    fn forget_invocation(&mut self, reference: ActionInvocationRef);
+    /// Original native status inventory, in native observation order. A root
+    /// mapping may qualify a different topology from its invoke/control peers.
+    fn action_inventory(&self) -> impl ExactSizeIterator<Item = ActionInvocationRef> {
+        core::iter::empty()
+    }
+    /// The original candidate and native opportunity remain owned on failure.
+    /// Accepted must retain native correlation before any fallible formatting.
+    fn answer_action(
+        &mut self,
+        candidate: &ProducerActionCandidate,
+        result: Result<ProducerActionReply<'_>, &CoreError>,
+    ) -> CoreResult<()>;
+    /// Optional native aggregate encoder. Partial encoding is never sent;
+    /// answer_action(Err) must replace it after any semantic failure.
+    fn begin_action_collection(
+        &mut self,
+        _budget: &mut clinkz_wot_foundation::WorkBudget,
+    ) -> CoreResult<()> {
+        Err(CoreError::UnsupportedOperation(crate::ErrorContext::new(
+            crate::ErrorPhase::Binding,
+            crate::RetryClass::Never,
+        )))
+    }
+    fn push_action_status(
+        &mut self,
+        _name: &str,
+        _invocation: ActionInvocationRef,
+        _view: RawActionView<'_>,
+    ) -> CoreResult<()> {
+        Err(CoreError::UnsupportedOperation(crate::ErrorContext::new(
+            crate::ErrorPhase::Binding,
+            crate::RetryClass::Never,
+        )))
+    }
 }

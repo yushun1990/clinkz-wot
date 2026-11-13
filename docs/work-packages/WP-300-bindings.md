@@ -205,3 +205,14 @@ control/response and NoSec policy. It creates no universal interaction facet.
 
 Concrete native response discrimination and captured branch validation follow SPI-NATIVE/DELIVERY-001; the first supported facet is recorded in [response evidence](../evidence/td-responses.md).
 No package, gate or milestone acceptance follows from this increment.
+
+## Producer authority extraction
+
+The Core [candidate and participation contracts](../spec/binding-spi.md#producer-action-candidates-and-native-participation)
+replace native access to Servient. HTTP Action I/O supplies matched candidates,
+original native correlation and borrowed-reply encoding; MQTT supplies native
+readiness/failure/lease-retirement facts. Neither runtime crate has a normal
+Servient dependency, including without preparation. The actual HTTP Action and
+MQTT broker suites exercise the same supported mappings after this extraction;
+wire protocol and broader qualification claims are unchanged. Continuation and
+logical revocation decisions belong to WP-400. No package/gate status changes.
