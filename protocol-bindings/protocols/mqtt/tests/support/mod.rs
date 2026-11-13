@@ -126,7 +126,7 @@ pub fn input_with_instance(
         })
         .collect();
     let runtime = service
-        .participation(owner, instance.key(), definitions)
+        .participation(&owner.participation_token(), instance.key(), definitions)
         .unwrap();
     ComposedProducerInput {
         instance,

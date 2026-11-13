@@ -112,31 +112,7 @@ impl core::fmt::Debug for RawActionHandle {
     }
 }
 
-/// Querying a completed invocation lends the same slices as its settlement.
-/// It cannot provide an earlier escape of the original shared allocation.
-///
-/// ```compile_fail,E0308
-/// use clinkz_wot_servient_finite::RawActionState;
-/// use std::sync::Arc;
-/// fn detach(state: RawActionState<'_>) -> Option<Arc<[u8]>> {
-///     match state {
-///         RawActionState::Complete(Ok(output)) => Some(Arc::clone(&output.data().unwrap().body)),
-///         _ => None,
-///     }
-/// }
-/// ```
-pub enum RawActionState<'a> {
-    Running,
-    Complete(Result<InteractionOutputView<'a>, &'a CoreError>),
-}
-
-/// Borrowed observation. Completion is retained until acknowledged; a cancel
-/// request is not a completion or proof of remote cancellation.
-pub struct RawActionView<'a> {
-    pub state: RawActionState<'a>,
-    pub cancel_requested: bool,
-    pub cancel_failure: Option<&'a CoreError>,
-}
+pub use clinkz_wot_core::action::{RawActionState, RawActionView};
 
 /// Complete original semantic result after the application continuation has
 /// released locally. Native delivery/remote effect is NOT inferred from this
@@ -269,7 +245,14 @@ impl core::fmt::Debug for RawActionSettlement {
     }
 }
 
+extern crate std;
+use self::std::time::{Duration, Instant};
+use clinkz_wot_core::action::{ProducerActionBinding, ProducerActionReply};
+
 struct Invocation {
+    native_owner: Option<Weak<()>>,
+    native_finished: Option<Instant>,
+    native_progress: u64,
     id: ActionInvocationRef,
     // Shared with handles so step can select and debit the cleanup/handler
     // lookup lane before scanning entries. Only the owner can set this flag.
@@ -307,6 +290,7 @@ pub(super) struct ActionStore {
     retiring: bool,
     retire_cursor: usize,
     result_slots: Rc<Cell<usize>>,
+    native_progress: u64,
 }
 
 impl ActionStore {
@@ -458,6 +442,283 @@ impl ActionStore {
 }
 
 impl RawProducerServient {
+    /// Resolve native correlation only within its original participation. The
+    /// Binding's copyable invocation reference cannot authorize another owner.
+    pub fn action_handle<B: ProducerActionBinding>(
+        &self,
+        binding: &B,
+        id: u32,
+    ) -> Option<RawActionHandle> {
+        self.native_action_handle(binding, binding.invocation(id)?)
+    }
+
+    fn native_action_handle<B: ProducerActionBinding>(
+        &self,
+        binding: &B,
+        reference: ActionInvocationRef,
+    ) -> Option<RawActionHandle> {
+        if !binding.associated_with(&self.participation_token(), binding.instance()) {
+            return None;
+        }
+        let entry = self.actions.as_ref()?.entries.iter().find(|entry| {
+            entry.id == reference
+                && entry.instance.key() == binding.instance()
+                && entry
+                    .native_owner
+                    .as_ref()
+                    .is_some_and(|owner| binding.participation_id().matches(owner))
+        })?;
+        Some(RawActionHandle {
+            id: entry.id,
+            token: Rc::downgrade(&entry.token),
+        })
+    }
+
+    /// One paid native step, followed by semantic admission at this owner.
+    /// Reply encoding borrows observations; it never receives dispatch power.
+    pub fn step_actions<B: ProducerActionBinding>(
+        &mut self,
+        binding: &mut B,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Poll<()>> {
+        if !binding.associated_with(&self.participation_token(), binding.instance()) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        let candidate = match binding.poll_action(budget) {
+            Poll::Pending => return Ok(Poll::Pending),
+            Poll::Ready(Err(error)) => {
+                self.reconcile_participation(binding.instance(), binding)?;
+                return Err(error);
+            }
+            Poll::Ready(Ok(None)) => return Ok(Poll::Ready(())),
+            Poll::Ready(Ok(Some(candidate))) => candidate,
+        };
+        let result = self.dispatch_action(binding, &candidate, budget);
+        match result {
+            Ok(reply) => binding.answer_action(&candidate, Ok(reply)),
+            Err(error) => binding.answer_action(&candidate, Err(&error)),
+        }?;
+        Ok(Poll::Pending)
+    }
+
+    fn dispatch_action<'a, B: ProducerActionBinding>(
+        &'a mut self,
+        binding: &mut B,
+        candidate: &clinkz_wot_core::action::ProducerActionCandidate,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ProducerActionReply<'a>> {
+        if candidate.instance != binding.instance() || !binding.ingress_gate().get() {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        match candidate.operation {
+            Operation::InvokeAction => {
+                if !binding.invocation_capacity() {
+                    return Err(CoreError::Backpressure(context()));
+                }
+                let handle = self.invoke_raw_action(
+                    RawActionRequest {
+                        instance: candidate.instance,
+                        target: &candidate.target,
+                        invoke: candidate.route,
+                        query: candidate.query,
+                        cancel: candidate.cancel,
+                        input: &candidate.input,
+                    },
+                    budget,
+                )?;
+                // Associate before any native formatting can fail. Late work
+                // remains reachable through the original logical store.
+                let store = self.actions.as_mut().expect("admitted Action");
+                let index = store.index(&handle).expect("original handle");
+                store.entries[index].native_owner = Some(binding.participation_id().downgrade());
+                Ok(ProducerActionReply::Accepted(handle.reference()))
+            }
+            Operation::QueryAction | Operation::CancelAction => {
+                let handle = candidate
+                    .invocation
+                    .and_then(|reference| {
+                        self.actions
+                            .as_ref()?
+                            .entries
+                            .iter()
+                            .find(|entry| {
+                                entry.id == reference && entry.instance.key() == candidate.instance
+                            })
+                            .map(|entry| RawActionHandle {
+                                id: entry.id,
+                                token: Rc::downgrade(&entry.token),
+                            })
+                    })
+                    .ok_or_else(|| CoreError::StaleHandle(context()))?;
+                // Native matching cannot relabel another Action's handle.
+                let store = self.actions.as_ref().expect("original store");
+                let entry = &store.entries[store.index(&handle).expect("original handle")];
+                if !matches!(&candidate.target, AffordanceTarget::Action(name) if name.as_ref() == entry.instance.actions[entry.behavior].name())
+                {
+                    return Err(CoreError::StaleHandle(context()));
+                }
+                if candidate.operation == Operation::QueryAction {
+                    self.query_raw_action(
+                        &handle,
+                        candidate.route.binding,
+                        candidate.route.mapping,
+                        &candidate.input,
+                        budget,
+                    )
+                    .map(ProducerActionReply::Status)
+                } else {
+                    self.cancel_raw_action(
+                        &handle,
+                        candidate.route.binding,
+                        candidate.route.mapping,
+                        &candidate.input,
+                        budget,
+                    )
+                    .map(ProducerActionReply::CancellationRequested)
+                }
+            }
+            Operation::QueryAllActions => {
+                if candidate.target != AffordanceTarget::Thing {
+                    return Err(CoreError::Validation(context()));
+                }
+                binding.begin_action_collection(budget)?;
+                let store = self
+                    .actions
+                    .as_ref()
+                    .ok_or_else(|| CoreError::StaleHandle(context()))?;
+                let inventory = binding.action_inventory();
+                if inventory.len() > store.limits.invocations {
+                    return Err(CoreError::Backpressure(context()));
+                }
+                let handles: Vec<_> = inventory
+                    .map(|reference| {
+                        let entry = store
+                            .entries
+                            .iter()
+                            .find(|entry| {
+                                entry.id == reference && entry.instance.key() == candidate.instance
+                            })
+                            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+                        Ok(RawActionHandle {
+                            id: entry.id,
+                            token: Rc::downgrade(&entry.token),
+                        })
+                    })
+                    .collect::<CoreResult<_>>()?;
+                self.query_raw_actions(
+                    candidate.instance,
+                    candidate.route,
+                    handles.iter(),
+                    &candidate.input,
+                    budget,
+                    |name, handle, view| binding.push_action_status(name, handle.reference(), view),
+                )?;
+                Ok(ProducerActionReply::Collection)
+            }
+            _ => Err(CoreError::UnsupportedOperation(context())),
+        }
+    }
+
+    /// Progress an original continuation independently of any native exchange
+    /// or publication. Least-recently progressed selection is scoped to this
+    /// participant and cannot be reset by an unrelated participant's progress.
+    pub fn progress_actions<B: ProducerActionBinding>(
+        &mut self,
+        binding: &B,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Poll<Option<u32>>> {
+        if !binding.associated_with(&self.participation_token(), binding.instance()) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        let store = self
+            .actions
+            .as_mut()
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        if budget
+            .consume(WorkClass::CleanupItems, store.limits.invocations as u64)
+            .is_err()
+        {
+            return Ok(Poll::Pending);
+        }
+        let Some(index) = store
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| {
+                entry
+                    .native_owner
+                    .as_ref()
+                    .is_some_and(|owner| binding.participation_id().matches(owner))
+            })
+            .min_by_key(|(_, entry)| entry.native_progress)
+            .map(|(index, _)| index)
+        else {
+            return Ok(Poll::Ready(None));
+        };
+        store.native_progress = store
+            .native_progress
+            .checked_add(1)
+            .ok_or_else(|| CoreError::Backpressure(context()))?;
+        let entry = &mut store.entries[index];
+        entry.native_progress = store.native_progress;
+        let handle = RawActionHandle {
+            id: entry.id,
+            token: Rc::downgrade(&entry.token),
+        };
+        let progress = self.step_raw_action(&handle, budget)?;
+        if progress.is_ready() {
+            let store = self.actions.as_mut().unwrap();
+            let index = store.index(&handle).unwrap();
+            store.entries[index]
+                .native_finished
+                .get_or_insert_with(Instant::now);
+        }
+        Ok(progress.map(|()| Some(handle.reference().slot().get())))
+    }
+
+    pub fn acknowledge_action<B: ProducerActionBinding>(
+        &mut self,
+        binding: &mut B,
+        id: u32,
+    ) -> CoreResult<Option<RawActionSettlement>> {
+        let handle = self
+            .action_handle(binding, id)
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        let result = self.take_raw_action_settlement(&handle)?;
+        if result.is_some() {
+            binding.forget_invocation(handle.reference());
+        }
+        Ok(result)
+    }
+
+    pub fn reap_actions<B: ProducerActionBinding>(
+        &mut self,
+        binding: &mut B,
+        age: Duration,
+    ) -> CoreResult<Option<RawActionSettlement>> {
+        if !binding.associated_with(&self.participation_token(), binding.instance()) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        let Some(id) = self.actions.as_ref().and_then(|store| {
+            store
+                .entries
+                .iter()
+                .find(|entry| {
+                    entry
+                        .native_owner
+                        .as_ref()
+                        .is_some_and(|owner| binding.participation_id().matches(owner))
+                        && entry
+                            .native_finished
+                            .is_some_and(|finished| finished.elapsed() >= age)
+                })
+                .map(|entry| entry.id.slot().get())
+        }) else {
+            return Ok(None);
+        };
+        self.acknowledge_action(binding, id)
+    }
+
     /// Reserve a bounded independent Action obligation store at the *existing*
     /// logical owner, before ingress. Does not activate or publish a Thing.
     pub fn enable_raw_actions(&mut self, limits: RawActionLimits) -> CoreResult<()> {
@@ -480,6 +741,7 @@ impl RawProducerServient {
             retiring: false,
             retire_cursor: 0,
             result_slots: Rc::new(Cell::new(0)),
+            native_progress: 0,
         });
         Ok(())
     }
@@ -635,6 +897,9 @@ impl RawProducerServient {
         store.next = next;
         store.used_work_bytes += behavior.work_bytes;
         store.entries.push(Invocation {
+            native_owner: None,
+            native_finished: None,
+            native_progress: 0,
             id,
             token,
             current: Rc::clone(&instance.current),

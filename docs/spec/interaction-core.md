@@ -375,6 +375,13 @@ a continuing invocation reference retaining its exact mapping, opaque continuati
 identity, policy and cleanup. Query/cancel use that association, their described
 operations and fresh permission; no fabricated generic URL or session is required.
 Producer application invocation state is distinct from Binding wire correlation.
+Producer native candidates never carry logical handles or a dispatch callback.
+Servient retains the exact participation association with original invocation
+state, validates control attribution and original route/principal even across distinct
+participants, and supplies borrowed semantic observations
+for native encoding. Continuation progress, cancellation, terminal retention and
+settlement remain Servient decisions even after native close or issuer/publication
+revocation. An immutable definition contains none of those live owners.
 Local abandonment/cancellation and known remote terminal state MUST be reported
 separately. `synchronous` absence makes no completion claim. Unknown effect
 MUST NOT authorize implicit replay of an Action or write.

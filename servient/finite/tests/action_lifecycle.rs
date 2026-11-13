@@ -1466,3 +1466,236 @@ fn input_and_last_slot_lookup_are_prepaid_before_bounded_traversal() {
     assert_eq!(trace.borrow().cancels, 1);
     assert_eq!(trace.borrow().polls, 1);
 }
+
+// A source-free candidate facet, with no protocol or real-I/O claim. Distinct
+// participants expose a topology which HTTP deliberately does not qualify.
+struct CandidateFacet {
+    key: ProducerInstanceKey,
+    token: clinkz_wot_core::publication::ProducerOwnerToken,
+    id: clinkz_wot_core::publication::ProducerParticipationId,
+    gate: Rc<Cell<bool>>,
+    candidate: Option<clinkz_wot_core::action::ProducerActionCandidate>,
+    inventory: Vec<ActionInvocationRef>,
+    accepted: Option<ActionInvocationRef>,
+    observed: usize,
+    failure: Option<CoreError>,
+}
+impl CandidateFacet {
+    fn new(owner: &RawProducerServient, key: ProducerInstanceKey) -> Self {
+        Self {
+            key,
+            token: owner.participation_token(),
+            id: Default::default(),
+            gate: Rc::new(Cell::new(true)),
+            candidate: None,
+            inventory: vec![],
+            accepted: None,
+            observed: 0,
+            failure: None,
+        }
+    }
+    fn offer(
+        &mut self,
+        operation: Operation,
+        route: ActionRoute,
+        invocation: Option<ActionInvocationRef>,
+    ) {
+        self.candidate = Some(clinkz_wot_core::action::ProducerActionCandidate {
+            instance: self.key,
+            target: if operation == Operation::QueryAllActions {
+                AffordanceTarget::Thing
+            } else {
+                AffordanceTarget::Action(Arc::from("run"))
+            },
+            operation,
+            route,
+            query: Some(crate::route(2, 22)),
+            cancel: Some(crate::route(3, 33)),
+            invocation,
+            input: caller("alice"),
+        });
+    }
+}
+impl clinkz_wot_core::publication::ClosedProducerParticipation for CandidateFacet {
+    fn associated_with(
+        &self,
+        token: &clinkz_wot_core::publication::ProducerOwnerToken,
+        key: ProducerInstanceKey,
+    ) -> bool {
+        self.token.same_owner(token) && self.key == key
+    }
+    fn participation_id(&self) -> &clinkz_wot_core::publication::ProducerParticipationId {
+        &self.id
+    }
+    fn retain_owner(&mut self, _: Rc<dyn std::any::Any>) {
+        unreachable!("raw test fixture")
+    }
+    fn begin_retire(&mut self) {
+        self.gate.set(false);
+    }
+    fn ready_for(
+        &self,
+        token: &clinkz_wot_core::publication::ProducerOwnerToken,
+        key: ProducerInstanceKey,
+    ) -> bool {
+        self.associated_with(token, key)
+    }
+    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+        &self.gate
+    }
+    fn retired(&self) -> bool {
+        !self.gate.get()
+    }
+}
+impl clinkz_wot_core::action::ProducerActionBinding for CandidateFacet {
+    fn instance(&self) -> ProducerInstanceKey {
+        self.key
+    }
+    fn poll_action(
+        &mut self,
+        _: &mut WorkBudget,
+    ) -> Poll<CoreResult<Option<clinkz_wot_core::action::ProducerActionCandidate>>> {
+        self.candidate
+            .take()
+            .map_or(Poll::Pending, |candidate| Poll::Ready(Ok(Some(candidate))))
+    }
+    fn invocation_capacity(&self) -> bool {
+        true
+    }
+    fn invocation(&self, id: u32) -> Option<ActionInvocationRef> {
+        self.inventory
+            .iter()
+            .copied()
+            .find(|reference| reference.slot().get() == id)
+    }
+    fn forget_invocation(&mut self, reference: ActionInvocationRef) {
+        self.inventory.retain(|old| *old != reference);
+    }
+    fn action_inventory(&self) -> impl ExactSizeIterator<Item = ActionInvocationRef> {
+        self.inventory.iter().copied()
+    }
+    fn answer_action(
+        &mut self,
+        _: &clinkz_wot_core::action::ProducerActionCandidate,
+        reply: Result<clinkz_wot_core::action::ProducerActionReply<'_>, &CoreError>,
+    ) -> CoreResult<()> {
+        use clinkz_wot_core::action::ProducerActionReply;
+        self.failure = reply.as_ref().err().map(|error| (*error).clone());
+        match reply {
+            Ok(ProducerActionReply::Accepted(reference)) => {
+                self.accepted = Some(reference);
+                self.inventory.push(reference);
+            }
+            Ok(ProducerActionReply::Status(_)) => self.observed += 1,
+            _ => {}
+        }
+        Ok(())
+    }
+    fn begin_action_collection(&mut self, _: &mut WorkBudget) -> CoreResult<()> {
+        Ok(())
+    }
+    fn push_action_status(
+        &mut self,
+        _: &str,
+        _: ActionInvocationRef,
+        _: clinkz_wot_core::action::RawActionView<'_>,
+    ) -> CoreResult<()> {
+        self.observed += 1;
+        Ok(())
+    }
+}
+struct QueryAllowed;
+impl clinkz_wot_core::action::ActionQueryPolicy for QueryAllowed {
+    fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn candidate_handoff_preserves_distinct_invoke_query_cancel_and_root_participants() {
+    let authority = key(9);
+    let key = authority.key();
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let ready = Rc::new(Cell::new(false));
+    let mut owner = owner(
+        instance(
+            authority,
+            Rc::clone(&trace),
+            Rc::clone(&ready),
+            false,
+            false,
+            false,
+            Rc::new(Cell::new(0)),
+        )
+        .with_action_query(QueryAllowed),
+    );
+    let mut invoke = CandidateFacet::new(&owner, key);
+    let mut query = CandidateFacet::new(&owner, key);
+    let mut cancel = CandidateFacet::new(&owner, key);
+    let mut root = CandidateFacet::new(&owner, key);
+    invoke.offer(Operation::InvokeAction, route(1, 11), None);
+    assert!(
+        owner
+            .step_actions(&mut invoke, &mut work_budget())
+            .unwrap()
+            .is_pending()
+    );
+    let reference = invoke.accepted.unwrap();
+    assert_eq!(trace.borrow().started, 1);
+    query.inventory.push(reference);
+    // A copied native reference grants no local ownership/reclamation handle.
+    assert!(
+        owner
+            .action_handle(&query, reference.slot().get())
+            .is_none()
+    );
+    query.offer(Operation::QueryAction, route(1, 11), Some(reference));
+    assert!(
+        owner
+            .step_actions(&mut query, &mut work_budget())
+            .unwrap()
+            .is_pending()
+    );
+    assert!(query.failure.is_some());
+    query.offer(Operation::QueryAction, route(2, 22), Some(reference));
+    assert!(
+        owner
+            .step_actions(&mut query, &mut work_budget())
+            .unwrap()
+            .is_pending()
+    );
+    assert!(query.failure.is_none());
+    assert_eq!(query.observed, 1);
+    cancel.offer(Operation::CancelAction, route(3, 33), Some(reference));
+    assert!(
+        owner
+            .step_actions(&mut cancel, &mut work_budget())
+            .unwrap()
+            .is_pending()
+    );
+    assert!(cancel.failure.is_none());
+    root.inventory.push(reference);
+    root.offer(Operation::QueryAllActions, route(4, 44), None);
+    assert!(
+        owner
+            .step_actions(&mut root, &mut work_budget())
+            .unwrap()
+            .is_pending()
+    );
+    assert!(root.failure.is_none());
+    assert_eq!(root.observed, 1);
+    assert_eq!(trace.borrow().polls, 0); // status never progresses the application
+    ready.set(true);
+    assert!(
+        owner
+            .progress_actions(&invoke, &mut work_budget())
+            .unwrap()
+            .is_ready()
+    );
+    let result = owner
+        .acknowledge_action(&mut invoke, reference.slot().get())
+        .unwrap()
+        .unwrap();
+    assert!(result.cancel_requested);
+    assert!(result.result().is_ok());
+}

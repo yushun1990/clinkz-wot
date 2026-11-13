@@ -266,7 +266,7 @@ pub(crate) fn create_from_text(
         .collect();
     assert_eq!(definitions.len(), 3);
     let mut participants: Vec<Box<dyn OwnedProducerParticipation>> = vec![Box::new(
-        HttpActionRuntime::try_new(owner, key, definitions, 4).unwrap(),
+        HttpActionRuntime::try_new(&owner.participation_token(), key, definitions, 4).unwrap(),
     )];
     if let Some(addr) = property {
         let program = prepared

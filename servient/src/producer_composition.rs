@@ -121,6 +121,9 @@ fn capture_notification_routes<'a>(
                 )
             })
             .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+        if participant.notification_publication_slots() == 0 {
+            return Err(CoreError::UnsupportedOperation(context()));
+        }
         let (route, services, data_bytes) = participant
             .notification_publication(
                 key,
@@ -515,8 +518,16 @@ impl ComposedProducerExposure {
             for p in &input.participants {
                 bytes = bytes
                     .checked_add(
-                        p.admission_backing_bytes(owner, input.instance.key())
-                            .ok_or_else(|| CoreError::UnsupportedOperation(context()))?,
+                        p.admission_backing_bytes(
+                            &owner.participation_token(),
+                            input.instance.key(),
+                        )
+                        .and_then(|native| {
+                            native.checked_add(p.notification_publication_slots().checked_mul(
+                                CapturedNotificationRoute::publication_overhead_bytes(),
+                            )?)
+                        })
+                        .ok_or_else(|| CoreError::UnsupportedOperation(context()))?,
                     )
                     .ok_or_else(busy)?;
             }
@@ -712,7 +723,7 @@ impl ComposedProducerExposure {
             .collect();
         if !participants
             .iter()
-            .all(|p| p.ready_for(owner, self.publication.key()))
+            .all(|p| p.ready_for(&owner.participation_token(), self.publication.key()))
         {
             return Err(busy());
         }

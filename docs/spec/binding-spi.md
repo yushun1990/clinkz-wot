@@ -136,6 +136,49 @@ migration itself introduced no new facade or interaction-family implementation;
 later composed HTTP Action delivery uses the successor boundary below. Historical
 contracts/evidence remain available at the pinned predecessor.
 
+### Producer Action candidates and native participation
+
+`ClosedProducerParticipation`, `ProducerOwnerToken` and
+`ProducerParticipationId` are Core contracts. Readiness, backing declarations
+and membership checks receive only passive issuer identity and instance keys.
+Neither those checks nor native progress may receive Servient, application
+handlers, or a trait forwarding logical dispatch/revocation. Issuer identity is
+not permission. Publication remains a Servient-local commit over the complete
+qualified original participation set.
+
+`ProducerActionBinding` yields an owned matched `ProducerActionCandidate` while
+retaining the original native input/reply opportunity. Servient decides invoke,
+query and cancel admission using captured routes/services and fresh policy. It
+retains logical handles, continuation progress, terminal retention and settlement.
+The Binding retains native tokens/epochs, record attribution, matching, encoding,
+ordering, delivery evidence and physical disposal. Copyable invocation references
+in native records are correlation data, never dispatch authority. Local handle
+recovery/progress/acknowledgement is confined to the original invoke participation;
+that association is installed before fallible acceptance encoding. Described
+query/cancel and a qualified root inventory may use different participants: they
+still require the original instance, captured operation route, principal and fresh
+policy. HTTP's same-native-owner inventory restriction is not an Engine rule.
+
+Borrowed `ProducerActionReply`/`RawActionView` observations confer no callback or
+result ownership. Reply/collection encoding does no I/O; only later paid native
+progress may send the original response. Root observations are authorized at
+Servient and serialized/ordered at the Binding; partial encoding must be replaced
+by refusal after any semantic failure. Collection support is optional and defaults
+to refusal. Closing an initiating exchange does not dispose the Action; native
+record removal follows Servient acknowledgement, whose transferred result owner
+still retains its original capacity until disposal.
+
+Native failure is evidence, not a logical revocation decision. Servient's
+`reconcile_participation` validates issuer/instance association and decides
+revocation/retirement. `step_actions` and `step_notifications` apply that boundary
+for their distinct facets. Direct native polling requires caller-driven
+reconciliation; there is no background failure propagation or automatic scheduler.
+MQTT readiness/health/close therefore receives no logical owner. Logical
+notification publication metadata is funded by Servient; native participants
+declare native storage/alignment, data capacity and the number of publication
+slots. These manual Host seams do not establish a universal session/runtime or
+all-profile implementation.
+
 The optional composed Host Producer handoff supplies a closed participation
 lease for each independently installed native contribution. It checks the exact
 owned definition/operation against one unambiguous participant, plus readiness,
@@ -184,8 +227,9 @@ other Bindings' infrastructure layouts or cross-Binding Action routes.
 QueryAllActions uses a finite Consumer exchange with separately captured actual
 status-validation support. The Producer participant supplies a distinct root
 control route at qualification, alongside invoke validation and leaf controls.
-Native aggregation, status-resource identity, encoding, ordering, history pruning
-and any actual consistency evidence stay inside the Binding. Shared borrowed
+Native aggregation, status-resource identity, encoding, ordering and any actual
+consistency evidence stay inside the Binding. Servient owns terminal-result
+retention and acknowledgement; native history removal follows that decision. Shared borrowed
 invocation views confer neither dispatch nor infrastructure shutdown authority.
 The [HTTP mapping](../../protocol-bindings/protocols/http/README.md#thing-root-action-status-query)
 is an explicit draft-derived subset, not a universal Action/session protocol.

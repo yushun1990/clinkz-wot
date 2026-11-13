@@ -121,7 +121,7 @@ impl ClosedProducerParticipation for UnselectedParticipant {
         self.2 = Some(owner);
     }
     fn begin_retire(&mut self) {}
-    fn ready_for(&self, _: &RawProducerServient, _: ProducerInstanceKey) -> bool {
+    fn ready_for(&self, _: &ProducerOwnerToken, _: ProducerInstanceKey) -> bool {
         true
     }
     fn ingress_gate(&self) -> &Rc<Cell<bool>> {
@@ -661,7 +661,7 @@ impl ClosedProducerParticipation for ActionLease {
     }
     fn admission_backing_bytes(
         &self,
-        _: &RawProducerServient,
+        _: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
         (!self.open.get() && !self.closed && self.retained_owner.is_none() && self.key == key)
@@ -674,7 +674,7 @@ impl ClosedProducerParticipation for ActionLease {
     fn begin_retire(&mut self) {
         self.close();
     }
-    fn ready_for(&self, _: &RawProducerServient, key: ProducerInstanceKey) -> bool {
+    fn ready_for(&self, _: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         !self.closed
             && self.key == key
             && self
@@ -1050,7 +1050,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
             Poll::Ready(RawFiniteState::InstalledClosed)
         );
     }
-    assert!(!unrelated.ready_for(&s, ka));
+    assert!(!unrelated.ready_for(&s.participation_token(), ka));
     // Even the lower-level publication entry cannot open B for A.
     assert!(
         s.publish_composed(&mut publication, &mut [&mut left, &mut unrelated])

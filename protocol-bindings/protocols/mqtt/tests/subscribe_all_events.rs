@@ -828,8 +828,7 @@ fn producer_replacement_retains_original_root_work_until_retirement_and_acknowle
         publish(&mut po, &mut fresh).await;
         pe.begin_close();
         assert!(
-            native(&mut pe)
-                .step(&mut po, &mut cx(), &mut budget())
+            po.step_notifications(native(&mut pe), &mut cx(), &mut budget())
                 .unwrap()
                 .is_pending()
         );
@@ -842,8 +841,7 @@ fn producer_replacement_retains_original_root_work_until_retirement_and_acknowle
         assert!(matches!(result.cause, Some(CoreError::StaleHandle(_))));
         assert_eq!(result.native.effect, PublicationEffect::NotPublished);
         assert!(
-            native(&mut pe)
-                .step(&mut po, &mut cx(), &mut budget())
+            po.step_notifications(native(&mut pe), &mut cx(), &mut budget())
                 .unwrap()
                 .is_pending(),
             "unread original settlement retains its work lease"
@@ -886,11 +884,10 @@ fn producer_root_validation_policy_and_saturation_return_original_complete_carri
         let mut pe = stage(&po, input, &bank);
         let end = Instant::now() + Duration::from_secs(3);
         loop {
-            let _ = pe
+            let _ = po.step_notifications(&mut pe
                 .participant_mut::<services::ServicesParticipant>(0)
                 .unwrap()
-                .native
-                .step(&mut po, &mut cx(), &mut budget())
+                .native, &mut cx(), &mut budget())
                 .unwrap();
             match pe.publish(&mut po, &mut budget()) {
                 Ok(()) => break,
@@ -1011,10 +1008,9 @@ fn producer_root_validation_policy_and_saturation_return_original_complete_carri
         pending.acknowledge().unwrap_or_else(|_| panic!());
         pe.begin_close();
         assert!(
-            pe.participant_mut::<services::ServicesParticipant>(0)
+            po.step_notifications(&mut pe.participant_mut::<services::ServicesParticipant>(0)
                 .unwrap()
-                .native
-                .step(&mut po, &mut cx(), &mut budget())
+                .native, &mut cx(), &mut budget())
                 .unwrap()
                 .is_ready()
         );
@@ -1449,11 +1445,10 @@ fn final_publication_refuses_missing_actual_collection_services_after_closed_nat
         let mut pe = stage(&po, input, &bank);
         let end = Instant::now() + Duration::from_secs(3);
         loop {
-            let ready = pe
+            let ready = po.step_notifications(&mut pe
                 .participant_mut::<services::ServicesParticipant>(0)
                 .unwrap()
-                .native
-                .step(&mut po, &mut cx(), &mut budget())
+                .native, &mut cx(), &mut budget())
                 .unwrap();
             if ready.is_ready() {
                 break;
@@ -1486,10 +1481,9 @@ fn final_publication_refuses_missing_actual_collection_services_after_closed_nat
         assert_eq!(s.locally_published(), 0);
         pe.begin_close();
         assert!(
-            pe.participant_mut::<services::ServicesParticipant>(0)
+            po.step_notifications(&mut pe.participant_mut::<services::ServicesParticipant>(0)
                 .unwrap()
-                .native
-                .step(&mut po, &mut cx(), &mut budget())
+                .native, &mut cx(), &mut budget())
                 .unwrap()
                 .is_ready()
         );

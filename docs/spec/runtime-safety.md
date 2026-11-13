@@ -672,3 +672,16 @@ native work retains its mapping/contract through validation and delivery.
 Clearing native work after physical retirement cannot redirect an accepted or
 late result to a sibling mapping. A borrowed handler context cannot outlive that
 original owner or turn branch inspection into native execution authority.
+
+Under SPI-INGRESS/RETIRE-001 and SAFE-AUTH/CLEANUP-001, native Producer failure
+facts are reconciled at Servient. A failed participant may fence its own ingress
+and close its native resources; it cannot revoke logical currentness or dispose
+application continuations. Servient validates the original issuer/instance
+association before propagating native failure to logical revocation. A stale or
+foreign report cannot revoke another owner. Native and application progress,
+acknowledgement and final result disposal remain independent and caller-driven.
+An encoded reply may finish after ingress closes; completed native delivery never
+acknowledges the Action. Original Action work/result funding survives native
+retirement, replacement and lost handles through the existing store/retirement
+owner. Dropping a root still owes its qualified finite local abort; this correction
+adds no detached task or generic cleanup destination.

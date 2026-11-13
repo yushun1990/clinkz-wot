@@ -292,11 +292,9 @@ impl Producer {
             .exposure
             .participant_mut::<HttpActionRuntime>(0)
             .unwrap();
-        let _ = native.step(&mut self.owner, &mut budget()).unwrap();
+        let _ = self.owner.step_actions(native, &mut budget()).unwrap();
         native.take_delivery();
-        let _ = native
-            .progress_actions(&mut self.owner, &mut budget())
-            .unwrap();
+        let _ = self.owner.progress_actions(native, &mut budget()).unwrap();
     }
     fn raw_invoke(&mut self, body: &str) -> String {
         let mut peer = TcpStream::connect(self.address).unwrap();
@@ -336,10 +334,7 @@ impl Producer {
             .exposure
             .participant_mut::<HttpActionRuntime>(0)
             .unwrap();
-        while let Some(s) = native
-            .reap_completed(&mut self.owner, Duration::ZERO)
-            .unwrap()
-        {
+        while let Some(s) = self.owner.reap_actions(native, Duration::ZERO).unwrap() {
             drop(s);
         }
         native.begin_close();
@@ -558,8 +553,9 @@ fn structured_producer_completion_is_checked_against_its_distinct_output_role() 
             .participant_mut::<HttpActionRuntime>(0)
             .unwrap();
         let id = native.action_ids().next().unwrap();
-        let produced = native
-            .acknowledge(&mut producer.owner, id)
+        let produced = producer
+            .owner
+            .acknowledge_action(native, id)
             .unwrap()
             .unwrap();
         assert!(matches!(produced.result(), Err(CoreError::Validation(_))));
@@ -1083,12 +1079,14 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
         let native = old_exposure
             .participant_mut::<HttpActionRuntime>(0)
             .unwrap();
-        let _ = native
-            .progress_actions(&mut producer.owner, &mut budget())
+        let _ = producer
+            .owner
+            .progress_actions(native, &mut budget())
             .unwrap();
         drop(
-            native
-                .reap_completed(&mut producer.owner, Duration::ZERO)
+            producer
+                .owner
+                .reap_actions(native, Duration::ZERO)
                 .unwrap()
                 .unwrap(),
         );

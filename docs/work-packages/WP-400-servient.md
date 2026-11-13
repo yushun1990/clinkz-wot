@@ -733,3 +733,34 @@ scope without changing dependencies or package/gate/milestone status.
 
 Finite runtime application-failure delivery preserves original authority, first cause, resource owners and separate effect certainty; see [response evidence](../evidence/td-responses.md).
 No package, gate or milestone acceptance follows from this increment.
+
+## Producer Action semantic execution ownership
+
+The existing bounded Action store additionally retains each invocation's exact
+native participation association and terminal-retention metadata. Servient's
+`step_actions` accepts Core candidates, performs fresh authorization and captured
+validation, dispatches behavior and lends semantic replies to the original native
+encoder. `progress_actions`, `acknowledge_action` and `reap_actions` keep logical
+continuation/settlement decisions here. Native references cannot recover local management handles
+in another participation; described controls/root inventories may qualify distinct
+participants under the original instance/route/principal checks. Definitions retain no live invocation/native owner.
+
+`reconcile_participation` and notification-specific driving consume native failure
+facts and decide logical revocation without giving that authority back to a
+Binding. Managed composition funds its logical notification publication metadata
+separately from declared native storage/alignment and publication slots. Failure
+before publication cannot admit application work; native close after acceptance
+cannot release its original continuation/result. Complete retirement still waits
+for both original native obligations and Action/result ownership.
+
+[HTTP Producer tests](../../protocol-bindings/protocols/http/tests/action_producer.rs),
+[continuing Consumer-to-Producer tests](../../protocol-bindings/protocols/http/tests/action_consumer.rs)
+and [root Action queries](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+cover actual TCP invoke/query/cancel, denial, revocation/replacement, late output,
+original-bank retention and final release. The MQTT broker tests distinguish
+native failure evidence from the logical reconciliation decision and retain
+mixed HTTP/MQTT execution. A source-free candidate fixture additionally checks
+distinct invoke/query/cancel/root participants without claiming real I/O for that
+topology. This remains a bounded Host/manual implementation;
+Review 10 F2/F3, continuing Consumer capacity, cross-instance compilation reuse
+and broader profile/production acceptance are not completed by this correction.

@@ -193,8 +193,8 @@ pub fn runtime() -> tokio::runtime::Runtime {
 pub async fn publish(owner: &mut RawProducerServient, exposure: &mut ComposedProducerExposure) {
     let end = Instant::now() + Duration::from_secs(3);
     loop {
-        let _ = native(exposure)
-            .step(owner, &mut cx(), &mut budget())
+        let _ = owner
+            .step_notifications(native(exposure), &mut cx(), &mut budget())
             .unwrap();
         match exposure.publish(owner, &mut budget()) {
             Ok(()) => return,
@@ -221,8 +221,8 @@ pub async fn finish<P: NativeNotificationPublication>(
 pub fn close(owner: &mut RawProducerServient, exposure: &mut ComposedProducerExposure) {
     exposure.begin_close();
     assert!(
-        native(exposure)
-            .step(owner, &mut cx(), &mut budget())
+        owner
+            .step_notifications(native(exposure), &mut cx(), &mut budget())
             .unwrap()
             .is_ready()
     );

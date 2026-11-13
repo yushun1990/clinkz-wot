@@ -88,7 +88,7 @@ fn consumer_late_native_views_retain_original_funding_after_cancellation_or_revo
                     .exposure
                     .participant_mut::<HttpActionRuntime>(0)
                     .unwrap();
-                let _ = native.step(&mut server.owner, &mut work()).unwrap();
+                let _ = server.owner.step_actions(native, &mut work()).unwrap();
                 if let Some(delivery) = native.take_delivery() {
                     assert!(delivery.locally_written);
                 }
@@ -292,7 +292,13 @@ fn retained_terminal_records_use_capacity_until_acknowledged_without_truncation(
         .exposure
         .participant_mut::<HttpActionRuntime>(0)
         .unwrap();
-    drop(native.acknowledge(&mut server.owner, id).unwrap().unwrap());
+    drop(
+        server
+            .owner
+            .acknowledge_action(native, id)
+            .unwrap()
+            .unwrap(),
+    );
     let (s, v, _) = server.send("GET", "/actions", "");
     assert_eq!(s, 200);
     assert_eq!(v["run"].as_array().unwrap().len(), 7);
@@ -365,8 +371,13 @@ fn complete_producer_qualification_requires_root_policy_all_forms_and_original_s
         .filter(|o| !matches!(&o.site,FormSite::Action(n) if n=="signal"))
         .map(|o| o.definition::<HttpActionDefinition>().unwrap().clone())
         .collect();
-    assert!(HttpActionRuntime::try_new(&owner, instance.key(), missing, 8).is_err());
-    assert!(HttpActionRuntime::try_new(&owner, instance.key(), all, 8).is_ok());
+    assert!(
+        HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), missing, 8)
+            .is_err()
+    );
+    assert!(
+        HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), all, 8).is_ok()
+    );
     TcpListener::bind(addr).unwrap();
 }
 
@@ -473,7 +484,7 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
                     .exposure
                     .participant_mut::<HttpActionRuntime>(0)
                     .unwrap();
-                let _ = native.step(&mut server.owner, &mut work()).unwrap();
+                let _ = server.owner.step_actions(native, &mut work()).unwrap();
                 delivery = native.take_delivery();
                 assert!(Instant::now() < end);
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -575,10 +586,13 @@ fn producer_replacement_cannot_retarget_old_status_links_or_original_pending_rep
     .unwrap();
     // Receive+format the original aggregate, retaining its separate reply.
     assert!(
-        old.exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .step(&mut old.owner, &mut work())
+        old.owner
+            .step_actions(
+                old.exposure
+                    .participant_mut::<HttpActionRuntime>(0)
+                    .unwrap(),
+                &mut work()
+            )
             .unwrap()
             .is_pending()
     );
@@ -606,7 +620,7 @@ fn producer_replacement_cannot_retarget_old_status_links_or_original_pending_rep
         .unwrap();
     let end = Instant::now() + Duration::from_secs(5);
     loop {
-        let _ = native.step(&mut old.owner, &mut work()).unwrap();
+        let _ = old.owner.step_actions(native, &mut work()).unwrap();
         if let Some(d) = native.take_delivery() {
             assert!(d.locally_written);
             break;
@@ -651,7 +665,7 @@ fn producer_replacement_cannot_retarget_old_status_links_or_original_pending_rep
         .participant_mut::<HttpActionRuntime>(0)
         .unwrap();
     let id = token.split_once('-').unwrap().1.parse().unwrap();
-    let handle = native.handle(id).unwrap();
+    let handle = successor.owner.action_handle(native, id).unwrap();
     successor.owner.close_raw_action(&handle).unwrap();
     assert!(
         successor
@@ -660,8 +674,9 @@ fn producer_replacement_cannot_retarget_old_status_links_or_original_pending_rep
             .unwrap()
             .is_ready()
     );
-    let settlement = native
-        .acknowledge(&mut successor.owner, id)
+    let settlement = successor
+        .owner
+        .acknowledge_action(native, id)
         .unwrap()
         .unwrap();
     assert_eq!(settlement.instance, old_key);
@@ -689,7 +704,9 @@ fn final_retained_td_mismatch_refuses_before_managed_handoff_without_native_effe
         .iter()
         .map(|o| o.definition::<HttpActionDefinition>().unwrap().clone())
         .collect();
-    let participant = HttpActionRuntime::try_new(&owner, instance.key(), definitions, 8).unwrap();
+    let participant =
+        HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), definitions, 8)
+            .unwrap();
     let mut altered = original;
     altered["actions"]["signal"]["output"]["type"] = json!("boolean");
     let instance = instance.with_description(Arc::from(altered.to_string()));
@@ -732,8 +749,9 @@ fn original_aggregate_reply_identity_survives_native_close_without_inventing_del
         .participant_mut::<HttpActionRuntime>(0)
         .unwrap();
     assert!(
-        native
-            .step(&mut server.owner, &mut work())
+        server
+            .owner
+            .step_actions(native, &mut work())
             .unwrap()
             .is_pending()
     );
@@ -850,7 +868,16 @@ fn aggregate_read_checks_original_principal_route_and_paid_work_before_any_membe
     let mut server = Server::new();
     let token = server.invoke("run", 1);
     let id = token.split_once('-').unwrap().1.parse().unwrap();
-    let handle = server.native().handle(id).unwrap();
+    let handle = server
+        .owner
+        .action_handle(
+            server
+                .exposure
+                .participant_mut::<HttpActionRuntime>(0)
+                .unwrap(),
+            id,
+        )
+        .unwrap();
     let route = ActionRoute {
         binding: (BindingId::new(61), BindingGeneration::INITIAL),
         mapping: ActionMappingKey(1),
@@ -956,8 +983,9 @@ fn oversized_native_aggregate_refuses_without_truncating_or_releasing_original_r
         .exposure
         .participant_mut::<HttpActionRuntime>(0)
         .unwrap();
-    let settlement = native
-        .acknowledge(&mut server.owner, ids[0])
+    let settlement = server
+        .owner
+        .acknowledge_action(native, ids[0])
         .unwrap()
         .unwrap();
     drop(settlement);
@@ -979,7 +1007,7 @@ fn pending_application_retirement_and_unread_settlement_pin_original_funding_aft
         .exposure
         .participant_mut::<HttpActionRuntime>(0)
         .unwrap();
-    let handle = native.handle(id).unwrap();
+    let handle = server.owner.action_handle(native, id).unwrap();
     server.owner.close_raw_action(&handle).unwrap();
     assert!(
         server
@@ -988,7 +1016,13 @@ fn pending_application_retirement_and_unread_settlement_pin_original_funding_aft
             .unwrap()
             .is_pending()
     );
-    assert!(native.acknowledge(&mut server.owner, id).unwrap().is_none());
+    assert!(
+        server
+            .owner
+            .acknowledge_action(native, id)
+            .unwrap()
+            .is_none()
+    );
     assert!(
         server
             .exposure
@@ -1012,10 +1046,14 @@ fn pending_application_retirement_and_unread_settlement_pin_original_funding_aft
             .is_ready()
     );
     let settlement = server
-        .exposure
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .acknowledge(&mut server.owner, id)
+        .owner
+        .acknowledge_action(
+            server
+                .exposure
+                .participant_mut::<HttpActionRuntime>(0)
+                .unwrap(),
+            id,
+        )
         .unwrap()
         .unwrap();
     server
@@ -1122,7 +1160,9 @@ fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
         .iter()
         .map(|o| o.definition::<HttpActionDefinition>().unwrap().clone())
         .collect();
-    let participant = HttpActionRuntime::try_new(&owner, instance.key(), definitions, 8).unwrap();
+    let participant =
+        HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), definitions, 8)
+            .unwrap();
     let mut exposure = ComposedProducerExposure::try_new(
         &owner,
         ComposedProducerInput {
@@ -1148,10 +1188,11 @@ fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
     peer.write_all(format!("GET /actions HTTP/1.1\r\nHost: {addr}\r\n\r\n").as_bytes())
         .unwrap();
     assert!(
-        exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .step(&mut owner, &mut work())
+        owner
+            .step_actions(
+                exposure.participant_mut::<HttpActionRuntime>(0).unwrap(),
+                &mut work()
+            )
             .unwrap()
             .is_pending()
     );
@@ -1194,8 +1235,9 @@ fn root_query_refuses_an_application_input_without_authorizing_or_progressing_ac
         .participant_mut::<HttpActionRuntime>(0)
         .unwrap();
     assert!(
-        native
-            .step(&mut server.owner, &mut work())
+        server
+            .owner
+            .step_actions(native, &mut work())
             .unwrap()
             .is_ready()
     );
@@ -1315,7 +1357,7 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
                 .exposure
                 .participant_mut::<HttpActionRuntime>(0)
                 .unwrap();
-            let _ = native.step(&mut server.owner, &mut work()).unwrap();
+            let _ = server.owner.step_actions(native, &mut work()).unwrap();
             native.take_delivery();
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -1335,7 +1377,7 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
                 .exposure
                 .participant_mut::<HttpActionRuntime>(0)
                 .unwrap();
-            let _ = native.step(&mut server.owner, &mut work()).unwrap();
+            let _ = server.owner.step_actions(native, &mut work()).unwrap();
             native.take_delivery();
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -1378,10 +1420,14 @@ fn review_borrowed_settlement_body_cannot_outlive_original_funding() {
     server.app.complete.set(true);
     server.progress();
     let settlement = server
-        .exposure
-        .participant_mut::<HttpActionRuntime>(0)
-        .unwrap()
-        .acknowledge(&mut server.owner, id)
+        .owner
+        .acknowledge_action(
+            server
+                .exposure
+                .participant_mut::<HttpActionRuntime>(0)
+                .unwrap(),
+            id,
+        )
         .unwrap()
         .unwrap();
     let original = server.app.last_body.borrow().as_ref().unwrap().clone();
@@ -1479,10 +1525,14 @@ fn review_acknowledged_results_still_use_bounded_result_capacity() {
         let id = token.split_once('-').unwrap().1.parse().unwrap();
         server.progress();
         let settlement = server
-            .exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .acknowledge(&mut server.owner, id)
+            .owner
+            .acknowledge_action(
+                server
+                    .exposure
+                    .participant_mut::<HttpActionRuntime>(0)
+                    .unwrap(),
+                id,
+            )
             .unwrap()
             .unwrap();
         settlements.push(settlement);
@@ -1508,10 +1558,14 @@ fn review_acknowledged_results_still_use_bounded_result_capacity() {
     let id = token.split_once('-').unwrap().1.parse().unwrap();
     settlements.push(
         server
-            .exposure
-            .participant_mut::<HttpActionRuntime>(0)
-            .unwrap()
-            .acknowledge(&mut server.owner, id)
+            .owner
+            .acknowledge_action(
+                server
+                    .exposure
+                    .participant_mut::<HttpActionRuntime>(0)
+                    .unwrap(),
+                id,
+            )
             .unwrap()
             .unwrap(),
     );

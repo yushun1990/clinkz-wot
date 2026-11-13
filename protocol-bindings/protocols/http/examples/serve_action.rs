@@ -126,7 +126,9 @@ fn main() {
         .iter()
         .map(|o| o.definition::<HttpActionDefinition>().unwrap().clone())
         .collect();
-    let native = HttpActionRuntime::try_new(&owner, instance.key(), definitions, 8).unwrap();
+    let native =
+        HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), definitions, 8)
+            .unwrap();
     let accounts = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let mut exposure = ComposedProducerExposure::try_new(
         &owner,
@@ -157,12 +159,9 @@ fn main() {
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(seconds) {
         let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-        let _ = native.step(&mut owner, &mut work());
-        let _ = native.progress_actions(&mut owner, &mut work());
-        if let Some(settlement) = native
-            .reap_completed(&mut owner, Duration::from_secs(5))
-            .unwrap()
-        {
+        let _ = owner.step_actions(native, &mut work());
+        let _ = owner.progress_actions(native, &mut work());
+        if let Some(settlement) = owner.reap_actions(native, Duration::from_secs(5)).unwrap() {
             println!("Expired Action settlement: {settlement:?}");
         }
         if let Some(delivery) = native.take_delivery() {
@@ -174,7 +173,7 @@ fn main() {
     let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
     let ids: Vec<_> = native.action_ids().collect();
     for id in ids {
-        let handle = native.handle(id).unwrap();
+        let handle = owner.action_handle(native, id).unwrap();
         owner.close_raw_action(&handle).unwrap();
         loop {
             match owner.step_raw_action(&handle, &mut work()).unwrap() {
@@ -184,7 +183,7 @@ fn main() {
         }
         println!(
             "Action settlement: {:?}",
-            native.acknowledge(&mut owner, id).unwrap()
+            owner.acknowledge_action(native, id).unwrap()
         );
     }
     exposure.retire(&mut owner, &mut work()).unwrap();

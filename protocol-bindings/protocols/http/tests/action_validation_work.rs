@@ -67,7 +67,7 @@ fn send(
     let mut delivery = None;
     loop {
         let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-        let _ = native.step(owner, credits).unwrap();
+        let _ = owner.step_actions(native, credits).unwrap();
         if delivery.is_none() {
             delivery = native.take_delivery();
         }
@@ -157,7 +157,7 @@ fn managed_http_funds_structured_input_immediate_and_continuing_output_before_ca
             assert_eq!(counts.invoked.get(), 1);
             let id = report.invocation.unwrap();
             let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-            let handle = native.handle(id).unwrap();
+            let handle = owner.action_handle(native, id).unwrap();
             if !immediate {
                 counts.complete.set(true);
                 let work = SCALAR_PROGRESS + additional;
@@ -171,7 +171,7 @@ fn managed_http_funds_structured_input_immediate_and_continuing_output_before_ca
                         0,
                         "no output is materialized before full funding"
                     );
-                    assert!(native.acknowledge(&mut owner, id).unwrap().is_none());
+                    assert!(owner.acknowledge_action(native, id).unwrap().is_none());
                 }
                 let mut enough = credits(work);
                 assert_eq!(
@@ -181,7 +181,7 @@ fn managed_http_funds_structured_input_immediate_and_continuing_output_before_ca
                 assert_eq!(enough.remaining(WorkClass::HandlerSteps), 0);
                 assert_eq!(counts.polls.get(), 1);
             }
-            let result = native.acknowledge(&mut owner, id).unwrap().unwrap();
+            let result = owner.acknowledge_action(native, id).unwrap().unwrap();
             assert_eq!(result.result().unwrap().data().unwrap().body.as_ref(), body);
             exposure.begin_close();
             exposure.retire(&mut owner, &mut budget()).unwrap();

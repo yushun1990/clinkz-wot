@@ -227,7 +227,7 @@ mod live {
         let mut delivered = false;
         loop {
             let http = exposure.participant_mut::<HttpActionRuntime>(1).unwrap();
-            let _ = http.step(owner, &mut budget()).unwrap();
+            let _ = owner.step_actions(http, &mut budget()).unwrap();
             if let Some(d) = http.take_delivery() {
                 assert!(d.locally_written);
                 delivered = true;
@@ -296,10 +296,10 @@ mod live {
                 .filter_map(|o| o.definition::<HttpActionDefinition>().cloned())
                 .collect();
             let mqtt_runtime = service
-                .participation(&owner, instance.key(), mqtt_definitions)
+                .participation(&owner.participation_token(), instance.key(), mqtt_definitions)
                 .unwrap();
             let http_runtime =
-                HttpActionRuntime::try_new(&owner, instance.key(), http_definitions, 8).unwrap();
+                HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), http_definitions, 8).unwrap();
             let mut exposure = stage(
                 &owner,
                 ComposedProducerInput {
@@ -532,7 +532,7 @@ mod live {
                     break result;
                 }
                 let http = exposure.participant_mut::<HttpActionRuntime>(1).unwrap();
-                let _ = http.step(&mut owner, &mut budget()).unwrap();
+                let _ = owner.step_actions(http, &mut budget()).unwrap();
                 if let Some(d) = http.take_delivery() {
                     assert!(d.locally_written);
                 }
@@ -552,7 +552,7 @@ mod live {
             assert_eq!(result.consumer(), &consumer_owner.reference());
             let http = exposure.participant_mut::<HttpActionRuntime>(1).unwrap();
             let id = http.action_ids().next().unwrap();
-            let retained = http.acknowledge(&mut owner, id).unwrap().unwrap();
+            let retained = owner.acknowledge_action(http, id).unwrap().unwrap();
             assert_eq!(retained.result().unwrap().data().unwrap().body, b"23");
             close(&mut owner, &mut exposure);
             assert!(!service.connected());

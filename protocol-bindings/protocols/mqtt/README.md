@@ -113,6 +113,14 @@ root loss and local cancellation fence pending emissions; escaped writes cannot
 be rolled back. Cancelling/dropping a partial packet closes the shared connection
 to preserve framing, reports uncertainty and invalidates dependent availability.
 Native failure is terminal for that service and never silently replays data.
+The native lease is constructed with `&owner.participation_token()`, a passive
+issuer identity. Drive its readiness/health/retirement with
+`owner.step_notifications(native, &mut cx, &mut budget)`: Servient reconciles
+native failure evidence and decides logical revocation. Direct
+`native.step(&mut cx, &mut budget)` performs only native work and requires
+explicit `owner.reconcile_participation(key, native)` for that logical decision.
+Native code cannot dispatch or revoke application authority and has no normal
+Servient dependency.
 Unread settlements retain the slot and original funding. Closing one Thing
 preserves sibling leases; retained emissions prevent premature logical retirement
 and final physical release. Drop reports no successful drain.

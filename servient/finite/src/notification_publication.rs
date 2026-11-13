@@ -55,12 +55,40 @@ pub struct CapturedNotificationRoute {
     pub data_bytes: usize,
 }
 impl CapturedNotificationRoute {
+    /// Portable upper bound for logical publication metadata, excluding native
+    /// storage and its alignment allowance, which the Binding declares itself.
+    pub fn publication_overhead_bytes() -> usize {
+        size_of::<NotificationPublicationState>()
+            + core::mem::align_of::<NotificationPublicationState>()
+    }
     pub fn backing_bytes(routes: &[Self], capacity: usize) -> Option<usize> {
         routes
             .iter()
             .try_fold(capacity.checked_mul(size_of::<Self>())?, |n, r| {
                 n.checked_add(target_name_bytes(&r.target)?.checked_add(2 * size_of::<usize>())?)
             })
+    }
+}
+
+impl RawProducerServient {
+    /// Drive this notification participation and reconcile its native evidence
+    /// here, where logical revocation belongs. No application emission is made.
+    pub fn step_notifications<B: ProducerNotificationBinding + ClosedProducerParticipation>(
+        &mut self,
+        binding: &mut B,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Poll<()>> {
+        let key = binding.producer_instance();
+        if !binding.associated_with(&self.participation_token(), key) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        let result = binding.poll_participation(cx, budget);
+        self.reconcile_participation(key, binding)?;
+        match result {
+            Poll::Pending => Ok(Poll::Pending),
+            Poll::Ready(result) => result.map(|()| Poll::Ready(())),
+        }
     }
 }
 
@@ -78,6 +106,11 @@ pub struct ProducerNotificationSettlement {
 /// unread settlement and funding survive replacement or loss of the exposure.
 pub struct ProducerNotificationPublication<P: NativeNotificationPublication> {
     native: Option<P>,
+    state: NotificationPublicationState,
+}
+// Concrete logical metadata has its own layout, so native crates never need to
+// name the generic Servient owner to declare their native publication backing.
+struct NotificationPublicationState {
     current: Rc<Cell<bool>>,
     issuer: Weak<()>,
     route: NotificationRoute,
@@ -91,8 +124,8 @@ pub struct ProducerNotificationPublication<P: NativeNotificationPublication> {
 }
 impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
     pub fn cancel(&mut self) {
-        if self.settlement.is_none() && self.first_cause.is_none() {
-            self.first_cause = Some(CoreError::Cancelled(self.progress_context()));
+        if self.state.settlement.is_none() && self.state.first_cause.is_none() {
+            self.state.first_cause = Some(CoreError::Cancelled(self.progress_context()));
         }
     }
     pub fn step(
@@ -101,27 +134,27 @@ impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
         budget: &mut WorkBudget,
         now: MonotonicInstant,
     ) -> Poll<()> {
-        if self.settlement.is_some() {
+        if self.state.settlement.is_some() {
             return Poll::Ready(());
         }
         self.observe_authority(now);
-        if self.native_outcome.is_none() {
+        if self.state.native_outcome.is_none() {
             let progress = self
                 .native
                 .as_mut()
                 .expect("unacknowledged publication")
-                .poll_publish(cx, budget, self.first_cause.is_some());
+                .poll_publish(cx, budget, self.state.first_cause.is_some());
             let Poll::Ready(outcome) = progress else {
                 self.observe_authority(now);
                 return Poll::Pending;
             };
-            if self.first_cause.is_none() {
-                self.first_cause = outcome.cause.clone();
+            if self.state.first_cause.is_none() {
+                self.state.first_cause = outcome.cause.clone();
             }
             if outcome.cause.is_some() {
-                self.current.set(false);
+                self.state.current.set(false);
             }
-            self.native_outcome = Some(outcome);
+            self.state.native_outcome = Some(outcome);
         }
         self.observe_authority(now);
         let retirement = self
@@ -130,60 +163,65 @@ impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
             .expect("unacknowledged publication")
             .poll_retire(cx, budget);
         if let Poll::Ready(Err(error)) = retirement {
-            if self.first_cause.is_none() {
-                self.first_cause = Some(error.clone());
+            if self.state.first_cause.is_none() {
+                self.state.first_cause = Some(error.clone());
             }
-            if self.cleanup_error.is_none() {
-                self.cleanup_error = Some(error);
+            if self.state.cleanup_error.is_none() {
+                self.state.cleanup_error = Some(error);
             }
-            self.current.set(false);
+            self.state.current.set(false);
             return Poll::Pending;
         }
         self.observe_authority(now);
         if retirement.is_pending() {
             return Poll::Pending;
         }
-        self.settlement = Some(ProducerNotificationSettlement {
-            instance: self.instance.key(),
-            target: self.target.clone(),
-            route: self.route.clone(),
-            cause: self.first_cause.clone(),
-            cleanup_error: self.cleanup_error.clone(),
-            native: self.native_outcome.take().expect("terminal native outcome"),
+        self.state.settlement = Some(ProducerNotificationSettlement {
+            instance: self.state.instance.key(),
+            target: self.state.target.clone(),
+            route: self.state.route.clone(),
+            cause: self.state.first_cause.clone(),
+            cleanup_error: self.state.cleanup_error.clone(),
+            native: self
+                .state
+                .native_outcome
+                .take()
+                .expect("terminal native outcome"),
         });
         Poll::Ready(())
     }
     fn observe_authority(&mut self, now: MonotonicInstant) {
-        if self.first_cause.is_none() {
-            self.first_cause = if !self.current.get() || self.issuer.strong_count() == 0 {
-                Some(CoreError::StaleHandle(self.progress_context()))
-            } else {
-                match self.deadline.checked_is_elapsed_at(now) {
-                    Some(false) => None,
-                    Some(true) => Some(CoreError::TimedOut(self.progress_context())),
-                    None => Some(CoreError::Validation(self.progress_context())),
-                }
-            };
+        if self.state.first_cause.is_none() {
+            self.state.first_cause =
+                if !self.state.current.get() || self.state.issuer.strong_count() == 0 {
+                    Some(CoreError::StaleHandle(self.progress_context()))
+                } else {
+                    match self.state.deadline.checked_is_elapsed_at(now) {
+                        Some(false) => None,
+                        Some(true) => Some(CoreError::TimedOut(self.progress_context())),
+                        None => Some(CoreError::Validation(self.progress_context())),
+                    }
+                };
         }
     }
     fn progress_context(&self) -> ErrorContext {
-        let (binding, generation) = self.route.binding();
+        let (binding, generation) = self.state.route.binding();
         ErrorContext::new(ErrorPhase::Delivery, RetryClass::Never)
-            .with_thing(self.instance.key().slot())
+            .with_thing(self.state.instance.key().slot())
             .with_binding(binding, generation)
     }
     pub fn settlement(&self) -> Option<&ProducerNotificationSettlement> {
-        self.settlement.as_ref()
+        self.state.settlement.as_ref()
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
-        self.first_cause.as_ref()
+        self.state.first_cause.as_ref()
     }
     pub fn cleanup_error(&self) -> Option<&CoreError> {
-        self.cleanup_error.as_ref()
+        self.state.cleanup_error.as_ref()
     }
     /// Terminal acknowledgement releases the original native slot and funding.
     pub fn acknowledge(mut self) -> Result<ProducerNotificationSettlement, Self> {
-        match self.settlement.take() {
+        match self.state.settlement.take() {
             Some(s) => Ok(s),
             None => Err(self),
         }
@@ -193,9 +231,10 @@ impl<P: NativeNotificationPublication> Drop for ProducerNotificationPublication<
     fn drop(&mut self) {
         // Dispose native work before releasing logical work/funding retention.
         self.native = None;
-        self.instance
+        self.state
+            .instance
             .notification_work
-            .set(self.instance.notification_work.get() - 1);
+            .set(self.state.instance.notification_work.get() - 1);
     }
 }
 
@@ -293,16 +332,18 @@ impl RawProducerServient {
             .set(instance.notification_work.get() + 1);
         Ok(ProducerNotificationPublication {
             native: Some(native),
-            current,
-            issuer: Rc::downgrade(&self.issuer),
-            route,
-            target,
-            deadline,
-            first_cause: None,
-            cleanup_error: None,
-            native_outcome: None,
-            settlement: None,
-            instance,
+            state: NotificationPublicationState {
+                current,
+                issuer: Rc::downgrade(&self.issuer),
+                route,
+                target,
+                deadline,
+                first_cause: None,
+                cleanup_error: None,
+                native_outcome: None,
+                settlement: None,
+                instance,
+            },
         })
     }
 }

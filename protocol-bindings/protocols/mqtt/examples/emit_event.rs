@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &mut budget(),&[provider.as_ref()],|s,op| matches!(s,ValidatedProducerScope::Event(n) if instance.supports_notification(&AffordanceTarget::Event(Arc::from(n)),op)))?;
         let definitions=prepared.operations().iter().map(|o| o.definition::<MqttNotificationDefinition>().expect("selected MQTT").clone()).collect();
         let mut owner=RawProducerServient::try_empty(RawProducerRegistryLimits {instances:1,behaviors_per_instance:1,target_name_bytes:64})?;
-        let native=service.participation(&owner,key,definitions)?;
+        let native=service.participation(&owner.participation_token(), key, definitions)?;
         let accounts=Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
         let mut exposure=ComposedProducerExposure::try_new(&owner,ComposedProducerInput {instance,prepared,
             providers:vec![provider],participants:vec![Box::new(native)],expected:None,handler_backing_bytes:0},
@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let end=Instant::now()+Duration::from_secs(3);
         loop {
             let native=exposure.participant_mut::<MqttNotificationRuntime>(0).expect("owned MQTT");
-            let _=native.step(&mut owner,&mut cx,&mut budget())?;
+            let _=owner.step_notifications(native, &mut cx, &mut budget())?;
             if let Some(error)=native.first_failure() { return Err(error.clone().into()); }
             match exposure.publish(&mut owner,&mut budget()) {
                 Ok(())=>break,
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Local Event publication: {:?}; subscriber delivery is observed separately",settlement.native.effect);
         exposure.begin_close();
         let native=exposure.participant_mut::<MqttNotificationRuntime>(0).expect("owned MQTT");
-        let _=native.step(&mut owner,&mut cx,&mut budget())?;
+        let _=owner.step_notifications(native, &mut cx, &mut budget())?;
         exposure.retire(&mut owner,&mut budget())?;
         if let Some(error)=settlement.cause { return Err(error.into()); }
         Ok(())

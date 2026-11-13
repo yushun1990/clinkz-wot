@@ -115,9 +115,14 @@ Lost handles cannot orphan work: the owner has a separate paid retirement path;
 root Drop uses only the application's qualified finite local abort for unfinished
 work, not a poll or a claim of completed native delivery.
 Native correlations, replies, cancellation and infrastructure cleanup remain at
-the Binding. The raw Host kernel itself has no native Action adapter or TD
-qualification; TD-driven mapping/validation and complete publication are separate
-composed capabilities. Automatic progress is not claimed by these manual facets.
+the Binding. The raw Host kernel drives the Core Action candidate/borrowed-reply
+contract;
+TD-driven mapping/validation and complete publication remain separate composed
+capabilities. HTTP Action and MQTT notification runtime crates depend normally
+on Core/Foundation and their native/data services, with no Servient dependency.
+Their passive publication facet is defined in Core. Only Servient retains logical
+Action handles/progress/settlement or reconciles native failures into revocation.
+Automatic progress is not claimed by these manual facets.
 It does not model Property observation or Event notification as finite exchanges: their
 establishment, delivery, reciprocal responses and stop require separate logical
 conversation owners.

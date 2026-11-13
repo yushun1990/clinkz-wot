@@ -2,6 +2,9 @@
 //! this module owns the actual description/authority/behavior linearization.
 use super::*;
 use clinkz_wot_core::action::{ActionRoute, ActionValidator};
+pub use clinkz_wot_core::publication::{
+    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
+};
 
 /// Bounded original-membership storage for this manually driven Host slice.
 pub const MAX_PRODUCER_PARTICIPANTS: usize = 32;
@@ -25,33 +28,6 @@ impl CapturedActionRoute {
             .try_fold(capacity.checked_mul(size_of::<Self>())?, |sum, route| {
                 sum.checked_add(route.target.name().map_or(0, str::len) + 2 * size_of::<usize>())
             })
-    }
-}
-
-/// Passive origin check for a native participant; cannot dispatch or publish.
-#[derive(Clone)]
-pub struct ProducerOwnerToken(Weak<()>);
-impl ProducerOwnerToken {
-    pub fn belongs_to(&self, owner: &RawProducerServient) -> bool {
-        self.0.as_ptr() == Rc::as_ptr(&owner.issuer)
-    }
-}
-
-/// Move-only identity of one native participation owner. It is neither a
-/// logical permission nor infrastructure shutdown authority. Implementations
-/// retain it until that participation's complete local disposal.
-pub struct ProducerParticipationId(Rc<()>);
-impl ProducerParticipationId {
-    pub fn new() -> Self {
-        Self(Rc::new(()))
-    }
-    pub fn same_owner(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-impl Default for ProducerParticipationId {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -259,11 +235,8 @@ impl ProducerPublication {
     ) -> bool {
         ids.len() == self.participants.len()
             && ids.clone().enumerate().all(|(i, id)| {
-                !ids.clone().take(i).any(|p| Rc::ptr_eq(&p.0, &id.0))
-                    && self
-                        .participants
-                        .iter()
-                        .any(|p| p.as_ptr() == Rc::as_ptr(&id.0))
+                !ids.clone().take(i).any(|p| p.same_owner(id))
+                    && self.participants.iter().any(|p| id.matches(p))
             })
     }
 
@@ -284,13 +257,13 @@ impl ProducerPublication {
         if ids
             .clone()
             .enumerate()
-            .any(|(i, id)| ids.clone().take(i).any(|prior| Rc::ptr_eq(&prior.0, &id.0)))
+            .any(|(i, id)| ids.clone().take(i).any(|prior| prior.same_owner(id)))
         {
             return Err(CoreError::Validation(context()));
         }
         for id in ids {
-            self.participants.push(Rc::downgrade(&id.0));
-            self.registry_participants.push(Rc::downgrade(&id.0));
+            self.participants.push(id.downgrade());
+            self.registry_participants.push(id.downgrade());
         }
         Ok(())
     }
@@ -353,113 +326,14 @@ impl Drop for ProducerPublication {
     }
 }
 
-/// Closed participation in one logical publication. This is a readiness and
-/// local ingress-gate lease, NOT an Engine-wide native session/resource API.
-/// Bindings may implement it over a shared listener, broker or other native
-/// owner with many Things. Every participant must already have been qualified
-/// against the complete final TD. The gate is installed in native ingress
-/// before setup; publication flips it without calling into linked code.
-pub trait ClosedProducerParticipation {
-    /// Immutable for this owner's entire lifetime, including retirement.
-    fn participation_id(&self) -> &ProducerParticipationId;
-    /// Retain the actual transferred capacity owner until native work, captured
-    /// backing and unread results are disposed. This cannot dispatch or do I/O.
-    fn retain_owner(&mut self, owner: Rc<dyn core::any::Any>);
-    /// Managed ownership handoff: the complete additional controlled backing
-    /// plus promised input/result capacity, only before this participation has
-    /// acquired unreserved native work. SDK/shared infrastructure stays native.
-    /// None means this participant has no managed Host admission contract.
-    fn admission_backing_bytes(
-        &self,
-        _owner: &RawProducerServient,
-        _key: ProducerInstanceKey,
-    ) -> Option<usize> {
-        None
-    }
-    /// Bounded local retirement intent, without polling I/O or calling an
-    /// application. Progress remains specific to the native participant.
-    fn begin_retire(&mut self);
-    /// Passive readiness for this exact logical instance and Servient owner.
-    /// Readiness alone does not establish qualified Form/operation coverage.
-    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool;
-    /// Exact native mapping/definition support. One participant may cover many
-    /// Forms and Things, but each selected operation has exactly one owner at
-    /// publication. This is not an Engine protocol matcher.
-    fn covers(
-        &self,
-        _key: ProducerInstanceKey,
-        _binding: (BindingId, BindingGeneration),
-        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
-        _form: u32,
-        _operation: Operation,
-        _definition: &dyn core::any::Any,
-    ) -> bool {
-        false
-    }
-    /// Exact number of prepared operation associations retained by this
-    /// participation, when its managed profile supplies a complete inventory.
-    /// This is not physical connection, route or subscription cardinality.
-    /// Shared prepared-backing deductions require this complete inventory;
-    /// wrappers must propagate it. None makes no such inventory claim.
-    fn qualified_operation_count(&self) -> Option<usize> {
-        None
-    }
-    /// Supply the actual source-free validation service for an invoke Form
-    /// which this participant covers. Missing service refuses publication,
-    /// including when the Action has no explicit input/output DataSchema.
-    /// Mapping and service are captured before the local commit, not borrowed
-    /// from an arbitrary RawActionRequest at ingress.
-    fn action_validation(
-        &self,
-        _key: ProducerInstanceKey,
-        _binding: (BindingId, BindingGeneration),
-        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
-        _form: u32,
-        _definition: &dyn core::any::Any,
-    ) -> Option<(ActionRoute, Rc<dyn ActionValidator>)> {
-        None
-    }
-    /// Supply the actual mapping for a covered query/cancel Form. This route
-    /// is captured with the invoke service before publication; native requests
-    /// cannot manufacture a control route by supplying their own key.
-    fn action_control_route(
-        &self,
-        _key: ProducerInstanceKey,
-        _binding: (BindingId, BindingGeneration),
-        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
-        _form: u32,
-        _operation: Operation,
-        _definition: &dyn core::any::Any,
-    ) -> Option<ActionRoute> {
-        None
-    }
-    /// Actual selected publication services and mapping for a covered Property observe
-    /// or Event subscribe Form. No native subscription or Engine subscriber is created.
-    fn notification_publication(
-        &self,
-        _key: ProducerInstanceKey,
-        _binding: (BindingId, BindingGeneration),
-        _site: clinkz_wot_core::thing::AffordanceSite<'_>,
-        _form: u32,
-        _definition: &dyn core::any::Any,
-    ) -> Option<(
-        clinkz_wot_core::publication::NotificationRoute,
-        Rc<dyn clinkz_wot_core::publication::ProducerNotificationServices>,
-        usize,
-    )> {
-        None
-    }
-    /// The native owner must consult this gate before offering semantic ingress.
-    /// It must be closed until publication and must not be shared between
-    /// independently published participations. Returning a gate is a passive
-    /// loan; all callbacks, including this one, run before the commit.
-    fn ingress_gate(&self) -> &Rc<Cell<bool>>;
-    /// True only after this participation's native obligations and unread
-    /// settlements have retired. The physical infrastructure may remain shared.
-    fn retired(&self) -> bool;
-}
-
+// A finite runtime contributes the passive Core publication facet.
 impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B> {
+    fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
+        owner.matches_issuer(&self.issuer) && self.binding.prepared_for_instance(key)
+    }
+    fn native_failure(&self) -> Option<&CoreError> {
+        self.first_cause.as_ref()
+    }
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.participation
     }
@@ -468,14 +342,14 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
     }
     fn admission_backing_bytes(
         &self,
-        owner: &RawProducerServient,
+        owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
         if self.state != RawFiniteState::Starting
             || self.native_started
             || self.retained_owner.is_some()
             || self.validation != FiniteValidation::Required
-            || self.issuer.as_ptr() != Rc::as_ptr(&owner.issuer)
+            || !owner.matches_issuer(&self.issuer)
             || !self.pair_is_current()
             || !self.binding.prepared_for_instance(key)
         {
@@ -495,10 +369,10 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
     fn begin_retire(&mut self) {
         self.begin_close();
     }
-    fn ready_for(&self, owner: &RawProducerServient, key: ProducerInstanceKey) -> bool {
+    fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         // A captured service cannot qualify dispatch that skips validation.
         // Explicitly unvalidated execution remains at activate_raw().
-        self.issuer.as_ptr() == Rc::as_ptr(&owner.issuer)
+        owner.matches_issuer(&self.issuer)
             && self.state == RawFiniteState::InstalledClosed
             && self.validation == FiniteValidation::Required
             && self.pair_is_current()
@@ -527,8 +401,27 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
 }
 
 impl RawProducerServient {
+    /// Reconcile native evidence at the logical owner. Native failure fences
+    /// this incarnation; already accepted work and sibling I/O keep their owners.
+    pub fn reconcile_participation(
+        &mut self,
+        key: ProducerInstanceKey,
+        participant: &mut dyn super::ClosedProducerParticipation,
+    ) -> CoreResult<()> {
+        if !participant.associated_with(&self.participation_token(), key) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        if participant.native_failure().is_some() {
+            self.revoke(key);
+            participant.begin_retire();
+        } else if participant.ingress_gate().get() && self.description(key).is_none() {
+            participant.begin_retire();
+        }
+        Ok(())
+    }
+
     pub fn participation_token(&self) -> ProducerOwnerToken {
-        ProducerOwnerToken(Rc::downgrade(&self.issuer))
+        ProducerOwnerToken::new(&self.issuer)
     }
     /// Preback the logical registry before any native setup. Empty does not
     /// confer acceptance, unlike constructing an already active raw registry.
@@ -667,7 +560,7 @@ impl RawProducerServient {
             || participants.len() > MAX_PRODUCER_PARTICIPANTS
             || !participants
                 .iter()
-                .all(|p| p.ready_for(self, publication.key))
+                .all(|p| p.ready_for(&self.participation_token(), publication.key))
         {
             return Err(CoreError::Validation(context()));
         }
