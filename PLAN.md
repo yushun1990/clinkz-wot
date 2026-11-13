@@ -14,12 +14,15 @@ remain separate future work.
 ## Delivery strategy: reusable, composable Engine execution
 
 The near-term engineering objective is **complete the reusable, composable WoT
-Engine execution architecture**, separating persistent logical instance
-associations from execution-capacity ownership while reusing eligible prepared
-meaning and qualified mappings. Basic
-Property/Action/Event and described collection coverage in both roles has reached
-a meaningful milestone. The real execution paths below are the foundation for
-this work; they do not establish architecture completion or v1 qualification.
+Engine execution architecture** through correct protocol/Engine authority,
+independent logical associations, checked reusable preparation and separately
+funded admitted work. The finite Host Consumer now has managed TD-ID
+registrations, non-revoking association views and independent `ConsumerCalls`
+capacity (PR #276); this completes a scoped finite handoff, not continuing
+Action/notification composition, Producer authority extraction or all-profile
+execution. Basic Property/Action/Event and described collection coverage in
+both roles has reached a meaningful milestone. These real execution paths do
+not establish architecture completion or v1 qualification.
 
 Separate invariant preparation from instance binding and accepted interaction
 work without prescribing a universal program format or new public type hierarchy.
@@ -151,11 +154,12 @@ production HTTPS, constrained-profile or v1 qualification. Those remain delivery
 
 | Priority | Product and architectural outcome | Evidence appropriate to the outcome |
 | --- | --- | --- |
-| 1 — Independent associations and funded admission | Keep independently authorized logical Things usable with reusable meaning/mappings and capacity supplied or acquired for admitted work. | Real finite HTTP execution with more associations than simultaneous calls; original authority, operands, aggregate/instance limits, reentry, revocation/replacement and funded normal/late disposal. |
-| 2 — Shared semantic and secure execution services | Broaden DataSchema/media/response meaning and TD-described security on the definition/instance boundary; deliver Host HTTPS, authentication, authorization and transport trust. | Supported assertions and security branches execute through actual captured services and native peers, without source-TD callbacks, silent weakening or credential leakage. |
-| 3 — Composable runtime and supported profiles | Extend checked reuse and application composition across finite, Action, notification and Producer capabilities; prove bounded progress, native sharing and portable representations. | Mixed real Binding work retains separate lifecycles and authority; Host/static/no-atomic evidence is scoped to supported capabilities. Measure preparation, per-instance and active-work costs before selecting caches, indexes or scheduling changes. |
-| 4 — Discovery/Directory clients | Compose bounded trusted retrieval, links/continuations and TD admission as an explicit client workflow. | Real endpoints and Directory peers, destination/credential policy, input/result/work limits, cancellation and final cleanup. |
-| 5 — Production and v1 integration | Qualify the retained role/operation, Host HTTP/HTTPS, security, Discovery and portable shared-layer scope through WP-700. | Independent interoperability, conformance, resource/performance, feature/profile and release evidence for the exact advertised scope. |
+| 1 — Producer native/semantic authority boundary | Remove the Binding-to-Servient execution authority leak (Review 10 F1). Binding owns native matching, correlation, I/O and retirement; Servient alone decides logical admission, dispatch and revocation. Begin with the existing real HTTP continuing Action path; do not prescribe a universal RPC/session or a callback facade that secretly forwards Engine authority. | HTTP Action invoke/query/cancel and original continuation/result/cleanup work through native candidates/opportunities and a protocol-neutral Servient handoff. The HTTP Binding no longer depends on `servient-finite` to dispatch application work; failure before/after publication, late outcomes and independent native release remain truthful. |
+| 2 — Reusable definition compilation and checked instance binding (0081) | Converge the already accepted definition/instance/authority split into useful cross-instance preparation and compilation reuse **before** extending the same coupling to more runtime families. Reuse only genuinely invariant work with checked Binding dependencies/operands; endpoint-specialized mappings remain specialized. No universal `CompiledProgram`, cache or persisted image is prescribed. | With fixed compatible definitions and increasing Thing instances, distinguish definition-compilation work from necessary TD input checks, instance binding/admission and native specialization. Demonstrate a real qualifying reuse path, changed-dependency refusal/recompilation, independent permissions/accounts and final physical release; do not label semantic-content sharing alone as compiler reuse. |
+| 3 — Continuing Consumer notification composition | Extend independent logical association and capacity ownership to established conversations; retain exact per-occurrence target and qualified source/verification context for fresh policy where required. Preserve native sharing/stop/response rights and fix Review 10 F2/F3 at affected service handoffs. | Real MQTT notification conversations remain independently authorized under shared compatible native interests. A concrete evidence-bearing source mapping tests per-occurrence policy without treating an unauthenticated topic as a verified principal; queued delivery, stop, loss, late work and physical cleanup retain their original owners. |
+| 4 — Continuing Action and multi-capability reuse | Decouple continuing invocation capacity and checked prepared-service ownership from per-instance Runtime construction. Integrate finite, Action, notification and qualified Producer capabilities under their common logical authority without a mega-Runtime; repair F2/F3 and obsolete adapters as the affected boundaries are changed. | Original invoke/query/cancel mappings and late outcomes survive initial exchange, replacement and retirement. Actual shared content/services are funded once, prepared declarations cannot silently change during runtime construction, and mixed HTTP/MQTT capabilities retain independent progress and cleanup. |
+| 5 — Secure execution and Discovery clients | Broaden actual DataSchema/media/security execution, Host HTTPS and explicit bounded trusted Discovery/Directory retrieval where their dependencies are ready; these can proceed independently of the cross-family sequence. | Supported assertions, security branches and trusted retrieval execute through actual providers and peers without source-TD callbacks, silent weakening, credential leakage or fabricated interoperability claims. |
+| 6 — Product integration and supported profiles | Converge practical application composition, Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification without prematurely freezing a universal facade or an automatic scheduler. | Supported role/operation/profile combinations have actual integration, conformance, resource/performance and lifecycle evidence for the advertised scope; unsupported combinations remain explicit. |
 
 Priorities express concentration, not sequential package gates. Security/HTTPS,
 Discovery and portable-profile work can advance with available dependencies;
@@ -183,14 +187,58 @@ independent of simultaneous execution capacity. Each admitted obligation retains
 its original instance, checked mapping, operands, accounts, result and cleanup.
 An endpoint specialized into a native artifact remains specialized.
 
-Concentrate first on independently usable Consumer associations and funded finite
-admission through existing HTTP execution. Next, extend original occurrence
-context and independent native participation where notification policy needs
-them; then carry the boundary across continuing Action obligations and separately
-qualified Producer exposures. These outcomes guide useful increments, not
-mandatory family containers or an all-protocol gate. Check each handoff against
-the other families before fixing its API. F1/F2/F3 remain scoped prerequisites
-where their affected authority or service handoffs are changed.
+The finite Consumer association/capacity separation is implemented by PR #276:
+the managed owner resolves TD IDs/configurations without retaining application
+handles or prepaying vacant finite call slots. It still provides neither a
+universal multi-family owner nor automatic scheduling/physical drain.
+
+Prioritize correcting **Producer execution authority (Review 10 F1)** before
+broadening Producer composition. Current HTTP Action and MQTT native runtimes
+receive `RawProducerServient` and can invoke, acknowledge or revoke logical
+work; this contradicts the Binding/Servient dependency and authority boundary.
+Use real HTTP Action invoke/query/cancel to establish native candidates,
+opportunities and failure handoff into Servient-owned authorization, dispatch
+and revocation. Preserve original native correlation, continuing Action and
+result/cleanup ownership. Remove the actual reverse dependency; do not simply
+hide it in a dispatch callback or add a universal RPC/session abstraction.
+The precise trait and carrier design must follow source-level implementation
+analysis; the responsibility decision does not preselect its ABI.
+
+Resolve [topic 0081](workspace/0081-reusable-plan-and-thing-identity.md)
+at two distinct levels. **The architectural decision is already selected:**
+reusable immutable preparation/definition, checked Binding-specific lowering,
+per-instance identity/operands/policy/authority and independently owned native
+infrastructure are different lifetimes; a Thing or Plan Set generation cannot
+mandate a fresh complete compilation or duplicate physical backing. Keep this
+decision active during F1 so the repaired SPI cannot reintroduce one full
+program per Thing. Reconcile 0081's historical DISCUSSING text with the
+current Planning and compiled-plan contracts without creating new abstractions.
+
+**The remaining capability is cross-instance compilation-work reuse, not just
+schema/content reuse.** Current finite `prepare_with_content` shares semantic
+content but still compiles each selected native mapping. After F1, before
+generalizing the Action/Notification instance handoffs, establish a concrete
+prepare-once/checked-bind-many path for genuinely equivalent compiled work,
+with a complete Binding dependency/operand contract and separately funded
+instance admission. If a native artifact includes a fixed endpoint or other
+instance-dependent data, it remains specialized; other immutable compilation
+work may still be reused. Evaluate definition count versus instance count and
+separate actual compilation from input validation, mapping qualification and
+binding costs. Neither post-compilation interning nor shared transport sessions
+alone meets this objective. Automatic caching, disk persistence, universal
+`CompiledProgram` and fleet-scale throughput are independent optional choices,
+not prerequisites.
+
+Then extend the same independently retained association/capacity principles
+where continuing Consumer Notification and Action lifetimes need them. Original
+notification occurrence context must reach the relevant fresh policy without
+equating a native topic with authenticated identity; compatible native sharing
+must keep independent logical rights and physical leases. Repair F2/F3 shared
+service charging and prepared-declaration fencing when those handoffs are
+changed. Preserve family-specific state and explicit application scheduling;
+do not build a mandatory mega-Runtime, automatic wake subsystem or global
+subscription pool. These are independently useful capabilities, not an
+all-family migration gate.
 
 Select subsequent increments against remaining product capabilities and the
 actual assumptions exposed by those integrations. Preserve distinct Property,
