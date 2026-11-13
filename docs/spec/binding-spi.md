@@ -169,9 +169,13 @@ record removal follows Servient acknowledgement, whose transferred result owner
 still retains its original capacity until disposal.
 
 Native failure is evidence, not a logical revocation decision. Servient's
-`reconcile_participation` validates issuer/instance association and decides
-revocation/retirement. `step_actions` and `step_notifications` apply that boundary
-for their distinct facets. Direct native polling requires caller-driven
+`reconcile_participation` validates issuer/instance association and requires the
+participant's exact identity in that incarnation's committed native set before
+propagating failure to logical revocation. A failed uncommitted participant may
+retire its own native work before or after another participant publishes the same
+key; passive origin/key association cannot revoke that publication or its Actions.
+`step_actions` and `step_notifications` apply that boundary for their distinct
+facets. Direct native polling requires caller-driven
 reconciliation; there is no background failure propagation or automatic scheduler.
 MQTT readiness/health/close therefore receives no logical owner. Logical
 notification publication metadata is funded by Servient; native participants

@@ -401,8 +401,9 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
 }
 
 impl RawProducerServient {
-    /// Reconcile native evidence at the logical owner. Native failure fences
-    /// this incarnation; already accepted work and sibling I/O keep their owners.
+    /// Reconcile native evidence at the logical owner. Only a committed member's
+    /// failure fences this incarnation; uncommitted owners may still retire
+    /// their own native work without affecting a publication or accepted Actions.
     pub fn reconcile_participation(
         &mut self,
         key: ProducerInstanceKey,
@@ -412,7 +413,14 @@ impl RawProducerServient {
             return Err(CoreError::StaleHandle(context()));
         }
         if participant.native_failure().is_some() {
-            self.revoke(key);
+            let id = participant.participation_id();
+            let committed_member = self.instances.iter().any(|entry| {
+                entry.instance.key() == key
+                    && entry.participations.iter().any(|member| id.matches(member))
+            });
+            if committed_member {
+                self.revoke(key);
+            }
             participant.begin_retire();
         } else if participant.ingress_gate().get() && self.description(key).is_none() {
             participant.begin_retire();

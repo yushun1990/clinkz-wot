@@ -203,7 +203,8 @@ pub trait ClosedProducerParticipation {
     fn notification_publication_slots(&self) -> usize {
         0
     }
-    /// Passive association, never permission to dispatch or revoke.
+    /// Passive issuer/key association, never proof of committed participation
+    /// membership or permission to dispatch or revoke.
     fn associated_with(&self, _owner: &ProducerOwnerToken, _key: ProducerInstanceKey) -> bool {
         false
     }

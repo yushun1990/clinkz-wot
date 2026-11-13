@@ -90,6 +90,123 @@ fn native_http_candidate_has_no_application_dispatch_or_revocation_authority() {
     );
     TcpListener::bind(address).unwrap();
 }
+
+#[test]
+fn failed_uncommitted_participant_preserves_publication_and_original_action() {
+    for published_before_failure in [false, true] {
+        let address = addr();
+        let mut owner = owner();
+        let counts = Rc::new(Counters::default());
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let mut live = create(
+            &owner,
+            key(Generation::INITIAL),
+            address,
+            None,
+            Rc::clone(&counts),
+            None,
+            Arc::clone(&bank),
+        );
+        let key = live.key();
+        live.participant_mut::<HttpActionRuntime>(0)
+            .unwrap()
+            .install_closed()
+            .unwrap();
+        let mut accepted = None;
+        if published_before_failure {
+            live.publish(&mut owner, &mut budget()).unwrap();
+            accepted = Some(send(&mut owner, &mut live, address, "POST", "/run", "12"));
+        }
+
+        // Equivalent definitions and passive issuer/key association do not
+        // make this new native owner a committed participant of the Thing.
+        let text = td(address, None);
+        let provider = HttpActionProducer::new(
+            HttpProducerConfig::for_loopback(address).unwrap(),
+            BindingId::new(61),
+            BindingGeneration::INITIAL,
+        );
+        let prepared = prepare_thing(
+            &text,
+            key,
+            GatewayDefaultV1::LIMITS,
+            &mut budget(),
+            &[&provider],
+            |_, _| true,
+        )
+        .unwrap();
+        let definitions = prepared
+            .operations()
+            .iter()
+            .map(|op| op.definition::<HttpActionDefinition>().unwrap().clone())
+            .collect();
+        let mut extra =
+            HttpActionRuntime::try_new(&owner.participation_token(), key, definitions, 4).unwrap();
+        assert!(extra.associated_with(&owner.participation_token(), key));
+        assert!(
+            !extra.participation_id().same_owner(
+                live.participant_mut::<HttpActionRuntime>(0)
+                    .unwrap()
+                    .participation_id(),
+            )
+        );
+        // The live closed/serving listener owns the address in both cases.
+        assert!(extra.install_closed().is_err());
+        let failure = extra.native_failure().unwrap().clone();
+        for _ in 0..2 {
+            owner.reconcile_participation(key, &mut extra).unwrap();
+            assert!(extra.retired());
+            assert_eq!(extra.native_failure(), Some(&failure));
+        }
+        if !published_before_failure {
+            assert!(owner.description(key).is_none());
+            // Prepublication failure cleanup cannot cancel a healthy staged
+            // publication or prevent its original native set from committing.
+            live.publish(&mut owner, &mut budget()).unwrap();
+        }
+        assert_eq!(owner.description(key), Some(text.as_ref()));
+        let accepted =
+            accepted.unwrap_or_else(|| send(&mut owner, &mut live, address, "POST", "/run", "12"));
+        assert!(accepted.starts_with("HTTP/1.1 202"));
+        let value: serde_json::Value =
+            serde_json::from_str(accepted.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let wire_id = value["id"].as_str().unwrap();
+        let id = wire_id.split_once('-').unwrap().1.parse().unwrap();
+        assert!(
+            send(
+                &mut owner,
+                &mut live,
+                address,
+                "GET",
+                &format!("/status?id={wire_id}"),
+                "",
+            )
+            .contains("\"running\"")
+        );
+        counts.complete.set(true);
+        let native = live.participant_mut::<HttpActionRuntime>(0).unwrap();
+        assert_eq!(
+            owner.progress_actions(native, &mut budget()).unwrap(),
+            Poll::Ready(Some(id)),
+        );
+        let result = owner.acknowledge_action(native, id).unwrap().unwrap();
+        assert!(!result.cancel_requested);
+        assert_eq!(counts.cancelled.get(), 0);
+        assert_eq!(counts.invoked.get(), 1);
+        assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
+        live.begin_close();
+        live.retire(&mut owner, &mut budget()).unwrap();
+        drop(live);
+        assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
+        drop(result);
+        assert_eq!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+            0
+        );
+        TcpListener::bind(address).unwrap();
+    }
+}
+
 fn send_report(
     owner: &mut RawProducerServient,
     exposure: &mut ComposedProducerExposure,
