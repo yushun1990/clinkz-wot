@@ -18,9 +18,10 @@ fn finite(
     owner: &ConsumerInstance,
     prepared: PreparedConsumer,
     bank: Arc<HostResourceAccounts>,
-) -> ConsumerRuntime {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let (defs, funding) = prepared.into_execution();
-    ConsumerRuntime::try_new(owner.reference(), defs, funding, bank, 2)
+    StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
+        .map(|association| (association, ConsumerCalls::try_new(bank, 2).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn integer(n: &str) -> Option<Payload> {
@@ -46,9 +47,9 @@ fn downstream_write_uses_its_own_native_completion_and_retains_late_success_with
         drop(registrations);
         let owner = instance();
         let rt = finite(&owner, prepared, bank.clone());
-        let mut read = rt
-            .read_property("a", Deadline::NONE, now(), &mut work())
-            .unwrap();
+        let mut read =
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+                .unwrap();
         assert!(
             read.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
                 .is_pending()
@@ -56,8 +57,9 @@ fn downstream_write_uses_its_own_native_completion_and_retains_late_success_with
         exchange(&peer, b"11");
         drop(poll(&mut read));
         drop(read);
-        let mut call = rt
-            .write_property(
+        let mut call =
+            rt.0.write_property(
+                &rt.1,
                 "a",
                 Payload::new(b"7".as_slice(), "application/json"),
                 Deadline::NONE,
@@ -131,9 +133,9 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
     });
     let owner = instance();
     let rt = finite(&owner, prepared, bank.clone());
-    let mut read = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut read =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     let result = poll(&mut read);
     assert_eq!(result.operation(), Operation::ReadProperty);
     assert!(matches!(
@@ -142,9 +144,9 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
     ));
     drop(result);
     for n in ["7", "8"] {
-        let mut call = rt
-            .invoke_action("a", integer(n), Deadline::NONE, now(), &mut work())
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let mut call =
+            rt.0.invoke_action(&rt.1, "a", integer(n), Deadline::NONE, now(), &mut work())
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let result = poll(&mut call);
         assert_eq!(result.consumer(), &owner.reference());
         assert_eq!(result.operation(), Operation::InvokeAction);
@@ -197,10 +199,10 @@ fn action_roles_refuse_missing_invalid_oversize_unpaid_input_and_unsupported_con
     let baseline = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
     for input in [None, integer("false"), integer(&"7".repeat(1025))] {
         let original = input.clone();
-        let error = rt
-            .invoke_action("a", input, Deadline::NONE, now(), &mut work())
-            .err()
-            .unwrap();
+        let error =
+            rt.0.invoke_action(&rt.1, "a", input, Deadline::NONE, now(), &mut work())
+                .err()
+                .unwrap();
         assert_eq!(error.into_input(), original);
         assert_eq!(
             bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
@@ -210,11 +212,12 @@ fn action_roles_refuse_missing_invalid_oversize_unpaid_input_and_unsupported_con
     let mut short = work();
     short.set_remaining(WorkClass::CodecInputBytes, 4095);
     assert!(
-        rt.invoke_action("a", integer("7"), Deadline::NONE, now(), &mut short)
+        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut short)
             .is_err()
     );
     assert!(
-        rt.invoke_action(
+        rt.0.invoke_action(
+            &rt.1,
             "continuing",
             integer("7"),
             Deadline::NONE,
@@ -260,9 +263,9 @@ fn action_absent_data_roles_allow_empty_success_but_reject_unexpected_output() {
                     prepare(&registrations, &td, bank.clone()),
                     bank.clone(),
                 );
-                let mut call = rt
-                    .invoke_action("a", None, Deadline::NONE, now(), &mut work())
-                    .unwrap_or_else(|_| panic!());
+                let mut call =
+                    rt.0.invoke_action(&rt.1, "a", None, Deadline::NONE, now(), &mut work())
+                        .unwrap_or_else(|_| panic!());
                 let mut cx = Context::from_waker(Waker::noop());
                 let no_codec = || {
                     let mut budget = work();
@@ -327,7 +330,7 @@ fn action_without_output_declines_unqualified_different_response_media_before_na
         let owner = instance();
         let rt = finite(&owner, prepared, bank.clone());
         assert!(
-            rt.invoke_action("a", integer("7"), Deadline::NONE, now(), &mut work())
+            rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
                 .is_err()
         );
         assert_eq!(p.native.load(Ordering::Relaxed), 0);
@@ -362,9 +365,9 @@ fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_
             ),
             bank.clone(),
         );
-        let mut call = rt
-            .read_property("a", Deadline::NONE, now(), &mut work())
-            .unwrap();
+        let mut call =
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+                .unwrap();
         let mut cx = Context::from_waker(Waker::noop());
         let quantum = || {
             let mut budget = work();
@@ -402,7 +405,7 @@ fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_
         for credit in [0, 1] {
             let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, credit);
             assert!(call.poll(&mut cx, now(), &mut budget).is_pending());
-            assert!(!rt.is_idle());
+            assert!(!rt.1.is_idle());
             assert_eq!(p.calls.load(Ordering::Relaxed), 0);
             assert_eq!(p.validates.load(Ordering::Relaxed), 1);
             assert_eq!(
@@ -513,11 +516,12 @@ fn instance_and_operation_policy_and_callback_revocation_are_checked_before_effe
     );
     assert!(
         other
-            .read_property("a", Deadline::NONE, now(), &mut work())
+            .0
+            .read_property(&other.1, "a", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     assert_eq!(
-        rt.invoke_action("a", integer("7"), Deadline::NONE, now(), &mut work())
+        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
             .err()
             .unwrap()
             .into_input(),
@@ -525,7 +529,7 @@ fn instance_and_operation_policy_and_callback_revocation_are_checked_before_effe
     );
     policy.revoke.store(true, Ordering::Relaxed);
     assert!(matches!(
-        rt.read_property("a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
             .err(),
         Some(CoreError::StaleHandle(_))
     ));
@@ -586,10 +590,10 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
             bank.clone(),
         );
         if input_callback {
-            let rejected = rt
-                .invoke_action("a", integer("7"), Deadline::NONE, now(), &mut work())
-                .err()
-                .unwrap();
+            let rejected =
+                rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
+                    .err()
+                    .unwrap();
             assert_eq!(
                 matches!(rejected.error().error(), CoreError::StaleHandle(_)),
                 !change_policy
@@ -598,9 +602,9 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
             assert_eq!(p.native.load(Ordering::Relaxed), 0);
         } else {
             let peer = std::thread::spawn(move || exchange(&peer, b"7"));
-            let mut call = rt
-                .read_property("a", Deadline::NONE, now(), &mut work())
-                .unwrap();
+            let mut call =
+                rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+                    .unwrap();
             let result = poll(&mut call);
             assert!(result.result().is_err());
             assert_eq!(
@@ -633,9 +637,9 @@ fn cancelled_action_retains_original_input_late_result_native_socket_and_charges
         bank.clone(),
     );
     let baseline = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
-    let mut call = rt
-        .invoke_action("a", integer("7"), Deadline::NONE, now(), &mut work())
-        .unwrap_or_else(|_| panic!());
+    let mut call =
+        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
+            .unwrap_or_else(|_| panic!());
     let mut native_only = work();
     native_only.set_remaining(WorkClass::CodecInputBytes, 0);
     assert!(
@@ -986,7 +990,7 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     let mut sibling = observations(&sibling_owner, hub.clone());
     let mut a = subscribe(&mut first);
     let mut b = subscribe(&mut sibling);
-    assert_eq!(a.identity().consumer, rt.consumer());
+    assert_eq!(a.identity().consumer, rt.0.consumer());
     assert_eq!(progress(&mut first, &a), NotificationState::Active);
     assert_eq!(progress(&mut sibling, &b), NotificationState::Active);
     assert!(
@@ -1000,9 +1004,9 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     observation_peer.send_to(b"0:17", local).unwrap();
     deliver(&mut first, &mut a);
     let peer = std::thread::spawn(move || exchange(&peer, b"7"));
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     let mut cx = Context::from_waker(Waker::noop());
     assert!(
         call.poll(&mut cx, now(), &mut WorkBudget::new())
@@ -1043,7 +1047,7 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     assert!(hub.receivers.borrow().contains_key(&1));
     observation_peer.send_to(b"1:17", local).unwrap();
     deliver(&mut sibling, &mut b);
-    rt.begin_close();
+    rt.1.begin_close();
     assert!(sibling_owner.reference().is_current());
     drop(late);
     drop(call);
@@ -1074,7 +1078,7 @@ fn closing_finite_facet_keeps_same_consumers_notification_live_and_callback_revo
     let mut notifications = observations(&owner, hub.clone());
     let mut cursor = subscribe(&mut notifications);
     progress(&mut notifications, &cursor);
-    rt.begin_close();
+    rt.1.begin_close();
     drop(rt);
     peer.send_to(b"0:17", local).unwrap();
     deliver(&mut notifications, &mut cursor);

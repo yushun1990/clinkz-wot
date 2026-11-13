@@ -153,8 +153,19 @@ withdrew availability, not the enduring product goals. Historical evidence and
 commands stay tied to their original revisions.
 
 
-The same source-free execution crate also contains the independent finite
-`consumer::ConsumerRuntime`. Planning owns open registration/selection and paid
+The same source-free execution crate contains the finite `ConsumerOwner` lifecycle
+boundary, non-revoking `ConsumerAssociation` views and independent `ConsumerCalls`
+work storage. Registered instances/facets have one actual logical owner; dropping
+an application handle never removes them. Standalone ownership remains a separate
+low-level representation; named configuration adoption consumes its unique
+association authority, while managed instance authority is created by its owner. Persistent
+registration and finite capacity have independent cardinalities; neither implies
+protocol selection, an executor or an authority-change notification service.
+That owner also resolves public TD IDs and named access configurations, so losing
+application views does not lose targeted management. `servient::consumer` adds
+only TD-aware ID ingress, rejecting an absent ID without retaining a TD or adding
+another registry. The finite execution crate still depends only on Core/Foundation.
+Planning owns open registration/selection and paid
 owned compilation; Core owns immutable completed Consumer definitions and service
 contracts. Execution consumes those definitions without an upward TD/Planning
 edge. The shared opaque Host bank now lives in Core; existing Servient account

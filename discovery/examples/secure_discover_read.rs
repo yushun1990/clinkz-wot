@@ -10,7 +10,9 @@ use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::{
     ConsumerRegistrationInput, ConsumerRegistry, ConsumerSelector,
 };
-use clinkz_wot_servient_finite::consumer::{ConsumerCall, ConsumerRuntime, ConsumerSettlement};
+use clinkz_wot_servient_finite::consumer::{
+    ConsumerCall, ConsumerCalls, ConsumerSettlement, StandaloneConsumerAssociation,
+};
 use std::{
     sync::{
         Arc,
@@ -102,7 +104,7 @@ pub(crate) fn prepare_read(
     registration: ConsumerRegistrationInput,
     instance: &ConsumerInstance,
     accounts: &Arc<HostResourceAccounts>,
-) -> CoreResult<ConsumerRuntime> {
+) -> CoreResult<(StandaloneConsumerAssociation, ConsumerCalls)> {
     let registry = ConsumerRegistry::try_new(vec![registration], accounts)
         .map_err(|e| e.error().error().clone())?;
     let prepared = registry.prepare(
@@ -138,13 +140,18 @@ pub(crate) fn prepare_read(
             ))
         })?;
     drop(registry);
-    ConsumerRuntime::try_new(
+    StandaloneConsumerAssociation::try_new(
         instance.reference(),
         vec![selected],
         funding,
         accounts.clone(),
-        1,
     )
+    .map(|association| {
+        (
+            association,
+            ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+        )
+    })
     .map_err(|e| e.error().error().clone())
 }
 
@@ -258,7 +265,9 @@ fn main() {
         .unwrap();
         drop(selected);
         let mut call = runtime
+            .0
             .read_property(
+                &runtime.1,
                 &args[4],
                 Deadline::at(now().checked_add_ticks(4_000).unwrap()),
                 now(),

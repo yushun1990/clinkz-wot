@@ -14,8 +14,9 @@ remain separate future work.
 ## Delivery strategy: reusable, composable Engine execution
 
 The near-term engineering objective is **complete the reusable, composable WoT
-Engine execution architecture**, starting with checked reuse of eligible prepared
-execution content across independently bound logical Thing instances. Basic
+Engine execution architecture**, separating persistent logical instance
+associations from execution-capacity ownership while reusing eligible prepared
+meaning and qualified mappings. Basic
 Property/Action/Event and described collection coverage in both roles has reached
 a meaningful milestone. The real execution paths below are the foundation for
 this work; they do not establish architecture completion or v1 qualification.
@@ -150,7 +151,7 @@ production HTTPS, constrained-profile or v1 qualification. Those remain delivery
 
 | Priority | Product and architectural outcome | Evidence appropriate to the outcome |
 | --- | --- | --- |
-| 1 — Reusable definitions and checked instance binding | Prepare eligible invariant content once and bind independent logical Things with their actual endpoints, services, policy, authority and accounts. Retain existing correct interaction and native ownership boundaries. | Existing real interaction paths demonstrate actual shared content, complete selected support, incompatible-bind refusal, independent revocation/replacement, late results and exact final release. |
+| 1 — Independent associations and funded admission | Keep independently authorized logical Things usable with reusable meaning/mappings and capacity supplied or acquired for admitted work. | Real finite HTTP execution with more associations than simultaneous calls; original authority, operands, aggregate/instance limits, reentry, revocation/replacement and funded normal/late disposal. |
 | 2 — Shared semantic and secure execution services | Broaden DataSchema/media/response meaning and TD-described security on the definition/instance boundary; deliver Host HTTPS, authentication, authorization and transport trust. | Supported assertions and security branches execute through actual captured services and native peers, without source-TD callbacks, silent weakening or credential leakage. |
 | 3 — Composable runtime and supported profiles | Extend checked reuse and application composition across finite, Action, notification and Producer capabilities; prove bounded progress, native sharing and portable representations. | Mixed real Binding work retains separate lifecycles and authority; Host/static/no-atomic evidence is scoped to supported capabilities. Measure preparation, per-instance and active-work costs before selecting caches, indexes or scheduling changes. |
 | 4 — Discovery/Directory clients | Compose bounded trusted retrieval, links/continuations and TD admission as an explicit client workflow. | Real endpoints and Directory peers, destination/credential policy, input/result/work limits, cancellation and final cleanup. |
@@ -173,26 +174,23 @@ Detailed contracts remain in [Planning](docs/spec/planning.md),
 [Core](docs/spec/interaction-core.md), [Binding SPI](docs/spec/binding-spi.md),
 [Runtime safety](docs/spec/runtime-safety.md) and [Foundation](docs/spec/foundation.md).
 
-The first increment should demonstrate checked reuse in the existing Host HTTP
-ReadAllProperties path: share its eligible prepared member/data meaning across
-independent Consumer instances, qualify each actual endpoint/native mapping,
-and retain separate policy, capacity, calls and results. Exact ownership,
-compatibility analysis and falsifiable acceptance are scoped in
-[Review 09](docs/reviews/review-09-engine-maturity-and-roadmap.md). This establishes
-the boundary using existing validation, without requiring new DataSchema
-constraints, automatic caches or universal native-artifact reuse. An endpoint
-embedded in a native artifact cannot become a free instance operand by assertion.
+The ownership direction in
+[Review 10](docs/reviews/review-10-engine-execution-architecture.md) supersedes
+the earlier ReadAllProperties-first implementation sequence. Existing checked
+content/mapping reuse is a foundation, not a reason to preserve per-instance
+Runtime containers or prepaid idle Call Slots. Persistent usability must be
+independent of simultaneous execution capacity. Each admitted obligation retains
+its original instance, checked mapping, operands, accounts, result and cleanup.
+An endpoint specialized into a native artifact remains specialized.
 
-Architecture acceptance requires an actual reusable-content/instance-binding
-seam in the preparation-to-execution handoff, not merely an `Arc` around a
-Property member table, an interned copy of fully prepared per-instance output,
-or two unchanged runtimes reading different URLs. The shared content must be
-prepared independently of instance authority; each instance must separately
-qualify and bind actual native mappings, policy, operands and funding without
-repeating that shared semantic preparation. The boundary must remain suitable
-for later shared DataSchema/security meaning without making a protocol-specific
-or ReadAllProperties-only framework. Demonstrate the distinct lifetimes, resource
-owners and measurable sharing benefit; do not require universal native reuse.
+Concentrate first on independently usable Consumer associations and funded finite
+admission through existing HTTP execution. Next, extend original occurrence
+context and independent native participation where notification policy needs
+them; then carry the boundary across continuing Action obligations and separately
+qualified Producer exposures. These outcomes guide useful increments, not
+mandatory family containers or an all-protocol gate. Check each handoff against
+the other families before fixing its API. F1/F2/F3 remain scoped prerequisites
+where their affected authority or service handoffs are changed.
 
 Select subsequent increments against remaining product capabilities and the
 actual assumptions exposed by those integrations. Preserve distinct Property,

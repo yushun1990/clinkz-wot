@@ -293,10 +293,75 @@ controls; no finite-call substitution or package/gate acceptance is implied.
 The source-free `servient-finite::consumer` owner consumes Core instance bindings and
 pins their exact actual execution/configuration and services. It accepts no
 call-time executor, codec, validator, security or configuration override. Managed
-call admission refuses a foreign parent bank and funds native lifetime, complete
-result backing, callback temporary and cleanup before invocation. The immutable
-startup registry layout remains caller-provisioned Host construction; actual
-retained services/registration backing have explicit original funding.
+association construction refuses bindings from a foreign instance bank. Finite
+admission accepts separately funded capacity, while retaining the original
+native/services and complete result/cleanup obligations.
+
+`ConsumerAssociation` and `ConsumerCalls` replace the bundled `ConsumerRuntime`
+constructor directly. Associations retain no vacant Call Slots; an explicitly
+chosen work owner can serve many instances, and each association can use several
+owners. The existing `FiniteCallState`, reserved-slot checkout, independent
+controls, late-result validation and finite native disposal remain. Original
+binding wrapper backing now survives selected settlement retention independently
+of the association's unselected mappings. Exact scopes and account ownership are
+specified in [Runtime Safety](../spec/runtime-safety.md) and
+[Foundation](../spec/foundation.md).
+
+The real HTTP [independent-capacity regressions](../../protocol-bindings/protocols/http/tests/support/independent_capacity.rs)
+run with `cargo test --locked -p clinkz-wot-binding-http --test uri_variables`.
+They exercise eight independent associations over one exact qualified mapping
+and one slot, two permitted destinations, independent work/instance quota refusal,
+retained input/variables, fixed-target refusal, reentry, late results across root
+loss/replacement and abandoned real-socket disposal. Existing HTTP callback,
+structured-data, reuse and downstream finite/Action/notification regressions
+remain applicable after direct caller migration.
+
+The [managed HTTP regressions](../../protocol-bindings/protocols/http/tests/support/managed_capacity.rs)
+extend that command with non-revoking handle loss, explicit facet/instance
+removal and replacement, owner shutdown, silent-peer retention with zero credit
+then funded cleanup, and abandoned A with active or settled B in both loss orders.
+`ConsumerOwner` creates unique instance authority and consumes named standalone association authority, then
+returns non-revoking handles/views. Registration metadata and call capacity have
+separate limits and funding. Original identity/tombstone funding survives stale
+handles; selected native/mapping/result ownership survives accepted work.
+The [callback fixture](../../protocol-bindings/protocols/http/tests/consumer_callbacks.rs)
+also exercises explicit managed removal during credential issuance, original
+input recovery, shutdown-before-reentrant-service-destruction, and facade loss
+during native checkout. No source/driver registry, eventfd or automatic
+authority-change notification is retained. The application supplies lifecycle
+progress, clock observations and actual timer wakeups where required.
+
+The same managed HTTP fixture covers TD-ID-addressed registration/read/removal
+after every Thing view is dropped, independent named configurations under one
+identity, configuration update with retained original context, and same-ID
+recreation while old work/results remain live. Source-aware ID ingress lives in
+`servient::consumer`; the source-free owner performs lookup and management in
+its actual registry. Anonymous TD parsing/preparation remains valid; this named
+ingress requires an ID. Duplicate live IDs refuse, missing configurations never
+fall back, and snapshot-conditioned management stays distinct from a command
+targeting the current ID. [Management tests](../../servient/finite/tests/consumer_lifecycle.rs)
+cover recovery, duplicate scopes, refusal and final authority backing.
+
+The registry uses individually funded AVL nodes and private reusable slot
+tickets; no operation shifts a population-sized array. Tests cover a million-entry
+configured limit without eager allocation, 4096 long-prefix IDs, and 6000 mixed
+public lifecycle workload steps at each of 64 and 4096 initial instances with the same
+4096 QueueOperations allowance. A separate map model checks original identities,
+refusal, removal/recreation and replacement. Private tree tests inspect ordering,
+balance, stored heights and counts throughout 20,000 mixed mutations.
+
+The managed HTTP fixture retains its 1024-credit admission cases and adds repeated
+removal/recreation and configuration changes among 2048 Things while original
+calls/results retain identity, sockets, quotas and cleanup. Refusal sweeps verify
+partial node-acquisition refunds and preservation of a reusable ticket. Reentrant
+service destruction and independent work-owner cleanup remain exercised. These
+are focused correctness/complexity claims, not production latency qualification.
+
+This is bounded Host finite capability with caller-driven execution,
+not continuing Action, notification or Producer association/capacity
+implementation. HTTP's one-exchange-per-native-
+registration restriction remains. F1/F2/F3 are unchanged outside the affected
+finite path; no gate, package, milestone or profile acceptance is inferred.
 
 The [reusable execution fixture](../../protocol-bindings/protocols/http/tests/reusable_execution.rs)
 executes independent HTTP Consumers from one semantic preparation, specialized
@@ -312,8 +377,8 @@ or portable execution.
 The [multi-instance characterization](../evidence/consumer-multi-instance-scaling.md)
 extends this finite Host path to increasing populations and active fractions,
 with independent policy/accounts, explicit native lanes, distinct targets,
-allocator/reservation separation and final retirement evidence. It retains the
-current runtime layout as provisional and records its dense account/slot costs
+allocator/reservation separation and final retirement evidence. It records the
+prior bundled runtime layout and its dense account/slot costs
 and preparation limits; no package or profile qualification is implied.
 
 Calls and abandoned-handle cleanup retain their original native owner and first

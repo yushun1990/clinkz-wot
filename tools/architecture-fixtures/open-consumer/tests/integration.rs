@@ -70,11 +70,11 @@ fn instance() -> ConsumerInstance {
     ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL))
 }
 struct Runtime {
-    inner: ConsumerRuntime,
+    inner: (StandaloneConsumerAssociation, ConsumerCalls),
     _instance: ConsumerInstance,
 }
 impl core::ops::Deref for Runtime {
-    type Target = ConsumerRuntime;
+    type Target = (StandaloneConsumerAssociation, ConsumerCalls);
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
@@ -82,7 +82,8 @@ impl core::ops::Deref for Runtime {
 fn runtime(prepared: PreparedConsumer, bank: Arc<HostResourceAccounts>) -> Runtime {
     let (defs, funding) = prepared.into_execution();
     let owner = instance();
-    let inner = ConsumerRuntime::try_new(owner.reference(), defs, funding, bank, 1)
+    let inner = StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
+        .map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     Runtime {
         inner,
@@ -205,9 +206,9 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
         .unwrap();
     io.block_on(async {
         for name in ["a", "a", "b"] {
-            let mut call = rt
-                .read_property(name, Deadline::NONE, now(), &mut work())
-                .unwrap();
+            let mut call =
+                rt.0.read_property(&rt.1, name, Deadline::NONE, now(), &mut work())
+                    .unwrap();
             let start = Instant::now();
             let settlement = loop {
                 if let Poll::Ready(s) =
@@ -437,22 +438,22 @@ fn validation_unread_results_configuration_loss_and_original_account_pressure() 
     });
     p.changed.store(true, Ordering::Relaxed);
     assert!(
-        rt.read_property("a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
     p.changed.store(false, Ordering::Relaxed);
     p.denied.store(true, Ordering::Relaxed);
     assert!(
-        rt.read_property("a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     p.denied.store(false, Ordering::Relaxed);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
-        rt.read_property("a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
             .is_err(),
         "occupied logical slot"
     );
@@ -474,13 +475,13 @@ fn validation_unread_results_configuration_loss_and_original_account_pressure() 
         .reserve(ResourceKind::PendingHandlerCallsGlobalMax, amount)
         .unwrap();
     assert!(
-        rt.read_property("a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     drop(pressure);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     let settlement = poll(&mut call);
     drop(rt);
     assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
@@ -498,16 +499,16 @@ fn real_late_result_after_revocation_retains_first_cause_and_original_binding() 
     let thing = source(json!([{"href":target}]));
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
     );
-    rt.begin_close();
+    rt.1.begin_close();
     assert!(
-        rt.read_property("a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     exchange(&peer, b"11");
@@ -540,30 +541,30 @@ fn lost_handles_failed_and_pending_cleanup_stay_funded_until_final_release() {
     let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
     drop(registry);
     drop(thing);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
     );
     p.fail_close.store(true, Ordering::Relaxed);
     drop(call);
-    rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-    assert!(!rt.is_idle());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    assert!(!rt.1.is_idle());
     assert_eq!(p.calls.load(Ordering::Relaxed), 0);
     p.fail_close.store(false, Ordering::Relaxed);
     p.pending_close.store(1, Ordering::Relaxed);
-    rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-    assert!(!rt.is_idle());
-    rt.step(
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    assert!(!rt.1.is_idle());
+    rt.1.step(
         &mut Context::from_waker(Waker::noop()),
         now(),
         &mut WorkBudget::new(),
     );
-    assert!(!rt.is_idle());
-    rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-    assert!(rt.is_idle());
+    assert!(!rt.1.is_idle());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    assert!(rt.1.is_idle());
     assert_eq!(p.calls.load(Ordering::Relaxed), 1);
     drop(rt);
     clean(&bank);
@@ -638,12 +639,25 @@ fn later_failure_reclaims_earlier_owned_output_and_runtime_rejects_a_foreign_ban
     let (defs, funding) = prepared.into_execution();
     let foreign = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let owner = instance();
-    let rejected = ConsumerRuntime::try_new(owner.reference(), defs, funding, foreign.clone(), 1)
-        .err()
-        .unwrap();
+    let rejected =
+        StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, foreign.clone())
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(foreign.clone(), 1).unwrap(),
+                )
+            })
+            .err()
+            .unwrap();
     clean(&foreign);
     let (defs, funding) = rejected.into_input();
-    let rt = ConsumerRuntime::try_new(owner.reference(), defs, funding, bank.clone(), 1)
+    let rt = StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(bank.clone(), 1).unwrap(),
+            )
+        })
         .unwrap_or_else(|_| panic!());
     drop(rt);
     clean(&bank);
@@ -659,11 +673,12 @@ fn selected_service_loss_deadline_clock_errors_and_root_loss_fence_real_calls() 
     drop(registry);
     drop(thing);
     assert!(matches!(
-        rt.read_property("a", Deadline::at(now()), now(), &mut work()),
+        rt.0.read_property(&rt.1, "a", Deadline::at(now()), now(), &mut work()),
         Err(CoreError::TimedOut(_))
     ));
     assert!(
-        rt.read_property(
+        rt.0.read_property(
+            &rt.1,
             "a",
             Deadline::at(MonotonicInstant::new(ClockId::new(100), 2)),
             now(),
@@ -673,14 +688,14 @@ fn selected_service_loss_deadline_clock_errors_and_root_loss_fence_real_calls() 
     );
     p.data_lost.store(true, Ordering::Relaxed);
     assert!(
-        rt.read_property("a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
     p.data_lost.store(false, Ordering::Relaxed);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         call.poll(
             &mut Context::from_waker(Waker::noop()),
@@ -708,9 +723,9 @@ fn selected_service_loss_deadline_clock_errors_and_root_loss_fence_real_calls() 
     ));
     drop(settlement);
     drop(call);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     drop(rt);
     let settlement = poll(&mut call);
     assert!(settlement.result().is_err());
@@ -733,20 +748,22 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
     let new_reg = registry(vec![registration(2, p.clone())]);
     let new = runtime(prepare(&new_reg, &thing, bank.clone()), bank.clone());
     let mut old_call = old
-        .read_property("a", Deadline::NONE, now(), &mut work())
+        .0
+        .read_property(&old.1, "a", Deadline::NONE, now(), &mut work())
         .unwrap();
     assert!(
         old_call
             .poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
     );
-    old.begin_close();
+    old.1.begin_close();
     exchange(&peer, b"7");
     let old_result = poll(&mut old_call);
     assert_eq!(old_result.binding().binding_id(), BindingId::new(1));
     assert!(old_result.result().is_err());
     let mut new_call = new
-        .read_property("a", Deadline::NONE, now(), &mut work())
+        .0
+        .read_property(&new.1, "a", Deadline::NONE, now(), &mut work())
         .unwrap();
     assert!(
         new_call
@@ -755,8 +772,9 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
     );
     exchange(&peer, b"9");
     // Drive to an unread terminal slot, then revoke before handoff.
-    new.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-    new.begin_close();
+    new.1
+        .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    new.1.begin_close();
     let new_result = poll(&mut new_call);
     assert_eq!(new_result.binding().binding_id(), BindingId::new(2));
     assert!(new_result.result().is_err());
@@ -864,9 +882,9 @@ fn unsupported_semantic_alternative_keeps_the_supported_form_executable() {
     let rt = runtime(prepared, bank.clone());
     drop(thing);
     drop(registry);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
@@ -888,15 +906,15 @@ fn unread_native_failure_wins_over_later_cancel_and_fabricated_transfer_stays_ow
     let thing = source(json!([{"href":target}]));
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
     );
     exchange(&peer, &[b'x'; 1025]);
-    rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
     call.cancel();
     let outcome = poll(&mut call);
     assert!(
@@ -906,9 +924,9 @@ fn unread_native_failure_wins_over_later_cancel_and_fabricated_transfer_stays_ow
     drop(outcome);
     drop(call);
     p.transfer_once.store(true, Ordering::Relaxed);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     call.cancel();
     assert!(
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
@@ -960,9 +978,9 @@ fn unavailable_selected_codec_is_never_called_for_a_late_native_result() {
     let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
     drop(registry);
     drop(thing);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
@@ -1028,14 +1046,21 @@ fn review_cleanup_progress_is_fair_with_one_native_credit() {
     defs_a.append(&mut defs_b);
     funding_a.append(&mut funding_b);
     let owner = instance();
-    let rt = ConsumerRuntime::try_new(owner.reference(), defs_a, funding_a, bank.clone(), 2)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let mut a = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
-    let mut b = rt
-        .read_property("b", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let rt =
+        StandaloneConsumerAssociation::try_new(owner.reference(), defs_a, funding_a, bank.clone())
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(bank.clone(), 2).unwrap(),
+                )
+            })
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut a =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
+    let mut b =
+        rt.0.read_property(&rt.1, "b", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         a.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
@@ -1049,11 +1074,11 @@ fn review_cleanup_progress_is_fair_with_one_native_credit() {
     for _ in 0..64 {
         let mut budget = work();
         budget.set_remaining(WorkClass::BindingPolls, 1);
-        rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
+        rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
     }
     let second_released = second.calls.load(Ordering::Relaxed);
     first.fail_close.store(false, Ordering::Relaxed);
-    rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
     assert_eq!(
         second.calls.load(Ordering::Relaxed),
         1,
@@ -1247,9 +1272,9 @@ fn target_envelope_is_partial_support_and_selected_short_form_still_executes() {
     let rt = runtime(prepared, bank.clone());
     drop(thing);
     drop(registry);
-    let mut call = rt
-        .read_property("a", Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            .unwrap();
     assert!(
         call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
             .is_pending()
@@ -1288,18 +1313,29 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
         definitions.append(&mut second_definitions);
         funding.append(&mut second_funding);
         let owner = instance();
-        let rt = ConsumerRuntime::try_new(owner.reference(), definitions, funding, bank.clone(), 2)
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let rt = StandaloneConsumerAssociation::try_new(
+            owner.reference(),
+            definitions,
+            funding,
+            bank.clone(),
+        )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(bank.clone(), 2).unwrap(),
+            )
+        })
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
         drop(reg_a);
         drop(reg_b);
         drop(source_a);
         drop(source_b);
-        let mut a = rt
-            .read_property("a", Deadline::NONE, now(), &mut work())
-            .unwrap();
-        let mut b = rt
-            .read_property("b", Deadline::NONE, now(), &mut work())
-            .unwrap();
+        let mut a =
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+                .unwrap();
+        let mut b =
+            rt.0.read_property(&rt.1, "b", Deadline::NONE, now(), &mut work())
+                .unwrap();
         assert!(
             a.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
                 .is_pending()
@@ -1316,7 +1352,7 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
                 budget.set_remaining(WorkClass::ProviderProbes, 2);
                 budget.set_remaining(WorkClass::HandlerSteps, 1);
             }
-            rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
+            rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
         }
         assert_eq!(
             second.validates.load(Ordering::Relaxed),
@@ -1337,8 +1373,8 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
         drop(result);
         drop(b);
         drop(a);
-        rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-        assert!(rt.is_idle());
+        rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+        assert!(rt.1.is_idle());
         drop(rt);
         clean(&bank);
         for probe in [first, second] {
@@ -1358,9 +1394,9 @@ fn rereview_unread_success_cannot_bypass_changed_access_with_short_credit() {
         let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
         let thing = source(json!([{"href":target}]));
         let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
-        let mut call = rt
-            .read_property("a", Deadline::NONE, now(), &mut work())
-            .unwrap();
+        let mut call =
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+                .unwrap();
         assert!(
             call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
                 .is_pending()
@@ -1368,7 +1404,7 @@ fn rereview_unread_success_cannot_bypass_changed_access_with_short_credit() {
         exchange(&peer, b"7");
         let start = Instant::now();
         while p.validates.load(Ordering::Relaxed) == 0 {
-            rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+            rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
             assert!(start.elapsed() < Duration::from_secs(5));
         }
         p.denied.store(true, Ordering::Relaxed);
@@ -1566,9 +1602,9 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
             prepare(&registry, &source(json!([{"href":target}])), bank.clone()),
             bank.clone(),
         );
-        let mut call = rt
-            .read_property("a", Deadline::NONE, now(), &mut work())
-            .unwrap();
+        let mut call =
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+                .unwrap();
         assert!(
             call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
                 .is_pending()
@@ -1576,7 +1612,7 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
         exchange(&peer, b"7");
         let start = Instant::now();
         while p.validates.load(Ordering::Relaxed) == 0 {
-            rt.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+            rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
             assert!(start.elapsed() < Duration::from_secs(5));
         }
         match change {
@@ -1598,7 +1634,7 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
                     .is_pending(),
                 "{change}, credit={credit}: handoff must wait for the full current check"
             );
-            assert!(!rt.is_idle());
+            assert!(!rt.1.is_idle());
             assert_eq!(p.calls.load(Ordering::Relaxed), 0);
             assert_eq!(
                 charged,
@@ -1628,7 +1664,7 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
             settlement.native_outcome(),
             ConsumerNativeOutcome::Returned(Ok(_))
         ));
-        assert!(rt.is_idle());
+        assert!(rt.1.is_idle());
         assert_eq!(p.calls.load(Ordering::Relaxed), 0);
         drop(settlement);
         assert_eq!(p.calls.load(Ordering::Relaxed), 1);

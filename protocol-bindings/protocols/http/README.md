@@ -42,7 +42,7 @@ verifier returns unchanged identity. Mutable services must publish non-reused
 passive revisions; immutable services may use zero. Native refusal responses can
 be delivered without authorizing application data.
 
-Credentials remain in per-instance runtime services and original replies. Grants
+Credentials remain in instance-bound access services and original replies. Grants
 bind the exact conjunction, audience URL, operation, registration and incarnation.
 `replace_credentials` / `replace_api_key` invalidate existing bindings and unread
 results; rebind the unchanged selected definition to adopt new state. Original
@@ -63,13 +63,119 @@ and [initial Basic/TLS evidence](../../../docs/evidence/td-security-https.md).
 # Host HTTP Properties, Actions and Finite Collections
 
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
-open `ConsumerRegistry`/`ConsumerRuntime`. `HttpConsumerConfig::for_cleartext_ip()` explicitly
+open `ConsumerRegistry`, `ConsumerAssociation` and `ConsumerCalls`.
+`HttpConsumerConfig::for_cleartext_ip()` explicitly
 permits cleartext IP access; `try_consumer_registration` constructs one complete,
 Consumer-only registration without I/O. Its native compiler implements the
 bounded NoSec / effective `application/json` Property Read/Write mapping from
 TD-resolved semantic input. The [composed Write subset](#composed-property-readwrite)
 uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
 uses `try_inline_consumer_registration` and remains a restricted Read adapter.
+
+Prepare bindings with `ConsumerRegistry`, then use the finite `ConsumerOwner`'s
+ID-addressed path for registered lifecycle and operations. The TD's `id` is the
+public key within that owner. Application views are non-revoking and need not be
+retained for later lookup/removal. Supply execution capacity independently:
+
+```rust
+use clinkz_wot_servient_finite::consumer::{
+    ConsumerOwner, StandaloneConsumerAssociation, ConsumerCalls,
+};
+use clinkz_wot_servient::consumer::register_thing;
+
+let owner = ConsumerOwner::try_new(registry_accounts.clone(), 16, 32).unwrap();
+// Named ingress requires a TD id; it does not change anonymous TD validity.
+let instance = register_thing(&owner, &td, &mut budget).unwrap();
+let thing_id = instance.thing_id().to_owned();
+let (bindings, funding) = prepared.into_execution();
+// Startup transfer of prepared mappings, not an externally owned registration.
+let standalone = StandaloneConsumerAssociation::try_new(
+    instance.consumer(), bindings, funding, instance_accounts.clone(),
+).unwrap_or_else(|e| panic!("{:?}", e.error()));
+drop(owner.set_configuration(&thing_id, "readonly", standalone, &mut budget)
+    .unwrap_or_else(|e| panic!("{:?}", e.error())));
+drop((instance, td)); // later operations need only the public ID/configuration
+let calls = ConsumerCalls::try_new(work_accounts.clone(), 1).unwrap();
+let mut call = owner.read_property(
+    &thing_id, "readonly", &calls, "level", deadline, now, &mut budget,
+).unwrap();
+// Explicitly fence this original instance; this does not report native drain.
+owner.remove_thing(&thing_id, &mut budget).unwrap();
+// Schedule funded call.poll / calls.step turns to observe the fence and clean up.
+```
+
+`instance_accounts` must match the bindings' bank. Work and registry metadata
+accounts may be separately provisioned. One owner can hold many registered
+instances/facets, while many associations share one `ConsumerCalls` or use several
+independent work owners. Native concurrency and original quotas still apply.
+Identity registration alone installs no mappings/readiness: configure it explicitly.
+The source-free `register_thing(id, budget)` is also available for already-qualified
+IDs. IDs use exact string equality, are limited locally to 2048 bytes and must be
+unique among that owner's live named registrations. Duplicate registration refuses;
+no ID is invented when the TD omits one. TD parsing/preparation itself still permits
+anonymous Things. These are Engine ingress rules, not W3C global uniqueness rules.
+
+`instance(id, budget)` and `association(id, configuration, budget)` recover current
+snapshots. The latter supports every existing finite operation without retaining
+a view between calls. Explicit nonempty configuration names (at most 256 bytes)
+select separate checked mappings/policies under one Thing identity. Missing names
+return `NotFound`; there is no implicit default, union or permission fallback.
+`set_configuration` installs/replaces one named association; its input must belong
+to the current original parent. Update fences the old association and retains its
+accepted work's original context. `remove_configuration` affects only that name;
+`remove_thing` and owner shutdown fence all registered configurations.
+
+ID commands address the registration current at lookup, and still require fresh
+authorization. They cannot infer the intent of delayed external commands. Optional
+original snapshots support conditional `remove_instance` / `replace_instance`,
+`replace_configuration` and `remove_configuration_if_current`; old snapshots never
+resolve a successor. `replace_thing(id, budget)` generates the replacement and
+advances its internal generation without asking the caller for slot coordinates.
+Dropping any returned handle leaves registration intact; `begin_close` or actual
+owner Drop fences all registrations.
+
+Thing/configuration storage is a private AVL map. Lookup, insertion and structural
+removal follow logarithmic paths, with bounded string comparisons and rotations.
+One fixed-size node is funded before allocation for each new entry; no global
+record shifting, rehash, arena growth or startup population allocation occurs.
+Removal also disposes that Thing's own configurations/services under their prepaid
+allowances. Whole-owner shutdown necessarily visits every parent before disposal.
+
+Slots are assigned only by the managed owner. A private funded free list recycles
+slot tickets in constant time; failed registration consumes no ticket and does not
+advance the allocation counter. Old work keeps its immutable original generation
+and issuer. Ticket backing follows actual high-water use until owner disposal.
+
+`ConsumerInstance::new` / `StandaloneConsumerAssociation` remain valid standalone
+composition paths, including caller-assigned coordinates for static resource
+domains. Managed raw-authority and unnamed registration APIs are removed.
+Composition under managed lifecycle starts by registering the TD ID and sharing
+its passive `instance(id, budget)?.consumer()` with policy/Binding/family facets.
+`set_configuration` consumes the standalone association input, not a second parent
+revoker. An already-live standalone instance is not silently promoted to managed
+ownership. The other standalone examples and dedicated-capacity measurement stay
+at that lower level; the [Read example](examples/read_property.rs) uses managed
+ID-addressed lifecycle. This does not add continuing Action/Event lifecycle stores.
+
+The application owns scheduling, fresh logical-clock observations and work credit.
+Removal does not notify a parked driver. Native I/O wakes alone cannot cover a
+silent peer, passive removal, abandoned handle or newly supplied credit. Arrange
+lifecycle-command, cyclic or actual timer turns and retain runnable responsibility
+after zero/partial credit. A logical `Deadline` does not install a timer or imply
+automatic timeout. If aggregate progress polls using another task's context, also
+arrange result-consumer turns; there is no automatic authority/result notification
+registry. The [Read example](examples/read_property.rs) uses explicit periodic
+progress, and [managed real-HTTP cases](tests/support/managed_capacity.rs) exercise
+removal without another peer response.
+
+Work-owner explicit close preserves `calls.step` cleanup access. Actual facade
+Drop vacates and locally disposes abandoned calls, even while unrelated handles
+retain shared state. Retained handles can finish their own cleanup; settlements
+retain original results/accounts. This requires complete finite nonblocking local
+abort from the selected Binding/services and claims no remote cancellation ACK,
+rollback or completed network drain. General asynchronous cleanup transfer is not
+implemented by this finite owner. No automatic eventfd/observer backend is linked.
+[Runtime Safety](../../../docs/spec/runtime-safety.md) defines the full contracts.
 
 The open finite path uses the bounded [prepared DataSchema subset](../../../docs/evidence/structured-dataschema.md).
 Nested object properties/required names, exact integer inclusive/exclusive bounds
@@ -93,7 +199,7 @@ The restricted Read path declines URI variables; the modern finite Property
 facet supports the bounded dynamic profile below. The restricted registration
 marks templates unsupported during preparation, so default Form selection can
 reach a supported static alternative. Unsupported targets return the
-original request before raw acceptance. No TD rescan, DNS, pool, redirect, retry, decompression,
+original request before raw acceptance. No TD rescan, DNS, native connection pool, redirect, retry, decompression,
 upgrade, background task or detached driver is involved.
 
 The Consumer tranche is complete within its independently accepted scope; its
@@ -601,7 +707,8 @@ from measured OS/SDK or total allocator maxima.
 ## Composed Property Read/Write
 
 The open `ConsumerRegistry` prepares separate `ReadProperty` and `WriteProperty`
-definitions from each effective TD Form operation. `ConsumerRuntime::write_property`
+definitions from each effective TD Form operation.
+`association.write_property(&calls, name, payload, deadline, now, &mut budget)`
 takes the Property value as a `Payload`, validates it with the captured actual
 data service and authorizes the original Consumer/operation before native I/O.
 Its recoverable local rejection returns the original payload. Execution retains
@@ -781,7 +888,10 @@ automatic progress and remote effect certainty remain unsupported.
 
 The `read_property` example now uses open startup registration through
 `planning::open_consumer::ConsumerRegistry` and the source-free
-`servient_finite::consumer::ConsumerRuntime`. `try_consumer_registration` returns
+`clinkz_wot_servient_finite::consumer::{ConsumerAssociation, ConsumerCalls}`.
+The association captures the original Consumer and bindings; separately
+constructed capacity is supplied to `association.read_property(&calls, name,
+deadline, now, &mut budget)`. `try_consumer_registration` returns
 the actual compiler/executor/configuration and JSON/type plus cleartext-IP access
 services. Complete type-only schema and NoSec support is checked in preparation;
 codec/type validation runs on normal and late output. Unsupported schema/security
@@ -874,7 +984,8 @@ remote effect certainty.
 
 The open Consumer and completely qualified composed Producer support TD 1.1
 `readallproperties` on an **actual Thing-root Form**. The Consumer API is
-`ConsumerRuntime::read_all_properties(deadline, now, budget)`. The root definition
+`association.read_all_properties(&calls, deadline, now, &mut budget)`.
+The root definition
 retains the selected Form, actual registration/configuration, data/access services
 and an owned schema for every described readable Property. A root mapping can be
 selected independently of individual Property Form support. Producer publication
@@ -951,7 +1062,7 @@ complete final TD before writing it and retires its listener/accounts on exit.
 
 ## Thing-root ReadMultipleProperties
 
-`ConsumerRuntime::read_multiple_properties(&["level"], deadline, now, budget)`
+`association.read_multiple_properties(&calls, &["level"], deadline, now, &mut budget)`
 selects members for one actual Thing-root `readmultipleproperties` interaction.
 Preparation retains all eligible readable names/schemas, actual services and the
 selected root Form. It performs no request encoding. Each call checks exact names
@@ -1019,7 +1130,7 @@ security, HTTPS, constrained profiles and production qualification remain open.
 
 ## Thing-root WriteAllProperties
 
-`ConsumerRuntime::write_all_properties(payload, deadline, now, budget)` selects
+`association.write_all_properties(&calls, payload, deadline, now, &mut budget)` selects
 one actual Thing-root `writeallproperties` Form and returns the original payload
 on local refusal. Preparation retains every writable (non-readOnly) member's
 name and supported prepared schema, including writeOnly members. The actual
@@ -1084,7 +1195,7 @@ cargo run -p clinkz-wot-binding-http --example read_all_properties -- /tmp/colle
 
 ## Thing-root WriteMultipleProperties
 
-`ConsumerRuntime::write_multiple_properties(payload, deadline, now, budget)`
+`association.write_multiple_properties(&calls, payload, deadline, now, &mut budget)`
 selects an actual root `writemultipleproperties` Form. The payload is one JSON
 object of selected writable names and their new values, each validated against
 its own original Property schema. Omitted writable members are untouched by this
@@ -1139,7 +1250,8 @@ cargo test --locked --offline -p clinkz-wot-binding-http --test write_multiple_p
 A root `queryallactions` Form with explicit `htv:methodName: "GET"`, JSON,
 endpoint NoSec and a supported primary 200 response selects one native status
 query. TD 1.1 has no HTTP method default for this operation. The Consumer uses
-`ConsumerRuntime::query_all_actions`; it needs no prior invocation handles and
+`association.query_all_actions(&calls, deadline, now, &mut budget)`;
+it needs no prior invocation handles and
 retains its own original query authority/services through normal or late result
 settlement. Root status responses do not grant local Action control authority.
 
@@ -1208,7 +1320,7 @@ same borrowed views, including late native success fenced by cancellation or
 revocation. `ConsumerNativeOutcome` preserves native retry/cleanup evidence
 separately from application failure. Sharing a Consumer settlement keeps the
 original response, native owner and original account reservations alive even
-after call/runtime disposal; final owner disposal releases them. Explicit copies
+after call or root disposal; final owner disposal releases them. Explicit copies
 own distinct backing and do not retain the original response allocation.
 Consumer QueryAllActions preparation qualifies every resolved response assertion,
 including foreign-vocabulary predicates; unsupported envelope instructions refuse
@@ -1228,8 +1340,10 @@ never sends an Action cancel or reinvokes application behavior.
 Modern finite Consumer Property Read/Write supports the shared bounded
 [URI-variable profile](../../../docs/evidence/uri-variables.md). Thing variables
 and affordance overrides have one shared schema interpretation. Calls use
-`read_property_with_variables` / `write_property_with_variables` with unescaped
-scalar lexical values; e.g. a prepared
+`association.read_property_with_variables(&calls, name, variables, deadline,
+now, &mut budget)` or `association.write_property_with_variables(&calls, name,
+payload, variables, deadline, now, &mut budget)` with unescaped scalar lexical
+values; e.g. a prepared
 `http://127.0.0.1:{port}/devices/{name}{?detail}` mapping can contact different
 ports and paths without constructing new definitions or retaining the TD.
 

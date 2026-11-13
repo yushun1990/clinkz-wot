@@ -271,18 +271,41 @@ impl<S: ?Sized> core::ops::Deref for ConsumerServiceOwner<S> {
 /// }
 /// ```
 pub struct ConsumerInstance(ConsumerInstanceRef);
+struct InstanceAuthority {
+    current: AtomicBool,
+    _funding: Option<HostCapacityReservation>,
+}
 impl ConsumerInstance {
     pub fn new(slot: ThingSlotId) -> Self {
         Self(ConsumerInstanceRef {
             slot,
-            current: Arc::new(AtomicBool::new(true)),
+            authority: Arc::new(InstanceAuthority {
+                current: AtomicBool::new(true),
+                _funding: None,
+            }),
         })
+    }
+    /// Account-backed construction for owners that create authority internally.
+    /// Original backing remains charged through the final passive reference,
+    /// including accepted work after logical removal. `new` remains caller-funded.
+    pub fn try_new_funded(slot: ThingSlotId, bank: &Arc<HostResourceAccounts>) -> CoreResult<Self> {
+        let bytes = core::mem::size_of::<InstanceAuthority>() + 2 * core::mem::size_of::<usize>();
+        let funding = bank
+            .reserve(ResourceKind::EngineLiveBytesGlobalMax, bytes as u64)
+            .ok_or_else(busy)?;
+        Ok(Self(ConsumerInstanceRef {
+            slot,
+            authority: Arc::new(InstanceAuthority {
+                current: AtomicBool::new(true),
+                _funding: Some(funding),
+            }),
+        }))
     }
     pub fn reference(&self) -> ConsumerInstanceRef {
         self.0.clone()
     }
     pub fn revoke(&self) {
-        self.0.current.store(false, Ordering::Release);
+        self.0.authority.current.store(false, Ordering::Release);
     }
 }
 impl Drop for ConsumerInstance {
@@ -295,19 +318,19 @@ impl Drop for ConsumerInstance {
 #[derive(Clone)]
 pub struct ConsumerInstanceRef {
     slot: ThingSlotId,
-    current: Arc<AtomicBool>,
+    authority: Arc<InstanceAuthority>,
 }
 impl ConsumerInstanceRef {
     pub fn slot(&self) -> ThingSlotId {
         self.slot
     }
     pub fn is_current(&self) -> bool {
-        self.current.load(Ordering::Acquire)
+        self.authority.current.load(Ordering::Acquire)
     }
 }
 impl PartialEq for ConsumerInstanceRef {
     fn eq(&self, other: &Self) -> bool {
-        self.slot == other.slot && Arc::ptr_eq(&self.current, &other.current)
+        self.slot == other.slot && Arc::ptr_eq(&self.authority, &other.authority)
     }
 }
 impl Eq for ConsumerInstanceRef {}
@@ -901,7 +924,7 @@ impl ConsumerDefinition {
         Ok(())
     }
     /// Source-free instance dependency binding. No TD/compiler lookup or native
-    /// retargeting is possible here. Logical authority is attached by the runtime.
+    /// retargeting is possible here. Logical authority is attached by the execution association.
     /// Refusal returns both original owners, including a caller's last reference.
     #[allow(clippy::type_complexity)] // Refusal preserves both move-owned inputs.
     pub fn bind(
@@ -969,7 +992,8 @@ impl ConsumerDefinition {
 
 /// Instance-local policy and funding over qualified reusable content/mapping.
 /// Reusing the content never shares permission or moves physical backing to this
-/// bank. Runtime records and every call/result continue to charge this bank.
+/// bank. Association records charge this bank; admitted work may use a distinct
+/// capacity bank while retaining an outstanding-call quota at this instance bank.
 pub struct ConsumerBinding {
     input: ConsumerBindingInput,
     access_work: u64,

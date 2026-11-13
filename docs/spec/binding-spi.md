@@ -259,7 +259,11 @@ owned cursor/output/failure-return mechanisms. A compiler's inspected footprint
 includes variable backing and destruction, not merely its erased slot Layout.
 The actual data and destination/access services remain captured through execution;
 a caller supplies no replacement executor, codec, validator or configuration to a
-finite operation. `ClientBinding::supports_operation` is only coarse eligibility;
+finite operation. Supplying a separate finite work owner changes Engine
+capacity, not this captured native association. The same qualified mapping can
+serve independent Consumer associations, but actual native concurrency and
+endpoint/variable compatibility remain enforced by its original registration.
+A vacant Engine slot is no promise of a free native exchange. `ClientBinding::supports_operation` is only coarse eligibility;
 the actual compiler and captured services prove complete Form support. Reusable
 semantic content does not qualify another native mapping. The finite preparation
 handoff retains exact native artifacts and actual data/execution dependencies;

@@ -19,13 +19,80 @@ contiguous allocation backing or transitive SDK maxima.
 The Host finite Consumer represents these owners separately: common prepared
 content retains its first backing reservations; actual data/access services and
 native registration backing retain their original startup bank; each specialized
-mapping retains its own compilation leases; each binding/runtime/call funds its
-own reference, policy association, records, result and cleanup capacity. Reusing
+mapping retains its own compilation leases; each binding/association/call owner
+funds its own reference, policy association, records, result and cleanup capacity. Reusing
 content or a qualified mapping never copies, refunds or transfers those physical
 leases. Retirement follows the last actual mapping/call/settlement reference.
 Heap allocation measurements and reservation counters describe different facts;
 temporary allowances and overlapping reservations are reported separately from
 requested retained allocator bytes.
+
+Persistent logical associations MUST NOT require prepaid idle call capacity.
+In the Host finite representation, association records and selected binding
+wrappers retain their explicit instance bank; `ConsumerCalls` funds its slot
+storage from a separately chosen work bank. Each admitted call acquires its
+native lifetime, operand/result backing, callback scratch and cleanup capacity
+from that work bank before effects. Sharing content, a mapping or work storage
+does not share authorization or promise native availability.
+
+`PendingHandlerCallsGlobalMax` constrains outstanding obligations in each chosen
+work domain, including retained settlements. When the association uses a distinct
+instance bank, admission also acquires one outstanding-obligation quota debit
+there. Both survive through final call/settlement disposal; a common bank is
+charged once. The instance debit is a logical quota, not a second physical RAM
+owner. A shared instance bank supplies a shared allowance, not per-Thing hard
+isolation. Separate work banks compose only the limits actually shared between
+them; no process-wide aggregate quota is inferred. Other per-instance byte or
+rate isolation is not provided by this outstanding-call debit.
+These counters follow the expressly selected banks; they do not discover or
+aggregate every association sharing one `ConsumerInstance` identity.
+
+Slot removal transfers the complete funded call to its settlement and may reuse
+storage without refunding retained operands/results/cleanup. Physical input
+bodies may be shared by native and Engine snapshots under the original call
+reservation; copied metadata and variable records have separate allowances.
+Capacity-owner loss cannot migrate these reservations to the association or a
+successor bank. Captured native limits remain additional independent constraints.
+
+The managed finite Consumer owner allocates no population-sized startup backing.
+Each AVL node reserves `size_of::<Node<V>>()` at the owner bank before Box
+allocation; this includes its inline value, child links, height and reservation.
+ID/configuration strings and identity headers have their separate original
+reservations. There are no node-array capacity shifts or opaque map allocations.
+Removing a node detaches its children before returning it for destruction outside
+registry borrows. Original node backing lasts through payload disposal. Retained
+passive snapshots keep their own funded tombstones, not other registry nodes.
+Selected definitions and original call/result reservations survive independently.
+
+For stored tree height h and query byte length L, lookup prepays
+`h*(L+1)+1` QueueOperations. Structural mutation prepays
+`2*(h+1)*(L+65)`: at most two height-bounded spines (search and successor
+extraction), each frame's key comparison and a 64-operation envelope for link
+rewiring, cached-height maintenance and at most two rotations. Actual AVL height
+is logarithmic in node count; no configured maximum or population-wide movement
+allowance is charged. Each actual lookup/commit pass is prepaid before effects.
+Per-entry cleanup and qualified mapping/service disposal are prepaid on adoption.
+This is a deterministic per-operation bound, not amortized resizing work.
+
+Owner-assigned slot tickets cost one fixed, funded Box per allocated coordinate.
+An active instance or the free list exclusively owns that ticket. Reuse and release
+are constant-time moves without allocation; free backing follows actual high-water
+use and remains charged until reuse or owner disposal. A staged new ticket is not
+consumed and the allocation counter is not advanced if registration fails. Checked
+generation exhaustion retires a ticket outside borrows. A removed instance's
+original Core authority remains independently funded through its final passive
+reference via `ConsumerInstance::try_new_funded`; recycling a ticket cannot refund
+or mutate accepted work. Low-level standalone `new` remains caller-funded startup
+construction, separate from managed allocation.
+
+Removing a Thing also disposes its own configuration subtree under those entries'
+original prepaid allowances; shutdown disposes the owner's whole population and
+iteratively drains its ticket free list. Those scope-sized final disposals are
+not hidden global work in an ordinary single-ID registry mutation. Owner metadata
+accounts add no idle call slots or pending-call quota. Original association/work
+banks retain those quotas through settlement disposal, and separate banks do not
+imply an automatic per-Thing/process aggregate. No authority-change observer or
+native indication allowance is introduced.
 
 Independently composed Host finite Consumer registries/Servients share service
 backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the

@@ -11,23 +11,129 @@ behavior owner. Currentness cannot be copied into per-Binding registries. A
 retention reference for original accepted work grants neither fresh acceptance
 nor native shutdown authority.
 
-The Host Consumer's finite, continuing Action and composed/raw notification owners capture the same independent
-`ConsumerInstance` reference. Revocation or authority Drop fences each, including
-unread finite results and callback-time late notifications. Each owner rechecks
-currentness after permission, codec and native callbacks before successful local
-handoff. Closing/dropping one facet or stopping one call/subscription revokes only
-its own acceptance; sibling facets retain their authority and native leases.
-Execution authorization receives the original instance and selected operation;
-preparation's destination check alone is insufficient. This implementation remains
-Host/manual and does not establish constrained or automatic-progress support.
-Finite runtime construction consumes `ConsumerBinding` records and still refuses
-an instance bank different from those records' bank. Shared content, qualified
-mapping and retained services may have different original banks; those backing
-charges stay with their actual owners. A binding has no source/compiler callback
-or executor/configuration override. Fresh permission uses the attached original
-instance, and native concurrency is still enforced by the actual registration.
-Dropping the preparation root, closing a sibling or dropping an instance cannot
-reclaim shared content still needed by another mapping or normal/late settlement.
+The Host finite Consumer's `ConsumerOwner` exclusively owns registered
+instances and their named configurations. `register_thing` constructs the unique
+Core authority; `set_configuration` consumes a move-only
+`StandaloneConsumerAssociation`. Returned `ConsumerInstanceHandle` identities
+and cloneable `ConsumerAssociation` views MUST NOT revoke or unregister on Drop,
+and MUST NOT expose the parent revoker or consumed association owner. A view issued before
+adoption remains non-revoking afterwards. Explicit owner APIs control removal,
+replacement and shutdown; registration does not create execution capacity.
+
+The finite owner's public management path addresses Things by their TD `id`
+within that owner, and configurations by an explicit name within that Thing.
+`servient::consumer::register_thing` rejects a missing TD ID; anonymous TDs remain
+valid for preparation and low-level standalone composition. The source-free
+`ConsumerOwner::register_thing` accepts the already-qualified URI string, with
+exact UTF-8 equality and a 2048-byte local bound. Duplicate live IDs refuse rather
+than replacing or merging. These are local registration rules, not global TD
+uniqueness or URI normalization rules. Identity registration installs no mappings
+or readiness promise; explicitly install prepared configurations before use.
+
+`instance` and `association` recover current non-revoking snapshots after all
+returned views are lost. ID-based Read and targeted removal need no retained
+management handles or external handle table. `remove_thing` targets the current
+registration at lookup; it cannot infer an external delayed command's intended
+revision. Original-snapshot remove/replace APIs supply that conditional behavior.
+Public ID lookup grants no permission: admission still checks the selected actual
+authority, operation, policy and capacity. Accepted work never repeats ID lookup.
+The holder of the logical owner has management capability; an application exposing
+it to untrusted clients must authenticate commands and govern configuration
+selection. A configuration name is a selector, not a credential or caller identity.
+
+`set_configuration` explicitly installs/replaces one named association under the
+same original parent. Configuration names are nonempty, at most 256 bytes, and
+are exact local selectors, not additional Thing identities. Refusal returns the
+unadopted original association without changing installed policy. Selection has
+no implicit default, permission union or fallback to a sibling configuration.
+Update fences the old association; accepted work retains its original mapping,
+configuration policy, operands and accounts. A stale configuration prepared for
+a removed parent cannot be installed into a new registration with the same ID.
+`remove_configuration` affects only the selected current association. Existing
+finite operations can use transient `association` lookup; this does not migrate
+continuing Action or notification lifetimes into this finite owner.
+
+One authority is retained across independently composed facets. Continuing
+Action, notification and policy services can compose with the managed instance's
+passive `ConsumerInstanceRef` after registration. Their storage/progress APIs
+remain separate. `ConsumerInstance` and `StandaloneConsumerAssociation` remain
+valid low-level standalone representations, including caller-selected coordinates
+for static/caller-owned resource domains. Such coordinates do not enter the
+managed registry: there is no managed raw-authority/unnamed-instance adoption API.
+Composition requiring managed lifecycle starts with managed registration and
+shares its passive reference. An already-live standalone instance is not silently
+promoted or retargeted to a managed authority. Dropping a standalone facet still
+never revokes its parent or siblings.
+
+Owner removal linearizes at the original authority fence before registry detach
+or linked destruction. Budgeted removal/replacement may refuse before mutation;
+successful removal fences immediately. Removing an association fences only that facet; removing
+or replacing a parent fences all its facets. Instance replacement requires the
+the owner's retained slot ticket and checked next generation, without accepting
+caller coordinates; registration membership also checks the original issuer, so
+equal coordinates across owners or fresh
+registrations cannot redirect a stale handle. Association replacement uses a
+fresh authority; old views never resolve through a replacement's registry slot.
+Owner shutdown fences every parent before any mapping/service destructor runs.
+Registry borrows end before linked callbacks, allocation or destruction.
+Removal completion means removal from acceptance, not native drain.
+
+Association views retain funded tombstone metadata. Closing their actual owner
+releases unselected mappings outside borrows; accepted calls retain only their
+selected definition, original authority, policy, operands and accounts. Calls
+recheck original currentness and captured dependencies after permission, codec,
+credential and native callbacks before effects or successful local handoff.
+A recorded first cause survives later cancellation; already accepted remote
+effects remain uncertain. Preparation's destination check alone is insufficient.
+
+Finite association construction consumes `ConsumerBinding` records and refuses
+a bank different from those records' bank. Shared content, qualified mappings
+and retained services keep their original backing charges. Binding supplies no
+source/compiler callback or execution/configuration override. Actual native
+concurrency remains enforced by its original registration. Dropping preparation
+or removing a sibling cannot reclaim backing still needed by another mapping or
+normal/late settlement. `ConsumerCalls` supplies bounded work capacity separately:
+one owner may serve many associations, and one association may use several work
+owners. Dedicated or on-demand capacity is valid; no pool, global registry,
+per-instance Runtime or executor is required.
+
+Admission reserves an original work slot before linked callbacks. Its call
+retains the original association authority, selected funded binding, resolved
+destination, lexical variables, input/selection, deadlines and reservations.
+Native retirement cannot erase those operands or retarget them to a successor.
+Settlement lends original input/result slices and destination/variables; no
+cloneable payload owner escapes. [Foundation](foundation.md) owns account scope.
+
+Logical removal and actual logical-owner Drop are passive fences. They do not
+signal an OS descriptor, run a scheduler, call a Rust Waker or perform native
+cancellation. The application MUST arrange funded `ConsumerCall::poll` or
+`ConsumerCalls::step` turns after lifecycle changes and abandonment, independent
+of native I/O wakes. A lifecycle-command loop, cyclic executive or actual timer
+may supply those turns. A logical `Deadline` is only an instant/comparison;
+expiry is observed on supplied clock observations, not by an installed timer.
+Native completion does not cover a silent peer or indefinite subscription.
+Aggregate progress also requires the application to arrange result-consumer turns
+if native wake interest has moved to another task. Zero/partial credit retains
+runnable/progress responsibility; no autonomous eventual cleanup is claimed.
+
+Explicit call cancellation and work-owner close wake registered progress outside
+borrows. Work-owner close fences only its admitted calls and preserves `step`
+access. Work-owner Drop records causes without invoking `Waker::wake`; it also
+vacates abandoned ready slots and destroys their complete original work under
+the qualified finite local-abort contract. A checked-out call remains owned by
+its lease; restoration locally disposes it if controller and handle are gone.
+Later abandonment after controller loss has the same effect. An unrelated live
+or settled B handle cannot be the sole reason abandoned A remains retained.
+Surviving handles retain their own cleanup; returned settlements keep original
+identity, normal/late evidence and accounts through disposal. Native/result
+backing retires before original reservations. Supported unwind retains remaining
+sweep/lease duties; arbitrary panicking/blocking providers are not qualified by
+metadata. This Host finite subset requires complete bounded nonblocking local
+abort, including native/service/credential/Waker destruction. Asynchronously
+call-owned retirement needs a separately implemented acknowledged complete-owner
+successor; a detached task/status token is insufficient. Local abort is neither
+remote cancellation acknowledgement nor rollback or network drain.
+
 Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties retain their own root
 coordinate, actual registration, combined schema and services under the existing finite ownership and settlement
 rules. Its bounded schema/name backing and destruction stay funded through final
@@ -244,13 +350,56 @@ restore or remove an original call slot. Admission/progress callbacks and linked
 destructors run after that borrow ends. A checked-out or admitting slot remains
 occupied; reentrant progress cannot poll it again or overwrite it through nested
 admission. Passive per-call control retains the first cause and abandonment even
-while native work is outside the registry. Explicit cancellation and facet close
-wake registered progress outside registry/control borrows; Drop records intent
-without calling a waker. Close fences the whole finite facet before notifying
+while native work is outside the registry. Explicit cancellation and work-owner close
+wake registered progress outside registry/control borrows. Managed removal and
+standalone authority loss are passive fences requiring application-scheduled
+progress. Work-owner close fences all its admitted calls before notifying
 any waiter. Callback-time close/cancellation is observed before another native
 effect or successful handoff, including construction and validated unread output.
 Removing a terminal call is its handoff linearization point. Native/codec late
 evidence remains with that original call regardless of the local first cause.
+
+Managed instance registration linearizes at unique-owner installation in the
+logical registry. Named configuration adoption moves its unique owner into that
+registry; only non-revoking views leave it. Lookup checks original issuer/authority rather
+than names or numeric coordinates alone. Configuration refusal returns complete
+unadopted input owners; failed identity construction publishes nothing, refunds
+its staged backing and consumes no slot ticket. Bounded lookup/mutation is paid
+before work; registered
+entry retirement is prepaid before adoption. Removing or replacing an entry
+fences it before dropping owners outside borrows. Accepted calls remain in their
+original independent work stores, with no transfer inferred from registry detach.
+The same rule applies to low-level standalone close; passive view loss changes
+no logical permission. The common finite kernel has no observer registry or
+native authority-change notification machinery.
+
+The managed registry is a private AVL map by TD ID; each instance has an AVL
+map by configuration name. Every node's cached height equals one plus its tallest
+child and its child heights differ by at most one. Search/insert/erase therefore
+visit logarithmic paths, including adversarial long-prefix IDs. Nodes are
+individually funded and allocated before commit: there is no global shift,
+rehash, arena growth or compaction pass. Rotations move complete nodes without
+changing their keys, values or authorities. Two-child deletion extracts a
+successor along one additional bounded spine and returns only the original
+removed node, detached from both children. Linked payload destruction occurs
+outside borrows. Accepted work retains original owners, never node addresses or
+mutable registry positions.
+
+A private funded ticket belongs either to one active registration or the owner's
+free list. Registration pops a ticket in constant time or allocates one before
+commit; failure leaves the list/counter unchanged. Removal fences/detaches first,
+then advances the ticket's checked generation and puts it on the free list without
+allocation. Generation exhaustion retires that ticket rather than wrapping.
+Replacement retains its ticket and advances the generation internally. Original
+Core references keep their immutable coordinate/generation and unique issuer;
+ticket recycling cannot revive them. No numeric slot index or caller-slot search
+is required. Free-list destruction is iterative to bound shutdown stack use.
+
+Single-Thing management performs no work proportional to unrelated registered
+Things. Disposing that Thing's own configurations/services still requires their
+prepaid scope-local work; whole-owner shutdown necessarily visits every parent
+before disposal and releases all retained ticket backing. Neither operation
+claims native drain or automatic scheduling.
 
 Runtime driver entry records its time observation on every original live or
 admitting call before invoking callbacks; direct call polling records its own

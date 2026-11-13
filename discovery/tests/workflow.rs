@@ -5,7 +5,7 @@ use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, *};
 use clinkz_wot_discovery::http::*;
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::{ConsumerRegistry, ConsumerSelector};
-use clinkz_wot_servient_finite::consumer::ConsumerRuntime;
+use clinkz_wot_servient_finite::consumer::{ConsumerCalls, StandaloneConsumerAssociation};
 use serde_json::json;
 use std::{
     sync::{
@@ -74,7 +74,7 @@ fn prepare(
     instance: &ConsumerInstance,
     allowed: Arc<AtomicBool>,
     bank: &Arc<HostResourceAccounts>,
-) -> CoreResult<ConsumerRuntime> {
+) -> CoreResult<(StandaloneConsumerAssociation, ConsumerCalls)> {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(770),
@@ -103,7 +103,13 @@ fn prepare(
     )?;
     let (definitions, funding) = prepared.into_execution();
     drop(registry);
-    ConsumerRuntime::try_new(instance.reference(), definitions, funding, bank.clone(), 1)
+    StandaloneConsumerAssociation::try_new(instance.reference(), definitions, funding, bank.clone())
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(bank.clone(), 1).unwrap(),
+            )
+        })
         .map_err(|e| e.error().error().clone())
 }
 fn now() -> MonotonicInstant {
@@ -179,12 +185,14 @@ async fn application_selects_then_separately_authorizes_and_executes_engine_read
     permission.store(false, Ordering::Release);
     assert!(
         runtime
-            .read_property("level", Deadline::NONE, now(), &mut work())
+            .0
+            .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     permission.store(true, Ordering::Release);
     let mut call = runtime
-        .read_property("level", Deadline::NONE, now(), &mut work())
+        .0
+        .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
         .unwrap();
     let result = loop {
         if let Poll::Ready(result) =

@@ -9,6 +9,8 @@ extern crate std;
 
 extern crate alloc;
 
+#[cfg(all(feature = "std", target_has_atomic = "ptr"))]
+pub mod consumer;
 pub mod consumer_property_read;
 mod error;
 #[cfg(feature = "std")]

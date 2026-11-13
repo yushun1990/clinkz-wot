@@ -33,7 +33,8 @@ fn retained_results_do_not_occupy_or_release_a_successor_native_exchange() {
         let mut second = start_read(&clients[1]);
         assert!(
             clients[2]
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&clients[2].1, Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
         assert_eq!(
@@ -45,7 +46,8 @@ fn retained_results_do_not_occupy_or_release_a_successor_native_exchange() {
         drop(first);
         assert!(
             clients[2]
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&clients[2].1, Deadline::NONE, now(0), &mut work())
                 .is_err(),
             "dropping an old result must not unlock the successor's exchange"
         );
@@ -71,7 +73,8 @@ fn retained_results_do_not_occupy_or_release_a_successor_native_exchange() {
         drop(second);
         assert!(
             clients[2]
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&clients[2].1, Deadline::NONE, now(0), &mut work())
                 .is_err(),
             "old cancellation/result Drop must not release a new occupancy lease"
         );
@@ -86,10 +89,11 @@ fn retained_results_do_not_occupy_or_release_a_successor_native_exchange() {
         drop(abandoned);
         assert!(
             clients[2]
-                .read_all_properties(Deadline::NONE, now(0), &mut work())
+                .0
+                .read_all_properties(&clients[2].1, Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
-        clients[1].step(&mut cx(), now(0), &mut work());
+        clients[1].1.step(&mut cx(), now(0), &mut work());
         let mut final_call = start_read(&clients[2]);
         let (result, _) = server.exchange(&mut final_call).await;
         result.result().unwrap();

@@ -61,7 +61,7 @@ fn client_for(
     probe: Arc<Probe>,
     bank: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
-) -> ConsumerRuntime {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let td = source_for(target);
     let registry = registry(vec![registration(1, probe)]);
     let p = prepare(&registry, &td, bank.clone());
@@ -69,11 +69,13 @@ fn client_for(
     assert_eq!(d.len(), 1);
     drop(td);
     drop(registry);
-    ConsumerRuntime::try_new(owner.reference(), d, f, bank, 1)
+    StandaloneConsumerAssociation::try_new(owner.reference(), d, f, bank.clone())
+        .map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
-fn write(rt: &ConsumerRuntime, bytes: &[u8]) -> ConsumerCall {
-    rt.write_multiple_properties(
+fn write(rt: &(StandaloneConsumerAssociation, ConsumerCalls), bytes: &[u8]) -> ConsumerCall {
+    rt.0.write_multiple_properties(
+        &rt.1,
         Payload::new(bytes, "application/json"),
         Deadline::NONE,
         now(),

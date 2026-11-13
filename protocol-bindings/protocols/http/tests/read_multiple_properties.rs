@@ -7,9 +7,13 @@ fn selected_description(addr: SocketAddr) -> Value {
     td["forms"] = json!([{"op":"readmultipleproperties", "href":format!("http://{addr}/properties"), "htv:methodName":"POST"}]);
     td
 }
-fn start_selected(client: &ConsumerRuntime, names: &[&str]) -> ConsumerCall {
+fn start_selected(
+    client: &(StandaloneConsumerAssociation, ConsumerCalls),
+    names: &[&str],
+) -> ConsumerCall {
     client
-        .read_multiple_properties(names, Deadline::NONE, now(0), &mut work())
+        .0
+        .read_multiple_properties(&client.1, names, Deadline::NONE, now(0), &mut work())
         .unwrap()
 }
 fn body(result: &ConsumerSettlement) -> Value {
@@ -88,9 +92,19 @@ fn same_td_supports_different_per_call_subsets_and_distinct_read_all() {
         assert_eq!(root.affordance(), &AffordanceTarget::Thing);
         assert_eq!(root.form(), 1);
         assert_eq!(root.binding().binding_id(), BindingId::new(98));
-        let client =
-            ConsumerRuntime::try_new(owner.reference(), definitions, funding, accounts.clone(), 2)
-                .unwrap_or_else(|_| panic!());
+        let client = StandaloneConsumerAssociation::try_new(
+            owner.reference(),
+            definitions,
+            funding,
+            accounts.clone(),
+        )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(accounts.clone(), 2).unwrap(),
+            )
+        })
+        .unwrap_or_else(|_| panic!());
         drop(td);
         for (names, expected) in [
             (vec!["level"], json!({"level":7})),
@@ -161,7 +175,14 @@ fn unsupported_selections_and_unpaid_encoding_have_no_native_effect() {
         ] {
             assert!(
                 client
-                    .read_multiple_properties(&names, Deadline::NONE, now(0), &mut work())
+                    .0
+                    .read_multiple_properties(
+                        &client.1,
+                        &names,
+                        Deadline::NONE,
+                        now(0),
+                        &mut work()
+                    )
                     .is_err()
             );
             assert_eq!(
@@ -178,7 +199,14 @@ fn unsupported_selections_and_unpaid_encoding_have_no_native_effect() {
             let mut unpaid = work().with_remaining(class, 0);
             assert!(
                 client
-                    .read_multiple_properties(&["on"], Deadline::NONE, now(0), &mut unpaid)
+                    .0
+                    .read_multiple_properties(
+                        &client.1,
+                        &["on"],
+                        Deadline::NONE,
+                        now(0),
+                        &mut unpaid
+                    )
                     .is_err()
             );
             assert_eq!(
@@ -647,11 +675,23 @@ fn selected_service_is_actual_static_preparation_never_encodes_and_callback_loss
                 continue;
             }
             let (d, f) = prepared.into_execution();
-            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 2)
-                .unwrap_or_else(|_| panic!());
+            let client =
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                    .map(|association| {
+                        (
+                            association,
+                            ConsumerCalls::try_new(accounts.clone(), 2).unwrap(),
+                        )
+                    })
+                    .unwrap_or_else(|_| panic!());
             let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
-            let result =
-                client.read_multiple_properties(&["on"], Deadline::NONE, now(0), &mut work());
+            let result = client.0.read_multiple_properties(
+                &client.1,
+                &["on"],
+                Deadline::NONE,
+                now(0),
+                &mut work(),
+            );
             assert_eq!(encodes.load(Ordering::Relaxed), 1);
             if fault == "encode" {
                 assert!(result.is_err());
@@ -674,7 +714,14 @@ fn selected_service_is_actual_static_preparation_never_encodes_and_callback_loss
             assert!(!available.load(Ordering::Relaxed));
             assert!(
                 client
-                    .read_multiple_properties(&["level"], Deadline::NONE, now(0), &mut work())
+                    .0
+                    .read_multiple_properties(
+                        &client.1,
+                        &["level"],
+                        Deadline::NONE,
+                        now(0),
+                        &mut work()
+                    )
                     .is_err()
             );
             drop(client);
@@ -714,7 +761,14 @@ fn pending_output_keeps_original_selection_and_funding_across_failed_sibling_adm
         // The original raw call keeps native occupancy through unread output.
         assert!(
             client
-                .read_multiple_properties(&["level"], Deadline::NONE, now(0), &mut work())
+                .0
+                .read_multiple_properties(
+                    &client.1,
+                    &["level"],
+                    Deadline::NONE,
+                    now(0),
+                    &mut work()
+                )
                 .is_err()
         );
         assert_eq!(held, ResourceKind::ALL.map(|k| accounts.account(k).used()));
@@ -769,9 +823,9 @@ fn escaping_expansion_refuses_with_funded_cleanup_before_native_start() {
         let accounts = bank(); let owner = consumer_instance();
         let client = client(td, Arc::new(AtomicBool::new(false)), accounts.clone(), &owner);
         let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
-        assert!(client.read_multiple_properties(&names.iter().map(String::as_str).collect::<Vec<_>>(), Deadline::NONE, now(0), &mut work()).is_err());
+        assert!(client.0.read_multiple_properties(&client.1, &names.iter().map(String::as_str).collect::<Vec<_>>(), Deadline::NONE, now(0), &mut work()).is_err());
         assert_eq!(baseline, ResourceKind::ALL.map(|k| accounts.account(k).used()));
-        assert!(client.is_idle());
+        assert!(client.1.is_idle());
         listener.set_nonblocking(true).unwrap();
         assert!(matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
         drop(client); clean(&accounts);
@@ -845,12 +899,26 @@ fn authorization_service_loss_fences_each_admission_boundary() {
             )
             .unwrap();
             let (d, f) = prepared.into_execution();
-            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
-                .unwrap_or_else(|_| panic!());
+            let client =
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                    .map(|association| {
+                        (
+                            association,
+                            ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+                        )
+                    })
+                    .unwrap_or_else(|_| panic!());
             let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
             assert!(
                 client
-                    .read_multiple_properties(&["on"], Deadline::NONE, now(0), &mut work())
+                    .0
+                    .read_multiple_properties(
+                        &client.1,
+                        &["on"],
+                        Deadline::NONE,
+                        now(0),
+                        &mut work()
+                    )
                     .is_err()
             );
             assert_eq!(
@@ -1014,8 +1082,19 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                 )
                 .unwrap();
                 let (d, f) = prepared.into_execution();
-                let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
-                    .unwrap_or_else(|_| panic!());
+                let client = StandaloneConsumerAssociation::try_new(
+                    owner.reference(),
+                    d,
+                    f,
+                    accounts.clone(),
+                )
+                .map(|association| {
+                    (
+                        association,
+                        ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+                    )
+                })
+                .unwrap_or_else(|_| panic!());
                 let mut call = start_selected(&client, &["on"]);
                 let start = Instant::now();
                 let (local, remote) = if unread {
@@ -1023,7 +1102,7 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                     // final permission callback, retaining an unread result.
                     while validated.load(Ordering::Relaxed) == 0 {
                         server.step();
-                        client.step(
+                        client.1.step(
                             &mut cx(),
                             now(0),
                             &mut work().with_remaining(WorkClass::ProviderProbes, 1),
@@ -1141,10 +1220,22 @@ fn review_preparation_qualifies_generic_array_input_independently_of_selection_f
                 "all-read has no Array input dependency"
             );
             let (d, f) = prepared.into_execution();
-            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
-                .unwrap_or_else(|_| panic!());
-            let result =
-                client.read_multiple_properties(&["on"], Deadline::NONE, now(0), &mut work());
+            let client =
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                    .map(|association| {
+                        (
+                            association,
+                            ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+                        )
+                    })
+                    .unwrap_or_else(|_| panic!());
+            let result = client.0.read_multiple_properties(
+                &client.1,
+                &["on"],
+                Deadline::NONE,
+                now(0),
+                &mut work(),
+            );
             if array_supported {
                 let mut call = result.unwrap();
                 let (local, remote) = server.exchange(&mut call).await;

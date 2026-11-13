@@ -625,7 +625,7 @@ fn client(
     denied: Arc<AtomicBool>,
     accounts: Arc<HostResourceAccounts>,
     owner: &ConsumerInstance,
-) -> ConsumerRuntime {
+) -> (StandaloneConsumerAssociation, ConsumerCalls) {
     let mut registration = try_consumer_registration(
         HttpConsumerConfig::for_cleartext_ip().unwrap(),
         BindingId::new(98),
@@ -658,7 +658,7 @@ fn client(
     assert_eq!(root.name(), None);
     assert_eq!(root.binding().binding_id(), BindingId::new(98));
     drop(td);
-    ConsumerRuntime::try_new(owner.reference(), definitions, funding, accounts, 2)
+    StandaloneConsumerAssociation::try_new(owner.reference(), definitions, funding, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts, 2).unwrap()))
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn prepare_consumer(
@@ -684,9 +684,8 @@ fn prepare_consumer(
     )
 }
 
-fn start_read(client: &ConsumerRuntime) -> ConsumerCall {
-    client
-        .read_all_properties(Deadline::NONE, now(0), &mut work())
+fn start_read(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
+    client.0.read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
         .unwrap()
 }
 fn registration() -> ConsumerRegistrationInput {
@@ -715,15 +714,14 @@ fn collection_description(addr: SocketAddr, operation: Operation) -> Value {
     td
 }
 fn start_collection_at(
-    client: &ConsumerRuntime,
+    client: &(StandaloneConsumerAssociation, ConsumerCalls),
     operation: Operation,
     deadline: Deadline,
 ) -> CoreResult<ConsumerCall> {
     if operation == Operation::ReadMultipleProperties {
-        client.read_multiple_properties(&["on"], deadline, now(0), &mut work())
+        client.0.read_multiple_properties(&client.1, &["on"], deadline, now(0), &mut work())
     } else if operation == Operation::WriteAllProperties {
-        client
-            .write_all_properties(
+        client.0.write_all_properties(&client.1,
                 payload(br#"{"on":false,"secret":"updated"}"#),
                 deadline,
                 now(0),
@@ -731,8 +729,7 @@ fn start_collection_at(
             )
             .map_err(|e| e.error().error().clone())
     } else if operation == Operation::WriteMultipleProperties {
-        client
-            .write_multiple_properties(
+        client.0.write_multiple_properties(&client.1,
                 payload(br#"{"on":false,"secret":"updated"}"#),
                 deadline,
                 now(0),
@@ -740,7 +737,7 @@ fn start_collection_at(
             )
             .map_err(|e| e.error().error().clone())
     } else {
-        client.read_all_properties(deadline, now(0), &mut work())
+        client.0.read_all_properties(&client.1, deadline, now(0), &mut work())
     }
 }
 
@@ -786,7 +783,7 @@ fn verify_collection_lifecycle(operation: Operation) {
                         .is_pending()
                 );
             } else {
-                client.step(&mut cx(), instant, &mut WorkBudget::new());
+                client.1.step(&mut cx(), instant, &mut WorkBudget::new());
             }
             assert_eq!(
                 retained,
@@ -809,8 +806,8 @@ fn verify_collection_lifecycle(operation: Operation) {
                 assert!(result.first_cause().is_some());
                 drop(result);
             } else {
-                while !client.is_idle() {
-                    client.step(&mut cx(), instant, &mut work());
+                while !client.1.is_idle() {
+                    client.1.step(&mut cx(), instant, &mut work());
                     assert!(start.elapsed() < Duration::from_secs(5));
                 }
             }

@@ -10,6 +10,7 @@ unit of execution, publication or physical ownership.
 | Prepared definition | Immutable semantic/native content with checked dependencies; no live credential, handler, session or cleanup obligation |
 | Registration | Linked implementation/configuration and supported facets; not a network endpoint |
 | Logical instance | Consumed/exposed local identity, policy, behavior association, generation and publication |
+| Execution capacity | Independently supplied/acquired funded storage and progress/cleanup; no cardinality equality with idle logical associations |
 | Admitted work | Call, Action invocation, subscription or exposure participation with independent authority and funded release |
 | Native infrastructure | Binding-owned listeners, sessions, subscriptions, pools, workers and buffers; may serve multiple logical owners |
 | Deployment | Runtime/process/firmware owner, with its own failure and recovery boundary |

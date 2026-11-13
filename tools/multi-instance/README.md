@@ -30,6 +30,18 @@ neither resource paths nor registration counts count devices. The workload uses
 Thing-root ReadAllProperties over 1–32 integer members. It checks every returned
 body against its selected target.
 
+This low-level standalone workload deliberately constructs a dedicated
+`ConsumerCalls` alongside each `StandaloneConsumerAssociation`, retaining
+`population * slots` call slots even when few instances are active. That is one
+supported deployment configuration, not
+the general Engine ownership model or a requirement for persistent associations.
+`--mode shared` shares qualified mappings; `--accounts shared` shares quota
+accounts. Neither option shares the call-slot storage in this executable.
+The configuration record labels this capacity layout explicitly. These
+measurements do not isolate association-only idle cost or measure shared work
+capacity; the [independent-capacity HTTP fixture](../../protocol-bindings/protocols/http/tests/support/independent_capacity.rs)
+exercises more associations than call slots separately.
+
 The full suite also records expected preparation refusals at 30 and 32 members
 for this exact TD shape: the semantic resolver's 32 scopes include Thing, Form
 and security scopes as well as members. The 29-member case executes normally.
@@ -58,7 +70,7 @@ per lane precedes measurement. Separate result-retention phases capture one
 result per lane, retire roots, and check final physical/account release.
 
 The Binding driver executes the **same** qualified HTTP artifact and Core finite
-seal through `start_finite`, omitting Consumer Runtime policy, bookkeeping and
+seal through `start_finite`, omitting Consumer association policy, call bookkeeping and
 data validation. This is a measurement control, never an authorized application
 entry point. It retains the same idle instances and uses the same peer, target
 bodies, connection policy, queue and warm-up. Compare paired synchronous API/allocation and
@@ -97,6 +109,9 @@ carriers as well as call handles. The carrier size is recorded in configuration;
 it is actual heap in this workload, independent of the runtime's vacant slots.
 The idle phase includes the logical root vector and separately reports authority,
 permission service, source-free definition binding and runtime construction.
+The historical `runtime_construct`/`runtime_bytes_per_instance` output names
+measure association construction plus its dedicated work owner here; they do
+not identify a required bundled runtime or the cost of an idle association alone.
 Definition root references are allocated in preparation. The fixture-storage
 phase contains only source inputs and expected response bodies.
 

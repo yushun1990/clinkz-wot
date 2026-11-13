@@ -13,7 +13,9 @@ use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, *};
 use clinkz_wot_discovery::{DiscoveryError, http::*};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::ConsumerRegistrationInput;
-use clinkz_wot_servient_finite::consumer::{ConsumerCall, ConsumerNativeOutcome, ConsumerRuntime};
+use clinkz_wot_servient_finite::consumer::{
+    ConsumerCall, ConsumerCalls, ConsumerNativeOutcome, StandaloneConsumerAssociation,
+};
 use serde_json::{Value, json};
 use std::{
     sync::{
@@ -172,7 +174,7 @@ impl App {
         thing: &DiscoveredThing,
         form: u32,
         instance: &ConsumerInstance,
-    ) -> CoreResult<ConsumerRuntime> {
+    ) -> CoreResult<(StandaloneConsumerAssociation, ConsumerCalls)> {
         prepare_read(
             thing,
             "level",
@@ -217,9 +219,11 @@ impl ConsumerDataService for ObservedData {
         Ok(())
     }
 }
-fn read(runtime: &ConsumerRuntime) -> ConsumerCall {
+fn read(runtime: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     runtime
+        .0
         .read_property(
+            &runtime.1,
             "level",
             Deadline::at(now().checked_add_ticks(4_000).unwrap()),
             now(),
@@ -227,10 +231,12 @@ fn read(runtime: &ConsumerRuntime) -> ConsumerCall {
         )
         .unwrap()
 }
-async fn until_request(runtime: &ConsumerRuntime, peer: &Peer) {
+async fn until_request(runtime: &(StandaloneConsumerAssociation, ConsumerCalls), peer: &Peer) {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            runtime.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+            runtime
+                .1
+                .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
             if !peer.requests.lock().unwrap().is_empty() {
                 break;
             }
@@ -262,7 +268,8 @@ async fn authenticated_directory_to_exact_basic_https_form_validates_structured_
     drop(selected); // No Discovery session/source/compiler is needed to execute.
     assert!(
         runtime
-            .read_property("mirror", Deadline::NONE, now(), &mut work())
+            .0
+            .read_property(&runtime.1, "mirror", Deadline::NONE, now(), &mut work())
             .is_err()
     );
     let mut call = read(&runtime);
@@ -410,7 +417,8 @@ async fn discovery_does_not_supply_missing_credentials_policy_or_instance_author
         }
         assert!(
             runtime
-                .read_property("level", Deadline::NONE, now(), &mut work())
+                .0
+                .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
                 .is_err(),
             "case {case}"
         );
@@ -559,7 +567,8 @@ async fn in_flight_cancellation_revocation_rotation_and_abandonment_release_the_
         // external watchdog in settle() fails the test if progress stops; an
         // Engine deadline must not impersonate cancellation or revocation.
         let mut call = runtime
-            .read_property("level", Deadline::NONE, now(), &mut work())
+            .0
+            .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
             .unwrap();
         until_request(&runtime, &thing).await;
         match case {
@@ -631,7 +640,9 @@ async fn validated_unread_success_is_fenced_by_changed_policy_or_original_instan
         // Drive native completion/validation without handing the result to the application.
         tokio::time::timeout(Duration::from_secs(3), async {
             while validations.load(Ordering::Acquire) == 0 {
-                runtime.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+                runtime
+                    .1
+                    .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         })

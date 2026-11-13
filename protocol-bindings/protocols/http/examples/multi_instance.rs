@@ -326,7 +326,8 @@ impl ConsumerAccessService for Policy {
 }
 struct Instance {
     owner: Option<ConsumerInstance>,
-    runtime: Option<ConsumerRuntime>,
+    // This workload chooses dedicated capacity; associations need not own it.
+    runtime: Option<(StandaloneConsumerAssociation, ConsumerCalls)>,
     denied: Arc<AtomicBool>,
 }
 #[derive(Default)]
@@ -397,13 +398,18 @@ impl Instance {
         cost.binding.add(before, start.elapsed().as_nanos());
         let before = meter::read();
         let start = Instant::now();
-        let runtime = ConsumerRuntime::try_new(
+        let runtime = StandaloneConsumerAssociation::try_new(
             owner.reference(),
             vec![binding],
             vec![],
             account.clone(),
-            slots,
         )
+        .map(|association| {
+            (
+                association,
+                ConsumerCalls::try_new(account.clone(), slots).unwrap(),
+            )
+        })
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
         cost.runtime.add(before, start.elapsed().as_nanos());
         Self {
@@ -413,10 +419,8 @@ impl Instance {
         }
     }
     fn start(&self, budget: &mut WorkBudget) -> CoreResult<ConsumerCall> {
-        self.runtime
-            .as_ref()
-            .unwrap()
-            .read_all_properties(Deadline::NONE, now(), budget)
+        let (association, calls) = self.runtime.as_ref().unwrap();
+        association.read_all_properties(calls, Deadline::NONE, now(), budget)
     }
 }
 fn hard_limits(definition: &Arc<ConsumerDefinition>) {
@@ -437,24 +441,33 @@ fn hard_limits(definition: &Arc<ConsumerDefinition>) {
             Arc::new(AtomicBool::new(false)),
             &mut work(),
         );
-        let result = ConsumerRuntime::try_new(
+        let association = StandaloneConsumerAssociation::try_new(
             owner.reference(),
             vec![binding],
             vec![],
             account.clone(),
-            slots,
-        );
-        assert_eq!(result.is_ok(), slots == 32);
-        if let Err(ref rejection) = result {
-            assert_eq!(rejection.input().0.len(), 1);
+        )
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+        let before_capacity = ResourceKind::ALL.map(|k| account.account(k).used());
+        let capacity = ConsumerCalls::try_new(account.clone(), slots);
+        assert_eq!(capacity.is_ok(), slots == 32);
+        if capacity.is_err() {
+            assert_eq!(association.consumer(), owner.reference());
+            assert!(association.consumer().is_current());
+            assert_eq!(
+                ResourceKind::ALL.map(|k| account.account(k).used()),
+                before_capacity,
+            );
         }
-        drop(result);
+        drop(capacity);
+        drop(association);
         drop(owner);
         clean(&account);
     }
     emit(
         json!({"phase": "hard_limits", "registry_32_accepted_33_refused": true,
-        "runtime_slots_32_accepted_0_and_33_refused": true, "refusal_returns_binding": true}),
+        "call_slots_32_accepted_0_and_33_refused": true,
+        "capacity_refusal_preserves_association": true}),
     );
 }
 enum Handle {
@@ -749,6 +762,7 @@ async fn run(o: Options) {
         json!({"phase": "configuration", "population": o.population, "active": o.active, "lanes": o.lanes,
         "slots": o.slots, "members": o.members, "rounds": o.rounds, "mode": o.mode,
         "driver": o.driver, "accounts": o.accounts, "delay_us": o.delay_us,
+        "capacity_layout": "dedicated_per_instance",
         "native_mappings": o.mappings(), "physical_peer_processes": 1,
         "account_size": size_of::<HostResourceAccounts>(), "result_owner_size": size_of::<ConsumerSettlement>(), "instance_owner_size": size_of::<Instance>() }),
     );

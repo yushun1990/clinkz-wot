@@ -8,7 +8,7 @@ const VALUES: &[u8] = br#"{"on":false,"secret":"updated"}"#;
 fn write_description(addr: SocketAddr) -> Value {
     collection_description(addr, WRITE)
 }
-fn start_write(client: &ConsumerRuntime) -> ConsumerCall {
+fn start_write(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
     start_collection_at(client, WRITE, Deadline::NONE).unwrap()
 }
 
@@ -42,13 +42,18 @@ fn complete_writable_map_uses_actual_root_form_services_and_one_native_put() {
             assert_eq!(root.affordance(), &AffordanceTarget::Thing);
             assert_eq!(root.form(), 0);
             assert_eq!(root.binding().binding_id(), BindingId::new(98));
-            let client = ConsumerRuntime::try_new(
+            let client = StandaloneConsumerAssociation::try_new(
                 owner.reference(),
                 definitions,
                 funding,
                 accounts.clone(),
-                2,
             )
+            .map(|association| {
+                (
+                    association,
+                    ConsumerCalls::try_new(accounts.clone(), 2).unwrap(),
+                )
+            })
             .unwrap_or_else(|_| panic!());
             drop(td);
             let mut call = start_write(&client);
@@ -76,7 +81,15 @@ fn complete_writable_map_uses_actual_root_form_services_and_one_native_put() {
             drop(call);
             // Individual write and all-read remain distinct on this listener.
             let mut single = client
-                .write_property("on", payload(b"true"), Deadline::NONE, now(0), &mut work())
+                .0
+                .write_property(
+                    &client.1,
+                    "on",
+                    payload(b"true"),
+                    Deadline::NONE,
+                    now(0),
+                    &mut work(),
+                )
                 .unwrap_or_else(|_| panic!());
             let (local, remote) = server.exchange(&mut single).await;
             assert!(local.result().is_ok());
@@ -140,7 +153,14 @@ fn invalid_missing_duplicate_readonly_and_unpaid_input_returns_original_without_
         inputs.push(payload(VALUES).with_content_coding("gzip"));
         for input in inputs {
             let rejected = client
-                .write_all_properties(input.clone(), Deadline::NONE, now(0), &mut work())
+                .0
+                .write_all_properties(
+                    &client.1,
+                    input.clone(),
+                    Deadline::NONE,
+                    now(0),
+                    &mut work(),
+                )
                 .err()
                 .unwrap()
                 .into_input();
@@ -159,7 +179,9 @@ fn invalid_missing_duplicate_readonly_and_unpaid_input_returns_original_without_
         ] {
             let input = payload(VALUES);
             let rejected = client
+                .0
                 .write_all_properties(
+                    &client.1,
                     input.clone(),
                     Deadline::NONE,
                     now(0),
@@ -177,7 +199,14 @@ fn invalid_missing_duplicate_readonly_and_unpaid_input_returns_original_without_
         denied.store(true, Ordering::Relaxed);
         assert!(
             client
-                .write_all_properties(payload(VALUES), Deadline::NONE, now(0), &mut work())
+                .0
+                .write_all_properties(
+                    &client.1,
+                    payload(VALUES),
+                    Deadline::NONE,
+                    now(0),
+                    &mut work()
+                )
                 .is_err()
         );
         server.step();
@@ -406,11 +435,23 @@ fn captured_map_service_validates_the_whole_input_and_service_loss_fences_native
             .unwrap();
             let (d, f) = prepared.into_execution();
             assert_eq!(d.len(), 1);
-            let client = ConsumerRuntime::try_new(owner.reference(), d, f, accounts.clone(), 1)
-                .unwrap_or_else(|_| panic!());
+            let client =
+                StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone())
+                    .map(|association| {
+                        (
+                            association,
+                            ConsumerCalls::try_new(accounts.clone(), 1).unwrap(),
+                        )
+                    })
+                    .unwrap_or_else(|_| panic!());
             let original = payload(VALUES);
-            let call =
-                client.write_all_properties(original.clone(), Deadline::NONE, now(0), &mut work());
+            let call = client.0.write_all_properties(
+                &client.1,
+                original.clone(),
+                Deadline::NONE,
+                now(0),
+                &mut work(),
+            );
             assert_eq!(calls.load(Ordering::Relaxed), 1);
             if lost {
                 assert!(Arc::ptr_eq(

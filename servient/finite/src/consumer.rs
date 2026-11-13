@@ -24,14 +24,16 @@ struct Definition {
     input: ConsumerBindingInput,
     data_policy: ConsumerDataPolicy,
     access_work: u64,
+    _funding: HostCapacityReservation,
 }
 impl Definition {
-    fn from_prepared(definition: ConsumerBinding) -> Self {
+    fn from_prepared(definition: ConsumerBinding, funding: HostCapacityReservation) -> Self {
         let (input, data_policy, access_work) = definition.into_parts();
         Self {
             input,
             data_policy,
             access_work,
+            _funding: funding,
         }
     }
     fn matches(&self, target: AffordanceSite<'_>, operation: Operation) -> bool {
@@ -223,7 +225,7 @@ impl Definition {
     }
     fn start(
         &self,
-        consumer: &ConsumerInstanceRef,
+        control: &CallControl,
         input: Option<Payload>,
         variables: &[(&str, &str)],
         destination: &str,
@@ -241,11 +243,9 @@ impl Definition {
                 BindingOperationalError::new(busy()),
             ));
         }
-        let current = if consumer.is_current() {
-            self.check_dependencies()
-        } else {
-            Err(stale())
-        };
+        let current = control
+            .check_admission(deadline)
+            .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
                 input,
@@ -264,7 +264,7 @@ impl Definition {
             deadline,
         )?;
         let security = match self.input.access.outbound_security(
-            consumer,
+            &control.association.consumer,
             self.binding(),
             destination,
             self.input.definition.operation(),
@@ -278,13 +278,12 @@ impl Definition {
                 ));
             }
         };
-        // Issuance may invalidate its own credentials, wrapped policy or the
-        // original instance. Refuse before constructing native work.
-        let current = if consumer.is_current() {
-            self.check_dependencies()
-        } else {
-            Err(stale())
-        };
+        // Issuance can revoke the association/work owner or advance its saved
+        // control time as well as invalidate credentials/services. Refuse while
+        // the complete original request is recoverable, before native acceptance.
+        let current = control
+            .check_admission(deadline)
+            .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
                 request.into_input(),
@@ -306,18 +305,78 @@ impl Definition {
     }
 }
 
-/// Frozen source-free definitions attached to independent Consumer authority. An
-/// accepted call always retains its original definition and original bank.
-pub struct ConsumerRuntime {
+/// A non-revoking view of checked mappings and original instance authority.
+/// Cloning or dropping this view never closes its association. Its actual owner
+/// is a `ConsumerOwner` registration or a `StandaloneConsumerAssociation`.
+/// Supply independent `ConsumerCalls` at each admission.
+///
+/// A view has no lifecycle API:
+/// ```compile_fail
+/// use clinkz_wot_servient_finite::consumer::ConsumerAssociation;
+/// fn revoke(view: &ConsumerAssociation) { view.begin_close(); }
+/// ```
+/// Nor can it be converted back into a revoking owner:
+/// ```compile_fail
+/// use clinkz_wot_servient_finite::consumer::{ConsumerAssociation, StandaloneConsumerAssociation};
+/// fn recover(view: ConsumerAssociation) -> StandaloneConsumerAssociation { view }
+/// ```
+#[derive(Clone)]
+pub struct ConsumerAssociation {
+    state: Rc<Association>,
+}
+struct Association {
+    authority: Rc<AssociationAuthority>,
+    mappings: RefCell<Option<AssociationMappings>>,
+    _funding: HostCapacityReservation,
+}
+struct AssociationMappings {
+    definitions: Vec<Arc<Definition>>,
+    bank: Arc<HostResourceAccounts>,
+    _funding: Vec<HostCapacityReservation>,
+}
+// Retained by calls without retaining unselected mappings or the facade.
+struct AssociationAuthority {
+    consumer: ConsumerInstanceRef,
+    active: Cell<bool>,
+    _funding: Vec<HostCapacityReservation>,
+}
+impl AssociationAuthority {
+    fn current(&self) -> bool {
+        self.active.get() && self.consumer.is_current()
+    }
+}
+
+/// Move-only standalone association authority for low-level composition.
+/// `handle()` returns a non-revoking view. Registration consumes this owner;
+/// neither a managed view nor a reference can recover its revocation power.
+/// Close/Drop passively fences, then releases unselected mappings. Applications
+/// must schedule funded call/work-owner progress even with silent native I/O.
+pub struct StandaloneConsumerAssociation {
+    association: ConsumerAssociation,
+}
+impl core::ops::Deref for StandaloneConsumerAssociation {
+    type Target = ConsumerAssociation;
+    fn deref(&self) -> &ConsumerAssociation {
+        &self.association
+    }
+}
+
+/// Explicit, caller-driven finite capacity, independent of logical registrations.
+/// One owner may serve many associations; each association may use several owners.
+/// The application supplies scheduling, fresh clock observations and work credit.
+/// Logical deadlines do not install timers, and native wakes alone do not cover
+/// passive removal or handle abandonment. Explicit close retains cleanup access.
+/// Actual facade loss locally disposes abandoned work outside registry borrows;
+/// surviving handles retain their own progress and original settlements.
+pub struct ConsumerCalls {
     state: Rc<State>,
 }
 struct State {
-    consumer: ConsumerInstanceRef,
-    definitions: Vec<Arc<Definition>>,
     bank: Arc<HostResourceAccounts>,
     active: Cell<bool>,
+    controller_present: Cell<bool>,
     registry: RefCell<Registry>,
-    // Last to drop, after all definitions, calls, native/result backing.
+    // Last to drop, after calls and their native/result backing.
     _funding: Vec<HostCapacityReservation>,
 }
 struct Registry {
@@ -349,6 +408,7 @@ impl Slot {
 /// Control remains reachable while the complete call is outside the registry.
 /// Recording a cause is passive; waking and destroying wakers happen separately.
 struct CallControl {
+    association: Rc<AssociationAuthority>,
     cause: RefCell<Option<CoreError>>,
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
@@ -357,12 +417,17 @@ struct CallControl {
     _funding: HostCapacityReservation,
 }
 impl CallControl {
-    fn new(bank: &Arc<HostResourceAccounts>, now: MonotonicInstant) -> CoreResult<Rc<Self>> {
+    fn new(
+        bank: &Arc<HostResourceAccounts>,
+        association: Rc<AssociationAuthority>,
+        now: MonotonicInstant,
+    ) -> CoreResult<Rc<Self>> {
         let bytes = (core::mem::size_of::<Self>() + 2 * core::mem::size_of::<usize>()) as u64;
         let funding = bank
             .reserve(K::EngineLiveBytesGlobalMax, bytes)
             .ok_or_else(busy)?;
         Ok(Rc::new(Self {
+            association,
             cause: RefCell::new(None),
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
@@ -372,10 +437,36 @@ impl CallControl {
         }))
     }
     fn record(&self, cause: CoreError) {
+        // A passive association close/revoke must win over later cancellation,
+        // even when no progress callback has observed that close yet.
+        let cause = if self.association.current() {
+            cause
+        } else {
+            stale()
+        };
         self.cause.borrow_mut().get_or_insert(cause);
     }
     fn cause(&self) -> Option<CoreError> {
         self.cause.borrow().clone()
+    }
+    fn check_admission(&self, deadline: Option<Deadline>) -> CoreResult<()> {
+        // Work-owner close records every original control, including a reserved
+        // admission, before notifying callbacks. Preserve that first cause and
+        // nested time observations; the parent alone cannot fence this facet.
+        if let Some(cause) = self.cause() {
+            return Err(cause);
+        }
+        if !self.association.current() {
+            return Err(stale());
+        }
+        match deadline
+            .unwrap_or(Deadline::NONE)
+            .checked_is_elapsed_at(self.last_time.get())
+        {
+            Some(false) => Ok(()),
+            Some(true) => Err(CoreError::TimedOut(context())),
+            None => Err(clock_error()),
+        }
     }
     // Only public API entry observes caller time. A resumed sweep consumes this
     // latest observation instead of replaying its pre-callback timestamp.
@@ -409,7 +500,7 @@ struct SlotLease<'a> {
 }
 impl State {
     fn current(&self) -> bool {
-        self.active.get() && self.consumer.is_current()
+        self.active.get()
     }
     fn reserve_slot(&self) -> CoreResult<SlotLease<'_>> {
         let mut registry = self.registry.borrow_mut();
@@ -498,6 +589,53 @@ impl State {
             }
         }
     }
+    fn abort_slot(&self, index: usize, sequence: Option<u64>) {
+        if self.controller_present.get() {
+            return;
+        }
+        let removed = {
+            let mut registry = self.registry.borrow_mut();
+            match &registry.slots[index] {
+                Slot::Ready(call)
+                    if call.work.control.abandoned.get()
+                        && sequence.is_none_or(|s| s == call.work.sequence) =>
+                {
+                    Some(core::mem::replace(&mut registry.slots[index], Slot::Vacant))
+                }
+                _ => None,
+            }
+        };
+        // Complete original owner, including its native work and accounts.
+        // A reentrant destructor sees an already vacant slot and closed store.
+        drop(removed);
+    }
+    fn abort_abandoned(&self) {
+        let mut sweep = AbortSweep {
+            state: self,
+            next: 0,
+            count: self.registry.borrow().slots.len(),
+        };
+        sweep.run();
+    }
+}
+struct AbortSweep<'a> {
+    state: &'a State,
+    next: usize,
+    count: usize,
+}
+impl AbortSweep<'_> {
+    fn run(&mut self) {
+        while self.next < self.count {
+            let index = self.next;
+            self.next += 1;
+            self.state.abort_slot(index, None);
+        }
+    }
+}
+impl Drop for AbortSweep<'_> {
+    fn drop(&mut self) {
+        self.run();
+    }
 }
 impl SlotLease<'_> {
     fn attach(&self, control: Rc<CallControl>) {
@@ -513,6 +651,12 @@ impl SlotLease<'_> {
 }
 impl Drop for SlotLease<'_> {
     fn drop(&mut self) {
+        let abort = !self.state.controller_present.get()
+            && self
+                .call
+                .as_ref()
+                .is_some_and(|call| call.work.control.abandoned.get());
+        let aborted = if abort { self.call.take() } else { None };
         let replacement = self.call.take().map_or(Slot::Vacant, Slot::Ready);
         let old = {
             let mut registry = self.state.registry.borrow_mut();
@@ -527,6 +671,7 @@ impl Drop for SlotLease<'_> {
         {
             control.wake();
         }
+        drop(aborted);
     }
 }
 struct Call {
@@ -547,13 +692,16 @@ struct CallWork {
     selection: Option<collection::PropertySelection>,
     deadline: Deadline,
     destination: alloc::boxed::Box<str>,
+    variables: Vec<(alloc::boxed::Box<str>, alloc::boxed::Box<str>)>,
+    input: Option<Payload>,
     _funding: Vec<HostCapacityReservation>,
 }
-impl ConsumerRuntime {
+impl ConsumerAssociation {
     /// Execute one prepared Property mapping with unescaped scalar operands.
     /// The borrowed inputs are validated, copied and funded before native work.
     pub fn read_property_with_variables(
         &self,
+        calls: &ConsumerCalls,
         name: &str,
         variables: &[(&str, &str)],
         deadline: Deadline,
@@ -561,6 +709,7 @@ impl ConsumerRuntime {
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start_with_variables(
+            calls,
             AffordanceSite::Property(name),
             Operation::ReadProperty,
             CallInput::Value(None),
@@ -574,6 +723,7 @@ impl ConsumerRuntime {
     #[allow(clippy::too_many_arguments)]
     pub fn write_property_with_variables(
         &self,
+        calls: &ConsumerCalls,
         name: &str,
         input: Payload,
         variables: &[(&str, &str)],
@@ -582,6 +732,7 @@ impl ConsumerRuntime {
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start_with_variables(
+            calls,
             AffordanceSite::Property(name),
             Operation::WriteProperty,
             CallInput::Value(Some(input)),
@@ -595,81 +746,16 @@ impl ConsumerRuntime {
             BindingInputRejection::new(input.unwrap(), error)
         })
     }
-    /// Recoverable ownership handoff. Only this captured vector supplies native
-    /// executors/services; runtime calls accept no compiler/configuration override.
-    pub fn try_new(
-        consumer: ConsumerInstanceRef,
-        definitions: Vec<ConsumerBinding>,
-        funding: Vec<HostCapacityReservation>,
-        bank: Arc<HostResourceAccounts>,
-        calls: usize,
-    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
-    {
-        let error = if !consumer.is_current()
-            || definitions.is_empty()
-            || definitions.len() > 128
-            || !(1..=MAX_CALLS).contains(&calls)
-            || definitions.iter().any(|d| !Arc::ptr_eq(d.bank(), &bank))
-            || definitions.iter().enumerate().any(|(i, d)| {
-                definitions[..i].iter().any(|old| {
-                    old.affordance() == d.affordance() && old.operation() == d.operation()
-                })
-            }) {
-            Some(invalid())
-        } else {
-            None
-        };
-        if let Some(error) = error {
-            return Err(reject((definitions, funding), error));
-        }
-        let bytes = (core::mem::size_of::<State>()
-            + calls * core::mem::size_of::<Slot>()
-            + definitions.len()
-                * (core::mem::size_of::<Arc<Definition>>()
-                    + core::mem::size_of::<Definition>()
-                    + 32)) as u64;
-        let extra = match reserve(&bank, &[(K::EngineLiveBytesGlobalMax, bytes)]) {
-            Ok(extra) => extra,
-            Err(e) => return Err(reject((definitions, funding), e)),
-        };
-        let mut slots = Vec::new();
-        let mut entries = Vec::new();
-        if slots.try_reserve_exact(calls).is_err()
-            || entries.try_reserve_exact(definitions.len()).is_err()
-        {
-            return Err(reject((definitions, funding), busy()));
-        }
-        slots.resize_with(calls, || Slot::Vacant);
-        entries.extend(
-            definitions
-                .into_iter()
-                .map(|d| Arc::new(Definition::from_prepared(d))),
-        );
-        let mut funding = funding;
-        funding.extend(extra);
-        Ok(Self {
-            state: Rc::new(State {
-                consumer,
-                definitions: entries,
-                bank,
-                active: Cell::new(true),
-                registry: RefCell::new(Registry {
-                    slots,
-                    sequence: 0,
-                    next_slot: 0,
-                }),
-                _funding: funding,
-            }),
-        })
-    }
     pub fn read_property(
         &self,
+        calls: &ConsumerCalls,
         name: &str,
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start(
+            calls,
             AffordanceSite::Property(name),
             Operation::ReadProperty,
             CallInput::Value(None),
@@ -683,11 +769,13 @@ impl ConsumerRuntime {
     /// invocation authority and do not query/cancel existing Consumer handles.
     pub fn query_all_actions(
         &self,
+        calls: &ConsumerCalls,
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start(
+            calls,
             AffordanceSite::Thing,
             Operation::QueryAllActions,
             CallInput::Value(None),
@@ -700,11 +788,13 @@ impl ConsumerRuntime {
     /// One selected Thing-root native interaction; never individual reads.
     pub fn read_all_properties(
         &self,
+        calls: &ConsumerCalls,
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start(
+            calls,
             AffordanceSite::Thing,
             Operation::ReadAllProperties,
             CallInput::Value(None),
@@ -719,12 +809,14 @@ impl ConsumerRuntime {
     /// inline selection survive independently of the caller and source TD.
     pub fn read_multiple_properties(
         &self,
+        calls: &ConsumerCalls,
         members: &[&str],
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start(
+            calls,
             AffordanceSite::Thing,
             Operation::ReadMultipleProperties,
             CallInput::Members(members),
@@ -738,6 +830,7 @@ impl ConsumerRuntime {
     /// acceptance returns the original input, including all backing.
     pub fn invoke_action(
         &self,
+        calls: &ConsumerCalls,
         name: &str,
         input: Option<Payload>,
         deadline: Deadline,
@@ -745,6 +838,7 @@ impl ConsumerRuntime {
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
         self.start(
+            calls,
             AffordanceSite::Action(name),
             Operation::InvokeAction,
             CallInput::Value(input),
@@ -758,6 +852,7 @@ impl ConsumerRuntime {
     /// automatically replayed, even if its remote effect remains uncertain.
     pub fn write_property(
         &self,
+        calls: &ConsumerCalls,
         name: &str,
         input: Payload,
         deadline: Deadline,
@@ -765,6 +860,7 @@ impl ConsumerRuntime {
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start(
+            calls,
             AffordanceSite::Property(name),
             Operation::WriteProperty,
             CallInput::Value(Some(input)),
@@ -782,12 +878,14 @@ impl ConsumerRuntime {
     /// Error/cancellation can follow partial remote effects and never replays.
     pub fn write_all_properties(
         &self,
+        calls: &ConsumerCalls,
         input: Payload,
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start(
+            calls,
             AffordanceSite::Thing,
             Operation::WriteAllProperties,
             CallInput::Value(Some(input)),
@@ -804,12 +902,14 @@ impl ConsumerRuntime {
     /// its exact writable set; omitted members are untouched by this intent.
     pub fn write_multiple_properties(
         &self,
+        calls: &ConsumerCalls,
         input: Payload,
         deadline: Deadline,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start(
+            calls,
             AffordanceSite::Thing,
             Operation::WriteMultipleProperties,
             CallInput::Value(Some(input)),
@@ -822,8 +922,10 @@ impl ConsumerRuntime {
             BindingInputRejection::new(input.expect("selected write input retained"), error)
         })
     }
+    #[allow(clippy::too_many_arguments)]
     fn start(
         &self,
+        calls: &ConsumerCalls,
         target: AffordanceSite<'_>,
         operation: Operation,
         input: CallInput<'_>,
@@ -831,11 +933,12 @@ impl ConsumerRuntime {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
-        self.start_with_variables(target, operation, input, &[], deadline, now, budget)
+        self.start_with_variables(calls, target, operation, input, &[], deadline, now, budget)
     }
     #[allow(clippy::too_many_arguments)]
     fn start_with_variables(
         &self,
+        calls: &ConsumerCalls,
         target: AffordanceSite<'_>,
         operation: Operation,
         input: CallInput<'_>,
@@ -848,21 +951,22 @@ impl ConsumerRuntime {
             CallInput::Value(input) => (input, None),
             CallInput::Members(members) => (None, Some(members)),
         };
-        let state = &self.state;
-        if !state.current() {
+        let association = &self.state;
+        let state = &calls.state;
+        if !state.current() || !association.authority.current() {
             return Err(reject(input, stale()));
         }
         let mut reserved = match state.reserve_slot() {
             Ok(reserved) => reserved,
             Err(error) => return Err(reject(input, error)),
         };
-        let control = match CallControl::new(&state.bank, now) {
+        let control = match CallControl::new(&state.bank, association.authority.clone(), now) {
             Ok(control) => control,
             Err(error) => return Err(reject(input, error)),
         };
         reserved.attach(control.clone());
         let checked = (|| -> CoreResult<_> {
-            if !state.current() {
+            if !state.current() || !association.authority.current() {
                 return Err(stale());
             }
             let name_len = match target {
@@ -874,19 +978,26 @@ impl ConsumerRuntime {
             if name_len > 256 {
                 return Err(invalid());
             }
-            if !pay(
-                budget,
-                W::PlanningItems,
-                (state.definitions.len() * (name_len + 1)) as u64,
-            ) {
-                return Err(busy());
-            }
-            let definition = state
-                .definitions
-                .iter()
-                .find(|d| d.matches(target, operation))
-                .ok_or_else(unsupported)?
-                .clone();
+            // Snapshot only the selected definition and bank. No registry or
+            // association borrow crosses permission/codec/native callbacks.
+            let (definition, association_bank) = {
+                let mappings = association.mappings.borrow();
+                let mappings = mappings.as_ref().ok_or_else(stale)?;
+                if !pay(
+                    budget,
+                    W::PlanningItems,
+                    (mappings.definitions.len() * (name_len + 1)) as u64,
+                ) {
+                    return Err(busy());
+                }
+                let definition = mappings
+                    .definitions
+                    .iter()
+                    .find(|d| d.matches(target, operation))
+                    .ok_or_else(unsupported)?
+                    .clone();
+                (definition, mappings.bank.clone())
+            };
             match deadline.checked_is_elapsed_at(now) {
                 Some(false) => {}
                 Some(true) => return Err(CoreError::TimedOut(context())),
@@ -939,11 +1050,23 @@ impl ConsumerRuntime {
                 clinkz_wot_core::notification::notification_payload_backing(input.as_ref())
                     .ok_or_else(invalid)? as u64
             };
+            // The Engine retains an input view after native exchange retirement.
+            // Its body shares the original allocation; only cloned media strings
+            // need additional backing. For encoded selections the declared bound
+            // also bounds those strings before the encoder is entered.
+            let input_metadata = if selection.is_some() {
+                policy.encoded_selection_bytes
+            } else {
+                input.as_ref().map_or(0, |p| {
+                    (p.content_type.len() + p.content_coding.as_ref().map_or(0, |c| c.len())) as u64
+                })
+            };
             let lifetime = resource
                 .admitted()
                 .retained_bytes()
                 .checked_add(body)
                 .and_then(|n| n.checked_add(input_bytes))
+                .and_then(|n| n.checked_add(input_metadata))
                 .and_then(|n| n.checked_add(media.checked_mul(2)?))
                 .and_then(|n| n.checked_add(core::mem::size_of::<Call>() as u64 + 256))
                 .and_then(|n| {
@@ -955,11 +1078,11 @@ impl ConsumerRuntime {
                     n.checked_add(if variables.is_empty() {
                         0
                     } else {
-                        // Bounded lexical String backing and conservative Host
-                        // BTreeMap node allowance, retained with the raw request.
+                        // Original lexical snapshot plus the native request's
+                        // strings and conservative Host map/vector allowance.
                         (uri_variables::MAX_VARIABLES
-                            * (uri_variables::MAX_NAME_BYTES
-                                + uri_variables::MAX_VALUE_BYTES
+                            * (2 * (uri_variables::MAX_NAME_BYTES
+                                + uri_variables::MAX_VALUE_BYTES)
                                 + 256)) as u64
                     })
                 })
@@ -985,7 +1108,7 @@ impl ConsumerRuntime {
                     context: context(),
                 });
             }
-            let funding = reserve(
+            let mut funding = reserve(
                 &state.bank,
                 &[
                     (
@@ -999,6 +1122,16 @@ impl ConsumerRuntime {
                     (K::BindingResponseBufferBytesGlobalMax, body),
                 ],
             )?;
+            // A separate instance domain constrains outstanding obligations,
+            // including unread results. This is a quota debit, not another RAM
+            // reservation. An identical bank is charged only once.
+            if !Arc::ptr_eq(&association_bank, &state.bank) {
+                funding.try_reserve_exact(1).map_err(|_| busy())?;
+                funding.extend(reserve(
+                    &association_bank,
+                    &[(K::PendingHandlerCallsGlobalMax, 1)],
+                )?);
+            }
             if !pay(budget, W::BindingPolls, 1) {
                 return Err(busy());
             }
@@ -1014,7 +1147,7 @@ impl ConsumerRuntime {
             if !pay(budget, W::ProviderProbes, definition.access_work()) {
                 return Err(busy());
             }
-            definition.check_current(&state.consumer, None, &destination)?;
+            definition.check_current(&association.authority.consumer, None, &destination)?;
             // Prepay local-disposal bookkeeping and the one native invocation. The
             // selected ConsumerOwnedHostV2 facet owes finite nonblocking local Drop.
             if budget.remaining(W::BindingPolls) < 1 || budget.remaining(W::CleanupItems) < 1 {
@@ -1057,7 +1190,7 @@ impl ConsumerRuntime {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
                     return Err(busy());
                 }
-                definition.check_current(&state.consumer, None, &destination)?;
+                definition.check_current(&association.authority.consumer, None, &destination)?;
             }
             let payload = encoded.as_ref().or(input.as_ref());
             let input_selection = match definition.validate_payload(payload, budget) {
@@ -1070,12 +1203,12 @@ impl ConsumerRuntime {
                     return Err(busy());
                 }
                 definition.check_current(
-                    &state.consumer,
+                    &association.authority.consumer,
                     input_selection.or(selection),
                     &destination,
                 )?;
             }
-            if !state.current() {
+            if !state.current() || !association.authority.current() {
                 return Err(stale());
             }
             if let Some(cause) = control.cause() {
@@ -1098,8 +1231,13 @@ impl ConsumerRuntime {
             Ok(checked) => checked,
             Err(e) => return Err(reject(input, e)),
         };
+        let retained_input = encoded.as_ref().or(input.as_ref()).cloned();
+        let retained_variables = variables
+            .iter()
+            .map(|(n, v)| ((*n).into(), (*v).into()))
+            .collect();
         let raw = match definition.start(
-            &self.state.consumer,
+            &control,
             encoded.or(input),
             variables,
             &destination,
@@ -1119,7 +1257,7 @@ impl ConsumerRuntime {
         let mut call = Call {
             progress: FiniteCallState::default(),
             work: CallWork {
-                consumer: state.consumer.clone(),
+                consumer: association.authority.consumer.clone(),
                 control: control.clone(),
                 effect: ConsumerEffect::NotAttempted,
                 sequence,
@@ -1132,6 +1270,8 @@ impl ConsumerRuntime {
                 selection,
                 deadline,
                 destination,
+                variables: retained_variables,
+                input: retained_input,
                 _funding: funding,
             },
         };
@@ -1141,18 +1281,177 @@ impl ConsumerRuntime {
         reserved.call = Some(call);
         drop(reserved);
         Ok(ConsumerCall {
-            state: self.state.clone(),
+            state: calls.state.clone(),
             slot,
             sequence,
             control,
         })
     }
-    /// Closes this finite facet. Other facets of the Consumer stay independent;
-    /// the ConsumerInstance owner revokes the whole incarnation.
+    /// Original identity only; this reference cannot revoke the instance.
+    pub fn consumer(&self) -> ConsumerInstanceRef {
+        self.state.authority.consumer.clone()
+    }
+    pub fn is_current(&self) -> bool {
+        self.state.authority.current()
+    }
+    fn fence(&self) {
+        self.state.authority.active.set(false);
+    }
+    fn close(&self) {
+        self.fence();
+        // End the borrow before linked service/artifact destructors can reenter.
+        let mappings = self.state.mappings.borrow_mut().take();
+        drop(mappings);
+    }
+}
+impl StandaloneConsumerAssociation {
+    /// Recoverable, source-free construction. The original bank funds this
+    /// mapping set and limits its outstanding calls across independent stores.
+    pub fn try_new(
+        consumer: ConsumerInstanceRef,
+        definitions: Vec<ConsumerBinding>,
+        funding: Vec<HostCapacityReservation>,
+        bank: Arc<HostResourceAccounts>,
+    ) -> Result<Self, BindingInputRejection<(Vec<ConsumerBinding>, Vec<HostCapacityReservation>)>>
+    {
+        let error = if !consumer.is_current()
+            || definitions.is_empty()
+            || definitions.len() > 128
+            || definitions.iter().any(|d| !Arc::ptr_eq(d.bank(), &bank))
+            || definitions.iter().enumerate().any(|(i, d)| {
+                definitions[..i].iter().any(|old| {
+                    old.affordance() == d.affordance() && old.operation() == d.operation()
+                })
+            }) {
+            Some(invalid())
+        } else {
+            None
+        };
+        if let Some(error) = error {
+            return Err(reject((definitions, funding), error));
+        }
+        let header_funding = match bank.reserve(
+            K::EngineLiveBytesGlobalMax,
+            (core::mem::size_of::<Association>() + 2 * core::mem::size_of::<usize>()) as u64,
+        ) {
+            Some(funding) => funding,
+            None => return Err(reject((definitions, funding), busy())),
+        };
+        let bytes = (definitions.len() * core::mem::size_of::<Arc<Definition>>()) as u64;
+        let extra = match reserve(&bank, &[(K::EngineLiveBytesGlobalMax, bytes)]) {
+            Ok(extra) => extra,
+            Err(e) => return Err(reject((definitions, funding), e)),
+        };
+        let authority_funding = match reserve(
+            &bank,
+            &[(
+                K::EngineLiveBytesGlobalMax,
+                (core::mem::size_of::<AssociationAuthority>() + 2 * core::mem::size_of::<usize>())
+                    as u64,
+            )],
+        ) {
+            Ok(funding) => funding,
+            Err(e) => return Err(reject((definitions, funding), e)),
+        };
+        let mut records = Vec::new();
+        let mut entries = Vec::new();
+        if records.try_reserve_exact(definitions.len()).is_err()
+            || entries.try_reserve_exact(definitions.len()).is_err()
+        {
+            return Err(reject((definitions, funding), busy()));
+        }
+        for _ in &definitions {
+            match bank.reserve(
+                K::EngineLiveBytesGlobalMax,
+                (core::mem::size_of::<Definition>() + 32) as u64,
+            ) {
+                Some(record) => records.push(record),
+                None => return Err(reject((definitions, funding), busy())),
+            }
+        }
+        entries.extend(
+            definitions
+                .into_iter()
+                .zip(records)
+                .map(|(definition, record)| {
+                    Arc::new(Definition::from_prepared(definition, record))
+                }),
+        );
+        let mut funding = funding;
+        funding.extend(extra);
+        Ok(Self {
+            association: ConsumerAssociation {
+                state: Rc::new(Association {
+                    authority: Rc::new(AssociationAuthority {
+                        consumer,
+                        active: Cell::new(true),
+                        _funding: authority_funding,
+                    }),
+                    mappings: RefCell::new(Some(AssociationMappings {
+                        definitions: entries,
+                        bank,
+                        _funding: funding,
+                    })),
+                    _funding: header_funding,
+                }),
+            },
+        })
+    }
+    pub fn handle(&self) -> ConsumerAssociation {
+        self.association.clone()
+    }
+    /// Immediate passive fencing, not native drain or a scheduled cleanup turn.
+    pub fn begin_close(&self) {
+        self.association.close();
+    }
+}
+impl Drop for StandaloneConsumerAssociation {
+    fn drop(&mut self) {
+        self.begin_close();
+    }
+}
+
+#[path = "consumer_managed.rs"]
+mod managed;
+pub use managed::{ConsumerInstanceHandle, ConsumerOwner};
+
+impl ConsumerCalls {
+    /// Fund bounded call storage independently of any logical association.
+    /// This bank also funds admitted work and its outstanding-call quota through
+    /// settlement disposal. It need not be the association's record/quota bank.
+    pub fn try_new(bank: Arc<HostResourceAccounts>, calls: usize) -> CoreResult<Self> {
+        if !(1..=MAX_CALLS).contains(&calls) {
+            return Err(invalid());
+        }
+        let bytes = (core::mem::size_of::<State>()
+            + 2 * core::mem::size_of::<usize>()
+            + calls * core::mem::size_of::<Slot>()) as u64;
+        let funding = reserve(&bank, &[(K::EngineLiveBytesGlobalMax, bytes)])?;
+        let mut slots = Vec::new();
+        slots.try_reserve_exact(calls).map_err(|_| busy())?;
+        slots.resize_with(calls, || Slot::Vacant);
+        Ok(Self {
+            state: Rc::new(State {
+                bank,
+                active: Cell::new(true),
+                controller_present: Cell::new(true),
+                registry: RefCell::new(Registry {
+                    slots,
+                    sequence: 0,
+                    next_slot: 0,
+                }),
+                _funding: funding,
+            }),
+        })
+    }
+    /// Fence this capacity owner's admitted work and wake its registered waiters.
+    /// Associations and other work owners remain independent.
     pub fn begin_close(&self) {
         self.state.close();
     }
     /// Drive independent cleanup, including after every call handle was lost.
+    /// Application scheduling is required independently of native wakes. Short credit
+    /// retains the original owner and the caller's runnable/credit obligation.
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
         let (start, count) = {
             let mut registry = self.state.registry.borrow_mut();
@@ -1189,13 +1488,12 @@ impl ConsumerRuntime {
             .iter()
             .all(|s| matches!(s, Slot::Vacant))
     }
-    pub fn consumer(&self) -> ConsumerInstanceRef {
-        self.state.consumer.clone()
-    }
 }
-impl Drop for ConsumerRuntime {
+impl Drop for ConsumerCalls {
     fn drop(&mut self) {
+        self.state.controller_present.set(false);
         self.state.revoke();
+        self.state.abort_abandoned();
     }
 }
 
@@ -1208,10 +1506,15 @@ pub struct ConsumerCall {
     control: Rc<CallControl>,
 }
 impl ConsumerCall {
+    /// Record cancellation and notify the currently registered driver, if any.
+    /// The notification requests a poll; it performs no native cleanup itself.
     pub fn cancel(&self) {
         self.control.record(CoreError::Cancelled(context()));
         self.control.wake();
     }
+    /// One explicit progress turn, with caller-supplied time and work credit.
+    /// This is not a Future: native wakes do not cover passive authority changes,
+    /// deadlines or replenished credit. The application must schedule those turns.
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -1234,13 +1537,15 @@ impl ConsumerCall {
         {
             return Poll::Pending;
         }
-        Poll::Ready(ConsumerSettlement { call: lease.take() })
+        let call = lease.take();
+        Poll::Ready(ConsumerSettlement { call })
     }
 }
 impl Drop for ConsumerCall {
     fn drop(&mut self) {
         self.control.abandoned.set(true);
         self.control.record(CoreError::Cancelled(context()));
+        self.state.abort_slot(self.slot, Some(self.sequence));
     }
 }
 /// Complete original normal/late result and retained cleanup/native owner.
@@ -1304,6 +1609,22 @@ pub enum ConsumerNativeOutcome<'a> {
 }
 
 impl ConsumerSettlement {
+    /// Original resolved destination; it never follows a successor association.
+    pub fn destination(&self) -> &str {
+        &self.call.work.destination
+    }
+    /// Original lexical operands, independent of caller storage and native retirement.
+    pub fn uri_variables(&self) -> impl ExactSizeIterator<Item = (&str, &str)> {
+        self.call
+            .work
+            .variables
+            .iter()
+            .map(|(n, v)| (n.as_ref(), v.as_ref()))
+    }
+    /// Original finite input, including an encoded member selection, as slices.
+    pub fn input(&self) -> Option<PayloadView<'_>> {
+        self.call.work.input.as_ref().map(Payload::view)
+    }
     /// Original writable meaning and invocation set, retained even after source
     /// destruction, replacement or native-report rejection. Report indices must
     /// be resolved through this schema, never through a successor definition.
@@ -1424,7 +1745,7 @@ impl CallWork {
             Some(true) => self.control.record(CoreError::TimedOut(context())),
             None => self.control.record(clock_error()),
         }
-        if !state.current() {
+        if !state.current() || !self.control.association.current() {
             self.control.record(stale());
         }
         self.control.cause()
