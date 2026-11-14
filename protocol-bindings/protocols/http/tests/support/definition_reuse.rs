@@ -19,13 +19,26 @@ fn prepared(
     content: Option<&Arc<PreparedConsumerContent>>,
     id: u32,
 ) -> CoreResult<Arc<ConsumerDefinition>> {
-    let registry = ConsumerRegistry::try_new(
-        vec![compiler.registration(BindingId::new(id), BindingGeneration::INITIAL, 0)?],
+    prepared_input(
+        td,
+        compiler.registration(BindingId::new(id), BindingGeneration::INITIAL, 0)?,
         accounts,
+        content,
     )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    .map(|(mapping, _)| mapping)
+}
+fn prepared_input(
+    td: &Value,
+    registration: ConsumerRegistrationInput,
+    accounts: &Arc<HostResourceAccounts>,
+    content: Option<&Arc<PreparedConsumerContent>>,
+) -> CoreResult<(Arc<ConsumerDefinition>, usize)> {
+    let registry = ConsumerRegistry::try_new(vec![registration], accounts)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let source: Thing = serde_json::from_value(td.clone()).unwrap();
+    let mut jobs = 0;
     let drive = |job: &mut ConsumerCompilation<'_>| {
+        jobs += 1;
         while !job.is_finished() {
             job.step(&mut work(), false);
         }
@@ -55,73 +68,76 @@ fn prepared(
     let definition = bindings[0].definition().clone();
     drop(bindings);
     drop(funding);
-    Ok(definition)
+    Ok((definition, jobs))
 }
 fn program(mapping: &ConsumerDefinition) -> HttpRequestDefinition {
     HttpRequestDefinition::from_prepared(mapping).expect("explicit HTTP definition")
 }
 
 #[test]
-fn native_lowering_count_follows_definitions_while_binding_follows_instances() {
+fn native_lowering_count_and_total_retained_cost_follow_definitions_and_instances() {
     for k in [1, 2] {
-        for n in [1, 8, 32] {
-            let compilation_bank = bank();
-            let mapping_bank = bank();
-            let compiler = HttpDefinitionCompiler::new(config(), compilation_bank.clone()).unwrap();
-            let mut definitions = Vec::new();
-            let mut contents = Vec::new();
-            for group in 0..k {
-                let mut td = root_only(description(address()));
-                td["forms"][0]["htv:headers"] = json!([
-                    {"htv:fieldName":"X-Model", "htv:fieldValue":format!("group-{group}")}]);
-                let mapping = prepared(&td, &compiler, &mapping_bank, None, 98).unwrap();
-                definitions.push(program(&mapping));
-                contents.push(mapping.content().clone());
+        for n in [1, 2, 8, 32] {
+            if k > n {
+                continue;
             }
-            assert_eq!(compiler.native_compilations(), k);
-            let binders: Vec<_> = definitions
-                .iter()
-                .map(|d| {
-                    HttpDefinitionCompiler::with_definition(config(), d, mapping_bank.clone())
-                        .unwrap()
+            // Equal source documents, common semantic owner, policy and native
+            // capacity in both controls. Account/fixture provisioning is excluded.
+            let common_bank = bank();
+            let initial = root_only(description(address()));
+            let (common_mapping, _) = prepared_input(
+                &initial,
+                try_consumer_registration(
+                    config(),
+                    BindingId::new(98),
+                    BindingGeneration::INITIAL,
+                    0,
+                )
+                .unwrap(),
+                &common_bank,
+                None,
+            )
+            .unwrap();
+            let content = common_mapping.content().clone();
+            drop(common_mapping);
+            let sources: Vec<_> = (0..n)
+                .map(|i| {
+                    let mut td = root_only(description(address()));
+                    td["id"] = json!(format!("urn:meter:{i}"));
+                    td["forms"][0]["htv:headers"] = json!([
+                    {"htv:fieldName":"X-Model", "htv:fieldValue":format!("group-{}", i % k)}]);
+                    td
                 })
                 .collect();
-            let original_bytes = live(&compilation_bank);
-            let started = Instant::now();
-            let mut mappings = Vec::new();
-            for instance in 0..n {
-                let group = instance % k;
-                let mut td = root_only(description(address()));
-                td["id"] = json!(format!("urn:meter:{instance}"));
-                td["forms"][0]["htv:headers"] = json!([
-                    {"htv:fieldName":"X-Model", "htv:fieldValue":format!("group-{group}")}]);
-                let mapping = prepared(
-                    &td,
-                    &binders[group],
-                    &mapping_bank,
-                    Some(&contents[group]),
-                    99,
-                )
-                .unwrap();
-                assert!(definitions[group].shares_compilation_with(&program(&mapping)));
-                mappings.push(mapping);
-            }
-            let elapsed = started.elapsed();
+            let compilation_bank = bank();
+            let mapping_bank = bank();
             let control_bank = bank();
-            let control_started = Instant::now();
-            let mut controls = Vec::new();
-            let mut independent_jobs = 0;
-            for instance in 0..n {
-                let group = instance % k;
-                let mut td = root_only(description(address()));
-                td["forms"][0]["htv:headers"] = json!([
-                    {"htv:fieldName":"X-Model", "htv:fieldValue":format!("group-{group}")}]);
-                let (mapping, cost) = mapping_cost(&td, &control_bank, Some(&contents[group]));
-                independent_jobs += cost.native_jobs;
-                controls.push(mapping);
+            let shared_start = allocation_meter::read();
+            let started = Instant::now();
+            let compiler = HttpDefinitionCompiler::new(config(), compilation_bank.clone()).unwrap();
+            let mut binders = Vec::new();
+            let mut shared: Vec<Arc<ConsumerDefinition>> = Vec::new();
+            for (i, td) in sources.iter().enumerate() {
+                let mapping = if i < k {
+                    let mapping =
+                        prepared(td, &compiler, &mapping_bank, Some(&content), 98).unwrap();
+                    binders.push(
+                        HttpDefinitionCompiler::with_definition(
+                            config(),
+                            &program(&mapping),
+                            mapping_bank.clone(),
+                        )
+                        .unwrap(),
+                    );
+                    mapping
+                } else {
+                    prepared(td, &binders[i % k], &mapping_bank, Some(&content), 98).unwrap()
+                };
+                if i >= k {
+                    assert!(program(&shared[i % k]).shares_compilation_with(&program(&mapping)));
+                }
+                shared.push(mapping);
             }
-            let control_elapsed = control_started.elapsed();
-            assert_eq!(independent_jobs, n);
             assert_eq!(compiler.native_compilations(), k);
             assert_eq!(
                 binders
@@ -132,26 +148,80 @@ fn native_lowering_count_follows_definitions_while_binding_follows_instances() {
             );
             assert_eq!(
                 binders.iter().map(|b| b.dependency_checks()).sum::<usize>(),
-                n
+                n - k
             );
             assert_eq!(
-                binders.iter().map(|b| b.instance_bindings()).sum::<usize>(),
+                compiler.instance_bindings()
+                    + binders.iter().map(|b| b.instance_bindings()).sum::<usize>(),
                 n
             );
-            assert_eq!(live(&compilation_bank), original_bytes);
-            eprintln!(
-                "HTTP definitions K={k} instances N={n}: lowerings={k}, checked bindings={n}, bind preparation={elapsed:?}, independent lowerings={independent_jobs}, independent preparation={control_elapsed:?}, original backing={original_bytes}"
+            // Runtime retained cost includes K instruction/input owners and N
+            // mappings, after compilation-only owners and counters are destroyed.
+            drop(compiler);
+            drop(binders);
+            let shared_elapsed = started.elapsed();
+            let shared_end = allocation_meter::read();
+            let shared_heap = shared_end.live - shared_start.live;
+            let shared_reserved = live(&compilation_bank) + live(&mapping_bank);
+            let definition_reserved = live(&compilation_bank);
+            let control_start = allocation_meter::read();
+            let started = Instant::now();
+            let mut controls = Vec::new();
+            let mut control_jobs = 0;
+            for td in &sources {
+                let (mapping, jobs) = prepared_input(
+                    td,
+                    try_consumer_registration(
+                        config(),
+                        BindingId::new(98),
+                        BindingGeneration::INITIAL,
+                        0,
+                    )
+                    .unwrap(),
+                    &control_bank,
+                    Some(&content),
+                )
+                .unwrap();
+                control_jobs += jobs;
+                controls.push(mapping);
+            }
+            let control_elapsed = started.elapsed();
+            let control_end = allocation_meter::read();
+            let control_heap = control_end.live - control_start.live;
+            let control_reserved = live(&control_bank);
+            assert_eq!(control_jobs, n);
+            if n >= 8 {
+                assert!(shared_heap < control_heap, "actual retained heap benefit");
+            }
+            assert!(
+                definition_reserved < k as u64 * 4096,
+                "no fixed 8 KiB dependency buffer"
             );
             drop(controls);
-            clean(&control_bank);
-            drop(compiler);
-            drop(definitions);
-            drop(contents);
-            drop(binders);
-            assert!(live(&compilation_bank) > 0);
-            drop(mappings);
+            assert_eq!(
+                allocation_meter::read().live,
+                control_start.live,
+                "physical control release"
+            );
+            drop(shared);
+            assert_eq!(
+                allocation_meter::read().live,
+                shared_start.live,
+                "physical shared release"
+            );
             clean(&mapping_bank);
             clean(&compilation_bank);
+            clean(&control_bank);
+            eprintln!(
+                "HTTP K={k} N={n}: lowerings={k}/{control_jobs}, checks={}, shared/independent heap={shared_heap}/{control_heap}, reserved={shared_reserved}/{control_reserved}, definition reserved={definition_reserved}, preparation including compile={shared_elapsed:?}/{control_elapsed:?}, allocation calls={}/{}, requested bytes={}/{}",
+                n - k,
+                shared_end.allocations - shared_start.allocations,
+                control_end.allocations - control_start.allocations,
+                shared_end.allocated_bytes - shared_start.allocated_bytes,
+                control_end.allocated_bytes - control_start.allocated_bytes
+            );
+            drop(content);
+            clean(&common_bank);
         }
     }
 }
@@ -335,6 +405,23 @@ fn changed_dependencies_refuse_before_lowering_and_fresh_compilation_can_recover
     .unwrap();
     assert!(program(&mapping).shares_compilation_with(&program(&equivalent)));
     drop(equivalent);
+    // These declarations affect neither support nor the normalized native
+    // instructions. They must not enter a second, overbroad dependency key.
+    let mut explicit_defaults = original.clone();
+    explicit_defaults["forms"][0]["htv:methodName"] = json!("GET");
+    explicit_defaults["forms"][0]["response"] = json!({
+        "contentType":"application/json", "htv:statusCodeValue":200});
+    explicit_defaults["forms"][0]["urn:vendor:annotation"] = json!("x".repeat(6000));
+    let equivalent = prepared(
+        &explicit_defaults,
+        &binder,
+        &mapping_bank,
+        Some(mapping.content()),
+        99,
+    )
+    .unwrap();
+    assert!(program(&mapping).shares_compilation_with(&program(&equivalent)));
+    drop(equivalent);
     let mut shifted = original.clone();
     shifted["forms"].as_array_mut().unwrap().insert(
         0,
@@ -390,12 +477,17 @@ fn changed_dependencies_refuse_before_lowering_and_fresh_compilation_can_recover
         ("contentCoding", json!("gzip")),
         ("contentType", json!("text/plain")),
         ("subprotocol", json!("other")),
+        ("htv:statusCodeValue", json!(200)), // unsupported at the Form itself
     ] {
         let mut td = original.clone();
         td["forms"][0][field] = value;
         assert!(
             prepared(&td, &binder, &mapping_bank, Some(mapping.content()), 99).is_err(),
             "{field}"
+        );
+        assert!(
+            prepared(&td, &compiler, &mapping_bank, Some(mapping.content()), 99).is_err(),
+            "fresh and reused extraction must reject the same unsupported {field}"
         );
     }
     for target in [
@@ -610,6 +702,26 @@ fn checked_binding_reuses_method_headers_and_response_discrimination_on_the_wire
             99,
         )
         .unwrap();
+        let mut another_supported_method = second_source.clone();
+        another_supported_method["properties"]["level"]["forms"][0]["htv:methodName"] =
+            json!("GET");
+        assert!(prepared(&another_supported_method, &binder, &mapping_bank, None, 99).is_err());
+        assert!(
+            prepared_input(
+                &another_supported_method,
+                try_consumer_registration(
+                    config(),
+                    BindingId::new(99),
+                    BindingGeneration::INITIAL,
+                    0
+                )
+                .unwrap(),
+                &mapping_bank,
+                None
+            )
+            .is_ok(),
+            "changed supported input can be freshly compiled"
+        );
         for (field, value) in [
             ("htv:statusCodeValue", json!(410)),
             ("success", json!(true)),

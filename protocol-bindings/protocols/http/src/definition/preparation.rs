@@ -1,14 +1,13 @@
 //! Explicit HTTP compile-once / checked-bind-many through the existing owned SPI.
 use super::*;
-use clinkz_wot_core::security::SecurityRequirement;
 use clinkz_wot_planning::{open_consumer::ConsumerRegistrationInput, *};
-use clinkz_wot_td::semantic::{
-    FormOwner, SemanticName, SemanticNode, SemanticScope, SemanticValue,
-};
-
-// A deliberately bounded dependency closure, not a serialized program format.
-const DEPENDENCY_BYTES: usize = 8192;
-const TEMPORARY: u64 = (DEPENDENCY_BYTES + std::mem::size_of::<HttpArtifact>() + 512) as u64;
+// Include the common security extractor's published envelope as well as bounded
+// header/response vectors, URI qualification and inline lowering. All of this
+// is temporary; retained input descendants are charged at their actual sizes.
+const TEMPORARY: u64 = clinkz_wot_planning::security::TEMPORARY_BYTES
+    + 8192
+    + std::mem::size_of::<HttpArtifact>() as u64
+    + 512;
 
 enum Mode {
     Compile,
@@ -142,29 +141,25 @@ impl HttpDefinitionCompiler {
         let definition = match &self.0.mode {
             Mode::Bind(definition) => {
                 self.0.checks.fetch_add(1, Ordering::Relaxed);
-                let mut sink = DependencySink::compare(&definition.0.dependencies);
-                dependencies(input, &mut sink)?;
-                sink.finish()?;
+                let current = HttpCompiler::for_finite(self.0.config).extract(input)?;
+                if current != definition.0.input {
+                    return Err(crate::compiler::unsupported());
+                }
                 definition.clone()
             }
             Mode::Compile => {
-                // Acquire original physical backing before dependency allocation
-                // or lowering. Failure drops provisional bytes before leases.
-                let funding = definition_funding(&self.0.bank)?;
-                let mut dependencies_bytes = Vec::new();
-                dependencies_bytes
-                    .try_reserve_exact(DEPENDENCY_BYTES)
-                    .map_err(|_| busy())?;
-                let mut sink = DependencySink::write(&mut dependencies_bytes);
-                dependencies(input, &mut sink)?;
-                sink.finish()?;
+                // Borrowed extraction uses admitted temporary backing. Acquire
+                // original physical backing before owning strings or lowering.
+                // Failure drops provisional data before its original leases.
+                let normalized = HttpCompiler::for_finite(self.0.config).extract(input)?;
+                let funding = definition_funding(&self.0.bank, normalized.owned_bytes())?;
                 self.0.compilations.fetch_add(1, Ordering::Relaxed);
-                let instructions =
-                    HttpCompiler::for_finite(self.0.config).compile_definition(input)?;
+                let instructions = normalized.lower()?;
+                let normalized = normalized.into_owned();
                 HttpRequestDefinition(Arc::new(CompiledRequest {
                     configuration: self.0.config.configuration,
                     instructions,
-                    dependencies: dependencies_bytes,
+                    input: normalized,
                     _funding: funding,
                 }))
             }
@@ -265,8 +260,9 @@ fn reserve(
 }
 fn definition_funding(
     bank: &Arc<HostResourceAccounts>,
+    input_bytes: usize,
 ) -> CoreResult<[HostCapacityReservation; 5]> {
-    let bytes = (std::mem::size_of::<CompiledRequest>() + DEPENDENCY_BYTES + 128) as u64;
+    let bytes = (std::mem::size_of::<CompiledRequest>() + input_bytes + 128) as u64;
     for kind in [
         ResourceKind::LargestContiguousAllocationBytesMax,
         ResourceKind::BindingArtifactBytesPerItemMax,
@@ -282,266 +278,4 @@ fn definition_funding(
         reserve(bank, ResourceKind::CleanupBytesMax, bytes)?,
         reserve(bank, ResourceKind::CleanupItemsMax, 1)?,
     ])
-}
-
-// This projection sits beside the actual HTTP compiler. It captures everything
-// lowering reads except the separately checked destination. Common schema/URI
-// meanings and live service qualification still run in ConsumerRegistry.
-fn dependencies(input: ResolvedBindingInput<'_>, sink: &mut DependencySink<'_>) -> CoreResult<()> {
-    let collection = input.owner == FormOwner::Thing;
-    sink.byte(match input.owner {
-        FormOwner::Thing => 0,
-        FormOwner::Property(_) => 1,
-        _ => return Err(crate::compiler::unsupported()),
-    })?;
-    sink.byte(input.operation as u8)?;
-    sink.optional_text(input.content_type)?;
-    sink.optional_text(input.subprotocol)?;
-    let facts = input
-        .document
-        .form(input.owner, input.form_index)
-        .ok_or_else(crate::compiler::unsupported)?;
-    sink.text(facts.content_type)?;
-    sink.optional_text(facts.content_coding)?;
-    sink.optional_text(facts.response_content_type)?;
-    sink.byte(u8::from(facts.declared_operations.is_some()))?;
-    for ops in [
-        facts.declared_operations.unwrap_or(&[]),
-        facts.effective_operations,
-    ] {
-        sink.length(ops.len())?;
-        for op in ops {
-            sink.byte(*op as u8)?;
-        }
-    }
-    // ConsumerRegistry already qualifies this conjunction against the current
-    // effective expression; raw scheme names are not native placement identity.
-    let requirement = input
-        .selected_security
-        .ok_or_else(crate::compiler::unsupported)?;
-    if !requirement.is_conjunction() {
-        return Err(crate::compiler::unsupported());
-    }
-    security(requirement, sink)?;
-    if !collection {
-        let flags = input.document.property().schema.facts();
-        sink.byte(u8::from(flags.read_only))?;
-        sink.byte(u8::from(flags.write_only))?;
-    }
-    let scope = if collection {
-        SemanticScope::AffordanceForm {
-            owner: input.owner,
-            index: input.form_index,
-        }
-    } else {
-        SemanticScope::Form {
-            property: input.property,
-            index: input.form_index,
-        }
-    };
-    sink.scope(input.document.scope(scope))?;
-    // Root extension assertions affect the supported native collection profile.
-    if matches!(
-        input.operation,
-        Operation::ReadMultipleProperties
-            | Operation::QueryAllActions
-            | Operation::WriteAllProperties
-            | Operation::WriteMultipleProperties
-    ) {
-        sink.scope(input.document.scope(SemanticScope::Thing))?;
-    }
-    let response = if collection {
-        SemanticScope::AffordanceResponse {
-            owner: input.owner,
-            index: input.form_index,
-        }
-    } else {
-        SemanticScope::Response {
-            property: input.property,
-            index: input.form_index,
-        }
-    };
-    sink.scope(input.document.scope(response))?;
-    let additional = input
-        .document
-        .additional_responses(input.owner, input.form_index)
-        .ok_or_else(crate::compiler::unsupported)?;
-    for (i, response) in additional.enumerate() {
-        if i == 32 {
-            return Err(crate::compiler::unsupported());
-        }
-        sink.byte(1)?;
-        sink.text(response.content_type)?;
-        sink.byte(u8::from(response.success))?;
-        sink.byte(u8::from(response.schema.is_some()))?;
-        let scope = if collection {
-            SemanticScope::AffordanceAdditionalResponse {
-                owner: input.owner,
-                form: input.form_index,
-                index: i as u32,
-            }
-        } else {
-            SemanticScope::AdditionalResponse {
-                property: input.property,
-                form: input.form_index,
-                index: i as u32,
-            }
-        };
-        sink.scope(input.document.scope(scope))?;
-    }
-    sink.byte(0)
-}
-fn security(r: &SecurityRequirement, sink: &mut DependencySink<'_>) -> CoreResult<()> {
-    match r {
-        SecurityRequirement::NoSec => sink.byte(0),
-        SecurityRequirement::Scheme { scheme, parameters } => {
-            sink.byte(1)?;
-            sink.text(scheme)?;
-            sink.length(parameters.len())?;
-            for (k, v) in parameters {
-                sink.text(k)?;
-                sink.text(v)?;
-            }
-            Ok(())
-        }
-        SecurityRequirement::AllOf(children) => {
-            sink.byte(2)?;
-            sink.length(children.len())?;
-            for r in children {
-                security(r, sink)?;
-            }
-            Ok(())
-        }
-        _ => Err(crate::compiler::unsupported()),
-    }
-}
-
-enum Output<'a> {
-    Write(&'a mut Vec<u8>),
-    Compare(&'a [u8]),
-}
-struct DependencySink<'a> {
-    output: Output<'a>,
-    position: usize,
-    nodes: usize,
-}
-impl<'a> DependencySink<'a> {
-    fn write(bytes: &'a mut Vec<u8>) -> Self {
-        Self {
-            output: Output::Write(bytes),
-            position: 0,
-            nodes: 0,
-        }
-    }
-    fn compare(bytes: &'a [u8]) -> Self {
-        Self {
-            output: Output::Compare(bytes),
-            position: 0,
-            nodes: 0,
-        }
-    }
-    fn bytes(&mut self, bytes: &[u8]) -> CoreResult<()> {
-        let end = self
-            .position
-            .checked_add(bytes.len())
-            .filter(|n| *n <= DEPENDENCY_BYTES)
-            .ok_or_else(crate::compiler::unsupported)?;
-        match &mut self.output {
-            Output::Write(out) => out.extend_from_slice(bytes),
-            Output::Compare(expected) if expected.get(self.position..end) == Some(bytes) => {}
-            _ => return Err(crate::compiler::unsupported()),
-        }
-        self.position = end;
-        Ok(())
-    }
-    fn finish(&self) -> CoreResult<()> {
-        if matches!(&self.output, Output::Compare(bytes) if bytes.len() != self.position) {
-            return Err(crate::compiler::unsupported());
-        }
-        Ok(())
-    }
-    fn byte(&mut self, byte: u8) -> CoreResult<()> {
-        self.bytes(&[byte])
-    }
-    fn length(&mut self, n: usize) -> CoreResult<()> {
-        self.bytes(
-            &u32::try_from(n)
-                .map_err(|_| crate::compiler::unsupported())?
-                .to_le_bytes(),
-        )
-    }
-    fn text(&mut self, text: &str) -> CoreResult<()> {
-        self.length(text.len())?;
-        self.bytes(text.as_bytes())
-    }
-    fn optional_text(&mut self, text: Option<&str>) -> CoreResult<()> {
-        self.byte(u8::from(text.is_some()))?;
-        if let Some(text) = text {
-            self.text(text)?;
-        }
-        Ok(())
-    }
-    fn iri(&mut self, iri: clinkz_wot_td::semantic::SemanticIri<'_>) -> CoreResult<()> {
-        let (prefix, suffix) = iri.segments();
-        self.length(prefix.len() + suffix.len())?;
-        self.bytes(prefix.as_bytes())?;
-        self.bytes(suffix.as_bytes())
-    }
-    fn scope(&mut self, scope: Option<SemanticNode<'_>>) -> CoreResult<()> {
-        self.byte(u8::from(scope.is_some()))?;
-        if let Some(scope) = scope {
-            self.children(scope)?;
-        }
-        Ok(())
-    }
-    fn children(&mut self, node: SemanticNode<'_>) -> CoreResult<()> {
-        for child in node.children() {
-            self.byte(1)?;
-            self.node(child)?;
-        }
-        self.byte(0)
-    }
-    fn node(&mut self, node: SemanticNode<'_>) -> CoreResult<()> {
-        self.nodes += 1;
-        if self.nodes > 128 {
-            return Err(crate::compiler::unsupported());
-        }
-        match node.name() {
-            SemanticName::Iri(iri) => {
-                self.byte(0)?;
-                self.iri(iri)?;
-            }
-            SemanticName::Keyword(s) => {
-                self.byte(1)?;
-                self.text(s)?;
-            }
-            SemanticName::Unmapped(s) => {
-                self.byte(2)?;
-                self.text(s)?;
-            }
-            SemanticName::Item => self.byte(3)?,
-        }
-        match node.value() {
-            SemanticValue::Null => self.byte(0)?,
-            SemanticValue::Bool(b) => {
-                self.byte(1)?;
-                self.byte(u8::from(b))?;
-            }
-            SemanticValue::Number(n) => {
-                self.byte(2)?;
-                self.text(&n.to_string())?;
-            }
-            SemanticValue::Text(s) => {
-                self.byte(3)?;
-                self.text(s)?;
-            }
-            SemanticValue::Iri(iri) => {
-                self.byte(4)?;
-                self.iri(iri)?;
-            }
-            SemanticValue::Array => self.byte(5)?,
-            SemanticValue::Object => self.byte(6)?,
-        }
-        self.children(node)
-    }
 }

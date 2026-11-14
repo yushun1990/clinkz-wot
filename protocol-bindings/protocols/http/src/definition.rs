@@ -11,7 +11,7 @@ struct CompiledRequest {
     configuration: ConsumerBindingConfiguration,
     instructions: HttpArtifact,
     #[cfg_attr(not(feature = "prepare"), allow(dead_code))]
-    dependencies: Vec<u8>,
+    input: crate::program::HttpRequestInput<'static>,
     _funding: [HostCapacityReservation; 5],
 }
 

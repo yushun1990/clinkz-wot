@@ -1,7 +1,9 @@
 //! Optional HTTP preparation; all executable types are defined by the runtime.
 use super::*;
+use crate::program::HttpRequestInput;
 use clinkz_wot_planning::*;
 use clinkz_wot_td::semantic::{FormOwner, SemanticNode, SemanticScope, SemanticValue};
+use std::borrow::Cow;
 const HTTP: &str = "http://www.w3.org/2011/http#";
 #[derive(Debug)]
 pub(super) struct HttpCompiler {
@@ -41,7 +43,7 @@ impl HostSemanticCompiler for HttpCompiler {
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         self.qualify_target(input)?;
-        let mut output = self.compile_definition(input)?;
+        let mut output = self.extract(input)?.lower()?;
         output.target_len = input.target.len() as u16;
         output.target[..input.target.len()].copy_from_slice(input.target.as_bytes());
         Ok(output)
@@ -69,12 +71,13 @@ impl HttpCompiler {
         }
         Ok(())
     }
-    /// Invariant native lowering. This function never reads the destination;
-    /// ordinary compilation and explicit definition preparation share it.
-    pub(super) fn compile_definition(
+    /// The only TD-to-native input extraction. TD applicability checks run for
+    /// each source; native header syntax checks remain in lowering. Only these
+    /// normalized facts can reach instruction lowering.
+    pub(super) fn extract<'a>(
         &self,
-        input: ResolvedBindingInput<'_>,
-    ) -> CoreResult<HttpArtifact> {
+        input: ResolvedBindingInput<'a>,
+    ) -> CoreResult<HttpRequestInput<'a>> {
         use clinkz_wot_td::data_type::Operation;
         let collection = input.owner == FormOwner::Thing
             && matches!(
@@ -154,7 +157,7 @@ impl HttpCompiler {
         if facts.content_coding.is_some() {
             return Err(unsupported());
         }
-        let responses = crate::responses::HttpResponses::compile(
+        let responses = crate::responses::HttpResponses::extract(
             input.document,
             input.owner,
             input.form_index,
@@ -174,13 +177,13 @@ impl HttpCompiler {
                 }
             })
             .ok_or_else(unsupported)?;
-        let mut output = HttpArtifact {
+        let mut output = HttpRequestInput {
             operation: input.operation,
             responses,
             secure: self.config.secure,
             authentication,
             method: if write { "PUT" } else { "GET" },
-            ..HttpArtifact::default()
+            headers: Vec::new(),
         };
         // Only absence enables the protocol default. Malformed/unsupported
         // explicit instructions never silently turn into a default request.
@@ -224,6 +227,15 @@ impl HttpCompiler {
             if headers.value() != SemanticValue::Array {
                 return Err(unsupported());
             }
+            let count = headers.children().count();
+            if count > 8 {
+                return Err(unsupported());
+            }
+            output
+                .headers
+                .try_reserve_exact(count)
+                .map_err(|_| unsupported())?;
+            let mut bytes = 0usize;
             for header in headers.children() {
                 if header.value() != SemanticValue::Object {
                     return Err(unsupported());
@@ -251,7 +263,15 @@ impl HttpCompiler {
                 }) {
                     return Err(unsupported());
                 }
-                output.header(name, value)?;
+                bytes = bytes
+                    .checked_add(name.len() + value.len())
+                    .ok_or_else(unsupported)?;
+                if bytes > 1024 {
+                    return Err(unsupported());
+                }
+                output
+                    .headers
+                    .push((Cow::Borrowed(name), Cow::Borrowed(value)));
             }
         }
         // Other standardized HTTP instructions are outside this declared slice.

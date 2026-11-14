@@ -405,7 +405,9 @@ The [Binding dependency/operand contract](../spec/binding-spi.md#explicit-http-d
 is implemented by optional `HttpDefinitionCompiler` and opaque
 `HttpRequestDefinition` / `HttpBoundRequest`. The existing HTTP lowering remains
 the one instruction compiler; explicit supplied definitions skip it after exact
-dependency comparison and concrete destination qualification. Runtime-only HTTP
+normalized-input comparison and concrete destination qualification. The same
+input extraction feeds fresh lowering, eliminating the separate dependency
+visitor; owned input descendants are sized to actual content. Runtime-only HTTP
 recognizes the bound artifact and retains its existing per-call inline program,
 I/O/occupancy and cleanup contracts. The private-policy identity is revised to
 include this interpretation; ordinary endpoint-specialized and restricted inline

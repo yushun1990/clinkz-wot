@@ -93,6 +93,9 @@ its complete actual configuration and all facts its lowering observes must be
 checked. A mismatch refuses or explicitly compiles another definition before
 dependent effects. Source/instance identities and registration coordinates are
 not dependencies merely because an old compiler carrier includes them.
+The HTTP increment uses one typed input extraction for lowering and reuse,
+with derived input equality; it retains no independent semantic projection.
+This is a concrete Binding choice, not a required generic compiler framework.
 
 `PREP-COVER-001`: Before Producer Serving, every retained final Thing-root and
 affordance Form and each effective operation MUST have complete support under

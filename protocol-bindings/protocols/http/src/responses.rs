@@ -8,6 +8,14 @@ pub(super) struct HttpResponses {
     empty: u64,
     utf8_media: u64,
 }
+/// Normalized native response facts; no source schema, credential or authority.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct HttpResponseInput {
+    code: u16,
+    success: bool,
+    has_data: bool,
+    utf8_media: bool,
+}
 impl Default for HttpResponses {
     fn default() -> Self {
         Self::primary(false)
@@ -79,6 +87,32 @@ impl HttpResponses {
         form: u32,
         operation: Operation,
     ) -> CoreResult<Self> {
+        Ok(Self::lower(&Self::extract(doc, owner, form, operation)?))
+    }
+    #[cfg(feature = "prepare")]
+    pub(super) fn lower(input: &[HttpResponseInput]) -> Self {
+        let mut result = Self {
+            codes: [0; 33],
+            count: input.len() as u8,
+            successes: 0,
+            empty: 0,
+            utf8_media: 0,
+        };
+        for (i, response) in input.iter().enumerate() {
+            result.codes[i] = response.code;
+            result.successes |= u64::from(response.success) << i;
+            result.empty |= u64::from(!response.has_data) << i;
+            result.utf8_media |= u64::from(response.utf8_media) << i;
+        }
+        result
+    }
+    #[cfg(feature = "prepare")]
+    pub(super) fn extract(
+        doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
+        owner: clinkz_wot_td::semantic::FormOwner<'_>,
+        form: u32,
+        operation: Operation,
+    ) -> CoreResult<Vec<HttpResponseInput>> {
         use clinkz_wot_td::semantic::{FormOwner, SemanticScope, SemanticValue};
         let facts = doc
             .form(owner, form)
@@ -89,7 +123,6 @@ impl HttpResponses {
                 | Operation::WriteAllProperties
                 | Operation::WriteMultipleProperties
         );
-        let mut result = Self::primary(write);
         let additional: Vec<_> = doc
             .additional_responses(owner, form)
             .ok_or_else(crate::compiler::unsupported)?
@@ -99,6 +132,10 @@ impl HttpResponses {
         {
             return Err(crate::compiler::unsupported());
         }
+        let mut result: Vec<HttpResponseInput> = Vec::new();
+        result
+            .try_reserve_exact(additional.len() + 1)
+            .map_err(|_| crate::compiler::unsupported())?;
         for i in 0..=additional.len() {
             let (media, success, has_data, scope) = if i == 0 {
                 (
@@ -138,9 +175,6 @@ impl HttpResponses {
             {
                 return Err(crate::compiler::unsupported());
             }
-            if media == "application/json; charset=utf-8" {
-                result.utf8_media |= 1u64 << i;
-            }
             let mut code = if i == 0 {
                 Some(if write { 204 } else { 200 })
             } else {
@@ -173,26 +207,20 @@ impl HttpResponses {
                 || code == 202
                 || has_data && matches!(code, 204 | 205 | 304)
                 || !has_data && code != 204
-                || result.codes[..i].contains(&code)
+                || result.iter().any(|r| r.code == code)
             {
                 return Err(crate::compiler::unsupported());
             }
             if i == 0 && code != if write { 204 } else { 200 } {
                 return Err(crate::compiler::unsupported());
             }
-            result.codes[i] = code;
-            if success {
-                result.successes |= 1u64 << i;
-            } else {
-                result.successes &= !(1u64 << i);
-            }
-            if !has_data {
-                result.empty |= 1u64 << i;
-            } else {
-                result.empty &= !(1u64 << i);
-            }
+            result.push(HttpResponseInput {
+                code,
+                success,
+                has_data,
+                utf8_media: media == "application/json; charset=utf-8",
+            });
         }
-        result.count = (additional.len() + 1) as u8;
         Ok(result)
     }
 }

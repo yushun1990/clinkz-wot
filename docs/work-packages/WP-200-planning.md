@@ -438,14 +438,17 @@ the selected concrete capability distinguishes lowering from dependency checking
 and instance specialization. No common compiled-program type, reuse lookup table,
 new resource schema, TD interpretation or Servient owner is introduced.
 PREP-REUSE-001 now explicitly distinguishes skipped compilation from semantic
-sharing and interning. The Binding contract owns the complete native projection;
+sharing and interning. The Binding contract owns one typed native-input extraction and equality;
 the normal common/schema/security/service qualification remains mandatory.
 
-Affected source is HTTP's definition/preparation module and native artifact
-resolution. New owned physical backing reserves its original global live,
+Affected source is HTTP's definition/preparation and native artifact resolution,
+its compiler/input representation, and shared response extraction/packing.
+New owned physical backing reserves its original global live,
 artifact-byte/item and cleanup capacity before construction. Each mapping keeps
 its generic cursor/output/temporary/rollback/reference funding. Existing inline
-output and closed aggregate layouts are unchanged. Validate the HTTP definition
+output and closed aggregate layouts are unchanged. The owned callback's temporary
+bound includes the published security-extraction envelope and bounded normalized
+vectors; this is separate from retained input capacity. Validate the HTTP definition
 and HTTPS reuse fixtures, full affected HTTP regressions, runtime-only HTTP build,
 Planning/finite tests and authority projections. No execution coordinator or
 runtime-safety change is admitted here. Package/gate/milestone status is unchanged;

@@ -78,8 +78,9 @@ with a bank for physical instruction ownership and call its `registration`
 input in the ordinary `ConsumerRegistry` preparation. From a selected mapping,
 extract `HttpRequestDefinition::from_prepared(mapping)` and supply it to
 `HttpDefinitionCompiler::with_definition` for further registrations/preparation.
-The supplied path checks dependencies and binds the new endpoint while skipping
-method/header/response lowering. `native_compilations`, `dependency_checks` and
+The supplied path uses the same typed input extraction as fresh compilation,
+compares normalized facts and binds the new endpoint while skipping header
+validation/packing and response-table packing. `native_compilations`, `dependency_checks` and
 `instance_bindings` distinguish those kinds of work. A mismatch refuses; explicit
 fresh preparation can produce another definition.
 
@@ -91,8 +92,9 @@ Runtime; each bound mapping captures its own actual execution registration.
 Original instruction funding survives until the last mapping/result releases it.
 See the [dependency contract](../../../docs/spec/binding-spi.md#explicit-http-definition-compilation)
 and [executable usage](tests/support/definition_reuse.rs). This optional Host
-path has an 8192-byte/128-node conservative dependency closure. It demonstrates
-skipped lowering without claiming a net cold-start speedup, portable sharing,
+path retains exactly sized normalized header/response facts with the shared
+instructions. It reduces retained heap for compatible populations but can cost
+more for a unique instance. It claims no net cold-start speedup, portable sharing,
 automatic caching or execution coordination.
 
 Prepare bindings with `ConsumerRegistry`, then use the finite `ConsumerOwner`'s

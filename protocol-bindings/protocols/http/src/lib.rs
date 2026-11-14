@@ -61,8 +61,8 @@ const MEDIA: u64 = 32;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v19\0",
-    "explicit-request-definition-v1;dependency-closure8192-nodes128;exact-config;fresh-IP-template-target;shared-original-account;inline-call-materialization;",
+    "clinkz-http-ip-v20\0",
+    "explicit-request-definition-v2;single-typed-native-input;derived-equality;exact-input-backing;header8/1024;responses33;exact-config;fresh-IP-template-target;shared-original-account;inline-call-materialization;",
     "TD-responses33;unique-terminal-native-status;explicit-success;branch-schema;JSON-or-JSON-UTF8-response;media32;",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
