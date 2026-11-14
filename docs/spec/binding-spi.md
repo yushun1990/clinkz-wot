@@ -416,6 +416,10 @@ original candidate, without treating an MQTT topic or NoSec payload as verified
 sender evidence. Rich source-provenance support requires separately qualified
 mapping/verification and original trust/dependency ownership; neither this facet
 nor compatible topic sharing establishes it.
+Individual policy refusal does not issue native unsubscribe or response data.
+The original reply owner may need retirement before another item can proceed;
+its native contract decides actual completion/failure, without duplicating reply
+rights or granting physical-service shutdown to the Engine.
 
 
 Thing-root ObserveAllProperties retains one logical participation and its

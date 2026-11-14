@@ -970,7 +970,7 @@ fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_e
             _: BindingRegistrationIdentity,
             _: &str,
             r: NotificationAuthorization<'_>,
-        ) -> CoreResult<()> {
+        ) -> CoreResult<NotificationDecision> {
             assert_eq!(r.target, &AffordanceTarget::Thing);
             if r.permission == NotificationPermission::Respond {
                 assert_eq!(
@@ -985,7 +985,7 @@ fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_e
                     });
                 }
             }
-            Ok(())
+            Ok(NotificationDecision::Allow)
         }
         fn work(&self) -> u64 {
             1

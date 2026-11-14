@@ -452,7 +452,10 @@ impl ConsumerNotificationBinding for Binding {
 struct Policy {
     denied: Rc<Cell<u8>>,
     probes: Rc<Cell<usize>>,
-    on_deliver: PolicyHook,
+    on_maintain: PolicyHook,
+    on_item: PolicyHook,
+    reject_alarm: Rc<Cell<bool>>,
+    reject_response: Rc<Cell<bool>>,
 }
 type PolicyHook = Rc<RefCell<Option<Box<dyn FnOnce()>>>>;
 impl Policy {
@@ -460,38 +463,65 @@ impl Policy {
         Self {
             denied: Rc::new(Cell::new(0)),
             probes: Rc::new(Cell::new(0)),
-            on_deliver: Rc::new(RefCell::new(None)),
+            on_maintain: Rc::new(RefCell::new(None)),
+            on_item: Rc::new(RefCell::new(None)),
+            reject_alarm: Rc::new(Cell::new(false)),
+            reject_response: Rc::new(Cell::new(false)),
         }
     }
 }
 fn bit(p: NotificationPermission) -> u8 {
     match p {
         NotificationPermission::Establish => 1,
+        NotificationPermission::Maintain => 16,
         NotificationPermission::Deliver => 2,
         NotificationPermission::Respond => 4,
         NotificationPermission::Cancel => 8,
     }
 }
 impl NotificationAuthorizer for Policy {
-    fn authorize(&self, request: NotificationAuthorization<'_>) -> CoreResult<()> {
+    fn authorize(
+        &self,
+        request: NotificationAuthorization<'_>,
+    ) -> CoreResult<NotificationDecision> {
         let p = request.permission;
         self.probes.set(self.probes.get() + 1);
-        if p == NotificationPermission::Deliver {
-            let hook = self.on_deliver.borrow_mut().take();
+        if p == NotificationPermission::Maintain {
+            let hook = self.on_maintain.borrow_mut().take();
             if let Some(hook) = hook {
                 hook();
             }
         }
-        if self.denied.get() & bit(p) == 0 {
-            Ok(())
-        } else {
-            Err(CoreError::Security {
+        if self.denied.get() & bit(p) != 0 {
+            return Err(CoreError::Security {
                 reason: SecurityFailureReason::AuthorizationDenied,
                 context: ErrorContext::new(ErrorPhase::Selection, RetryClass::Never),
-            })
+            });
         }
+        if matches!(
+            p,
+            NotificationPermission::Deliver | NotificationPermission::Respond
+        ) {
+            let hook = self.on_item.borrow_mut().take();
+            if let Some(hook) = hook {
+                hook();
+            }
+            let occurrence = request
+                .occurrence
+                .expect("occurrence decisions require an actual item");
+            if occurrence == &AffordanceTarget::Event(Arc::from("alarm"))
+                && (self.reject_alarm.get()
+                    || p == NotificationPermission::Respond && self.reject_response.get())
+            {
+                return Ok(NotificationDecision::RejectOccurrence);
+            }
+        } else {
+            assert!(request.occurrence.is_none());
+        }
+        Ok(NotificationDecision::Allow)
     }
 }
+
 struct Root {
     inner: RawNotificationServient<Binding, Policy>,
     _instance: ConsumerInstance,
@@ -1695,7 +1725,7 @@ fn configuration_changes_during_permission_callback_precede_native_effects_and_d
             step(&mut root, &id);
         }
         let polls = bus.borrow().receive_polls;
-        *policy.on_deliver.borrow_mut() = Some(Box::new(move || configuration.set(2)));
+        *policy.on_maintain.borrow_mut() = Some(Box::new(move || configuration.set(2)));
         if already_queued {
             assert!(root.front(&mut cursor, &mut budget()).is_err());
         } else {
@@ -2216,5 +2246,252 @@ fn occurrence_slice_and_name_loans_keep_exact_owners_until_advance_or_reply_clea
         drop(root);
         assert_eq!(copied_body, b"exact occurrence");
         assert_eq!(copied_name, "alarm");
+    }
+}
+
+#[test]
+fn occurrence_refusal_retires_required_reply_without_revoking_the_conversation() {
+    #[derive(Clone, Copy, Debug)]
+    enum RejectAt {
+        Acceptance,
+        QueuedDelivery,
+        ResponseAdmission,
+        ResponseSend,
+    }
+    for at in [
+        RejectAt::Acceptance,
+        RejectAt::QueuedDelivery,
+        RejectAt::ResponseAdmission,
+        RejectAt::ResponseSend,
+    ] {
+        let bus = Bus::new();
+        let (mut root, policy, _) = root(&bus, limits());
+        let mut request = event(true);
+        request.target = AffordanceTarget::Thing;
+        request.kind = NotificationKind::SubscribeAllEvents;
+        let mut cursor = subscribe(&mut root, request, Program::event());
+        let id = cursor.identity().clone();
+        step(&mut root, &id);
+        let original = payload("original rejected occurrence");
+        let weak = Arc::downgrade(&original.body);
+        Bus::publish(&bus, ("sensor", 1), Some(original));
+        if matches!(at, RejectAt::Acceptance) {
+            policy.reject_alarm.set(true);
+        }
+        step(&mut root, &id);
+        let mut response_input = None;
+        match at {
+            RejectAt::Acceptance => {}
+            RejectAt::QueuedDelivery => {
+                policy.reject_alarm.set(true);
+                assert!(root.front(&mut cursor, &mut budget()).unwrap().is_none());
+            }
+            RejectAt::ResponseAdmission | RejectAt::ResponseSend => {
+                assert_eq!(
+                    data(&mut root, &mut cursor),
+                    b"original rejected occurrence"
+                );
+                let input = payload("original caller response");
+                if matches!(at, RejectAt::ResponseAdmission) {
+                    policy.reject_response.set(true);
+                    let refused = root
+                        .respond(
+                            &mut cursor,
+                            EventDataResponse(Some(input.clone())),
+                            &mut budget(),
+                        )
+                        .err()
+                        .unwrap()
+                        .into_input();
+                    assert_eq!(refused.0, Some(input));
+                } else {
+                    response_input = Some(Arc::downgrade(&input.body));
+                    root.respond(&mut cursor, EventDataResponse(Some(input)), &mut budget())
+                        .unwrap_or_else(|_| panic!());
+                    policy.reject_response.set(true);
+                    assert_eq!(step(&mut root, &id), NotificationState::Active);
+                }
+            }
+        }
+        assert_eq!(
+            root.status(&id).unwrap().state,
+            NotificationState::Active,
+            "{at:?}"
+        );
+        assert!(root.status(&id).unwrap().first_cause.is_none());
+        policy.reject_alarm.set(false);
+        policy.reject_response.set(false);
+        assert!(
+            root.front(&mut cursor, &mut budget()).unwrap().is_none(),
+            "refused occurrences never resurrect"
+        );
+        assert!(root.advance(&mut cursor, &mut budget()).is_err());
+        let reserved = root.reserved_engine_bytes();
+        let polls = bus.borrow().receive_polls;
+        assert!(
+            root.progress(
+                &id,
+                &mut Context::from_waker(Waker::noop()),
+                &mut WorkBudget::new()
+            )
+            .is_err()
+        );
+        assert!(weak.upgrade().is_some());
+        bus.borrow_mut().retire = Mode::Pending;
+        let cleanup_only = || {
+            budget()
+                .with_remaining(WorkClass::ProviderProbes, 0)
+                .with_remaining(WorkClass::CodecInputBytes, 0)
+        };
+        assert!(
+            root.step_cleanup(&mut Context::from_waker(Waker::noop()), &mut cleanup_only())
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(bus.borrow().reply_retire_polls, 1);
+        assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+        assert!(weak.upgrade().is_some());
+        assert_eq!(root.reserved_engine_bytes(), reserved);
+        assert_eq!(bus.borrow().reply_send_polls, 0);
+        assert_eq!(bus.borrow().close_polls, 0);
+        bus.borrow_mut().retire = Mode::Ready;
+        root.progress(
+            &id,
+            &mut Context::from_waker(Waker::noop()),
+            &mut cleanup_only(),
+        )
+        .unwrap();
+        assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 0);
+        assert!(
+            weak.upgrade().is_some(),
+            "payload survives reply retirement until its own disposal"
+        );
+        if let Some(ref weak) = response_input {
+            assert!(weak.upgrade().is_some());
+        }
+        root.progress(
+            &id,
+            &mut Context::from_waker(Waker::noop()),
+            &mut cleanup_only(),
+        )
+        .unwrap();
+        assert!(weak.upgrade().is_none());
+        if let Some(weak) = response_input {
+            assert!(weak.upgrade().is_none());
+        }
+        assert_eq!(
+            bus.borrow().receive_polls,
+            polls,
+            "cleanup never acquires another candidate"
+        );
+        assert_eq!(root.reserved_engine_bytes(), reserved);
+        assert_eq!(bus.borrow().physical[&("sensor", 1)].participants, 1);
+        // The native fixture attributes its next occurrence to another Event.
+        bus.borrow().endpoints[0]
+            .upgrade()
+            .unwrap()
+            .borrow_mut()
+            .target = AffordanceTarget::Event(Arc::from("ready"));
+        Bus::publish(&bus, ("sensor", 1), Some(payload("permitted occurrence")));
+        step(&mut root, &id);
+        let view = root.front(&mut cursor, &mut budget()).unwrap().unwrap();
+        assert_eq!(
+            view.target,
+            clinkz_wot_core::thing::AffordanceSite::Event("ready")
+        );
+        assert_eq!(view.data.unwrap().body, b"permitted occurrence");
+        root.respond(
+            &mut cursor,
+            EventDataResponse(Some(payload("permitted response"))),
+            &mut budget(),
+        )
+        .unwrap_or_else(|_| panic!());
+        step(&mut root, &id);
+        step(&mut root, &id);
+        root.advance(&mut cursor, &mut budget()).unwrap();
+        assert_eq!(cursor.identity(), &id);
+        assert_eq!(bus.borrow().subscriptions, 1);
+        assert_eq!(bus.borrow().reply_send_polls, 1);
+        assert!(root.status(&id).unwrap().first_cause.is_none());
+        root.stop(&cursor, None, &mut budget())
+            .unwrap_or_else(|_| panic!());
+        let report = settle(&mut root, &id);
+        assert_eq!(report.responses_delivered, 1);
+        assert_eq!(report.responses_uncertain, 0);
+        assert_eq!(
+            report.delivered_items,
+            if matches!(at, RejectAt::ResponseAdmission | RejectAt::ResponseSend) {
+                2
+            } else {
+                1
+            }
+        );
+        assert_eq!(
+            report.loss.items, 0,
+            "authorization refusal is not native loss"
+        );
+        assert!(bus.borrow().physical.is_empty());
+    }
+}
+
+#[test]
+fn rejected_reply_cleanup_error_keeps_original_owners_and_fences_on_the_native_failure() {
+    let bus = Bus::new();
+    let (mut root, policy, _) = root(&bus, limits());
+    let cursor = subscribe(&mut root, event(true), Program::event());
+    let id = cursor.identity().clone();
+    step(&mut root, &id);
+    policy.reject_alarm.set(true);
+    let original = payload("retained rejected occurrence");
+    let weak = Arc::downgrade(&original.body);
+    Bus::publish(&bus, ("sensor", 1), Some(original));
+    assert_eq!(step(&mut root, &id), NotificationState::Active);
+    bus.borrow_mut().retire = Mode::Fail;
+    assert_eq!(step(&mut root, &id), NotificationState::Closing);
+    assert!(root.status(&id).unwrap().cleanup_error.is_some());
+    assert!(weak.upgrade().is_some());
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+    assert_eq!(bus.borrow().reply_send_polls, 0);
+    bus.borrow_mut().retire = Mode::Ready;
+    let report = settle(&mut root, &id);
+    assert!(matches!(report.first_cause, Some(CoreError::Cleanup(_))));
+    assert_eq!(report.responses_delivered, 0);
+    assert!(weak.upgrade().is_none());
+    assert!(bus.borrow().physical.is_empty());
+}
+
+#[test]
+fn continuing_grant_loss_during_item_policy_overrides_even_an_occurrence_refusal() {
+    for queued in [false, true] {
+        let bus = Bus::new();
+        let (mut root, policy, _) = root(&bus, limits());
+        let mut cursor = subscribe(&mut root, event(true), Program::event());
+        let id = cursor.identity().clone();
+        step(&mut root, &id);
+        Bus::publish(&bus, ("sensor", 1), Some(payload("owned original")));
+        if queued {
+            step(&mut root, &id);
+        }
+        policy.reject_alarm.set(true);
+        let denied = policy.denied.clone();
+        *policy.on_item.borrow_mut() = Some(Box::new(move || {
+            denied.set(bit(NotificationPermission::Maintain))
+        }));
+        if queued {
+            assert!(root.front(&mut cursor, &mut budget()).is_err());
+        } else {
+            assert_eq!(step(&mut root, &id), NotificationState::Closing);
+        }
+        assert_eq!(root.status(&id).unwrap().state, NotificationState::Closing);
+        assert_eq!(root.status(&id).unwrap().queued_items, usize::from(queued));
+        assert_eq!(bus.borrow().reply_send_polls, 0);
+        let report = settle(&mut root, &id);
+        assert!(matches!(
+            report.first_cause,
+            Some(CoreError::Security { .. })
+        ));
+        assert_eq!(report.delivered_items, 0);
+        assert_eq!(bus.borrow().reply_aborts, 1);
+        assert!(bus.borrow().physical.is_empty());
     }
 }

@@ -27,7 +27,10 @@ impl<B: ConsumerNotificationBinding> NotificationAuthorizer for CapturedAuthoriz
     fn work(&self) -> u64 {
         self.association.access_work
     }
-    fn authorize(&self, request: NotificationAuthorization<'_>) -> CoreResult<()> {
+    fn authorize(
+        &self,
+        request: NotificationAuthorization<'_>,
+    ) -> CoreResult<NotificationDecision> {
         let captured = &self.association;
         captured.check_dependencies()?;
         let input = captured.definition.input();
@@ -37,6 +40,13 @@ impl<B: ConsumerNotificationBinding> NotificationAuthorizer for CapturedAuthoriz
             || request.kind != input.schemas.kind()
         {
             return Err(CoreError::StaleHandle(context()));
+        }
+        if matches!(
+            request.permission,
+            NotificationPermission::Deliver | NotificationPermission::Respond
+        ) != request.occurrence.is_some()
+        {
+            return Err(invalid());
         }
         if let Some(occurrence) = request.occurrence {
             if !request.kind.accepts_occurrence(request.target, occurrence) {

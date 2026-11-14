@@ -392,15 +392,25 @@ pub trait ConsumerNotificationBinding {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotificationPermission {
     Establish,
+    /// Retain/use the conversation's authority, independently of any item.
+    Maintain,
     Deliver,
     Respond,
     Cancel,
 }
+/// A policy may refuse one owned occurrence without withdrawing the continuing
+/// grant. Errors mean authority/dependency failure and fence the conversation.
+/// RejectOccurrence is valid only for Deliver/Respond with an actual occurrence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NotificationDecision {
+    Allow,
+    RejectOccurrence,
+}
 /// Original logical context for one policy check. `target` is the conversation
-/// scope; `occurrence` is present for acceptance/delivery/response of an owned
-/// item, including delayed checks. It is the mapping's logical affordance coordinate, not
-/// an authenticated sender, topic, principal or device identity. A check without
-/// an occurrence grants no permission to deliver a future item.
+/// scope. Establish/Maintain/Cancel have no occurrence; Deliver/Respond always
+/// have the original owned item's coordinate, including delayed checks. It is
+/// not an authenticated sender, topic, principal or device identity. Subscription
+/// permission grants no permission to deliver a future item.
 #[derive(Clone, Copy)]
 pub struct NotificationAuthorization<'a> {
     pub recipient: &'a NotificationIdentity,
@@ -424,7 +434,8 @@ pub trait NotificationAuthorizer {
     fn work(&self) -> u64 {
         1
     }
-    fn authorize(&self, request: NotificationAuthorization<'_>) -> CoreResult<()>;
+    fn authorize(&self, request: NotificationAuthorization<'_>)
+    -> CoreResult<NotificationDecision>;
 }
 
 /// Optional captured validation for the raw lifecycle. Data work is prepaid

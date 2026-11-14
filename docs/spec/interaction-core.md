@@ -578,18 +578,34 @@ a spare Engine slot establishes a native subscription or availability guarantee.
 The detailed declaration, admission, policy and cleanup checks are owned by
 [Runtime Safety](runtime-safety.md#notification-associations-and-conversation-capacity).
 
-`NotificationAuthorization` carries the original recipient, conversation target,
-notification kind, permission and optional occurrence target. Native candidates
-must match the original recipient/scope; composed Event collection policy accepts
-only members of its captured schema. Acceptance, delayed delivery and response
-checks receive the owned item's coordinate. A preflight with no occurrence grants
-no future delivery. The default `ConsumerAccessService::authorize_notification`
-uses whole-conversation instance permission; policies can override it for named
-occurrences without post-delivery filtering or mutable last-source state. Missing
-required context must refuse in the applicable policy. These coordinates are
-neither verified principals nor arbitrary physical-source identities. Authenticated
-source provenance needs an actual evidence-bearing mapping/verifier and bounded
-original proof/dependency ownership; this increment does not provide that capability.
+`NotificationAuthorization` distinguishes subscription authority from decisions
+about an owned occurrence. Establish/Maintain/Cancel carry no occurrence;
+Deliver/Respond MUST carry the actual original item coordinate. Maintain checks
+the continuing grant before native polling and semantic use, including when no
+candidate exists. Neither an empty `front()` nor native polling requests Deliver
+permission without an item. Native candidates must match the original recipient,
+scope and bounds; composed collection policy also checks captured Event membership.
+
+`NotificationDecision::Allow` permits the requested handoff. An explicit
+`RejectOccurrence` from Deliver/Respond refuses only that item, retaining its
+payload, original reply and any submitted response for bounded retirement. It
+withdraws neither the conversation grant nor a sibling's permission. Errors from
+any policy phase mean authority/dependency failure and fence the conversation;
+RejectOccurrence in a subscription-only phase is an invalid service result and
+cannot grant permission. Error categories are not guessed to determine scope.
+The default `ConsumerAccessService::authorize_notification` checks whole-conversation
+instance permission. An occurrence-specific policy supplies its separate current
+subscription decision and explicit item refusal through this same bounded callback.
+
+Acceptance, delayed delivery, response admission and delayed response send all
+use the owned item's coordinate. Refusal is irreversible for that item, even if
+policy later changes; later independently allowed items retain the same conversation
+identity. A refusal is not a native loss report, a mapped unsubscribe or an
+application dataResponse. Invalid native/schema contracts and native failures
+remain conversation failures. These coordinates are neither verified principals
+nor arbitrary physical-source identities. Authenticated source provenance needs
+an actual evidence-bearing mapping/verifier and bounded original proof/dependency
+ownership; this increment does not provide that capability.
 
 `ConsumerNotifications` exposes the same paid `decline_response` operation for admitted optional
 opportunities, retaining native retirement before advance without sending or

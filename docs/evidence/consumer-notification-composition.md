@@ -24,8 +24,8 @@ no subscription quota, validation scratch, queue or native interest. A second
 outstanding conversation at a one-subscription instance bank refuses while global
 capacity is still available; a third association refuses under shared saturation.
 An unacknowledged closed conversation retains its slot. The same real broker
-interest remains usable by the sibling after queued occurrence policy refuses
-one Consumer, and after another Consumer's mapped cancellation is denied. Passive
+interest remains usable by the sibling after the continuing grant is withdrawn
+from one Consumer, and after another Consumer's mapped cancellation is denied. Passive
 view loss does not revoke accepted work. Original Consumer revocation, lost cursor
 cleanup and final release are exercised with partial native frame writes.
 Mosquitto observes one SUBSCRIBE and one final UNSUBSCRIBE; the production Binding
@@ -36,6 +36,28 @@ Event coordinates, including a permission change after queue admission. Only the
 original permitted Consumer receives its queued value. These are TD Event labels,
 not publisher identities. The independent peer is an anonymous MQTT publisher.
 NoSec, the topic filter and an application meter label prove no source principal.
+
+The authorization counterexamples reject `alarm` and subsequently deliver `ready`
+on the same original logical subscription, with the sibling independently receiving
+both. One case refuses at native candidate acceptance and verifies that native
+polling/empty views never request Deliver without an occurrence. Another changes
+policy after both items are queued, refuses the original head and verifies that
+relaxing policy cannot resurrect it. After bounded disposal, the allowed queued
+Event is delivered with no resubscribe, unsubscribe, first cause or native loss.
+Both cases fail on the original PR head: the first observes an occurrence-free
+Deliver call and the second gets terminal Security refusal from `front()`.
+
+The raw reply-owner counterexample refuses at acceptance, queued delivery, response
+admission and delayed response send, including required replies. Zero cleanup credit
+and pending native retirement retain the original payload/reply and submitted
+response, with no send and no new candidate acquired. Retirement progresses without
+codec/authorization credit; only subsequent paid disposal releases the payload.
+A later allowed Event and reply use the same conversation. A separate native
+retirement-error case fences on that actual failure and keeps the original job
+through eventual cleanup. Another case withdraws the continuing grant inside an
+occurrence policy callback: fresh Maintain refuses both staged and queued handoffs,
+even when the item callback returned RejectOccurrence. These deterministic owner tests supplement the real
+MQTT cases; they do not claim MQTT reciprocal response support.
 
 Review 10's notification F2 correction imports original data/access owners across
 independently constructed registries. A fixture allocates 60,000 bytes of data
@@ -58,7 +80,7 @@ before cleanup. These metadata-mutation probes establish declaration fencing, no
 an allocation-overrun or credential-leak claim.
 
 The [raw lifecycle suite](../../servient/finite/tests/notification.rs) retains its
-37 regressions for original identities, independent permissions/stop, loss,
+original regressions for original identities, independent permissions/stop, loss,
 queue/late handoff, response cardinality, pending/error retirement, prepaid cleanup
 and finite local abort. Existing real Producer-to-Consumer MQTT tests retain
 Property/Event/collection schema, replacement, broker failure and native cleanup

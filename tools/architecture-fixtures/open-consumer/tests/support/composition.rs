@@ -803,12 +803,15 @@ impl NotificationParticipation for Participation {
 }
 struct Access(Rc<Hub>);
 impl NotificationAuthorizer for Access {
-    fn authorize(&self, request: NotificationAuthorization<'_>) -> CoreResult<()> {
+    fn authorize(
+        &self,
+        request: NotificationAuthorization<'_>,
+    ) -> CoreResult<NotificationDecision> {
         assert!(request.recipient.consumer.is_current());
         if self.0.deny.get() {
             Err(invalid())
         } else {
-            Ok(())
+            Ok(NotificationDecision::Allow)
         }
     }
 }

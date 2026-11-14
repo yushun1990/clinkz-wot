@@ -159,21 +159,24 @@ pub trait ConsumerAccessService: Send + Sync {
         operation: Operation,
     ) -> CoreResult<()>;
     /// Fresh notification policy, with the original occurrence coordinate at
-    /// acceptance and delayed delivery/response. The default grants the whole
-    /// conversation. Occurrence-specific policies override this callback; no
+    /// acceptance and delayed delivery/response. The default checks the whole
+    /// conversation. Occurrence-specific policies return RejectOccurrence for
+    /// an individual refusal; errors withdraw authority/fence the conversation.
+    /// Deliver/Respond always carry an occurrence; Maintain never does. No
     /// authenticated source claim is implied by an affordance name.
     fn authorize_notification(
         &self,
         binding: BindingRegistrationIdentity,
         endpoint: &str,
         request: crate::notification::NotificationAuthorization<'_>,
-    ) -> CoreResult<()> {
+    ) -> CoreResult<crate::notification::NotificationDecision> {
         self.authorize_instance(
             &request.recipient.consumer,
             binding,
             endpoint,
             request.operation(),
         )
+        .map(|()| crate::notification::NotificationDecision::Allow)
     }
     /// Fresh permission for the complete original writable set, before native
     /// effects and on result handoff. Default group permission covers every

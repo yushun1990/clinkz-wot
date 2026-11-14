@@ -108,9 +108,11 @@ struct Access {
     revision: AtomicU64,
     deny_alarm: AtomicBool,
     deny_cancel: AtomicBool,
+    deny_subscription: AtomicBool,
     expected: Mutex<Option<ConsumerInstanceRef>>,
     alarm_seen: AtomicBool,
     ready_seen: AtomicBool,
+    missing_occurrences: AtomicUsize,
 }
 impl Default for Access {
     fn default() -> Self {
@@ -120,9 +122,11 @@ impl Default for Access {
             revision: AtomicU64::new(0),
             deny_alarm: AtomicBool::new(false),
             deny_cancel: AtomicBool::new(false),
+            deny_subscription: AtomicBool::new(false),
             expected: Mutex::new(None),
             alarm_seen: AtomicBool::new(false),
             ready_seen: AtomicBool::new(false),
+            missing_occurrences: AtomicUsize::new(0),
         }
     }
 }
@@ -153,8 +157,18 @@ impl ConsumerAccessService for Access {
         _: BindingRegistrationIdentity,
         _: &str,
         r: NotificationAuthorization<'_>,
-    ) -> CoreResult<()> {
+    ) -> CoreResult<NotificationDecision> {
         assert_eq!(r.target, &AffordanceTarget::Thing);
+        if self.deny_subscription.load(Ordering::Relaxed) {
+            return Err(denied());
+        }
+        if matches!(
+            r.permission,
+            NotificationPermission::Deliver | NotificationPermission::Respond
+        ) && r.occurrence.is_none()
+        {
+            self.missing_occurrences.fetch_add(1, Ordering::Relaxed);
+        }
         if let Some(AffordanceTarget::Event(name)) = r.occurrence {
             if let Some(expected) = &*self.expected.lock().unwrap() {
                 assert_eq!(&r.recipient.consumer, expected);
@@ -165,7 +179,7 @@ impl ConsumerAccessService for Access {
                 _ => panic!("undeclared occurrence reached policy"),
             }
             if &**name == "alarm" && self.deny_alarm.load(Ordering::Relaxed) {
-                return Err(denied());
+                return Ok(NotificationDecision::RejectOccurrence);
             }
         }
         if r.permission == NotificationPermission::Cancel
@@ -173,7 +187,7 @@ impl ConsumerAccessService for Access {
         {
             return Err(denied());
         }
-        Ok(())
+        Ok(NotificationDecision::Allow)
     }
 }
 fn denied() -> CoreError {
@@ -554,7 +568,9 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
         peer.publish_raw("composition/events/alarm", b"41", false);
         queued(&mut work, &a, 1).await;
         queued(&mut work, &z, 1).await;
-        first_access.deny_alarm.store(true, Ordering::Relaxed);
+        first_access
+            .deny_subscription
+            .store(true, Ordering::Relaxed);
         assert!(
             work.front(&mut a, &mut budget()).is_err(),
             "fresh queued occurrence policy"
@@ -577,6 +593,9 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
             Some(CoreError::Security { .. })
         ));
         drop(report);
+        first_access
+            .deny_subscription
+            .store(false, Ordering::Relaxed);
         let third = subscribe(&mut work, &associations[2]).unwrap_or_else(|_| panic!());
         drive(&mut work, &third, true).await;
         // Application view loss grants no revocation and strands no cleanup.
@@ -626,4 +645,132 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
             assert_empty(bank);
         }
     });
+}
+
+#[cfg(feature = "broker-tests")]
+fn rejected_alarm_then_ready_on_original_conversation(queued_change: bool) {
+    broker::runtime().block_on(async {
+        let broker = broker::Broker::start();
+        let service = service(broker.address);
+        let b = binding(&service);
+        let original = bank();
+        let maps = bank();
+        let capacity = bank();
+        let policy = Arc::new(Access::default());
+        policy.deny_alarm.store(!queued_change, Ordering::Relaxed);
+        let services = retained(Arc::new(Data::new(32)), policy.clone(), &original);
+        let def = definition(&b, services.clone(), &maps, broker.address);
+        let consumers = [owner(1), owner(2)];
+        let instances = [bank(), bank()];
+        let sibling = ConsumerServiceOwner::retain_access(Arc::new(Access::default()), &original)
+            .unwrap_or_else(|_| panic!());
+        let associations = [
+            associate(
+                &consumers[0],
+                def.clone(),
+                services.access.clone(),
+                &instances[0],
+            ),
+            associate(&consumers[1], def.clone(), sibling, &instances[1]),
+        ];
+        let mut work = ConsumerNotifications::try_new(limits(2), capacity.clone()).unwrap();
+        let mut a = subscribe(&mut work, &associations[0]).unwrap_or_else(|_| panic!());
+        let mut z = subscribe(&mut work, &associations[1]).unwrap_or_else(|_| panic!());
+        let original_id = a.identity().clone();
+        drive(&mut work, &a, true).await;
+        drive(&mut work, &z, true).await;
+        if !queued_change {
+            work.progress(a.identity(), &mut cx(), &mut budget())
+                .unwrap();
+            assert_eq!(
+                policy.missing_occurrences.load(Ordering::Relaxed),
+                0,
+                "native polling must not require a Deliver decision without an occurrence"
+            );
+            assert!(work.front(&mut a, &mut budget()).unwrap().is_none());
+        }
+        let mut peer = broker::Peer::new(&broker);
+        peer.publish_raw("composition/events/alarm", b"41", false);
+        peer.publish_raw("composition/events/ready", b"true", false);
+        queued(&mut work, &a, if queued_change { 2 } else { 1 }).await;
+        queued(&mut work, &z, 2).await;
+        if queued_change {
+            policy.deny_alarm.store(true, Ordering::Relaxed);
+            assert!(
+                work.front(&mut a, &mut budget()).unwrap().is_none(),
+                "deny the original queued alarm without closing the conversation"
+            );
+            // Once refused, changing policy back cannot resurrect this item.
+            policy.deny_alarm.store(false, Ordering::Relaxed);
+            assert!(work.front(&mut a, &mut budget()).unwrap().is_none());
+            work.progress(a.identity(), &mut cx(), &mut budget())
+                .unwrap();
+        }
+        let view = work.front(&mut a, &mut budget()).unwrap().unwrap();
+        assert_eq!(
+            view.target,
+            clinkz_wot_core::thing::AffordanceSite::Event("ready")
+        );
+        assert_eq!(view.data.unwrap().body, b"true");
+        work.advance(&mut a, &mut budget()).unwrap();
+        assert_eq!(a.identity(), &original_id);
+        assert_eq!(
+            work.status(a.identity()).unwrap().state,
+            NotificationState::Active
+        );
+        assert!(work.status(a.identity()).unwrap().first_cause.is_none());
+        assert_eq!(policy.missing_occurrences.load(Ordering::Relaxed), 0);
+        for (name, body) in [("alarm", b"41".as_slice()), ("ready", b"true".as_slice())] {
+            let view = work.front(&mut z, &mut budget()).unwrap().unwrap();
+            assert_eq!(
+                view.target,
+                clinkz_wot_core::thing::AffordanceSite::Event(name)
+            );
+            assert_eq!(view.data.unwrap().body, body);
+            work.advance(&mut z, &mut budget()).unwrap();
+        }
+        assert!(service.connected());
+        assert_eq!(
+            broker.logs().matches("Received SUBSCRIBE from cr").count(),
+            1
+        );
+        assert_eq!(
+            broker
+                .logs()
+                .matches("Received UNSUBSCRIBE from cr")
+                .count(),
+            0
+        );
+        for cursor in [&a, &z] {
+            work.stop(cursor, None, &mut budget())
+                .unwrap_or_else(|_| panic!());
+            drive(&mut work, cursor, false).await;
+            drop(work.take_settlement(cursor.identity()).unwrap());
+        }
+        assert!(!service.connected());
+        assert_eq!(
+            broker
+                .logs()
+                .matches("Received UNSUBSCRIBE from cr")
+                .count(),
+            1
+        );
+        drop((work, associations, def, services));
+        assert_empty(&original);
+        assert_empty(&maps);
+        assert_empty(&capacity);
+        for bank in &instances {
+            assert_empty(bank);
+        }
+    });
+}
+#[cfg(feature = "broker-tests")]
+#[test]
+fn native_poll_has_no_occurrence_delivery_preflight_and_denied_alarm_allows_next_ready() {
+    rejected_alarm_then_ready_on_original_conversation(false);
+}
+#[cfg(feature = "broker-tests")]
+#[test]
+fn queued_alarm_denial_does_not_fence_ready_or_a_sibling_consumer() {
+    rejected_alarm_then_ready_on_original_conversation(true);
 }

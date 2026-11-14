@@ -244,8 +244,11 @@ owns admission, declaration fencing, occurrence policy, report ownership and cle
 The [composition evidence](../evidence/consumer-notification-composition.md)
 exercises one compilation/eight associations/two slots/one real MQTT interest,
 original service funding, independent queued policy/stop/revocation, saturation
-and final release. Existing Producer-to-Consumer, loss and late-work evidence is
-retained. The downstream reciprocal-response fixture checks original occurrence
+and final release. Occurrence-specific refusals now retire only the original item;
+subscription Maintain/authority errors remain separate. Native and queued-policy
+counterexamples deliver a later permitted Event on the same conversation, and
+reply-owner tests cover refused required responses with bounded pending/error
+retirement. Existing Producer-to-Consumer, loss and late-work evidence is retained. The downstream reciprocal-response fixture checks original occurrence
 policy at delayed send and complete reply retirement; MQTT still refuses that
 response capability. Constrained notifications, authenticated source provenance,
 automatic progress and a managed all-family owner remain unimplemented. No package,

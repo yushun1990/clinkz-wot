@@ -199,8 +199,13 @@ an association to `subscribe`. Each admitted conversation retains its original
 move-only cursor, identity, policy, queue, loss/stop, response and cleanup state.
 Dropping association views does not revoke work. Original authority and prepared
 declarations are checked around native/validation/policy callbacks and at delayed
-delivery; policy receives the original conversation and occurrence coordinate.
-For a root Event conversation this is the declared Event name, not authenticated
+delivery. Maintain checks the continuing grant without an item; Deliver/Respond
+always receive the original item coordinate. Explicit RejectOccurrence refuses
+only that item and retains it for bounded disposal; policy errors withdraw
+subscription authority. Later allowed Events use the same logical subscription
+after refused-item retirement, including after queued policy changes. No rejected
+item is exposed or resurrected. Native interests change only for their actual
+participation/cleanup obligations. For a root Event conversation this is the declared Event name, not authenticated
 publisher identity. NoSec MQTT establishes no trusted meter/source provenance.
 
 Preparation can import original data/access service owners across registries;

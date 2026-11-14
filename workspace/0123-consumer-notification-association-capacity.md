@@ -52,3 +52,28 @@ Runtime Safety owners, their API/state projections and work packages. Evidence
 is in the notification composition record. Action F2/F3, broader checked lowering,
 managed all-family registration, automatic progress and constrained notification
 execution remain outside this increment. No milestone or gate closes.
+
+## Subscription authority and individual occurrence refusal
+
+The first policy expression conflated the continuing grant with item permission:
+Deliver was called without an item before native polling, and any refusal fenced
+the whole conversation. A policy requiring an actual Event could not reach its
+allowed input; a denied queued Event prevented later allowed Events on the same
+subscription. Real MQTT counterexamples falsify that contract.
+
+The selected correction adds a subscription Maintain check and the explicit
+Allow/RejectOccurrence disposition for actual Deliver/Respond decisions. Policy
+errors still fence authority; there is no inference from generic security/error
+codes. Item refusal uses the existing staged/queue owner and one irreversible
+flag, then the same bounded reply/payload retirement mechanics as close. The
+participation and continuing identity survive successful item retirement. Required
+replies receive no fabricated response; native retirement failures remain fatal.
+
+Treating every error as an item refusal would hide dependency/authority loss.
+Reusing Establish as the continuing phase obscures the independent lifetime.
+Per-Event subscriptions or rewriting MQTT interests would change collection and
+native ownership. A generic filtering pipeline, new queue or pool adds no needed
+capability. The original F2/F3 preparation/owner/funding boundaries are retained.
+Exact semantics are migrated to Core/Runtime Safety; the same evidence record
+links native, queued-policy-change and response-owner counterexamples. No topic
+or NoSec payload becomes authenticated source evidence.

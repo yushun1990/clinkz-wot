@@ -254,7 +254,7 @@ states = ["Reserved", "Establishing", "Active", "Stopping", "CleanupPending", "C
 initial = "Reserved"
 terminal = ["Closed"]
 required_events = ["Reserved:cancel-or-fail-before-native-start"]
-invariant = "Each Engine logical subscription captures its notification kind and scope and has independent cursor/permission/stop. Persistent associations require no vacant conversation slot; independent work capacity retains the original context per entry. Prepared declarations cannot be refreshed by capacity construction. Original occurrence coordinates reach fresh acceptance/delivery/response policy without implying authenticated source provenance. Retained report target backing keeps its original owner until disposal. A Property collection has one root identity and complete named schema; an Event collection retains each occurrence target and its original member data/response roles separately from root scope. Neither creates member cursors. Attribution backing is bounded with data before handoff. Public delivery views lend payload/media and occurrence-name slices under the exclusive original root borrow; advance/cleanup cannot release their original allocation owners while the loan is used. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
+invariant = "Each Engine logical subscription captures its notification kind and scope and has independent cursor/permission/stop. Persistent associations require no vacant conversation slot; independent work capacity retains the original context per entry. Prepared declarations cannot be refreshed by capacity construction. Original occurrence coordinates reach fresh acceptance/delivery/response policy without implying authenticated source provenance. Subscription Maintain checks carry no occurrence; Deliver/Respond always carry an original item. Explicit item refusal leaves the conversation Active and retains payload/reply until bounded retirement, while authority/dependency or native retirement failure fences the conversation. Refused items cannot resurrect or acquire application delivery/response rights. Retained report target backing keeps its original owner until disposal. A Property collection has one root identity and complete named schema; an Event collection retains each occurrence target and its original member data/response roles separately from root scope. Neither creates member cursors. Attribution backing is bounded with data before handoff. Public delivery views lend payload/media and occurrence-name slices under the exclusive original root borrow; advance/cleanup cannot release their original allocation owners while the loan is used. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
 
 [[machine.transition]]
 from = "Reserved"
@@ -279,6 +279,16 @@ to = "CleanupPending"
 [[machine.transition]]
 from = "Active"
 event = "validated-delivery-and-optional-reciprocal-response"
+to = "Active"
+
+[[machine.transition]]
+from = "Active"
+event = "reject-original-occurrence-and-retain-its-cleanup-owner"
+to = "Active"
+
+[[machine.transition]]
+from = "Active"
+event = "retire-refused-item-without-closing-native-participation"
 to = "Active"
 
 [[machine.transition]]

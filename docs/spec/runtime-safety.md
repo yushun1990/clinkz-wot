@@ -279,10 +279,36 @@ required to use changed dependencies.
 The validator borrows the original Property value/map or Event role trees,
 prepays validation before native handoff and checks data before queue acceptance.
 The original occurrence coordinate survives staging/queueing and is supplied to
-fresh policy at acceptance, `front`, response admission and delayed native response
-send. Check original recipient, scope and coordinate bounds before policy; the
-composed policy also checks captured Event membership. Invalid/late candidates and
-first causes remain with the original conversation through cleanup. NoSec MQTT
+fresh Deliver/Respond policy at acceptance, `front`, response admission and delayed
+native response send. These decisions always carry an owned item. Separate Maintain
+checks, without an occurrence, preserve the current subscription grant before
+polling or semantic use. Fresh Maintain checks after occurrence policy ensure that
+synchronous grant withdrawal overrides even a positive item refusal; both probes
+are prepaid before acquiring a native candidate or entering the item callback. Check original recipient, scope, backing and native
+response support before occurrence policy; the composed policy also checks
+captured Event membership.
+
+An explicit RejectOccurrence marks only the original staged/queued item as refused.
+It cannot be exposed, advanced, responded to or resurrected by subsequent policy
+changes. `front()` returns None for that refused head; `respond()` returns the exact
+unaccepted caller input with AuthorizationDenied. Progress, or the existing paid
+round-robin cleanup visit, retires the refused item without closing the native
+participation. Each turn performs at most one native retirement poll or one item
+disposal; it never scans a stream of refused items. Later queue entries remain
+behind the original refused head until its retirement completes. Callers continue
+manual progress after an empty view or pending retirement.
+
+Refused payloads and submitted responses stay funded until their exact reply
+owner retires and their own disposal step completes. Required response opportunities
+can be retired on refusal without fabricating a send. Pending or short cleanup
+credit retains all original owners/capacity; cleanup does not need renewed delivery
+permission or codec credit. Native reply-retirement failure records its cleanup
+error and fences the conversation, retaining that reply for the ordinary cleanup
+path. Actual sent/uncertain response evidence remains distinct from refusal intent.
+Authority/dependency errors, instance revocation, invalid native/schema contracts
+and native failures also fence as before; an occurrence refusal itself sets no
+subscription first cause, stop intent or native loss count. Invalid/late candidates
+and first causes remain with the original conversation through cleanup. NoSec MQTT
 supplies declared Event attribution, not publisher authentication; source-proof
 verification, proof freshness and its retained trust dependencies remain unimplemented.
 
