@@ -53,6 +53,7 @@ fn prepare_consumer(
                 },
             })
             .collect(),
+        bank,
     )?;
     let thing = serde_json::from_value(value).unwrap();
     let mut limits = GatewayDefaultV1::LIMITS.clone();

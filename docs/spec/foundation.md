@@ -54,6 +54,24 @@ reservation; copied metadata and variable records have separate allowances.
 Capacity-owner loss cannot migrate these reservations to the association or a
 successor bank. Captured native limits remain additional independent constraints.
 
+The Host notification representation imports the same original data/access
+service owners. A shared prepared mapping pays its actual program/schema/reference
+records, without charging service backing again. Independent associations fund
+only their retained records at their selected instance banks. Explicit notification
+capacity reserves its Engine envelope, cleanup slots and `SubscriptionsGlobalMax`
+at its work bank. Each admitted conversation additionally reserves the original
+`SubscriptionsPerThingMax` quota at its instance bank and data-validation scratch
+at its work bank. These subscription counters are logical capacity limits, not
+additional physical RAM. A shared instance bank is a shared allowance, not inferred
+per-Thing isolation or aggregation across arbitrary banks.
+
+Conversation acknowledgement releases scratch/quota after complete local retirement;
+retained report target references keep their original prepared/association funding
+until final report disposal. The capacity envelope remains reserved until the
+capacity owner is disposed, independently of persistent association count. Native
+MQTT buffers/interests/sockets retain their Binding-owned policy; Engine reservations
+are not a transitive process-memory measurement.
+
 The managed finite Consumer owner allocates no population-sized startup backing.
 Each AVL node reserves `size_of::<Node<V>>()` at the owner bank before Box
 allocation; this includes its inline value, child links, height and reservation.

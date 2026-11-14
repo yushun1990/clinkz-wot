@@ -62,7 +62,7 @@ fn prepare(
     selector: ConsumerSelector,
     bank: &Arc<HostResourceAccounts>,
 ) -> CoreResult<ConsumerNotificationDefinition<MqttNotificationConsumer>> {
-    let registry = ConsumerNotificationRegistry::try_new(inputs)?;
+    let registry = ConsumerNotificationRegistry::try_new(inputs, &bank)?;
     let thing = serde_json::from_value(value).unwrap();
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
@@ -274,20 +274,37 @@ fn captured_data_service_availability_and_capacity_are_checked_before_runtime_in
     .unwrap();
     available.store(false, Ordering::Relaxed);
     let owner = owner();
-    let refused = ConsumerNotificationRuntime::try_new(owner.reference(), definition, raw_limits())
-        .err()
-        .unwrap()
-        .into_input();
+    let definition = Rc::new(definition);
+    let access =
+        ConsumerServiceOwner::retain_access(Arc::new(Access), &bank).unwrap_or_else(|_| panic!());
+    let (refused, access) = ConsumerNotificationAssociation::try_new(
+        owner.reference(),
+        definition,
+        access,
+        bank.clone(),
+        &mut budget(),
+    )
+    .err()
+    .unwrap()
+    .into_input();
     available.store(true, Ordering::Relaxed);
+    let association = ConsumerNotificationAssociation::try_new(
+        owner.reference(),
+        refused,
+        access,
+        bank.clone(),
+        &mut budget(),
+    )
+    .unwrap_or_else(|_| panic!());
     let mut short = raw_limits();
     short.engine_bytes = 1;
-    let refused = ConsumerNotificationRuntime::try_new(owner.reference(), refused, short)
-        .err()
-        .unwrap()
-        .into_input();
-    let runtime = ConsumerNotificationRuntime::try_new(owner.reference(), refused, raw_limits())
-        .unwrap_or_else(|_| panic!());
-    drop(runtime);
+    assert!(
+        ConsumerNotifications::<MqttNotificationConsumer>::try_new(short, bank.clone()).is_err()
+    );
+    let runtime =
+        ConsumerNotifications::<MqttNotificationConsumer>::try_new(raw_limits(), bank.clone())
+            .unwrap();
+    drop((runtime, association));
     assert_empty(&bank);
     assert!(!s.connected());
 }
@@ -315,9 +332,13 @@ fn subscribe_only_form_allows_local_stop_and_explicitly_refuses_mapped_cancellat
             .cancellation
     );
     let owner = owner();
-    let mut runtime =
-        ConsumerNotificationRuntime::try_new(owner.reference(), definition, raw_limits())
-            .unwrap_or_else(|_| panic!());
+    let mut runtime = NotificationFixture::try_new(
+        owner.reference(),
+        definition,
+        Arc::new(Access),
+        raw_limits(),
+    )
+    .unwrap_or_else(|_| panic!());
     let cursor = runtime
         .subscribe(
             SubscriptionInput(None),
@@ -341,5 +362,6 @@ fn subscribe_only_form_allows_local_stop_and_explicitly_refuses_mapped_cancellat
     assert!(!report.native_started);
     assert_eq!(report.remote_cancellation, RemoteCancellation::NotAttempted);
     drop(runtime);
+    drop(report);
     assert_empty(&bank);
 }

@@ -408,8 +408,31 @@ compiler, asynchronous preparation coordinator or first-use cache. Metadata,
 support and clone/drop callbacks remain trusted finite local work.
 
 The selected `ConsumerNotificationDefinition` owns the actual Binding/program,
-configuration, family-qualified target, endpoint/Form, concrete data and
-access services and original Host funding. The shared role selector
+configuration, family-qualified target, endpoint/Form, the actual retained data
+service owner and original Host funding. It captures the complete data policy,
+selected media and native `NotificationSupport` during preparation, before a
+runtime can use it. Binding configuration/registration and preparation bounds
+must still match after callbacks. Changed declarations refuse rather than reset
+the baseline. Runtime dependency checks compare against these original facts.
+
+Notification registries adopt raw data/access service backing once at their
+startup bank (`try_new`), recognizing aliases within that construction. Composition
+across registries imports the same `RetainedConsumerServices` through
+`try_from_retained`; configuration equality is not physical ownership. Definition
+funding covers mapping/schema/reference records, excluding already funded service
+backing. The selected mapping retains its data owner; access policy is independently
+qualified when binding a Consumer association. Selection's destination permission
+grants no execution permission.
+
+One actual immutable notification mapping can be checked and bound to many
+Consumer associations without repeating TD admission, schema construction or
+native compilation. The complete native program remains specialized to its actual
+endpoint, target, kind, configuration and registration. Binding it supplies no
+retargeting API or new TD compatibility proof. A different endpoint/description
+requires appropriate preparation; this is not a general notification equivalent
+of HTTP's compile-input extraction or cross-endpoint native-work reuse.
+
+The shared role selector
 `prepare_notification_schemas` uses the same structured normalizer for a readable
 Property, each of the four Event roles and each named collection member. Its
 borrowed census prepays variable construction, rollback and destruction; exact

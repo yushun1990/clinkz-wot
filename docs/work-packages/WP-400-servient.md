@@ -235,19 +235,24 @@ retention, callback revocation and final release alongside the finite owner.
 Raw notification limits remain owner-scoped: this does not claim TD/schema
 qualification or shared aggregate Host-bank accounting for notification queues.
 
-`consumer_notification::ConsumerNotificationRuntime` now consumes the typed
-TD-selected Property or Event definition and captures its actual data/access services around
-this same lifecycle. Validation prepays work before native handoff and checks
-each candidate before logical acceptance, with post-callback authority checks.
-Original bank leases fund the root's queue and validation envelope until runtime
-disposal. Property value schemas and Event subscription/data/dataResponse/cancellation
-roles remain distinct;
-the MQTT subset explicitly rejects unsupported application control/response data.
-Real broker tests join the qualified Engine Producer to these independent
-Consumers and exercise stop/unsubscribe, loss, replacement and cleanup. Native
-matching/distribution/sharing and physical release remain Binding-owned.
-Constrained execution and automatic progress remain unimplemented. No universal runtime,
-session or all-family acceptance gate is introduced.
+`ConsumerNotificationAssociation` now retains a shared typed TD-selected mapping,
+original Consumer reference, retained access owner and instance bank without
+vacant conversation capacity. `ConsumerNotifications` supplies independent work
+capacity around the raw lifecycle, with original contexts retained per entry.
+The [Runtime contract](../spec/runtime-safety.md#notification-associations-and-conversation-capacity)
+owns admission, declaration fencing, occurrence policy, report ownership and cleanup.
+The [composition evidence](../evidence/consumer-notification-composition.md)
+exercises one compilation/eight associations/two slots/one real MQTT interest,
+original service funding, independent queued policy/stop/revocation, saturation
+and final release. Occurrence-specific refusals now retire only the original item;
+subscription Maintain/authority errors remain separate. Native and queued-policy
+counterexamples deliver a later permitted Event on the same conversation, and
+reply-owner tests cover refused required responses with bounded pending/error
+retirement. Existing Producer-to-Consumer, loss and late-work evidence is retained. The downstream reciprocal-response fixture checks original occurrence
+policy at delayed send and complete reply retirement; MQTT still refuses that
+response capability. Constrained notifications, authenticated source provenance,
+automatic progress and a managed all-family owner remain unimplemented. No package,
+architecture gate or milestone is closed.
 
 The separate `consumer_action::ConsumerActionRuntime` now retains TD-selected
 continuing invocation identity, mappings and services after each native exchange

@@ -3,9 +3,10 @@
 use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, notification::*, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::*;
-use clinkz_wot_servient_finite::{
-    consumer_notification::ConsumerNotificationRuntime, notification::*,
-};
+use clinkz_wot_servient_finite::notification::*;
+#[path = "../../../../servient/finite/tests/support/composed_notification.rs"]
+mod composed_fixture;
+use composed_fixture::NotificationFixture;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -266,7 +267,7 @@ fn work() -> WorkBudget {
         .into_iter()
         .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 1_000_000))
 }
-type Runtime = ConsumerNotificationRuntime<EventBinding>;
+type Runtime = NotificationFixture<EventBinding>;
 fn runtime(
     responses: &Rc<Responses>,
     bank: &Arc<HostResourceAccounts>,
@@ -279,8 +280,8 @@ fn runtime(
                 "forms":[{"href":ENDPOINT}]}}
         }))
         .unwrap();
-        let registry =
-            ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+        let registry = ConsumerNotificationRegistry::try_new(
+            vec![ConsumerNotificationRegistration {
                 binding: EventBinding(responses.clone()),
                 services: ConsumerServices {
                     data: independent_open_consumer::services(Arc::new(
@@ -289,8 +290,10 @@ fn runtime(
                     .data,
                     access: Arc::new(EventAccess),
                 },
-            }])
-            .unwrap();
+            }],
+            &bank,
+        )
+        .unwrap();
         registry
             .prepare_notification(
                 &source,
@@ -307,6 +310,7 @@ fn runtime(
     let runtime = Runtime::try_new(
         owner.reference(),
         definition,
+        Arc::new(EventAccess),
         RawNotificationLimits {
             subscriptions: 1,
             queue_items: 2,
@@ -317,7 +321,7 @@ fn runtime(
             engine_bytes: 32768,
         },
     )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    .unwrap_or_else(|e| panic!("{:?}", e));
     (owner, runtime)
 }
 fn step(root: &mut Runtime, cursor: &NotificationCursor) -> NotificationState {
@@ -427,13 +431,16 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
                 "forms":[{"href":ENDPOINT}]
             }}
         })).unwrap();
-        ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
-            binding: EventBinding(responses.clone()),
-            services: ConsumerServices {
-                data: Arc::new(StructuredData(responses.compiled_data.clone())),
-                access: Arc::new(ControlAccess),
-            },
-        }])
+        ConsumerNotificationRegistry::try_new(
+            vec![ConsumerNotificationRegistration {
+                binding: EventBinding(responses.clone()),
+                services: ConsumerServices {
+                    data: Arc::new(StructuredData(responses.compiled_data.clone())),
+                    access: Arc::new(ControlAccess),
+                },
+            }],
+            &bank,
+        )
         .unwrap()
         .prepare_notification(
             &source,
@@ -451,6 +458,7 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     let mut root = Runtime::try_new(
         owner.reference(),
         definition,
+        Arc::new(ControlAccess),
         RawNotificationLimits {
             subscriptions: 1,
             queue_items: 2,
@@ -561,6 +569,7 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     assert_eq!(settlement.responses_delivered, 1);
     assert_eq!(responses.closes.get(), 1);
     drop(root);
+    drop(settlement);
     clean(&bank);
 }
 
@@ -651,6 +660,7 @@ fn td_prepared_optional_response_can_retire_and_advance_without_sending_or_stopp
     assert_eq!(report.responses_delivered, 0);
     assert_eq!(report.responses_uncertain, 0);
     drop(root);
+    drop(report);
     clean(&bank);
 }
 
@@ -773,13 +783,16 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
         collection_structured: true,
         ..Responses::default()
     });
-    let registry = ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
-        binding: CollectionBinding(EventBinding(responses.clone())),
-        services: ConsumerServices {
-            data: Arc::new(CollectionData),
-            access: Arc::new(CollectionAccess),
-        },
-    }])
+    let registry = ConsumerNotificationRegistry::try_new(
+        vec![ConsumerNotificationRegistration {
+            binding: CollectionBinding(EventBinding(responses.clone())),
+            services: ConsumerServices {
+                data: Arc::new(CollectionData),
+                access: Arc::new(CollectionAccess),
+            },
+        }],
+        &bank,
+    )
     .unwrap();
     let definition = {
         let source=serde_json::from_value(serde_json::json!({
@@ -804,9 +817,10 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
     };
     drop(registry);
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
-    let mut root = ConsumerNotificationRuntime::try_new(
+    let mut root = NotificationFixture::try_new(
         owner.reference(),
         definition,
+        Arc::new(CollectionAccess),
         RawNotificationLimits {
             subscriptions: 1,
             queue_items: 2,
@@ -826,7 +840,7 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
             &mut work(),
         )
         .unwrap_or_else(|_| panic!());
-    let step = |r: &mut ConsumerNotificationRuntime<CollectionBinding>| {
+    let step = |r: &mut NotificationFixture<CollectionBinding>| {
         r.progress(
             cursor.identity(),
             &mut Context::from_waker(Waker::noop()),
@@ -903,6 +917,7 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
     assert_eq!(report.target, AffordanceTarget::Thing);
     assert_eq!(report.responses_delivered, 2);
     drop(root);
+    drop(report);
     clean(&bank);
 }
 
@@ -926,4 +941,165 @@ impl ConsumerDataService for CollectionData {
     fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
         clinkz_wot_codec_json::validate_payload(s, p)
     }
+}
+
+#[test]
+fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_exact_reply() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    struct ResponsePolicy(Arc<AtomicBool>, Arc<AtomicUsize>);
+    impl ConsumerAccessService for ResponsePolicy {
+        fn authorize(
+            &self,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            Ok(())
+        }
+        fn authorize_instance(
+            &self,
+            _: &ConsumerInstanceRef,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            Ok(())
+        }
+        fn authorize_notification(
+            &self,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            r: NotificationAuthorization<'_>,
+        ) -> CoreResult<NotificationDecision> {
+            assert_eq!(r.target, &AffordanceTarget::Thing);
+            if r.permission == NotificationPermission::Respond {
+                assert_eq!(
+                    r.occurrence,
+                    Some(&AffordanceTarget::Event(Arc::from("alarm")))
+                );
+                self.1.fetch_add(1, Ordering::Relaxed);
+                if self.0.load(Ordering::Relaxed) {
+                    return Err(CoreError::Security {
+                        reason: SecurityFailureReason::AuthorizationDenied,
+                        context: ErrorContext::new(ErrorPhase::Delivery, RetryClass::Never),
+                    });
+                }
+            }
+            Ok(NotificationDecision::Allow)
+        }
+        fn work(&self) -> u64 {
+            1
+        }
+        fn retained_bytes(&self) -> u64 {
+            64
+        }
+    }
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let responses = Rc::new(Responses::default());
+    let denied = Arc::new(AtomicBool::new(false));
+    let checks = Arc::new(AtomicUsize::new(0));
+    let access: Arc<dyn ConsumerAccessService> =
+        Arc::new(ResponsePolicy(denied.clone(), checks.clone()));
+    let services = RetainedConsumerServices {
+        data: ConsumerServiceOwner::retain_data(Arc::new(CollectionData), &bank)
+            .unwrap_or_else(|_| panic!()),
+        access: ConsumerServiceOwner::retain_access(access, &bank).unwrap_or_else(|_| panic!()),
+    };
+    let registry = ConsumerNotificationRegistry::try_from_retained(vec![
+        RetainedConsumerNotificationRegistration {
+            binding: CollectionBinding(EventBinding(responses.clone())),
+            services: services.clone(),
+        },
+    ])
+    .unwrap();
+    let source = serde_json::from_value(serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Original occurrence policy",
+        "security":"n","securityDefinitions":{"n":{"scheme":"nosec"}},
+        "events":{
+            "alarm":{"data":{"type":"integer"},"dataResponse":{"type":"integer"},"forms":[{"href":ENDPOINT}]},
+            "ready":{"data":{"type":"boolean"},"dataResponse":{"type":"integer"},"forms":[{"href":ENDPOINT}]}},
+        "forms":[{"href":ENDPOINT,"op":["subscribeallevents","unsubscribeallevents"]}]
+    })).unwrap();
+    let definition = Rc::new(
+        registry
+            .prepare_notification(
+                &source,
+                &AffordanceTarget::Thing,
+                NotificationKind::SubscribeAllEvents,
+                ConsumerSelector::default(),
+                GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut work(),
+            )
+            .unwrap(),
+    );
+    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
+    let association = clinkz_wot_servient_finite::consumer_notification::ConsumerNotificationAssociation::try_new(owner.reference(), definition, services.access.clone(), bank.clone(), &mut work()).unwrap_or_else(|_| panic!());
+    let mut root =
+        clinkz_wot_servient_finite::consumer_notification::ConsumerNotifications::try_new(
+            RawNotificationLimits {
+                subscriptions: 1,
+                queue_items: 2,
+                queue_payload_bytes: 512,
+                payload_backing_bytes: 256,
+                control_backing_bytes: 0,
+                target_name_bytes: 64,
+                engine_bytes: 32768,
+            },
+            bank.clone(),
+        )
+        .unwrap();
+    drop((source, registry, services));
+    let mut cursor = root
+        .subscribe(
+            &association,
+            SubscriptionInput(None),
+            ResponseRequirement::Required,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .unwrap_or_else(|_| panic!());
+    drop(association);
+    let mut cx = Context::from_waker(Waker::noop());
+    root.progress(cursor.identity(), &mut cx, &mut work())
+        .unwrap();
+    root.progress(cursor.identity(), &mut cx, &mut work())
+        .unwrap();
+    assert!(root.front(&mut cursor, &mut work()).unwrap().is_some());
+    root.respond(
+        &mut cursor,
+        EventDataResponse(Some(Payload::new(b"7".as_slice(), "application/json"))),
+        &mut work(),
+    )
+    .unwrap_or_else(|_| panic!());
+    denied.store(true, Ordering::Relaxed);
+    assert!(
+        root.progress(cursor.identity(), &mut cx, &mut work())
+            .is_err()
+    );
+    assert_eq!(checks.load(Ordering::Relaxed), 2);
+    assert_eq!(responses.sends.get(), 0);
+    for _ in 0..8 {
+        if root
+            .progress(cursor.identity(), &mut cx, &mut work())
+            .unwrap()
+            == NotificationState::Closed
+        {
+            break;
+        }
+    }
+    let report = root.take_settlement(cursor.identity()).unwrap();
+    assert_eq!(report.responses_delivered, 0);
+    assert_eq!(responses.releases.get(), 1);
+    assert!(
+        responses
+            .last_body
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .upgrade()
+            .is_none()
+    );
+    drop((report, root));
+    clean(&bank);
 }
