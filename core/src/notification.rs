@@ -396,18 +396,35 @@ pub enum NotificationPermission {
     Respond,
     Cancel,
 }
+/// Original logical context for one policy check. `target` is the conversation
+/// scope; `occurrence` is present for acceptance/delivery/response of an owned
+/// item, including delayed checks. It is the mapping's logical affordance coordinate, not
+/// an authenticated sender, topic, principal or device identity. A check without
+/// an occurrence grants no permission to deliver a future item.
+#[derive(Clone, Copy)]
+pub struct NotificationAuthorization<'a> {
+    pub recipient: &'a NotificationIdentity,
+    pub target: &'a AffordanceTarget,
+    pub kind: NotificationKind,
+    pub occurrence: Option<&'a AffordanceTarget>,
+    pub permission: NotificationPermission,
+}
+impl NotificationAuthorization<'_> {
+    pub fn operation(&self) -> Operation {
+        if self.permission == NotificationPermission::Cancel {
+            self.kind.stop_operation()
+        } else {
+            self.kind.start_operation()
+        }
+    }
+}
 /// Actual captured application policy, rechecked at long-lived delivery and
 /// response/cancel. Native trust/credential services remain Binding-owned.
 pub trait NotificationAuthorizer {
     fn work(&self) -> u64 {
         1
     }
-    fn authorize(
-        &self,
-        recipient: &NotificationIdentity,
-        target: &AffordanceTarget,
-        permission: NotificationPermission,
-    ) -> CoreResult<()>;
+    fn authorize(&self, request: NotificationAuthorization<'_>) -> CoreResult<()>;
 }
 
 /// Optional captured validation for the raw lifecycle. Data work is prepaid

@@ -245,18 +245,51 @@ services after callbacks. Insufficient credit grants no success and keeps the
 original slot and funding. Native poll errors and late retirement output retain
 independent evidence; even after an error, captured validation applies to that
 late output before final settlement, without clearing the first cause.
-The composed notification owner captures the actual data/access services and separately
-prepared Property value, root Property map, Event or named Event collection schema roles, prepays validation before native handoff and checks data
-before queue acceptance. Each role borrows the original structured constraint
-backing and funding rather than a second captured tree. Actual validator support,
-availability and its original work/scratch policy are checked around validation;
-changed declarations fence the value, without entering an unfunded callback or
-replacing the original allowance. Invalid/late data and first causes remain with the
-original subscription through cleanup. Its original Host bank conservatively
-funds the root queue and validation envelope until root disposal; raw owner-scoped
-limits alone are not an aggregate-accounting claim. Native topic sharing,
-distribution, bounded queues and connection/control-frame disposal remain in
-the Binding, independently of each logical recipient's authority and stop.
+### Notification associations and conversation capacity
+
+`ConsumerNotificationAssociation` retains the original Consumer reference,
+qualified immutable definition, actual retained access owner and chosen instance
+bank. Its passive views MUST NOT revoke on Drop. Construction checks the prepared
+definition's original declarations, qualifies the supplied access owner and prepays
+its record before retention. It captures access work/security revision at this
+explicit binding boundary; a later capacity constructor cannot refresh them.
+It allocates no conversation queue, native interest or vacant work slot.
+
+`ConsumerNotifications` supplies a bounded raw conversation slab at an independently
+chosen work bank. Subscribe acquires the original instance's outstanding-subscription
+quota and the prepared data service's validation scratch before native preparation.
+Each entry retains its exact Consumer, definition, policy, participant, queue,
+response rights and original funding. A closed unacknowledged entry still occupies
+its slot. Acknowledgement releases work scratch and subscription quota after local
+retirement; retained reports keep original prepared/association owners for any
+shared target backing until report disposal. Capacity Drop performs qualified
+whole-owner finite local abort; it does not revoke persistent associations or
+other capacity domains. Original instance revocation fences only its work.
+Applications still schedule progress/cleanup after passive revocation and cursor
+loss. There is no scheduler or automatic authority-change wake mechanism.
+
+Prepared data policy/media/native support MUST match at association binding,
+admission and applicable delayed handoffs. Fresh availability/schema support and
+access work/backing/revision checks surround policy/validation callbacks. Changed
+declarations refuse/fence the original obligation without entering an unfunded
+callback or accepting a new baseline. Cleanup retains its prepaid owners even
+when those declarations are no longer usable. Explicit new qualification is
+required to use changed dependencies.
+
+The validator borrows the original Property value/map or Event role trees,
+prepays validation before native handoff and checks data before queue acceptance.
+The original occurrence coordinate survives staging/queueing and is supplied to
+fresh policy at acceptance, `front`, response admission and delayed native response
+send. Check original recipient, scope and coordinate bounds before policy; the
+composed policy also checks captured Event membership. Invalid/late candidates and
+first causes remain with the original conversation through cleanup. NoSec MQTT
+supplies declared Event attribution, not publisher authentication; source-proof
+verification, proof freshness and its retained trust dependencies remain unimplemented.
+
+Native topic sharing, distribution, bounded queues and connection/control-frame
+disposal remain in the Binding, independently of each recipient's authority,
+cursor, loss and stop. An Engine slot grants no whole-service shutdown right.
+
 Raw and composed notification `front()` lend only payload/media and occurrence
 name slices under the existing exclusive root borrow. No public delivery loan
 exposes cloneable owners of those original allocations. Active loans prevent

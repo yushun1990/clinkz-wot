@@ -392,6 +392,7 @@ impl NotificationParticipation for Participation {
     }
 }
 
+#[derive(Clone)]
 struct Binding {
     bus: Rc<RefCell<Bus>>,
     configuration: Rc<Cell<u64>>,
@@ -472,12 +473,8 @@ fn bit(p: NotificationPermission) -> u8 {
     }
 }
 impl NotificationAuthorizer for Policy {
-    fn authorize(
-        &self,
-        _: &NotificationIdentity,
-        _: &AffordanceTarget,
-        p: NotificationPermission,
-    ) -> CoreResult<()> {
+    fn authorize(&self, request: NotificationAuthorization<'_>) -> CoreResult<()> {
+        let p = request.permission;
         self.probes.set(self.probes.get() + 1);
         if p == NotificationPermission::Deliver {
             let hook = self.on_deliver.borrow_mut().take();
@@ -498,6 +495,9 @@ impl NotificationAuthorizer for Policy {
 struct Root {
     inner: RawNotificationServient<Binding, Policy>,
     _instance: ConsumerInstance,
+    binding: Binding,
+    configuration: Cell<u64>,
+    policy: Policy,
 }
 impl core::ops::Deref for Root {
     type Target = RawNotificationServient<Binding, Policy>;
@@ -519,17 +519,61 @@ impl Root {
         limits: RawNotificationLimits,
     ) -> Result<Self, BindingInputRejection<(Binding, Cell<u64>, Policy)>> {
         let instance = ConsumerInstance::new(slot);
-        RawNotificationServient::try_new(
-            binding,
-            configuration,
-            policy,
+        RawNotificationContext::try_new(
+            binding.clone(),
+            configuration.clone(),
+            policy.clone(),
             instance.reference(),
-            limits,
+            None,
         )
-        .map(|inner| Self {
-            inner,
-            _instance: instance,
-        })
+        .map_err(|e| {
+            BindingInputRejection::new(
+                (binding.clone(), configuration.clone(), policy.clone()),
+                e.into_parts().1,
+            )
+        })?;
+        RawNotificationServient::try_new(limits)
+            .map(|inner| Self {
+                inner,
+                _instance: instance,
+                binding: binding.clone(),
+                configuration: configuration.clone(),
+                policy: policy.clone(),
+            })
+            .map_err(|e| {
+                BindingInputRejection::new(
+                    (binding, configuration, policy),
+                    BindingOperationalError::new(e),
+                )
+            })
+    }
+    fn subscribe(
+        &mut self,
+        request: RawNotificationRequest,
+        program: Program,
+        budget: &mut WorkBudget,
+    ) -> Result<NotificationCursor, BindingInputRejection<(RawNotificationRequest, Program)>> {
+        let context = match RawNotificationContext::try_new(
+            self.binding.clone(),
+            self.configuration.clone(),
+            self.policy.clone(),
+            self._instance.reference(),
+            None,
+        ) {
+            Ok(context) => context,
+            Err(e) => {
+                return Err(BindingInputRejection::new(
+                    (request, program),
+                    e.into_parts().1,
+                ));
+            }
+        };
+        self.inner
+            .subscribe(request, program, context, budget)
+            .map_err(|e| {
+                let ((r, p, _), e) = e.into_parts();
+                BindingInputRejection::new((r, p), e)
+            })
     }
 }
 fn binding_error() -> CoreError {

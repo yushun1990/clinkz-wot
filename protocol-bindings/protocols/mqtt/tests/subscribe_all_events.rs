@@ -7,14 +7,14 @@ mod support;
 use broker::*;
 use clinkz_wot_core::{consumer::*, notification::*};
 use clinkz_wot_planning::open_consumer::*;
-use clinkz_wot_servient_finite::{consumer_notification::*, notification::*};
+use clinkz_wot_servient_finite::notification::*;
 use std::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
 use support::*;
 
-type Consumer = ConsumerNotificationRuntime<MqttNotificationConsumer>;
+type Consumer = NotificationFixture<MqttNotificationConsumer>;
 
 #[derive(Default)]
 struct ObservedData {
@@ -52,7 +52,7 @@ fn occurrence_views_cannot_retain_original_backing_across_repeated_advance_and_u
             Arc::new(Access::default()),
             observer.clone(),
         );
-        let mut events = from_definition(definition, &authority, 4);
+        let mut events = from_definition(definition, &authority, 4, Arc::new(Access::default()));
         let mut cursor = subscribe(&mut events, NotificationOverflow::Terminate);
         active(&mut events, &cursor).await;
         let mut peer = Peer::new(&broker);
@@ -199,10 +199,13 @@ fn try_definition(
     access: Arc<Access>,
     data: Arc<dyn ConsumerDataService>,
 ) -> CoreResult<ConsumerNotificationDefinition<MqttNotificationConsumer>> {
-    let registry = ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
-        binding: s.binding(),
-        services: ConsumerServices { data, access },
-    }])?;
+    let registry = ConsumerNotificationRegistry::try_new(
+        vec![ConsumerNotificationRegistration {
+            binding: s.binding(),
+            services: ConsumerServices { data, access },
+        }],
+        &bank,
+    )?;
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
     registry.prepare_notification(
@@ -219,10 +222,12 @@ fn from_definition(
     d: ConsumerNotificationDefinition<MqttNotificationConsumer>,
     owner: &ConsumerInstance,
     items: usize,
+    access: Arc<dyn ConsumerAccessService>,
 ) -> Consumer {
     Consumer::try_new(
         owner.reference(),
         d,
+        access,
         RawNotificationLimits {
             subscriptions: 4,
             queue_items: items,
@@ -233,7 +238,7 @@ fn from_definition(
             engine_bytes: 128_000,
         },
     )
-    .unwrap_or_else(|e| panic!("runtime: {:?}", e.error()))
+    .unwrap_or_else(|e| panic!("runtime: {:?}", e))
 }
 fn consumer(
     s: &MqttConsumerService,
@@ -249,11 +254,12 @@ fn consumer(
             s,
             event_collection_td(b.address, topic),
             bank,
-            access,
+            access.clone(),
             Arc::new(MqttJsonData),
         ),
         owner,
         items,
+        access,
     )
 }
 fn subscribe(c: &mut Consumer, policy: NotificationOverflow) -> NotificationCursor {
@@ -342,7 +348,7 @@ fn emission(
         now(),
         &mut budget(),
     )
-    .unwrap_or_else(|e| panic!("publish: {:?}", e.error()))
+    .unwrap_or_else(|e| panic!("publish: {:?}", e))
 }
 async fn send(o: &mut RawProducerServient, e: &mut ComposedProducerExposure, bytes: &[u8]) {
     let mut work = emission(o, e, bytes);
@@ -519,6 +525,7 @@ fn malformed_event_data_refuses_before_delivery_and_with_original_backing_retain
             assert_eq!(report.delivered_items, 0);
             assert!(!s.connected());
             drop(c);
+            drop(report);
             assert_empty(&bank);
         }
     });
@@ -547,6 +554,7 @@ fn independently_captured_collection_schemas_cannot_be_replaced_by_shared_native
             ),
             &two,
             4,
+            Arc::new(Access::default()),
         );
         let mut ca = subscribe(&mut a, NotificationOverflow::Terminate);
         let cz = subscribe(&mut z, NotificationOverflow::Terminate);
@@ -759,6 +767,7 @@ fn replacement_cannot_retarget_an_old_collection_queue_or_inherit_it() {
         assert!(!s.connected());
         close(&mut po, &mut pe);
         drop((a, pe));
+        drop(report);
         assert_empty(&bank);
     });
 }
@@ -795,10 +804,11 @@ fn partial_unsubscribe_and_broker_failure_preserve_stop_uncertainty_and_funding(
         assert_eq!(report.remote_cancellation, RemoteCancellation::Unknown);
         assert_eq!(
             bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
-            used
+            used - MqttJsonData.policy().temporary_bytes
         );
         assert!(!s.connected());
         drop(c);
+        drop(report);
         assert_empty(&bank);
     });
 }
@@ -884,10 +894,15 @@ fn producer_root_validation_policy_and_saturation_return_original_complete_carri
         let mut pe = stage(&po, input, &bank);
         let end = Instant::now() + Duration::from_secs(3);
         loop {
-            let _ = po.step_notifications(&mut pe
-                .participant_mut::<services::ServicesParticipant>(0)
-                .unwrap()
-                .native, &mut cx(), &mut budget())
+            let _ = po
+                .step_notifications(
+                    &mut pe
+                        .participant_mut::<services::ServicesParticipant>(0)
+                        .unwrap()
+                        .native,
+                    &mut cx(),
+                    &mut budget(),
+                )
                 .unwrap();
             match pe.publish(&mut po, &mut budget()) {
                 Ok(()) => break,
@@ -1008,11 +1023,16 @@ fn producer_root_validation_policy_and_saturation_return_original_complete_carri
         pending.acknowledge().unwrap_or_else(|_| panic!());
         pe.begin_close();
         assert!(
-            po.step_notifications(&mut pe.participant_mut::<services::ServicesParticipant>(0)
-                .unwrap()
-                .native, &mut cx(), &mut budget())
-                .unwrap()
-                .is_ready()
+            po.step_notifications(
+                &mut pe
+                    .participant_mut::<services::ServicesParticipant>(0)
+                    .unwrap()
+                    .native,
+                &mut cx(),
+                &mut budget()
+            )
+            .unwrap()
+            .is_ready()
         );
         pe.retire(&mut po, &mut budget()).unwrap();
         assert!(!ps.connected());
@@ -1059,7 +1079,7 @@ fn collection_validator_rechecks_original_authority_after_callback_and_requires_
                 calls: calls.clone(),
             }),
         );
-        let mut c = from_definition(d, &owner, 4);
+        let mut c = from_definition(d, &owner, 4, Arc::new(Access::default()));
         let id = subscribe(&mut c, NotificationOverflow::Terminate);
         active(&mut c, &id).await;
         send(&mut po, &mut pe, ONE).await;
@@ -1088,6 +1108,7 @@ fn collection_validator_rechecks_original_authority_after_callback_and_requires_
         ));
         close(&mut po, &mut pe);
         drop((c, pe));
+        drop(report);
         assert_empty(&bank);
     });
 }
@@ -1292,6 +1313,7 @@ fn unknown_event_and_cross_event_schema_data_are_owned_and_refused_before_logica
             assert_eq!(report.delivered_items, 0);
             assert!(!s.connected());
             drop(c);
+            drop(report);
             assert_empty(&bank);
         }
     });
@@ -1334,6 +1356,7 @@ fn cursor_loss_and_stop_before_start_release_collection_without_native_effects()
         assert!(!s.connected());
         assert!(!b.logs().contains("Received SUBSCRIBE from cr"));
         drop(c);
+        drop(result);
         assert_empty(&bank);
     });
 }
@@ -1376,15 +1399,17 @@ fn overlapping_distinct_filters_refuse_without_revoking_original_collection_inte
         let mut root = consumer(&s, &b, prefix, &one, &bank, Arc::new(Access::default()), 4);
         let mut a = subscribe(&mut root, NotificationOverflow::Terminate);
         active(&mut root, &a).await;
-        let registry =
-            ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+        let registry = ConsumerNotificationRegistry::try_new(
+            vec![ConsumerNotificationRegistration {
                 binding: s.binding(),
                 services: ConsumerServices {
                     data: Arc::new(MqttJsonData),
                     access: Arc::new(LeafAccess),
                 },
-            }])
-            .unwrap();
+            }],
+            &bank,
+        )
+        .unwrap();
         let mut limits = GatewayDefaultV1::LIMITS.clone();
         assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
         let d = registry
@@ -1398,7 +1423,8 @@ fn overlapping_distinct_filters_refuse_without_revoking_original_collection_inte
                 &mut budget(),
             )
             .unwrap();
-        let mut leaf = from_definition(d, &two, 4);
+        drop(registry);
+        let mut leaf = from_definition(d, &two, 4, Arc::new(LeafAccess));
         assert!(
             leaf.subscribe(
                 SubscriptionInput(None),
@@ -1445,10 +1471,15 @@ fn final_publication_refuses_missing_actual_collection_services_after_closed_nat
         let mut pe = stage(&po, input, &bank);
         let end = Instant::now() + Duration::from_secs(3);
         loop {
-            let ready = po.step_notifications(&mut pe
-                .participant_mut::<services::ServicesParticipant>(0)
-                .unwrap()
-                .native, &mut cx(), &mut budget())
+            let ready = po
+                .step_notifications(
+                    &mut pe
+                        .participant_mut::<services::ServicesParticipant>(0)
+                        .unwrap()
+                        .native,
+                    &mut cx(),
+                    &mut budget(),
+                )
                 .unwrap();
             if ready.is_ready() {
                 break;
@@ -1481,11 +1512,16 @@ fn final_publication_refuses_missing_actual_collection_services_after_closed_nat
         assert_eq!(s.locally_published(), 0);
         pe.begin_close();
         assert!(
-            po.step_notifications(&mut pe.participant_mut::<services::ServicesParticipant>(0)
-                .unwrap()
-                .native, &mut cx(), &mut budget())
-                .unwrap()
-                .is_ready()
+            po.step_notifications(
+                &mut pe
+                    .participant_mut::<services::ServicesParticipant>(0)
+                    .unwrap()
+                    .native,
+                &mut cx(),
+                &mut budget()
+            )
+            .unwrap()
+            .is_ready()
         );
         pe.retire(&mut po, &mut budget()).unwrap();
         assert!(!s.connected());

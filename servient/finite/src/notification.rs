@@ -1,6 +1,6 @@
-//! Caller-driven raw Host Consumer notifications. Each facet retains the one
-//! Consumer authority's reference and one captured native capability. Native
-//! infrastructure may be shared; cursors and logical stop remain independent.
+//! Caller-driven raw Host notification capacity. Each admitted conversation
+//! retains its original logical association. Native infrastructure, persistent
+//! association count and execution capacity have independent lifetimes.
 use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use clinkz_wot_core::consumer::ConsumerInstanceRef;
 use clinkz_wot_core::thing::AffordanceSite;
@@ -178,6 +178,9 @@ pub struct NotificationSettlement {
     pub delivered_items: u64,
     pub responses_delivered: u64,
     pub responses_uncertain: u64,
+    // Composed reports can retain original coordinate backing. Keep its
+    // original prepared/association owners until this report is disposed.
+    _validation: Option<Rc<dyn NotificationValidation>>,
 }
 
 struct Buffered<R> {
@@ -195,18 +198,19 @@ impl<R: NotificationResponse> Buffered<R> {
         }
     }
 }
-struct Entry<P: NotificationParticipation> {
+struct Entry<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
+    context: RawNotificationContext<B, A>,
     identity: NotificationIdentity,
     request: RawNotificationRequest,
     stopped: Rc<Cell<bool>>,
     state: NotificationState,
     support: NotificationSupport,
-    participant: Option<P>,
+    participant: Option<B::Participation>,
     native_started: bool,
     close_started: bool,
     cancel_admitted: bool,
-    queue: VecDeque<Buffered<P::Response>>,
-    staged: Option<Buffered<P::Response>>,
+    queue: VecDeque<Buffered<<B::Participation as NotificationParticipation>::Response>>,
+    staged: Option<Buffered<<B::Participation as NotificationParticipation>::Response>>,
     queue_bytes: usize,
     reservation: usize,
     cancellation: Option<CancellationInput>,
@@ -220,7 +224,7 @@ struct Entry<P: NotificationParticipation> {
     responses_delivered: u64,
     responses_uncertain: u64,
 }
-impl<P: NotificationParticipation> Entry<P> {
+impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
     fn fence(&mut self, cause: CoreError) {
         if self.state == NotificationState::Closed {
             return;
@@ -246,7 +250,7 @@ impl<P: NotificationParticipation> Entry<P> {
     }
     fn check_live(&mut self, paired: bool) -> CoreResult<()> {
         self.sync_stop();
-        if !paired || !self.identity.consumer.is_current() {
+        if !paired || !self.context.paired() {
             self.fence(stale());
         }
         if matches!(
@@ -262,7 +266,7 @@ impl<P: NotificationParticipation> Entry<P> {
         self.cleanup_error.get_or_insert(error);
     }
 }
-impl<P: NotificationParticipation> Drop for Entry<P> {
+impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Drop for Entry<B, A> {
     fn drop(&mut self) {
         // Explicit qualified finite local abort, never a successful drain claim.
         if let Some(item) = self.staged.take() {
@@ -276,28 +280,72 @@ impl<P: NotificationParticipation> Drop for Entry<P> {
         }
     }
 }
-struct Slot<P: NotificationParticipation> {
+struct Slot<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
     generation: Option<Generation>,
-    entry: Option<Entry<P>>,
+    entry: Option<Entry<B, A>>,
 }
 
 /// Exclusive manual access linearizes progress, delivery, stop and settlement.
 /// Policy and native callbacks execute without locks. Linked callbacks and all
 /// local destructors must be finite/cooperative; this is no preemption claim.
 pub struct RawNotificationServient<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
+    issuer: NotificationIssuer,
+    slots: Vec<Slot<B, A>>,
+    limits: RawNotificationLimits,
+    reserved_bytes: usize,
+    current: bool,
+    cleanup_cursor: usize,
+    retained: usize,
+}
+
+/// Source-free admission context, retained by the original work. Construction
+/// allocates no conversation slots and establishes no native subscription.
+/// The Binding owns its physical backing; validation/policy retain their own
+/// original owners. This raw context itself is not a TD qualification proof.
+pub struct RawNotificationContext<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
     binding: B,
     configuration: B::Configuration,
     binding_identity: (BindingId, BindingGeneration),
     authorizer: A,
     validation: Option<Rc<dyn NotificationValidation>>,
     consumer: ConsumerInstanceRef,
-    issuer: NotificationIssuer,
-    slots: Vec<Slot<B::Participation>>,
-    limits: RawNotificationLimits,
-    reserved_bytes: usize,
-    current: bool,
-    cleanup_cursor: usize,
-    retained: usize,
+}
+impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationContext<B, A> {
+    #[allow(clippy::type_complexity)]
+    pub fn try_new(
+        binding: B,
+        configuration: B::Configuration,
+        authorizer: A,
+        consumer: ConsumerInstanceRef,
+        validation: Option<Rc<dyn NotificationValidation>>,
+    ) -> Result<
+        Self,
+        BindingInputRejection<(
+            B,
+            B::Configuration,
+            A,
+            Option<Rc<dyn NotificationValidation>>,
+        )>,
+    > {
+        if !consumer.is_current() || binding.configuration() != &configuration {
+            return Err(reject(
+                (binding, configuration, authorizer, validation),
+                invalid(),
+            ));
+        }
+        Ok(Self {
+            binding_identity: binding.identity(),
+            binding,
+            configuration,
+            authorizer,
+            consumer,
+            validation,
+        })
+    }
+    fn paired(&self) -> bool {
+        self.consumer.is_current()
+            && binding_paired(&self.binding, &self.configuration, self.binding_identity)
+    }
 }
 fn context(phase: ErrorPhase) -> ErrorContext {
     ErrorContext::new(phase, RetryClass::Never)
@@ -334,49 +382,31 @@ fn binding_paired<B: ConsumerNotificationBinding>(
 }
 
 impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationServient<B, A> {
-    #[allow(clippy::type_complexity)]
-    pub fn try_new(
-        binding: B,
-        configuration: B::Configuration,
-        authorizer: A,
-        consumer: ConsumerInstanceRef,
-        limits: RawNotificationLimits,
-    ) -> Result<Self, BindingInputRejection<(B, B::Configuration, A)>> {
+    pub fn try_new(limits: RawNotificationLimits) -> CoreResult<Self> {
         let needed = limits
             .subscriptions
-            .checked_mul(size_of::<Slot<B::Participation>>())
+            .checked_mul(size_of::<Slot<B, A>>())
             .and_then(|n| n.checked_add(size_of::<Self>() + 2 * size_of::<usize>()));
-        if !consumer.is_current() || binding.configuration() != &configuration {
-            return Err(reject((binding, configuration, authorizer), invalid()));
-        }
         if limits.subscriptions > u32::MAX as usize
             || needed.is_none_or(|n| n > limits.engine_bytes)
         {
-            return Err(reject((binding, configuration, authorizer), capacity()));
+            return Err(capacity());
         }
         let mut slots = Vec::new();
-        if slots.try_reserve_exact(limits.subscriptions).is_err() {
-            return Err(reject((binding, configuration, authorizer), capacity()));
-        }
+        slots
+            .try_reserve_exact(limits.subscriptions)
+            .map_err(|_| capacity())?;
         let reserved_bytes = slots
             .capacity()
-            .checked_mul(size_of::<Slot<B::Participation>>())
-            .and_then(|n| n.checked_add(size_of::<Self>() + 2 * size_of::<usize>()));
-        let Some(reserved_bytes) = reserved_bytes.filter(|n| *n <= limits.engine_bytes) else {
-            return Err(reject((binding, configuration, authorizer), capacity()));
-        };
+            .checked_mul(size_of::<Slot<B, A>>())
+            .and_then(|n| n.checked_add(size_of::<Self>() + 2 * size_of::<usize>()))
+            .filter(|n| *n <= limits.engine_bytes)
+            .ok_or_else(capacity)?;
         slots.resize_with(limits.subscriptions, || Slot {
             generation: Some(Generation::INITIAL),
             entry: None,
         });
-        let binding_identity = binding.identity();
         Ok(Self {
-            binding,
-            configuration,
-            binding_identity,
-            authorizer,
-            validation: None,
-            consumer,
             issuer: NotificationIssuer::default(),
             slots,
             limits,
@@ -389,36 +419,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     pub fn reserved_engine_bytes(&self) -> usize {
         self.reserved_bytes
     }
-    /// Install immutable actual validation before any subscription exists.
-    /// The composed owner retains its backing and prepaid validation scratch.
-    #[allow(clippy::type_complexity)]
-    pub fn try_new_validated(
-        binding: B,
-        configuration: B::Configuration,
-        authorizer: A,
-        consumer: ConsumerInstanceRef,
-        limits: RawNotificationLimits,
-        validation: Rc<dyn NotificationValidation>,
-    ) -> Result<Self, BindingInputRejection<(B, B::Configuration, A, Rc<dyn NotificationValidation>)>>
-    {
-        match Self::try_new(binding, configuration, authorizer, consumer, limits) {
-            Ok(mut root) => {
-                root.validation = Some(validation);
-                Ok(root)
-            }
-            Err(e) => {
-                let ((b, c, a), error) = e.into_parts();
-                Err(BindingInputRejection::new((b, c, a, validation), error))
-            }
-        }
-    }
     pub fn retained_subscriptions(&self) -> usize {
         self.retained
-    }
-    fn paired(&self) -> bool {
-        self.current
-            && self.consumer.is_current()
-            && binding_paired(&self.binding, &self.configuration, self.binding_identity)
     }
     fn index(&self, identity: &NotificationIdentity) -> CoreResult<usize> {
         let i = identity.subscription.slot().get() as usize;
@@ -429,7 +431,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             .map(|_| i)
             .ok_or_else(stale)
     }
-    fn entry(&self, id: &NotificationIdentity) -> CoreResult<&Entry<B::Participation>> {
+    fn entry(&self, id: &NotificationIdentity) -> CoreResult<&Entry<B, A>> {
         Ok(self.slots[self.index(id)?].entry.as_ref().unwrap())
     }
     fn reservation(&self, queue_capacity: usize, target_bytes: usize) -> Option<usize> {
@@ -459,11 +461,18 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         &mut self,
         request: RawNotificationRequest,
         program: B::Program,
+        mut context: RawNotificationContext<B, A>,
         budget: &mut WorkBudget,
-    ) -> Result<NotificationCursor, BindingInputRejection<(RawNotificationRequest, B::Program)>>
-    {
+    ) -> Result<
+        NotificationCursor,
+        BindingInputRejection<(
+            RawNotificationRequest,
+            B::Program,
+            RawNotificationContext<B, A>,
+        )>,
+    > {
         let check = (|| {
-            if !self.paired() {
+            if !self.current || !context.paired() {
                 return Err(stale());
             }
             let kind = request.kind;
@@ -500,27 +509,36 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 .position(|s| s.entry.is_none() && s.generation.is_some())
                 .ok_or_else(capacity)?;
             let id = self.issuer.identity(
-                self.consumer.clone(),
+                context.consumer.clone(),
                 SubscriptionId::new(SlotIndex::new(i as u32), self.slots[i].generation.unwrap()),
             );
             debit(
                 budget,
                 WorkClass::ProviderProbes,
-                self.authorizer.work().checked_add(1).ok_or_else(capacity)?,
+                context
+                    .authorizer
+                    .work()
+                    .checked_add(1)
+                    .ok_or_else(capacity)?,
             )?;
-            self.authorizer
-                .authorize(&id, &request.target, NotificationPermission::Establish)?;
-            let support = self.binding.support(&program, kind)?;
-            if !self.paired() {
+            context.authorizer.authorize(NotificationAuthorization {
+                recipient: &id,
+                target: &request.target,
+                kind,
+                occurrence: None,
+                permission: NotificationPermission::Establish,
+            })?;
+            let support = context.binding.support(&program, kind)?;
+            if !self.current || !context.paired() {
                 return Err(stale());
             }
             if request.responses == ResponseRequirement::Required && !support.event_responses {
                 return Err(unsupported());
             }
-            if let Some(validation) = &self.validation {
+            if let Some(validation) = &context.validation {
                 validation.subscription(&request.subscription, budget)?;
             }
-            if !self.paired() {
+            if !self.current || !context.paired() {
                 return Err(stale());
             }
             let reservation = self
@@ -541,13 +559,13 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         })();
         let (i, identity, support) = match check {
             Ok(v) => v,
-            Err(e) => return Err(reject((request, program), e)),
+            Err(e) => return Err(reject((request, program, context), e)),
         };
         // Prepaid before any external effect. Actual allocator capacity is
         // checked too; process OOM remains an environment failure.
         let mut queue = VecDeque::new();
         if queue.try_reserve_exact(self.limits.queue_items).is_err() {
-            return Err(reject((request, program), capacity()));
+            return Err(reject((request, program, context), capacity()));
         }
         let Some(reservation) = self
             .reservation(queue.capacity(), request.target.name().map_or(0, str::len))
@@ -557,14 +575,17 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                     .is_some_and(|v| v <= self.limits.engine_bytes)
             })
         else {
-            return Err(reject((request, program), capacity()));
+            return Err(reject((request, program, context), capacity()));
         };
         let stopped = Rc::new(Cell::new(false));
-        let participant = match self.binding.prepare(program, &identity) {
+        let participant = match context.binding.prepare(program, &identity) {
             Ok(p) => p,
             Err(e) => {
                 let (program, error) = e.into_parts();
-                return Err(BindingInputRejection::new((request, program), error));
+                return Err(BindingInputRejection::new(
+                    (request, program, context),
+                    error,
+                ));
             }
         };
         self.reserved_bytes += reservation;
@@ -574,6 +595,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             stopped: stopped.clone(),
         };
         self.slots[i].entry = Some(Entry {
+            context,
             identity,
             request,
             stopped,
@@ -602,15 +624,34 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     }
 
     fn authorize(
-        entry: &mut Entry<B::Participation>,
-        authorizer: &A,
+        entry: &mut Entry<B, A>,
         paired: bool,
         permission: NotificationPermission,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
         entry.check_live(paired)?;
-        debit(budget, WorkClass::ProviderProbes, authorizer.work())?;
-        let result = authorizer.authorize(&entry.identity, &entry.request.target, permission);
+        debit(
+            budget,
+            WorkClass::ProviderProbes,
+            entry.context.authorizer.work(),
+        )?;
+        let result = entry
+            .context
+            .authorizer
+            .authorize(NotificationAuthorization {
+                recipient: &entry.identity,
+                target: &entry.request.target,
+                kind: entry.request.kind,
+                occurrence: if matches!(
+                    permission,
+                    NotificationPermission::Deliver | NotificationPermission::Respond
+                ) {
+                    entry.queue.front().map(|v| &v.native.target)
+                } else {
+                    None
+                },
+                permission,
+            });
         entry.sync_stop();
         if entry.state == NotificationState::Closing {
             return Err(entry.first_cause.clone().unwrap());
@@ -622,8 +663,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         Ok(())
     }
 
-    /// Revocation of this facet is local and immediate, even with zero native
-    /// work credit. ConsumerInstance::revoke fences all attached facets.
+    /// Fence this capacity domain's admission and retained work immediately,
+    /// even with zero native work credit. This does not revoke any Consumer
+    /// authority, another capacity owner or shared native infrastructure.
     pub fn revoke(&mut self) {
         self.current = false;
         for slot in &mut self.slots {
@@ -632,8 +674,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             }
         }
     }
-    /// Close this notification facet; sibling facets and native infrastructure
-    /// retain their independent owners.
+    /// Close this work owner. Persistent associations, other capacity domains
+    /// and shared native infrastructure retain their independent owners.
     pub fn begin_close(&mut self) {
         self.current = false;
         for slot in &mut self.slots {
@@ -685,7 +727,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             Ok(i) => i,
             Err(e) => return Err(reject(cancellation, e)),
         };
-        let paired = self.paired();
+        let paired = self.current;
         let e = self.slots[i].entry.as_mut().unwrap();
         e.fence(cancelled());
         if cancellation.is_none() {
@@ -695,7 +737,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             if e.state == NotificationState::Closed || e.close_started || e.cancellation.is_some() {
                 return Err(invalid());
             }
-            if !paired {
+            if !paired || !e.context.paired() {
                 return Err(stale());
             }
             if !e.support.cancellation {
@@ -713,15 +755,21 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             {
                 return Err(capacity());
             }
-            debit(budget, WorkClass::ProviderProbes, self.authorizer.work())?;
-            if let Some(validation) = &self.validation {
+            debit(
+                budget,
+                WorkClass::ProviderProbes,
+                e.context.authorizer.work(),
+            )?;
+            if let Some(validation) = &e.context.validation {
                 validation.cancellation(cancellation.as_ref().unwrap(), budget)?;
             }
-            self.authorizer.authorize(
-                &e.identity,
-                &e.request.target,
-                NotificationPermission::Cancel,
-            )?;
+            e.context.authorizer.authorize(NotificationAuthorization {
+                recipient: &e.identity,
+                target: &e.request.target,
+                kind: e.request.kind,
+                occurrence: None,
+                permission: NotificationPermission::Cancel,
+            })?;
             if !e.identity.consumer.is_current() {
                 return Err(stale());
             }
@@ -762,19 +810,13 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<RawNotificationView<'_>>> {
         let i = self.index(cursor.identity())?;
-        let paired = self.paired();
+        let paired = self.current;
         let e = self.slots[i].entry.as_mut().unwrap();
-        Self::authorize(
-            e,
-            &self.authorizer,
-            paired,
-            NotificationPermission::Deliver,
-            budget,
-        )?;
+        Self::authorize(e, paired, NotificationPermission::Deliver, budget)?;
         e.check_live(binding_paired(
-            &self.binding,
-            &self.configuration,
-            self.binding_identity,
+            &e.context.binding,
+            &e.context.configuration,
+            e.context.binding_identity,
         ))?;
         if e.state != NotificationState::Active {
             return Ok(None);
@@ -806,19 +848,13 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     ) -> Result<(), BindingInputRejection<EventDataResponse>> {
         let result = (|| {
             let i = self.index(cursor.identity())?;
-            let paired = self.paired();
+            let paired = self.current;
             let e = self.slots[i].entry.as_mut().unwrap();
-            Self::authorize(
-                e,
-                &self.authorizer,
-                paired,
-                NotificationPermission::Respond,
-                budget,
-            )?;
+            Self::authorize(e, paired, NotificationPermission::Respond, budget)?;
             e.check_live(binding_paired(
-                &self.binding,
-                &self.configuration,
-                self.binding_identity,
+                &e.context.binding,
+                &e.context.configuration,
+                e.context.binding_identity,
             ))?;
             if notification_payload_backing(input.0.as_ref())
                 .is_none_or(|n| n > self.limits.payload_backing_bytes)
@@ -829,13 +865,13 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             if !item.exposed || item.response_state != EventResponseState::Awaiting {
                 return Err(unsupported());
             }
-            if let Some(validation) = &self.validation {
+            if let Some(validation) = &e.context.validation {
                 validation.response(&item.native.target, &input, budget)?;
             }
             e.check_live(binding_paired(
-                &self.binding,
-                &self.configuration,
-                self.binding_identity,
+                &e.context.binding,
+                &e.context.configuration,
+                e.context.binding_identity,
             ))?;
             e.queue.front_mut().unwrap().response_state = EventResponseState::Pending;
             Ok(i)
@@ -889,7 +925,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
         let i = self.index(cursor.identity())?;
-        let paired = self.paired();
+        let paired = self.current;
         let e = self.slots[i].entry.as_mut().unwrap();
         e.check_live(paired)?;
         let item = e.queue.front_mut().ok_or_else(invalid)?;
@@ -915,10 +951,10 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         budget: &mut WorkBudget,
     ) -> CoreResult<NotificationState> {
         let i = self.index(identity)?;
-        let paired = self.paired();
+        let paired = self.current;
         let e = self.slots[i].entry.as_mut().unwrap();
         e.sync_stop();
-        if !paired {
+        if !paired || !e.context.paired() {
             e.fence(stale());
         }
         if e.state == NotificationState::Closed {
@@ -926,22 +962,28 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         }
         if e.state == NotificationState::Closing {
             if !e.close_started && e.cancellation.is_some() && !e.cancel_admitted {
-                debit(budget, WorkClass::ProviderProbes, self.authorizer.work())?;
+                debit(
+                    budget,
+                    WorkClass::ProviderProbes,
+                    e.context.authorizer.work(),
+                )?;
                 match if paired {
-                    self.authorizer.authorize(
-                        &e.identity,
-                        &e.request.target,
-                        NotificationPermission::Cancel,
-                    )
+                    e.context.authorizer.authorize(NotificationAuthorization {
+                        recipient: &e.identity,
+                        target: &e.request.target,
+                        kind: e.request.kind,
+                        occurrence: None,
+                        permission: NotificationPermission::Cancel,
+                    })
                 } else {
                     Err(stale())
                 } {
                     Ok(())
                         if e.identity.consumer.is_current()
                             && binding_paired(
-                                &self.binding,
-                                &self.configuration,
-                                self.binding_identity,
+                                &e.context.binding,
+                                &e.context.configuration,
+                                e.context.binding_identity,
                             ) =>
                     {
                         e.cancel_admitted = true
@@ -957,17 +999,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             return Self::cleanup(e, cx, budget);
         }
         if e.state == NotificationState::Establishing {
-            Self::authorize(
-                e,
-                &self.authorizer,
-                paired,
-                NotificationPermission::Establish,
-                budget,
-            )?;
+            Self::authorize(e, paired, NotificationPermission::Establish, budget)?;
             e.check_live(binding_paired(
-                &self.binding,
-                &self.configuration,
-                self.binding_identity,
+                &e.context.binding,
+                &e.context.configuration,
+                e.context.binding_identity,
             ))?;
             debit(budget, WorkClass::BindingPolls, 1)?;
             e.native_started = true;
@@ -985,7 +1021,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 _ => {}
             }
             e.sync_stop();
-            if !binding_paired(&self.binding, &self.configuration, self.binding_identity) {
+            if !binding_paired(
+                &e.context.binding,
+                &e.context.configuration,
+                e.context.binding_identity,
+            ) {
                 e.fence(stale());
             }
             return Ok(e.state);
@@ -995,17 +1035,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             .front()
             .is_some_and(|v| v.response_state == EventResponseState::Pending)
         {
-            Self::authorize(
-                e,
-                &self.authorizer,
-                paired,
-                NotificationPermission::Respond,
-                budget,
-            )?;
+            Self::authorize(e, paired, NotificationPermission::Respond, budget)?;
             e.check_live(binding_paired(
-                &self.binding,
-                &self.configuration,
-                self.binding_identity,
+                &e.context.binding,
+                &e.context.configuration,
+                e.context.binding_identity,
             ))?;
             debit(budget, WorkClass::BindingPolls, 1)?;
             let item = e.queue.front_mut().unwrap();
@@ -1025,7 +1059,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 Poll::Pending => {}
             }
             e.sync_stop();
-            if !binding_paired(&self.binding, &self.configuration, self.binding_identity) {
+            if !binding_paired(
+                &e.context.binding,
+                &e.context.configuration,
+                e.context.binding_identity,
+            ) {
                 e.fence(stale());
             }
             return Ok(e.state);
@@ -1068,25 +1106,23 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             e.sync_stop();
             return Ok(e.state);
         }
-        Self::authorize(
-            e,
-            &self.authorizer,
-            paired,
-            NotificationPermission::Deliver,
-            budget,
-        )?;
+        Self::authorize(e, paired, NotificationPermission::Deliver, budget)?;
         e.check_live(binding_paired(
-            &self.binding,
-            &self.configuration,
-            self.binding_identity,
+            &e.context.binding,
+            &e.context.configuration,
+            e.context.binding_identity,
         ))?;
         // Prepay the independent post-callback policy probe before asking the
         // Binding for an owned value. A short work quantum never strands a
         // staged value or accidentally terminates a healthy conversation.
-        debit(budget, WorkClass::ProviderProbes, self.authorizer.work())?;
+        debit(
+            budget,
+            WorkClass::ProviderProbes,
+            e.context.authorizer.work(),
+        )?;
         debit(budget, WorkClass::QueueOperations, 1)?;
         debit(budget, WorkClass::BindingPolls, 1)?;
-        if let Some(validation) = &self.validation {
+        if let Some(validation) = &e.context.validation {
             validation.prepay_data(budget)?;
         }
         let signal = e
@@ -1118,16 +1154,39 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 if e.state == NotificationState::Closing {
                     return Ok(e.state);
                 }
+                let item = e.staged.as_ref().unwrap();
+                if item.native.recipient != e.identity {
+                    e.fence(stale());
+                    return Ok(e.state);
+                }
+                if !e
+                    .request
+                    .kind
+                    .accepts_occurrence(&e.request.target, &item.native.target)
+                    || item
+                        .native
+                        .target
+                        .name()
+                        .is_some_and(|n| n.len() > self.limits.target_name_bytes)
+                {
+                    e.fence(invalid());
+                    return Ok(e.state);
+                }
                 // Fresh policy AFTER native progress, independently for each
                 // original recipient, precedes acceptance into its logical queue.
-                let still_paired =
-                    binding_paired(&self.binding, &self.configuration, self.binding_identity);
+                let still_paired = binding_paired(
+                    &e.context.binding,
+                    &e.context.configuration,
+                    e.context.binding_identity,
+                );
                 let result = if still_paired {
-                    self.authorizer.authorize(
-                        &e.identity,
-                        &e.request.target,
-                        NotificationPermission::Deliver,
-                    )
+                    e.context.authorizer.authorize(NotificationAuthorization {
+                        recipient: &e.identity,
+                        target: &e.request.target,
+                        kind: e.request.kind,
+                        occurrence: Some(&e.staged.as_ref().unwrap().native.target),
+                        permission: NotificationPermission::Deliver,
+                    })
                 } else {
                     Err(stale())
                 };
@@ -1139,17 +1198,25 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                     e.fence(error);
                     return Ok(e.state);
                 }
-                if !binding_paired(&self.binding, &self.configuration, self.binding_identity) {
+                if !binding_paired(
+                    &e.context.binding,
+                    &e.context.configuration,
+                    e.context.binding_identity,
+                ) {
                     e.fence(stale());
                     return Ok(e.state);
                 }
                 let item = e.staged.as_ref().unwrap();
                 let kind = e.request.kind;
-                let validation = self.validation.as_ref().map_or(Ok(()), |v| {
+                let validation = e.context.validation.as_ref().map_or(Ok(()), |v| {
                     v.data(&item.native.target, item.native.data.as_ref())
                 });
                 e.sync_stop();
-                if !binding_paired(&self.binding, &self.configuration, self.binding_identity) {
+                if !binding_paired(
+                    &e.context.binding,
+                    &e.context.configuration,
+                    e.context.binding_identity,
+                ) {
                     e.fence(stale());
                 }
                 if e.state == NotificationState::Closing {
@@ -1216,7 +1283,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     }
 
     fn cleanup(
-        e: &mut Entry<B::Participation>,
+        e: &mut Entry<B, A>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<NotificationState> {
@@ -1301,7 +1368,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         Ok(NotificationSettlement {
             identity: e.identity.clone(),
             target: e.request.target.clone(),
-            binding: self.binding_identity,
+            binding: e.context.binding_identity,
             first_cause: e.first_cause.take(),
             cleanup_error: e.cleanup_error.take(),
             cancellation_error: e.cancellation_error.take(),
@@ -1311,6 +1378,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             delivered_items: e.delivered,
             responses_delivered: e.responses_delivered,
             responses_uncertain: e.responses_uncertain,
+            _validation: e.context.validation.take(),
         })
     }
 }

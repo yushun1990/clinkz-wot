@@ -191,19 +191,35 @@ other unsupported assertions listed above. Mere presence of a dataResponse
 schema never creates a response right. A caller requiring native Event responses
 is refused before native acquisition; protocol SUBACK is not a dataResponse.
 
-`ConsumerNotificationRuntime` consumes the definition and an independent
-`ConsumerInstance` reference. It composes the existing raw notification lifecycle;
-it is not another execution kernel. Every logical observation/subscription gets its own move-only
-cursor, identity, policy checks, queue, loss/stop state and settlement. The
-captured JSON/schema service validates each candidate before logical queue
-acceptance. Original authority is checked after native/validation callbacks and
-again at application delivery. No codec, executor or configuration is supplied
-per operation. Runtime construction reserves the owner-scoped Engine queue and
-validation envelope at the original Host bank; these conservative root leases
-last until runtime disposal. Pure compilation requires a per-step Planning work
-allowance of at least 4096 (the stock Gateway preset has 256); callers must
-explicitly provision that allowance, compilation temporary capacity and runtime
-limits. This does not qualify the unmodified Gateway resource profile.
+`ConsumerNotificationAssociation` binds a shared prepared mapping, an independent
+`ConsumerInstance` reference, retained access owner and instance bank. It allocates
+no queue, vacant conversation slot or native subscription. `ConsumerNotifications`
+supplies bounded work capacity at a separately selected bank; applications pass
+an association to `subscribe`. Each admitted conversation retains its original
+move-only cursor, identity, policy, queue, loss/stop, response and cleanup state.
+Dropping association views does not revoke work. Original authority and prepared
+declarations are checked around native/validation/policy callbacks and at delayed
+delivery; policy receives the original conversation and occurrence coordinate.
+For a root Event conversation this is the declared Event name, not authenticated
+publisher identity. NoSec MQTT establishes no trusted meter/source provenance.
+
+Preparation can import original data/access service owners across registries;
+physical backing is charged once. Work capacity funds its Engine envelope and
+cleanup slots; each admitted conversation funds validation scratch at that work
+bank and its quota at the original instance bank. Scratch/quota release after
+retirement and acknowledgement; reports retain original coordinate backing until
+disposal. Native buffers and sockets remain separately Binding-owned. Pure
+compilation still requires an explicit Planning work allowance of at least 4096
+(the stock Gateway preset has 256), with compilation temporary capacity and
+explicit work limits. This does not qualify the unmodified Gateway profile.
+
+The [composition fixture](tests/notification_composition.rs) executes eight
+persistent associations over one compiled mapping, two Engine conversation slots
+and one native interest, with independent policy, cancellation, revocation and
+final release. This is reuse of an actual endpoint-specialized mapping; a new
+endpoint/TD still needs appropriate preparation. Broader cross-endpoint lowering,
+authenticated source evidence, general wildcard coalescing and automatic driving
+remain separate capabilities.
 
 Native policy is fixed and bounded: at most 32 actual participation leases and
 32 exact topics per service, four queued payloads per participant, 4096 payload

@@ -1,14 +1,14 @@
 use broker::*;
 use clinkz_wot_core::{consumer::*, notification::*};
 use clinkz_wot_planning::open_consumer::*;
-use clinkz_wot_servient_finite::{consumer_notification::*, notification::*};
+use clinkz_wot_servient_finite::notification::*;
 use std::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
 use support::*;
 
-type Consumer = ConsumerNotificationRuntime<MqttNotificationConsumer>;
+type Consumer = NotificationFixture<MqttNotificationConsumer>;
 #[derive(Default)]
 struct Access {
     deny_start: AtomicBool,
@@ -76,13 +76,16 @@ fn prepare_consumer(
     access: Arc<Access>,
 ) -> CoreResult<ConsumerNotificationDefinition<MqttNotificationConsumer>> {
     let thing = serde_json::from_value(value).unwrap();
-    let registry = ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
-        binding: s.binding(),
-        services: ConsumerServices {
-            data: Arc::new(MqttJsonData),
-            access,
-        },
-    }])?;
+    let registry = ConsumerNotificationRegistry::try_new(
+        vec![ConsumerNotificationRegistration {
+            binding: s.binding(),
+            services: ConsumerServices {
+                data: Arc::new(MqttJsonData),
+                access,
+            },
+        }],
+        bank,
+    )?;
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
     let definition = registry.prepare_notification(
@@ -107,21 +110,22 @@ fn consumer(
     access: Arc<Access>,
     items: usize,
 ) -> Consumer {
-    let definition = prepare_consumer(s, notification_td(b.address, topic), bank, access).unwrap_or_else(|e| {
-        if let CoreError::LimitExceeded {
-            resource,
-            limit,
-            requested,
-            ..
-        } = &e
-        {
-            panic!("{resource:?}: {requested:?} > {limit}");
-        }
-        panic!("{e:?}")
-    });
+    let definition = prepare_consumer(s, notification_td(b.address, topic), bank, access.clone())
+        .unwrap_or_else(|e| {
+            if let CoreError::LimitExceeded {
+                resource,
+                limit,
+                requested,
+                ..
+            } = &e
+            {
+                panic!("{resource:?}: {requested:?} > {limit}");
+            }
+            panic!("{e:?}")
+        });
     // The source TD, semantic arena and preparation registry are already gone.
-    Consumer::try_new(owner.reference(), definition, engine_limits(items))
-        .unwrap_or_else(|e| panic!("runtime: {:?}", e.error()))
+    Consumer::try_new(owner.reference(), definition, access, engine_limits(items))
+        .unwrap_or_else(|e| panic!("runtime: {:?}", e))
 }
 fn subscribe(c: &mut Consumer, overflow: NotificationOverflow) -> NotificationCursor {
     c.subscribe(
@@ -222,7 +226,13 @@ async fn producer(
     let mut o = owner();
     let mut e = stage(
         &o,
-        input_with_instance(&o, notification_instance(authority(1), &notification_td(b.address, topic).to_string()), &p, &s, None),
+        input_with_instance(
+            &o,
+            notification_instance(authority(1), &notification_td(b.address, topic).to_string()),
+            &p,
+            &s,
+            None,
+        ),
         bank,
     );
     publish(&mut o, &mut e).await;
@@ -231,11 +241,25 @@ async fn producer(
 async fn send(o: &mut RawProducerServient, e: &mut ComposedProducerExposure, bytes: &[u8]) {
     let key = e.key();
     let data = match KIND {
-        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => unreachable!("single-affordance fixture"),
-        NotificationKind::PropertyObservation => PublicationData::PropertyValue(Payload::new(bytes.to_vec(), "application/json")),
+        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => {
+            unreachable!("single-affordance fixture")
+        }
+        NotificationKind::PropertyObservation => {
+            PublicationData::PropertyValue(Payload::new(bytes.to_vec(), "application/json"))
+        }
         NotificationKind::Event => data(bytes),
     };
-    let mut emission = o.publish_notification(native(e), key, target(), data, Deadline::NONE, now(), &mut budget()).unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut emission = o
+        .publish_notification(
+            native(e),
+            key,
+            target(),
+            data,
+            Deadline::NONE,
+            now(),
+            &mut budget(),
+        )
+        .unwrap_or_else(|e| panic!("{:?}", e));
     finish(&mut emission).await;
     assert_eq!(
         emission.settlement().unwrap().native.effect,
@@ -370,6 +394,7 @@ fn required_responses_invalid_controls_and_unpaid_or_denied_start_refuse_before_
         assert_eq!(result.remote_cancellation, RemoteCancellation::NotAttempted);
         assert!(!s.connected());
         drop(c);
+        drop(result);
         assert_empty(&bank);
     });
 }
@@ -440,6 +465,7 @@ fn replacement_preserves_original_queued_identity_and_sibling_native_participati
         assert!(!s.connected());
         close(&mut po, &mut pe);
         drop((a, z, pe));
+        drop(result);
         assert_empty(&bank);
     });
 }
@@ -483,6 +509,7 @@ fn fresh_authorization_fences_buffered_delivery_and_denied_cancel_still_releases
         value(&mut z, &mut cz, b"1").await;
         drop((c, z));
         assert!(!s.connected());
+        drop(result);
         assert_empty(&bank);
 
         let s = service(&b, 8192);
@@ -503,6 +530,7 @@ fn fresh_authorization_fences_buffered_delivery_and_denied_cancel_still_releases
         assert_eq!(result.remote_cancellation, RemoteCancellation::NotAttempted);
         assert!(!s.connected());
         drop(c);
+        drop(result);
         assert_empty(&bank);
     });
 }
@@ -542,6 +570,7 @@ fn malformed_json_wrong_schema_and_unpaid_validation_never_escape_to_application
             assert_eq!(result.delivered_items, 0);
             assert!(!s.connected());
             drop(c);
+            drop(result);
             assert_empty(&bank);
         }
         // An Engine Producer's valid integer is invalid for the captured
@@ -550,14 +579,25 @@ fn malformed_json_wrong_schema_and_unpaid_validation_never_escape_to_application
         let s = service(&b, 8192);
         let mut description = notification_td(b.address, "invalid/alarm");
         match KIND {
-        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => unreachable!("single-affordance fixture"),
-            NotificationKind::PropertyObservation => description["properties"][NAME]["type"] = serde_json::json!("boolean"),
-            NotificationKind::Event => description["events"][NAME]["data"]["type"] = serde_json::json!("boolean"),
+            NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => {
+                unreachable!("single-affordance fixture")
+            }
+            NotificationKind::PropertyObservation => {
+                description["properties"][NAME]["type"] = serde_json::json!("boolean")
+            }
+            NotificationKind::Event => {
+                description["events"][NAME]["data"]["type"] = serde_json::json!("boolean")
+            }
         }
         let definition =
             prepare_consumer(&s, description, &bank, Arc::new(Access::default())).unwrap();
-        let mut c = Consumer::try_new(owner.reference(), definition, engine_limits(4))
-            .unwrap_or_else(|_| panic!());
+        let mut c = Consumer::try_new(
+            owner.reference(),
+            definition,
+            Arc::new(Access::default()),
+            engine_limits(4),
+        )
+        .unwrap_or_else(|_| panic!());
         let ca = subscribe(&mut c, NotificationOverflow::Terminate);
         active(&mut c, &ca).await;
         send(&mut po, &mut pe, b"1").await;
@@ -566,6 +606,7 @@ fn malformed_json_wrong_schema_and_unpaid_validation_never_escape_to_application
         assert!(matches!(result.first_cause, Some(CoreError::Validation(_))));
         close(&mut po, &mut pe);
         drop((c, pe));
+        drop(result);
         assert_empty(&bank);
     });
 }
@@ -674,6 +715,7 @@ fn logical_and_native_overflow_report_loss_without_coalescing() {
             Some(CoreError::Backpressure(_))
         ));
         drop(c);
+        drop(result);
         assert_empty(&bank);
     });
 }
@@ -824,6 +866,7 @@ fn cancellation_is_reauthorized_and_invalid_control_returns_its_original_payload
             assert_eq!(result.remote_cancellation, RemoteCancellation::NotAttempted);
             assert!(!s.connected());
             drop(c);
+            drop(result);
             assert_empty(&bank);
         }
     });
@@ -864,10 +907,11 @@ fn broker_loss_during_partial_unsubscribe_retains_stop_cause_and_reports_unknown
         assert_eq!(result.remote_cancellation, RemoteCancellation::Unknown);
         assert_eq!(
             bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
-            funded
+            funded - MqttJsonData.policy().temporary_bytes
         );
         assert!(!s.connected());
         drop(c);
+        drop(result);
         assert_empty(&bank);
     });
 }
@@ -975,6 +1019,7 @@ fn a_new_interest_during_partial_unsubscribe_keeps_original_remote_uncertainty()
         close(&mut po, &mut pe);
         drop((a, z, pe));
         assert!(!s.connected());
+        drop(report);
         assert_empty(&bank);
     });
 }
@@ -1036,7 +1081,11 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
         fn policy(&self) -> ConsumerDataPolicy {
             MqttJsonData.policy()
         }
-        fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
+        fn validate(
+            &self,
+            schema: &data_schema::PreparedSchema,
+            payload: &Payload,
+        ) -> CoreResult<()> {
             let result = MqttJsonData.validate(schema, payload);
             self.0.revoke();
             result
@@ -1048,16 +1097,19 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
         let s = service(&b, 8192);
         let owner = Arc::new(consumer_owner(1));
         let definition = {
-            let registry =
-                ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+            let registry = ConsumerNotificationRegistry::try_new(
+                vec![ConsumerNotificationRegistration {
                     binding: s.binding(),
                     services: ConsumerServices {
                         data: Arc::new(RevokingData(owner.clone())),
                         access: Arc::new(Access::default()),
                     },
-                }])
-                .unwrap();
-            let thing = serde_json::from_value(notification_td(b.address, "callback/alarm")).unwrap();
+                }],
+                &bank,
+            )
+            .unwrap();
+            let thing =
+                serde_json::from_value(notification_td(b.address, "callback/alarm")).unwrap();
             let mut limits = GatewayDefaultV1::LIMITS.clone();
             assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
             registry
@@ -1072,8 +1124,13 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
                 )
                 .unwrap()
         };
-        let mut c = Consumer::try_new(owner.reference(), definition, engine_limits(4))
-            .unwrap_or_else(|_| panic!());
+        let mut c = Consumer::try_new(
+            owner.reference(),
+            definition,
+            Arc::new(Access::default()),
+            engine_limits(4),
+        )
+        .unwrap_or_else(|_| panic!());
         let ca = subscribe(&mut c, NotificationOverflow::Terminate);
         active(&mut c, &ca).await;
         let (mut po, mut pe, _) = producer(&b, "callback/alarm", &bank).await;
@@ -1090,28 +1147,36 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
         assert!(!s.connected());
         close(&mut po, &mut pe);
         drop((c, pe));
+        drop(report);
         assert_empty(&bank);
     });
 }
 
 fn target() -> AffordanceTarget {
     match KIND {
-        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => unreachable!("single-affordance fixture"),
+        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => {
+            unreachable!("single-affordance fixture")
+        }
         NotificationKind::PropertyObservation => AffordanceTarget::Property(Arc::from(NAME)),
         NotificationKind::Event => AffordanceTarget::Event(Arc::from(NAME)),
     }
 }
 fn notification_td(address: SocketAddr, topic: &str) -> serde_json::Value {
     match KIND {
-        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => unreachable!("single-affordance fixture"),
+        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => {
+            unreachable!("single-affordance fixture")
+        }
         NotificationKind::PropertyObservation => property_td(address, topic),
         NotificationKind::Event => td(address, topic),
     }
 }
 fn notification_instance(authority: ProducerInstanceAuthority, text: &str) -> RawProducerInstance {
-    RawProducerInstance::new(authority, vec![]).with_description(Arc::from(text))
+    RawProducerInstance::new(authority, vec![])
+        .with_description(Arc::from(text))
         .with_notification_sources(vec![match KIND {
-        NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => unreachable!("single-affordance fixture"),
+            NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => {
+                unreachable!("single-affordance fixture")
+            }
             NotificationKind::PropertyObservation => ProducerNotificationSource::property(NAME),
             NotificationKind::Event => ProducerNotificationSource::event(NAME),
         }])

@@ -158,6 +158,23 @@ pub trait ConsumerAccessService: Send + Sync {
         target: &str,
         operation: Operation,
     ) -> CoreResult<()>;
+    /// Fresh notification policy, with the original occurrence coordinate at
+    /// acceptance and delayed delivery/response. The default grants the whole
+    /// conversation. Occurrence-specific policies override this callback; no
+    /// authenticated source claim is implied by an affordance name.
+    fn authorize_notification(
+        &self,
+        binding: BindingRegistrationIdentity,
+        endpoint: &str,
+        request: crate::notification::NotificationAuthorization<'_>,
+    ) -> CoreResult<()> {
+        self.authorize_instance(
+            &request.recipient.consumer,
+            binding,
+            endpoint,
+            request.operation(),
+        )
+    }
     /// Fresh permission for the complete original writable set, before native
     /// effects and on result handoff. Default group permission covers every
     /// member; policies with member restrictions override this callback.
@@ -181,6 +198,25 @@ pub trait ConsumerAccessService: Send + Sync {
 pub struct ConsumerServices {
     pub data: Arc<dyn ConsumerDataService>,
     pub access: Arc<dyn ConsumerAccessService>,
+}
+
+/// Original physical service owners for composition across definitions and
+/// independently funded registries. Adopt raw services once, then clone these
+/// references; reference/association costs are funded by each retained user.
+#[derive(Clone)]
+pub struct RetainedConsumerServices {
+    pub data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
+    pub access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
+}
+impl RetainedConsumerServices {
+    pub fn check_backing(&self) -> CoreResult<()> {
+        if self.data.policy().retained_bytes != self.data.backing_bytes()
+            || self.access.retained_bytes() != self.access.backing_bytes()
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
 }
 
 /// An explicitly retained actual service and its original physical funding.
@@ -512,7 +548,13 @@ pub struct ConsumerNotificationDefinitionInput<B: crate::notification::ConsumerN
     pub endpoint: Box<str>,
     pub form: u32,
     pub schemas: NotificationSchemas,
-    pub services: ConsumerServices,
+    pub data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
+    /// Admission declarations, captured before compilation and never refreshed
+    /// by association/capacity construction. Changed metadata requires new
+    /// qualification and funding, even when the new declaration is smaller.
+    pub data_policy: ConsumerDataPolicy,
+    pub content_type: Box<str>,
+    pub support: crate::notification::NotificationSupport,
     pub funding: Vec<HostCapacityReservation>,
     pub bank: Arc<HostResourceAccounts>,
 }
@@ -522,33 +564,40 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
     pub fn try_new(
         input: ConsumerNotificationDefinitionInput<B>,
     ) -> Result<Self, BindingInputRejection<ConsumerNotificationDefinitionInput<B>>> {
-        let check = (|| {
-            if input.binding.identity()
-                != (
-                    input.identity.binding_id(),
-                    input.identity.binding_generation(),
-                )
-                || input.binding.configuration() != &input.configuration
-                || !input.schemas.kind().accepts_target(&input.target)
-                || !input.services.data.available()
-                || input.services.data.policy().validation_work == 0
-                || input.services.access.work() == 0
-                || !input.schemas.supports(input.services.data.as_ref())
-            {
-                return Err(invalid());
-            }
-            input
-                .binding
-                .support(&input.program, input.schemas.kind())?;
-            Ok(())
-        })();
-        match check {
-            Ok(()) => Ok(Self { input }),
+        let definition = Self { input };
+        match definition.check_dependencies() {
+            Ok(()) => Ok(definition),
             Err(e) => Err(BindingInputRejection::new(
-                input,
+                definition.input,
                 BindingOperationalError::new(e),
             )),
         }
+    }
+    pub fn check_dependencies(&self) -> CoreResult<()> {
+        let input = &self.input;
+        if input.binding.identity()
+            != (
+                input.identity.binding_id(),
+                input.identity.binding_generation(),
+            )
+            || input.binding.configuration() != &input.configuration
+            || !input.schemas.kind().accepts_target(&input.target)
+            || !input.data.available()
+            || input.data.policy() != input.data_policy
+            || input.data_policy.retained_bytes != input.data.backing_bytes()
+            || input.data_policy.validation_work == 0
+            || input.data.content_type() != &*input.content_type
+            || !input.schemas.supports(input.data.service())
+        {
+            return Err(invalid());
+        }
+        let support = input
+            .binding
+            .support(&input.program, input.schemas.kind())?;
+        if support != input.support {
+            return Err(invalid());
+        }
+        Ok(())
     }
     pub fn input(&self) -> &ConsumerNotificationDefinitionInput<B> {
         &self.input

@@ -529,8 +529,12 @@ after native setup starts, its owner remains responsible for bounded cleanup.
 
 The raw Host Consumer facet implements these roles in `core::notification` and
 `servient-finite::notification`. One source-free capability registration may serve many
-independent logical subscriptions; separate roots may share compatible native
-infrastructure. A non-cloneable cursor borrows retained raw data until explicit
+independent logical subscriptions. `RawNotificationServient` is explicit work
+capacity; each subscription supplies its original `RawNotificationContext`,
+including the Consumer reference, actual Binding/configuration, policy and optional
+validation. Persistent usability requires no vacant conversation slot. One capacity
+owner may serve independent Consumers; separate capacity owners may share compatible
+native infrastructure. A non-cloneable cursor borrows retained raw data until explicit
 advance; cloneable stop intent grants no receive/response or shutdown authority.
 `RawNotificationView` lends Core `PayloadView` byte/media slices and an
 `AffordanceSite` occurrence coordinate. It exposes neither a Payload/body Arc
@@ -564,10 +568,30 @@ codecs, map representations, native controls, security and reciprocal response
 opportunities require independent qualification. Structured scalar support
 supplies none of these additional capabilities.
 
-The composed `ConsumerNotificationRuntime` consumes the selected source-free
-Property, Property collection, Event or Event collection definition and captures actual services around that same raw
-lifecycle.
-It exposes the same paid `decline_response` operation for admitted optional
+The composed `ConsumerNotificationAssociation` binds a shared selected
+source-free Property, Property collection, Event or Event collection definition
+to one original Consumer reference, retained access owner and instance bank.
+Cloneable views are non-revoking. `ConsumerNotifications` supplies independently
+funded conversation capacity around the same raw lifecycle. Accepted work retains
+its original association after public view loss; neither an idle association nor
+a spare Engine slot establishes a native subscription or availability guarantee.
+The detailed declaration, admission, policy and cleanup checks are owned by
+[Runtime Safety](runtime-safety.md#notification-associations-and-conversation-capacity).
+
+`NotificationAuthorization` carries the original recipient, conversation target,
+notification kind, permission and optional occurrence target. Native candidates
+must match the original recipient/scope; composed Event collection policy accepts
+only members of its captured schema. Acceptance, delayed delivery and response
+checks receive the owned item's coordinate. A preflight with no occurrence grants
+no future delivery. The default `ConsumerAccessService::authorize_notification`
+uses whole-conversation instance permission; policies can override it for named
+occurrences without post-delivery filtering or mutable last-source state. Missing
+required context must refuse in the applicable policy. These coordinates are
+neither verified principals nor arbitrary physical-source identities. Authenticated
+source provenance needs an actual evidence-bearing mapping/verifier and bounded
+original proof/dependency ownership; this increment does not provide that capability.
+
+`ConsumerNotifications` exposes the same paid `decline_response` operation for admitted optional
 opportunities, retaining native retirement before advance without sending or
 stopping; required and submitted responses remain non-declinable.
 Its immutable validation hook distinguishes a Property's value schema from
@@ -575,9 +599,9 @@ Event subscription/data/dataResponse/cancellation roles, prepays data validation
 before native handoff, and validates each
 candidate before logical queue acceptance. Invalid or late data remains owned
 through cleanup and is never exposed. Currentness is rechecked after validation
-callbacks as well as native/policy callbacks. Each composed root prepays its
-Engine queue/validation envelope from the original bank; native queue/connection
-policy retains its separate Binding owner. This supplies TD-driven Property
+callbacks as well as native/policy callbacks. Each admitted conversation retains its
+original mapping, policy and funding; native queue/connection policy retains its
+separate Binding owner. This supplies TD-driven Property
 observation and Event execution for the
 declared MQTT subset. Property establishment has empty control input, fabricates
 no initial value and performs no implicit Read. Mapped stop authorizes

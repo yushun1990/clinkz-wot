@@ -53,6 +53,7 @@ fn selected(
                 },
             })
             .collect(),
+        bank,
     )?;
     let mut limits = GatewayDefaultV1::LIMITS.clone();
     assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));

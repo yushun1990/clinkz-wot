@@ -407,6 +407,17 @@ as Property observation. The Property DataSchema is distinct from all Event
 roles; no native subscription ACK is a Property value. Separate control/response capabilities
 must be supported explicitly; protocol ACKs cannot stand in for application data.
 
+Notification association/capacity separation changes no native topology authority.
+Actual same-registration programs may serve many independent Consumer associations
+under checked original configuration/support. The Binding still decides native
+matching, distribution, compatibility, response cardinality and physical lease
+retirement. The Engine policy receives logical occurrence coordinates from the
+original candidate, without treating an MQTT topic or NoSec payload as verified
+sender evidence. Rich source-provenance support requires separately qualified
+mapping/verification and original trust/dependency ownership; neither this facet
+nor compatible topic sharing establishes it.
+
+
 Thing-root ObserveAllProperties retains one logical participation and its
 collection schema, not a list of Property drivers. The implemented complete-map
 data facet attributes each value through its exact TD member name and validates

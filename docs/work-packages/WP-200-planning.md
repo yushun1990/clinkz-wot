@@ -171,8 +171,9 @@ native registrations. Raw-service `try_new` remains local startup adoption.
 The [service composition evidence](../evidence/consumer-execution-reuse.md#physical-service-ownership-across-registries-and-servients)
 exercises same/separate banks, refusal/rollback, independent HTTPS credentials
 and policy revisions, normal/late HTTP results and exact final release. This
-does not extend retained-owner import to the distinct continuing Action,
-notification or Producer preparation APIs.
+does not extend retained-owner import to continuing Action or Producer
+preparation. Notification composition now imports those same physical owners
+through its own typed registry, as described below.
 The HTTP example uses this path; method/header/context/framing and prior finite
 ownership regressions continue on the explicitly restricted inline helper.
 `InlineConsumerCompilerSupport`, `InlineConsumerCompilerRegistration`,
@@ -225,7 +226,7 @@ additional/different response formats and unsupported schema/security assertions
 remain explicit unsupported alternatives. This is not a universal finite model
 for every WoT operation or complete Action support. Notification preparation uses
 the separate typed facet described in the
-[Planning contract](../spec/planning.md#open-consumer-event-preparation).
+[Planning contract](../spec/planning.md#open-consumer-notification-preparation).
 
 The existing registry/erasure is retained because the owned compiler is usable;
 its Property-shaped keys, requests and validator contract are replaced rather
@@ -453,3 +454,18 @@ and HTTPS reuse fixtures, full affected HTTP regressions, runtime-only HTTP buil
 Planning/finite tests and authority projections. No execution coordinator or
 runtime-safety change is admitted here. Package/gate/milestone status is unchanged;
 independent acceptance reconstructs the exact PR diff and executable evidence.
+
+## Notification mapping reuse and service ownership
+
+The typed registry's raw startup adoption and explicit retained-owner import now
+fund shared actual data/access services once. Each selected mapping captures its
+original data/media/native-support declarations and checks callback changes;
+definition funding covers its own program/schema/record costs. The source-free
+mapping can be bound to independent Consumer policies/accounts without repeating
+invariant preparation. Endpoints and native registration remain specialized;
+changing a TD or endpoint requires appropriate new qualification. This supplies
+the notification F2/F3 handoff correction, not the continuing Action correction.
+The [Planning contract](../spec/planning.md#open-consumer-notification-preparation)
+owns exact preparation scope, and
+[notification evidence](../evidence/consumer-notification-composition.md) scopes
+executable claims. No new admission gate or package closure is introduced.
