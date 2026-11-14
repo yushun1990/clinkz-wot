@@ -40,6 +40,41 @@ impl HostSemanticCompiler for HttpCompiler {
         }
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
+        self.qualify_target(input)?;
+        let mut output = self.compile_definition(input)?;
+        output.target_len = input.target.len() as u16;
+        output.target[..input.target.len()].copy_from_slice(input.target.as_bytes());
+        Ok(output)
+    }
+}
+impl HttpCompiler {
+    /// Instance specialization, including the restricted owner's template limit.
+    pub(super) fn qualify_target(&self, input: ResolvedBindingInput<'_>) -> CoreResult<()> {
+        // Template eligibility depends on the actual execution owner. The
+        // restricted Read owner has no validated actual-destination admission;
+        // admitting a template there would mask executable literal alternatives.
+        if self.caller_resolves_targets {
+            crate::address::qualify(input.target, self.config.secure)
+        } else {
+            Target::parse_for(input.target, self.config.secure)
+        }
+        .map_err(|_| unsupported())?;
+        if input.target.contains('{')
+            && !matches!(
+                input.operation,
+                Operation::ReadProperty | Operation::WriteProperty
+            )
+        {
+            return Err(unsupported());
+        }
+        Ok(())
+    }
+    /// Invariant native lowering. This function never reads the destination;
+    /// ordinary compilation and explicit definition preparation share it.
+    pub(super) fn compile_definition(
+        &self,
+        input: ResolvedBindingInput<'_>,
+    ) -> CoreResult<HttpArtifact> {
         use clinkz_wot_td::data_type::Operation;
         let collection = input.owner == FormOwner::Thing
             && matches!(
@@ -64,23 +99,6 @@ impl HostSemanticCompiler for HttpCompiler {
         {
             return Err(unsupported());
         }
-        // Template eligibility depends on the actual execution owner. The
-        // restricted Read owner has no validated actual-destination admission;
-        // admitting a template there would mask executable literal alternatives.
-        let target = if self.caller_resolves_targets {
-            crate::address::qualify(input.target, self.config.secure)
-        } else {
-            Target::parse_for(input.target, self.config.secure)
-        }
-        .map_err(|_| unsupported())?;
-        if input.target.contains('{')
-            && !matches!(
-                input.operation,
-                Operation::ReadProperty | Operation::WriteProperty
-            )
-        {
-            return Err(unsupported());
-        }
         let requirement = clinkz_wot_planning::security::compilation_security(&input)?;
         let authentication = crate::security::HttpSecurity::from_requirement(&requirement)
             .map_err(|_| unsupported())?;
@@ -93,13 +111,10 @@ impl HostSemanticCompiler for HttpCompiler {
                 input.operation,
                 Operation::ReadProperty | Operation::WriteProperty
             ) || !matches!(input.owner, FormOwner::Property(_))
-                || target.uri.scheme_str() != Some("https")
             {
                 return Err(unsupported());
             }
-        } else if target.uri.scheme_str() != Some("http")
-            || authentication != crate::security::HttpSecurity::default()
-        {
+        } else if authentication != crate::security::HttpSecurity::default() {
             return Err(unsupported());
         }
 
@@ -165,10 +180,8 @@ impl HostSemanticCompiler for HttpCompiler {
             secure: self.config.secure,
             authentication,
             method: if write { "PUT" } else { "GET" },
-            target_len: input.target.len() as u16,
             ..HttpArtifact::default()
         };
-        output.target[..input.target.len()].copy_from_slice(input.target.as_bytes());
         // Only absence enables the protocol default. Malformed/unsupported
         // explicit instructions never silently turn into a default request.
         if let Some(method) = unique(form, "http://www.w3.org/2011/http#methodName")? {

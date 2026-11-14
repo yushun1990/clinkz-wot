@@ -1,6 +1,7 @@
 # Consumer execution reuse characterization
 
-This records the first reuse increment. The subsequent
+This records the first content-reuse increment and the later
+[explicit HTTP compilation increment](#explicit-http-definition-compilation). The subsequent
 [multi-instance scalability workload](consumer-multi-instance-scaling.md)
 extends measurement to 10,000 logical instances, controlled active fractions,
 native capacity, quota topology, allocator/RSS behavior and sustained execution.
@@ -153,6 +154,94 @@ an endorsement of the present Rust types:
   See [Core](../spec/interaction-core.md), [Binding SPI](../spec/binding-spi.md)
   and [runtime safety](../spec/runtime-safety.md).
 
+## Explicit HTTP definition compilation
+
+The [definition fixture](../../protocol-bindings/protocols/http/tests/support/definition_reuse.rs)
+adds genuine cross-instance native compilation reuse through the existing owned
+compiler interface. The [Binding contract](../spec/binding-spi.md#explicit-http-definition-compilation)
+owns its dependency and resource rules. Run the scoped tests with:
+
+```sh
+cargo test --locked -p clinkz-wot-binding-http --test reusable_execution definition_reuse -- --nocapture
+cargo test --locked -p clinkz-wot-binding-http --test security_https compiled_request_reuse
+```
+
+Fresh `HttpDefinitionCompiler` preparation calls the real existing HTTP lowering
+once per selected definition. It retains method/default instructions, validated
+and packed headers, response status/media/success discrimination and selected
+security placement, with an exact bounded dependency projection. A supplied
+`HttpRequestDefinition` follows a different path: stream-compare the current
+resolved dependencies, qualify the actual endpoint/template and produce a new
+bound artifact referencing those same instructions. It never calls HTTP lowering,
+header validation/packing or response-table compilation on that path. There is
+no compile-then-intern phase. Runtime calls copy the existing inline instruction
+representation with their actual destination; they perform no TD compilation.
+
+Common Basic admission, semantic lending, schema/content construction or borrowed
+comparison, selected security qualification, actual data/access services, native
+selection, destination policy and capacity remain instance preparation. Current
+credentials, authority, invocation operands, native I/O/occupancy, validation,
+results and cleanup retain their original owners. Reuse can cross actual native
+registrations and banks with identical interpretation configuration; it shares
+neither execution authority nor physical I/O resources.
+
+The test varies K=1/2 definitions and N=1/8/32 additional instances independently.
+The actual lowering counter remains K; supplied-definition lowerings are zero,
+dependency checks and completed instance bindings are N. The ordinary independent
+compiler control lowers N times while using the same common semantic content.
+The original compilation-bank reservation stays constant as N grows: on Linux
+x86_64 it is 10,352 bytes for K=1 or 20,392 for K=2 while the source compiler is
+retained, including its separate 312-byte owner charge. Each definition reserves
+10,040 bytes, including its 8192-byte dependency-vector capacity. These are
+capacity counters, not measured physical RAM or an ABI promise.
+
+Debug elapsed preparation timings are printed separately for checked binding
+and independent compilation, excluding construction of the K supplied definitions.
+In the scoped workload both are approximately 30 ms for N=32; these observations
+establish skipped native lowering, not a net cold-start latency improvement.
+Input processing dominates this small HTTP instruction compiler. Include initial
+definition construction, common admission and retained capacity when evaluating
+a deployment; sharing is not automatically cheaper for a small instance count.
+
+Executable controls cover changed headers/method/coding/media/subprotocol,
+response status/success/media, common schema, full configuration and invalid
+targets. A dependency mismatch refuses without compiling; explicit new-definition
+preparation recovers a changed supported header mapping. Concrete percent-escaped
+paths and queries reach the peer unchanged, using the shared POST/header and
+additional HTTP 409 discrimination. Two qualified Engine Producers verify distinct
+endpoints, equal-coordinate but different Consumer authorities, per-instance
+policy denial, cancellation, retained results and independent sibling progress.
+Original compilation funding survives preparation, compiler and instance roots
+and releases only after both results. Every bank returns to zero. The HTTPS
+variant of the independent-service fixture reuses one compilation with separate
+credential/access owners and policies, preserving credential revision fencing,
+authority revocation and sibling execution through actual TLS.
+
+Zero-credit, cancelled preparation and capacity refusal execute no lowering or
+reuse callback, roll back provisional mapping charges and preserve the original
+definition for retry. Existing HTTP lifecycle, service, schema and security
+regressions remain distinct evidence; their older measurements are not relabeled.
+
+The architecture was reassessed against three alternatives. Retargeting a
+complete existing `ConsumerDefinition` would conflate its exact executor/services
+and destination with pure instructions. A generic cache or universal compiled
+program would add an unused cross-Binding contract. Relaxing the inline adapter's
+Copy restriction would change its existing storage/evidence promises; the already
+available owned `ConsumerCompiler` handles the new artifact instead. The selected
+increment is local to HTTP and preserves the current call representation.
+
+Remaining limitations are material: dependency comparison is conservative and
+linear in the bounded projection, and its correspondence to HTTP lowering needs
+maintenance when that compiler changes. No common normalized TD admission is
+reused, no arbitrary new instance is admitted after its source is destroyed,
+and no complete TD cold-start speedup is established. Skipped lowering is scoped
+to this explicit instruction path. Definitions retain an 8192-byte dependency capacity even when
+their used projection is small. Each call still copies inline instructions.
+Continuing Actions, notifications, Producer compilation, other Bindings,
+portable/static sharing, caches, persistence and higher-level execution composition
+are separate capabilities. This evidence does not close a package, architecture
+gate or milestone; independent acceptance assesses the exact PR revision.
+
 ## Provisional choices and unproven evolution
 
 `ConsumerExecutionContent`, `PreparedConsumerContent`, `ConsumerDefinition` and
@@ -172,7 +261,7 @@ whether or not a proposed optimization saves memory or time.
 
 ### Endpoint-specific native compilation and instance operands
 
-**Current evidence.** The fixture constructs one common content owner but N
+**Original evidence.** The first fixture constructs one common content owner but N
 native artifacts for N endpoints. The
 [HTTP artifact](../../protocol-bindings/protocols/http/src/program.rs) embeds the
 complete target, method and headers. Real peers verify changed paths and headers;
@@ -185,7 +274,9 @@ It proves neither checked retargeting nor a benefit from avoiding compilation.
 The current artifact cannot acquire a new endpoint merely by changing its
 envelope. Native compilation cost has not been isolated as a fleet bottleneck.
 
-**Possible evolution, unproven.** A concrete Binding could separate reusable
+**Successor.** The explicit HTTP increment above separates reusable instructions
+from checked destinations. Other Bindings and richer operand contracts remain
+unproven. A concrete Binding can separate reusable
 request instructions from explicitly checked endpoint or header operands, with
 complete configuration compatibility, destination policy and operand funding.
 Other Bindings may remain specialized. Program reuse would not by itself imply

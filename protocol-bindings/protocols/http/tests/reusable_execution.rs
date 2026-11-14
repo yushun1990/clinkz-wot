@@ -8,6 +8,8 @@ mod allocation_meter;
 mod native_occupancy;
 #[path = "support/service_ownership.rs"]
 mod service_ownership;
+#[path = "support/definition_reuse.rs"]
+mod definition_reuse;
 #[global_allocator]
 static ALLOCATOR: allocation_meter::Allocator = allocation_meter::Allocator;
 

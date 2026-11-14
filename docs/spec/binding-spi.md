@@ -97,6 +97,64 @@ This seam does not mandate a new artifact for each target, connection sharing,
 one connection per Thing, a global target cache or a universal target program.
 Logical close and original work/resource retention retain SPI-RETIRE-001 meaning.
 
+## Explicit HTTP definition compilation
+
+`HttpDefinitionCompiler::new` supplies optional owned HTTP preparation through
+the existing `ConsumerCompiler` interface. It lowers method defaults/instructions,
+validated packed header names/values, native response status/media/success
+discrimination and selected security placement once for each selected definition.
+`HttpRequestDefinition::from_prepared` extracts only that pure compilation from
+its first qualified mapping. `with_definition` supplies it explicitly to later
+preparation; there is no automatic matching table, cache or universal program.
+The ordinary HTTP compiler remains a valid endpoint-specialized alternative.
+
+Before using supplied instructions, HTTP compares an exact bounded projection
+of the current TD-resolved dependencies: owner kind and operation; request media
+and subprotocol; declared/effective operation sets; content coding and primary
+response media; Property read/write flags; complete resolved Form instructions;
+the collection-root extension assertions where lowering reads them; every
+primary/additional response instruction and its media/success/schema-presence
+facts; and the complete selected security conjunction. Expanded IRIs compare
+independently of their compact prefix spelling. Full immutable HTTP configuration,
+including private policy, format, result and destination bounds, must agree.
+This is byte comparison of a Binding-owned projection, not a caller digest or
+compatibility inferred from a Rust type. The projection is limited to 8192 bytes
+and 128 extension nodes and conservatively retains order and ignored extension
+facts; equivalent inputs can therefore refuse this optional reuse path.
+
+The absolute endpoint/template is a separately qualified instance operand. Each
+bind checks actual IP/scheme/authority/path/template syntax, configured capacity
+and operation-specific template eligibility. Common TD admission, schema/response/
+URI-variable preparation or checked semantic-content reuse, actual data/access
+services and current permission remain separate. Value schemas are not native
+instruction dependencies except for facts actually read by HTTP lowering; a
+different supported value schema can use the same native definition only with
+its own completely qualified semantic content. Credential/trust owners never
+become immutable instruction data. Any dependency mismatch refuses the supplied
+definition without falling through to fresh compilation; callers may explicitly
+prepare another definition.
+
+One funded physical owner retains the instructions and dependency bytes at their
+original bank. Each selected mapping owns a new `HttpBoundRequest`, destination,
+artifact envelope, actual executor/configuration/services and independently
+funded record. Shared data has no instance generation, handler, session or cleanup
+obligation. Native registrations can differ in identity/generation/ordinal when
+their complete interpretation configuration agrees; actual compiler/executor
+pairing and fresh envelopes still apply. Cancelling or retiring one instance
+cannot reclaim a sibling's definition. Original funding survives all mappings
+and normal/late results until final physical disposal.
+
+Preparation statistics count native lowering attempts, reuse dependency checks
+and successful destination bindings separately. The bounded atomic callbacks
+retain the existing Host deployment failure policy; the generic owned cursor,
+temporary, cancellation, rollback and destructor contract still applies. Shared
+backing is acquired before construction and retained separately from mapping
+reference charges. The runtime materializes the existing inline instructions
+into each native call, preserving its current I/O/storage and retirement contract.
+This does not add a compiler or TD dependency to runtime-only HTTP.
+Executable scope and remaining limits are in the
+[reuse evidence](../evidence/consumer-execution-reuse.md#explicit-http-definition-compilation).
+
 ## Publication and security collaboration
 
 Producer publication follows [PREP-COVER-001](planning.md) and SAFE-PUBLISH-001.

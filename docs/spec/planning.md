@@ -84,6 +84,16 @@ Specialized per-instance preparation is also valid; no parameter language,
 universal VM, cache, persistence or generator is mandatory. A separate plan-set
 epoch is required only when independently retained/replaced, not for every Thing.
 
+Compilation-work reuse MUST bypass the invariant lowering for compatible
+instances. Sharing semantic content, sharing transport or interning separately
+compiled output does not establish that claim. Distinguish actual lowering from
+input validation, dependency comparison, checked operand binding, admission and
+native specialization. The concrete Binding owns the dependency/operand split;
+its complete actual configuration and all facts its lowering observes must be
+checked. A mismatch refuses or explicitly compiles another definition before
+dependent effects. Source/instance identities and registration coordinates are
+not dependencies merely because an old compiler carrier includes them.
+
 `PREP-COVER-001`: Before Producer Serving, every retained final Thing-root and
 affordance Form and each effective operation MUST have complete support under
 the actual Binding/services/configuration and registered behavior or an explicitly
@@ -234,14 +244,21 @@ No replacement constraint/member/name tree is built. Unsupported or changed mean
 reported Consumer alternatives, rather than becoming Producer qualification.
 
 Every selected mapping still passes common Form/security/media/URI checks, actual
-provider selection, complete data-service support, native compilation and capacity
+provider selection, complete data-service support, native preparation and capacity
 checks. `ConsumerDefinition` retains the shared content, exact native mapping,
 actual executor/configuration and data service with captured bounds. A change to
-native literals, headers or template instructions requires actual native
-preparation; changing values within a qualified dynamic mapping is interaction
+native literals or headers requires native qualification and either another
+compilation or an explicitly established reusable definition. Checked new endpoint
+operands may bind an existing definition; a specialized artifact has no implicit
+retargeting right. Changing values within a qualified dynamic mapping is interaction
 work and requires no replacement definition. Content reuse grants no native
 artifact compatibility. Native compilation remains owned/incremental,
 and no TD, parser, semantic arena or compiler survives the completed definition.
+The [explicit HTTP implementation](binding-spi.md#explicit-http-definition-compilation)
+uses the existing owned compiler interface for both fresh lowering and supplied
+definition binding. A `ConsumerCompilation` job therefore denotes bounded native
+preparation, not necessarily a new invariant lowering. Other compilers retain
+their own actual dependencies and specialization rules.
 
 `type_schema::prepare_schema` captures the bounded structured subset defined in
 [Core](interaction-core.md). A bounded borrowed census checks supported assertions,

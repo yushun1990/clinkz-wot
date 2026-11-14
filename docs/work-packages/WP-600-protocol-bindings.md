@@ -398,3 +398,24 @@ dependency, qualification, package, gate or milestone status.
 
 The [HTTP finite response profile](../../protocol-bindings/protocols/http/README.md#td-described-finite-response-alternatives) supplies the bounded real-I/O participant documented in [response evidence](../evidence/td-responses.md).
 No package, gate or milestone acceptance follows from this increment.
+
+## HTTP definition compilation (0081)
+
+The [Binding dependency/operand contract](../spec/binding-spi.md#explicit-http-definition-compilation)
+is implemented by optional `HttpDefinitionCompiler` and opaque
+`HttpRequestDefinition` / `HttpBoundRequest`. The existing HTTP lowering remains
+the one instruction compiler; explicit supplied definitions skip it after exact
+dependency comparison and concrete destination qualification. Runtime-only HTTP
+recognizes the bound artifact and retains its existing per-call inline program,
+I/O/occupancy and cleanup contracts. The private-policy identity is revised to
+include this interpretation; ordinary endpoint-specialized and restricted inline
+preparation remain supported choices.
+
+[Evidence](../evidence/consumer-execution-reuse.md#explicit-http-definition-compilation)
+separates K lowerings from N checked bindings, includes an independent-compilation
+control and real HTTP/TLS execution, and records original-account/final-result
+retention, mismatch/refusal/rollback and limitations. Source scope is
+`src/definition.rs`, `src/definition/preparation.rs`, native artifact resolution
+in `src/lib.rs`, and the definition/HTTPS tests. No Binding dependencies are added
+to Engine modules, and no native execution owner or per-Thing Runtime is required.
+This increment does not close WP-600 or qualify all protocol/profile families.

@@ -22,6 +22,13 @@ authority. Concrete Bindings qualify native expansion/matching compatibility.
 No Thing/device or Thing/connection cardinality follows from these lifetimes.
 See [variable preparation](../spec/planning.md#uri-variable-preparation).
 
+The [HTTP definition contract](../spec/binding-spi.md#explicit-http-definition-compilation)
+provides one concrete compile-once / checked-bind-many representation using
+the existing owned compiler interface. Its immutable request instructions and
+original physical funding are separate from each mapping's checked endpoint,
+exact execution registration and live instance binding. It does not turn that
+HTTP representation into a required Engine program, cache or per-Thing owner.
+
 Prepared security requirements are immutable content; credential services, verified
 principals and opaque per-call capabilities are live dependencies/work. Native key
 and trust owners remain in the Binding. Content sharing never shares permission. A physical content owner and its
