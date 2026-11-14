@@ -1,7 +1,9 @@
 //! Optional HTTP preparation; all executable types are defined by the runtime.
 use super::*;
+use crate::program::HttpRequestInput;
 use clinkz_wot_planning::*;
 use clinkz_wot_td::semantic::{FormOwner, SemanticNode, SemanticScope, SemanticValue};
+use std::borrow::Cow;
 const HTTP: &str = "http://www.w3.org/2011/http#";
 #[derive(Debug)]
 pub(super) struct HttpCompiler {
@@ -40,6 +42,42 @@ impl HostSemanticCompiler for HttpCompiler {
         }
     }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
+        self.qualify_target(input)?;
+        let mut output = self.extract(input)?.lower()?;
+        output.target_len = input.target.len() as u16;
+        output.target[..input.target.len()].copy_from_slice(input.target.as_bytes());
+        Ok(output)
+    }
+}
+impl HttpCompiler {
+    /// Instance specialization, including the restricted owner's template limit.
+    pub(super) fn qualify_target(&self, input: ResolvedBindingInput<'_>) -> CoreResult<()> {
+        // Template eligibility depends on the actual execution owner. The
+        // restricted Read owner has no validated actual-destination admission;
+        // admitting a template there would mask executable literal alternatives.
+        if self.caller_resolves_targets {
+            crate::address::qualify(input.target, self.config.secure)
+        } else {
+            Target::parse_for(input.target, self.config.secure)
+        }
+        .map_err(|_| unsupported())?;
+        if input.target.contains('{')
+            && !matches!(
+                input.operation,
+                Operation::ReadProperty | Operation::WriteProperty
+            )
+        {
+            return Err(unsupported());
+        }
+        Ok(())
+    }
+    /// The only TD-to-native input extraction. TD applicability checks run for
+    /// each source; native header syntax checks remain in lowering. Only these
+    /// normalized facts can reach instruction lowering.
+    pub(super) fn extract<'a>(
+        &self,
+        input: ResolvedBindingInput<'a>,
+    ) -> CoreResult<HttpRequestInput<'a>> {
         use clinkz_wot_td::data_type::Operation;
         let collection = input.owner == FormOwner::Thing
             && matches!(
@@ -64,23 +102,6 @@ impl HostSemanticCompiler for HttpCompiler {
         {
             return Err(unsupported());
         }
-        // Template eligibility depends on the actual execution owner. The
-        // restricted Read owner has no validated actual-destination admission;
-        // admitting a template there would mask executable literal alternatives.
-        let target = if self.caller_resolves_targets {
-            crate::address::qualify(input.target, self.config.secure)
-        } else {
-            Target::parse_for(input.target, self.config.secure)
-        }
-        .map_err(|_| unsupported())?;
-        if input.target.contains('{')
-            && !matches!(
-                input.operation,
-                Operation::ReadProperty | Operation::WriteProperty
-            )
-        {
-            return Err(unsupported());
-        }
         let requirement = clinkz_wot_planning::security::compilation_security(&input)?;
         let authentication = crate::security::HttpSecurity::from_requirement(&requirement)
             .map_err(|_| unsupported())?;
@@ -93,13 +114,10 @@ impl HostSemanticCompiler for HttpCompiler {
                 input.operation,
                 Operation::ReadProperty | Operation::WriteProperty
             ) || !matches!(input.owner, FormOwner::Property(_))
-                || target.uri.scheme_str() != Some("https")
             {
                 return Err(unsupported());
             }
-        } else if target.uri.scheme_str() != Some("http")
-            || authentication != crate::security::HttpSecurity::default()
-        {
+        } else if authentication != crate::security::HttpSecurity::default() {
             return Err(unsupported());
         }
 
@@ -139,7 +157,7 @@ impl HostSemanticCompiler for HttpCompiler {
         if facts.content_coding.is_some() {
             return Err(unsupported());
         }
-        let responses = crate::responses::HttpResponses::compile(
+        let responses = crate::responses::HttpResponses::extract(
             input.document,
             input.owner,
             input.form_index,
@@ -159,16 +177,14 @@ impl HostSemanticCompiler for HttpCompiler {
                 }
             })
             .ok_or_else(unsupported)?;
-        let mut output = HttpArtifact {
+        let mut output = HttpRequestInput {
             operation: input.operation,
             responses,
             secure: self.config.secure,
             authentication,
             method: if write { "PUT" } else { "GET" },
-            target_len: input.target.len() as u16,
-            ..HttpArtifact::default()
+            headers: Vec::new(),
         };
-        output.target[..input.target.len()].copy_from_slice(input.target.as_bytes());
         // Only absence enables the protocol default. Malformed/unsupported
         // explicit instructions never silently turn into a default request.
         if let Some(method) = unique(form, "http://www.w3.org/2011/http#methodName")? {
@@ -211,6 +227,15 @@ impl HostSemanticCompiler for HttpCompiler {
             if headers.value() != SemanticValue::Array {
                 return Err(unsupported());
             }
+            let count = headers.children().count();
+            if count > 8 {
+                return Err(unsupported());
+            }
+            output
+                .headers
+                .try_reserve_exact(count)
+                .map_err(|_| unsupported())?;
+            let mut bytes = 0usize;
             for header in headers.children() {
                 if header.value() != SemanticValue::Object {
                     return Err(unsupported());
@@ -238,7 +263,15 @@ impl HostSemanticCompiler for HttpCompiler {
                 }) {
                     return Err(unsupported());
                 }
-                output.header(name, value)?;
+                bytes = bytes
+                    .checked_add(name.len() + value.len())
+                    .ok_or_else(unsupported)?;
+                if bytes > 1024 {
+                    return Err(unsupported());
+                }
+                output
+                    .headers
+                    .push((Cow::Borrowed(name), Cow::Borrowed(value)));
             }
         }
         // Other standardized HTTP instructions are outside this declared slice.

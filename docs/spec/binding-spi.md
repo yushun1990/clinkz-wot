@@ -97,6 +97,72 @@ This seam does not mandate a new artifact for each target, connection sharing,
 one connection per Thing, a global target cache or a universal target program.
 Logical close and original work/resource retention retain SPI-RETIRE-001 meaning.
 
+## Explicit HTTP definition compilation
+
+`HttpDefinitionCompiler::new` supplies optional owned HTTP preparation through
+`ConsumerCompiler`. `HttpRequestDefinition::from_prepared` extracts one pure
+compilation without retaining the first mapping's executor, endpoint or authority.
+`with_definition` supplies it explicitly to later preparation. Ordinary
+endpoint-specialized compilation remains supported; no cache, automatic matching
+table or universal program is required.
+
+There MUST be one authoritative HTTP Consumer input extraction for fresh
+compilation and checked reuse. `HttpCompiler::extract` performs TD/native applicability checks
+and produces `HttpRequestInput`: operation, secure mode, native authentication
+placement, normalized method, bounded borrowed header name/value pairs, and
+normalized response status/success/data/media facts. Response interpretation is
+shared with Producer preparation. Method defaults, operation eligibility,
+read/write flags, coding, unsupported instructions, response framing/uniqueness
+and selected security qualification run for every source before reuse comparison.
+Unsupported meaning cannot be hidden by equality to an older input.
+
+Only `HttpRequestInput::lower` constructs Consumer instructions. It receives no
+TD document, semantic node, endpoint, registration or independent dependency key.
+Reuse compares the new input against its owned retained counterpart using the
+same type's derived equality. Consequently any TD-dependent lowering extension
+must enter that type; new fields participate in equality automatically and must
+be supplied by its exhaustive extraction/ownership constructors. There is no
+second traversal/projection that must independently remember compiler reads.
+Changes to actual interpretation/configuration and owned backing still require
+the normal private-policy version, resource-bound and executable review.
+
+Successful fresh lowering validates header syntax/reserved placements and packs
+headers and response discrimination tables. Equal normalized inputs under the
+same complete HTTP configuration can reuse that success and its instructions
+without repeating those operations. Extraction, method selection, response
+interpretation/validation and security qualification are **not** skipped work.
+Ignored metadata and equivalent explicit defaults do not become dependencies.
+Header order/spelling remains an exact operand comparison. A changed relevant
+input refuses the supplied definition; callers may explicitly compile another.
+
+The endpoint/template is a separate checked instance operand. Each bind verifies
+actual IP/scheme/authority/path/template syntax, capacity and operation eligibility.
+Common TD admission, schema/response/URI-variable content, actual services and
+fresh policy/credentials remain separately qualified. Different supported value
+schemas may use identical native instructions only with their own qualified
+semantic content. Full HTTP configuration, including private policy, format and
+result/destination bounds, must agree. Registration identity/generation/ordinal
+can differ; actual compiler/executor pairing and fresh artifact seals still apply.
+
+One physical owner retains the inline instructions and exactly sized owned input
+vectors/header strings at its original bank; no fixed dependency buffer or raw
+extension tree is retained. Header input is bounded by eight pairs/1024 total
+bytes, responses by 33 entries. Physical backing is reserved before owning that
+data or lowering. Each mapping funds its own bound artifact, destination,
+executor/services association and records. Cancelling or retiring one instance
+cannot reclaim a sibling's data. Original backing survives normal/late results
+and is destroyed before its original reservations release.
+
+The existing owned cursor/output/temporary/cancellation/rollback contract and
+Host deployment failure policy apply. Statistics distinguish actual lowering
+attempts, input comparisons and successful destination bindings. Runtime calls
+still materialize the existing inline instruction representation and retain
+current I/O/occupancy/retirement guarantees; runtime-only HTTP acquires no
+TD/compiler dependency. The [reuse evidence](../evidence/consumer-execution-reuse.md#explicit-http-definition-compilation)
+measures setup-inclusive work, requested retained heap and capacity separately.
+Sharing is optional and can cost more for a small or unique-definition workload;
+no total preparation-time improvement or automatic profile choice is promised.
+
 ## Publication and security collaboration
 
 Producer publication follows [PREP-COVER-001](planning.md) and SAFE-PUBLISH-001.

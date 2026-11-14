@@ -159,7 +159,7 @@ production HTTPS, constrained-profile or v1 qualification. Those remain delivery
 | 3 — Continuing Consumer notification composition | Extend independent logical association and capacity ownership to established conversations; retain exact per-occurrence target and qualified source/verification context for fresh policy where required. Preserve native sharing/stop/response rights and fix Review 10 F2/F3 at affected service handoffs. | Real MQTT notification conversations remain independently authorized under shared compatible native interests. A concrete evidence-bearing source mapping tests per-occurrence policy without treating an unauthenticated topic as a verified principal; queued delivery, stop, loss, late work and physical cleanup retain their original owners. |
 | 4 — Continuing Action and multi-capability reuse | Decouple continuing invocation capacity and checked prepared-service ownership from per-instance Runtime construction. Integrate finite, Action, notification and qualified Producer capabilities under their common logical authority without a mega-Runtime; repair F2/F3 and obsolete adapters as the affected boundaries are changed. | Original invoke/query/cancel mappings and late outcomes survive initial exchange, replacement and retirement. Actual shared content/services are funded once, prepared declarations cannot silently change during runtime construction, and mixed HTTP/MQTT capabilities retain independent progress and cleanup. |
 | 5 — Secure execution and Discovery clients | Broaden actual DataSchema/media/security execution, Host HTTPS and explicit bounded trusted Discovery/Directory retrieval where their dependencies are ready; these can proceed independently of the cross-family sequence. | Supported assertions, security branches and trusted retrieval execute through actual providers and peers without source-TD callbacks, silent weakening, credential leakage or fabricated interoperability claims. |
-| 6 — Product integration and supported profiles | Converge practical application composition, Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification without prematurely freezing a universal facade or an automatic scheduler. | Supported role/operation/profile combinations have actual integration, conformance, resource/performance and lifecycle evidence for the advertised scope; unsupported combinations remain explicit. |
+| 6 — Product integration and supported profiles | Provide convenient execution composition for supported deployments alongside simple, composable manual poll/step APIs; converge Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification. Integrate with deployment-supplied async runtimes, event loops, timers or main loops without prescribing Tokio, a universal scheduler, mega-Runtime or one execution owner per Thing. | Applications can progress supported mixed capabilities and cleanup through higher-level integration, with independent semantic/native ownership and preserved safety guarantees. Supported role/operation/profile combinations have actual integration, conformance, resource/performance and lifecycle evidence; unsupported combinations remain explicit. |
 
 Priorities express concentration, not sequential package gates. Security/HTTPS,
 Discovery and portable-profile work can advance with available dependencies;
@@ -192,17 +192,14 @@ the managed owner resolves TD IDs/configurations without retaining application
 handles or prepaying vacant finite call slots. It still provides neither a
 universal multi-family owner nor automatic scheduling/physical drain.
 
-Prioritize correcting **Producer execution authority (Review 10 F1)** before
-broadening Producer composition. Current HTTP Action and MQTT native runtimes
-receive `RawProducerServient` and can invoke, acknowledge or revoke logical
-work; this contradicts the Binding/Servient dependency and authority boundary.
-Use real HTTP Action invoke/query/cancel to establish native candidates,
-opportunities and failure handoff into Servient-owned authorization, dispatch
-and revocation. Preserve original native correlation, continuing Action and
-result/cleanup ownership. Remove the actual reverse dependency; do not simply
-hide it in a dispatch callback or add a universal RPC/session abstraction.
-The precise trait and carrier design must follow source-level implementation
-analysis; the responsibility decision does not preselect its ABI.
+Retain the **Producer execution authority correction (Review 10 F1)** while
+broadening composition. HTTP Action invoke/query/cancel now supplies native
+candidates, opportunities and failure handoff into Servient-owned authorization,
+dispatch and revocation; MQTT follows the same authority separation. The
+[Binding contract](docs/spec/binding-spi.md#producer-action-candidates-and-native-participation)
+owns the exact handoffs. Preserve original native correlation, continuing Action
+and result/cleanup ownership. Future composition must not reintroduce the reverse
+dependency through a dispatch callback or a universal RPC/session abstraction.
 
 Resolve [topic 0081](workspace/0081-reusable-plan-and-thing-identity.md)
 at two distinct levels. **The architectural decision is already selected:**
@@ -210,14 +207,19 @@ reusable immutable preparation/definition, checked Binding-specific lowering,
 per-instance identity/operands/policy/authority and independently owned native
 infrastructure are different lifetimes; a Thing or Plan Set generation cannot
 mandate a fresh complete compilation or duplicate physical backing. Keep this
-decision active during F1 so the repaired SPI cannot reintroduce one full
-program per Thing. Reconcile 0081's historical DISCUSSING text with the
-current Planning and compiled-plan contracts without creating new abstractions.
+decision active across subsequent SPI changes so they cannot reintroduce one full
+program per Thing. Topic 0081's historical investigation is migrated into the
+current Planning and compiled-plan contracts; concrete representations remain
+Binding-specific choices.
 
-**The remaining capability is cross-instance compilation-work reuse, not just
-schema/content reuse.** Current finite `prepare_with_content` shares semantic
-content but still compiles each selected native mapping. After F1, before
-generalizing the Action/Notification instance handoffs, establish a concrete
+**The capability is cross-instance compilation-work reuse, alongside
+schema/content reuse.** Ordinary finite `prepare_with_content` shares semantic
+content and still invokes the selected native preparation capability. The explicit
+[HTTP definition path](docs/spec/binding-spi.md#explicit-http-definition-compilation)
+separates native instruction lowering from dependency checking and fresh endpoint
+binding; its [evidence](docs/evidence/consumer-execution-reuse.md#explicit-http-definition-compilation)
+does not establish reuse in every Binding or interaction family. Before
+generalizing the Action/Notification instance handoffs, assess that concrete
 prepare-once/checked-bind-many path for genuinely equivalent compiled work,
 with a complete Binding dependency/operand contract and separately funded
 instance admission. If a native artifact includes a fixed endpoint or other
@@ -235,10 +237,23 @@ notification occurrence context must reach the relevant fresh policy without
 equating a native topic with authenticated identity; compatible native sharing
 must keep independent logical rights and physical leases. Repair F2/F3 shared
 service charging and prepared-declaration fencing when those handoffs are
-changed. Preserve family-specific state and explicit application scheduling;
-do not build a mandatory mega-Runtime, automatic wake subsystem or global
-subscription pool. These are independently useful capabilities, not an
-all-family migration gate.
+changed. Preserve family-specific state and support both manual driving and
+convenient higher-level execution composition. These are independently useful
+capabilities, not an all-family migration gate.
+
+Current implementations require application-driven poll/step turns, including
+after passive revocation or abandoned work; the existing runtime-safety contract
+continues to apply. This describes today's mechanism, not the intended limit of
+application integration. Low-level poll/step remains important for embedded
+deployments without an async runtime, and its public APIs should be simple,
+understandable, composable and practical to drive correctly. Supported deployments
+should also offer composition that progresses Bindings, Actions, notifications
+and cleanup without applications manually orchestrating every internal task.
+The environment may supply an async runtime, event loop, timer or simple main
+loop. Integration must preserve Servient ownership of semantic authority and
+accepted work, and Binding ownership of native I/O and physical resources.
+Execution composition is a later capability; topic 0081 changes neither current
+progress/wake/cleanup guarantees nor execution-coordination code.
 
 Select subsequent increments against remaining product capabilities and the
 actual assumptions exposed by those integrations. Preserve distinct Property,

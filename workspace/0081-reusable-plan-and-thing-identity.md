@@ -1,20 +1,21 @@
 # Reusable Plan semantics versus Thing-generation ownership
 
-Status: DISCUSSING
+Status: MIGRATED
 
-ADR-0024 migrates the preparation/execution, definition/instance and native
-infrastructure direction into active authority. The first source extraction is
-scoped to dependency/compiler ownership; production reuse, funding and shared
-retirement remain unproved. Earlier sequencing below is history where it
-conflicts with that decision. It does not block the dependency extraction.
+The definition/instance/authority decision is authoritative in ADR-0025,
+[Planning PREP-REUSE-001](../docs/spec/planning.md) and the
+[compiled-plan lifecycle](../docs/architecture/30-compiled-plan-lifecycle.md).
+The concrete dependency/operand contract belongs to the
+[Binding SPI](../docs/spec/binding-spi.md#explicit-http-definition-compilation);
+the [reuse evidence](../docs/evidence/consumer-execution-reuse.md#explicit-http-definition-compilation)
+owns the HTTP increment, alternatives and remaining architectural limits.
+Migration does not close a package, milestone or independent acceptance gate.
 
-The completed [integrated Review 08](../docs/reviews/review-08-integrated-architecture-reassessment.md#programs-instance-context-and-live-authority)
-reassesses reuse with current compilation, role and infrastructure boundaries.
-It recommends separating definition content, checked instance context and live
-authority now, while deferring automatic caching/persistence until benefit and
-ownership are proved. Its review-first sequence challenges the older narrow-fix
-sequencing below without retrospectively changing accepted implementation or
-activating a shared-program contract. The topic remains DISCUSSING.
+The rest of this file preserves historical investigation and alternatives.
+Its v5 Plan-Set clauses, 0086-first sequence and DISCUSSING conclusions are not
+current authority or implementation prerequisites. Broader cache/persistence
+and cross-family reuse remain optional future capabilities under the active
+contracts; they do not block a scoped executable definition-compilation path.
 
 ## Question and counterexample
 

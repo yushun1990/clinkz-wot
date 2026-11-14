@@ -5,6 +5,15 @@ include!("support/security.rs");
 
 #[test]
 fn retained_service_composition_preserves_independent_https_credentials_policy_and_authority() {
+    independent_https_composition(false);
+}
+
+#[test]
+fn compiled_request_reuse_preserves_independent_https_credentials_policy_and_authority() {
+    independent_https_composition(true);
+}
+
+fn independent_https_composition(reuse_native: bool) {
     io().block_on(async {
         let keys = Keys::for_name("127.0.0.1");
         let verify_a = verifier();
@@ -18,6 +27,9 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
         let service_bank = bank();
         let startup_a = bank();
         let startup_b = bank();
+        let native_bank = bank();
+        let shared_native: RefCell<Option<HttpRequestDefinition>> = RefCell::new(None);
+        let native_compilers: RefCell<Vec<HttpDefinitionCompiler>> = RefCell::new(Vec::new());
         let data = ConsumerServiceOwner::retain_data(
             HttpConsumerConfig::for_https_ip()
                 .unwrap()
@@ -61,14 +73,35 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
                        startup: &Arc<HostResourceAccounts>,
                        accounts: &Arc<HostResourceAccounts>,
                        reuse: Option<&Arc<PreparedConsumerContent>>| {
-            let input = try_https_consumer_registration(
-                keys.client(),
-                access,
-                BindingId::new(198),
-                BindingGeneration::INITIAL,
-                0,
-            )
-            .unwrap();
+            let input = if reuse_native {
+                let config = HttpConsumerConfig::for_https_ip().unwrap();
+                let compiler = if let Some(definition) = shared_native.borrow().as_ref() {
+                    HttpDefinitionCompiler::with_definition(config, definition, native_bank.clone())
+                } else {
+                    HttpDefinitionCompiler::new(config, native_bank.clone())
+                }
+                .unwrap();
+                let input = compiler
+                    .https_registration(
+                        keys.client(),
+                        access,
+                        BindingId::new(198),
+                        BindingGeneration::INITIAL,
+                        0,
+                    )
+                    .unwrap();
+                native_compilers.borrow_mut().push(compiler);
+                input
+            } else {
+                try_https_consumer_registration(
+                    keys.client(),
+                    access,
+                    BindingId::new(198),
+                    BindingGeneration::INITIAL,
+                    0,
+                )
+                .unwrap()
+            };
             let access = ConsumerServiceOwner::retain_access(input.services.access, startup)
                 .unwrap_or_else(|e| panic!("{:?}", e.error()));
             let registry = ConsumerRegistry::try_from_retained(
@@ -108,6 +141,14 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
             }
             .unwrap();
             let (bindings, funding) = prepared.into_execution();
+            if reuse_native {
+                let definition =
+                    HttpRequestDefinition::from_prepared(bindings[0].definition()).unwrap();
+                if let Some(original) = shared_native.borrow().as_ref() {
+                    assert!(original.shares_compilation_with(&definition));
+                }
+                *shared_native.borrow_mut() = Some(definition);
+            }
             assert!(std::ptr::eq(
                 bindings[0].definition().data(),
                 data.service()
@@ -138,6 +179,16 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
             &bank_b,
             Some(&content),
         );
+        if reuse_native {
+            let compilers = native_compilers.borrow();
+            assert_eq!(
+                compilers.iter().map(|c| c.native_compilations()).collect::<Vec<_>>(),
+                [1, 0]
+            );
+            assert_eq!(compilers[1].instance_bindings(), 1);
+        }
+        native_compilers.borrow_mut().clear();
+        shared_native.borrow_mut().take();
         drop(data);
         assert_eq!(
             service_bank
@@ -217,6 +268,7 @@ fn retained_service_composition_preserves_independent_https_credentials_policy_a
         clean(&bank_b);
         clean(&startup_a);
         clean(&service_bank);
+        clean(&native_bank);
         a.close();
         b.close();
     });

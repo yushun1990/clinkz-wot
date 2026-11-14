@@ -30,6 +30,10 @@ mod producer;
 use clinkz_wot_codec_json as producer_validation;
 pub use finite_producer::{HttpFiniteBinding, HttpFiniteConfig, HttpFiniteReply};
 mod address;
+mod definition;
+#[cfg(feature = "prepare")]
+pub use definition::preparation::{HttpDefinitionCompiler, HttpDefinitionCursor};
+pub use definition::{HttpBoundRequest, HttpRequestDefinition};
 mod program;
 mod responses;
 mod security;
@@ -57,7 +61,8 @@ const MEDIA: u64 = 32;
 // All immutable behavior (including dependency configuration) is versioned here.
 // Bump this encoding when any supported behavior or private ceiling changes.
 const PRIVATE_POLICY: &[u8] = concat!(
-    "clinkz-http-ip-v18\0",
+    "clinkz-http-ip-v20\0",
+    "explicit-request-definition-v2;single-typed-native-input;derived-equality;exact-input-backing;header8/1024;responses33;exact-config;fresh-IP-template-target;shared-original-account;inline-call-materialization;",
     "TD-responses33;unique-terminal-native-status;explicit-success;branch-schema;JSON-or-JSON-UTF8-response;media32;",
     "hyper1.12.0(client,http1);httparse1.10.1(std);hyper-util0.1.20(tokio);",
     "tokio1.52.3(net,rt);http-body-util0.1.3;bytes1.11.1;socket2-0.6.4;",
@@ -269,9 +274,7 @@ impl binding::ClientBinding for Client {
         variables: &[(&str, &str)],
         artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
     ) -> CoreResult<Box<str>> {
-        let program = artifact
-            .artifact()
-            .try_payload::<HttpArtifact>(COMPATIBILITY)
+        let program = definition::instructions(artifact)
             .ok_or_else(|| error(601, "incompatible HTTP artifact"))?;
         if program.target() != target || program.secure != self.config.secure {
             return Err(error(601, "incompatible HTTP mapping"));
@@ -303,32 +306,29 @@ impl binding::ClientBinding for Client {
         for (out, (name, value)) in variables.iter_mut().zip(request.uri_variables()) {
             *out = (name.as_str(), value.as_str());
         }
-        let target = artifact
-            .artifact()
-            .try_payload::<HttpArtifact>(COMPATIBILITY)
-            .and_then(|a| {
-                let expanded = address::resolve(
-                    a.target(),
-                    &variables[..request.uri_variables().len()],
-                    self.config.secure,
-                    self.config.configuration.target_capacity(),
-                )
-                .ok()?;
-                if request
-                    .destination()
-                    .is_some_and(|d| d != expanded.as_ref())
-                    || (!request.uri_variables().is_empty() && request.destination().is_none())
-                {
-                    return None;
-                }
-                let mut program = *a;
-                program.target[..expanded.len()].copy_from_slice(expanded.as_bytes());
-                program.target_len = expanded.len() as u16;
-                Some((
-                    Target::parse_for(&expanded, self.config.secure).ok()?,
-                    program,
-                ))
-            });
+        let target = definition::instructions(artifact).and_then(|a| {
+            let expanded = address::resolve(
+                a.target(),
+                &variables[..request.uri_variables().len()],
+                self.config.secure,
+                self.config.configuration.target_capacity(),
+            )
+            .ok()?;
+            if request
+                .destination()
+                .is_some_and(|d| d != expanded.as_ref())
+                || (!request.uri_variables().is_empty() && request.destination().is_none())
+            {
+                return None;
+            }
+            let mut program = a;
+            program.target[..expanded.len()].copy_from_slice(expanded.as_bytes());
+            program.target_len = expanded.len() as u16;
+            Some((
+                Target::parse_for(&expanded, self.config.secure).ok()?,
+                program,
+            ))
+        });
         let Some(target) = target else {
             return Err(reject(
                 request,

@@ -72,6 +72,31 @@ TD-resolved semantic input. The [composed Write subset](#composed-property-readw
 uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
 uses `try_inline_consumer_registration` and remains a restricted Read adapter.
 
+For explicit native compilation reuse, construct `HttpDefinitionCompiler::new`
+with a bank for physical instruction ownership and call its `registration`
+(`https_registration` for TLS with separately supplied trust/access). Use that
+input in the ordinary `ConsumerRegistry` preparation. From a selected mapping,
+extract `HttpRequestDefinition::from_prepared(mapping)` and supply it to
+`HttpDefinitionCompiler::with_definition` for further registrations/preparation.
+The supplied path uses the same typed input extraction as fresh compilation,
+compares normalized facts and binds the new endpoint while skipping header
+validation/packing and response-table packing. `native_compilations`, `dependency_checks` and
+`instance_bindings` distinguish those kinds of work. A mismatch refuses; explicit
+fresh preparation can produce another definition.
+
+`prepare_with_content` independently shares common schema/security meaning; it
+does not itself guarantee native compilation reuse. New mappings still validate
+their descriptions, services, endpoint operands, policy and capacity. The pure
+HTTP definition has no executor, credentials, authority, session or per-Thing
+Runtime; each bound mapping captures its own actual execution registration.
+Original instruction funding survives until the last mapping/result releases it.
+See the [dependency contract](../../../docs/spec/binding-spi.md#explicit-http-definition-compilation)
+and [executable usage](tests/support/definition_reuse.rs). This optional Host
+path retains exactly sized normalized header/response facts with the shared
+instructions. It reduces retained heap for compatible populations but can cost
+more for a unique instance. It claims no net cold-start speedup, portable sharing,
+automatic caching or execution coordination.
+
 Prepare bindings with `ConsumerRegistry`, then use the finite `ConsumerOwner`'s
 ID-addressed path for registered lifecycle and operations. The TD's `id` is the
 public key within that owner. Application views are non-revoking and need not be

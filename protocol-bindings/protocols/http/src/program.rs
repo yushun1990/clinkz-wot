@@ -1,5 +1,6 @@
 //! HTTP vocabulary/default interpretation belongs with the HTTP executor.
 use super::*;
+use std::borrow::Cow;
 
 pub(super) const COMPATIBILITY: BindingArtifactCompatibility =
     BindingArtifactCompatibility::new(*b"clinkz-http-v006");
@@ -104,5 +105,70 @@ impl HttpArtifact {
         };
         self.count += 1;
         Ok(())
+    }
+}
+
+/// All normalized inputs to Consumer instruction lowering.
+/// Fresh compilation and reuse use this same type and derived equality. Lowering
+/// cannot inspect a TD, endpoint, registration or another dependency inventory.
+/// A new TD-dependent instruction needs a field here: equality includes it, and
+/// both exhaustive constructors must supply it. Owned descendants also need
+/// their usual explicit storage/work accounting.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct HttpRequestInput<'a> {
+    pub(super) operation: Operation,
+    pub(super) secure: bool,
+    pub(super) authentication: crate::security::HttpSecurity,
+    pub(super) method: &'static str,
+    pub(super) headers: Vec<(Cow<'a, str>, Cow<'a, str>)>,
+    pub(super) responses: Vec<crate::responses::HttpResponseInput>,
+}
+
+#[cfg(feature = "prepare")]
+impl HttpRequestInput<'_> {
+    pub(super) fn lower(&self) -> CoreResult<HttpArtifact> {
+        let mut output = HttpArtifact {
+            operation: self.operation,
+            secure: self.secure,
+            authentication: self.authentication,
+            method: self.method,
+            responses: crate::responses::HttpResponses::lower(&self.responses),
+            ..HttpArtifact::default()
+        };
+        for (name, value) in &self.headers {
+            output.header(name, value)?;
+        }
+        Ok(output)
+    }
+
+    /// Exact requested descendants for the owned representation. Borrowed
+    /// extraction allocates only the bounded coordinate vectors, not strings.
+    pub(super) fn owned_bytes(&self) -> usize {
+        self.headers.capacity() * std::mem::size_of::<(Cow<'static, str>, Cow<'static, str>)>()
+            + self
+                .headers
+                .iter()
+                .flat_map(|(n, v)| [n, v])
+                .map(|s| match s {
+                    Cow::Borrowed(s) => s.len(),
+                    Cow::Owned(s) => s.capacity(),
+                })
+                .sum::<usize>()
+            + self.responses.capacity() * std::mem::size_of::<crate::responses::HttpResponseInput>()
+    }
+
+    pub(super) fn into_owned(self) -> HttpRequestInput<'static> {
+        HttpRequestInput {
+            operation: self.operation,
+            secure: self.secure,
+            authentication: self.authentication,
+            method: self.method,
+            headers: self
+                .headers
+                .into_iter()
+                .map(|(n, v)| (Cow::Owned(n.into_owned()), Cow::Owned(v.into_owned())))
+                .collect(),
+            responses: self.responses,
+        }
     }
 }

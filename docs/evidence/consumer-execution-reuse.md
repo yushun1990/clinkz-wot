@@ -1,6 +1,7 @@
 # Consumer execution reuse characterization
 
-This records the first reuse increment. The subsequent
+This records the first content-reuse increment and the later
+[explicit HTTP compilation increment](#explicit-http-definition-compilation). The subsequent
 [multi-instance scalability workload](consumer-multi-instance-scaling.md)
 extends measurement to 10,000 logical instances, controlled active fractions,
 native capacity, quota topology, allocator/RSS behavior and sustained execution.
@@ -153,6 +154,141 @@ an endorsement of the present Rust types:
   See [Core](../spec/interaction-core.md), [Binding SPI](../spec/binding-spi.md)
   and [runtime safety](../spec/runtime-safety.md).
 
+## Explicit HTTP definition compilation
+
+The [definition fixture](../../protocol-bindings/protocols/http/tests/support/definition_reuse.rs)
+exercises actual cross-instance native compilation reuse through the owned
+compiler interface. The [Binding contract](../spec/binding-spi.md#explicit-http-definition-compilation)
+owns the single-input and resource rules. Run:
+
+```sh
+cargo test --locked -p clinkz-wot-binding-http --test reusable_execution definition_reuse -- --nocapture
+cargo test --locked -p clinkz-wot-binding-http --test security_https compiled_request_reuse
+```
+
+### Architecture reassessment and correctness boundary
+
+The first PR prototype (`add6cbd`) kept an independent semantic dependency visitor
+beside HTTP lowering and reserved 10,040 bytes per definition, including an
+8192-byte raw projection. Its tests established skipped lowering, but did not
+justify that retained cost or prevent the two inventories drifting. That design
+is replaced, rather than made an accepted maintenance obligation.
+
+Fresh and reused preparation now call one `HttpCompiler::extract` to interpret
+and qualify source facts. It constructs `HttpRequestInput`, a concrete private
+HTTP type with operation, secure mode, native authentication placement, method,
+borrowed header pairs and normalized response facts. The sole Consumer lowering
+function accepts only this input. Its derived equality compares the newly
+extracted input against the same type's owned retained value. A lowering change
+cannot accidentally read an unrecorded TD field: source-dependent information
+must pass through the input type, whose new fields enter equality automatically
+and must be provided by exhaustive constructors. This is the code boundary
+protecting reuse as support evolves, alongside normal private-policy, work,
+storage and independent review obligations. There is no generic access recorder,
+parallel dependency schema, hash identity or second TD interpretation.
+
+Every source still incurs common TD admission/lending, semantic-content
+construction or borrowed comparison, HTTP applicability/default/method selection,
+response interpretation/support and security/service checks. Only header
+validation/reserved-placement checks and packing, and response-table packing,
+are skipped for compatible inputs. The bound destination and fresh registration,
+policy, credentials, authority, operands, accepted work and cleanup stay separate.
+The result is actual reuse of successful native lowering and physical instruction
+backing, not avoidance of all protocol interpretation or all preparation work.
+
+### Measured costs and benefit
+
+Linux x86_64, Rust 1.95.0 debug characterization. N is the **total** mapping count,
+K the number of distinct definitions (K <= N). Both controls use identical
+sources/configuration and the same existing common semantic content. Account and
+fixture provisioning and common-content setup are excluded equally. Timings,
+allocation traffic and retained deltas include initial compilation of K source
+mappings, creation of import capabilities and N-K checked bindings. Compilation
+owners/counters are disposed before retained readings; the K physical definitions
+and all N qualified mappings remain. The independent control freshly compiles N
+mappings. Neither control executes I/O in this cost experiment.
+
+| K | N | Shared requested heap | Independent requested heap | Shared capacity | Independent capacity |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1 | 3,549 | 2,889 | 12,085 | 12,505 |
+| 1 | 2 | 5,214 | 5,746 | 22,206 | 25,010 |
+| 1 | 8 | 15,236 | 22,920 | 82,932 | 100,040 |
+| 1 | 32 | 55,388 | 91,680 | 325,836 | 400,160 |
+| 2 | 2 | 7,066 | 5,746 | 24,170 | 25,010 |
+| 2 | 8 | 17,088 | 22,920 | 84,896 | 100,040 |
+| 2 | 32 | 57,240 | 91,680 | 327,800 | 400,160 |
+
+Requested heap is actual allocator Layout bytes, including vectors, names, Arc
+and erased output slots; capacity is original account reservations. They are
+not interchangeable: at K=N=1 sharing reserves slightly less but uses **660 more
+heap bytes**. At K=1, N=32 it saves 36,292 heap bytes; K=2 saves 34,440. The fixture's
+owned instruction/input definition reserves 1,964 bytes instead of 10,040; actual
+input descendants determine this cost rather than a fixed maximum. Unused Form
+metadata is not retained. These are measured layout/workload results, not stable
+ABI sizes or a general break-even threshold.
+
+Actual lowerings are K versus N. Reuse comparisons are N-K, total successful
+bindings N. For the one-header/one-response fixture this avoids N-K header
+syntax/placement validations and pack operations and N-K response table pack
+operations; response interpretation and eligibility still run N times. At K=1,
+N=32 the shared/control runs made 6188/6244 allocation calls requesting
+2,657,328/2,697,516 bytes cumulatively. These are allocation traffic, not retained
+or peak RAM. Full source-inclusive debug preparation remains roughly 29–31 ms
+in both paths at N=32. There is no established preparation-time gain, statistical
+latency result, warm-I/O improvement or fleet-throughput claim. Work credits bound
+callbacks and must not be presented as measured CPU instructions saved.
+
+The cost test checks the entire retained allocator delta returns to its initial
+value after both controls release, in addition to every account reaching zero.
+This covers actual physical release, rather than treating a smaller reservation
+or shared Arc pointer as a RAM measurement.
+
+### Behavioral evidence, alternatives and limitations
+
+Public-path controls exercise changed headers/method/coding/media/subprotocol,
+response status/success/media, schema, configuration and invalid targets. Prefix
+aliases, moved Form coordinates, equivalent explicit defaults and large ignored
+metadata reuse the same compilation. Changed supported header instructions
+refuse reuse and recover through explicit fresh compilation. Real peers verify
+POST/header instructions, percent-escaped paths/queries and additional HTTP 409
+discrimination. Engine HTTP/TLS tests retain independent policy/credential and
+authority changes, a real late native output, sibling progress and original
+funding through the final result. Zero-credit, cancelled and capacity-refused
+preparation retain bounded rollback and retry.
+
+Alternatives were reassessed, not assumed inferior because the prototype exists:
+
+- **Ordinary per-instance compilation:** simplest for unique definitions or
+  small populations; it is a supported choice and wins retained heap at N=K in
+  this fixture. It cannot alone provide the requested compile-once capability.
+- **Shrink the serialized projection:** fixes some capacity waste but preserves
+  an independently maintained list of compiler dependencies. Rejected.
+- **Recompile and compare/intern native output:** avoids retaining input facts,
+  but repeats header validation/packing and cannot prove compilation-work reuse.
+- **One private normalized HTTP input:** selected. It replaces the visitor with
+  data already needed by lowering and derived equality, with actual-sized owned
+  backing. It needs no new public hierarchy or Engine protocol case.
+- **Generic dependency-recording compiler, cache, or whole-TD IR:** could pursue
+  broader reuse but adds machinery without evidence this small lowering is a
+  startup bottleneck. It is unnecessary for the demonstrated memory benefit.
+- **Share complete ConsumerDefinition:** conflates concrete endpoint/executor/
+  service associations with immutable instructions; it does not preserve the
+  required independent instance/dependency boundaries.
+
+The remaining tradeoff is deliberate: owned normalized facts duplicate some
+header/response content alongside packed instructions, and comparison/extraction
+still cost work and temporary vectors. Both modes use that extractor, so these
+CPU/allocation comparisons do not establish an improvement over the earlier
+one-pass compiler. Keeping a second optimized TD parser would recreate the
+dependency drift this change removes. Exact header order/spelling can refuse
+semantically equivalent inputs. A fresh description is still required to bind a
+new mapping; call execution is source-free. Runtime calls still copy inline
+instructions, and their destination buffer remains part of that existing layout.
+Continuing Actions, notifications, Producer definition sharing, other Bindings,
+portable/static representations, caches, persistence and execution coordination
+are separate capabilities. No package, architecture gate or milestone is closed;
+independent acceptance must assess the exact updated PR revision.
+
 ## Provisional choices and unproven evolution
 
 `ConsumerExecutionContent`, `PreparedConsumerContent`, `ConsumerDefinition` and
@@ -172,7 +308,7 @@ whether or not a proposed optimization saves memory or time.
 
 ### Endpoint-specific native compilation and instance operands
 
-**Current evidence.** The fixture constructs one common content owner but N
+**Original evidence.** The first fixture constructs one common content owner but N
 native artifacts for N endpoints. The
 [HTTP artifact](../../protocol-bindings/protocols/http/src/program.rs) embeds the
 complete target, method and headers. Real peers verify changed paths and headers;
@@ -185,7 +321,9 @@ It proves neither checked retargeting nor a benefit from avoiding compilation.
 The current artifact cannot acquire a new endpoint merely by changing its
 envelope. Native compilation cost has not been isolated as a fleet bottleneck.
 
-**Possible evolution, unproven.** A concrete Binding could separate reusable
+**Successor.** The explicit HTTP increment above separates reusable instructions
+from checked destinations. Other Bindings and richer operand contracts remain
+unproven. A concrete Binding can separate reusable
 request instructions from explicitly checked endpoint or header operands, with
 complete configuration compatibility, destination policy and operand funding.
 Other Bindings may remain specialized. Program reuse would not by itself imply
