@@ -136,10 +136,29 @@ impl Association {
         let d = self.definition.input();
         [Some(&d.invoke), d.query.as_ref(), d.cancel.as_ref()]
     }
+    /// Complete qualification for a new association/invocation. Retaining this
+    /// whole set does not make every operation a live dependency of old work.
     fn check_dependencies(&self) -> CoreResult<()> {
         self.definition.check_dependencies()?;
         for access in self.access.iter().flatten() {
             access.check()?;
+        }
+        Ok(())
+    }
+    /// One operation's original qualification, without importing unused
+    /// siblings into an admitted invocation's invalidation scope.
+    fn check_operation(&self, operation: usize) -> CoreResult<()> {
+        let selected = self.selected(operation)?;
+        selected.check_services()?;
+        let definition = self.definition.input();
+        if !definition.schemas.supports(selected.op.data.service()) {
+            return Err(invalid());
+        }
+        if operation != 0 {
+            selected
+                .op
+                .mapping
+                .supports_continuation(definition.invoke.mapping.as_ref())?;
         }
         Ok(())
     }
@@ -829,18 +848,29 @@ impl ConsumerActionHandle {
         if v.state != ConsumerActionState::Pending || v.exchange.is_some() {
             return Err(busy());
         }
-        let selected = v.association.selected(operation)?;
+        let association = v.association.clone();
+        let selected = association.selected(operation)?;
         prepay(&selected, budget)?;
         let continuation = v.continuation.as_deref().ok_or_else(invalid)?;
-        if let Err(e) = selected
+        let preflight = selected
             .check(&self.state, &self.control, Some(continuation))
-            .and_then(|()| v.association.check_dependencies())
-            .and_then(|()| self.control.check(&self.state))
-        {
-            v.close(e.clone());
-            return Err(e);
-        }
-        let raw = selected.op.mapping.start(None, Some(continuation))?;
+            .and_then(|()| association.check_operation(operation));
+        // The requested control has no admitted work yet. Refusal cannot
+        // withdraw Invoke authority, but its callbacks may invalidate the
+        // invocation's original dependencies. Record that observation before
+        // returning an error or permitting another native effect.
+        v.fence(&self.state);
+        self.control.check(&self.state)?;
+        preflight?;
+        let continuation = v.continuation.as_deref().ok_or_else(invalid)?;
+        let raw = match selected.op.mapping.start(None, Some(continuation)) {
+            Ok(raw) => raw,
+            Err(error) => {
+                v.fence(&self.state);
+                self.control.check(&self.state)?;
+                return Err(error);
+            }
+        };
         v.exchange = Some(Exchange(Some(raw)));
         v.operation = operation;
         v.retiring = false;
@@ -1006,6 +1036,15 @@ impl ConsumerActionSettlement {
     }
 }
 impl Invocation {
+    fn check_dependencies(&self) -> CoreResult<()> {
+        // Invoke owns the continuation and common data obligation throughout.
+        // A control additionally governs only its exchange or retained result.
+        self.association.check_operation(0)?;
+        if self.operation != 0 {
+            self.association.check_operation(self.operation)?;
+        }
+        Ok(())
+    }
     fn close(&mut self, cause: CoreError) {
         self.control.record(cause);
         self.first_cause = self.control.cause();
@@ -1022,7 +1061,7 @@ impl Invocation {
             self.close(e);
         }
         if self.first_cause.is_none()
-            && let Err(e) = self.association.check_dependencies()
+            && let Err(e) = self.check_dependencies()
         {
             self.close(e);
         }
@@ -1044,7 +1083,7 @@ impl Invocation {
         }
         if let Err(e) = selected
             .check(state, &self.control, self.continuation.as_deref())
-            .and_then(|()| self.association.check_dependencies())
+            .and_then(|()| self.check_dependencies())
         {
             self.close(e);
         }
@@ -1133,6 +1172,10 @@ impl Invocation {
         self.fence(state);
         if self.first_cause.is_some() {
             self.state = ConsumerActionState::Closed;
+        } else if self.state == ConsumerActionState::Pending {
+            // The control's status/ack was consumed and its exchange retired.
+            // No unread application result depends on that control any longer.
+            self.operation = 0;
         }
         self.retiring = false;
     }

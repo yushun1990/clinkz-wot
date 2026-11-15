@@ -70,14 +70,38 @@ native allowance or imply one connection per Consumer.
 
 Additional real HTTP cases change an access revision/work declaration, prepared
 data work or native bounds after unread completion, and change data work inside
-actual output validation. Each observed violation irreversibly fences its own
-invocation. Restoring declarations cannot enable query or successful handoff;
+actual output validation. Each observed violation of the original Invoke or retained Query dependencies
+irreversibly fences its own invocation. Restoring declarations cannot enable query or successful handoff;
 original identity and native output remain in the failed settlement. Original
 invoke validation still runs for late output when cancellation/access loss has
 already fenced application acceptance, under its original data allowance.
 
+The operation-scope HTTP counterexample uses three independent operation data/
+access services and native mappings. Changing only unused Cancel access revision,
+work, retained-backing declaration, native bounds or schema support leaves pending Invoke and its
+independently authorized Query result usable. Per-instance Cancel denial likewise
+refuses before effects. Cases cover both never-used Cancel and an acknowledged,
+fully retired cancellation: a failed later request preserves original identity,
+continuation and known cancellation status. No refused request starts native work.
+Metadata changes still refuse admission through the original association; explicit
+new access binding may qualify a new revision/work, while changed prepared native/
+data declarations or unfunded access backing still refuse that binding.
+
+This counterexample fails against `306d3d9` with Closed instead of Pending after
+only the unused Cancel revision changes. No funding is released because a control
+becomes unavailable; the original complete definition/services remain retained.
+A raw immediate Invoke completion similarly survives an independent unused Query
+revision change before completion or handoff, without entering Query/Cancel policy.
+The access-callback regression uses independent control codecs: loss of the
+original Invoke validator must be observed and fenced before a control starts,
+even though that control's own data service remains available. Negative cases change the actually admitted Query/Cancel revision with native work
+owned: the invocation stays irreversibly fenced through short-credit/pending
+retirement, preserves a late validated Query output and uncertain Cancel status,
+and releases only its original owners. The unread-result HTTP cases use independent
+Query services to ensure narrowing cannot bypass its selected grant/bounds.
+
 The [raw callback suite](../../servient/finite/tests/consumer_action_callbacks.rs)
-retains 22 deterministic occupied-slot/reentry, time, wake, unwind, cancellation,
+retains 24 deterministic occupied-slot/reentry, time, wake, unwind, cancellation,
 late-result and paid disposal cases. The independent
 [downstream datagram fixture](../../tools/architecture-fixtures/open-consumer/tests/action.rs)
 continues to use different actual invoke/control Binding types and blocked/error

@@ -109,6 +109,9 @@ impl ConsumerActionDefinition {
             )),
         }
     }
+    /// Complete selected-operation qualification for new associations/admission.
+    /// Admitted execution checks the dependencies of its original work and the
+    /// operation owning its current exchange or unread result.
     pub fn check_dependencies(&self) -> CoreResult<()> {
         let input = &self.0;
         if !matches!(input.target, AffordanceTarget::Action(_))

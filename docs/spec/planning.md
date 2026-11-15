@@ -390,9 +390,12 @@ Preparation captures the complete data policy/media/support, native identity,
 operation and exchange/continuation/result/scratch/work bounds. It checks original
 service backing and rechecks admission declarations around access/compilation
 callbacks. `ConsumerActionDefinition::check_dependencies` preserves those facts
-through association and work admission; construction cannot capture a replacement
-baseline. A changed declaration, even a smaller bound, requires explicit new
-qualification and applicable funding. The preparation access service is a
+through complete association and new-work admission; construction cannot
+capture a replacement baseline. Already admitted execution follows the
+[dependencies of its owned operations](runtime-safety.md#continuing-action-associations-and-invocation-capacity),
+rather than importing unused controls into its invalidation scope. A changed
+declaration, even a smaller bound, requires explicit new qualification and
+applicable funding. The preparation access service is a
 qualification dependency, not a retained Consumer permission. Execution binds
 explicit per-operation access owners independently, checks their actual backing,
 qualifies destination/NoSec support, and retains their work/revision snapshots.

@@ -47,6 +47,26 @@ Alternatives considered:
   distinguish these owners or falsify the HTTP claims. Physical HTTP occupancy
   remains a Binding policy.
 
+The dependency-scope reassessment rejects aggregate live invalidation of the
+retained definition. A real HTTP counterexample against `306d3d9` changes only
+an independent unused Cancel access revision: pending Invoke becomes Closed.
+Retained membership is therefore not evidence of a dependency of every admitted
+operation. Complete original qualification stays at new association/admission;
+live work keeps original Invoke obligations plus its owned exchange/unread-result
+operation. A consumed nonterminal control with fully retired exchange has no
+remaining authority over pending execution. Explicit pre-effect control refusal
+cannot withdraw an unrelated invocation grant, but still observes existing work's
+callback-time authority/dependency loss. No declaration baseline is refreshed.
+
+Keeping the aggregate check would preserve this counterexample. Dropping all
+control checks would allow stale selected exchanges/results. Remembering every
+ever-used operation would retain retired control authority without an owned
+obligation; poisoning the shared association on refusal would cross independent
+invocations. The existing single-exchange operation index and settlement state
+already identify the relevant lifetime, so no dependency graph, grant bitmap,
+new Runtime or scheduler is needed. Physical owners/funding remain retained
+independently of this narrower validity scope.
+
 This applies the definition/authority split of 0081 and the independent-capacity
 principle of 0121/0123. It does not import their representation as a universal
 carrier. The normative migrations are [Planning](../docs/spec/planning.md#continuing-consumer-action-preparation)

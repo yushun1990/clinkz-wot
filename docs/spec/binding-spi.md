@@ -480,7 +480,11 @@ without concrete dependency qualification. Controls explicitly check compatibili
 different Binding implementations may share an admitted continuation contract.
 `destination` calculates the actual target before captured fresh authorization;
 `start` must use that same target and capture all borrowed input. Refusal permits
-no semantic effect. Tokens and native response envelopes stay opaque to the Engine.
+no semantic effect. Refused control start does not withdraw unrelated admitted
+Invoke work. A successful start retains that operation's own dependencies through
+exchange retirement and any unread result; merely retaining a sibling mapping
+confers neither permission nor an invocation-wide revocation right. Tokens and
+native response envelopes stay opaque to the Engine.
 
 The exchange owner remains retained after response/error until successful local
 retirement, including late observations. Pending or failed retirement cannot

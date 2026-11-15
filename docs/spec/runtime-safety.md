@@ -505,8 +505,30 @@ instance bank. Association construction allocates no vacant slot, exchange,
 continuation or work quota. It rechecks prepared data/native declarations and
 original backing before/after policy qualification. Explicit new access binding
 captures its own work/revision; it never replaces prepared data/native facts.
-Declaration restoration does not erase a failure already observed by admitted
-work. Independent invocations sharing a definition keep their own first causes.
+Association construction and new invocation admission check the complete
+selected Invoke/Query/Cancel set against its original declarations. Retaining
+that set does not create a blanket invalidation domain for admitted work.
+
+A live invocation checks its original Invoke mapping, data obligations and bound
+access declarations, plus the operation owning its current exchange or unread
+result. An unused Query/Cancel dependency cannot fence unrelated accepted work
+or its handoff. A Query result retains its original Query dependencies until
+handoff. Once a nonterminal status or cancellation acknowledgement has been
+consumed and its exchange fully retired, that control no longer governs the
+pending invocation. The original continuation and known cancellation status
+remain retained. Shared actual services still invalidate every relevant use;
+separate operation coordinates do not isolate an aliased dependency.
+
+A control request checks its own original qualification, continuation
+compatibility and fresh destination/instance permission before native start.
+An unavailable or denied control refuses without native effects or withdrawal
+of unrelated Invoke work. Every refusal still observes callback-time loss of
+already relevant dependencies and logical authority. Fresh policy checks remain
+scoped to the actual operation, including progress and handoff that depend on it;
+Invoke permission never grants Query/Cancel permission. Consumer/root revocation,
+time and local cancellation continue to govern the entire invocation.
+Declaration restoration does not erase an already observed violation of relevant
+admitted work. Independent invocations keep their own first causes.
 
 `ConsumerActions` owns a bounded slot registry and its capacity bank independently
 of any Consumer. Vacant slots contain only registry/control references; each
@@ -548,10 +570,13 @@ unwind restoration follow the boundary rules above independently for this owner.
 
 Action access, native and validation callbacks are followed by fresh original
 control/dependency checks before another native effect or successful handoff.
-A control authorization/service failure fences the invocation even if the service
-later recovers. Short work or an unsupported control remains a refusal without
-inventing a remote effect. A successful native start returned after revocation
-is retained for local retirement, without polling it for further effects.
+After native control start, loss of that exchange's authorization/services
+fences its admitted work irreversibly. A refusal before start leaves unrelated
+accepted work usable; it cannot hide an observed original Invoke dependency or
+logical authority violation. Short work or an unsupported control remains a
+refusal without inventing a remote effect. A successful native start returned
+after revocation is retained for local retirement, without polling it for further
+effects.
 Required cleanup and late validation continue under original funding; neither
 can erase a first cause or promote uncertain effects to success/rollback.
 Native completion evidence is stored before validator entry, including on

@@ -447,6 +447,13 @@ data service validates completion, including late output after cancellation;
 native output, validation error, first local cause, cleanup error and effect
 uncertainty remain independently observable. No successor association/capacity
 can replace an invocation's original Consumer, services, mappings or token.
+Complete association/admission qualification is distinct from admitted-work
+invalidation: original Invoke obligations and the current exchange/unread result
+retain their own dependencies. An unavailable unused control, or its refusal
+before native effects, cannot revoke unrelated accepted work. A fully retired
+nonterminal control no longer governs the invocation; its original continuation
+and cancellation evidence remain. Exact checks and sticky failure ownership
+belong to [Runtime Safety](runtime-safety.md#continuing-action-associations-and-invocation-capacity).
 
 Native completion does not seal unread application success. `Completed` remains
 revocable until `take_settlement(now, budget)` performs paid, fresh checks of

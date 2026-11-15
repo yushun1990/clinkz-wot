@@ -274,6 +274,10 @@ The [Action composition evidence](../evidence/consumer-action-composition.md)
 adds shared physical service funding, original prepared-declaration refusal,
 one actual definition/three associations/two independent capacities over real HTTP,
 original instance quotas through settlement disposal and independent access.
+Complete qualification remains at association/admission; live invalidation follows
+original Invoke obligations and the operation owning an exchange/unread result.
+Independent unused controls and refusals before native start leave unrelated
+accepted work usable; relevant admitted failures retain original late cleanup.
 The root QueryAllActions fixture shares one Consumer authority across separate
 finite and continuing capacity. Managed mixed HTTP/MQTT composition, reusable
 Producer exposure composition and broader profiles remain separate work.

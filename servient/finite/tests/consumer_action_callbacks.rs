@@ -295,6 +295,15 @@ fn harness(slots: usize) -> Harness {
         });
         let bounds = mapping.bounds();
         let identity = mapping.identity();
+        // A control's codec must not accidentally stand in for the original
+        // Invoke validator when an access callback changes that dependency.
+        let data = if operation == Operation::InvokeAction {
+            data.clone()
+        } else {
+            ConsumerServiceOwner::retain_data(Arc::new(Data(Arc::new(Probe::default()))), &bank)
+                .ok()
+                .unwrap()
+        };
         ConsumerActionOperation {
             mapping,
             endpoint: "test://action".into(),
@@ -1077,4 +1086,207 @@ fn native_inline_wake_cannot_repoll_and_preserves_driver_retry_interest() {
     drop(waker);
     drop(call);
     dispose(h);
+}
+
+struct OperationAccess {
+    operation: Operation,
+    revision: AtomicUsize,
+    authorizations: AtomicUsize,
+}
+impl ConsumerAccessService for OperationAccess {
+    fn security_revision(&self) -> u64 {
+        self.revision.load(Ordering::Relaxed) as u64
+    }
+    fn authorize(
+        &self,
+        _: BindingRegistrationIdentity,
+        _: &str,
+        operation: Operation,
+    ) -> CoreResult<()> {
+        assert_eq!(operation, self.operation);
+        Ok(())
+    }
+    fn authorize_instance(
+        &self,
+        _: &ConsumerInstanceRef,
+        _: BindingRegistrationIdentity,
+        _: &str,
+        operation: Operation,
+    ) -> CoreResult<()> {
+        assert_eq!(operation, self.operation);
+        self.authorizations.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+    fn retained_bytes(&self) -> u64 {
+        64
+    }
+    fn work(&self) -> u64 {
+        1
+    }
+}
+fn operation_association(h: &Harness) -> (ConsumerActionAssociation, [Arc<OperationAccess>; 3]) {
+    let services = [
+        Operation::InvokeAction,
+        Operation::QueryAction,
+        Operation::CancelAction,
+    ]
+    .map(|operation| {
+        Arc::new(OperationAccess {
+            operation,
+            revision: AtomicUsize::new(0),
+            authorizations: AtomicUsize::new(0),
+        })
+    });
+    let owners = services.each_ref().map(|s| {
+        ConsumerServiceOwner::retain_access(s.clone(), &h.bank)
+            .ok()
+            .unwrap()
+    });
+    let [invoke, query, cancel] = owners;
+    let association = ConsumerActionAssociation::try_new(
+        h.owner.reference(),
+        h.rt.association.definition().clone(),
+        ConsumerActionAccess {
+            invoke,
+            query: Some(query),
+            cancel: Some(cancel),
+        },
+        h.bank.clone(),
+        &mut work(),
+    )
+    .ok()
+    .unwrap();
+    (association, services)
+}
+
+#[test]
+fn unused_query_revision_cannot_revoke_original_invoke_completion_or_handoff() {
+    for after_completion in [false, true] {
+        let h = harness(1);
+        h.probe.complete_invoke.store(true, Ordering::Relaxed);
+        let (association, services) = operation_association(&h);
+        let call =
+            h.rt.calls
+                .invoke_action(
+                    &association,
+                    Some(Payload::new(b"12".as_slice(), "application/json")),
+                    Deadline::NONE,
+                    at(1),
+                    &mut work(),
+                )
+                .ok()
+                .unwrap();
+        let identity = call.identity().unwrap();
+        if after_completion {
+            assert_eq!(progress(&call), ConsumerActionState::Completed);
+        }
+        services[1].revision.store(1, Ordering::Relaxed);
+        assert_eq!(progress(&call), ConsumerActionState::Completed);
+        assert!(call.first_cause().unwrap().is_none());
+        let settlement = call.take_settlement(at(1), &mut work()).unwrap();
+        assert_eq!(settlement.identity(), &identity);
+        assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
+        assert_eq!(services[1].authorizations.load(Ordering::Relaxed), 0);
+        assert_eq!(services[2].authorizations.load(Ordering::Relaxed), 0);
+        assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
+        assert!(h.rt.calls.is_idle());
+        assert_eq!(
+            h.bank
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                .used(),
+            1
+        );
+        drop((call, association, services));
+        assert_eq!(
+            h.bank
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                .used(),
+            1
+        );
+        drop(settlement);
+        dispose(h);
+    }
+}
+
+#[test]
+fn selected_control_revision_fences_owned_exchange_and_retains_late_cleanup() {
+    for operation in [1, 2] {
+        let h = harness(1);
+        let (association, services) = operation_association(&h);
+        let call =
+            h.rt.calls
+                .invoke_action(
+                    &association,
+                    Some(Payload::new(b"12".as_slice(), "application/json")),
+                    Deadline::NONE,
+                    at(1),
+                    &mut work(),
+                )
+                .ok()
+                .unwrap();
+        let identity = call.identity().unwrap();
+        assert_eq!(progress(&call), ConsumerActionState::Pending);
+        if operation == 1 {
+            call.query(at(1), &mut work()).unwrap();
+        } else {
+            call.request_cancel(at(1), &mut work()).unwrap();
+        }
+        h.probe.close_pending.store(true, Ordering::Relaxed);
+        h.probe.late.store(operation == 1, Ordering::Relaxed);
+        services[operation].revision.store(1, Ordering::Relaxed);
+        assert_eq!(progress(&call), ConsumerActionState::Closing);
+        assert!(matches!(
+            call.first_cause().unwrap(),
+            Some(CoreError::Validation(_))
+        ));
+        assert_eq!(
+            h.probe.polls.load(Ordering::Relaxed),
+            1,
+            "invalid selected work can only retire"
+        );
+        assert_eq!(
+            h.probe.drops.load(Ordering::Relaxed),
+            1,
+            "the control owner remains funded"
+        );
+        let closes = h.probe.closes.load(Ordering::Relaxed);
+        assert_eq!(
+            call.progress(&mut cx(), at(1), &mut WorkBudget::new())
+                .unwrap(),
+            ConsumerActionState::Closing
+        );
+        assert_eq!(h.probe.closes.load(Ordering::Relaxed), closes);
+        // Adversarial restoration cannot erase the violation already observed.
+        services[operation].revision.store(0, Ordering::Relaxed);
+        assert!(call.query(at(1), &mut work()).is_err());
+        h.probe.close_pending.store(false, Ordering::Relaxed);
+        assert_eq!(progress(&call), ConsumerActionState::Closed);
+        let settlement = call.take_settlement(at(1), &mut work()).unwrap();
+        assert_eq!(settlement.identity(), &identity);
+        assert!(matches!(settlement.result(), Err(CoreError::Validation(_))));
+        assert_eq!(
+            settlement.remote_cancellation(),
+            if operation == 2 {
+                ConsumerActionCancellation::Uncertain
+            } else {
+                ConsumerActionCancellation::NotRequested
+            }
+        );
+        if operation == 1 {
+            assert_eq!(
+                settlement
+                    .native_result()
+                    .unwrap()
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body,
+                b"24"
+            );
+            assert_eq!(h.probe.validates.load(Ordering::Relaxed), 2);
+        }
+        assert_eq!(h.probe.drops.load(Ordering::Relaxed), 2);
+        drop((call, association, services, settlement));
+        dispose(h);
+    }
 }
