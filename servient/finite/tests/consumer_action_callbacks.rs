@@ -276,11 +276,17 @@ struct Harness {
     rt: Rc<TestClient>,
     owner: ConsumerInstance,
     probe: Arc<Probe>,
+    codecs: [Arc<Probe>; 3],
     bank: Arc<HostResourceAccounts>,
 }
 fn harness(slots: usize) -> Harness {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let probe = Arc::new(Probe::default());
+    let codecs = [
+        probe.clone(),
+        Arc::new(Probe::default()),
+        Arc::new(Probe::default()),
+    ];
     let data = ConsumerServiceOwner::retain_data(Arc::new(Data(probe.clone())), &bank)
         .ok()
         .unwrap();
@@ -295,12 +301,16 @@ fn harness(slots: usize) -> Harness {
         });
         let bounds = mapping.bounds();
         let identity = mapping.identity();
-        // A control's codec must not accidentally stand in for the original
-        // Invoke validator when an access callback changes that dependency.
+        // Each representation has an independent actual validation dependency.
         let data = if operation == Operation::InvokeAction {
             data.clone()
         } else {
-            ConsumerServiceOwner::retain_data(Arc::new(Data(Arc::new(Probe::default()))), &bank)
+            let i = if operation == Operation::QueryAction {
+                1
+            } else {
+                2
+            };
+            ConsumerServiceOwner::retain_data(Arc::new(Data(codecs[i].clone())), &bank)
                 .ok()
                 .unwrap()
         };
@@ -350,6 +360,7 @@ fn harness(slots: usize) -> Harness {
         rt,
         owner,
         probe,
+        codecs,
         bank,
     }
 }
@@ -635,7 +646,7 @@ fn cancelled_failed_query_retains_late_invalid_output_and_failed_retirement_unde
     h.probe.invalid_output.store(true, Ordering::Relaxed);
     let counts = (
         h.probe.closes.load(Ordering::Relaxed),
-        h.probe.validates.load(Ordering::Relaxed),
+        h.codecs[1].validates.load(Ordering::Relaxed),
     );
     call.progress(&mut cx(), at(1), &mut WorkBudget::new())
         .unwrap();
@@ -643,7 +654,7 @@ fn cancelled_failed_query_retains_late_invalid_output_and_failed_retirement_unde
         counts,
         (
             h.probe.closes.load(Ordering::Relaxed),
-            h.probe.validates.load(Ordering::Relaxed)
+            h.codecs[1].validates.load(Ordering::Relaxed)
         )
     );
     h.probe.close_pending.store(false, Ordering::Relaxed);
@@ -656,7 +667,8 @@ fn cancelled_failed_query_retains_late_invalid_output_and_failed_retirement_unde
     assert!(s.native_result().unwrap().is_ok());
     assert!(s.result().is_err());
     assert_eq!(s.effect(), ConsumerEffect::Unknown);
-    assert_eq!(h.probe.validates.load(Ordering::Relaxed), 2);
+    assert_eq!(h.probe.validates.load(Ordering::Relaxed), 1);
+    assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 1);
     assert_eq!(h.probe.drops.load(Ordering::Relaxed), 2);
     let Harness {
         rt, owner, bank, ..
@@ -778,6 +790,7 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
         owner,
         bank,
         probe,
+        ..
     } = h;
     drop(rt);
     drop(call);
@@ -822,6 +835,7 @@ fn callback_can_drop_the_original_handle_or_runtime_without_losing_native_owners
                 owner,
                 bank,
                 probe,
+                ..
             } = h;
             hook(Edge::Poll, move || drop(rt));
             assert_eq!(progress(&call), ConsumerActionState::Closed);
@@ -999,6 +1013,7 @@ fn replacement_during_authorization_already_refuses_before_native_start() {
         owner,
         probe,
         bank,
+        ..
     } = harness(1);
     let owner = Rc::new(owner);
     let original = owner.clone();
@@ -1022,7 +1037,7 @@ fn replacement_during_authorization_already_refuses_before_native_start() {
 }
 
 #[test]
-fn service_loss_during_control_access_stays_fenced_after_service_recovery() {
+fn retired_invoke_codec_loss_does_not_revoke_independent_control_or_query_output() {
     for cancel in [false, true] {
         let h = harness(1);
         let call = start(&h);
@@ -1036,20 +1051,61 @@ fn service_loss_during_control_access_stays_fenced_after_service_recovery() {
         } else {
             call.query(at(1), &mut work())
         };
-        assert!(result.is_err());
-        assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
-        h.probe.unavailable.store(false, Ordering::Relaxed);
-        assert!(call.query(at(1), &mut work()).is_err());
+        result.unwrap();
+        assert_eq!(h.probe.starts.load(Ordering::Relaxed), 2);
+        // Full qualification is still required for new work using this definition.
+        let refused = invoke(&h.rt).err().unwrap();
+        assert!(matches!(refused.error().error(), CoreError::Validation(_)));
+        drop(refused);
+        if cancel {
+            assert_eq!(progress(&call), ConsumerActionState::Pending);
+            call.query(at(1), &mut work()).unwrap();
+        }
+        assert_eq!(progress(&call), ConsumerActionState::Completed);
         let s = call.take_settlement(at(1), &mut work()).unwrap();
-        assert!(matches!(s.result(), Err(CoreError::Validation(_))));
+        assert!(s.result().is_ok());
+        assert_eq!(h.probe.validates.load(Ordering::Relaxed), 1);
+        assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 1);
+        assert_eq!(h.codecs[2].validates.load(Ordering::Relaxed), 0);
         assert_eq!(
             s.remote_cancellation(),
-            ConsumerActionCancellation::NotRequested
+            if cancel {
+                ConsumerActionCancellation::Requested
+            } else {
+                ConsumerActionCancellation::NotRequested
+            }
         );
         drop(s);
         drop(call);
         dispose(h);
     }
+}
+
+#[test]
+fn selected_query_codec_loss_refuses_before_effects_without_revoking_original_work() {
+    let h = harness(1);
+    let call = start(&h);
+    assert_eq!(progress(&call), ConsumerActionState::Pending);
+    let query = h.codecs[1].clone();
+    hook(Edge::Access, move || {
+        query.unavailable.store(true, Ordering::Relaxed)
+    });
+    assert!(call.query(at(1), &mut work()).is_err());
+    assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
+    assert!(call.query(at(1), &mut work()).is_err());
+    call.request_cancel(at(1), &mut work()).unwrap();
+    assert_eq!(progress(&call), ConsumerActionState::Pending);
+    h.codecs[1].unavailable.store(false, Ordering::Relaxed);
+    call.query(at(1), &mut work()).unwrap();
+    assert_eq!(progress(&call), ConsumerActionState::Completed);
+    let s = call.take_settlement(at(1), &mut work()).unwrap();
+    assert!(s.result().is_ok());
+    assert_eq!(
+        s.remote_cancellation(),
+        ConsumerActionCancellation::Requested
+    );
+    drop((s, call));
+    dispose(h);
 }
 
 #[test]
@@ -1283,7 +1339,8 @@ fn selected_control_revision_fences_owned_exchange_and_retains_late_cleanup() {
                     .body,
                 b"24"
             );
-            assert_eq!(h.probe.validates.load(Ordering::Relaxed), 2);
+            assert_eq!(h.probe.validates.load(Ordering::Relaxed), 1);
+            assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 1);
         }
         assert_eq!(h.probe.drops.load(Ordering::Relaxed), 2);
         drop((call, association, services, settlement));

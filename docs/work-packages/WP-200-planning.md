@@ -247,6 +247,10 @@ Consumer invoke/control mappings. The HTTP Engine-to-Engine and downstream
 datagram Action fixtures cover this capability alongside unchanged synchronous
 finite execution. This adds no
 whole-family, package or milestone acceptance claim.
+The common schema pair describes meaning, while actual role qualification is
+per operation: Invoke input/output, Query output and no application data for
+Cancel acknowledgements. Query's service/media/limits may differ from Invoke's;
+it need not implement an unused input role.
 
 The [Action ownership increment](../evidence/consumer-action-composition.md)
 imports original service owners instead of charging their backing per mapping,

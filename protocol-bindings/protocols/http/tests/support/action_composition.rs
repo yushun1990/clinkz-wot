@@ -6,6 +6,8 @@ struct Declarations {
     data_bytes: AtomicU64,
     data_work: AtomicU64,
     data_temporary: AtomicU64,
+    body_limit: AtomicU64,
+    validations: AtomicUsize,
     media: AtomicBool,
     unsupported: AtomicBool,
     native_bytes: AtomicU64,
@@ -43,12 +45,22 @@ impl ConsumerDataService for OwnedData {
             self.backing.len() as u64 + self.declarations.data_bytes.load(Ordering::Relaxed);
         p.validation_work += self.declarations.data_work.load(Ordering::Relaxed);
         p.temporary_bytes += self.declarations.data_temporary.load(Ordering::Relaxed);
+        let limit = self.declarations.body_limit.load(Ordering::Relaxed);
+        if limit != 0 {
+            p.body_bytes = limit;
+        }
         p
+    }
+    fn available(&self) -> bool {
+        self.inner.available()
     }
     fn supports_schema(&self, s: &PreparedSchema) -> bool {
         !self.declarations.unsupported.load(Ordering::Relaxed) && self.inner.supports_schema(s)
     }
     fn validate(&self, s: &PreparedSchema, p: &Payload) -> CoreResult<()> {
+        self.declarations
+            .validations
+            .fetch_add(1, Ordering::Relaxed);
         let result = self.inner.validate(s, p);
         if p.body.as_ref() == b"24" {
             *self.declarations.last_output.lock().unwrap() = Some(Arc::downgrade(&p.body));
@@ -668,7 +680,7 @@ fn real_http_definition_serves_independent_associations_and_execution_capacity()
 #[test]
 fn real_http_observed_dependency_change_is_irreversible_and_retains_native_output() {
     io().block_on(async {
-        for case in 0..5 {
+        for case in 0..7 {
             let mut producer = Producer::new();
             let sb = bank();
             let db = bank();
@@ -720,7 +732,7 @@ fn real_http_observed_dependency_change_is_irreversible_and_retains_native_outpu
             producer.counts.complete.set(true);
             h.query(now(), &mut budget()).unwrap();
             if case == 0 {
-                declarations[0]
+                declarations[1]
                     .validation_change
                     .store(true, Ordering::Relaxed);
             } else {
@@ -728,15 +740,19 @@ fn real_http_observed_dependency_change_is_irreversible_and_retains_native_outpu
                 match case {
                     1 => declarations[1].revision.store(1, Ordering::Relaxed),
                     2 => declarations[1].native_bytes.store(1, Ordering::Relaxed),
-                    3 => declarations[0].data_work.store(1, Ordering::Relaxed),
-                    _ => declarations[1].access_work.store(1, Ordering::Relaxed),
+                    3 => declarations[1].data_work.store(1, Ordering::Relaxed),
+                    4 => declarations[1].access_work.store(1, Ordering::Relaxed),
+                    5 => declarations[0].revision.store(1, Ordering::Relaxed),
+                    _ => declarations[0].native_bytes.store(1, Ordering::Relaxed),
                 }
             }
             producer.drive(&h, ConsumerActionState::Closed).await;
             declarations[1].revision.store(0, Ordering::Relaxed);
-            declarations[0].data_work.store(0, Ordering::Relaxed);
+            declarations[1].data_work.store(0, Ordering::Relaxed);
             declarations[1].native_bytes.store(0, Ordering::Relaxed);
             declarations[1].access_work.store(0, Ordering::Relaxed);
+            declarations[0].revision.store(0, Ordering::Relaxed);
+            declarations[0].native_bytes.store(0, Ordering::Relaxed);
             assert!(h.query(now(), &mut budget()).is_err());
             let s = h.take_settlement(now(), &mut budget()).unwrap();
             assert_eq!(s.identity(), &identity);
@@ -926,7 +942,7 @@ fn real_http_unused_cancel_dependency_cannot_revoke_original_work_or_query_resul
                         .access_bytes
                         .store(123456, Ordering::Relaxed),
                     3 => declarations[2].native_bytes.store(1, Ordering::Relaxed),
-                    4 => declarations[2].unsupported.store(true, Ordering::Relaxed),
+                    4 => declarations[2].native_work.store(1, Ordering::Relaxed),
                     _ => policies[2].denied.store(true, Ordering::Relaxed),
                 }
                 assert_eq!(
@@ -1002,6 +1018,117 @@ fn real_http_unused_cancel_dependency_cannot_revoke_original_work_or_query_resul
                 }
                 producer.finish();
             }
+        }
+    });
+}
+
+#[test]
+fn real_http_query_output_uses_its_own_body_allowance_and_validator() {
+    io().block_on(async {
+        for (invoke_limit, query_limit, query_valid) in [(2, 8, true), (32, 1, false)] {
+            let mut producer = Producer::new();
+            let sb = bank();
+            let db = bank();
+            let ab = bank();
+            let eb = bank();
+            let declarations = [0, 1, 2].map(|_| Arc::new(Declarations::default()));
+            declarations[0]
+                .body_limit
+                .store(invoke_limit, Ordering::Relaxed);
+            declarations[1]
+                .body_limit
+                .store(query_limit, Ordering::Relaxed);
+            let services = [0, 1, 2]
+                .map(|i| retained(&sb, &declarations[i], (32, 32), Arc::new(Policy::default())));
+            let definition = Rc::new(
+                prepare_operations(
+                    &td(producer.address, None),
+                    [
+                        (&services[0], &declarations[0]),
+                        (&services[1], &declarations[1]),
+                        (&services[2], &declarations[2]),
+                    ],
+                    db.clone(),
+                    &Arc::new(AtomicUsize::new(0)),
+                )
+                .unwrap(),
+            );
+            let owner = instance();
+            let association = ConsumerActionAssociation::try_new(
+                owner.reference(),
+                definition.clone(),
+                ConsumerActionAccess {
+                    invoke: services[0].access.clone(),
+                    query: Some(services[1].access.clone()),
+                    cancel: Some(services[2].access.clone()),
+                },
+                ab.clone(),
+                &mut budget(),
+            )
+            .ok()
+            .unwrap();
+            let calls = ConsumerActions::try_new(1, eb.clone()).unwrap();
+            let h = calls
+                .invoke_action(
+                    &association,
+                    payload(b"12"),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
+                .ok()
+                .unwrap();
+            let identity = h.identity().unwrap();
+            producer.drive(&h, ConsumerActionState::Pending).await;
+            *producer.counts.output.borrow_mut() = Some(if query_valid {
+                b"2400".to_vec()
+            } else {
+                b"24".to_vec()
+            });
+            producer.counts.complete.set(true);
+            h.query(now(), &mut budget()).unwrap();
+            let expected = if query_valid {
+                ConsumerActionState::Completed
+            } else {
+                ConsumerActionState::Closed
+            };
+            let end = Instant::now() + Duration::from_secs(5);
+            loop {
+                let state = h.progress(&mut cx(), now(), &mut budget()).unwrap();
+                if matches!(
+                    state,
+                    ConsumerActionState::Completed | ConsumerActionState::Closed
+                ) {
+                    assert_eq!(
+                        state, expected,
+                        "Invoke limit {invoke_limit}, Query limit {query_limit}"
+                    );
+                    break;
+                }
+                producer.step();
+                assert!(Instant::now() < end);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            assert_eq!(s.identity(), &identity);
+            assert_eq!(s.result().is_ok(), query_valid);
+            assert!(s.native_result().unwrap().is_ok());
+            assert_eq!(
+                declarations[0].validations.load(Ordering::Relaxed),
+                1,
+                "Invoke validates only its input"
+            );
+            assert_eq!(
+                declarations[1].validations.load(Ordering::Relaxed),
+                usize::from(query_valid)
+            );
+            drop((h, calls, association, definition, services, owner));
+            assert!(live(&sb) > 0 && live(&db) > 0);
+            drop(s);
+            for b in [&sb, &db, &ab, &eb] {
+                clean(b);
+            }
+            producer.finish();
         }
     });
 }

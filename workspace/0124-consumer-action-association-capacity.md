@@ -67,6 +67,46 @@ already identify the relevant lifetime, so no dependency graph, grant bitmap,
 new Runtime or scheduler is needed. Physical owners/funding remain retained
 independently of this narrower validity scope.
 
+Output validation exposes a second ownership conflation. The Action has one
+input/output meaning, but its independently selected Forms/services own wire
+representations and resource allowances. The real HTTP counterexample on
+`485b5e5` admits a two-byte Invoke input, then rejects a valid four-byte Query
+output under Invoke's two-byte limit despite Query's eight-byte allowance. The
+converse must also refuse a two-byte result when Query permits only one byte,
+even if Invoke permits 32. A distinct downstream mapping returns the same
+semantic string as plain text while Invoke uses JSON: `ready` is valid text
+output, not a JSON string token. Even with generous body bounds, an Invoke JSON
+validator cannot validate those original Query bytes correctly.
+
+The [TD 1.1 Recommendation](https://www.w3.org/TR/wot-thing-description11/)
+places Action input/output schemas on ActionAffordance (§5.3.1.4) and media on
+Forms (§5.3.4.2). Our inference is that shared semantic constraints cannot confer
+ownership of every operation's representation on Invoke. TD does not prescribe
+this runtime's codec API or guarantee that every query returns completed output;
+the native Binding must actually lift a completed application value.
+
+The simplest contract retains shared schemas once and validates with the
+returning operation's original service/media/body/scratch/work declaration.
+Invoke qualifies input and possible immediate output; Query qualifies output
+without implementing unused input; Cancel status/ack remains native. Its own
+exchange and unread output keep that codec dependency live. Once Invoke's
+exchange retires, its input codec no longer governs a later Query representation;
+original Invoke native continuation and access/authority still govern the
+invocation. Normal and late result paths use the same producer operation index,
+already retained through cleanup. Captured work is paid before poll/close that
+may return output; original media and policy are checked around validation even
+after application authority loss. No data declaration is refreshed.
+
+Keeping Invoke validation would retain the demonstrated mismatch. Taking the
+minimum or maximum of both policies would merge unrelated service obligations
+and still not decode differing media. Requiring every Query to produce Invoke
+bytes would impose unnecessary Binding transcoding and hide original late
+evidence. A universal codec/value conversion layer has no demonstrated need:
+Core's existing schema evaluation already supplies shared constraint meaning.
+Dropping validation after failure would erase late evidence obligations. The
+selected change therefore keeps the original output bytes, selected codec and
+funding together without adding a runtime, conversion carrier or new authority.
+
 This applies the definition/authority split of 0081 and the independent-capacity
 principle of 0121/0123. It does not import their representation as a universal
 carrier. The normative migrations are [Planning](../docs/spec/planning.md#continuing-consumer-action-preparation)

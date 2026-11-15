@@ -486,6 +486,17 @@ exchange retirement and any unread result; merely retaining a sibling mapping
 confers neither permission nor an invocation-wide revocation right. Tokens and
 native response envelopes stay opaque to the Engine.
 
+Shared Action schemas do not select a universal representation. Each mapping
+is paired with its own qualified data service/media and original resource
+declaration for the application-value roles it can return or consume. Invoke
+qualifies input and possible completed output; Query qualifies completed output;
+Cancel's native acknowledgement has no application-value role. A Binding lifts
+only an actual completed value into `ConsumerActionReply::Complete`, retaining
+that exchange's original payload/media. Native pending/status envelopes remain
+Binding-owned. Normal and late completed output is checked by the returning
+operation's service against the shared output schema, without normalization to
+Invoke media or limits. Returning media cannot select a replacement codec.
+
 The exchange owner remains retained after response/error until successful local
 retirement, including late observations. Pending or failed retirement cannot
 release its slot/backing/funding. `abort_local` consumes the complete owner under

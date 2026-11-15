@@ -275,9 +275,14 @@ adds shared physical service funding, original prepared-declaration refusal,
 one actual definition/three associations/two independent capacities over real HTTP,
 original instance quotas through settlement disposal and independent access.
 Complete qualification remains at association/admission; live invalidation follows
-original Invoke obligations and the operation owning an exchange/unread result.
+original Invoke native/authority obligations and the operation owning an exchange/unread result.
 Independent unused controls and refusals before native start leave unrelated
 accepted work usable; relevant admitted failures retain original late cleanup.
+Shared Action output meaning is checked with the returning operation's captured
+codec, media and body/scratch/work policy. Retired Invoke input validation does
+not govern Query output. Real HTTP contrasts independent body allowances;
+downstream datagrams contrast JSON/plain-text media, output-only Query support,
+exact selected validation work and changed-declaration refusal during late cleanup.
 The root QueryAllActions fixture shares one Consumer authority across separate
 finite and continuing capacity. Managed mixed HTTP/MQTT composition, reusable
 Producer exposure composition and broader profiles remain separate work.

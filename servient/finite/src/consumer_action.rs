@@ -2,7 +2,8 @@
 //! No TD, native token interpretation, URL synthesis, retry or protocol cases.
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
-    action::raw_action_output_shape, consumer::*, consumer_action::*, host_accounts::*, *,
+    action::raw_action_output_shape, consumer::*, consumer_action::*, data_schema::PreparedSchema,
+    host_accounts::*, *,
 };
 use clinkz_wot_foundation::{MonotonicInstant, ResourceKind as K, WorkBudget, WorkClass as W};
 use core::{
@@ -101,12 +102,13 @@ impl Selected<'_> {
         state: &State,
         control: &Control,
         continuation: Option<&dyn Any>,
+        schema: Option<&PreparedSchema>,
     ) -> CoreResult<()> {
         control.check(state)?;
-        self.check_services()?;
+        self.check_services(schema)?;
         control.check(state)?;
         let destination = self.op.mapping.destination(continuation)?;
-        self.check_services()?;
+        self.check_services(schema)?;
         control.check(state)?;
         let result = self.access.owner.authorize_instance(
             &control.identity.consumer,
@@ -115,13 +117,23 @@ impl Selected<'_> {
             self.op.operation,
         );
         // Preserve dependency loss even when the policy callback also refuses.
-        self.check_services()?;
+        self.check_services(schema)?;
         control.check(state)?;
         result
     }
-    fn check_services(&self) -> CoreResult<()> {
-        self.op.check_dependencies()?;
-        self.access.check()
+    fn check_services(&self, schema: Option<&PreparedSchema>) -> CoreResult<()> {
+        self.op.check_native_dependencies()?;
+        self.access.check()?;
+        self.check_data(schema)
+    }
+    fn check_data(&self, schema: Option<&PreparedSchema>) -> CoreResult<()> {
+        if let Some(schema) = schema {
+            self.op.check_data_dependencies()?;
+            if !self.op.data.supports_schema(schema) {
+                return Err(invalid());
+            }
+        }
+        Ok(())
     }
 }
 struct Association {
@@ -147,13 +159,10 @@ impl Association {
     }
     /// One operation's original qualification, without importing unused
     /// siblings into an admitted invocation's invalidation scope.
-    fn check_operation(&self, operation: usize) -> CoreResult<()> {
+    fn check_operation(&self, operation: usize, schema: Option<&PreparedSchema>) -> CoreResult<()> {
         let selected = self.selected(operation)?;
-        selected.check_services()?;
+        selected.check_services(schema)?;
         let definition = self.definition.input();
-        if !definition.schemas.supports(selected.op.data.service()) {
-            return Err(invalid());
-        }
         if operation != 0 {
             selected
                 .op
@@ -176,29 +185,24 @@ impl Association {
     }
     fn validate(
         &self,
-        schema: Option<&clinkz_wot_core::data_schema::PreparedSchema>,
+        operation: usize,
+        schema: Option<&PreparedSchema>,
         payload: Option<&Payload>,
     ) -> CoreResult<()> {
-        let current = || {
-            let d = self.definition.input();
-            let op = &d.invoke;
-            if !op.data.available()
-                || op.data.policy() != op.data_policy
-                || op.data_policy.retained_bytes != op.data.backing_bytes()
-                || op.data.content_type() != &*op.content_type
-                || !d.schemas.supports(op.data.service())
-            {
-                return Err(invalid());
-            }
-            Ok(())
-        };
-        current()?;
-        let selected = self.selected(0)?;
+        let selected = self.selected(operation)?;
         match (schema, payload) {
             (None, None) => Ok(()),
-            (Some(s), Some(p)) if p.body.len() as u64 <= selected.policy.body_bytes => {
+            (Some(s), Some(p))
+                if p.body.len() as u64 <= selected.policy.body_bytes
+                    && p.content_type == *selected.op.content_type
+                    && p.content_coding.is_none() =>
+            {
+                // Late observations use the same original representation even
+                // after authority loss. Never substitute the Invoke codec or
+                // refresh a changed service's declaration before callback entry.
+                selected.check_data(Some(s))?;
                 let result = selected.op.data.validate(s, p);
-                current()?;
+                selected.check_data(Some(s))?;
                 result
             }
             _ => Err(invalid()),
@@ -621,14 +625,21 @@ impl ConsumerActions {
             reserved.attach(control.clone());
             let invoke = d.selected(0)?;
             let mut native = 0;
-            let mut temporary = invoke.policy.temporary_bytes;
+            let mut temporary = 0;
             let mut continuation = 0;
             let mut response = 0;
             for s in d.operations().into_iter().flatten() {
                 native = native.max(s.bounds.exchange_bytes);
-                temporary = temporary
-                    .max(s.bounds.temporary_bytes)
-                    .max(s.data_policy.temporary_bytes);
+                temporary = temporary.max(s.bounds.temporary_bytes);
+                let schemas = &d.definition.input().schemas;
+                let has_data = match s.operation {
+                    Operation::InvokeAction => schemas.input.is_some() || schemas.output.is_some(),
+                    Operation::QueryAction => schemas.output.is_some(),
+                    _ => false,
+                };
+                if has_data {
+                    temporary = temporary.max(s.data_policy.temporary_bytes);
+                }
                 continuation = continuation.max(s.bounds.continuation_bytes);
                 response = response.max(s.bounds.response_bytes);
             }
@@ -674,10 +685,11 @@ impl ConsumerActions {
                 funding.try_reserve_exact(1).map_err(|_| busy())?;
                 funding.extend(reserve(&d.bank, &[(K::PendingHandlerCallsGlobalMax, 1)])?);
             }
-            prepay(&invoke, budget)?;
-            invoke.check(state, &control, None)?;
-            d.validate(d.definition.input().schemas.input.as_ref(), input.as_ref())?;
-            invoke.check(state, &control, None)?;
+            let schema = d.definition.input().schemas.input.as_ref();
+            prepay(&invoke, budget, schema.is_some())?;
+            invoke.check(state, &control, None, schema)?;
+            d.validate(0, schema, input.as_ref())?;
+            invoke.check(state, &control, None, schema)?;
             d.check_dependencies()?;
             control.check(state)?;
             // Allocate the separately funded record before native effects. Input
@@ -850,11 +862,18 @@ impl ConsumerActionHandle {
         }
         let association = v.association.clone();
         let selected = association.selected(operation)?;
-        prepay(&selected, budget)?;
+        // Controls carry no application input. Their output validation is paid
+        // separately before native progress can return a completed value.
+        prepay(&selected, budget, false)?;
+        let schema = if operation == 1 {
+            association.definition.input().schemas.output.as_ref()
+        } else {
+            None
+        };
         let continuation = v.continuation.as_deref().ok_or_else(invalid)?;
         let preflight = selected
-            .check(&self.state, &self.control, Some(continuation))
-            .and_then(|()| association.check_operation(operation));
+            .check(&self.state, &self.control, Some(continuation), schema)
+            .and_then(|()| association.check_operation(operation, schema));
         // The requested control has no admitted work yet. Refusal cannot
         // withdraw Invoke authority, but its callbacks may invalidate the
         // invocation's original dependencies. Record that observation before
@@ -1036,14 +1055,28 @@ impl ConsumerActionSettlement {
     }
 }
 impl Invocation {
-    fn check_dependencies(&self) -> CoreResult<()> {
-        // Invoke owns the continuation and common data obligation throughout.
-        // A control additionally governs only its exchange or retained result.
-        self.association.check_operation(0)?;
-        if self.operation != 0 {
-            self.association.check_operation(self.operation)?;
+    fn live_output_schema(&self) -> Option<&PreparedSchema> {
+        if self.operation != 2
+            && (self.exchange.is_some()
+                || matches!(self.reply, Some(ConsumerActionReply::Complete(_)))
+                || matches!(self.native_result, Some(Ok(_))))
+        {
+            self.association.definition.input().schemas.output.as_ref()
+        } else {
+            None
         }
-        Ok(())
+    }
+    fn check_dependencies(&self) -> CoreResult<()> {
+        // Invoke owns native continuation and authority throughout. A retired
+        // input codec does not own a Query representation. Only the exchange
+        // or unread completed value keeps its actual output codec live.
+        self.association.check_operation(0, None)?;
+        if self.operation != 0 {
+            self.association.check_operation(self.operation, None)?;
+        }
+        self.association
+            .selected(self.operation)?
+            .check_data(self.live_output_schema())
     }
     fn close(&mut self, cause: CoreError) {
         self.control.record(cause);
@@ -1082,7 +1115,12 @@ impl Invocation {
             return Err(busy());
         }
         if let Err(e) = selected
-            .check(state, &self.control, self.continuation.as_deref())
+            .check(
+                state,
+                &self.control,
+                self.continuation.as_deref(),
+                self.live_output_schema(),
+            )
             .and_then(|()| self.check_dependencies())
         {
             self.close(e);
@@ -1101,18 +1139,16 @@ impl Invocation {
             .selected(self.operation)
             .expect("captured operation");
         // All callback and late validation work is paid before native progress.
-        if prepay(&selected, budget).is_err() {
-            return;
-        }
-        if !pay(
-            budget,
-            W::CodecInputBytes,
-            self.association.selected(0).unwrap().policy.validation_work,
-        ) {
+        if prepay(&selected, budget, self.live_output_schema().is_some()).is_err() {
             return;
         }
         if self.first_cause.is_none()
-            && let Err(e) = selected.check(state, &self.control, self.continuation.as_deref())
+            && let Err(e) = selected.check(
+                state,
+                &self.control,
+                self.continuation.as_deref(),
+                self.live_output_schema(),
+            )
         {
             self.close(e);
         }
@@ -1199,6 +1235,7 @@ impl Invocation {
                                 .response_bytes
                     }) {
                     self.association.validate(
+                        self.operation,
                         self.association.definition.input().schemas.output.as_ref(),
                         output.data(),
                     )
@@ -1240,19 +1277,24 @@ impl Invocation {
         self.fence(state);
         if self.first_cause.is_none() {
             let s = self.association.selected(self.operation).unwrap();
-            if let Err(e) = s.check(state, &self.control, self.continuation.as_deref()) {
+            if let Err(e) = s.check(
+                state,
+                &self.control,
+                self.continuation.as_deref(),
+                self.live_output_schema(),
+            ) {
                 // Terminal state must not suppress fencing of this late result.
                 self.close(e);
             }
         }
     }
 }
-fn prepay(s: &Selected<'_>, budget: &mut WorkBudget) -> CoreResult<()> {
+fn prepay(s: &Selected<'_>, budget: &mut WorkBudget, codec: bool) -> CoreResult<()> {
     let access = s.access_work.checked_mul(2).ok_or_else(invalid)?;
     if !pay(budget, W::ProviderProbes, access)
         || !pay(budget, W::BindingPolls, s.bounds.poll_work)
         || !pay(budget, W::CleanupItems, 1)
-        || !pay(budget, W::CodecInputBytes, s.policy.validation_work)
+        || (codec && !pay(budget, W::CodecInputBytes, s.policy.validation_work))
     {
         return Err(busy());
     }

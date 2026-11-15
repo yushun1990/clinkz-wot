@@ -47,6 +47,9 @@ pub trait ConsumerActionExchange {
 /// `start` refusal has no native effects; success captures all borrowed input.
 /// Controls explicitly check compatibility with the original invoke mapping;
 /// different registrations/Bindings are allowed when they implement it.
+/// Completed values retain this operation's representation, paired with its
+/// captured output data service. Native status/ack envelopes stay Binding-owned;
+/// no conversion to the original Invoke representation is required or implied.
 /// Metadata and continuation-compatibility inspection are bounded, allocation-
 /// free passive operations; execution checks them without entering native I/O.
 pub trait ConsumerActionMapping {
@@ -94,6 +97,25 @@ pub struct ConsumerActionDefinitionInput {
 /// Reusable source-free definition. Contains no Consumer, permission, vacant
 /// invocation slot or native continuation. Endpoints/configuration stay specialized.
 pub struct ConsumerActionDefinition(ConsumerActionDefinitionInput);
+
+/// Shared Action meaning, qualified only for application-value roles actually
+/// carried by this operation. Native status/acknowledgement envelopes belong to
+/// the Binding; CancelAction carries no application input or completed output.
+pub fn action_data_supported(
+    operation: Operation,
+    schemas: &ValueSchemas,
+    data: &dyn ConsumerDataService,
+) -> bool {
+    match operation {
+        Operation::InvokeAction => schemas.supports(data),
+        Operation::QueryAction => schemas
+            .output
+            .as_ref()
+            .is_none_or(|s| data.supports_schema(s)),
+        Operation::CancelAction => true,
+        _ => false,
+    }
+}
 impl ConsumerActionDefinition {
     /// Source-free construction checks pairing, not TD support. Planning alone
     /// admits TD operation applicability and complete common/native semantics.
@@ -126,7 +148,9 @@ impl ConsumerActionDefinition {
         ] {
             let Some(selected) = selected else { continue };
             selected.check_dependencies()?;
-            if selected.operation != operation || !input.schemas.supports(selected.data.service()) {
+            if selected.operation != operation
+                || !action_data_supported(operation, &input.schemas, selected.data.service())
+            {
                 return Err(invalid());
             }
             if operation != Operation::InvokeAction {
@@ -146,6 +170,12 @@ impl ConsumerActionDefinition {
 }
 impl ConsumerActionOperation {
     pub fn check_dependencies(&self) -> CoreResult<()> {
+        self.check_native_dependencies()?;
+        self.check_data_dependencies()
+    }
+    /// Original native mapping/continuation qualification, independent of a
+    /// codec whose application-value role may already have retired.
+    pub fn check_native_dependencies(&self) -> CoreResult<()> {
         let b = self.bounds;
         if self.mapping.identity() != self.identity
             || self.mapping.operation() != self.operation
@@ -155,7 +185,14 @@ impl ConsumerActionOperation {
             || b.response_bytes == 0
             || b.continuation_bytes == 0
             || self.endpoint.len() > 256
-            || !self.data.available()
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+    /// Original representation and resource declaration, never a new snapshot.
+    pub fn check_data_dependencies(&self) -> CoreResult<()> {
+        if !self.data.available()
             || self.data.policy() != self.data_policy
             || self.data_policy.retained_bytes != self.data.backing_bytes()
             || self.data_policy.validation_work == 0

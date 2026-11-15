@@ -88,6 +88,9 @@ adds reuse of one actual endpoint-specialized continuing definition across
 independent Consumers and execution capacities, original service funding and
 prepared-declaration refusal. General security/schema, cross-endpoint Action
 lowering, constrained execution and production qualification remain open.
+Completed output now preserves the returning operation's representation and
+data limits against shared Action meaning, with independent HTTP body-allowance
+and downstream JSON/plain-text evidence at the same scoped increment.
 
 The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
 proves the bounded endpoint NoSec HTTP subset, including

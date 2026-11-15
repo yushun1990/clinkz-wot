@@ -373,9 +373,14 @@ independent `ValueSchemas` roles. A borrowed census prepays construction and
 rollback work, checks aggregate destruction against the cleanup-step allowance,
 and reserves variable backing before constructing the constraints. One original
 owned pair serves invoke/query/cancel selection; subsequent semantic loans compare
-borrowed assertions without rebuilding it. Each actual selected service still
-qualifies the complete retained schemas. No native compiler needs to interpret
-them again to obtain the same common meaning.
+borrowed assertions without rebuilding it. Each actual selected data service
+qualifies the complete schemas for its application-value roles: Invoke input
+and possible completed output, Query completed output, and no application value
+for Cancel. Query need not support the input schema. Native status/acknowledgement
+encoding is the mapping's responsibility. Different operations may retain
+different valid media and body/scratch/work policies for the same output meaning;
+Query output is never required to fit Invoke's representation or allowance.
+No native compiler needs to reinterpret constraints to obtain common meaning.
 Native vocabulary, variable address placement/matching and response conventions
 stay in the Binding; variable scope and DataSchema interpretation are shared.
 The reusable definition owns every selected mapping, both Action data roles,

@@ -961,7 +961,7 @@ and terminal states. The [invoke_action example](examples/invoke_action.rs)
 shows retained service adoption, association binding and capacity construction.
 `query` and `request_cancel` are explicit described operations. POST 202 with the
 bounded native id means accepted work, never a terminal result. GET `running`
-remains pending; `completed` supplies output for the original captured validator;
+remains pending; `completed` supplies output for that returning mapping's captured validator;
 `failed` is a remote execution failure. DELETE `cancelling` acknowledges only a
 request; `terminal` acknowledges no result. A later query must obtain completion.
 The default access service checks the actual expanded control target before I/O.
@@ -1003,7 +1003,7 @@ fenced settlement with the original native output still available as evidence.
 Once successful handoff has occurred, later revocation does not retract that value.
 If a native poll fails but retirement returns a late completion, `native_error()`
 keeps the poll error while `native_result()` keeps the actual late output.
-The captured validator still checks it; neither a valid late result nor a later
+The returning exchange's original validator still checks it; neither a valid late result nor a later
 cancellation can erase the original failure or silently retry the Action.
 
 Run `serve_action`, save its printed qualified TD to `TD.json`, then run:
@@ -1019,8 +1019,11 @@ The HTTP integration joins real Engine roles and covers pending/completed and
 cancellation paths, unsupported mappings, validation, capacity, replacements,
 malformed native replies, abandonment and final socket/account release. The
 independent downstream fixture executes real datagrams using different invoke and
-control Binding implementations, including late invalid completion during blocked
-and failed cleanup. These tests do not establish general Action interoperability,
+control Binding implementations, including independent JSON Invoke/plain-text
+Query representations and late completion during blocked and failed cleanup.
+The HTTP mapping itself remains JSON; completed Query data uses Query's captured
+service and body/scratch/work limits against the shared Action output schema.
+It is not constrained by Invoke's allowance. These tests do not establish general Action interoperability,
 HTTPS, broader DataSchema/security, constrained execution, automatic progress or
 remote effect certainty.
 

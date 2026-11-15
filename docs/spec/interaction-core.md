@@ -442,14 +442,25 @@ Each admitted invocation owns its association, unique local handle/control,
 opaque native continuation and normal/late evidence through settlement and
 cleanup. The Binding's token never becomes logical authority. Invoke acceptance
 exposes Pending, not a completed result. Explicit query/cancel can use different
-actual mappings and independently bound access services. The original invoke
-data service validates completion, including late output after cancellation;
-native output, validation error, first local cause, cleanup error and effect
+actual mappings and independently bound access services. One immutable Action
+input/output schema pair defines value meaning across those mappings. Invoke's
+captured data service validates its input and any immediate completed output;
+Query's captured data service validates completed output returned by Query,
+including late output during its retirement. Each uses its own original media,
+body/scratch/work policy and native result bound. The value need not fit Invoke's
+representation or resource allowance when it arrives through Query. No common
+codec, conversion to Invoke bytes or codec selection from untrusted media is
+implied. Settlement lends the original returning operation's bytes and media.
+Cancel acknowledgements and native status envelopes are Binding-owned facts,
+not application values requiring the Action input/output schemas.
+Native output, validation error, first local cause, cleanup error and effect
 uncertainty remain independently observable. No successor association/capacity
 can replace an invocation's original Consumer, services, mappings or token.
 Complete association/admission qualification is distinct from admitted-work
-invalidation: original Invoke obligations and the current exchange/unread result
-retain their own dependencies. An unavailable unused control, or its refusal
+invalidation: original Invoke native/authority obligations and the current
+exchange/unread result retain their own dependencies. An input codec whose
+exchange has retired does not govern an independently represented Query result.
+An unavailable unused control, or its refusal
 before native effects, cannot revoke unrelated accepted work. A fully retired
 nonterminal control no longer governs the invocation; its original continuation
 and cancellation evidence remain. Exact checks and sticky failure ownership
@@ -467,7 +478,7 @@ subsequent revocation does not retract a value already handed to the caller.
 A native poll error is retained immediately as `native_error()` and the first
 local cause when none exists. Retirement still owns its original response
 opportunity. Any late output returned by `poll_close` is retained in
-`native_result()` and checked by the captured invoke validator; it cannot erase
+`native_result()` and checked by that exchange's captured output validator; it cannot erase
 the earlier error, skip validation or establish application success.
 
 Cancellation request acknowledgement and already-terminal acknowledgement grant

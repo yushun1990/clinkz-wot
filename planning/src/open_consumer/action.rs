@@ -334,7 +334,7 @@ impl ConsumerActionRegistry {
                     || r.services.data.policy() != policy
                     || !r.services.data.available()
                     || r.services.data.content_type() != content_type
-                    || !schemas.supports(r.services.data.service())
+                    || !action_data_supported(operation, schemas, r.services.data.service())
                     || r.services.access.work() != access_work
                     || r.services.access.security_revision() != revision
                     || !r
@@ -355,7 +355,7 @@ impl ConsumerActionRegistry {
                 .supports_security(&clinkz_wot_core::security::SecurityRequirement::NOSEC)
                 || !r.services.data.available()
                 || content_type != facts.content_type
-                || !schemas.supports(r.services.data.service())
+                || !action_data_supported(operation, schemas, r.services.data.service())
             {
                 continue;
             }

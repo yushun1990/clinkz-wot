@@ -79,6 +79,11 @@ the existing qualified Producer; the independently Cargo-linked Action fixture
 uses different invoke/control implementations and real datagrams to test this
 boundary, including blocked/error cleanup and late invalid completion. Its
 evidence supplements the existing synchronous finite and notification regressions.
+The returning mapping preserves completed bytes/media under its own captured
+data service and bounds, with shared Action output meaning. The downstream
+fixture also contrasts JSON Invoke with plain-text Query, distinct limits/work
+and late output. This is no claim that every native Query status is application
+output or that Bindings must convert results to Invoke's representation.
 
 HTTP SSE does not determine general fields, thread/atomic requirements, retry,
 reply cardinality or one-connection-per-subscription policy. Native streams,

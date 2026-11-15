@@ -731,9 +731,10 @@ fn action_meaning_is_built_once_and_actual_support_work_and_schema_bounds_still_
             drop(definition);
         } else {
             assert!(result.is_err(), "case {case}");
-            assert!(
-                traces.lock().unwrap().is_empty(),
-                "refusal before native compilation"
+            assert_eq!(
+                traces.lock().unwrap().len(),
+                usize::from(case == 1),
+                "Cancel needs no application-schema support; unsupported value roles never compile"
             );
         }
         drop((registry, thing));
@@ -1076,7 +1077,12 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
             match reason {
                 0 => owner.revoke(),
                 1 => p.denied.store(true, Ordering::Relaxed),
-                2 => p.unavailable.store(true, Ordering::Relaxed),
+                2 => {
+                    // The shared codec becomes a live dependency when a Query
+                    // exchange owns a potential application result.
+                    h.query(now(), &mut budget()).unwrap();
+                    p.unavailable.store(true, Ordering::Relaxed);
+                }
                 3 => {
                     h.progress(
                         &mut cx(),

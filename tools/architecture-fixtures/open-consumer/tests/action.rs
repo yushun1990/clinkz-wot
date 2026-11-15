@@ -21,6 +21,8 @@ use std::{
 struct NativeProbe {
     close_blocked: AtomicBool,
     fail_close: AtomicBool,
+    fail_with_late: AtomicBool,
+    polls: AtomicUsize,
     replies: AtomicUsize,
     live: AtomicUsize,
     drops_funded: AtomicUsize,
@@ -33,6 +35,7 @@ struct Native {
     peer: SocketAddr,
     endpoint: Box<str>,
     operation: Operation,
+    media: &'static str,
     probe: Arc<NativeProbe>,
 }
 struct Invoke(Native);
@@ -76,6 +79,8 @@ impl Native {
             bytes,
             sent: false,
             answered: false,
+            media: self.media,
+            late: None,
             probe: self.probe.clone(),
         }))
     }
@@ -131,10 +136,13 @@ struct Exchange {
     bytes: Vec<u8>,
     sent: bool,
     answered: bool,
+    media: &'static str,
+    late: Option<ConsumerActionReply>,
     probe: Arc<NativeProbe>,
 }
 impl ConsumerActionExchange for Exchange {
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>> {
+        self.probe.polls.fetch_add(1, Ordering::Relaxed);
         let s = self.socket.as_ref().unwrap();
         if !self.sent {
             s.send(&self.bytes).unwrap();
@@ -147,15 +155,21 @@ impl ConsumerActionExchange for Exchange {
             Ok(n) => {
                 self.answered = true;
                 self.probe.replies.fetch_add(1, Ordering::Relaxed);
-                Poll::Ready(match &data[..n] {
+                let reply = match &data[..n] {
                     b"ACCEPT 7" => Ok(ConsumerActionReply::Accepted(Box::new(Token(7)))),
                     b"WAIT" => Ok(ConsumerActionReply::Pending),
                     b"STOP REQUESTED" => Ok(ConsumerActionReply::CancelRequested),
                     bytes if bytes.starts_with(b"OUTPUT ") => Ok(ConsumerActionReply::Complete(
-                        InteractionOutput::with_data(Payload::new(&bytes[7..], "application/json")),
+                        InteractionOutput::with_data(Payload::new(&bytes[7..], self.media)),
                     )),
                     _ => Err(invalid()),
-                })
+                };
+                if self.probe.fail_with_late.swap(false, Ordering::Relaxed) {
+                    self.late = Some(reply.unwrap());
+                    Poll::Ready(Err(invalid()))
+                } else {
+                    Poll::Ready(reply)
+                }
             }
         }
     }
@@ -167,7 +181,7 @@ impl ConsumerActionExchange for Exchange {
             return Poll::Pending;
         }
         self.socket = None;
-        Poll::Ready(Ok(None))
+        Poll::Ready(Ok(self.late.take()))
     }
     fn abort_local(self: Box<Self>) {
         drop(self);
@@ -195,6 +209,7 @@ impl Drop for Exchange {
 struct Compiler {
     id: BindingRegistrationIdentity,
     invoke: bool,
+    media: &'static str,
     peer: SocketAddr,
     probe: Arc<NativeProbe>,
 }
@@ -223,6 +238,7 @@ impl ConsumerActionPreparation for Compiler {
             peer: self.peer,
             endpoint: input.endpoint.into(),
             operation: input.operation,
+            media: self.media,
             probe: self.probe.clone(),
         };
         Ok(Some(if self.invoke {
@@ -297,6 +313,7 @@ fn client(
                             i,
                         ),
                         invoke: i == 0,
+                        media: "application/json",
                         peer,
                         probe: probe.clone(),
                     }),
@@ -541,4 +558,408 @@ fn last_local_owner_uses_funded_nonblocking_abort_without_remote_cancel() {
         std::io::ErrorKind::WouldBlock
     );
     clean(&b);
+}
+
+#[derive(Default)]
+struct CodecProbe {
+    validations: AtomicUsize,
+    unavailable: AtomicBool,
+    changed: AtomicBool,
+}
+/// Two actual representations of one output schema. An output-only variant
+/// deliberately cannot validate the Action's integer input.
+struct Representation {
+    operation: Operation,
+    body: u64,
+    output_only: bool,
+    probe: Arc<CodecProbe>,
+    bank: Arc<HostResourceAccounts>,
+}
+impl ConsumerDataService for Representation {
+    fn content_type(&self) -> &str {
+        if self.operation == Operation::InvokeAction {
+            "application/json"
+        } else {
+            "text/plain"
+        }
+    }
+    fn supports_schema(&self, schema: &data_schema::PreparedSchema) -> bool {
+        use data_schema::{PreparedSchema as S, ValueType as T};
+        match self.operation {
+            Operation::InvokeAction => true,
+            Operation::QueryAction => {
+                matches!(schema, S::String { .. } | S::Type(T::String))
+                    || (!self.output_only
+                        && matches!(schema, S::Integer { .. } | S::Type(T::Integer)))
+            }
+            _ => false, // A Cancel acknowledgement is not an application value.
+        }
+    }
+    fn available(&self) -> bool {
+        !self.probe.unavailable.load(Ordering::Relaxed)
+    }
+    fn policy(&self) -> ConsumerDataPolicy {
+        ConsumerDataPolicy {
+            retained_bytes: 64,
+            temporary_bytes: match self.operation {
+                Operation::InvokeAction => 64,
+                Operation::QueryAction => 1024,
+                _ => 2048, // This unused application-codec role needs no scratch.
+            },
+            body_bytes: self.body,
+            encoded_selection_bytes: 0,
+            validation_work: if self.operation == Operation::InvokeAction {
+                47
+            } else {
+                7
+            } + u64::from(self.probe.changed.load(Ordering::Relaxed)),
+        }
+    }
+    fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
+        self.probe.validations.fetch_add(1, Ordering::Relaxed);
+        assert!(
+            self.bank
+                .account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
+                .used()
+                >= self.policy().temporary_bytes
+        );
+        if payload.content_type != self.content_type()
+            || payload.content_coding.is_some()
+            || payload.body.len() as u64 > self.body
+        {
+            return Err(invalid());
+        }
+        if self.operation == Operation::InvokeAction {
+            return clinkz_wot_codec_json::validate_payload(schema, payload);
+        }
+        // The native text is borrowed directly, with shared constraint meaning
+        // evaluated by Core. There is no intermediate JSON or conversion API.
+        struct Text<'a>(&'a str);
+        impl data_schema::ValueAccess for Text<'_> {
+            type Node = Option<i64>;
+            fn kind(
+                &self,
+                node: Self::Node,
+            ) -> Result<data_schema::ValueType, data_schema::SchemaViolation> {
+                Ok(if node.is_some() {
+                    data_schema::ValueType::Integer
+                } else {
+                    data_schema::ValueType::String
+                })
+            }
+            fn number(
+                &self,
+                node: Self::Node,
+            ) -> Result<data_schema::NumberValue<'_>, data_schema::SchemaViolation> {
+                node.map(data_schema::NumberValue::Signed)
+                    .ok_or(data_schema::SchemaViolation::Value)
+            }
+            fn string_length(&self, _: Self::Node) -> Result<usize, data_schema::SchemaViolation> {
+                Ok(self.0.chars().count())
+            }
+            fn property(
+                &self,
+                _: Self::Node,
+                _: &str,
+            ) -> Result<Option<Self::Node>, data_schema::SchemaViolation> {
+                Err(data_schema::SchemaViolation::Value)
+            }
+        }
+        let text = std::str::from_utf8(&payload.body).map_err(|_| invalid())?;
+        let node = if schema.accepts_kind(data_schema::ValueType::Integer) {
+            Some(text.parse::<i64>().map_err(|_| invalid())?)
+        } else {
+            None
+        };
+        schema.validate(&Text(text), node).map_err(|_| invalid())
+    }
+}
+fn representation_client(
+    peer: SocketAddr,
+    bank: &Arc<HostResourceAccounts>,
+    native: &Arc<NativeProbe>,
+    codecs: &[Arc<CodecProbe>; 3],
+    limits: (u64, u64),
+    output_only: bool,
+    owner: &ConsumerInstance,
+) -> (ConsumerActionAssociation, ConsumerActions) {
+    *native.bank.lock().unwrap() = Some(bank.clone());
+    let operations = [
+        Operation::InvokeAction,
+        Operation::QueryAction,
+        Operation::CancelAction,
+    ];
+    let access = ConsumerServiceOwner::retain_access(Arc::new(Access), bank)
+        .ok()
+        .unwrap();
+    let registry = ConsumerActionRegistry::try_new(
+        operations
+            .into_iter()
+            .enumerate()
+            .map(|(i, operation)| ConsumerActionRegistration {
+                preparation: Box::new(Compiler {
+                    id: BindingRegistrationIdentity::new(
+                        BindingId::new(80 + i as u32),
+                        BindingGeneration::INITIAL,
+                        configuration().configuration(),
+                        configuration().native_compatibility().unwrap(),
+                        i as u32,
+                    ),
+                    invoke: i == 0,
+                    media: if i == 0 {
+                        "application/json"
+                    } else {
+                        "text/plain"
+                    },
+                    peer,
+                    probe: native.clone(),
+                }),
+                services: RetainedConsumerServices {
+                    data: ConsumerServiceOwner::retain_data(
+                        Arc::new(Representation {
+                            operation,
+                            body: if i == 0 { limits.0 } else { limits.1 },
+                            output_only,
+                            probe: codecs[i].clone(),
+                            bank: bank.clone(),
+                        }),
+                        bank,
+                    )
+                    .ok()
+                    .unwrap(),
+                    access: access.clone(),
+                },
+            })
+            .collect(),
+    )
+    .unwrap();
+    let td = serde_json::from_value(serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"independent representations",
+        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "actions":{"run":{"input":{"type":"integer"},
+            "output":{"type":"string", "minLength":5, "maxLength":5}, "forms":[
+                {"href":format!("linkedudp://{peer}/invoke"),"contentType":"application/json","op":"invokeaction"},
+                {"href":format!("linkedudp://{peer}/query"),"contentType":"text/plain","op":"queryaction"},
+                {"href":format!("linkedudp://{peer}/cancel"),"contentType":"text/plain","op":"cancelaction"}
+        ]}}})).unwrap();
+    let selectors = ConsumerActionSelectors {
+        invoke: ConsumerSelector {
+            form: Some(0),
+            binding: Some(BindingId::new(80)),
+        },
+        query: ConsumerSelector {
+            form: Some(1),
+            binding: Some(BindingId::new(81)),
+        },
+        cancel: ConsumerSelector {
+            form: Some(2),
+            binding: Some(BindingId::new(82)),
+        },
+    };
+    let definition = registry
+        .prepare_action(
+            &td,
+            "run",
+            selectors,
+            GatewayDefaultV1::LIMITS,
+            bank.clone(),
+            &mut work(),
+        )
+        .unwrap();
+    drop((td, registry));
+    let association = ConsumerActionAssociation::try_new(
+        owner.reference(),
+        Rc::new(definition),
+        ConsumerActionAccess {
+            invoke: access.clone(),
+            query: Some(access.clone()),
+            cancel: Some(access),
+        },
+        bank.clone(),
+        &mut work(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    (
+        association,
+        ConsumerActions::try_new(1, bank.clone()).unwrap(),
+    )
+}
+
+#[test]
+fn independent_query_representation_owns_schema_validation_limits_and_exact_work() {
+    // Same Action output meaning, independent body limits and codecs. Also
+    // reject a valid text representation that violates the shared schema.
+    for (invoke_limit, query_limit, output_only, answer, valid) in [
+        (2, 64, false, b"OUTPUT ready".as_slice(), true),
+        (64, 64, false, b"OUTPUT ready".as_slice(), true),
+        (64, 64, true, b"OUTPUT ready".as_slice(), true),
+        (64, 4, true, b"OUTPUT ready".as_slice(), false),
+        (64, 64, true, b"OUTPUT no".as_slice(), false),
+    ] {
+        let (address, peer) = peer(vec![
+            (b"INVOKE 12", b"ACCEPT 7"),
+            (b"CANCEL 7", b"STOP REQUESTED"),
+            (b"QUERY 7", answer),
+        ]);
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let native = Arc::new(NativeProbe::default());
+        let codecs = [0, 1, 2].map(|_| Arc::new(CodecProbe::default()));
+        let owner = instance();
+        let runtime = representation_client(
+            address,
+            &bank,
+            &native,
+            &codecs,
+            (invoke_limit, query_limit),
+            output_only,
+            &owner,
+        );
+        let h = runtime
+            .1
+            .invoke_action(
+                &runtime.0,
+                Some(Payload::new(b"12".as_slice(), "application/json")),
+                Deadline::NONE,
+                now(),
+                &mut work(),
+            )
+            .ok()
+            .unwrap();
+        let identity = h.identity().unwrap();
+        assert_eq!(
+            bank.account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
+                .used(),
+            1024
+        );
+        drive(&h, ConsumerActionState::Pending);
+        // The generous, both-role case isolates media while Invoke remains
+        // available. Other cases also prove retirement of its codec dependency.
+        codecs[0]
+            .unavailable
+            .store(invoke_limit == 2 || output_only, Ordering::Relaxed);
+        // Controls carry no application input; Cancel has no codec roles at all.
+        let mut control_credit = work().with_remaining(WorkClass::CodecInputBytes, 0);
+        h.request_cancel(now(), &mut control_credit).unwrap();
+        let start = Instant::now();
+        while h.progress(&mut cx(), now(), &mut control_credit).unwrap()
+            != ConsumerActionState::Pending
+        {
+            assert!(start.elapsed() < Duration::from_secs(2));
+            std::thread::yield_now();
+        }
+        h.query(
+            now(),
+            &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
+        )
+        .unwrap();
+        let polls = native.polls.load(Ordering::Relaxed);
+        h.progress(
+            &mut cx(),
+            now(),
+            &mut work().with_remaining(WorkClass::CodecInputBytes, 6),
+        )
+        .unwrap();
+        assert_eq!(native.polls.load(Ordering::Relaxed), polls);
+        let start = Instant::now();
+        loop {
+            let mut exact = work().with_remaining(WorkClass::CodecInputBytes, 7);
+            let state = h.progress(&mut cx(), now(), &mut exact).unwrap();
+            assert_eq!(exact.remaining(WorkClass::CodecInputBytes), 0);
+            if matches!(
+                state,
+                ConsumerActionState::Completed | ConsumerActionState::Closed
+            ) {
+                assert_eq!(state == ConsumerActionState::Completed, valid);
+                break;
+            }
+            assert!(start.elapsed() < Duration::from_secs(2));
+            std::thread::yield_now();
+        }
+        let s = h.take_settlement(now(), &mut work()).unwrap();
+        assert_eq!(s.identity(), &identity);
+        assert_eq!(
+            s.remote_cancellation(),
+            ConsumerActionCancellation::Requested
+        );
+        assert_eq!(s.result().is_ok(), valid);
+        let output = s.native_result().unwrap().unwrap().data().unwrap();
+        assert_eq!(output.content_type, "text/plain");
+        assert_eq!(output.body, &answer[7..]);
+        assert_eq!(codecs[0].validations.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            codecs[1].validations.load(Ordering::Relaxed),
+            usize::from(query_limit >= 5)
+        );
+        assert_eq!(codecs[2].validations.load(Ordering::Relaxed), 0);
+        drop((h, runtime, owner));
+        assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
+        drop(s);
+        clean(&bank);
+        peer.join().unwrap();
+    }
+}
+
+#[test]
+fn late_query_text_keeps_original_codec_funding_and_failure_evidence() {
+    for changed in [false, true] {
+        let (address, peer) = peer(vec![
+            (b"INVOKE 12", b"ACCEPT 7"),
+            (b"QUERY 7", b"OUTPUT ready"),
+        ]);
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let native = Arc::new(NativeProbe::default());
+        let codecs = [0, 1, 2].map(|_| Arc::new(CodecProbe::default()));
+        let owner = instance();
+        let runtime =
+            representation_client(address, &bank, &native, &codecs, (2, 64), true, &owner);
+        let h = runtime
+            .1
+            .invoke_action(
+                &runtime.0,
+                Some(Payload::new(b"12".as_slice(), "application/json")),
+                Deadline::NONE,
+                now(),
+                &mut work(),
+            )
+            .ok()
+            .unwrap();
+        let identity = h.identity().unwrap();
+        drive(&h, ConsumerActionState::Pending);
+        h.query(now(), &mut work()).unwrap();
+        native.close_blocked.store(true, Ordering::Relaxed);
+        native.fail_with_late.store(true, Ordering::Relaxed);
+        drive(&h, ConsumerActionState::Closing);
+        assert_eq!(codecs[1].validations.load(Ordering::Relaxed), 0);
+        h.cancel_local();
+        owner.revoke();
+        native.fail_close.store(true, Ordering::Relaxed);
+        h.progress(&mut cx(), now(), &mut work()).unwrap();
+        assert!(h.take_settlement(now(), &mut work()).is_err());
+        codecs[0].unavailable.store(true, Ordering::Relaxed);
+        codecs[1].changed.store(changed, Ordering::Relaxed);
+        drop((runtime, owner));
+        native.close_blocked.store(false, Ordering::Relaxed);
+        drive(&h, ConsumerActionState::Closed);
+        let s = h.take_settlement(now(), &mut work()).unwrap();
+        assert_eq!(s.identity(), &identity);
+        assert!(s.native_error().is_some());
+        assert!(s.cleanup_error().is_some());
+        assert_eq!(s.validation_error().is_some(), changed);
+        assert!(s.result().is_err());
+        let output = s.native_result().unwrap().unwrap().data().unwrap();
+        assert_eq!(output.content_type, "text/plain");
+        assert_eq!(output.body, b"ready");
+        assert_eq!(codecs[0].validations.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            codecs[1].validations.load(Ordering::Relaxed),
+            usize::from(!changed)
+        );
+        assert_eq!(native.live.load(Ordering::Relaxed), 0);
+        assert_eq!(native.drops_funded.load(Ordering::Relaxed), 2);
+        drop(h);
+        assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
+        drop(s);
+        clean(&bank);
+        peer.join().unwrap();
+    }
 }

@@ -80,15 +80,15 @@ native allowance or imply one connection per Consumer.
 
 Additional real HTTP cases change an access revision/work declaration, prepared
 data work or native bounds after unread completion, and change data work inside
-actual output validation. Each observed violation of the original Invoke or retained Query dependencies
+actual Query output validation. Each observed violation of the relevant original native/authority or retained Query data dependencies
 irreversibly fences its own invocation. Restoring declarations cannot enable query or successful handoff;
 original identity and native output remain in the failed settlement. Original
-invoke validation still runs for late output when cancellation/access loss has
-already fenced application acceptance, under its original data allowance.
+returning-operation validation still runs for late output when cancellation/access
+loss has already fenced application acceptance, under that service's original allowance.
 
 The operation-scope HTTP counterexample uses three independent operation data/
 access services and native mappings. Changing only unused Cancel access revision,
-work, retained-backing declaration, native bounds or schema support leaves pending Invoke and its
+work, retained-backing declaration or native byte/work bounds leaves pending Invoke and its
 independently authorized Query result usable. Per-instance Cancel denial likewise
 refuses before effects. Cases cover both never-used Cancel and an acknowledged,
 fully retired cancellation: a failed later request preserves original identity,
@@ -102,20 +102,64 @@ only the unused Cancel revision changes. No funding is released because a contro
 becomes unavailable; the original complete definition/services remain retained.
 A raw immediate Invoke completion similarly survives an independent unused Query
 revision change before completion or handoff, without entering Query/Cancel policy.
-The access-callback regression uses independent control codecs: loss of the
-original Invoke validator must be observed and fenced before a control starts,
-even though that control's own data service remains available. Negative cases change the actually admitted Query/Cancel revision with native work
+The access-callback regression uses independent control codecs: losing the
+retired Invoke codec during control access leaves the selected Query/Cancel
+usable, while full qualification still refuses new invocation admission. Losing
+Query's actual codec before Query admission refuses without native effects or
+revoking pending Invoke; an independently authorized Cancel remains usable.
+Negative cases change the actually admitted Query/Cancel revision with native work
 owned: the invocation stays irreversibly fenced through short-credit/pending
 retirement, preserves a late validated Query output and uncertain Cancel status,
 and releases only its original owners. The unread-result HTTP cases use independent
 Query services to ensure narrowing cannot bypass its selected grant/bounds.
 
 The [raw callback suite](../../servient/finite/tests/consumer_action_callbacks.rs)
-retains 24 deterministic occupied-slot/reentry, time, wake, unwind, cancellation,
+retains deterministic occupied-slot/reentry, time, wake, unwind, cancellation,
 late-result and paid disposal cases. The independent
 [downstream datagram fixture](../../tools/architecture-fixtures/open-consumer/tests/action.rs)
 continues to use different actual invoke/control Binding types and blocked/error
-retirement with funded late validation. The
+retirement with funded late validation.
+
+The HTTP body-allowance counterexample fails against `485b5e5`: Invoke accepts
+input `12` under a two-byte body policy, then a Query with an eight-byte policy
+returns valid integer `2400`. Invoke-centered validation closes it. The corrected
+path completes with exactly one Invoke input validation and one Query output
+validation. Conversely, Invoke's 32-byte policy cannot grant Query permission to
+validate two-byte `24` under Query's one-byte allowance: the native output remains
+retained, validation fails before codec entry, and settlement cannot succeed.
+Independent service, definition, association and execution banks all reach zero
+only after original settlement disposal.
+
+The downstream representation counterexamples use integer JSON Invoke input
+and a shared five-character string output schema. Invoke uses a JSON service
+with a two- or 64-byte policy; Query uses an independent plain-text service with
+a 64-byte policy, 1024-byte scratch and seven work units, versus Invoke's 64-byte
+scratch and 47 units. Both services can support both schemas in the media-only
+case. A separate case lets Query implement only its actual output role; Cancel's
+service implements neither application schema. Real datagrams preserve `ready`
+as `text/plain` through settlement, without JSON quotes or conversion. Query
+completes with Invoke available in the media-only case and after its retired
+codec becomes unavailable in other cases, with its exact seven work units;
+six units enter no native poll. Control start and Cancel progress use
+zero application codec credit. Query's own too-small body limit and a valid text
+value violating the shared string constraint both refuse application success.
+The Query validator observes the original scratch reservation during callback.
+Admission reserves exactly its 1024-byte maximum used-role scratch, omitting
+the Cancel carrier's unused 2048-byte application codec declaration.
+
+Late text output is returned by the original exchange's `poll_close` after a
+native poll error, blocked/failed retirement, local cancellation, Consumer
+revocation and root loss. It is validated once by Query under its captured
+allowance; Invoke is not reentered. The settlement retains original identity,
+poll/cleanup errors, raw text/media and failed application outcome. Changing
+Query's declared work while cleanup is pending prevents validation entry under
+the stale allowance, retains a distinct validation error and the exact native
+output, and never refreshes funding or the qualification baseline. Native
+destructors observe original cleanup funding; all accounts clear after final
+settlement disposal. Existing cancellation/reentry/uncertain-control cases remain
+in the HTTP and raw suites.
+
+The
 [root QueryAllActions integration](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
 uses two continuing associations and independent continuing/finite capacity under
 one original Consumer authority against the actual HTTP Producer.
