@@ -23,9 +23,11 @@ pub trait ConsumerActionPreparation {
         input: ConsumerActionPreparationInput<'_>,
     ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>>;
 }
+/// Composition imports the original physical owners. Selection never adopts
+/// raw service aliases or charges their backing again for another mapping.
 pub struct ConsumerActionRegistration {
     pub preparation: Box<dyn ConsumerActionPreparation>,
-    pub services: ConsumerServices,
+    pub services: RetainedConsumerServices,
 }
 #[derive(Clone, Copy, Default)]
 pub struct ConsumerActionSelectors {
@@ -42,6 +44,7 @@ impl ConsumerActionRegistry {
             || registrations.len() > MAX_REGISTRATIONS
             || registrations.iter().enumerate().any(|(i, r)| {
                 r.preparation.bounds().work == 0
+                    || r.services.check_backing().is_err()
                     || r.services.access.work() == 0
                     || r.services.data.policy().validation_work == 0
                     || registrations[..i].iter().any(|old| {
@@ -315,20 +318,53 @@ impl ConsumerActionRegistry {
             if selector.binding.is_some_and(|b| b != id.binding_id()) {
                 continue;
             }
-            if !pay(budget, W::ProviderProbes, r.services.access.work()) {
+            r.services.check_backing()?;
+            let policy = r.services.data.policy();
+            let access_work = r.services.access.work();
+            let revision = r.services.access.security_revision();
+            let content_type = r.services.data.content_type();
+            let b = r.preparation.bounds();
+            if b.work == 0 || policy.validation_work == 0 || access_work == 0 {
+                return Err(invalid());
+            }
+            let current = || {
+                r.services.check_backing()?;
+                if r.preparation.identity() != id
+                    || r.preparation.bounds() != b
+                    || r.services.data.policy() != policy
+                    || !r.services.data.available()
+                    || r.services.data.content_type() != content_type
+                    || !action_data_supported(operation, schemas, r.services.data.service())
+                    || r.services.access.work() != access_work
+                    || r.services.access.security_revision() != revision
+                    || !r
+                        .services
+                        .access
+                        .supports_security(&clinkz_wot_core::security::SecurityRequirement::NOSEC)
+                {
+                    return Err(invalid());
+                }
+                Ok(())
+            };
+            if !pay(budget, W::ProviderProbes, access_work) {
                 return Err(busy());
             }
-            if !r.services.data.available()
-                || r.services.data.content_type() != facts.content_type
-                || !schemas.supports(r.services.data.as_ref())
-                || r.services
-                    .access
-                    .authorize(id, endpoint, operation)
-                    .is_err()
+            if !r
+                .services
+                .access
+                .supports_security(&clinkz_wot_core::security::SecurityRequirement::NOSEC)
+                || !r.services.data.available()
+                || content_type != facts.content_type
+                || !action_data_supported(operation, schemas, r.services.data.service())
             {
                 continue;
             }
-            let b = r.preparation.bounds();
+            let authorized = r.services.access.authorize(id, endpoint, operation);
+            // A policy callback cannot change the compiler allowance before entry.
+            current()?;
+            if authorized.is_err() {
+                continue;
+            }
             check_limit(limits, K::PlanCompileWorkUnitsPerStepMax, b.work)?;
             check_limit(
                 limits,
@@ -349,8 +385,9 @@ impl ConsumerActionRegistry {
             let bytes = b
                 .retained_bytes
                 .checked_add(1024 + endpoint.len() as u64 + name.len() as u64)
-                .and_then(|n| n.checked_add(r.services.data.policy().retained_bytes))
-                .and_then(|n| n.checked_add(r.services.access.retained_bytes()))
+                // The service owner funds its original media string. This
+                // independent snapshot is acquired at the definition bank.
+                .and_then(|bytes| bytes.checked_add(content_type.len() as u64))
                 .ok_or_else(invalid)?;
             let funding = reserve(
                 bank,
@@ -359,7 +396,7 @@ impl ConsumerActionRegistry {
                     (K::CleanupItemsMax, 1),
                 ],
             )?;
-            let mapping = match r
+            let compiled = r
                 .preparation
                 .compile_action(ConsumerActionPreparationInput {
                     document: doc,
@@ -368,7 +405,9 @@ impl ConsumerActionRegistry {
                     operation,
                     endpoint,
                     schemas,
-                }) {
+                });
+            current()?;
+            let mapping = match compiled {
                 Ok(Some(m)) => m,
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
                 Err(e) => return Err(e),
@@ -376,6 +415,7 @@ impl ConsumerActionRegistry {
             if mapping.identity() != id || mapping.operation() != operation {
                 return Err(invalid());
             }
+            let bounds = mapping.bounds();
             if chosen.is_some() {
                 return Err(ambiguous());
             }
@@ -384,7 +424,12 @@ impl ConsumerActionRegistry {
                     mapping,
                     endpoint: endpoint.into(),
                     form,
-                    services: r.services.clone(),
+                    data: r.services.data.clone(),
+                    data_policy: policy,
+                    content_type: content_type.into(),
+                    identity: id,
+                    operation,
+                    bounds,
                 },
                 funding,
             ));

@@ -289,8 +289,12 @@ handoffs without silently capturing a new baseline.
 [notification composition evidence](../evidence/consumer-notification-composition.md)
 corrects this notification F2/F3 handoff through original service-owner import,
 prepared declaration checks and independent association/work capacity. It also
-adds original named occurrence policy. This does not resolve the continuing
-Action defects or establish authenticated source provenance. The diagnostic
+adds original named occurrence policy. This does not establish authenticated source provenance. The later
+[Action composition evidence](../evidence/consumer-action-composition.md) addresses
+Action F2/F3 with imported physical owners, original prepared-declaration checks,
+independent associations and invocation capacity. Its scoped HTTP/downstream
+execution does not establish cross-endpoint Action lowering, managed mixed-family
+composition or qualified Producer exposure reuse. The diagnostic
 probe above remains historical evidence against its reviewed revision/API.
 
 **Proposed engineering sequence.** Increments establish ownership guarantees,

@@ -134,7 +134,9 @@ actual mapping/verifier and retained original trust/dependency context, includin
 forged/absent/ambiguous/stale evidence tests; changed-description/endpoint native
 lowering reuse; mixed Binding storage and managed notification registration;
 constrained notification execution; convenient automatic driving and authority
-wake integration; and the continuing Action F2/F3 and independent-capacity work.
+wake integration. The separate [continuing Action increment](consumer-action-composition.md)
+addresses its F2/F3 and independent-capacity handoff; it does not close these
+notification or mixed-family gaps.
 A native MQTT topic or NoSec message cannot fill the provenance gap. General
 wildcard coalescing, tenant/credential sharing and MQTT reciprocal Event responses
 remain outside the declared mapping. Priority 3 and the broader v6 architecture

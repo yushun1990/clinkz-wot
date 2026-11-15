@@ -11,7 +11,8 @@ use clinkz_wot_foundation::{ResourceKind, WorkBudget, WorkClass};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Actual codec and type-validation implementation. Preparation checks the
-/// entire schema subset; this service validates input and normal/late result bytes.
+/// entire schema subset of each used value role; the service paired with the
+/// returning operation validates its normal/late result representation.
 /// Callbacks are trusted, pure and bounded by their captured declared policy.
 /// Metadata/support/availability queries are bounded allocation-free passive
 /// inspection; they acquire no credentials, source documents or native I/O.

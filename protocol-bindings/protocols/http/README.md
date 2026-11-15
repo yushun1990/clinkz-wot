@@ -928,11 +928,14 @@ restricted aggregate regression/measurement path. HTTP SSE is not implemented.
 ## TD-driven continuing Consumer Actions
 
 `ConsumerActionRegistry::prepare_action` selects invoke and every described
-query/cancel operation independently. Register `HttpActionConsumer` with
-`HttpConsumerConfig::consumer_services()` (or actual application services) and an
-explicit 4096-unit `PlanCompileWorkUnitsPerStepMax` allowance. This is the same
-bounded pure native callback policy as the existing typed MQTT facet. The shared
-HTTP lowering preserves the qualified Producer mapping above: bounded structured JSON,
+query/cancel operation independently. At startup, obtain the actual services
+from `HttpConsumerConfig::consumer_services()` (or supply application services),
+then adopt their data/access backing with `ConsumerServiceOwner::retain_data` and
+`retain_access` at the original service bank. Register `HttpActionConsumer` with
+those `RetainedConsumerServices`; share the same retained owners across
+registrations and capability families. Supply an explicit 4096-unit
+`PlanCompileWorkUnitsPerStepMax` allowance for the bounded pure native callback.
+The shared HTTP lowering preserves the qualified Producer mapping above: bounded structured JSON,
 endpoint NoSec, cleartext IP literals, POST invoke and independent GET/DELETE
 control Forms ending in `{?id}`, with a string `uriVariables.id`. Absent or false
 `synchronous` uses this continuing facet; the existing explicitly synchronous
@@ -941,12 +944,24 @@ preparation; absent operations remain unavailable. Different actual registration
 may select controls on this native listener; another listener/continuation format
 is unsupported by this concrete mapping.
 
-The source-free `consumer_action::ConsumerActionRuntime` owns each invocation
-independently of finite native exchanges. `invoke_action` returns a local handle;
-`progress` exposes Invoking, Pending, Querying, Cancelling, local Closing and terminal states.
+The source-free `ConsumerActionDefinition` retains qualified mappings/data and
+can be shared through `Rc` across independent Consumers at its original
+endpoint/registration/configuration. Bind it with
+`ConsumerActionAssociation::try_new`, passing the original Consumer reference,
+explicit per-operation `ConsumerActionAccess` owners, an instance bank and work
+budget. Associations allocate no invocation slots, and dropping their passive
+views does not cancel admitted work.
+
+`ConsumerActions::try_new(slots, work_bank)` supplies independent bounded
+execution capacity for many associations. `invoke_action(&association, input,
+deadline, now, budget)` returns the local invocation handle; the invocation
+retains its original association and native continuation beyond each finite
+exchange. `progress` exposes Invoking, Pending, Querying, Cancelling, local Closing
+and terminal states. The [invoke_action example](examples/invoke_action.rs)
+shows retained service adoption, association binding and capacity construction.
 `query` and `request_cancel` are explicit described operations. POST 202 with the
 bounded native id means accepted work, never a terminal result. GET `running`
-remains pending; `completed` supplies output for the original captured validator;
+remains pending; `completed` supplies output for that returning mapping's captured validator;
 `failed` is a remote execution failure. DELETE `cancelling` acknowledges only a
 request; `terminal` acknowledges no result. A later query must obtain completion.
 The default access service checks the actual expanded control target before I/O.
@@ -965,13 +980,17 @@ the actual captured data service validates them. The HTTP policy fingerprint is
 v13 (the continuing Action mapping was introduced in v9). There is one active exchange per actual registration; the Engine independently
 bounds continuing invocations and unread terminal slots.
 
-`cancel_local`, handle abandonment, deadline, policy/service loss, root close and
-instance replacement retire local work with its first cause. They do not send a
-hidden DELETE or prove remote rollback. A lost DELETE reply retains Uncertain
+`cancel_local`, handle abandonment, deadline, relevant policy/service loss,
+capacity close and instance replacement retire local work with its first cause.
+Unused control dependencies and control refusals before native effects leave
+unrelated admitted work usable; an owned control exchange or unread result keeps
+its own original dependency and permission checks. Local retirement sends no
+hidden DELETE and proves no remote rollback. A lost DELETE reply retains Uncertain
 remote cancellation; Requested still permits eventual application completion.
 Settlement retains accepted status, original native result, validation and cleanup
-errors, remote cancellation and effect uncertainty separately. Pre-effect refusal
-returns original input. Pending/error cleanup and unread settlement keep original
+errors, remote cancellation and effect uncertainty separately. Input and
+normal/late output access lend slices; sharing the settlement keeps the original
+bytes and their funding together. Pre-effect refusal returns original input. Pending/error cleanup and unread settlement keep original
 funding; Drop disposes native owners finitely before refunding it. The API admits
 no detached job, native pooling, reconnect or cleanup transfer.
 
@@ -984,7 +1003,7 @@ fenced settlement with the original native output still available as evidence.
 Once successful handoff has occurred, later revocation does not retract that value.
 If a native poll fails but retirement returns a late completion, `native_error()`
 keeps the poll error while `native_result()` keeps the actual late output.
-The captured validator still checks it; neither a valid late result nor a later
+The returning exchange's original validator still checks it; neither a valid late result nor a later
 cancellation can erase the original failure or silently retry the Action.
 
 Run `serve_action`, save its printed qualified TD to `TD.json`, then run:
@@ -1000,8 +1019,11 @@ The HTTP integration joins real Engine roles and covers pending/completed and
 cancellation paths, unsupported mappings, validation, capacity, replacements,
 malformed native replies, abandonment and final socket/account release. The
 independent downstream fixture executes real datagrams using different invoke and
-control Binding implementations, including late invalid completion during blocked
-and failed cleanup. These tests do not establish general Action interoperability,
+control Binding implementations, including independent JSON Invoke/plain-text
+Query representations and late completion during blocked and failed cleanup.
+The HTTP mapping itself remains JSON; completed Query data uses Query's captured
+service and body/scratch/work limits against the shared Action output schema.
+It is not constrained by Invoke's allowance. These tests do not establish general Action interoperability,
 HTTPS, broader DataSchema/security, constrained execution, automatic progress or
 remote effect certainty.
 

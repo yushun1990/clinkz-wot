@@ -1296,13 +1296,22 @@ fn status_output_absence_and_present_json_null_are_distinct_schema_roles() {
 #[test]
 fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authority() {
     use clinkz_wot_planning::open_consumer::ConsumerActionRegistration;
-    use clinkz_wot_servient_finite::consumer_action::{ConsumerActionRuntime, ConsumerActionState};
+    use clinkz_wot_servient_finite::consumer_action::*;
     io().block_on(async {
         let mut server = Server::new();
         let bank = accounts();
         let instance =
             ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2), Generation::INITIAL));
         let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
+        let services = config.consumer_services();
+        let services = RetainedConsumerServices {
+            data: ConsumerServiceOwner::retain_data(services.data, &bank)
+                .ok()
+                .unwrap(),
+            access: ConsumerServiceOwner::retain_access(services.access, &bank)
+                .ok()
+                .unwrap(),
+        };
         let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
             preparation: Box::new(HttpActionConsumer::new(
                 config,
@@ -1310,13 +1319,13 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
                 BindingGeneration::INITIAL,
                 0,
             )),
-            services: config.consumer_services(),
+            services: services.clone(),
         }])
         .unwrap();
         let thing: Thing = serde_json::from_value(server.td.clone()).unwrap();
         let mut limits = GatewayDefaultV1::LIMITS.clone();
         assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
-        let definitions = ["run", "signal"]
+        let definitions: Vec<_> = ["run", "signal"]
             .iter()
             .map(|name| {
                 registry
@@ -1332,9 +1341,36 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
             })
             .collect();
         drop(thing);
-        let runtime = ConsumerActionRuntime::try_new(instance.reference(), definitions, 2)
-            .ok()
-            .unwrap();
+        let associations: Vec<_> = definitions
+            .into_iter()
+            .map(|definition| {
+                let access = ConsumerActionAccess {
+                    invoke: services.access.clone(),
+                    query: definition
+                        .input()
+                        .query
+                        .as_ref()
+                        .map(|_| services.access.clone()),
+                    cancel: definition
+                        .input()
+                        .cancel
+                        .as_ref()
+                        .map(|_| services.access.clone()),
+                };
+                ConsumerActionAssociation::try_new(
+                    instance.reference(),
+                    Rc::new(definition),
+                    access,
+                    bank.clone(),
+                    &mut work(),
+                )
+                .ok()
+                .unwrap()
+            })
+            .collect();
+        drop(services);
+        drop(registry);
+        let runtime = ConsumerActions::try_new(2, bank.clone()).unwrap();
         let group = consumer(
             &server.td,
             bank.clone(),
@@ -1343,7 +1379,7 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
         );
         let a = runtime
             .invoke_action(
-                "run",
+                &associations[0],
                 Some(Payload::new(b"12".to_vec(), "application/json")),
                 Deadline::NONE,
                 now(),
@@ -1364,7 +1400,7 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
         }
         let b = runtime
             .invoke_action(
-                "signal",
+                &associations[1],
                 Some(Payload::new(b"1".to_vec(), "application/json")),
                 Deadline::NONE,
                 now(),
@@ -1405,6 +1441,7 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
         drop(a);
         drop(b);
         drop(runtime);
+        drop(associations);
         drop(group);
         clean(&bank);
         assert_eq!(server.app.cancelled.get(), 0);

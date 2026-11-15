@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0124-consumer-action-association-capacity.md][0124 Continuing Consumer Action association and capacity]]
+
 - [[file:0123-consumer-notification-association-capacity.md][0123 Continuing Consumer notification association and capacity]]
 
 - [[file:0122-producer-native-semantic-authority.md][0122 Producer native and semantic authority (Review 10 F1)]]

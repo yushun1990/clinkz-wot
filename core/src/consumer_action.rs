@@ -47,6 +47,11 @@ pub trait ConsumerActionExchange {
 /// `start` refusal has no native effects; success captures all borrowed input.
 /// Controls explicitly check compatibility with the original invoke mapping;
 /// different registrations/Bindings are allowed when they implement it.
+/// Completed values retain this operation's representation, paired with its
+/// captured output data service. Native status/ack envelopes stay Binding-owned;
+/// no conversion to the original Invoke representation is required or implied.
+/// Metadata and continuation-compatibility inspection are bounded, allocation-
+/// free passive operations; execution checks them without entering native I/O.
 pub trait ConsumerActionMapping {
     fn identity(&self) -> BindingRegistrationIdentity;
     fn operation(&self) -> Operation;
@@ -70,7 +75,14 @@ pub struct ConsumerActionOperation {
     /// the Binding expands it, under the captured destination/security policy.
     pub endpoint: Box<str>,
     pub form: u32,
-    pub services: ConsumerServices,
+    pub data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
+    /// Original qualification, captured by preparation and never refreshed by
+    /// association or execution construction.
+    pub data_policy: ConsumerDataPolicy,
+    pub content_type: Box<str>,
+    pub identity: BindingRegistrationIdentity,
+    pub operation: Operation,
+    pub bounds: ConsumerActionBounds,
 }
 pub struct ConsumerActionDefinitionInput {
     pub target: AffordanceTarget,
@@ -82,61 +94,113 @@ pub struct ConsumerActionDefinitionInput {
     // Last: actual native definitions and services die before original funding.
     pub funding: Vec<HostCapacityReservation>,
 }
-/// Source-free association; no compiler or source TD crosses into execution.
+/// Reusable source-free definition. Contains no Consumer, permission, vacant
+/// invocation slot or native continuation. Endpoints/configuration stay specialized.
 pub struct ConsumerActionDefinition(ConsumerActionDefinitionInput);
+
+/// Shared Action meaning, qualified only for application-value roles actually
+/// carried by this operation. Native status/acknowledgement envelopes belong to
+/// the Binding; CancelAction carries no application input or completed output.
+pub fn action_data_supported(
+    operation: Operation,
+    schemas: &ValueSchemas,
+    data: &dyn ConsumerDataService,
+) -> bool {
+    match operation {
+        Operation::InvokeAction => schemas.supports(data),
+        Operation::QueryAction => schemas
+            .output
+            .as_ref()
+            .is_none_or(|s| data.supports_schema(s)),
+        Operation::CancelAction => true,
+        _ => false,
+    }
+}
 impl ConsumerActionDefinition {
     /// Source-free construction checks pairing, not TD support. Planning alone
     /// admits TD operation applicability and complete common/native semantics.
     pub fn try_new(
         input: ConsumerActionDefinitionInput,
     ) -> Result<Self, BindingInputRejection<ConsumerActionDefinitionInput>> {
-        let checked = (|| {
-            if !matches!(input.target, AffordanceTarget::Action(_))
-                || input.target.name().is_none_or(|n| n.len() > 256)
-            {
-                return Err(invalid());
-            }
-            for (operation, selected) in [
-                (Operation::InvokeAction, Some(&input.invoke)),
-                (Operation::QueryAction, input.query.as_ref()),
-                (Operation::CancelAction, input.cancel.as_ref()),
-            ] {
-                let Some(selected) = selected else { continue };
-                let b = selected.mapping.bounds();
-                if selected.mapping.operation() != operation
-                    || b.poll_work == 0
-                    || b.exchange_bytes == 0
-                    || b.response_bytes == 0
-                    || b.continuation_bytes == 0
-                    || selected.endpoint.len() > 256
-                    || !selected.services.data.available()
-                    || selected.services.data.policy().validation_work == 0
-                    || selected.services.access.work() == 0
-                    || !input.schemas.supports(selected.services.data.as_ref())
-                {
-                    return Err(invalid());
-                }
-                if operation != Operation::InvokeAction {
-                    selected
-                        .mapping
-                        .supports_continuation(input.invoke.mapping.as_ref())?;
-                }
-            }
-            Ok(())
-        })();
-        match checked {
-            Ok(()) => Ok(Self(input)),
+        let definition = Self(input);
+        match definition.check_dependencies() {
+            Ok(()) => Ok(definition),
             Err(e) => Err(BindingInputRejection::new(
-                input,
+                definition.0,
                 BindingOperationalError::new(e),
             )),
         }
+    }
+    /// Complete selected-operation qualification for new associations/admission.
+    /// Admitted execution checks the dependencies of its original work and the
+    /// operation owning its current exchange or unread result.
+    pub fn check_dependencies(&self) -> CoreResult<()> {
+        let input = &self.0;
+        if !matches!(input.target, AffordanceTarget::Action(_))
+            || input.target.name().is_none_or(|n| n.len() > 256)
+        {
+            return Err(invalid());
+        }
+        for (operation, selected) in [
+            (Operation::InvokeAction, Some(&input.invoke)),
+            (Operation::QueryAction, input.query.as_ref()),
+            (Operation::CancelAction, input.cancel.as_ref()),
+        ] {
+            let Some(selected) = selected else { continue };
+            selected.check_dependencies()?;
+            if selected.operation != operation
+                || !action_data_supported(operation, &input.schemas, selected.data.service())
+            {
+                return Err(invalid());
+            }
+            if operation != Operation::InvokeAction {
+                selected
+                    .mapping
+                    .supports_continuation(input.invoke.mapping.as_ref())?;
+            }
+        }
+        Ok(())
     }
     pub fn input(&self) -> &ConsumerActionDefinitionInput {
         &self.0
     }
     pub fn into_input(self) -> ConsumerActionDefinitionInput {
         self.0
+    }
+}
+impl ConsumerActionOperation {
+    pub fn check_dependencies(&self) -> CoreResult<()> {
+        self.check_native_dependencies()?;
+        self.check_data_dependencies()
+    }
+    /// Original native mapping/continuation qualification, independent of a
+    /// codec whose application-value role may already have retired.
+    pub fn check_native_dependencies(&self) -> CoreResult<()> {
+        let b = self.bounds;
+        if self.mapping.identity() != self.identity
+            || self.mapping.operation() != self.operation
+            || self.mapping.bounds() != b
+            || b.poll_work == 0
+            || b.exchange_bytes == 0
+            || b.response_bytes == 0
+            || b.continuation_bytes == 0
+            || self.endpoint.len() > 256
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+    /// Original representation and resource declaration, never a new snapshot.
+    pub fn check_data_dependencies(&self) -> CoreResult<()> {
+        if !self.data.available()
+            || self.data.policy() != self.data_policy
+            || self.data_policy.retained_bytes != self.data.backing_bytes()
+            || self.data_policy.validation_work == 0
+            || self.data.content_type() != &*self.content_type
+        {
+            return Err(invalid());
+        }
+        Ok(())
     }
 }
 fn invalid() -> CoreError {

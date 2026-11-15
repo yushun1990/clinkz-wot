@@ -497,6 +497,87 @@ that arbitrary panicking linked code can resume execution. The independent
 control allocation is funded before native construction and keeps its original
 lease through its last handle/call reference. It cannot address a reused slot.
 
+### Continuing Action associations and invocation capacity
+
+The Host `ConsumerActionAssociation` retains one original Consumer, shared
+prepared definition, separately qualified per-operation access owners and
+instance bank. Association construction allocates no vacant slot, exchange,
+continuation or work quota. It rechecks prepared data/native declarations and
+original backing before/after policy qualification. Explicit new access binding
+captures its own work/revision; it never replaces prepared data/native facts.
+Association construction and new invocation admission check the complete
+selected Invoke/Query/Cancel set against its original declarations. Retaining
+that set does not create a blanket invalidation domain for admitted work.
+
+A live invocation checks its original Invoke native mapping/continuation and bound
+access declarations, plus the operation owning its current exchange or unread
+result. Data-service checks follow the application-value role still owned by
+that exchange/result. After input validation and Invoke exchange retirement,
+Invoke's codec is not a dependency of an independently represented Query result;
+the original native continuation and Invoke authority remain live.
+An unused Query/Cancel dependency cannot fence unrelated accepted work
+or its handoff. A Query result retains its original Query dependencies until
+handoff. Once a nonterminal status or cancellation acknowledgement has been
+consumed and its exchange fully retired, that control no longer governs the
+pending invocation. The original continuation and known cancellation status
+remain retained. Shared actual services still invalidate every relevant use;
+separate operation coordinates do not isolate an aliased dependency.
+
+A control request checks its original native/access and used value-role
+qualification, continuation compatibility and fresh destination/instance
+permission before native start.
+An unavailable or denied control refuses without native effects or withdrawal
+of unrelated Invoke work. Every refusal still observes callback-time loss of
+already relevant dependencies and logical authority. Fresh policy checks remain
+scoped to the actual operation, including progress and handoff that depend on it;
+Invoke permission never grants Query/Cancel permission. Consumer/root revocation,
+time and local cancellation continue to govern the entire invocation.
+Declaration restoration does not erase an already observed violation of relevant
+admitted work. Independent invocations keep their own first causes.
+
+The Action output schema is shared semantic meaning, not a mandate to reuse
+Invoke's codec. Invoke validates input and any immediate output with its own
+original data service; Query validates its completed output with Query's original
+service, media and body/scratch/work policy, through normal and late retirement
+paths. Native response backing is additionally bounded by that exchange's
+original response declaration. Media must match the captured representation;
+the current subset admits no content coding. Before any poll/close that may
+return an application value, prepay that operation's captured validation work
+once. Never add Invoke's allowance to Query's. Control start carries no
+application input; Cancel progress invokes no application codec. Admission
+reserves the maximum selected native scratch and used data-role scratch before
+effects; an unused Cancel application codec requires no scratch. Check the
+actual output service's original declaration and schema support before/after
+validation even if authority was already lost or the validator refuses. A changed
+declaration cannot authorize larger work or silently replace the original codec.
+The original payload/media, validation error and earlier native/local/cleanup
+failures remain separate evidence. Sharing semantic constraints transfers no
+permission and permits no transcoding, new service adoption or funding refund.
+
+`ConsumerActions` owns a bounded slot registry and its capacity bank independently
+of any Consumer. Vacant slots contain only registry/control references; each
+admitted invocation record is separately allocated and funded, then retains that
+allocation through checkout and settlement. Slot storage does not charge that
+record a second time. Admission reserves a slot, passive control, complete native/
+continuation/input/result/scratch backing and cleanup credit before effects.
+The capacity bank funds actual work backing. A distinct association bank debits
+one outstanding-work quota (`PendingHandlerCallsGlobalMax`), including retained
+settlements; an identical bank is debited once. This quota is not a second RAM
+reservation. Unread results retain their slot. Settlement transfers evidence,
+association, quota and backing to the result owner; the vacant slot alone cannot
+refund a result's funding. Refused admission returns exact original input and
+rolls back all newly reserved capacity without native effects.
+
+Capacity close/Drop fences its admitted work, without revoking associations or
+sibling capacities. Original Consumer revocation fences its own invocations in
+any capacity. Loss of association views is passive. Handles retain original
+capacity/control ownership for progress; settlements retain their original
+association and work leases through final native/data/service disposal. Input,
+normal and late output access lends slices tied to that settlement; it cannot
+detach the original payload Arc from its funding.
+Cleanup still uses the bounded Host local-abort contract; this adds no scheduler,
+background task, native pool or general async cleanup transfer.
+
 The Host continuing Action owner has its own occupied invocation slots and
 separately funded passive controls. Registry borrows end before access,
 validation, destination/start, poll/retirement and linked destruction callbacks.
@@ -513,10 +594,13 @@ unwind restoration follow the boundary rules above independently for this owner.
 
 Action access, native and validation callbacks are followed by fresh original
 control/dependency checks before another native effect or successful handoff.
-A control authorization/service failure fences the invocation even if the service
-later recovers. Short work or an unsupported control remains a refusal without
-inventing a remote effect. A successful native start returned after revocation
-is retained for local retirement, without polling it for further effects.
+After native control start, loss of that exchange's authorization/services
+fences its admitted work irreversibly. A refusal before start leaves unrelated
+accepted work usable; it cannot hide an observed original Invoke dependency or
+logical authority violation. Short work or an unsupported control remains a
+refusal without inventing a remote effect. A successful native start returned
+after revocation is retained for local retirement, without polling it for further
+effects.
 Required cleanup and late validation continue under original funding; neither
 can erase a first cause or promote uncertain effects to success/rollback.
 Native completion evidence is stored before validator entry, including on
@@ -711,9 +795,10 @@ Consumer partial support. Decoder traversal and constraint disposal have the
 bounded envelopes in [Core](interaction-core.md); callbacks remain cooperative.
 
 Continuing Action input/output borrow the same prepared constraints and retain
-their original funding through normal or late result disposal. The invoke
-association's actual captured validator checks input before native effects and
-completed output even when it arrives during control-exchange retirement. A
+their original funding through normal or late result disposal. The Consumer's
+Invoke data service checks input before native effects; the operation returning
+a completed value supplies its captured validator and resource policy, including
+Query output arriving during control-exchange retirement. A
 Producer's captured Action validator checks before behavior authorization and
 before successful result observation. Acceptance/pending/cancel acknowledgements
 do not become application output. Native failure, validation failure, local

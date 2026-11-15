@@ -155,12 +155,18 @@ fn definition(
     b: Arc<HostResourceAccounts>,
     p: Arc<Policy>,
     separate: bool,
-) -> CoreResult<ConsumerActionDefinition> {
+) -> CoreResult<(ConsumerActionDefinition, ConsumerActionAccess)> {
     let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
     let actual = config.consumer_services();
     let services = ConsumerServices {
         data: Arc::new(Data(p.clone(), actual.data)),
         access: Arc::new(Access(p, actual.access)),
+    };
+    let services = RetainedConsumerServices {
+        data: ConsumerServiceOwner::retain_data(services.data, &b)
+            .map_err(|e| e.error().error().clone())?,
+        access: ConsumerServiceOwner::retain_access(services.access, &b)
+            .map_err(|e| e.error().error().clone())?,
     };
     let count = if separate { 3 } else { 1 };
     let registry = ConsumerActionRegistry::try_new(
@@ -190,7 +196,43 @@ fn definition(
         ConsumerActionSelectors::default()
     };
     let thing: Thing = serde_json::from_str(text).unwrap();
-    registry.prepare_action(&thing, "run", selectors, &limits(), b, &mut budget())
+    let definition =
+        registry.prepare_action(&thing, "run", selectors, &limits(), b, &mut budget())?;
+    let access = ConsumerActionAccess {
+        invoke: services.access.clone(),
+        query: definition
+            .input()
+            .query
+            .as_ref()
+            .map(|_| services.access.clone()),
+        cancel: definition
+            .input()
+            .cancel
+            .as_ref()
+            .map(|_| services.access.clone()),
+    };
+    Ok((definition, access))
+}
+struct Client {
+    association: ConsumerActionAssociation,
+    calls: ConsumerActions,
+}
+fn bind(
+    prepared: (ConsumerActionDefinition, ConsumerActionAccess),
+    owner: &ConsumerInstance,
+    bank: Arc<HostResourceAccounts>,
+    slots: usize,
+) -> Client {
+    let association = ConsumerActionAssociation::try_new(
+        owner.reference(),
+        Rc::new(prepared.0),
+        prepared.1,
+        bank.clone(),
+        &mut budget(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let calls = ConsumerActions::try_new(slots, bank).unwrap();
+    Client { association, calls }
 }
 fn client(
     text: &str,
@@ -199,8 +241,8 @@ fn client(
     owner: &ConsumerInstance,
     separate: bool,
     slots: usize,
-) -> ConsumerActionRuntime {
-    let d = definition(text, b, p, separate).unwrap_or_else(|e| match e {
+) -> Client {
+    let d = definition(text, b.clone(), p, separate).unwrap_or_else(|e| match e {
         CoreError::LimitExceeded {
             resource,
             limit,
@@ -210,8 +252,7 @@ fn client(
         } => panic!("{resource:?} limit={limit} requested={requested:?} used={observed:?}"),
         e => panic!("{e:?}"),
     });
-    ConsumerActionRuntime::try_new(owner.reference(), vec![d], slots)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()))
+    bind(d, owner, b, slots)
 }
 struct Producer {
     owner: RawProducerServient,
@@ -370,7 +411,14 @@ fn accepted_pending_query_completed_uses_selected_forms_and_independent_identity
         );
         drop(text);
         let h = runtime
-            .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+            .calls
+            .invoke_action(
+                &runtime.association,
+                payload(b"12"),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
             .ok()
             .unwrap();
         let identity = h.identity().unwrap();
@@ -386,15 +434,19 @@ fn accepted_pending_query_completed_uses_selected_forms_and_independent_identity
         // Unread completion retains its slot. No implicit reinvocation on pressure.
         assert!(
             runtime
-                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .calls
+                .invoke_action(
+                    &runtime.association,
+                    payload(b"12"),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget()
+                )
                 .is_err()
         );
         let settlement = h.take_settlement(now(), &mut budget()).unwrap();
         assert_eq!(settlement.identity(), &identity);
-        assert_eq!(
-            settlement.result().unwrap().data().unwrap().body.as_ref(),
-            b"24"
-        );
+        assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
         assert_eq!(settlement.effect(), ConsumerEffect::Unknown);
         assert_eq!(
             settlement.selected_form(Operation::QueryAction).unwrap(),
@@ -449,8 +501,9 @@ fn structured_actions_validate_both_roles_before_effects_and_keep_original_conte
         ] {
             assert!(
                 runtime
+                    .calls
                     .invoke_action(
-                        "run",
+                        &runtime.association,
                         payload(invalid.as_bytes()),
                         Deadline::NONE,
                         now(),
@@ -465,8 +518,9 @@ fn structured_actions_validate_both_roles_before_effects_and_keep_original_conte
         assert_eq!(producer.counts.invoked.get(), 0);
         assert_eq!(producer.counts.authorized.get(), 0);
         let first = runtime
+            .calls
             .invoke_action(
-                "run",
+                &runtime.association,
                 payload(STRUCTURED_INPUT),
                 Deadline::NONE,
                 now(),
@@ -476,8 +530,9 @@ fn structured_actions_validate_both_roles_before_effects_and_keep_original_conte
             .unwrap();
         producer.drive(&first, ConsumerActionState::Pending).await;
         let second = runtime
+            .calls
             .invoke_action(
-                "run",
+                &runtime.association,
                 payload(STRUCTURED_INPUT),
                 Deadline::NONE,
                 now(),
@@ -499,10 +554,7 @@ fn structured_actions_validate_both_roles_before_effects_and_keep_original_conte
         let a = first.take_settlement(now(), &mut budget()).unwrap();
         let c = second.take_settlement(now(), &mut budget()).unwrap();
         for s in [&a, &c] {
-            assert_eq!(
-                s.result().unwrap().data().unwrap().body.as_ref(),
-                STRUCTURED_OUTPUT
-            );
+            assert_eq!(s.result().unwrap().data().unwrap().body, STRUCTURED_OUTPUT);
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
         }
         drop((first, second, runtime, owner));
@@ -530,8 +582,9 @@ fn structured_producer_completion_is_checked_against_its_distinct_output_role() 
             1,
         );
         let h = runtime
+            .calls
             .invoke_action(
-                "run",
+                &runtime.association,
                 payload(STRUCTURED_INPUT),
                 Deadline::NONE,
                 now(),
@@ -620,7 +673,14 @@ fn action_meaning_is_built_once_and_actual_support_work_and_schema_bounds_still_
                 HttpActionConsumer::new(config, BindingId::new(90), BindingGeneration::INITIAL, 0),
                 traces.clone(),
             )),
-            services,
+            services: RetainedConsumerServices {
+                data: ConsumerServiceOwner::retain_data(services.data, &b)
+                    .ok()
+                    .unwrap(),
+                access: ConsumerServiceOwner::retain_access(services.access, &b)
+                    .ok()
+                    .unwrap(),
+            },
         }])
         .unwrap();
         let mut source: Value = serde_json::from_str(&text).unwrap();
@@ -671,9 +731,10 @@ fn action_meaning_is_built_once_and_actual_support_work_and_schema_bounds_still_
             drop(definition);
         } else {
             assert!(result.is_err(), "case {case}");
-            assert!(
-                traces.lock().unwrap().is_empty(),
-                "refusal before native compilation"
+            assert_eq!(
+                traces.lock().unwrap().len(),
+                usize::from(case == 1),
+                "Cancel needs no application-schema support; unsupported value roles never compile"
             );
         }
         drop((registry, thing));
@@ -697,7 +758,14 @@ fn described_cancel_acknowledges_request_and_query_can_still_complete() {
             2,
         );
         let h = runtime
-            .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+            .calls
+            .invoke_action(
+                &runtime.association,
+                payload(b"12"),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
             .ok()
             .unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
@@ -765,8 +833,9 @@ fn input_and_completion_validation_and_remote_failure_keep_original_evidence() {
                 2,
             );
             let rejection = runtime
+                .calls
                 .invoke_action(
-                    "run",
+                    &runtime.association,
                     payload(b"\"bad\""),
                     Deadline::NONE,
                     now(),
@@ -777,7 +846,14 @@ fn input_and_completion_validation_and_remote_failure_keep_original_evidence() {
             assert_eq!(rejection.into_parts().0.unwrap().body.as_ref(), b"\"bad\"");
             assert_eq!(producer.counts.invoked.get(), 0);
             let h = runtime
-                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .calls
+                .invoke_action(
+                    &runtime.association,
+                    payload(b"12"),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
                 .ok()
                 .unwrap();
             producer.drive(&h, ConsumerActionState::Pending).await;
@@ -888,7 +964,14 @@ fn local_cancellation_and_cancel_response_loss_do_not_claim_remote_rollback() {
                 1,
             );
             let h = runtime
-                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .calls
+                .invoke_action(
+                    &runtime.association,
+                    payload(b"12"),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
                 .ok()
                 .unwrap();
             producer.drive(&h, ConsumerActionState::Pending).await;
@@ -949,7 +1032,14 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
             let pressure = b.reserve(ResourceKind::CleanupItemsMax, remaining).unwrap();
             assert!(
                 runtime
-                    .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                    .calls
+                    .invoke_action(
+                        &runtime.association,
+                        payload(b"12"),
+                        Deadline::NONE,
+                        now(),
+                        &mut budget()
+                    )
                     .is_err()
             );
             assert_eq!(producer.counts.invoked.get(), 0);
@@ -960,20 +1050,39 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
                 Deadline::NONE
             };
             let h = runtime
-                .invoke_action("run", payload(b"12"), deadline, now(), &mut budget())
+                .calls
+                .invoke_action(
+                    &runtime.association,
+                    payload(b"12"),
+                    deadline,
+                    now(),
+                    &mut budget(),
+                )
                 .ok()
                 .unwrap();
             // Native exchange concurrency is separate from retained invocation capacity.
             assert!(
                 runtime
-                    .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                    .calls
+                    .invoke_action(
+                        &runtime.association,
+                        payload(b"12"),
+                        Deadline::NONE,
+                        now(),
+                        &mut budget()
+                    )
                     .is_err()
             );
             producer.drive(&h, ConsumerActionState::Pending).await;
             match reason {
                 0 => owner.revoke(),
                 1 => p.denied.store(true, Ordering::Relaxed),
-                2 => p.unavailable.store(true, Ordering::Relaxed),
+                2 => {
+                    // The shared codec becomes a live dependency when a Query
+                    // exchange owns a potential application result.
+                    h.query(now(), &mut budget()).unwrap();
+                    p.unavailable.store(true, Ordering::Relaxed);
+                }
                 3 => {
                     h.progress(
                         &mut cx(),
@@ -982,7 +1091,7 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
                     )
                     .unwrap();
                 }
-                _ => runtime.begin_close(),
+                _ => runtime.calls.begin_close(),
             }
             if reason != 3 {
                 producer.drive(&h, ConsumerActionState::Closed).await;
@@ -1015,13 +1124,20 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
             1,
         );
         let h = runtime
-            .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+            .calls
+            .invoke_action(
+                &runtime.association,
+                payload(b"12"),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
             .ok()
             .unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         drop(h);
-        runtime.step(&mut cx(), now(), &mut budget());
-        assert!(runtime.is_idle());
+        runtime.calls.step(&mut cx(), now(), &mut budget());
+        assert!(runtime.calls.is_idle());
         drop(runtime);
         drop(owner);
         clean(&b);
@@ -1043,7 +1159,14 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
             1,
         );
         let old = runtime
-            .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+            .calls
+            .invoke_action(
+                &runtime.association,
+                payload(b"12"),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
             .ok()
             .unwrap();
         producer.drive(&old, ConsumerActionState::Pending).await;
@@ -1059,7 +1182,14 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
         assert_eq!(old_counts.invoked.get(), 1);
         // The vacated local slot can be reused only by an explicit new invocation.
         let new = runtime
-            .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+            .calls
+            .invoke_action(
+                &runtime.association,
+                payload(b"12"),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
             .ok()
             .unwrap();
         assert_ne!(new.identity().unwrap(), old_identity);
@@ -1123,7 +1253,14 @@ fn absent_controls_are_unsupported_and_never_synthesized() {
             1,
         );
         let h = runtime
-            .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+            .calls
+            .invoke_action(
+                &runtime.association,
+                payload(b"12"),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
             .ok()
             .unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
@@ -1187,7 +1324,14 @@ fn malformed_native_acceptance_and_framing_never_grant_completion_or_replay() {
                 1,
             );
             let h = runtime
-                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .calls
+                .invoke_action(
+                    &runtime.association,
+                    payload(b"12"),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
                 .ok()
                 .unwrap();
             for _ in 0..1000 {
@@ -1279,7 +1423,14 @@ fn wire_location_cannot_replace_the_selected_query_form() {
             1,
         );
         let h = runtime
-            .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+            .calls
+            .invoke_action(
+                &runtime.association,
+                payload(b"12"),
+                Deadline::NONE,
+                now(),
+                &mut budget(),
+            )
             .ok()
             .unwrap();
         for expected in [ConsumerActionState::Pending, ConsumerActionState::Completed] {
@@ -1328,8 +1479,9 @@ fn unread_completion_remains_revocable_until_settlement_handoff() {
                 let h = runtime
                     .as_ref()
                     .unwrap()
+                    .calls
                     .invoke_action(
-                        "run",
+                        &runtime.as_ref().unwrap().association,
                         payload(b"12"),
                         Deadline::at(MonotonicInstant::new(ClockId::new(1), 1)),
                         now(),
@@ -1345,7 +1497,7 @@ fn unread_completion_remains_revocable_until_settlement_handoff() {
                     0 => owner.revoke(),
                     1 => p.denied.store(true, Ordering::Relaxed),
                     2 => p.unavailable.store(true, Ordering::Relaxed),
-                    3 => runtime.as_ref().unwrap().begin_close(),
+                    3 => runtime.as_ref().unwrap().calls.begin_close(),
                     4 => h.cancel_local(),
                     6 => drop(runtime.take()),
                     8 => p.lose_data_on_query_access.store(true, Ordering::Relaxed),
@@ -1380,8 +1532,7 @@ fn unread_completion_remains_revocable_until_settlement_handoff() {
                         .unwrap()
                         .data()
                         .unwrap()
-                        .body
-                        .as_ref(),
+                        .body,
                     b"24"
                 );
                 assert_eq!(s.effect(), ConsumerEffect::Unknown);
@@ -1406,14 +1557,19 @@ fn unread_success_requires_paid_fresh_handoff_and_keeps_its_slot_on_short_credit
             let owner = instance();
             let p = Arc::new(Policy::default());
             let d = definition(&td(producer.address, None), b.clone(), p.clone(), true).unwrap();
-            let selected = d.input().query.as_ref().unwrap();
-            let access_work = selected.services.access.work();
+            let selected = d.0.input().query.as_ref().unwrap();
+            let access_work = d.1.query.as_ref().unwrap().work();
             let destination_work = selected.mapping.bounds().poll_work;
-            let runtime = ConsumerActionRuntime::try_new(owner.reference(), vec![d], 1)
-                .ok()
-                .unwrap();
+            let runtime = bind(d, &owner, b.clone(), 1);
             let h = runtime
-                .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                .calls
+                .invoke_action(
+                    &runtime.association,
+                    payload(b"12"),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
                 .ok()
                 .unwrap();
             producer.drive(&h, ConsumerActionState::Pending).await;
@@ -1447,7 +1603,14 @@ fn unread_success_requires_paid_fresh_handoff_and_keeps_its_slot_on_short_credit
                 );
                 assert!(
                     runtime
-                        .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                        .calls
+                        .invoke_action(
+                            &runtime.association,
+                            payload(b"12"),
+                            Deadline::NONE,
+                            now(),
+                            &mut budget()
+                        )
                         .is_err()
                 );
             }
@@ -1606,9 +1769,8 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
             } else {
                 td(producer.address, None)
             };
-            let mut input = definition(&text, b.clone(), p.clone(), false)
-                .unwrap()
-                .into_input();
+            let (prepared, access) = definition(&text, b.clone(), p.clone(), false).unwrap();
+            let mut input = prepared.into_input();
             let mut query = input.query.take().unwrap();
             // Retain the actual selected HTTP mapping; only its exchange result
             // timing changes, as permitted by the native retirement contract.
@@ -1616,14 +1778,17 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
                 original: query.mapping,
                 probe: probe.clone(),
             });
+            query.bounds = query.mapping.bounds();
             input.query = Some(query);
-            let d = ConsumerActionDefinition::try_new(input).ok().unwrap();
-            let runtime = ConsumerActionRuntime::try_new(owner.reference(), vec![d], 1)
-                .ok()
-                .unwrap();
+            let d = (
+                ConsumerActionDefinition::try_new(input).ok().unwrap(),
+                access,
+            );
+            let runtime = bind(d, &owner, b.clone(), 1);
             let h = runtime
+                .calls
                 .invoke_action(
-                    "run",
+                    &runtime.association,
                     payload(if structured { STRUCTURED_INPUT } else { b"12" }),
                     Deadline::NONE,
                     now(),
@@ -1661,8 +1826,7 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
                     .unwrap()
                     .data()
                     .unwrap()
-                    .body
-                    .as_ref(),
+                    .body,
                 if structured { STRUCTURED_OUTPUT } else { b"24" }
             );
             assert!(s.native_result().unwrap().is_ok(), "late output was lost");
@@ -1777,25 +1941,33 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
             let b = bank();
             let owner = instance();
             let p = Arc::new(Policy::default());
-            let mut input = definition(&td(producer.address, None), b.clone(), p.clone(), false)
-                .unwrap()
-                .into_input();
+            let (prepared, access) =
+                definition(&td(producer.address, None), b.clone(), p.clone(), false).unwrap();
+            let mut input = prepared.into_input();
             // Decorate only native timing; tokens, destination, socket ownership,
             // serialization and response parsing remain in the HTTP Binding.
             let original = input.query.take().unwrap();
+            let mapping = Box::new(CallbackMapping(original.mapping));
             input.query = Some(ConsumerActionOperation {
-                mapping: Box::new(CallbackMapping(original.mapping)),
+                bounds: mapping.bounds(),
+                mapping,
                 ..original
             });
-            let d = ConsumerActionDefinition::try_new(input).ok().unwrap();
-            let runtime = Rc::new(
-                ConsumerActionRuntime::try_new(owner.reference(), vec![d], 1)
-                    .ok()
-                    .unwrap(),
+            let d = (
+                ConsumerActionDefinition::try_new(input).ok().unwrap(),
+                access,
             );
+            let runtime = Rc::new(bind(d, &owner, b.clone(), 1));
             let h = Rc::new(
                 runtime
-                    .invoke_action("run", payload(b"12"), Deadline::NONE, now(), &mut budget())
+                    .calls
+                    .invoke_action(
+                        &runtime.association,
+                        payload(b"12"),
+                        Deadline::NONE,
+                        now(),
+                        &mut budget(),
+                    )
                     .ok()
                     .unwrap(),
             );
@@ -1808,16 +1980,16 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
             let nested = h.clone();
             let rt = runtime.clone();
             on_callback(edge, move || {
-                assert!(!rt.is_idle());
+                assert!(!rt.calls.is_idle());
                 assert!(nested.identity().is_ok());
                 assert!(nested.query(now(), &mut budget()).is_err());
                 assert!(nested.take_settlement(now(), &mut budget()).is_err());
                 if edge == CallbackEdge::Access || edge == CallbackEdge::Close {
-                    rt.begin_close();
+                    rt.calls.begin_close();
                 } else {
                     nested.cancel_local();
                 }
-                rt.step(&mut cx(), now(), &mut budget());
+                rt.calls.step(&mut cx(), now(), &mut budget());
             });
             if edge != CallbackEdge::Access {
                 producer.drive(&h, ConsumerActionState::Closed).await;
@@ -1842,8 +2014,7 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
                     .unwrap()
                     .data()
                     .unwrap()
-                    .body
-                    .as_ref(),
+                    .body,
                 b"24"
             );
             assert_eq!(p.validations.load(Ordering::Relaxed), 2);
@@ -1858,3 +2029,6 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
         }
     });
 }
+
+#[path = "support/action_composition.rs"]
+mod composition;

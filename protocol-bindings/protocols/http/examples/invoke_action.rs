@@ -6,6 +6,7 @@ use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::*;
 use clinkz_wot_servient_finite::consumer_action::*;
 use std::{
+    rc::Rc,
     sync::Arc,
     task::{Context, Waker},
     time::{Duration, Instant},
@@ -26,6 +27,15 @@ fn main() {
     assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
     let bank = Arc::new(HostResourceAccounts::new(&limits));
     let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
+    let services = config.consumer_services();
+    let services = RetainedConsumerServices {
+        data: ConsumerServiceOwner::retain_data(services.data, &bank)
+            .ok()
+            .unwrap(),
+        access: ConsumerServiceOwner::retain_access(services.access, &bank)
+            .ok()
+            .unwrap(),
+    };
     let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
         preparation: Box::new(HttpActionConsumer::new(
             config,
@@ -33,7 +43,7 @@ fn main() {
             BindingGeneration::INITIAL,
             601,
         )),
-        services: config.consumer_services(),
+        services: services.clone(),
     }])
     .unwrap();
     let definition = registry
@@ -49,8 +59,29 @@ fn main() {
     drop(thing);
     drop(registry);
     let consumer = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL));
-    let runtime = ConsumerActionRuntime::try_new(consumer.reference(), vec![definition], 1)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let access = ConsumerActionAccess {
+        invoke: services.access.clone(),
+        query: definition
+            .input()
+            .query
+            .as_ref()
+            .map(|_| services.access.clone()),
+        cancel: definition
+            .input()
+            .cancel
+            .as_ref()
+            .map(|_| services.access.clone()),
+    };
+    let association = ConsumerActionAssociation::try_new(
+        consumer.reference(),
+        Rc::new(definition),
+        access,
+        bank.clone(),
+        &mut work(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    drop(services);
+    let runtime = ConsumerActions::try_new(1, bank.clone()).unwrap();
     let clock = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(601), clock.elapsed().as_millis() as u64);
     let io = tokio::runtime::Builder::new_current_thread()
@@ -62,7 +93,7 @@ fn main() {
         let input = (args[3] != "-").then(|| Payload::new(args[3].as_bytes(), "application/json"));
         let handle = runtime
             .invoke_action(
-                &args[2],
+                &association,
                 input,
                 Deadline::at(now().checked_add_ticks(10_000).unwrap()),
                 now(),
@@ -102,12 +133,13 @@ fn main() {
                 "{}",
                 output
                     .data()
-                    .map_or_else(|| "completed".into(), |p| String::from_utf8_lossy(&p.body))
+                    .map_or_else(|| "completed".into(), |p| String::from_utf8_lossy(p.body))
             ),
             Err(error) => eprintln!("{error:?}"),
         }
     });
     drop(runtime);
+    drop(association);
     drop(consumer);
     assert!(
         ResourceKind::ALL

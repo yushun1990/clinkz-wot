@@ -38,6 +38,16 @@ occurrence policy and retained work follow
 [Runtime Safety](../spec/runtime-safety.md#notification-associations-and-conversation-capacity).
 This does not qualify authenticated source provenance or cross-endpoint lowering.
 
+Continuing Consumer Actions apply that distinction through reusable qualified
+`ConsumerActionDefinition`, independent `ConsumerActionAssociation` and separately
+funded `ConsumerActions` capacity. Definitions stay endpoint/registration
+specialized and retain original data/native declarations. Invocation identity,
+opaque continuation and cleanup belong to admitted work, beyond each exchange.
+Detailed contracts remain in [Core](../spec/interaction-core.md),
+[Planning](../spec/planning.md#continuing-consumer-action-preparation) and
+[Runtime Safety](../spec/runtime-safety.md#continuing-action-associations-and-invocation-capacity).
+
+
 Prepared security requirements are immutable content; credential services, verified
 principals and opaque per-call capabilities are live dependencies/work. Native key
 and trust owners remain in the Binding. Content sharing never shares permission. A physical content owner and its
