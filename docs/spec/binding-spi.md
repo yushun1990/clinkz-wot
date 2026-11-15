@@ -186,6 +186,13 @@ trusted linked code, not preemption/sandboxing guarantees. Static associated
 state/caller-owned slots and Host erasure/owned calls may differ physically;
 both must meet supported semantic ownership/progress/cancellation outcomes.
 
+Optional [Host Consumer turns](runtime-safety.md#host-consumer-execution-turns)
+borrow existing Servient capacity owners. This adds no Binding callback, native
+task inventory or Engine-owned transport loop. Bindings keep actual descriptor,
+connection, topic, continuation, retry and physical-release ownership. The Host
+supplies native wake integration and independent maintenance turns under that
+contract; no native source gains Servient admission or dispatch authority.
+
 ## Removed general contracts and retained adapters
 
 ADR-0025 supersedes ADR-0002/0003/0005/0008/0009/0010/0012 physical APIs and

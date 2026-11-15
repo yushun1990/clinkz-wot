@@ -16,6 +16,13 @@ Applicable requirements: AUTH-EVIDENCE-001, MOD-DEPS-001, SAFE-PROFILE-001, PERF
 
 Required evidence follows actual claims: Scoped real execution and conformance, feature/dependency cells, retained-owner cleanup under saturation, measured capability/profile performance and independent v1 technical release review. Historical gates and manifests cannot certify the successor.
 
+The [Host Consumer turn increment](../evidence/consumer-execution-composition.md)
+provides scoped executable composition of finite HTTP, continuing HTTP Actions
+and MQTT notifications under managed Consumer authority. Native readiness and
+deployment maintenance turns use independent work credit; manual APIs remain
+available. This is integration availability, not all-family Producer reuse,
+security/source qualification, an embedded-profile claim or release acceptance.
+
 Retained Property Read code/tests and historical tranches remain useful within
 their recorded contracts. Their old status does not close this package under
 v6. Exact successor source scope/API/state/resource changes, removals, checks and

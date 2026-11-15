@@ -493,3 +493,10 @@ requirements = ["SAFE-CLEANUP-001", "SPI-RETIRE-001"]
 participants = ["accepted-work", "cleanup-owner", "native-infrastructure"]
 preconditions = ["local-terminal-keeps-original-release-owner", "whole-owner-transfer-is-acknowledged", "physical-release-waits-for-final-use"]
 ownership = "Logical release never closes sibling service or certifies remote rollback; infrastructure shutdown has its own authority."
+
+[[composition]]
+id = "consumer-capacity-turn"
+requirements = ["SAFE-AUTH-001", "SAFE-CONCUR-001", "SAFE-CLEANUP-001", "RES-WORK-001"]
+participants = ["logical-instance", "accepted-work", "action-invocation", "notification-conversation", "cleanup-owner", "native-infrastructure"]
+preconditions = ["original-managed-reference-and-independent-family-permission", "separate-per-capacity-credit-and-original-work-owners", "deployment-native-wakes-and-maintenance-turns", "application-result-observation-in-driving-task"]
+ownership = "A borrowed turn creates no owner or scheduler. Existing family transitions retain normal/late results and pending/failed retirement. Live notification cursors retain unread reports; aggregate driving disposes abandoned reports only after complete original local retirement and paid cleanup. Explicit manual cleanup may instead collect reports after cursor loss. Passive logical replacement or owner loss cannot retarget work or manufacture a wake; native physical resources remain Binding-owned."

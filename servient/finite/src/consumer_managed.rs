@@ -1,4 +1,4 @@
-//! Managed finite Consumer lifecycle. IDs address AVL nodes; slots are private.
+//! Managed Consumer identity and finite configurations. Internal slots are private.
 use super::*;
 use alloc::boxed::Box;
 #[path = "consumer_tree.rs"]
@@ -117,7 +117,7 @@ impl core::fmt::Debug for ConsumerInstanceHandle {
     }
 }
 
-/// Actual logical owner of registered finite Consumers and named configurations.
+/// Actual logical owner of registered Consumers and named finite configurations.
 /// All ordinary management addresses TD IDs. Internal slots are owner-assigned;
 /// standalone caller-owned authority remains a separate low-level representation.
 /// Registration, lookup and removal touch logarithmic tree paths, never a global

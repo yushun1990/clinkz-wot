@@ -223,8 +223,47 @@ persistent associations over one compiled mapping, two Engine conversation slots
 and one native interest, with independent policy, cancellation, revocation and
 final release. This is reuse of an actual endpoint-specialized mapping; a new
 endpoint/TD still needs appropriate preparation. Broader cross-endpoint lowering,
-authenticated source evidence, general wildcard coalescing and automatic driving
-remain separate capabilities.
+authenticated source evidence and general wildcard coalescing remain separate
+capabilities. Optional aggregate Host driving is described below.
+
+### Managed mixed Consumer execution
+
+`ConsumerNotifications::step` visits active conversations and original cleanup
+without an application cursor inventory. Live cursors keep queued data and closed
+reports. Aggregate driving disposes abandoned reports after complete local
+retirement; retain the cursor for a required report, or use the manual
+`progress`/`step_cleanup` path to collect reports after cursor loss.
+
+The optional `consumer_execution::step_consumers` borrows existing finite, Action
+and notification capacity owners with independent caller-selected work credit.
+Start with managed `ConsumerOwner` registration and bind continuing associations
+to that original passive reference. Removing/replacing the parent fences all its
+original work; capacity size and native connection count remain independent of
+Thing count. No scheduler, new work owner or native task registry is added.
+
+The deployment supplies native Wakers and independent maintenance turns covering
+passive lifecycle/stop changes, deadlines, credit and the next native phase.
+Observe application results in the same Host task/loop. Query, Cancel, advance,
+response and mapped stop remain explicit decisions; the helper drives admitted
+progress and cleanup. Idle capacities do not imply final disposal of separately
+retained results or physical owners. See the
+[progress contract](../../../docs/spec/runtime-safety.md#host-consumer-execution-turns).
+
+The [runnable example](examples/mixed_consumer.rs) accepts a TD with all three
+supported capabilities and uses a deployment-supplied Tokio timer/loop for ten
+seconds, then fences managed acceptance and drains abandoned work:
+
+```sh
+cargo run -p clinkz-wot-binding-mqtt --example mixed_consumer -- \
+  TD.json 127.0.0.1:1883 level run alarm 12
+```
+
+The [real mixed tests](tests/mixed_consumer.rs) exercise separate permissions,
+short credit, native wakes, silent deadlines, controls, replacement, owner loss,
+retained original results and physical release. The
+[scoped evidence](../../../docs/evidence/consumer-execution-composition.md)
+distinguishes managed Consumer integration from remaining Producer reuse,
+authenticated mixed execution/source verification and embedded-profile work.
 
 Native policy is fixed and bounded: at most 32 actual participation leases and
 32 exact topics per service, four queued payloads per participant, 4096 payload

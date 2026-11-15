@@ -174,7 +174,9 @@ configuration-specialized definition. It does not compare new TDs, reuse partial
 Action lowering across endpoints, share invocation authority or provide general
 security support beyond the existing NoSec mapping. Explicit access binding may
 qualify a new policy revision for new work; it cannot retarget admitted work.
-Managed mixed HTTP/MQTT capabilities, reusable qualified Producer exposures,
-constrained continuing Actions, scheduler/event-loop integration and production
-qualification remain open. Review 10's retained probe is historical against its
+Managed mixed HTTP/MQTT execution was outside this increment; the subsequent
+[Host turn composition](consumer-execution-composition.md) supplies its scoped
+Consumer integration. Reusable qualified Producer exposures, constrained
+continuing Actions and production qualification remain open.
+Review 10's retained probe is historical against its
 recorded API; the corrected live counterexamples are these executable fixtures.

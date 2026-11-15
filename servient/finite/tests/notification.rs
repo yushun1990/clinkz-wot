@@ -703,6 +703,141 @@ fn data(root: &mut Root, cursor: &mut NotificationCursor) -> Vec<u8> {
 }
 
 #[test]
+fn aggregate_turn_rotates_short_credit_and_preserves_live_reports() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(&bus, limits());
+    let stalled = subscribe(
+        &mut root,
+        property(NotificationOverflow::Terminate),
+        Program {
+            start: Mode::Pending,
+            ..Program::property()
+        },
+    );
+    let stalled_id = stalled.identity().clone();
+    let mut live = subscribe(
+        &mut root,
+        property(NotificationOverflow::Terminate),
+        Program::property(),
+    );
+    let live_id = live.identity().clone();
+    let mut cx = Context::from_waker(Waker::noop());
+    for _ in 0..4 {
+        root.step(
+            &mut cx,
+            &mut budget().with_remaining(WorkClass::BindingPolls, 1),
+        );
+        // Mixing aggregate progress with explicit report cleanup must not
+        // reset the active-conversation rotation under short credit.
+        assert!(root.step_cleanup(&mut cx, &mut budget()).unwrap().is_none());
+    }
+    assert_eq!(
+        root.status(&stalled_id).unwrap().state,
+        NotificationState::Establishing
+    );
+    assert_eq!(
+        root.status(&live_id).unwrap().state,
+        NotificationState::Active
+    );
+    bus.borrow_mut().close = Mode::Fail;
+    drop(stalled);
+    root.step(&mut cx, &mut budget());
+    assert!(root.status(&stalled_id).unwrap().cleanup_error.is_some());
+    Bus::publish(&bus, ("sensor", 1), Some(payload("sibling")));
+    root.step(&mut cx, &mut budget());
+    assert_eq!(data(&mut root, &mut live), b"sibling");
+    root.advance(&mut live, &mut budget()).unwrap();
+    bus.borrow_mut().close = Mode::Ready;
+    root.step(&mut cx, &mut budget());
+    assert!(root.status(&stalled_id).is_err());
+    assert_eq!(root.retained_subscriptions(), 1);
+
+    root.begin_close();
+    root.step(&mut cx, &mut budget());
+    assert_eq!(
+        root.status(&live_id).unwrap().state,
+        NotificationState::Closed
+    );
+    assert_eq!(
+        root.retained_subscriptions(),
+        1,
+        "live receiver owns its unread report"
+    );
+    root.step(&mut cx, &mut budget());
+    let report = root.take_settlement(&live_id).unwrap();
+    assert_eq!(report.delivered_items, 1);
+    assert!(matches!(report.first_cause, Some(CoreError::Cancelled(_))));
+    assert_eq!(root.retained_subscriptions(), 0);
+    assert!(bus.borrow().physical.is_empty());
+}
+
+#[test]
+fn aggregate_abandonment_keeps_original_reply_until_retired_even_with_stop_views() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(&bus, limits());
+    let cursor = subscribe(&mut root, event(true), Program::event());
+    let identity = cursor.identity().clone();
+    let stop = cursor.stop_handle();
+    let mut cx = Context::from_waker(Waker::noop());
+    root.step(&mut cx, &mut budget());
+    Bus::publish(&bus, ("sensor", 1), Some(payload("reply owned")));
+    root.step(&mut cx, &mut budget());
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+    let retained = root.reserved_engine_bytes();
+    drop(cursor);
+    root.step(&mut cx, &mut WorkBudget::new());
+    assert_eq!(root.reserved_engine_bytes(), retained);
+    bus.borrow_mut().retire = Mode::Pending;
+    root.step(&mut cx, &mut budget());
+    bus.borrow_mut().retire = Mode::Fail;
+    root.step(&mut cx, &mut budget());
+    assert_eq!(root.reserved_engine_bytes(), retained);
+    assert!(root.status(&identity).unwrap().cleanup_error.is_some());
+    assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+    bus.borrow_mut().retire = Mode::Ready;
+    for _ in 0..8 {
+        root.step(&mut cx, &mut budget());
+    }
+    assert_eq!(root.retained_subscriptions(), 0);
+    assert!(bus.borrow().physical.is_empty());
+    assert_eq!(
+        bus.borrow().reply_send_polls,
+        0,
+        "aggregate progress invents no response"
+    );
+    stop.request_stop(); // A surviving passive stop view cannot pin/revive work.
+    assert!(root.status(&identity).is_err());
+}
+
+#[test]
+fn aggregate_zero_credit_observes_passive_parent_loss_without_discarding_report() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(&bus, limits());
+    let cursor = subscribe(
+        &mut root,
+        property(NotificationOverflow::Terminate),
+        Program::property(),
+    );
+    let mut cx = Context::from_waker(Waker::noop());
+    root.step(&mut cx, &mut budget());
+    root._instance.revoke();
+    let polls = bus.borrow().close_polls;
+    root.step(&mut cx, &mut WorkBudget::new());
+    assert_eq!(bus.borrow().close_polls, polls);
+    assert_eq!(
+        root.status(cursor.identity()).unwrap().state,
+        NotificationState::Closing
+    );
+    root.step(&mut cx, &mut budget());
+    let report = root.take_settlement(cursor.identity()).unwrap();
+    assert!(matches!(
+        report.first_cause,
+        Some(CoreError::StaleHandle(_))
+    ));
+    assert_eq!(report.remote_cancellation, RemoteCancellation::Unknown);
+}
+
+#[test]
 fn property_observation_has_one_cursor_and_no_fabricated_initial_value() {
     let bus = Bus::new();
     Bus::publish(&bus, ("sensor", 1), Some(payload("no subscribers")));

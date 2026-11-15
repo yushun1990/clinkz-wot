@@ -250,8 +250,8 @@ counterexamples deliver a later permitted Event on the same conversation, and
 reply-owner tests cover refused required responses with bounded pending/error
 retirement. Existing Producer-to-Consumer, loss and late-work evidence is retained. The downstream reciprocal-response fixture checks original occurrence
 policy at delayed send and complete reply retirement; MQTT still refuses that
-response capability. Constrained notifications, authenticated source provenance,
-automatic progress and a managed all-family owner remain unimplemented. No package,
+response capability. Constrained notifications and authenticated source provenance
+remain unimplemented. Optional aggregate progress is scoped below; no package,
 architecture gate or milestone is closed.
 
 The separate `consumer_action::ConsumerActionAssociation` and `ConsumerActions`
@@ -284,8 +284,8 @@ not govern Query output. Real HTTP contrasts independent body allowances;
 downstream datagrams contrast JSON/plain-text media, output-only Query support,
 exact selected validation work and changed-declaration refusal during late cleanup.
 The root QueryAllActions fixture shares one Consumer authority across separate
-finite and continuing capacity. Managed mixed HTTP/MQTT composition, reusable
-Producer exposure composition and broader profiles remain separate work.
+finite and continuing capacity. Managed mixed Consumer execution is scoped below;
+reusable Producer exposure composition and broader profiles remain separate work.
 
 Unread native completion remains revocable until a paid settlement handoff with
 fresh time, original authority and captured service/access checks. The HTTP
@@ -311,6 +311,27 @@ remains applicable. The
 distinguishes reproduced defects from already-correct replacement behavior.
 These changes preserve the continuing association and its explicit described
 controls; no finite-call substitution or package/gate acceptance is implied.
+
+## Host Consumer execution composition
+
+The [borrowed turn contract](../spec/runtime-safety.md#host-consumer-execution-turns)
+adds aggregate active/cleanup notification progress and an optional common turn
+over existing finite, continuing Action and notification capacities. It creates
+no work owner, scheduler or Thing-to-capacity relationship. Live cursors retain
+their terminal reports; aggregate driving reclaims abandoned cursors only after
+original retirement. The manual per-conversation/report cleanup path remains
+available when reports are required after cursor loss.
+
+The [mixed HTTP/MQTT evidence](../evidence/consumer-execution-composition.md)
+uses managed TD-ID registration, separate application permission services,
+shared prepared definitions and independent capacity. Deployment-supplied native
+wakes and a timer drive one Host task's admitted work/results and cleanup,
+including silent deadlines, passive replacement/owner loss and abandonment.
+Original unread results, physical sibling ownership and final release are checked;
+existing callback/late-result and F1/F2/F3 evidence stays applicable. The compiled
+example exposes the same integration. No independent acceptance, Producer reuse,
+mixed authentication/source verification, constrained continuing implementation,
+production qualification or package/milestone closure is claimed.
 
 ## Open finite Consumer ownership
 

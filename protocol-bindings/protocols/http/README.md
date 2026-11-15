@@ -62,6 +62,11 @@ and [initial Basic/TLS evidence](../../../docs/evidence/td-security-https.md).
 
 # Host HTTP Properties, Actions and Finite Collections
 
+For managed finite HTTP and continuing HTTP Actions alongside MQTT notifications,
+use the optional [Host Consumer turn integration](../mqtt/README.md#managed-mixed-consumer-execution).
+The [compiled example](../mqtt/examples/mixed_consumer.rs) supplies one deployment
+loop with independent capacity credit while preserving explicit manual APIs.
+
 `clinkz-wot-binding-http` is an optional Cargo dependency used with the public
 open `ConsumerRegistry`, `ConsumerAssociation` and `ConsumerCalls`.
 `HttpConsumerConfig::for_cleartext_ip()` explicitly
