@@ -122,7 +122,12 @@ capabilities. HTTP Action and MQTT notification runtime crates depend normally
 on Core/Foundation and their native/data services, with no Servient dependency.
 Their passive publication facet is defined in Core. Only Servient retains logical
 Action handles/progress/settlement or reconciles native failures into revocation.
-Automatic progress is not claimed by these manual facets.
+Automatic progress is not claimed by these manual facets. Optional Host Consumer
+turn composition borrows existing family capacities under the
+[runtime progress contract](../spec/runtime-safety.md#host-consumer-execution-turns).
+It depends only on Core/Foundation and adds no owner, scheduler or protocol case.
+The deployment supplies wake/maintenance turns, time and independent credit;
+Servient retains logical authority/work and Bindings retain native resources.
 It does not model Property observation or Event notification as finite exchanges: their
 establishment, delivery, reciprocal responses and stop require separate logical
 conversation owners.

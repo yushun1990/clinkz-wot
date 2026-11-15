@@ -323,7 +323,8 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
 
 /// Explicit family-specific conversation capacity, independently funded and
 /// usable by many persistent associations. No scheduling, native matching or
-/// physical subscription pool is introduced. Drive progress/cleanup manually.
+/// physical subscription pool is introduced. Drive an explicit aggregate turn
+/// or select individual conversations for progress/cleanup.
 pub struct ConsumerNotifications<B: ConsumerNotificationBinding> {
     root: RawNotificationServient<B, CapturedAuthorizer<B>>,
     bank: Arc<HostResourceAccounts>,
@@ -363,6 +364,13 @@ where
     }
     pub fn retained_subscriptions(&self) -> usize {
         self.root.retained_subscriptions()
+    }
+    /// Drive active conversations and original cleanup without retaining their
+    /// identities. Live cursors keep their data/reports; abandoned cursors are
+    /// reclaimed only after local retirement. No application response or remote
+    /// cancellation input is invented. See `RawNotificationServient::step`.
+    pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+        self.root.step(cx, budget);
     }
     pub fn subscribe(
         &mut self,

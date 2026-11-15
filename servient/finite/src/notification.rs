@@ -37,28 +37,34 @@ pub struct RawNotificationLimits {
 /// ```
 pub struct NotificationCursor {
     identity: NotificationIdentity,
-    stopped: Rc<Cell<bool>>,
+    control: Rc<NotificationControl>,
+}
+#[derive(Default)]
+struct NotificationControl {
+    stopped: Cell<bool>,
+    abandoned: Cell<bool>,
 }
 impl NotificationCursor {
     pub fn identity(&self) -> &NotificationIdentity {
         &self.identity
     }
     pub fn stop_handle(&self) -> NotificationStop {
-        NotificationStop(self.stopped.clone())
+        NotificationStop(self.control.clone())
     }
 }
 impl Drop for NotificationCursor {
     fn drop(&mut self) {
-        self.stopped.set(true);
+        self.control.abandoned.set(true);
+        self.control.stopped.set(true);
     }
 }
 /// Cloneable cancellation intent only; it confers no receive/response or native
 /// infrastructure-shutdown authority. No user/native callback runs here.
 #[derive(Clone)]
-pub struct NotificationStop(Rc<Cell<bool>>);
+pub struct NotificationStop(Rc<NotificationControl>);
 impl NotificationStop {
     pub fn request_stop(&self) {
-        self.0.set(true);
+        self.0.stopped.set(true);
     }
 }
 
@@ -203,7 +209,7 @@ struct Entry<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
     context: RawNotificationContext<B, A>,
     identity: NotificationIdentity,
     request: RawNotificationRequest,
-    stopped: Rc<Cell<bool>>,
+    control: Rc<NotificationControl>,
     state: NotificationState,
     support: NotificationSupport,
     participant: Option<B::Participation>,
@@ -232,17 +238,17 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
         }
         // Stop intent linearizes at the shared flag, even if a later revoke or
         // callback failure is the next operation that observes this entry.
-        let cause = if self.stopped.get() {
+        let cause = if self.control.stopped.get() {
             cancelled()
         } else {
             cause
         };
         self.first_cause.get_or_insert(cause);
-        self.stopped.set(true);
+        self.control.stopped.set(true);
         self.state = NotificationState::Closing;
     }
     fn sync_stop(&mut self) {
-        if self.stopped.get() {
+        if self.control.stopped.get() {
             self.fence(cancelled());
         }
         if !self.identity.consumer.is_current() {
@@ -299,6 +305,7 @@ pub struct RawNotificationServient<B: ConsumerNotificationBinding, A: Notificati
     limits: RawNotificationLimits,
     reserved_bytes: usize,
     current: bool,
+    progress_cursor: usize,
     cleanup_cursor: usize,
     retained: usize,
 }
@@ -429,6 +436,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             limits,
             reserved_bytes,
             current: true,
+            progress_cursor: 0,
             cleanup_cursor: 0,
             retained: 0,
         })
@@ -468,7 +476,14 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             .checked_add(self.limits.payload_backing_bytes.checked_mul(2)?)?
             .checked_add(self.limits.control_backing_bytes.checked_mul(2)?)?
             .checked_add(target)?
-            .checked_add(3 * size_of::<usize>()) // Rc<Cell<bool>>, including alignment
+            .checked_add(
+                Layout::new::<[usize; 2]>()
+                    .extend(Layout::new::<NotificationControl>())
+                    .ok()?
+                    .0
+                    .pad_to_align()
+                    .size(),
+            )
     }
 
     /// Complete pre-effect rejection returns the exact request and native program.
@@ -596,7 +611,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         else {
             return Err(reject((request, program, context), capacity()));
         };
-        let stopped = Rc::new(Cell::new(false));
+        let control = Rc::new(NotificationControl::default());
         let participant = match context.binding.prepare(program, &identity) {
             Ok(p) => p,
             Err(e) => {
@@ -611,13 +626,13 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         self.retained += 1;
         let cursor = NotificationCursor {
             identity: identity.clone(),
-            stopped: stopped.clone(),
+            control: control.clone(),
         };
         self.slots[i].entry = Some(Entry {
             context,
             identity,
             request,
-            stopped,
+            control,
             support,
             state: NotificationState::Establishing,
             participant: Some(participant),
@@ -754,6 +769,43 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             }
         }
     }
+    /// Visit every original conversation once, rotating the first visit between
+    /// turns. Each conversation keeps its own progress, policy and cleanup.
+    /// Short credit or a pending/failed participant cannot skip sibling visits.
+    /// Live cursors retain their queued data and terminal reports. Abandoned
+    /// cursors' reports are disposed only after complete local retirement and a
+    /// paid cleanup visit, even if a stop handle or saved identity survives.
+    ///
+    /// This is one explicit turn, not a scheduler: arrange turns after passive
+    /// authority/stop changes and replenished credit independently of native wakes.
+    pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+        let count = self.slots.len();
+        if count == 0 {
+            return;
+        }
+        let start = self.progress_cursor;
+        self.progress_cursor = (start + 1) % count;
+        for offset in 0..count {
+            let i = (start + offset) % count;
+            let Some(entry) = &self.slots[i].entry else {
+                continue;
+            };
+            let identity = entry.identity.clone();
+            // Errors are already retained on this original entry; insufficient
+            // work leaves it runnable. Neither can fail the whole capacity turn.
+            let _ = self.progress(&identity, cx, budget);
+            let entry = self.slots[i].entry.as_ref().unwrap();
+            if entry.state == NotificationState::Closed
+                && entry.control.abandoned.get()
+                && debit(budget, WorkClass::CleanupItems, 1).is_ok()
+            {
+                drop(
+                    self.take_settlement(&identity)
+                        .expect("original closed entry"),
+                );
+            }
+        }
+    }
     /// One paid round-robin cleanup visit, usable after every cursor/identity
     /// has been lost. Returning the complete terminal report acknowledges it;
     /// pending/error retains the original slot. No native global scheduler is
@@ -775,7 +827,10 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         // Independent authority may end while the receive cursor is retained.
         // Observe that fence before deciding whether this entry needs cleanup.
         e.sync_stop();
-        if !e.stopped.get() && e.state != NotificationState::Closed && !e.has_rejected_item() {
+        if !e.control.stopped.get()
+            && e.state != NotificationState::Closed
+            && !e.has_rejected_item()
+        {
             return Ok(None);
         }
         let identity = e.identity.clone();
@@ -857,7 +912,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
 
     pub fn status(&self, identity: &NotificationIdentity) -> CoreResult<NotificationStatus<'_>> {
         let e = self.entry(identity)?;
-        let state = if (e.stopped.get() || !e.identity.consumer.is_current())
+        let state = if (e.control.stopped.get() || !e.identity.consumer.is_current())
             && e.state != NotificationState::Closed
         {
             NotificationState::Closing

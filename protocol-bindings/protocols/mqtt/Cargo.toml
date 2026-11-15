@@ -30,3 +30,7 @@ broker-tests = ["prepare"]
 [[example]]
 name = "emit_event"
 required-features = ["prepare"]
+
+[[example]]
+name = "mixed_consumer"
+required-features = ["prepare"]

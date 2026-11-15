@@ -18,9 +18,11 @@ Engine execution architecture** through correct protocol/Engine authority,
 independent logical associations, checked reusable preparation and separately
 funded admitted work. The finite Host Consumer now has managed TD-ID
 registrations, non-revoking association views and independent `ConsumerCalls`
-capacity (PR #276); this completes a scoped finite handoff, not continuing
-Action/notification composition, Producer authority extraction or all-profile
-execution. Basic Property/Action/Event and described collection coverage in
+capacity (PR #276). Independently bound continuing Actions and notifications
+now join that managed authority through
+[optional Host execution turns](docs/evidence/consumer-execution-composition.md).
+These are scoped capabilities, not all-profile execution or architecture closure.
+Basic Property/Action/Event and described collection coverage in
 both roles has reached a meaningful milestone. These real execution paths do
 not establish architecture completion or v1 qualification.
 
@@ -91,6 +93,11 @@ lowering, constrained execution and production qualification remain open.
 Completed output now preserves the returning operation's representation and
 data limits against shared Action meaning, with independent HTTP body-allowance
 and downstream JSON/plain-text evidence at the same scoped increment.
+The [mixed Consumer increment](docs/evidence/consumer-execution-composition.md)
+executes independently authorized finite HTTP, continuing HTTP Actions and MQTT
+notifications under managed Consumer lifecycle, with aggregate progress/cleanup
+and a deployment-supplied Host loop. Qualified Producer reuse, mixed security,
+authenticated source evidence and constrained continuing execution remain open.
 
 The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
 proves the bounded endpoint NoSec HTTP subset, including
@@ -163,9 +170,9 @@ production HTTPS, constrained-profile or v1 qualification. Those remain delivery
 | 1 — Producer native/semantic authority boundary | Remove the Binding-to-Servient execution authority leak (Review 10 F1). Binding owns native matching, correlation, I/O and retirement; Servient alone decides logical admission, dispatch and revocation. Begin with the existing real HTTP continuing Action path; do not prescribe a universal RPC/session or a callback facade that secretly forwards Engine authority. | HTTP Action invoke/query/cancel and original continuation/result/cleanup work through native candidates/opportunities and a protocol-neutral Servient handoff. The HTTP Binding no longer depends on `servient-finite` to dispatch application work; failure before/after publication, late outcomes and independent native release remain truthful. |
 | 2 — Reusable definition compilation and checked instance binding (0081) | Converge the already accepted definition/instance/authority split into useful cross-instance preparation and compilation reuse **before** extending the same coupling to more runtime families. Reuse only genuinely invariant work with checked Binding dependencies/operands; endpoint-specialized mappings remain specialized. No universal `CompiledProgram`, cache or persisted image is prescribed. | With fixed compatible definitions and increasing Thing instances, distinguish definition-compilation work from necessary TD input checks, instance binding/admission and native specialization. Demonstrate a real qualifying reuse path, changed-dependency refusal/recompilation, independent permissions/accounts and final physical release; do not label semantic-content sharing alone as compiler reuse. |
 | 3 — Continuing Consumer notification composition | Independent Host notification associations/capacity, actual mapping reuse, named occurrence policy and notification F2/F3 corrections are implemented at the scoped evidence below. Extend original per-occurrence context to qualified source/verification evidence where required; preserve native sharing/stop/response rights. | Real MQTT notification conversations remain independently authorized under shared compatible native interests. A concrete evidence-bearing source mapping tests per-occurrence policy without treating an unauthenticated topic as a verified principal; queued delivery, stop, loss, late work and physical cleanup retain their original owners. |
-| 4 — Continuing Action and multi-capability reuse | Independent continuing Action associations/capacity, actual prepared-definition reuse and Action F2/F3 corrections are implemented at the [scoped evidence](docs/evidence/consumer-action-composition.md). Integrate finite, Action, notification and qualified Producer capabilities under their common logical authority without a mega-Runtime; replace obsolete adapters as the affected boundaries are changed. | Original invoke/query/cancel mappings and late outcomes survive initial exchange, replacement and retirement. Actual shared content/services are funded once, prepared declarations cannot silently change during runtime construction, and mixed HTTP/MQTT capabilities retain independent progress and cleanup. |
+| 4 — Continuing Action and multi-capability reuse | Independent continuing Action associations/capacity, actual prepared-definition reuse and Action F2/F3 corrections are implemented at the [scoped evidence](docs/evidence/consumer-action-composition.md). [Mixed Consumer turns](docs/evidence/consumer-execution-composition.md) now integrate finite HTTP, continuing HTTP Actions and MQTT under managed authority. Extend qualified Producer reuse without a mega-Runtime. | Original invoke/query/cancel mappings and late outcomes survive initial exchange, replacement and retirement. Actual shared content/services are funded once, prepared declarations cannot silently change during runtime construction, and mixed capabilities retain independent progress and cleanup. Producer exposure reuse needs its own complete qualification/publication evidence. |
 | 5 — Secure execution and Discovery clients | Broaden actual DataSchema/media/security execution, Host HTTPS and explicit bounded trusted Discovery/Directory retrieval where their dependencies are ready; these can proceed independently of the cross-family sequence. | Supported assertions, security branches and trusted retrieval execute through actual providers and peers without source-TD callbacks, silent weakening, credential leakage or fabricated interoperability claims. |
-| 6 — Product integration and supported profiles | Provide convenient execution composition for supported deployments alongside simple, composable manual poll/step APIs; converge Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification. Integrate with deployment-supplied async runtimes, event loops, timers or main loops without prescribing Tokio, a universal scheduler, mega-Runtime or one execution owner per Thing. | Applications can progress supported mixed capabilities and cleanup through higher-level integration, with independent semantic/native ownership and preserved safety guarantees. Supported role/operation/profile combinations have actual integration, conformance, resource/performance and lifecycle evidence; unsupported combinations remain explicit. |
+| 6 — Product integration and supported profiles | Optional borrowed Host Consumer turn composition is implemented alongside manual poll/step APIs. Broaden supported deployment integration, Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification without prescribing Tokio, a universal scheduler, mega-Runtime or one execution owner per Thing. | Applications progress the scoped mixed Consumer capabilities and cleanup through a deployment-supplied loop with independent semantic/native ownership. Broader role/operation/profile combinations still need integration, conformance, resource/performance and lifecycle evidence; unsupported combinations remain explicit. |
 
 Priorities express concentration, not sequential package gates. Security/HTTPS,
 Discovery and portable-profile work can advance with available dependencies;
@@ -195,8 +202,9 @@ An endpoint specialized into a native artifact remains specialized.
 
 The finite Consumer association/capacity separation is implemented by PR #276:
 the managed owner resolves TD IDs/configurations without retaining application
-handles or prepaying vacant finite call slots. It still provides neither a
-universal multi-family owner nor automatic scheduling/physical drain.
+handles or prepaying vacant finite call slots. Independently bound continuing
+facets share that original authority; no universal multi-family configuration
+registry or automatic scheduling/physical drain is introduced.
 
 Retain the **Producer execution authority correction (Review 10 F1)** while
 broadening composition. HTTP Action invoke/query/cancel now supplies native
@@ -246,27 +254,28 @@ leases. This is a scoped Host/manual capability, not completion of priority 3:
 authenticated source provenance still needs an evidence-bearing mapping/verifier,
 retained original trust/dependency context and forged/absent/ambiguous/stale-proof
 checks. Neither topics nor NoSec payloads establish that claim. Cross-endpoint
-notification lowering and managed multi-family registration also remain open.
+notification lowering remains open; continuing associations bind explicitly to
+the managed parent independently of finite named configurations.
 The [continuing Action increment](docs/evidence/consumer-action-composition.md)
 now applies the independently retained definition/association/capacity boundary
-and corrects Action F2/F3 through real HTTP execution. Mixed capability and
-qualified Producer reuse remain open. Preserve family-specific state and support
-both manual driving and convenient higher-level execution composition. These are independently useful capabilities, not an
-all-family migration gate.
+and corrects Action F2/F3 through real HTTP execution. The
+[Host composition increment](docs/evidence/consumer-execution-composition.md)
+now supplies aggregate active/cleanup notification progress and optional borrowed
+turns over existing family capacities, retaining manual use. The existing mixed
+Producer collection fixture remains separate evidence; reusable qualified Producer
+exposures and broader roles/profiles remain open.
 
-Current implementations require application-driven poll/step turns, including
-after passive revocation or abandoned work; the existing runtime-safety contract
-continues to apply. This describes today's mechanism, not the intended limit of
-application integration. Low-level poll/step remains important for embedded
-deployments without an async runtime, and its public APIs should be simple,
-understandable, composable and practical to drive correctly. Supported deployments
-should also offer composition that progresses Bindings, Actions, notifications
-and cleanup without applications manually orchestrating every internal task.
-The environment may supply an async runtime, event loop, timer or simple main
-loop. Integration must preserve Servient ownership of semantic authority and
-accepted work, and Binding ownership of native I/O and physical resources.
-Execution composition is a later capability; topic 0081 changes neither current
-progress/wake/cleanup guarantees nor execution-coordination code.
+Host applications can progress the supported mixed Consumer work and cleanup
+through one integration turn. Deployment-supplied native wakes and maintenance
+turns provide time and work credit; semantic Query/Cancel/response choices stay
+explicit. The [runtime contract](docs/spec/runtime-safety.md#host-consumer-execution-turns)
+owns exact wake, result-observation and drain limits. The implementation provides
+no scheduler or execution state container. Low-level poll/step remains important
+for deployments without an async runtime; the Host example demonstrates one
+possible supplied runtime/timer, not a dependency required by the Engine.
+Qualified Producer reuse, authenticated notification provenance, mixed secure
+execution, constrained continuing capabilities and broader Host integration remain
+independently useful work, without an all-family migration gate.
 
 Select subsequent increments against remaining product capabilities and the
 actual assumptions exposed by those integrations. Preserve distinct Property,

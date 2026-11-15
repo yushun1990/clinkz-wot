@@ -113,8 +113,10 @@ may supply those turns. A logical `Deadline` is only an instant/comparison;
 expiry is observed on supplied clock observations, not by an installed timer.
 Native completion does not cover a silent peer or indefinite subscription.
 Aggregate progress also requires the application to arrange result-consumer turns
-if native wake interest has moved to another task. Zero/partial credit retains
-runnable/progress responsibility; no autonomous eventual cleanup is claimed.
+if native wake interest has moved to another task. The optional
+[Host turn composition](#host-consumer-execution-turns) observes application results
+in the same driving task. Zero/partial credit retains runnable/progress
+responsibility; no autonomous eventual cleanup is claimed.
 
 Explicit call cancellation and work-owner close wake registered progress outside
 borrows. Work-owner close fences only its admitted calls and preserves `step`
@@ -265,8 +267,29 @@ retirement; retained reports keep original prepared/association owners for any
 shared target backing until report disposal. Capacity Drop performs qualified
 whole-owner finite local abort; it does not revoke persistent associations or
 other capacity domains. Original instance revocation fences only its work.
-Applications still schedule progress/cleanup after passive revocation and cursor
-loss. There is no scheduler or automatic authority-change wake mechanism.
+Applications schedule progress/cleanup after passive revocation and cursor loss,
+either individually or with the aggregate turn below. There is no scheduler or
+automatic authority-change wake mechanism.
+
+`RawNotificationServient::step` and `ConsumerNotifications::step` visit every
+original conversation at most once per turn, rotating the first visit across
+turns. A pending participant, retained error or short credit cannot skip sibling
+visits. Each visit uses the existing conversation's policy, validation, queue,
+response and retirement transitions. Zero credit can observe passive stop and
+authority fences but cannot enter native cleanup. The turn invents no application
+response, cancellation input, remote control or permission.
+
+A live cursor retains queued values and its closed unread report. Cursor Drop
+records abandonment separately from stop intent. Aggregate progress disposes an
+abandoned cursor's report only after complete local retirement and a paid cleanup
+visit; pending/failed response or participation retirement retains its original
+owners and capacity. A surviving stop view or saved identity does not prevent
+this disposal or revive the cursor. Applications needing reports after cursor
+loss use the existing explicit `progress`/`step_cleanup`/`take_settlement` path
+instead of automatic abandoned-report disposal. This is an opt-in consequence
+of aggregate driving, matching abandonment of finite/Action handles; it does not
+discard a live recipient's result or report. Neither acknowledgement nor idle
+capacity proves release of independently retained result/definition/native owners.
 
 Prepared data policy/media/native support MUST match at association binding,
 admission and applicable delayed handoffs. Fresh availability/schema support and
@@ -619,6 +642,56 @@ mandatory pointer atomics/Arc. Profiles use common semantic kernels/invariant
 cases where applicable and their own storage/wake/release evidence. No portable
 compile, matching mock trace or std flag qualifies hardware, SDK, allocator or
 real-time performance. Missing implemented profiles remain gaps, not exclusions.
+
+### Host Consumer execution turns
+
+`consumer_execution::ConsumerProgress` is an optional borrowed progress interface
+implemented by finite calls, continuing Actions and typed notification capacities.
+`step_consumers` visits the supplied capacities with independently supplied work
+budgets and one caller-qualified clock observation. It allocates no registry,
+stores no work, owns no Consumer and acquires no native resources. The slice may
+contain any subset or several capacities, including notifications from different
+Bindings. Progress remains bounded/cooperative under each capacity's existing
+contract. Per-capacity credit prevents one family from spending a sibling's
+allowance; each capacity retains its existing within-capacity fairness. Errors,
+short credit, normal/late results and cleanup remain with their original owners.
+The return value reports idle capacities after the turn, including unread reports;
+it is not a claim that external settlements or physical infrastructure are gone.
+Idle inspection is passive and must not invoke linked callbacks or mutate work.
+
+Managed composition starts with `ConsumerOwner` registration and shares its
+original passive reference with independently authorized family associations.
+The existing finite named-configuration registry stays finite; Action and
+notification associations are explicitly bound, not looked up through a new
+universal configuration registry. Removing/replacing a parent or dropping its
+owner fences every original facet without retargeting work. Closing a capacity
+still fences only that capacity. The progress helper accepts no new authority,
+definition, service or configuration override and changes no admission rules.
+
+A Host deployment MUST supply turns on native wakes and an independent maintenance
+source covering passive lifecycle/stop changes, deadlines, replenished credit and
+native Ready-to-next-phase transitions. An actual timer, command loop or cyclic
+main loop can provide this source; a logical Deadline and native wake interest
+alone cannot. In async integration, register that source before returning Pending
+and keep application result observation/decisions in the same driving task.
+Existing manual handles do not supply broadcast wake notification to independently
+awaiting result tasks. The helper neither self-wakes on exhausted credit nor
+claims progress after the deployment stops supplying turns. Explicit finite/Action
+cancellation retains its existing registered wake behavior; passive owner loss
+and notification stop remain passive. Native descriptors/timers/sessions stay in
+their actual Binding/deployment, not in this interface.
+
+Application QueryAction, CancelAction, response, advance and mapped stop remain
+explicit decisions under fresh policy. Shutdown fences managed acceptance, keeps
+the capacities progressing and consumes live results/reports until original local
+retirement; abandoned work can then be reclaimed by its capacity. Dropping a
+capacity still invokes only its qualified finite local abort. No background
+executor, mandatory scheduler, per-Thing work owner or complete drain on Drop is
+introduced. Manual per-handle poll/progress and capacity step remain usable alone.
+The [mixed execution evidence](../evidence/consumer-execution-composition.md)
+and [compiled Host example](../../protocol-bindings/protocols/mqtt/examples/mixed_consumer.rs)
+establish the scoped integration; Producer composition, mixed security/source
+verification and constrained continuing execution require separate evidence.
 
 ### Caller-owned finite Read
 
