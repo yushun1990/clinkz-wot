@@ -48,6 +48,15 @@ Detailed contracts remain in [Core](../spec/interaction-core.md),
 [Runtime Safety](../spec/runtime-safety.md#continuing-action-associations-and-invocation-capacity).
 
 
+Producer reuse has a different publication boundary: a `PreparedThing` remains
+one description's complete selection, while concrete HTTP response/validation
+instructions can be explicitly shared across checked native route bindings.
+Independent final-TD qualification, behavior/authority, native readiness and
+collision checks, publication and retirement stay with each exposure. The
+[Producer contract](../spec/planning.md#reusable-producer-preparation) owns the
+exact split; it does not copy the Consumer association representation or make
+an entire prepared Thing a universal reusable program.
+
 Prepared security requirements are immutable content; credential services, verified
 principals and opaque per-call capabilities are live dependencies/work. Native key
 and trust owners remain in the Binding. Content sharing never shares permission. A physical content owner and its

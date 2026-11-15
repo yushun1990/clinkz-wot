@@ -81,15 +81,6 @@ impl HttpResponses {
         })
     }
     #[cfg(feature = "prepare")]
-    pub(super) fn compile(
-        doc: &clinkz_wot_td::semantic::ResolvedSemanticDocument<'_>,
-        owner: clinkz_wot_td::semantic::FormOwner<'_>,
-        form: u32,
-        operation: Operation,
-    ) -> CoreResult<Self> {
-        Ok(Self::lower(&Self::extract(doc, owner, form, operation)?))
-    }
-    #[cfg(feature = "prepare")]
     pub(super) fn lower(input: &[HttpResponseInput]) -> Self {
         let mut result = Self {
             codes: [0; 33],
@@ -105,6 +96,16 @@ impl HttpResponses {
             result.utf8_media |= u64::from(response.utf8_media) << i;
         }
         result
+    }
+    #[cfg(feature = "prepare")]
+    pub(super) fn matches_input(&self, input: &[HttpResponseInput]) -> bool {
+        input.len() == usize::from(self.count)
+            && input.iter().enumerate().all(|(i, r)| {
+                self.codes[i] == r.code
+                    && (self.successes & (1 << i) != 0) == r.success
+                    && (self.empty & (1 << i) == 0) == r.has_data
+                    && (self.utf8_media & (1 << i) != 0) == r.utf8_media
+            })
     }
     #[cfg(feature = "prepare")]
     pub(super) fn extract(

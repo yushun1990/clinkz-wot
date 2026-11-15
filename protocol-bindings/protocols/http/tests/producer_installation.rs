@@ -792,13 +792,26 @@ fn nested_schema_limits_and_final_disposal_keep_the_original_funding() {
         (std::mem::size_of::<clinkz_wot_core::execution::responses::FiniteResponses>()
             + 2 * std::mem::size_of::<usize>()
             + "application/json".len()) as u64;
+    // Native instructions now have their own immutable Arc owner. Compare
+    // scalar and structured definitions so this test still checks exact schema
+    // growth without depending on that private instruction layout.
+    let (scalar, _) = prepare_with_schema(address, Generation::INITIAL, json!({"type":"integer"}));
+    let scalar_schema_bytes =
+        (std::mem::size_of::<PreparedSchema>() + 2 * std::mem::size_of::<usize>()) as u64;
+    let instruction_bytes =
+        scalar.install_policy().program_bytes - scalar_schema_bytes - response_bytes;
+    assert!(instruction_bytes > 0);
+    drop(scalar);
     let b = bank();
     let mut required = Vec::new();
     for close in [true, false] {
         let (prepared, authority) =
             prepare_with_schema(address, Generation::INITIAL, schema.clone());
         let policy = prepared.install_policy();
-        assert_eq!(policy.program_bytes, schema_bytes + response_bytes);
+        assert_eq!(
+            policy.program_bytes,
+            instruction_bytes + schema_bytes + response_bytes
+        );
         assert!(policy.largest_indirect_allocation >= field_table as u64);
         assert!(policy.local_drop_work >= 2 * PreparedSchema::MAX_NODES as u64);
         MAX.with(|n| n.set(0));

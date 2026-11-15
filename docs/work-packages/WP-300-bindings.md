@@ -224,3 +224,15 @@ Servient dependency, including without preparation. The actual HTTP Action and
 MQTT broker suites exercise the same supported mappings after this extraction;
 wire protocol and broader qualification claims are unchanged. Continuation and
 logical revocation decisions belong to WP-400. No package/gate status changes.
+
+## Explicit reusable Producer instructions
+
+The existing open Producer capability can return a checked per-input mapping
+that references concrete shared native instructions. The
+[HTTP contract](../spec/binding-spi.md#reusable-http-producer-instructions)
+keeps exact native operands, collisions, listeners, correlation and retirement
+in the Binding; it adds no protocol case or required reusable-program facet to
+Core. [The real HTTP evidence](../evidence/producer-preparation-reuse.md) covers
+NoSec Property Read and independently qualified publication, not broader family,
+security/profile, shared-listener or package acceptance. Original physical
+funding remains attached to every instruction reference.

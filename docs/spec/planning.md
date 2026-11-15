@@ -93,7 +93,7 @@ its complete actual configuration and all facts its lowering observes must be
 checked. A mismatch refuses or explicitly compiles another definition before
 dependent effects. Source/instance identities and registration coordinates are
 not dependencies merely because an old compiler carrier includes them.
-The HTTP increment uses one typed input extraction for lowering and reuse,
+The HTTP Consumer increment uses one typed input extraction for lowering and reuse,
 with derived input equality; it retains no independent semantic projection.
 This is a concrete Binding choice, not a required generic compiler framework.
 
@@ -281,8 +281,46 @@ HTTP Producer selected-definition final checking compares borrowed normalized
 constraints against the original program and retains its existing schema owner;
 it no longer recompiles a second selected constraint tree merely to compare it.
 Other providers still need complete actual support probes, with declared scratch.
-Native endpoint lowering and whole-description admission remain separate work;
-this does not establish general normalized-TD reuse or native retargeting.
+The explicit [Producer definition path](#reusable-producer-preparation) also
+checks and binds fresh native endpoints without repeating invariant lowering.
+Whole-description admission remains separate work; neither path establishes
+general normalized-TD reuse.
+
+## Reusable Producer preparation
+
+`PreparedThing` is the complete selected mapping set for one description, not
+the unit of cross-instance reuse. Its scope/Form/operation coordinates, actual
+provider indices and bound native definitions remain description-specific.
+`ProducerCapability::prepare` may lower fresh instructions or check and bind
+explicitly supplied immutable work; it returns the concrete mapping for the
+current input in both cases. This does not require a second common compiler ABI,
+whole-Thing cloning or the Consumer definition/association representation.
+
+Every new instance still runs the complete TD admission/semantic walk, actual
+behavior coverage, deterministic provider selection and native operand checks.
+After closed installation, `check_final_thing` rechecks the entire final TD,
+the exact selected mappings, actual dependencies and every competing candidate.
+A shared subdefinition grants neither final-TD qualification nor permission.
+Changed dependencies refuse a supplied definition; there is no implicit fallback
+compilation in the explicit bind path.
+
+The concrete [HTTP contract](binding-spi.md#reusable-http-producer-instructions)
+separates response/validation instructions from native route binding. All
+applicability checks run through the same compiler entry before either lowering
+or borrowed comparison; schemas compare using the existing common comparators,
+and native response facts compare directly with the retained discriminator.
+No second independently maintained dependency tree is stored. Actual lowering
+is counted only where response/schema instructions are constructed. Ordinary
+fresh support probes may still lower temporary definitions; the supplied HTTP
+definition path and selected final checks bypass that work.
+
+Definition byte declarations count each returned mapping's additional backing.
+Shared content excluded from that amount must retain its own complete original
+physical reservation through every reference, including native configuration
+snapshots. Instance admission separately pays for descriptions, coordinates,
+operands, behavior, publication, participants, results/cleanup and final-check
+scratch. The [runtime owner](runtime-safety.md#reusable-producer-definition-ownership)
+keeps these lifetimes independent. There is no automatic cache or new gate.
 
 `ConsumerDefinition::bind` attaches a retained actual access policy and independent
 instance bank without recompilation or source callbacks. `ConsumerBinding` is the

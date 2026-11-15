@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0126-reusable-producer-preparation.md][0126 Reusable Producer preparation and independent publication]]
+
 - [[file:0125-consumer-execution-composition.md][0125 Managed Consumer execution composition]]
 
 - [[file:0124-consumer-action-association-capacity.md][0124 Continuing Consumer Action association and capacity]]

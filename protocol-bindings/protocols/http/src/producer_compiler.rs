@@ -88,6 +88,17 @@ impl HttpProducerConfig {
         budget: &mut WorkBudget,
         expected: Option<&HttpProducerProgram>,
     ) -> CoreResult<Option<HttpProducerProgram>> {
+        self.compile_mapping_shared(input, budget, expected.map(|p| &p.instructions), None, None)
+    }
+
+    pub(crate) fn compile_mapping_shared(
+        &self,
+        input: clinkz_wot_planning::ResolvedBindingInput<'_>,
+        budget: &mut WorkBudget,
+        expected: Option<&Arc<HttpProducerInstructions>>,
+        accounts: Option<&Arc<clinkz_wot_core::host_accounts::HostResourceAccounts>>,
+        compilations: Option<&std::cell::Cell<usize>>,
+    ) -> CoreResult<Option<HttpProducerProgram>> {
         if budget
             .consume(
                 WorkClass::BindingPolls,
@@ -152,7 +163,7 @@ impl HttpProducerConfig {
         {
             return Err(producer_unsupported());
         }
-        let responses = crate::responses::HttpResponses::compile(
+        let response_input = crate::responses::HttpResponses::extract(
             document,
             input.owner,
             input.form_index,
@@ -163,23 +174,6 @@ impl HttpProducerConfig {
         budget
             .consume(WorkClass::BindingPolls, response_work)
             .map_err(|_| producer_unsupported())?;
-        let response_contract = if let Some(original) = expected {
-            if !clinkz_wot_planning::responses::matches(
-                document,
-                input.owner,
-                input.form_index,
-                &original.response_contract,
-            )? {
-                return Err(producer_unsupported());
-            }
-            original.response_contract.clone()
-        } else {
-            Arc::new(clinkz_wot_planning::responses::prepare(
-                document,
-                input.owner,
-                input.form_index,
-            )?)
-        };
         // Shared DataSchema meaning is prepared once. HTTP supplies JSON
         // decoding; accepting extension-free schemas is not validation support.
         let mut schema_work = 0;
@@ -212,66 +206,6 @@ impl HttpProducerConfig {
         {
             return Ok(None);
         }
-        let property_map = if collection {
-            Some(if let Some(original) = expected {
-                let original = original
-                    .property_map
-                    .as_ref()
-                    .ok_or_else(producer_unsupported)?;
-                let writing = matches!(
-                    input.operation,
-                    Operation::WriteAllProperties | Operation::WriteMultipleProperties
-                );
-                if !clinkz_wot_planning::type_schema::matches_property_schema(
-                    document, original, writing,
-                )? {
-                    return Err(producer_unsupported());
-                }
-                Arc::clone(original)
-            } else {
-                Arc::new(
-                    if matches!(
-                        input.operation,
-                        Operation::WriteAllProperties | Operation::WriteMultipleProperties
-                    ) {
-                        clinkz_wot_planning::type_schema::prepare_writable_property_schema(
-                            document,
-                        )?
-                    } else {
-                        clinkz_wot_planning::type_schema::prepare_readable_property_schema(
-                            document,
-                        )?
-                    },
-                )
-            })
-        } else {
-            None
-        };
-        let value_schema = if let Some(original) = expected {
-            let agrees = if collection {
-                original.value_schema.as_ref()
-                    == &clinkz_wot_core::data_schema::PreparedSchema::Type(
-                        clinkz_wot_core::data_schema::ValueType::Object,
-                    )
-            } else {
-                clinkz_wot_planning::type_schema::matches_schema(
-                    document.property().schema,
-                    &original.value_schema,
-                )?
-            };
-            if !agrees {
-                return Err(producer_unsupported());
-            }
-            Arc::clone(&original.value_schema)
-        } else {
-            Arc::new(if collection {
-                clinkz_wot_core::data_schema::PreparedSchema::Type(
-                    clinkz_wot_core::data_schema::ValueType::Object,
-                )
-            } else {
-                clinkz_wot_planning::type_schema::prepare_schema(document.property().schema)?
-            })
-        };
         let form = document
             .scope(if collection {
                 SemanticScope::AffordanceForm {
@@ -329,12 +263,114 @@ impl HttpProducerConfig {
         if origin.len() > 64 {
             return Err(producer_unsupported());
         }
+        let instructions = if let Some(original) = expected {
+            if original.operation != input.operation
+                || original.secure != self.secure
+                || original.authentication != authentication
+                || !original.responses.matches_input(&response_input)
+            {
+                return Err(producer_unsupported());
+            }
+            if !clinkz_wot_planning::responses::matches(
+                document,
+                input.owner,
+                input.form_index,
+                &original.response_contract,
+            )? {
+                return Err(producer_unsupported());
+            }
+            if collection {
+                let property_map = original
+                    .property_map
+                    .as_ref()
+                    .ok_or_else(producer_unsupported)?;
+                if !clinkz_wot_planning::type_schema::matches_property_schema(
+                    document,
+                    property_map,
+                    matches!(
+                        input.operation,
+                        Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                    ),
+                )? || original.value_schema.as_ref()
+                    != &clinkz_wot_core::data_schema::PreparedSchema::Type(
+                        clinkz_wot_core::data_schema::ValueType::Object,
+                    )
+                {
+                    return Err(producer_unsupported());
+                }
+            } else if original.property_map.is_some()
+                || !clinkz_wot_planning::type_schema::matches_schema(
+                    document.property().schema,
+                    &original.value_schema,
+                )?
+            {
+                return Err(producer_unsupported());
+            }
+            Arc::clone(original)
+        } else {
+            // Reserve the bounded provisional owner before lowering schemas or
+            // response instructions. Shrink to actual physical backing below.
+            let mut funding = accounts
+                .map(crate::producer_compiler::definition_funding)
+                .transpose()?;
+            if let Some(count) = compilations {
+                count.set(count.get() + 1);
+            }
+            let response_contract = Arc::new(clinkz_wot_planning::responses::prepare(
+                document,
+                input.owner,
+                input.form_index,
+            )?);
+            let value_schema = Arc::new(if collection {
+                clinkz_wot_core::data_schema::PreparedSchema::Type(
+                    clinkz_wot_core::data_schema::ValueType::Object,
+                )
+            } else {
+                clinkz_wot_planning::type_schema::prepare_schema(document.property().schema)?
+            });
+            let property_map = if collection {
+                Some(Arc::new(
+                    if matches!(
+                        input.operation,
+                        Operation::WriteAllProperties | Operation::WriteMultipleProperties
+                    ) {
+                        clinkz_wot_planning::type_schema::prepare_writable_property_schema(
+                            document,
+                        )?
+                    } else {
+                        clinkz_wot_planning::type_schema::prepare_readable_property_schema(
+                            document,
+                        )?
+                    },
+                ))
+            } else {
+                None
+            };
+            let mut instructions = HttpProducerInstructions {
+                operation: input.operation,
+                responses: crate::responses::HttpResponses::lower(&response_input),
+                response_contract,
+                secure: self.secure,
+                authentication,
+                value_schema,
+                property_map,
+                funding: None,
+            };
+            if let Some(leases) = funding.as_mut() {
+                let bytes = instructions.backing_bytes() as u64;
+                for i in [0, 2, 3] {
+                    let excess = leases[i]
+                        .amount()
+                        .checked_sub(bytes)
+                        .ok_or_else(producer_unsupported)?;
+                    leases[i].release_part(excess);
+                }
+            }
+            instructions.funding = funding;
+            Arc::new(instructions)
+        };
         let mut program = HttpProducerProgram {
-            operation: input.operation,
-            responses,
-            response_contract,
-            secure: self.secure,
-            authentication,
+            instructions,
             security_registration: None,
             form: input.form_index,
             address: self.address,
@@ -343,13 +379,46 @@ impl HttpProducerConfig {
             authority_end: authority_end as u8,
             origin: [0; 64],
             origin_len: origin.len() as u8,
-            value_schema,
-            property_map,
         };
         program.target[..input.target.len()].copy_from_slice(input.target.as_bytes());
         program.origin[..origin.len()].copy_from_slice(origin.as_bytes());
         Ok(Some(program))
     }
+}
+
+pub(crate) fn definition_bound() -> usize {
+    core::mem::size_of::<HttpProducerInstructions>()
+        + 2 * clinkz_wot_core::data_schema::PreparedSchema::BACKING_BOUND
+        + 33 * (256
+            + core::mem::size_of::<clinkz_wot_core::execution::responses::ResponseAlternative>())
+        + 1024
+}
+
+fn definition_funding(
+    bank: &Arc<clinkz_wot_core::host_accounts::HostResourceAccounts>,
+) -> CoreResult<[clinkz_wot_core::host_accounts::HostCapacityReservation; 5]> {
+    // Explicit reuse admits Property Read only: two bounded constraint
+    // trees (value and response schemas), 33 response media and vector entries.
+    let bytes = definition_bound() as u64;
+    for kind in [
+        ResourceKind::LargestContiguousAllocationBytesMax,
+        ResourceKind::BindingArtifactBytesPerItemMax,
+    ] {
+        if bytes > bank.account(kind).limit() {
+            return Err(producer_busy());
+        }
+    }
+    let reserve = |kind, amount| bank.reserve(kind, amount).ok_or_else(producer_busy);
+    Ok([
+        reserve(ResourceKind::EngineLiveBytesGlobalMax, bytes)?,
+        reserve(ResourceKind::BindingArtifactsGlobalMax, 1)?,
+        reserve(ResourceKind::BindingArtifactBytesGlobalMax, bytes)?,
+        reserve(ResourceKind::CleanupBytesMax, bytes)?,
+        reserve(ResourceKind::CleanupItemsMax, 1)?,
+    ])
+}
+fn producer_busy() -> CoreError {
+    CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
 }
 pub(crate) fn class_assertion(node: SemanticNode<'_>) -> bool {
     node.name() == SemanticName::Keyword("@type")

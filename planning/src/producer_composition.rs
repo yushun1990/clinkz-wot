@@ -79,12 +79,18 @@ pub struct ProducerOperationInput<'a> {
 
 /// An actual startup registration with its own concrete definition type.
 /// `None` is a nonmatching candidate; `Err` is a failed selected preparation.
+/// Preparation may perform fresh lowering or checked binding of explicitly
+/// supplied immutable work. It always returns the mapping for this input, not a
+/// shared whole-Thing qualification certificate or logical authority.
 /// The final check must compare all immutable services, mapping operands and
 /// native endpoint facts against the SAME owned definition. Native readiness,
 /// collisions and leases are checked separately before Servient publication.
 pub trait ProducerCapability {
     fn identity(&self) -> (BindingId, BindingGeneration);
-    /// Exact retained definition footprint including indirect owned backing.
+    /// Additional retained definition footprint, including indirect backing
+    /// without its own original reservation. Explicitly funded shared content
+    /// keeps its complete physical owner through every definition reference;
+    /// each returned mapping still declares its own layout/operand cost.
     /// Native infrastructure/work and the logical Thing are separate owners.
     fn definition_bytes(&self, definition: &dyn Any) -> Option<usize>;
     fn prepare(
@@ -139,6 +145,9 @@ impl PreparedOperation {
         self.definition.as_ref()
     }
 }
+/// Complete selection for one description. Operation coordinates and provider
+/// indices belong here; reusable subdefinitions belong to concrete Bindings.
+/// A new Thing requalifies its complete description, services and behaviors.
 pub struct PreparedThing {
     operations: Vec<PreparedOperation>,
     retained_bytes: usize,

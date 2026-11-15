@@ -1,13 +1,20 @@
 //! Optional preparation of the direct finite participant, without the legacy
 //! Producer executor/installation interface.
 use crate::*;
+use clinkz_wot_core::host_accounts::HostResourceAccounts;
 use clinkz_wot_core::{finite::FiniteIngressBinding, producer::ProducerInstanceKey};
 use clinkz_wot_planning::{
     ResolvedProducerInput,
     finite_producer::FiniteProducerCompiler,
     producer_composition::{FormSite, ProducerCapability, ProducerOperationInput},
 };
-use std::any::Any;
+use std::{any::Any, cell::Cell};
+
+enum Preparation {
+    Specialized,
+    Compile(Arc<HostResourceAccounts>),
+    Bind(HttpProducerDefinition),
+}
 
 /// One immutable startup registration. Explicit loopback/nonzero endpoints
 /// remain fixed in this first slice; port-0 rewriting is deliberately unsupported.
@@ -17,6 +24,10 @@ pub struct HttpFiniteProducer {
     generation: BindingGeneration,
     timeout_ticks: u64,
     security: Option<HttpServerSecurity>,
+    preparation: Preparation,
+    compilations: Cell<usize>,
+    checks: Cell<usize>,
+    bindings: Cell<usize>,
 }
 
 impl HttpFiniteProducer {
@@ -35,6 +46,10 @@ impl HttpFiniteProducer {
             generation,
             timeout_ticks,
             security: None,
+            preparation: Preparation::Specialized,
+            compilations: Cell::new(0),
+            checks: Cell::new(0),
+            bindings: Cell::new(0),
         })
     }
 
@@ -56,7 +71,50 @@ impl HttpFiniteProducer {
             generation,
             timeout_ticks,
             security: Some(security),
+            preparation: Preparation::Specialized,
+            compilations: Cell::new(0),
+            checks: Cell::new(0),
+            bindings: Cell::new(0),
         })
+    }
+
+    /// Explicitly lower reusable NoSec HTTP Property Read instructions.
+    /// The original bank pays for physical backing until the final reference.
+    pub fn compiling(
+        listen: HttpProducerConfig,
+        id: BindingId,
+        generation: BindingGeneration,
+        timeout_ticks: u64,
+        accounts: Arc<HostResourceAccounts>,
+    ) -> CoreResult<Self> {
+        let mut provider = Self::try_new(listen, id, generation, timeout_ticks)?;
+        provider.preparation = Preparation::Compile(accounts);
+        Ok(provider)
+    }
+
+    /// Check complete supported meaning and bind fresh native route operands.
+    /// A changed dependency refuses; this capability never falls back to lowering.
+    pub fn reusing(
+        listen: HttpProducerConfig,
+        id: BindingId,
+        generation: BindingGeneration,
+        timeout_ticks: u64,
+        definition: &HttpProducerDefinition,
+    ) -> CoreResult<Self> {
+        let mut provider = Self::try_new(listen, id, generation, timeout_ticks)?;
+        provider.preparation = Preparation::Bind(definition.clone());
+        Ok(provider)
+    }
+    /// Actual instruction lowerings, including failed attempts and support probes.
+    pub fn native_compilations(&self) -> usize {
+        self.compilations.get()
+    }
+    pub fn dependency_checks(&self) -> usize {
+        self.checks.get()
+    }
+    /// Successful preparation bindings; final/support checks are not new instances.
+    pub fn mapping_bindings(&self) -> usize {
+        self.bindings.get()
     }
     fn compile_definition(
         &self,
@@ -82,12 +140,32 @@ impl HttpFiniteProducer {
         {
             return Ok(None);
         }
+        if !matches!(self.preparation, Preparation::Specialized)
+            && (!matches!(input.site, FormSite::Property(_))
+                || input.operation != Operation::ReadProperty)
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
         if self.listen.secure && self.security.as_ref().is_none_or(|s| !s.is_ready()) {
             return Err(crate::producer::producer_unsupported());
         }
+        // A supplied definition is an actual capability dependency, including
+        // at final qualification. An unrelated expected program cannot make a
+        // currently incompatible registration claim support.
+        let original = match &self.preparation {
+            Preparation::Bind(definition) => Some(&definition.0),
+            _ => expected.map(|p| &p.instructions),
+        };
+        if original.is_some() {
+            self.checks.set(self.checks.get() + 1);
+        }
+        let accounts = match &self.preparation {
+            Preparation::Compile(accounts) => Some(accounts),
+            _ => None,
+        };
         let mut program = self
             .listen
-            .compile_mapping(
+            .compile_mapping_shared(
                 clinkz_wot_planning::ResolvedBindingInput {
                     selected_security: None,
                     document: input.document,
@@ -100,7 +178,9 @@ impl HttpFiniteProducer {
                     subprotocol: None,
                 },
                 budget,
-                expected,
+                original,
+                accounts,
+                Some(&self.compilations),
             )?
             .ok_or_else(|| {
                 CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
@@ -108,7 +188,7 @@ impl HttpFiniteProducer {
         if self
             .security
             .as_ref()
-            .is_some_and(|service| !service.supports(program.authentication))
+            .is_some_and(|service| !service.supports(program.instructions.authentication))
         {
             return Err(crate::producer::producer_unsupported());
         }
@@ -126,6 +206,9 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
         instance: ProducerInstanceKey,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<(HttpFiniteBinding, HttpFiniteConfig)>> {
+        if !matches!(self.preparation, Preparation::Specialized) {
+            return Err(crate::producer::producer_unsupported());
+        }
         let property = input.property();
         let Some(program) = self.listen.compile_property_read(input, budget)? else {
             return Ok(None);
@@ -195,9 +278,11 @@ impl ProducerCapability for HttpFiniteProducer {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<Box<dyn Any>>> {
-        Ok(self
-            .compile_definition(input, budget, None)?
-            .map(|program| Box::new(program) as Box<dyn Any>))
+        let program = self.compile_definition(input, budget, None)?;
+        if program.is_some() {
+            self.bindings.set(self.bindings.get() + 1);
+        }
+        Ok(program.map(|program| Box::new(program) as Box<dyn Any>))
     }
     fn supports(
         &self,
@@ -210,7 +295,11 @@ impl ProducerCapability for HttpFiniteProducer {
         // Cover the bounded URI/program and collection member/name backing used
         // by a sequential pure support/final-check callback, including its Arc.
         // No replacement definition survives and no native setup occurs.
-        Some(clinkz_wot_planning::security::TEMPORARY_BYTES as usize + 32_768)
+        Some(
+            clinkz_wot_planning::security::TEMPORARY_BYTES as usize
+                + crate::producer_compiler::definition_bound()
+                + 8192,
+        )
     }
     fn check_final(
         &self,

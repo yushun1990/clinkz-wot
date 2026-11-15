@@ -1429,3 +1429,45 @@ in other operation families remain unsupported. Existing native Action
 continuation-ID mappings retain their separately qualified profile.
 Finite Property Producer preparation/final qualification rejects dynamic declarations/templates;
 Consumer support never licenses advertising an unqualified mapping.
+
+## Reusable Producer preparation
+
+For an explicit NoSec Property Read reuse path, register
+`HttpFiniteProducer::compiling(listen, id, generation, timeout, original_bank)`
+with the existing `prepare_thing`. Extract
+`HttpProducerDefinition::from_program` from the selected `HttpProducerProgram`.
+For another independent Thing, register
+`HttpFiniteProducer::reusing(new_listen, new_id, new_generation, timeout, &definition)`
+and run `prepare_thing` on that Thing's complete description and actual behaviors.
+The supplied-definition path checks dependencies and binds fresh routes; a
+mismatch refuses without fallback compilation. Ordinary `try_new`/`try_https`
+keep specialized preparation and do not establish this reusable definition.
+These explicit modes use whole-Thing `ProducerCapability`, not the older
+single-Property `FiniteProducerCompiler` facade.
+
+The shared physical owner contains the native response discriminator, complete
+response contract and value/response constraint trees. It contains no endpoint,
+Property name, Form coordinate, handler, permission or native listener. Source
+IDs/titles/names and native endpoints may differ; schema/response/media and
+supported native meaning must agree. Each binding still checks actual native
+operands and complete final-TD support. `native_compilations`,
+`dependency_checks` and `mapping_bindings` distinguish actual lowering from
+necessary checks and prepared route bindings; they count preparation work, not
+live Things or runtime performance.
+
+Build the instance's `HttpFiniteConfig` with its own logical key, targets and
+bound programs. Native route collisions, closed setup/readiness, independent
+`ComposedProducerExposure` admission, complete final qualification and local
+publication all remain required. Live permission and behavior are fresh for each
+accepted request. Request timeout belongs to the actual native configuration;
+publication does not share listeners or create a scheduler. Reusable instructions
+retain their original bank until the last program/definition reference drops;
+new instance banks pay their own mapping/publication/native costs.
+
+The [real HTTP tests](tests/composed_thing/reuse.rs) prove one actual lowering
+across independently published Things, different names/routes/handlers and
+permissions, normal/additional responses, complete final-description refusals,
+collisions/ambiguity, failed publication isolation, unread original results,
+independent retirement and final physical funding/socket release. This is scoped
+to Host/manual loopback HTTP NoSec Read. Other operations/security/profiles,
+normalized whole-TD reuse and shared-listener execution remain separate work.

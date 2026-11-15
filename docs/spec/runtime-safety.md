@@ -834,6 +834,31 @@ compares its declared operation count with the covered prepared associations at
 admission and before publication. Unpaired native definitions refuse handoff;
 selected-entry equality alone cannot fund an additional retained schema.
 
+## Reusable Producer definition ownership
+
+Complete Producer publication remains per instance. `ComposedProducerExposure`
+owns that instance's complete selected mappings, actual providers, native member
+identities, final-check scratch and publication/retirement guard. It may retain
+references to shared immutable Binding instructions; it does not become a shared
+Thing or acquire another instance's authority, native participant or shutdown
+right. A failed publication retires only its original membership. A sibling
+keeps its own current permission, behavior, native progress and settlement.
+
+Explicitly funded HTTP instructions retain their original physical definition
+bank through every program/definition/native snapshot, independently of all
+exposure banks. Instance admission pays its actual reference/operand and runtime
+cost rather than charging the shared physical allocation again. Source or sibling
+retirement cannot release that original charge early or move it to another bank.
+Even a detached immutable program reference keeps the original lease; the final
+physical instruction/schema/response owner releases it after disposal. This is
+separate from native socket retirement and original unread result ownership.
+
+The [preparation contract](planning.md#reusable-producer-preparation) and
+[concrete HTTP boundary](binding-spi.md#reusable-http-producer-instructions)
+do not remove complete final-TD qualification, native collisions, fresh ingress
+authority or acknowledged retirement. The [evidence](../evidence/producer-preparation-reuse.md)
+is a bounded manual Host integration, not a per-Thing scheduler or runtime.
+
 ## Resolved Consumer destinations
 
 The finite Host owner validates variable inputs, reserves original operand,

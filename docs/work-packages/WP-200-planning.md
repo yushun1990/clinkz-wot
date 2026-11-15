@@ -296,8 +296,8 @@ compares the existing owned definitions in place. It never reconstructs a full
 complete `check_final`; every other candidate runs `supports` to detect new
 ambiguity under the same matching/error contract as `prepare`. Original operation
 coordinates, selected registration identity, complete final operation count and
-behavior coverage remain checked. The HTTP and test-only UDP participants reuse
-their concrete lowering for these comparisons without boxing another definition.
+behavior coverage remain checked. The HTTP participant compares borrowed input with original instructions; the
+test-only UDP participant reuses its pure mapping logic without boxing another definition.
 Work exhaustion remains Backpressure and does not silently certify support.
 
 Actual capabilities declare `final_check_temporary_bytes` for the complete peak
@@ -480,3 +480,17 @@ The [Planning contract](../spec/planning.md#open-consumer-notification-preparati
 owns exact preparation scope, and
 [notification evidence](../evidence/consumer-notification-composition.md) scopes
 executable claims. No new admission gate or package closure is introduced.
+
+## Reusable Producer preparation
+
+[Planning](../spec/planning.md#reusable-producer-preparation) now distinguishes
+one description's `PreparedThing` selection from concrete reusable instruction
+subdefinitions. The actual capability can check and bind supplied immutable work
+through the existing `prepare` boundary. Every instance still runs complete
+common TD/behavior/provider qualification; final checking remains complete after
+closed native setup. No new common program, cache or Consumer-style association
+layer is introduced. [HTTP evidence](../evidence/producer-preparation-reuse.md)
+proves actual avoided response/schema lowering, checked distinct names/routes,
+refusals and original ownership. This does not establish normalized whole-TD,
+other Producer-family or constrained preparation reuse; dependencies and package
+status remain unchanged.

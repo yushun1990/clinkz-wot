@@ -62,3 +62,4 @@ docs/evidence/constrained-finite-execution.md,constrained-finite-execution-evide
 docs/evidence/consumer-notification-composition.md,consumer-notification-composition-evidence,non-normative-evidence,6.0,1,docs/spec/runtime-safety.md
 docs/evidence/consumer-action-composition.md,consumer-action-composition-evidence,non-normative-evidence,6.0,1,docs/spec/runtime-safety.md
 docs/evidence/consumer-execution-composition.md,consumer-execution-composition-evidence,non-normative-evidence,6.0,1,docs/spec/runtime-safety.md
+docs/evidence/producer-preparation-reuse.md,producer-preparation-reuse-evidence,non-normative-evidence,6.0,1,docs/spec/planning.md
