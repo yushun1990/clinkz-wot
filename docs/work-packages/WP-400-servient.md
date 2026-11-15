@@ -254,8 +254,11 @@ response capability. Constrained notifications, authenticated source provenance,
 automatic progress and a managed all-family owner remain unimplemented. No package,
 architecture gate or milestone is closed.
 
-The separate `consumer_action::ConsumerActionRuntime` now retains TD-selected
-continuing invocation identity, mappings and services after each native exchange
+The separate `consumer_action::ConsumerActionAssociation` and `ConsumerActions`
+replace the former per-Consumer Runtime. Persistent associations retain reusable
+TD-selected definitions and explicitly bound per-operation access; independently
+funded capacity admits invocations from many Consumers. Each invocation retains
+its original identity, association, mappings and services after each exchange
 ends. Explicit query/cancel uses the original association and current authority;
 cancel acknowledgement is not terminal completion. First local cause, remote
 cancellation status, effect uncertainty, native result, validation and cleanup
@@ -267,6 +270,13 @@ policy loss, deadlines, both role replacements, resource pressure and final
 release. The downstream datagram fixture covers different actual Binding types,
 zero-credit progress and blocked/error cleanup with a retained late invalid result.
 The original synchronous Consumer path remains separately exercised.
+The [Action composition evidence](../evidence/consumer-action-composition.md)
+adds shared physical service funding, original prepared-declaration refusal,
+one actual definition/three associations/two independent capacities over real HTTP,
+original instance quotas through settlement disposal and independent access.
+The root QueryAllActions fixture shares one Consumer authority across separate
+finite and continuing capacity. Managed mixed HTTP/MQTT composition, reusable
+Producer exposure composition and broader profiles remain separate work.
 
 Unread native completion remains revocable until a paid settlement handoff with
 fresh time, original authority and captured service/access checks. The HTTP

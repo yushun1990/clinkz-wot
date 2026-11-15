@@ -268,8 +268,12 @@ impl Drop for Native {
         fire(Edge::Dispose);
     }
 }
+struct TestClient {
+    calls: ConsumerActions,
+    association: ConsumerActionAssociation,
+}
 struct Harness {
-    rt: Rc<ConsumerActionRuntime>,
+    rt: Rc<TestClient>,
     owner: ConsumerInstance,
     probe: Arc<Probe>,
     bank: Arc<HostResourceAccounts>,
@@ -277,18 +281,31 @@ struct Harness {
 fn harness(slots: usize) -> Harness {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let probe = Arc::new(Probe::default());
-    let op = |operation| ConsumerActionOperation {
-        mapping: Box::new(Mapping {
+    let data = ConsumerServiceOwner::retain_data(Arc::new(Data(probe.clone())), &bank)
+        .ok()
+        .unwrap();
+    let access = ConsumerServiceOwner::retain_access(Arc::new(Access), &bank)
+        .ok()
+        .unwrap();
+    let op = |operation| {
+        let mapping = Box::new(Mapping {
             operation,
             probe: probe.clone(),
             bank: bank.clone(),
-        }),
-        endpoint: "test://action".into(),
-        form: 0,
-        services: ConsumerServices {
-            data: Arc::new(Data(probe.clone())),
-            access: Arc::new(Access),
-        },
+        });
+        let bounds = mapping.bounds();
+        let identity = mapping.identity();
+        ConsumerActionOperation {
+            mapping,
+            endpoint: "test://action".into(),
+            form: 0,
+            data: data.clone(),
+            data_policy: data.policy(),
+            content_type: "application/json".into(),
+            bounds,
+            identity,
+            operation,
+        }
     };
     let d = ConsumerActionDefinition::try_new(ConsumerActionDefinitionInput {
         target: AffordanceTarget::Action("run".into()),
@@ -304,10 +321,22 @@ fn harness(slots: usize) -> Harness {
     })
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
-    let rt = Rc::new(
-        ConsumerActionRuntime::try_new(owner.reference(), vec![d], slots)
-            .unwrap_or_else(|e| panic!("{:?}", e.error())),
-    );
+    let association = ConsumerActionAssociation::try_new(
+        owner.reference(),
+        Rc::new(d),
+        ConsumerActionAccess {
+            invoke: access.clone(),
+            query: Some(access.clone()),
+            cancel: Some(access),
+        },
+        bank.clone(),
+        &mut work(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let rt = Rc::new(TestClient {
+        association,
+        calls: ConsumerActions::try_new(slots, bank.clone()).unwrap(),
+    });
     Harness {
         rt,
         owner,
@@ -315,11 +344,9 @@ fn harness(slots: usize) -> Harness {
         bank,
     }
 }
-fn invoke(
-    rt: &ConsumerActionRuntime,
-) -> Result<ConsumerActionHandle, BindingInputRejection<Option<Payload>>> {
-    rt.invoke_action(
-        "run",
+fn invoke(rt: &TestClient) -> Result<ConsumerActionHandle, BindingInputRejection<Option<Payload>>> {
+    rt.calls.invoke_action(
+        &rt.association,
         Some(Payload::new(b"12".as_slice(), "application/json")),
         Deadline::NONE,
         at(1),
@@ -347,13 +374,13 @@ fn admission_callbacks_reserve_capacity_and_observe_close_before_effects() {
         let h = harness(1);
         let rt = h.rt.clone();
         hook(edge, move || {
-            assert!(!rt.is_idle());
+            assert!(!rt.calls.is_idle());
             assert!(matches!(
                 invoke(&rt).err().unwrap().error().error(),
                 CoreError::Backpressure(_)
             ));
-            rt.step(&mut cx(), at(1), &mut work());
-            rt.begin_close();
+            rt.calls.step(&mut cx(), at(1), &mut work());
+            rt.calls.begin_close();
         });
         let result = invoke(&h.rt);
         fired();
@@ -415,12 +442,12 @@ fn progress_callback(edge: Edge) {
     let rt = h.rt.clone();
     hook(edge, move || {
         assert!(nested.identity().is_ok());
-        assert!(!rt.is_idle());
+        assert!(!rt.calls.is_idle());
         assert!(nested.query(at(1), &mut work()).is_err());
         assert!(nested.take_settlement(at(1), &mut work()).is_err());
         nested.cancel_local();
         let _ = nested.progress(&mut cx(), at(1), &mut work());
-        rt.step(&mut cx(), at(1), &mut work());
+        rt.calls.step(&mut cx(), at(1), &mut work());
     });
     progress(&call);
     fired();
@@ -471,7 +498,7 @@ fn settlement_access_close_fences_validated_unread_success() {
     let call = start(&h);
     assert_eq!(progress(&call), ConsumerActionState::Completed);
     let rt = h.rt.clone();
-    hook(Edge::Access, move || rt.begin_close());
+    hook(Edge::Access, move || rt.calls.begin_close());
     let s = call.take_settlement(at(1), &mut work()).unwrap();
     fired();
     assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
@@ -489,10 +516,10 @@ fn abandoned_token_destruction_runs_outside_registry() {
     drop(call);
     let rt = h.rt.clone();
     hook(Edge::TokenDrop, move || {
-        assert!(rt.is_idle());
-        rt.begin_close();
+        assert!(rt.calls.is_idle());
+        rt.calls.begin_close();
     });
-    h.rt.step(&mut cx(), at(1), &mut work());
+    h.rt.calls.step(&mut cx(), at(1), &mut work());
     fired();
     dispose(h);
 }
@@ -506,7 +533,7 @@ fn nested_admission_owns_a_distinct_slot_and_cannot_overwrite_the_outer_invocati
     let rt = h.rt.clone();
     hook(Edge::Start, move || {
         *save.borrow_mut() = Some(invoke(&rt).ok().unwrap());
-        rt.step(&mut cx(), at(1), &mut work());
+        rt.calls.step(&mut cx(), at(1), &mut work());
     });
     let call = start(&h);
     let sibling = sibling.borrow_mut().take().unwrap();
@@ -672,7 +699,7 @@ fn synchronous_cancellation_wake_registers_busy_progress_and_retries_after_resto
             hook(Edge::Wake, move || {
                 let mut cx = Context::from_waker(&retry_waker);
                 if driver {
-                    rt.step(&mut cx, at(1), &mut work());
+                    rt.calls.step(&mut cx, at(1), &mut work());
                 } else {
                     assert!(matches!(
                         on_wake.progress(&mut cx, at(1), &mut work()),
@@ -708,12 +735,13 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
     let a = start(&h);
     let b = start(&h);
     let (waker, count) = wake_counter();
-    h.rt.step(&mut Context::from_waker(&waker), at(1), &mut work());
+    h.rt.calls
+        .step(&mut Context::from_waker(&waker), at(1), &mut work());
     let sibling = b.clone();
     hook(Edge::Wake, move || {
         sibling.cancel_local();
     });
-    h.rt.begin_close();
+    h.rt.calls.begin_close();
     fired();
     assert!(matches!(
         a.first_cause().unwrap(),
@@ -726,7 +754,7 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
     assert_eq!(count.load(Ordering::Relaxed), 2);
     drop(a);
     drop(b);
-    h.rt.step(&mut cx(), at(1), &mut work());
+    h.rt.calls.step(&mut cx(), at(1), &mut work());
     drop(waker);
     dispose(h);
 
@@ -762,8 +790,8 @@ fn replacing_a_registered_waker_may_reenter_and_close_the_checked_out_invocation
     drop(waker);
     let rt = h.rt.clone();
     hook(Edge::WakerDrop, move || {
-        rt.begin_close();
-        rt.step(&mut cx(), at(1), &mut work());
+        rt.calls.begin_close();
+        rt.calls.step(&mut cx(), at(1), &mut work());
     });
     assert_eq!(progress(&call), ConsumerActionState::Closed);
     fired();
@@ -798,8 +826,8 @@ fn callback_can_drop_the_original_handle_or_runtime_without_losing_native_owners
             clean(&bank);
         } else {
             hook(Edge::Poll, move || drop(call));
-            h.rt.step(&mut cx(), at(1), &mut work());
-            assert!(h.rt.is_idle());
+            h.rt.calls.step(&mut cx(), at(1), &mut work());
+            assert!(h.rt.calls.is_idle());
             assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);
             dispose(h);
         }
@@ -814,10 +842,12 @@ fn nested_progress_time_fences_admission_and_unread_handoff_without_false_regres
         h.probe.complete_invoke.store(true, Ordering::Relaxed);
         if admission {
             let rt = h.rt.clone();
-            hook(Edge::Access, move || rt.step(&mut cx(), at(5), &mut work()));
+            hook(Edge::Access, move || {
+                rt.calls.step(&mut cx(), at(5), &mut work())
+            });
         }
-        let result = h.rt.invoke_action(
-            "run",
+        let result = h.rt.calls.invoke_action(
+            &h.rt.association,
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::at(at(5)),
             at(1),
@@ -835,7 +865,7 @@ fn nested_progress_time_fences_admission_and_unread_handoff_without_false_regres
             hook(Edge::Validate, move || {
                 let _ = nested.progress(&mut cx(), at(5), &mut work());
             });
-            h.rt.step(&mut cx(), at(1), &mut work());
+            h.rt.calls.step(&mut cx(), at(1), &mut work());
             let s = call.take_settlement(at(5), &mut work()).unwrap();
             assert!(matches!(s.first_cause(), Some(CoreError::TimedOut(_))));
             assert!(s.native_result().unwrap().is_ok());
@@ -849,8 +879,10 @@ fn nested_progress_time_fences_admission_and_unread_handoff_without_false_regres
     let a = start(&h);
     let b = start(&h);
     let rt = h.rt.clone();
-    hook(Edge::Access, move || rt.step(&mut cx(), at(2), &mut work()));
-    h.rt.step(&mut cx(), at(1), &mut work());
+    hook(Edge::Access, move || {
+        rt.calls.step(&mut cx(), at(2), &mut work())
+    });
+    h.rt.calls.step(&mut cx(), at(1), &mut work());
     assert!(a.first_cause().unwrap().is_none());
     assert!(b.first_cause().unwrap().is_none());
     // A real regression, unlike resuming the outer sweep, is still a fault.
@@ -886,26 +918,27 @@ fn short_work_or_capacity_refuses_before_callbacks_and_preserves_input_and_slot(
     let input = Payload::new(b"12".as_slice(), "application/json");
     let original = input.body.clone();
     let refusal =
-        h.rt.invoke_action(
-            "run",
-            Some(input),
-            Deadline::NONE,
-            at(1),
-            &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
-        )
-        .err()
-        .unwrap();
+        h.rt.calls
+            .invoke_action(
+                &h.rt.association,
+                Some(input),
+                Deadline::NONE,
+                at(1),
+                &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
+            )
+            .err()
+            .unwrap();
     let (input, _) = refusal.into_parts();
     assert!(Arc::ptr_eq(&original, &input.unwrap().body));
     assert!(!entered.get());
-    assert!(h.rt.is_idle());
+    assert!(h.rt.calls.is_idle());
     assert_eq!(before, usage(&h.bank));
     let k = ResourceKind::EngineLiveBytesGlobalMax;
     let account = h.bank.account(k);
     let held = h.bank.reserve(k, account.limit() - account.used()).unwrap();
     assert!(invoke(&h.rt).is_err());
     assert!(!entered.get());
-    assert!(h.rt.is_idle());
+    assert!(h.rt.calls.is_idle());
     drop(held);
     let call = start(&h);
     assert!(entered.get());
@@ -967,7 +1000,7 @@ fn replacement_during_authorization_already_refuses_before_native_start() {
         CoreError::StaleHandle(_)
     ));
     assert_eq!(probe.starts.load(Ordering::Relaxed), 0);
-    assert!(rt.is_idle());
+    assert!(rt.calls.is_idle());
     let replacement =
         ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
     assert!(replacement.reference().is_current());
@@ -1023,7 +1056,8 @@ fn native_inline_wake_cannot_repoll_and_preserves_driver_retry_interest() {
     let restored = Rc::new(Cell::new(false));
     let seen = restored.clone();
     hook(Edge::Wake, move || {
-        rt.step(&mut Context::from_waker(&nested_waker), at(1), &mut work());
+        rt.calls
+            .step(&mut Context::from_waker(&nested_waker), at(1), &mut work());
         hook(Edge::Wake, move || {
             // The restoration wake can execute synchronously too. A second
             // poll is legal only after the original owner has been restored.

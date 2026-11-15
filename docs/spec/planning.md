@@ -378,8 +378,31 @@ qualifies the complete retained schemas. No native compiler needs to interpret
 them again to obtain the same common meaning.
 Native vocabulary, variable address placement/matching and response conventions
 stay in the Binding; variable scope and DataSchema interpretation are shared.
-The association owns every selected mapping, both Action data roles, actual
-services and original funding after all TD/compiler owners disappear.
+The reusable definition owns every selected mapping, both Action data roles,
+actual data-service owners and original definition funding after all TD/compiler
+owners disappear. `ConsumerActionRegistration` imports `RetainedConsumerServices`
+from startup composition: service backing is adopted once at its original bank,
+then referenced across selected operations, definitions, registries and families.
+Mapping/schema/reference costs remain separately funded. Selection never adds
+physical data/access backing to each operation's reservation.
+
+Preparation captures the complete data policy/media/support, native identity,
+operation and exchange/continuation/result/scratch/work bounds. It checks original
+service backing and rechecks admission declarations around access/compilation
+callbacks. `ConsumerActionDefinition::check_dependencies` preserves those facts
+through association and work admission; construction cannot capture a replacement
+baseline. A changed declaration, even a smaller bound, requires explicit new
+qualification and applicable funding. The preparation access service is a
+qualification dependency, not a retained Consumer permission. Execution binds
+explicit per-operation access owners independently, checks their actual backing,
+qualifies destination/NoSec support, and retains their work/revision snapshots.
+
+An already qualified, endpoint-specialized definition may be bound to independent
+Consumers without repeating TD admission, schema construction or native
+compilation. This is reuse of the same actual definition, not checked bind-many
+of new TDs or cross-endpoint partial lowering. Bindings keep continuation
+compatibility and native capacity; shared definitions imply no shared logical
+authority or extra physical exchange capacity.
 `ConsumerPreparationBounds` replaces the notification-specific bounds name for
 these two pure typed preparation facets. Declared work must fit the caller's
 configured compilation allowance; short/unfunded preparation invokes no native

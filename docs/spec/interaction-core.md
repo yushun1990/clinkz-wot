@@ -422,15 +422,31 @@ separately described query/cancel routes. Its 202 means locally admitted work,
 not remote terminal success or rollback. Other qualified Bindings must provide
 their actual validation services during publication, not at individual ingress.
 
-The Host `consumer_action::ConsumerActionRuntime` implements the continuing
-Consumer association separately from finite results. Its unique local handle
-pins the original Consumer incarnation and selected mappings; the Binding's
-opaque token is retained independently of each finite native exchange and never
-becomes logical authority. Invoke acceptance exposes Pending, not a completed
-result. Explicit query/cancel can use different actual mappings and captured
-access services. The original invoke data service validates completion, including
-late output after cancellation; native output, validation error, first local cause,
-cleanup error and effect uncertainty remain independently observable.
+The Host continuing Consumer Action separates four owners. A reusable
+`ConsumerActionDefinition` retains source-free native mappings, Action data roles
+and qualified data services. It contains no Consumer or access grant, invocation
+slot or native continuation. It remains endpoint/target/registration/configuration
+specialized; binding an already prepared definition does not admit another TD or
+silently specialize it for a different endpoint.
+
+`ConsumerActionAssociation` binds that shared definition to one original Consumer,
+explicit per-operation retained access services and an instance resource domain.
+Clones are passive non-revoking views; dropping them does not cancel admitted work.
+Access services are newly qualified at this explicit binding, with captured work
+and security revisions, rather than carried as permission in the definition.
+`ConsumerActions` supplies separately funded bounded execution capacity for many
+associations. It owns no idle association or definition. One association may use
+independent capacities; closing a capacity fences only work admitted there.
+
+Each admitted invocation owns its association, unique local handle/control,
+opaque native continuation and normal/late evidence through settlement and
+cleanup. The Binding's token never becomes logical authority. Invoke acceptance
+exposes Pending, not a completed result. Explicit query/cancel can use different
+actual mappings and independently bound access services. The original invoke
+data service validates completion, including late output after cancellation;
+native output, validation error, first local cause, cleanup error and effect
+uncertainty remain independently observable. No successor association/capacity
+can replace an invocation's original Consumer, services, mappings or token.
 
 Native completion does not seal unread application success. `Completed` remains
 revocable until `take_settlement(now, budget)` performs paid, fresh checks of
@@ -456,6 +472,10 @@ asserts remote rollback. No progress/control path reinvokes an Action. Unread
 terminal settlement retains the original slot; acknowledgement returns a complete
 settlement owner, and stale handles cannot address a reused slot. The settlement
 retains original services, native evidence and funding until final disposal.
+Consumer Action settlement input and normal/late output access lend
+`PayloadView`/`InteractionOutputView` slices, never cloneable original payload
+owners. Share the settlement owner to retain original funded bytes; explicit
+copies belong to the caller.
 
 A Thing-root **QueryAllActions** is a finite status observation, independent of
 any Consumer invocation handle. Action definitions, invocation instances and

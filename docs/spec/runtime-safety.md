@@ -497,6 +497,41 @@ that arbitrary panicking linked code can resume execution. The independent
 control allocation is funded before native construction and keeps its original
 lease through its last handle/call reference. It cannot address a reused slot.
 
+### Continuing Action associations and invocation capacity
+
+The Host `ConsumerActionAssociation` retains one original Consumer, shared
+prepared definition, separately qualified per-operation access owners and
+instance bank. Association construction allocates no vacant slot, exchange,
+continuation or work quota. It rechecks prepared data/native declarations and
+original backing before/after policy qualification. Explicit new access binding
+captures its own work/revision; it never replaces prepared data/native facts.
+Declaration restoration does not erase a failure already observed by admitted
+work. Independent invocations sharing a definition keep their own first causes.
+
+`ConsumerActions` owns a bounded slot registry and its capacity bank independently
+of any Consumer. Vacant slots contain only registry/control references; each
+admitted invocation record is separately allocated and funded, then retains that
+allocation through checkout and settlement. Slot storage does not charge that
+record a second time. Admission reserves a slot, passive control, complete native/
+continuation/input/result/scratch backing and cleanup credit before effects.
+The capacity bank funds actual work backing. A distinct association bank debits
+one outstanding-work quota (`PendingHandlerCallsGlobalMax`), including retained
+settlements; an identical bank is debited once. This quota is not a second RAM
+reservation. Unread results retain their slot. Settlement transfers evidence,
+association, quota and backing to the result owner; the vacant slot alone cannot
+refund a result's funding. Refused admission returns exact original input and
+rolls back all newly reserved capacity without native effects.
+
+Capacity close/Drop fences its admitted work, without revoking associations or
+sibling capacities. Original Consumer revocation fences its own invocations in
+any capacity. Loss of association views is passive. Handles retain original
+capacity/control ownership for progress; settlements retain their original
+association and work leases through final native/data/service disposal. Input,
+normal and late output access lends slices tied to that settlement; it cannot
+detach the original payload Arc from its funding.
+Cleanup still uses the bounded Host local-abort contract; this adds no scheduler,
+background task, native pool or general async cleanup transfer.
+
 The Host continuing Action owner has its own occupied invocation slots and
 separately funded passive controls. Registry borrows end before access,
 validation, destination/start, poll/retirement and linked destruction callbacks.

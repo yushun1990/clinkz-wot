@@ -9,6 +9,7 @@ use independent_open_consumer::{Probe, configuration, services};
 use std::{
     any::Any,
     net::{SocketAddr, UdpSocket},
+    rc::Rc,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -279,7 +280,7 @@ fn client(
     probe: Arc<NativeProbe>,
     data: Arc<Probe>,
     owner: &ConsumerInstance,
-) -> ConsumerActionRuntime {
+) -> (ConsumerActionAssociation, ConsumerActions) {
     *probe.bank.lock().unwrap() = Some(bank.clone());
     let registry = ConsumerActionRegistry::try_new(
         (0..2)
@@ -299,7 +300,14 @@ fn client(
                         peer,
                         probe: probe.clone(),
                     }),
-                    services,
+                    services: RetainedConsumerServices {
+                        data: ConsumerServiceOwner::retain_data(services.data, &bank)
+                            .ok()
+                            .unwrap(),
+                        access: ConsumerServiceOwner::retain_access(services.access, &bank)
+                            .ok()
+                            .unwrap(),
+                    },
                 }
             })
             .collect(),
@@ -314,14 +322,28 @@ fn client(
             "run",
             ConsumerActionSelectors::default(),
             GatewayDefaultV1::LIMITS,
-            bank,
+            bank.clone(),
             &mut work(),
         )
         .unwrap();
     drop(td);
     drop(registry);
-    ConsumerActionRuntime::try_new(owner.reference(), vec![d], 1)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()))
+    let access = ConsumerServiceOwner::retain_access(Arc::new(Access), &bank)
+        .ok()
+        .unwrap();
+    let association = ConsumerActionAssociation::try_new(
+        owner.reference(),
+        Rc::new(d),
+        ConsumerActionAccess {
+            invoke: access.clone(),
+            query: Some(access.clone()),
+            cancel: Some(access),
+        },
+        bank.clone(),
+        &mut work(),
+    )
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    (association, ConsumerActions::try_new(1, bank).unwrap())
 }
 fn drive(h: &ConsumerActionHandle, expected: ConsumerActionState) {
     let start = Instant::now();
@@ -370,8 +392,9 @@ fn distinct_downstream_invoke_and_control_bindings_execute_native_action_lifecyc
     let owner = instance();
     let runtime = client(address, b.clone(), p.clone(), data.clone(), &owner);
     let h = runtime
+        .1
         .invoke_action(
-            "run",
+            &runtime.0,
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),
@@ -425,8 +448,9 @@ fn delayed_cleanup_keeps_late_output_validation_first_cause_and_original_funding
     let owner = instance();
     let runtime = client(address, b.clone(), p.clone(), data.clone(), &owner);
     let h = runtime
+        .1
         .invoke_action(
-            "run",
+            &runtime.0,
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),
@@ -489,8 +513,9 @@ fn last_local_owner_uses_funded_nonblocking_abort_without_remote_cancel() {
         &owner,
     );
     let h = runtime
+        .1
         .invoke_action(
-            "run",
+            &runtime.0,
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),

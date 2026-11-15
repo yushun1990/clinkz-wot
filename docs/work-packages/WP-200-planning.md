@@ -235,7 +235,7 @@ first-use cache or protocol-specific stream adds no necessary functionality to
 this composition proof and is not introduced.
 
 The [continuing Action preparation](../spec/planning.md#continuing-consumer-action-preparation)
-adds an independent operation-scoped association through `ConsumerActionRegistry`.
+adds an operation-scoped reusable definition through `ConsumerActionRegistry`.
 It selects actual invoke/query/cancel mappings and services after common TD
 admission, checks native continuation compatibility and owns the complete result
 after source/compiler disposal. Missing described control support refuses the
@@ -247,6 +247,13 @@ Consumer invoke/control mappings. The HTTP Engine-to-Engine and downstream
 datagram Action fixtures cover this capability alongside unchanged synchronous
 finite execution. This adds no
 whole-family, package or milestone acceptance claim.
+
+The [Action ownership increment](../evidence/consumer-action-composition.md)
+imports original service owners instead of charging their backing per mapping,
+and preserves qualified native/data declarations through checked association and
+work admission. Rebinding the same endpoint-specialized definition repeats no
+TD admission, schema construction or native compilation; access binding remains
+explicit and independent. Cross-endpoint/cross-TD Action lowering remains open.
 
 ## Implemented finite join
 

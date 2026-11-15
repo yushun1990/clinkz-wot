@@ -472,7 +472,11 @@ Continuing Consumer Actions use `ConsumerActionMapping` and
 `ConsumerActionExchange`, separate from finite results and notification
 participation. Every selected operation owns its actual immutable native mapping,
 registration/configuration and full declared exchange/continuation/result/scratch
-bounds. Controls explicitly check compatibility with the original invoke mapping;
+bounds. Preparation retains the original declaration; association/capacity
+construction cannot refresh it. A shared actual mapping may serve independent
+Consumer associations, while fresh per-operation permission and admitted native
+exchanges remain independent. This grants no cross-endpoint or cross-TD reuse
+without concrete dependency qualification. Controls explicitly check compatibility with the original invoke mapping;
 different Binding implementations may share an admitted continuation contract.
 `destination` calculates the actual target before captured fresh authorization;
 `start` must use that same target and capture all borrowed input. Refusal permits
@@ -492,6 +496,9 @@ A normal poll error and an original late observation from retirement are separat
 outcomes. The Consumer retains the poll error immediately, then retains and
 validates any late completion returned by `poll_close`; an existing error cannot
 be used to discard that observation or promote it to successful handoff.
+Consumer Action settlements lend original input and normal/late output slices;
+the native exchange may transfer owned output into the invocation, but application
+observation cannot detach its body owner from the retained funding.
 
 ## Native Thing-root Property collection reads
 
