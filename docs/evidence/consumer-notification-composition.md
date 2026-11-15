@@ -79,6 +79,25 @@ admission fences the original conversation before native start, even if restored
 before cleanup. These metadata-mutation probes establish declaration fencing, not
 an allocation-overrun or credential-leak claim.
 
+The response-validation regression mutates the prepared data service's work
+declaration inside its actual JSON validation callback, both for valid and invalid
+caller payloads. The observed mismatch fences the original conversation. Restoring
+the declaration cannot reenter validation, expose/advance the occurrence or submit
+the response. Ordinary malformed input and short codec credit instead leave the
+same conversation Active. The exact refused caller payload is returned; zero-credit
+and pending cleanup retain the original occurrence/reply and bank reservations.
+Final retirement sends nothing, releases the reply once and retains the original
+first cause. The regression failed before the correction: state remained Active.
+An independently supplied review probe likewise changed from Active/retry accepted/
+one send to Closing/retry refused/no send.
+
+Adjacent raw counterexamples distinguish identical `CoreError` categories carrying
+input/work versus dependency origin before native polling. They also reject response
+validation after synchronous stop or native pairing loss, restore the pairing and
+attempt retry. Both paths fence immediately and retain the original input, first
+cause and reply/payload cleanup owners. Admission, cancellation and owned-native-data
+validation retain their existing refusal or fatal-cleanup semantics.
+
 The [raw lifecycle suite](../../servient/finite/tests/notification.rs) retains its
 original regressions for original identities, independent permissions/stop, loss,
 queue/late handoff, response cardinality, pending/error retirement, prepaid cleanup

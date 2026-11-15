@@ -553,7 +553,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 return Err(unsupported());
             }
             if let Some(validation) = &context.validation {
-                validation.subscription(&request.subscription, budget)?;
+                validation
+                    .subscription(&request.subscription, budget)
+                    .map_err(NotificationValidationError::into_error)?;
             }
             if !self.current || !context.paired() {
                 return Err(stale());
@@ -713,6 +715,24 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         }
     }
 
+    fn validation_result(
+        entry: &mut Entry<B, A>,
+        paired: bool,
+        result: Result<(), NotificationValidationError>,
+    ) -> CoreResult<()> {
+        // Even a recoverable validation refusal must observe synchronous stop,
+        // parent revocation or native pairing loss before returning to callers.
+        entry.check_live(paired)?;
+        match result {
+            Ok(()) => Ok(()),
+            Err(NotificationValidationError::Rejected(error)) => Err(error),
+            Err(NotificationValidationError::Dependency(error)) => {
+                entry.fence(error.clone());
+                Err(error)
+            }
+        }
+    }
+
     /// Fence this capacity domain's admission and retained work immediately,
     /// even with zero native work credit. This does not revoke any Consumer
     /// authority, another capacity owner or shared native infrastructure.
@@ -811,7 +831,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 e.context.authorizer.work(),
             )?;
             if let Some(validation) = &e.context.validation {
-                validation.cancellation(cancellation.as_ref().unwrap(), budget)?;
+                validation
+                    .cancellation(cancellation.as_ref().unwrap(), budget)
+                    .map_err(NotificationValidationError::into_error)?;
             }
             require_subscription(e.context.authorizer.authorize(NotificationAuthorization {
                 recipient: &e.identity,
@@ -929,7 +951,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             }
             let item = e.queue.front_mut().unwrap();
             if let Some(validation) = &e.context.validation {
-                validation.response(&item.native.target, &input, budget)?;
+                let result = validation.response(&item.native.target, &input, budget);
+                Self::validation_result(e, paired, result)?;
             }
             e.check_live(binding_paired(
                 &e.context.binding,
@@ -1202,7 +1225,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         debit(budget, WorkClass::QueueOperations, 1)?;
         debit(budget, WorkClass::BindingPolls, 1)?;
         if let Some(validation) = &e.context.validation {
-            validation.prepay_data(budget)?;
+            let result = validation.prepay_data(budget);
+            Self::validation_result(e, paired, result)?;
         }
         let signal = e
             .participant
@@ -1354,7 +1378,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
                 {
                     e.fence(invalid());
                 } else if let Err(error) = validation {
-                    e.fence(error);
+                    e.fence(error.into_error());
                 } else if bytes.is_none_or(|n| n > self.limits.payload_backing_bytes)
                     || (!kind.is_event() && (item.native.data.is_none() || has_response))
                     || (has_response && !e.support.event_responses)

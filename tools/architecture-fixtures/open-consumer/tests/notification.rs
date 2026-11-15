@@ -1103,3 +1103,252 @@ fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_e
     drop((report, root));
     clean(&bank);
 }
+
+#[test]
+fn response_validation_dependency_failure_is_irreversible_after_restoration() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    struct MutatingData {
+        armed: AtomicBool,
+        changed: AtomicBool,
+        calls: AtomicUsize,
+    }
+    impl ConsumerDataService for MutatingData {
+        fn content_type(&self) -> &str {
+            "application/json"
+        }
+        fn policy(&self) -> ConsumerDataPolicy {
+            ConsumerDataPolicy {
+                retained_bytes: 0,
+                temporary_bytes: 4096,
+                body_bytes: 512,
+                encoded_selection_bytes: 0,
+                validation_work: if self.changed.load(Ordering::Relaxed) {
+                    1025
+                } else {
+                    1024
+                },
+            }
+        }
+        fn validate(
+            &self,
+            schema: &data_schema::PreparedSchema,
+            payload: &Payload,
+        ) -> CoreResult<()> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let result = clinkz_wot_codec_json::validate_payload(schema, payload);
+            if self.armed.swap(false, Ordering::Relaxed) {
+                self.changed.store(true, Ordering::Relaxed);
+            }
+            result
+        }
+    }
+    for invalid_response in [false, true] {
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let data = Arc::new(MutatingData {
+            armed: AtomicBool::new(false),
+            changed: AtomicBool::new(false),
+            calls: AtomicUsize::new(0),
+        });
+        let responses = Rc::new(Responses::default());
+        let source = serde_json::from_value(serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Response dependency fencing",
+            "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}},
+            "events":{"alarm":{"data":{"type":"integer"},"dataResponse":{"type":"integer"},"forms":[{"href":ENDPOINT}]}}
+        })).unwrap();
+        let definition = ConsumerNotificationRegistry::try_new(
+            vec![ConsumerNotificationRegistration {
+                binding: EventBinding(responses.clone()),
+                services: ConsumerServices {
+                    data: data.clone(),
+                    access: Arc::new(EventAccess),
+                },
+            }],
+            &bank,
+        )
+        .unwrap()
+        .prepare_notification(
+            &source,
+            &AffordanceTarget::Event(Arc::from("alarm")),
+            NotificationKind::Event,
+            ConsumerSelector::default(),
+            GatewayDefaultV1::LIMITS,
+            bank.clone(),
+            &mut work(),
+        )
+        .unwrap();
+        let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
+        let mut root = Runtime::try_new(
+            owner.reference(),
+            definition,
+            Arc::new(EventAccess),
+            RawNotificationLimits {
+                subscriptions: 1,
+                queue_items: 2,
+                queue_payload_bytes: 512,
+                payload_backing_bytes: 256,
+                control_backing_bytes: 256,
+                target_name_bytes: 64,
+                engine_bytes: 32768,
+            },
+        )
+        .unwrap();
+        let mut cursor = root
+            .subscribe(
+                SubscriptionInput(None),
+                ResponseRequirement::Required,
+                NotificationOverflow::Terminate,
+                &mut work(),
+            )
+            .unwrap_or_else(|_| panic!());
+        step(&mut root, &cursor);
+        step(&mut root, &cursor);
+        assert!(root.front(&mut cursor, &mut work()).unwrap().is_some());
+        let occurrence = responses.last_body.borrow().as_ref().unwrap().clone();
+        let malformed = Payload::new(b"false".as_slice(), "application/json");
+        let refused = root
+            .respond(
+                &mut cursor,
+                EventDataResponse(Some(malformed.clone())),
+                &mut work(),
+            )
+            .err()
+            .unwrap()
+            .into_input();
+        assert_eq!(refused.0, Some(malformed));
+        assert_eq!(
+            root.status(cursor.identity()).unwrap().state,
+            NotificationState::Active
+        );
+        assert!(
+            root.status(cursor.identity())
+                .unwrap()
+                .first_cause
+                .is_none()
+        );
+        let original = Payload::new(
+            if invalid_response {
+                b"false".as_slice()
+            } else {
+                b"7".as_slice()
+            },
+            "application/json",
+        );
+        let original_ptr = original.body.as_ptr();
+        let response_body = Arc::downgrade(&original.body);
+        // A short codec quantum remains recoverable and never enters validation.
+        let calls = data.calls.load(Ordering::Relaxed);
+        let mut short = work().with_remaining(WorkClass::CodecInputBytes, 1023);
+        let input = root
+            .respond(&mut cursor, EventDataResponse(Some(original)), &mut short)
+            .err()
+            .unwrap()
+            .into_input();
+        assert_eq!(data.calls.load(Ordering::Relaxed), calls);
+        assert_eq!(
+            root.status(cursor.identity()).unwrap().state,
+            NotificationState::Active
+        );
+        assert!(
+            root.status(cursor.identity())
+                .unwrap()
+                .first_cause
+                .is_none()
+        );
+        data.armed.store(true, Ordering::Relaxed);
+        let input = root
+            .respond(&mut cursor, input, &mut work())
+            .err()
+            .unwrap()
+            .into_input();
+        assert_eq!(input.0.as_ref().unwrap().body.as_ptr(), original_ptr);
+        assert_eq!(data.calls.load(Ordering::Relaxed), calls + 1);
+        assert_eq!(responses.sends.get(), 0);
+        assert!(response_body.upgrade().is_some());
+        assert_eq!(
+            root.status(cursor.identity()).unwrap().state,
+            NotificationState::Closing,
+            "an observed dependency failure must fence even if payload validation also refuses"
+        );
+        let first = root
+            .status(cursor.identity())
+            .unwrap()
+            .first_cause
+            .unwrap()
+            .clone();
+        data.changed.store(false, Ordering::Relaxed);
+        let input = root
+            .respond(&mut cursor, input, &mut work())
+            .err()
+            .unwrap()
+            .into_input();
+        assert_eq!(input.0.as_ref().unwrap().body.as_ptr(), original_ptr);
+        assert_eq!(
+            data.calls.load(Ordering::Relaxed),
+            calls + 1,
+            "restoration cannot re-enter validation on the original conversation"
+        );
+        assert!(root.front(&mut cursor, &mut work()).is_err());
+        assert!(root.advance(&mut cursor, &mut work()).is_err());
+        assert_eq!(
+            root.status(cursor.identity()).unwrap().first_cause,
+            Some(&first)
+        );
+        let funded = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+        assert!(
+            root.progress(
+                cursor.identity(),
+                &mut Context::from_waker(Waker::noop()),
+                &mut WorkBudget::new()
+            )
+            .is_err()
+        );
+        responses.pending_retirement.set(true);
+        let cleanup_only = || {
+            work()
+                .with_remaining(WorkClass::ProviderProbes, 0)
+                .with_remaining(WorkClass::CodecInputBytes, 0)
+        };
+        root.progress(
+            cursor.identity(),
+            &mut Context::from_waker(Waker::noop()),
+            &mut cleanup_only(),
+        )
+        .unwrap();
+        assert_eq!(responses.releases.get(), 0);
+        assert!(occurrence.upgrade().is_some());
+        assert_eq!(
+            bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+            funded
+        );
+        responses.pending_retirement.set(false);
+        for _ in 0..8 {
+            if root
+                .progress(
+                    cursor.identity(),
+                    &mut Context::from_waker(Waker::noop()),
+                    &mut cleanup_only(),
+                )
+                .unwrap()
+                == NotificationState::Closed
+            {
+                break;
+            }
+        }
+        let report = root.take_settlement(cursor.identity()).unwrap();
+        assert_eq!(report.first_cause.as_ref(), Some(&first));
+        assert_eq!(report.responses_delivered, 0);
+        assert_eq!(report.responses_uncertain, 0);
+        assert_eq!(responses.sends.get(), 0);
+        assert_eq!(responses.releases.get(), 1);
+        assert_eq!(responses.closes.get(), 1);
+        assert!(occurrence.upgrade().is_none());
+        assert!(
+            response_body.upgrade().is_some(),
+            "refused caller input still belongs to its caller"
+        );
+        drop(input);
+        assert!(response_body.upgrade().is_none());
+        drop((report, root));
+        clean(&bank);
+    }
+}

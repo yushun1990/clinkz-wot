@@ -77,3 +77,27 @@ capability. The original F2/F3 preparation/owner/funding boundaries are retained
 Exact semantics are migrated to Core/Runtime Safety; the same evidence record
 links native, queued-policy-change and response-owner counterexamples. No topic
 or NoSec payload becomes authenticated source evidence.
+
+## Validation refusal and observed dependency loss
+
+A response validator's plain `CoreResult` erased whether it rejected caller input
+or observed prepared-service invalidation after a codec callback. The raw owner
+returned both errors without fencing. Restoring the declaration then allowed the
+same conversation to retry and send, contradicting the original dependency fence.
+
+The correction carries the failure origin in the existing family-specific
+validation SPI. Only observed dependency failures fence response admission and
+data prepayment; malformed caller input and insufficient codec credit remain
+recoverable while current. All callback outcomes also observe passive currentness.
+Native data errors remain fatal, admission has no admitted conversation, and
+cancellation already fences before validation. There is no new resource owner.
+
+Fencing every response error would destroy a usable conversation on bad input or
+a short work quantum. Inferring origin from `CoreError` conflates errors that share
+the same category. Rereading declarations after failure loses already observed
+evidence when a declaration is restored. Storing a sticky failure on a shared
+association would fence independent conversations together. The conversation owner
+instead retains its own irreversible fence and existing reply/payload cleanup.
+The Core and Runtime Safety owners define the resulting contract; the composition
+evidence links mutation/restoration and adjacent callback counterexamples. The
+subscription/occurrence policy split and F2/F3 ownership boundaries are unchanged.

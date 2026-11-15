@@ -2495,3 +2495,197 @@ fn continuing_grant_loss_during_item_policy_overrides_even_an_occurrence_refusal
         assert!(bus.borrow().physical.is_empty());
     }
 }
+
+#[derive(Clone, Copy)]
+enum ValidationMode {
+    Ready,
+    Rejected,
+    Dependency,
+}
+impl ValidationMode {
+    fn result(self) -> Result<(), NotificationValidationError> {
+        let error =
+            CoreError::Validation(ErrorContext::new(ErrorPhase::Validate, RetryClass::Never));
+        match self {
+            Self::Ready => Ok(()),
+            Self::Rejected => Err(NotificationValidationError::Rejected(error)),
+            Self::Dependency => Err(NotificationValidationError::Dependency(error)),
+        }
+    }
+}
+struct ValidationProbe {
+    prepay: Cell<ValidationMode>,
+    response: Cell<ValidationMode>,
+    on_response: PolicyHook,
+}
+impl NotificationValidation for ValidationProbe {
+    fn subscription(
+        &self,
+        _: &SubscriptionInput,
+        _: &mut WorkBudget,
+    ) -> Result<(), NotificationValidationError> {
+        Ok(())
+    }
+    fn cancellation(
+        &self,
+        _: &CancellationInput,
+        _: &mut WorkBudget,
+    ) -> Result<(), NotificationValidationError> {
+        Ok(())
+    }
+    fn response(
+        &self,
+        _: &AffordanceTarget,
+        _: &EventDataResponse,
+        _: &mut WorkBudget,
+    ) -> Result<(), NotificationValidationError> {
+        let hook = self.on_response.borrow_mut().take();
+        if let Some(hook) = hook {
+            hook();
+        }
+        self.response.get().result()
+    }
+    fn prepay_data(&self, _: &mut WorkBudget) -> Result<(), NotificationValidationError> {
+        self.prepay.get().result()
+    }
+    fn data(
+        &self,
+        _: &AffordanceTarget,
+        _: Option<&Payload>,
+    ) -> Result<(), NotificationValidationError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn observed_validation_dependency_loss_before_native_handoff_cannot_be_restored() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(&bus, limits());
+    let validation = Rc::new(ValidationProbe {
+        prepay: Cell::new(ValidationMode::Rejected),
+        response: Cell::new(ValidationMode::Ready),
+        on_response: Rc::new(RefCell::new(None)),
+    });
+    let context = RawNotificationContext::try_new(
+        root.binding.clone(),
+        root.configuration.clone(),
+        root.policy.clone(),
+        root._instance.reference(),
+        Some(validation.clone()),
+    )
+    .unwrap_or_else(|_| panic!());
+    let cursor = root
+        .inner
+        .subscribe(
+            property(NotificationOverflow::Terminate),
+            Program::property(),
+            context,
+            &mut budget(),
+        )
+        .unwrap_or_else(|_| panic!());
+    let id = cursor.identity().clone();
+    step(&mut root, &id);
+    // The CoreError category is identical; the retained validation origin is
+    // what distinguishes caller/work refusal from dependency invalidation.
+    assert!(
+        root.progress(&id, &mut Context::from_waker(Waker::noop()), &mut budget())
+            .is_err()
+    );
+    assert_eq!(root.status(&id).unwrap().state, NotificationState::Active);
+    assert!(root.status(&id).unwrap().first_cause.is_none());
+    assert_eq!(bus.borrow().receive_polls, 0);
+    validation.prepay.set(ValidationMode::Dependency);
+    let error = root
+        .progress(&id, &mut Context::from_waker(Waker::noop()), &mut budget())
+        .err()
+        .unwrap();
+    assert_eq!(root.status(&id).unwrap().state, NotificationState::Closing);
+    assert_eq!(root.status(&id).unwrap().first_cause, Some(&error));
+    validation.prepay.set(ValidationMode::Ready);
+    let report = settle(&mut root, &id);
+    assert_eq!(report.first_cause.as_ref(), Some(&error));
+    assert_eq!(report.delivered_items, 0);
+    assert_eq!(bus.borrow().receive_polls, 0);
+    assert!(bus.borrow().physical.is_empty());
+}
+
+#[test]
+fn rejected_response_validation_still_observes_callback_revocation_and_pairing_loss() {
+    for change_pairing in [false, true] {
+        let bus = Bus::new();
+        let (mut root, _, configuration) = root(&bus, limits());
+        let validation = Rc::new(ValidationProbe {
+            prepay: Cell::new(ValidationMode::Ready),
+            response: Cell::new(ValidationMode::Rejected),
+            on_response: Rc::new(RefCell::new(None)),
+        });
+        let context = RawNotificationContext::try_new(
+            root.binding.clone(),
+            root.configuration.clone(),
+            root.policy.clone(),
+            root._instance.reference(),
+            Some(validation.clone()),
+        )
+        .unwrap_or_else(|_| panic!());
+        let mut cursor = root
+            .inner
+            .subscribe(event(true), Program::event(), context, &mut budget())
+            .unwrap_or_else(|_| panic!());
+        let id = cursor.identity().clone();
+        step(&mut root, &id);
+        let occurrence = payload("original notification");
+        let occurrence_body = Arc::downgrade(&occurrence.body);
+        Bus::publish(&bus, ("sensor", 1), Some(occurrence));
+        step(&mut root, &id);
+        assert!(root.front(&mut cursor, &mut budget()).unwrap().is_some());
+        let stop = cursor.stop_handle();
+        let changed = configuration.clone();
+        *validation.on_response.borrow_mut() = Some(Box::new(move || {
+            if change_pairing {
+                changed.set(2);
+            } else {
+                stop.request_stop();
+            }
+        }));
+        let original = payload("refused caller response");
+        let input_body = Arc::downgrade(&original.body);
+        let ptr = original.body.as_ptr();
+        let input = root
+            .respond(
+                &mut cursor,
+                EventDataResponse(Some(original)),
+                &mut budget(),
+            )
+            .err()
+            .unwrap()
+            .into_input();
+        assert_eq!(input.0.as_ref().unwrap().body.as_ptr(), ptr);
+        let first = root.status(&id).unwrap().first_cause.unwrap().clone();
+        assert!(if change_pairing {
+            matches!(first, CoreError::StaleHandle(_))
+        } else {
+            matches!(first, CoreError::Cancelled(_))
+        });
+        configuration.set(1);
+        validation.response.set(ValidationMode::Ready);
+        let input = root
+            .respond(&mut cursor, input, &mut budget())
+            .err()
+            .unwrap()
+            .into_input();
+        assert_eq!(root.status(&id).unwrap().state, NotificationState::Closing);
+        assert_eq!(root.status(&id).unwrap().first_cause, Some(&first));
+        bus.borrow_mut().retire = Mode::Pending;
+        step(&mut root, &id);
+        assert!(occurrence_body.upgrade().is_some());
+        assert_eq!(bus.borrow().reply_send_polls, 0);
+        bus.borrow_mut().retire = Mode::Ready;
+        let report = settle(&mut root, &id);
+        assert_eq!(report.first_cause.as_ref(), Some(&first));
+        assert!(occurrence_body.upgrade().is_none());
+        assert!(input_body.upgrade().is_some());
+        drop(input);
+        assert!(input_body.upgrade().is_none());
+        assert!(bus.borrow().physical.is_empty());
+    }
+}

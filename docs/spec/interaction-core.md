@@ -614,8 +614,20 @@ Its immutable validation hook distinguishes a Property's value schema from
 Event subscription/data/dataResponse/cancellation roles, prepays data validation
 before native handoff, and validates each
 candidate before logical queue acceptance. Invalid or late data remains owned
-through cleanup and is never exposed. Currentness is rechecked after validation
-callbacks as well as native/policy callbacks. Each admitted conversation retains its
+through cleanup and is never exposed. `NotificationValidationError` preserves
+whether validation refused caller input/work credit (`Rejected`) or observed a
+violation of the original prepared-service dependencies (`Dependency`). The latter
+MUST irreversibly fence an admitted conversation, even if payload validation also
+failed or a declaration is restored before retry. It cannot be inferred from a
+`CoreError` category or replaced by a later successful dependency read. With original
+dependencies/currentness intact, malformed response input and insufficient codec
+credit return the original input without closing the conversation. Native data
+validation failure remains fatal; cancellation already fences local semantic use
+before validating its control input. Currentness is rechecked after validation
+callbacks on both success and refusal, as well as after native/policy callbacks.
+Refused responses retain their original caller-owned input; the conversation keeps
+the original occurrence payload, unused native reply, first cause and cleanup
+funding until bounded retirement. Each admitted conversation retains its
 original mapping, policy and funding; native queue/connection policy retains its
 separate Binding owner. This supplies TD-driven Property
 observation and Event execution for the

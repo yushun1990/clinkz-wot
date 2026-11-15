@@ -96,40 +96,44 @@ impl<B: ConsumerNotificationBinding> CapturedServices<B> {
         &self,
         schema: Option<&clinkz_wot_core::data_schema::PreparedSchema>,
         payload: Option<&Payload>,
-    ) -> CoreResult<()> {
-        self.check_dependencies()?;
+    ) -> Result<(), NotificationValidationError> {
+        use NotificationValidationError::{Dependency, Rejected};
+        self.check_dependencies().map_err(Dependency)?;
         match (schema, payload) {
             (None, None) => Ok(()),
             (Some(schema), Some(payload))
-                if self.definition.input().data.available()
-                    && self.definition.input().data.policy() == self.policy()
-                    && self.definition.input().data.supports_schema(schema)
-                    && payload.body.len() as u64 <= self.policy().body_bytes =>
+                if payload.body.len() as u64 <= self.policy().body_bytes =>
             {
                 let result = self.definition.input().data.validate(schema, payload);
-                self.check_dependencies()?;
-                if !self.definition.input().data.supports_schema(schema) {
-                    return Err(invalid());
-                }
-                result
+                // This check also runs when the codec refuses the caller's
+                // payload. Observed dependency loss cannot become input error.
+                self.check_dependencies().map_err(Dependency)?;
+                result.map_err(Rejected)
             }
-            _ => Err(invalid()),
+            _ => Err(Rejected(invalid())),
         }
     }
-    fn prepay(&self, budget: &mut WorkBudget) -> CoreResult<()> {
-        self.check_dependencies()?;
+    fn prepay(&self, budget: &mut WorkBudget) -> Result<(), NotificationValidationError> {
+        self.check_dependencies()
+            .map_err(NotificationValidationError::Dependency)?;
         if !pay(budget, W::CodecInputBytes, self.policy().validation_work) {
-            return Err(busy());
+            return Err(NotificationValidationError::Rejected(busy()));
         }
         Ok(())
     }
 }
 impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices<B> {
-    fn subscription(&self, input: &SubscriptionInput, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn subscription(
+        &self,
+        input: &SubscriptionInput,
+        budget: &mut WorkBudget,
+    ) -> Result<(), NotificationValidationError> {
         if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             // No universal aggregate control encoding is implied by TD 1.1.
             if input.0.is_some() || s.members().iter().any(|m| m.subscription.is_some()) {
-                return Err(CoreError::UnsupportedOperation(context()));
+                return Err(NotificationValidationError::Rejected(
+                    CoreError::UnsupportedOperation(context()),
+                ));
             }
         }
         if self.schemas().subscription().is_some() {
@@ -137,10 +141,16 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
         }
         self.validate(self.schemas().subscription(), input.0.as_ref())
     }
-    fn cancellation(&self, input: &CancellationInput, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn cancellation(
+        &self,
+        input: &CancellationInput,
+        budget: &mut WorkBudget,
+    ) -> Result<(), NotificationValidationError> {
         if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             if input.0.is_some() || s.members().iter().any(|m| m.cancellation.is_some()) {
-                return Err(CoreError::UnsupportedOperation(context()));
+                return Err(NotificationValidationError::Rejected(
+                    CoreError::UnsupportedOperation(context()),
+                ));
             }
         }
         if self.schemas().cancellation().is_some() {
@@ -153,12 +163,15 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
         target: &AffordanceTarget,
         input: &EventDataResponse,
         budget: &mut WorkBudget,
-    ) -> CoreResult<()> {
+    ) -> Result<(), NotificationValidationError> {
         let schema = if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             let AffordanceTarget::Event(name) = target else {
-                return Err(invalid());
+                return Err(NotificationValidationError::Rejected(invalid()));
             };
-            s.member(name).ok_or_else(invalid)?.data_response.as_ref()
+            s.member(name)
+                .ok_or_else(|| NotificationValidationError::Rejected(invalid()))?
+                .data_response
+                .as_ref()
         } else {
             self.schemas().data_response()
         };
@@ -167,7 +180,7 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
         }
         self.validate(schema, input.0.as_ref())
     }
-    fn prepay_data(&self, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn prepay_data(&self, budget: &mut WorkBudget) -> Result<(), NotificationValidationError> {
         if self.schemas().data().is_some()
             || matches!(
                 self.schemas(),
@@ -179,32 +192,37 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
         }
         Ok(())
     }
-    fn data(&self, target: &AffordanceTarget, data: Option<&Payload>) -> CoreResult<()> {
+    fn data(
+        &self,
+        target: &AffordanceTarget,
+        data: Option<&Payload>,
+    ) -> Result<(), NotificationValidationError> {
+        use NotificationValidationError::{Dependency, Rejected};
         if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             let AffordanceTarget::Event(name) = target else {
-                return Err(invalid());
+                return Err(Rejected(invalid()));
             };
-            return self.validate(s.member(name).ok_or_else(invalid)?.data.as_ref(), data);
+            return self.validate(
+                s.member(name)
+                    .ok_or_else(|| Rejected(invalid()))?
+                    .data
+                    .as_ref(),
+                data,
+            );
         }
         if let NotificationSchemas::ObserveAllProperties(schema) = self.schemas() {
-            let payload = data.ok_or_else(invalid)?;
-            if !self.definition.input().data.available()
-                || self.definition.input().data.policy() != self.policy()
-                || !self.definition.input().data.supports_property_map(schema)
-                || payload.body.len() as u64 > self.policy().body_bytes
-            {
-                return Err(invalid());
+            self.check_dependencies().map_err(Dependency)?;
+            let payload = data.ok_or_else(|| Rejected(invalid()))?;
+            if payload.body.len() as u64 > self.policy().body_bytes {
+                return Err(Rejected(invalid()));
             }
             let result = self
                 .definition
                 .input()
                 .data
                 .validate_property_map(schema, payload);
-            self.check_dependencies()?;
-            if !self.definition.input().data.supports_property_map(schema) {
-                return Err(invalid());
-            }
-            return result;
+            self.check_dependencies().map_err(Dependency)?;
+            return result.map_err(Rejected);
         }
         self.validate(self.schemas().data(), data)
     }

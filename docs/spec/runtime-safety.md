@@ -276,6 +276,26 @@ callback or accepting a new baseline. Cleanup retains its prepaid owners even
 when those declarations are no longer usable. Explicit new qualification is
 required to use changed dependencies.
 
+Validation MUST preserve an observed dependency violation separately from ordinary
+caller-input or short-work refusal. Both the scalar and collection validators
+recheck captured dependencies after the codec callback, including when the codec
+returns an error. Response admission and prepayment before native receive MUST
+fence the original conversation on a dependency result; restoring a declaration
+cannot revive it or permit a retry to send a response. An input/work refusal with
+valid dependencies remains recoverable, but still requires a passive currentness
+check before return so synchronous stop, instance revocation or pairing loss is
+not hidden by the error. Dependency origin cannot be inferred from `CoreError` or
+reconstructed by rereading declarations after the failure.
+
+Response refusal returns the exact caller input without adopting it or consuming
+the native reply opportunity. A fenced conversation retains its original occurrence,
+reply job, first cause and prepaid cleanup owners through zero-credit or pending
+retirement; cleanup requires neither codec credit nor renewed delivery permission.
+Admission failure has no admitted conversation to fence. Cancellation has already
+fenced local semantic use before its validation callback. Validation failure of an
+owned native candidate remains fatal regardless of error origin. None of these
+paths changes subscription authority versus individual occurrence refusal.
+
 The validator borrows the original Property value/map or Event role trees,
 prepays validation before native handoff and checks data before queue acceptance.
 The original occurrence coordinate survives staging/queueing and is supplied to
